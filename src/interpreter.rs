@@ -838,6 +838,7 @@ mod tests {
     use crate::{Features, GrammarExt, NomResult};
 
     use anyhow::format_err;
+    use assert_matches::assert_matches;
 
     #[derive(Debug)]
     struct RealGrammar;
@@ -890,7 +891,7 @@ mod tests {
         let program = Span::new(
             r#"x = (1, 2) + (3, 4);
             (y, z) = (0, 3) * (2, 0.5) - x;
-            u = (1, 2) + 3 * (0.5, z);"#,
+            # u = (1, 2) + 3 * (0.5, z);"#,
         );
         let block = RealGrammar::parse_statements(program).unwrap();
         let mut context = Context::new();
@@ -1041,5 +1042,110 @@ mod tests {
             _ => panic!("Unexpected `alias` value: {:?}", alias),
         };
         assert!(Rc::ptr_eq(sin, alias));
+    }
+
+    #[test]
+    fn undefined_var() {
+        let program = "x + 3";
+        let program = Span::new(program);
+        let block = RealGrammar::parse_statements(program).unwrap();
+        let mut context = Context::new();
+        let err = context.evaluate(&block).unwrap_err();
+        assert_eq!(err.inner.fragment, "x");
+        assert_matches!(err.inner.extra, EvalError::Undefined(ref var) if var == "x");
+    }
+
+    #[test]
+    fn undefined_function() {
+        let program = "1 + sin(-5.0)";
+        let program = Span::new(program);
+        let block = RealGrammar::parse_statements(program).unwrap();
+        let mut context = Context::new();
+        let err = context.evaluate(&block).unwrap_err();
+        assert_eq!(err.inner.fragment, "sin");
+        assert_matches!(err.inner.extra, EvalError::Undefined(ref var) if var == "sin");
+    }
+
+    #[test]
+    fn cannot_call_error() {
+        let program = "x = 5; x(1.0)";
+        let program = Span::new(program);
+        let block = RealGrammar::parse_statements(program).unwrap();
+        let mut context = Context::new();
+        let err = context.evaluate(&block).unwrap_err();
+        assert_eq!(err.inner.offset, 7);
+        assert_matches!(err.inner.extra, EvalError::CannotCall(ref var) if var == "x");
+    }
+
+    #[test]
+    fn tuple_len_mismatch_error() {
+        let program = "x = (1, 2) + (3, 4, 5);";
+        let program = Span::new(program);
+        let block = RealGrammar::parse_statements(program).unwrap();
+        let mut context = Context::new();
+        let err = context.evaluate(&block).unwrap_err();
+        assert_eq!(err.inner.fragment, "(1, 2) + (3, 4, 5)");
+        assert_matches!(
+            err.inner.extra,
+            EvalError::TupleLenMismatch { lhs: 2, rhs: 3 }
+        );
+    }
+
+    #[test]
+    fn cannot_destructure_error() {
+        let program = "(x, y) = 1.0;";
+        let program = Span::new(program);
+        let block = RealGrammar::parse_statements(program).unwrap();
+        let mut context = Context::new();
+        let err = context.evaluate(&block).unwrap_err();
+        assert_eq!(err.inner.fragment, "(x, y)");
+        assert_matches!(err.inner.extra, EvalError::CannotDestructure);
+    }
+
+    #[test]
+    fn unexpected_operand() {
+        let mut context = Context::new();
+
+        let program = Span::new("1 / (2, 3)");
+        let block = RealGrammar::parse_statements(program).unwrap();
+        let err = context.evaluate(&block).unwrap_err();
+        assert_eq!(err.inner.fragment, "1 / (2, 3)");
+        assert_matches!(
+            err.inner.extra,
+            EvalError::UnexpectedOperand { ref op } if *op == BinaryOp::Div.into()
+        );
+
+        let program = Span::new("1 == 1 && !(2, 3)");
+        let block = RealGrammar::parse_statements(program).unwrap();
+        let err = context.evaluate(&block).unwrap_err();
+        assert_eq!(err.inner.fragment, "!(2, 3)");
+        assert_matches!(
+            err.inner.extra,
+            EvalError::UnexpectedOperand { ref op } if *op == UnaryOp::Not.into()
+        );
+
+        let program = Span::new("|x| { x + 5 } + 10");
+        let block = RealGrammar::parse_statements(program).unwrap();
+        let err = context.evaluate(&block).unwrap_err();
+        assert_matches!(
+            err.inner.extra,
+            EvalError::UnexpectedOperand { ref op } if *op == BinaryOp::Add.into()
+        );
+    }
+
+    #[test]
+    fn native_fn_error() {
+        let mut context = Context::new();
+        context.innermost_scope().insert_native_fn("sin", Sin);
+
+        let program = "1 + sin(-5.0, 2.0)";
+        let program = Span::new(program);
+        let block = RealGrammar::parse_statements(program).unwrap();
+        let err = context.evaluate(&block).unwrap_err();
+        assert_eq!(err.inner.fragment, "sin(-5.0, 2.0)");
+        assert_matches!(
+            err.inner.extra,
+            EvalError::NativeCall(ref e) if e.to_string().contains("Invalid args")
+        );
     }
 }

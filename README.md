@@ -12,7 +12,7 @@ type annotations and several other aspects of parsing.
 - Python-like **comments** staring with `#`.
 - Basic **arithmetic operations**: `+`, `-` (binary and unary), `*`, `/`, `^` (power).
   The parser outputs AST with nodes organized according to the operation priority.
-- **Boolean operations**: `&&`, `||`, `!`.
+- **Boolean operations**: `==`, `!=`, `&&`, `||`, `!`.
 - **Function calls**: `foo(1.0, x)`.
 - **Parentheses** which predictably influence operation priority.
 
@@ -60,6 +60,9 @@ Since the versatility of literals / type annotations is the entire point of the 
 it does little besides parsing. In particular, the library does not provide means
 to interpret / compile the produced AST or analyze it in other ways
 (e.g., by performing Hindley – Milner type inference).
+
+Another missing feature is control flow (such as conditionals and loops). This is to
+keep the grammar reasonably short.
 
 ## Implementation Details 
 

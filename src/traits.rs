@@ -6,13 +6,13 @@ use crate::{
 use std::fmt;
 
 /// Parsing features for a `Grammar`.
-// TODO: make boolean expressions optional
+// TODO: make boolean expressions optional, too.
 #[derive(Debug, Clone)]
 pub struct Features {
     /// Parse tuple types?
     pub tuples: bool,
-    /// Parse type hints?
-    pub type_hints: bool,
+    /// Parse type annotations?
+    pub type_annotations: bool,
     /// Parse function definitions?
     pub fn_definitions: bool,
     /// Parse blocks?
@@ -24,7 +24,7 @@ impl Features {
     pub const fn all() -> Self {
         Self {
             tuples: true,
-            type_hints: true,
+            type_annotations: true,
             fn_definitions: true,
             blocks: true,
         }
@@ -34,7 +34,7 @@ impl Features {
     pub const fn none() -> Self {
         Self {
             tuples: false,
-            type_hints: false,
+            type_annotations: false,
             fn_definitions: false,
             blocks: false,
         }

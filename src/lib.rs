@@ -18,13 +18,13 @@
 //!
 //! impl Grammar for SimpleGrammar {
 //!     type Lit = f32;
-//!     // We switch off type hint parsing in `FEATURES`, so can specify a void type
-//!     // for type hint.
+//!     // We switch off type hint parsing in `FEATURES`, so can specify
+//!     // a void type for type annotations.
 //!     type Type = ();
 //!
-//!     // Support all features, except for type hints.
+//!     // Support all features, except for type annotations.
 //!     const FEATURES: Features = Features {
-//!         type_hints: false,
+//!         type_annotations: false,
 //!         ..Features::all()
 //!     };
 //!
@@ -33,7 +33,8 @@
 //!         float(input)
 //!     }
 //!
-//!     /// Since we've disabled type hints, we may leave type parsing unimplemented.
+//!     /// Since we've disabled type annotations, we may leave type parsing
+//!     /// unimplemented.
 //!     fn parse_type(input: Span<'_>) -> NomResult<'_, Self::Type> {
 //!         unreachable!()
 //!     }
@@ -271,6 +272,7 @@ impl fmt::Display for UnaryOp {
 
 impl UnaryOp {
     /// Priority of unary operations.
+    // TODO: replace with enum?
     pub const PRIORITY: usize = 5;
 }
 
@@ -330,6 +332,7 @@ impl BinaryOp {
     }
 
     /// Returns the priority of this operation.
+    // TODO: replace with enum?
     pub fn priority(self) -> usize {
         match self {
             BinaryOp::And | BinaryOp::Or => 0,
@@ -341,7 +344,7 @@ impl BinaryOp {
     }
 }
 
-/// Generic operation.
+/// Generic operation, either unary or binary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Op {
     /// Unary operation.
@@ -386,14 +389,14 @@ pub enum Lvalue<'a, T> {
 /// `Lvalue` with the associated code span.
 pub type SpannedLvalue<'a, T> = Spanned<'a, Lvalue<'a, T>>;
 
-/// Statement.
+/// Statement: an expression or a variable assignment.
 #[derive(Debug, Clone)]
 pub enum Statement<'a, T>
 where
     T: Grammar,
 {
     /// Empty statement.
-    // TODO probably isn't needed.
+    // TODO: remove in favor returning a structured statement list for blocks.
     Empty,
     /// Expression, e.g., `x + (1, 2)`.
     Expr(SpannedExpr<'a, T>),

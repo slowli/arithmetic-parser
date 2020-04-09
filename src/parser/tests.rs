@@ -1068,7 +1068,7 @@ fn type_hints_when_switched_off() {
         type Type = ValueType;
 
         const FEATURES: Features = Features {
-            type_hints: false,
+            type_annotations: false,
             ..Features::all()
         };
 

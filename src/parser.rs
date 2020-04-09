@@ -585,7 +585,7 @@ where
     Ty: GrammarType,
 {
     let simple_lvalue: Box<dyn Fn(Span<'a>) -> NomResult<'a, SpannedLvalue<'a, T::Type>>> =
-        if T::FEATURES.type_hints {
+        if T::FEATURES.type_annotations {
             let parser = map(
                 tuple((
                     var_name,

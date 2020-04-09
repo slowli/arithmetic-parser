@@ -86,6 +86,8 @@ use nom_locate::{LocatedSpan, LocatedSpanEx};
 
 use std::fmt;
 
+mod helpers;
+pub mod interpreter;
 mod parser;
 mod traits;
 
@@ -140,7 +142,7 @@ impl Context {
 }
 
 /// Arithmetic expression with an abstract types for type hints and literals.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Expr<'a, T>
 where
     T: Grammar,
@@ -201,6 +203,31 @@ impl<T: Grammar> Expr<'_, T> {
         match self {
             Expr::Binary { ref rhs, .. } => Some(rhs),
             _ => None,
+        }
+    }
+}
+
+impl<T: Grammar> Clone for Expr<'_, T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Variable => Self::Variable,
+            Self::Literal(lit) => Self::Literal(lit.clone()),
+            Self::FnDefinition(function) => Self::FnDefinition(function.clone()),
+            Self::Tuple(tuple) => Self::Tuple(tuple.clone()),
+            Self::Block(block) => Self::Block(block.clone()),
+            Self::Function { name, args } => Self::Function {
+                name: *name,
+                args: args.clone(),
+            },
+            Self::Unary { op, inner } => Self::Unary {
+                op: *op,
+                inner: inner.clone(),
+            },
+            Self::Binary { op, lhs, rhs } => Self::Binary {
+                op: *op,
+                lhs: lhs.clone(),
+                rhs: rhs.clone(),
+            },
         }
     }
 }
@@ -392,7 +419,7 @@ pub enum Lvalue<'a, T> {
 pub type SpannedLvalue<'a, T> = Spanned<'a, Lvalue<'a, T>>;
 
 /// Statement: an expression or a variable assignment.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Statement<'a, T>
 where
     T: Grammar,
@@ -407,6 +434,18 @@ where
         /// RHS of the assignment.
         rhs: Box<SpannedExpr<'a, T>>,
     },
+}
+
+impl<T: Grammar> Clone for Statement<'_, T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Expr(expr) => Self::Expr(expr.clone()),
+            Self::Assignment { lhs, rhs } => Self::Assignment {
+                lhs: lhs.clone(),
+                rhs: rhs.clone(),
+            },
+        }
+    }
 }
 
 impl<T> PartialEq for Statement<'_, T>
@@ -440,7 +479,7 @@ pub type SpannedStatement<'a, T> = Spanned<'a, Statement<'a, T>>;
 /// Block of statements.
 ///
 /// A block may end with a return expression, e.g., `{ x = 1; x }`.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Block<'a, T>
 where
     T: Grammar,
@@ -449,6 +488,15 @@ where
     pub statements: Vec<SpannedStatement<'a, T>>,
     /// The last statement in the block which is returned from the block.
     pub return_value: Option<Box<SpannedExpr<'a, T>>>,
+}
+
+impl<T: Grammar> Clone for Block<'_, T> {
+    fn clone(&self) -> Self {
+        Self {
+            statements: self.statements.clone(),
+            return_value: self.return_value.clone(),
+        }
+    }
 }
 
 impl<T> PartialEq for Block<'_, T>
@@ -465,7 +513,7 @@ where
 /// Function definition, e.g., `|x, y| x + y`.
 ///
 /// A function definition consists of a list of arguments and the function body.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct FnDefinition<'a, T>
 where
     T: Grammar,
@@ -474,6 +522,15 @@ where
     pub args: Vec<SpannedLvalue<'a, T::Type>>,
     /// Function body, e.g., `x + y`.
     pub body: Block<'a, T>,
+}
+
+impl<T: Grammar> Clone for FnDefinition<'_, T> {
+    fn clone(&self) -> Self {
+        Self {
+            args: self.args.clone(),
+            body: self.body.clone(),
+        }
+    }
 }
 
 impl<T> PartialEq for FnDefinition<'_, T>

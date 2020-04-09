@@ -48,7 +48,7 @@ impl Default for Features {
 }
 
 /// Unites all necessary parsers to form a complete grammar definition.
-pub trait Grammar {
+pub trait Grammar: 'static {
     /// Type of the literal used in the grammar.
     type Lit: Clone + fmt::Debug;
     /// Type of the type declaration used in the grammar.

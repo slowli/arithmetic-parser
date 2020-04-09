@@ -463,9 +463,9 @@ where
     Ty: GrammarType,
 {
     // First, we parse the expression into a list with simple expressions interspersed
-    // with binary operations. For example, `1 + 2 * :foo(x, y)` is parsed into
+    // with binary operations. For example, `1 + 2 * foo(x, y)` is parsed into
     //
-    //     [ 1, +, 2, *, :foo(x, y) ]
+    //     [ 1, +, 2, *, foo(x, y) ]
     let binary_ops = alt((
         tag("+"),
         tag("-"),
@@ -490,7 +490,7 @@ where
     // We track the `right_contour` of the parsed tree and insert a new operation so that
     // operations in the contour with lower priority remain in place.
     //
-    // As an example, consider expression `1 + 2 * :foo(x, y) - 7` split into list
+    // As an example, consider expression `1 + 2 * foo(x, y) - 7` split into list
     // `[ 1, +, 2, *, foo(x, y), -, 7 ]`. First, we form a tree
     //
     //   +

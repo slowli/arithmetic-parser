@@ -51,5 +51,11 @@ jobs:
         with:
           command: test
 
+      - name: Run example
+        uses: actions-rs/cargo@v1
+        with:
+          command: run
+          args: --example complex_c
+
       - name: Check docs
         run: cargo clean --doc && cargo doc --no-deps && cargo deadlinks --dir target/doc

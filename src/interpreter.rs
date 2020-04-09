@@ -1,6 +1,36 @@
 //! Simple interpreter for ASTs produced by the parser.
-
-#![allow(missing_docs)]
+//!
+//! # Examples
+//!
+//! ```
+//! use arithmetic_parser::{
+//!     grammars::F32Grammar,
+//!     interpreter::{Assert, BinaryFn, Context, Value},
+//!     Grammar, GrammarExt, Span,
+//! };
+//!
+//! let mut context = Context::new();
+//! // Add some native functions to the interpreter.
+//! context
+//!     .innermost_scope()
+//!     .insert_native_fn("min", BinaryFn::new(|x, y| if x < y { x } else { y }))
+//!     .insert_native_fn("max", BinaryFn::new(|x, y| if x > y { x } else { y }))
+//!     .insert_native_fn("assert", Assert);
+//! // Create a new scope to make native functions non-overridable.
+//! context.create_scope();
+//!
+//! let program = r#"
+//!     ## The interpreter supports all parser features, including
+//!     ## function definitions, tuples and blocks.
+//!     order = |x, y| (min(x, y), max(x, y));
+//!     assert(order(0.5, -1) == (-1, 0.5));
+//!     (_, M) = order(3^2, { x = 3; x + 5 });
+//!     M
+//! "#;
+//! let program = F32Grammar::parse_statements(Span::new(program)).unwrap();
+//! let ret = context.evaluate(&program).unwrap();
+//! assert_eq!(ret, Value::Simple(9.0));
+//! ```
 
 use num_traits::{Num, Pow};
 
@@ -16,15 +46,34 @@ use crate::{
     SpannedLvalue, SpannedStatement, Statement, UnaryOp,
 };
 
+mod functions;
+pub use self::functions::{Assert, BinaryFn};
+
+/// Errors that can occur during interpreting expressions and statements.
 #[derive(Debug)]
 pub enum EvalError {
-    TupleLenMismatch { lhs: usize, rhs: usize },
+    /// Mismatch between length of tuples in a binary operation or assignment.
+    TupleLenMismatch {
+        /// Length of a tuple on the left-hand side.
+        lhs: usize,
+        /// Length of a tuple on the right-hand side.
+        rhs: usize,
+    },
+    /// Cannot destructure a no-tuple variable.
     CannotDestructure,
+    /// Variable with the enclosed name is not defined.
     Undefined(String),
+    /// Variable with the enclosed name is not callable (i.e., is not a function).
     CannotCall(String),
+    /// Error during execution of a native function.
     NativeCall(anyhow::Error),
+    /// Embedded function definitions are not yet supported by the interpreter.
     EmbeddedFunction,
-    UnexpectedOperand { op: Op },
+    /// Unexpected operand type(s) for the specified operation.
+    UnexpectedOperand {
+        /// Operation which failed.
+        op: Op,
+    },
 }
 
 /// Function on zero or more `Value`s.
@@ -221,7 +270,7 @@ impl<T: Grammar> Clone for Function<'_, T> {
     }
 }
 
-/// Values produced by expressions.
+/// Values produced by expressions during their interpretation.
 #[derive(Debug)]
 pub enum Value<'a, T>
 where
@@ -317,9 +366,7 @@ where
                 }
             }
 
-            _ => Err(EvalError::UnexpectedOperand {
-                op: Op::Binary(BinaryOp::Add),
-            }),
+            _ => Err(EvalError::UnexpectedOperand { op: Op::Binary(op) }),
         }
     }
 
@@ -340,7 +387,7 @@ where
     }
 
     fn try_pow(self, rhs: Self) -> Result<Self, EvalError> {
-        self.try_binary_op(rhs, BinaryOp::Add, |x, y| x.pow(y))
+        self.try_binary_op(rhs, BinaryOp::Power, |x, y| x.pow(y))
     }
 
     fn try_neg(self) -> Result<Self, EvalError> {
@@ -835,36 +882,15 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Features, GrammarExt, NomResult};
+    use crate::{grammars::F32Grammar, GrammarExt};
 
     use anyhow::format_err;
     use assert_matches::assert_matches;
 
-    #[derive(Debug)]
-    struct RealGrammar;
-
-    impl Grammar for RealGrammar {
-        type Lit = f32;
-        type Type = ();
-
-        const FEATURES: Features = Features {
-            type_annotations: false,
-            ..Features::all()
-        };
-
-        fn parse_literal(input: Span<'_>) -> NomResult<'_, Self::Lit> {
-            nom::number::complete::float(input)
-        }
-
-        fn parse_type(_input: Span<'_>) -> NomResult<'_, Self::Type> {
-            unimplemented!()
-        }
-    }
-
     #[test]
     fn basic_program() {
         let program = Span::new("x = 1; y = 2; x + y");
-        let block = RealGrammar::parse_statements(program).unwrap();
+        let block = F32Grammar::parse_statements(program).unwrap();
         let mut context = Context::new();
         let return_value = context.evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Simple(3.0));
@@ -875,7 +901,7 @@ mod tests {
     #[test]
     fn basic_program_with_tuples() {
         let program = Span::new("tuple = (1 - 3, 2); (x, _) = tuple;");
-        let block = RealGrammar::parse_statements(program).unwrap();
+        let block = F32Grammar::parse_statements(program).unwrap();
         let mut context = Context::new();
         let return_value = context.evaluate(&block).unwrap();
         assert_eq!(return_value, Value::void());
@@ -893,7 +919,7 @@ mod tests {
             (y, z) = (0, 3) * (2, 0.5) - x;
             # u = (1, 2) + 3 * (0.5, z);"#,
         );
-        let block = RealGrammar::parse_statements(program).unwrap();
+        let block = F32Grammar::parse_statements(program).unwrap();
         let mut context = Context::new();
         context.evaluate(&block).unwrap();
         assert_eq!(
@@ -907,7 +933,7 @@ mod tests {
     #[test]
     fn program_with_blocks() {
         let program = Span::new("z = { x = 1; x + 3 };");
-        let block = RealGrammar::parse_statements(program).unwrap();
+        let block = F32Grammar::parse_statements(program).unwrap();
         let mut context = Context::new();
         let return_value = context.evaluate(&block).unwrap();
         assert_eq!(return_value, Value::void());
@@ -918,7 +944,7 @@ mod tests {
     #[test]
     fn program_with_interpreted_function() {
         let program = Span::new("foo = |x| x + 5; foo(3.0)");
-        let block = RealGrammar::parse_statements(program).unwrap();
+        let block = F32Grammar::parse_statements(program).unwrap();
         let mut context = Context::new();
         let return_value = context.evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Simple(8.0));
@@ -932,7 +958,7 @@ mod tests {
             foo = |a| a + x;
             foo(-3)"#;
         let program = Span::new(program);
-        let block = RealGrammar::parse_statements(program).unwrap();
+        let block = F32Grammar::parse_statements(program).unwrap();
         let mut context = Context::new();
         let return_value = context.evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Simple(2.0));
@@ -945,7 +971,7 @@ mod tests {
             x = 10;
             foo(-3)"#;
         let program = Span::new(program);
-        let block = RealGrammar::parse_statements(program).unwrap();
+        let block = F32Grammar::parse_statements(program).unwrap();
         let mut context = Context::new();
         let return_value = context.evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Simple(2.0));
@@ -957,7 +983,7 @@ mod tests {
             add = 0;
             foo(-3)"#;
         let program = Span::new(program);
-        let block = RealGrammar::parse_statements(program).unwrap();
+        let block = F32Grammar::parse_statements(program).unwrap();
         let mut context = Context::new();
         let return_value = context.evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Simple(2.0));
@@ -969,7 +995,7 @@ mod tests {
             apply = |fn, x, y| (fn(x), fn(y));
             apply(|x| x + 3, 1, -2)"#;
         let program = Span::new(program);
-        let block = RealGrammar::parse_statements(program).unwrap();
+        let block = F32Grammar::parse_statements(program).unwrap();
         let mut context = Context::new();
         let return_value = context.evaluate(&block).unwrap();
         assert_eq!(
@@ -986,7 +1012,7 @@ mod tests {
             };
             (a, b)"#;
         let program = Span::new(program);
-        let block = RealGrammar::parse_statements(program).unwrap();
+        let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = context.evaluate(&block).unwrap();
         assert_eq!(
             return_value,
@@ -998,11 +1024,11 @@ mod tests {
     #[derive(Debug, Clone, Copy)]
     struct Sin;
 
-    impl NativeFn<RealGrammar> for Sin {
+    impl NativeFn<F32Grammar> for Sin {
         fn execute<'a>(
             &self,
-            args: &[Value<'a, RealGrammar>],
-        ) -> anyhow::Result<Value<'a, RealGrammar>> {
+            args: &[Value<'a, F32Grammar>],
+        ) -> anyhow::Result<Value<'a, F32Grammar>> {
             match args {
                 [Value::Simple(x)] => Ok(Value::Simple(x.sin())),
                 _ => Err(format_err!("Invalid args supplied to `sin`")),
@@ -1016,7 +1042,7 @@ mod tests {
         context.innermost_scope().insert_native_fn("sin", Sin);
 
         let program = Span::new("sin(1.0) - 3");
-        let block = RealGrammar::parse_statements(program).unwrap();
+        let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = context.evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Simple(1.0_f32.sin() - 3.0));
     }
@@ -1025,7 +1051,7 @@ mod tests {
     fn function_aliasing() {
         let program = "alias = sin; alias(1.0)";
         let program = Span::new(program);
-        let block = RealGrammar::parse_statements(program).unwrap();
+        let block = F32Grammar::parse_statements(program).unwrap();
         let mut context = Context::new();
         context.innermost_scope().insert_native_fn("sin", Sin);
         let return_value = context.evaluate(&block).unwrap();
@@ -1048,7 +1074,7 @@ mod tests {
     fn undefined_var() {
         let program = "x + 3";
         let program = Span::new(program);
-        let block = RealGrammar::parse_statements(program).unwrap();
+        let block = F32Grammar::parse_statements(program).unwrap();
         let mut context = Context::new();
         let err = context.evaluate(&block).unwrap_err();
         assert_eq!(err.inner.fragment, "x");
@@ -1059,7 +1085,7 @@ mod tests {
     fn undefined_function() {
         let program = "1 + sin(-5.0)";
         let program = Span::new(program);
-        let block = RealGrammar::parse_statements(program).unwrap();
+        let block = F32Grammar::parse_statements(program).unwrap();
         let mut context = Context::new();
         let err = context.evaluate(&block).unwrap_err();
         assert_eq!(err.inner.fragment, "sin");
@@ -1070,7 +1096,7 @@ mod tests {
     fn cannot_call_error() {
         let program = "x = 5; x(1.0)";
         let program = Span::new(program);
-        let block = RealGrammar::parse_statements(program).unwrap();
+        let block = F32Grammar::parse_statements(program).unwrap();
         let mut context = Context::new();
         let err = context.evaluate(&block).unwrap_err();
         assert_eq!(err.inner.offset, 7);
@@ -1081,7 +1107,7 @@ mod tests {
     fn tuple_len_mismatch_error() {
         let program = "x = (1, 2) + (3, 4, 5);";
         let program = Span::new(program);
-        let block = RealGrammar::parse_statements(program).unwrap();
+        let block = F32Grammar::parse_statements(program).unwrap();
         let mut context = Context::new();
         let err = context.evaluate(&block).unwrap_err();
         assert_eq!(err.inner.fragment, "(1, 2) + (3, 4, 5)");
@@ -1095,7 +1121,7 @@ mod tests {
     fn cannot_destructure_error() {
         let program = "(x, y) = 1.0;";
         let program = Span::new(program);
-        let block = RealGrammar::parse_statements(program).unwrap();
+        let block = F32Grammar::parse_statements(program).unwrap();
         let mut context = Context::new();
         let err = context.evaluate(&block).unwrap_err();
         assert_eq!(err.inner.fragment, "(x, y)");
@@ -1107,7 +1133,7 @@ mod tests {
         let mut context = Context::new();
 
         let program = Span::new("1 / (2, 3)");
-        let block = RealGrammar::parse_statements(program).unwrap();
+        let block = F32Grammar::parse_statements(program).unwrap();
         let err = context.evaluate(&block).unwrap_err();
         assert_eq!(err.inner.fragment, "1 / (2, 3)");
         assert_matches!(
@@ -1116,7 +1142,7 @@ mod tests {
         );
 
         let program = Span::new("1 == 1 && !(2, 3)");
-        let block = RealGrammar::parse_statements(program).unwrap();
+        let block = F32Grammar::parse_statements(program).unwrap();
         let err = context.evaluate(&block).unwrap_err();
         assert_eq!(err.inner.fragment, "!(2, 3)");
         assert_matches!(
@@ -1125,7 +1151,7 @@ mod tests {
         );
 
         let program = Span::new("|x| { x + 5 } + 10");
-        let block = RealGrammar::parse_statements(program).unwrap();
+        let block = F32Grammar::parse_statements(program).unwrap();
         let err = context.evaluate(&block).unwrap_err();
         assert_matches!(
             err.inner.extra,
@@ -1140,7 +1166,7 @@ mod tests {
 
         let program = "1 + sin(-5.0, 2.0)";
         let program = Span::new(program);
-        let block = RealGrammar::parse_statements(program).unwrap();
+        let block = F32Grammar::parse_statements(program).unwrap();
         let err = context.evaluate(&block).unwrap_err();
         assert_eq!(err.inner.fragment, "sin(-5.0, 2.0)");
         assert_matches!(

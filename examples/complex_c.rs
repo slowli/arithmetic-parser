@@ -3,12 +3,6 @@
 //!
 //! The example uses complex-valued literals and features a primitive form of constant folding.
 
-use nom::{
-    character::complete::one_of,
-    combinator::{map, opt},
-    number::complete::float,
-    sequence::tuple,
-};
 use num_complex::Complex32;
 
 use std::{
@@ -19,39 +13,11 @@ use std::{
 };
 
 use arithmetic_parser::{
-    BinaryOp, Block, Expr, Features, FnDefinition, Grammar, GrammarExt, Lvalue, NomResult, Span,
+    grammars::NumGrammar, BinaryOp, Block, Expr, FnDefinition, GrammarExt, Lvalue, Span,
     SpannedExpr, SpannedLvalue, Statement, UnaryOp,
 };
 
-/// Grammar that supports complex-value literals (of form `<float>[ij]?`, such as `5.0`,
-/// `1i` or `-3.5j`).
-#[derive(Debug, Clone, Copy)]
-struct ComplexGrammar;
-
-impl Grammar for ComplexGrammar {
-    type Lit = Complex32;
-    type Type = ();
-
-    const FEATURES: Features = Features {
-        fn_definitions: true,
-        ..Features::none()
-    };
-
-    fn parse_literal(input: Span<'_>) -> NomResult<'_, Self::Lit> {
-        let parser = tuple((float, opt(one_of("ij"))));
-        map(parser, |(value, maybe_imag)| {
-            if maybe_imag.is_some() {
-                Complex32::new(0.0, value)
-            } else {
-                Complex32::new(value, 0.0)
-            }
-        })(input)
-    }
-
-    fn parse_type(_: Span<'_>) -> NomResult<'_, Self::Type> {
-        unreachable!("type hints are disabled in `FEATURES`")
-    }
-}
+type ComplexGrammar = NumGrammar<Complex32>;
 
 /// Evaluated expression.
 #[derive(Debug, Clone)]

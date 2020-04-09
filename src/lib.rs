@@ -8,37 +8,10 @@
 //! ```
 //! # use assert_matches::assert_matches;
 //! use arithmetic_parser::{
-//!     Features, Grammar, GrammarExt, NomResult, Span, Statement, Expr,
-//!     FnDefinition,
+//!     grammars::F32Grammar,
+//!     GrammarExt, NomResult, Span, Statement, Expr, FnDefinition,
 //! };
 //! use nom::number::complete::float;
-//!
-//! #[derive(Debug)]
-//! struct SimpleGrammar;
-//!
-//! impl Grammar for SimpleGrammar {
-//!     type Lit = f32;
-//!     // We switch off type hint parsing in `FEATURES`, so can specify
-//!     // a void type for type annotations.
-//!     type Type = ();
-//!
-//!     // Support all features, except for type annotations.
-//!     const FEATURES: Features = Features {
-//!         type_annotations: false,
-//!         ..Features::all()
-//!     };
-//!
-//!     /// Parses a literal using a standard `nom` parser.
-//!     fn parse_literal(input: Span<'_>) -> NomResult<'_, Self::Lit> {
-//!         float(input)
-//!     }
-//!
-//!     /// Since we've disabled type annotations, we may leave type parsing
-//!     /// unimplemented.
-//!     fn parse_type(input: Span<'_>) -> NomResult<'_, Self::Type> {
-//!         unreachable!()
-//!     }
-//! }
 //!
 //! const PROGRAM: &str = r#"
 //!     ## This is a comment.
@@ -54,7 +27,7 @@
 //!     other_function(y - z)
 //! "#;
 //!
-//! let block = SimpleGrammar::parse_statements(Span::new(PROGRAM)).unwrap();
+//! let block = F32Grammar::parse_statements(Span::new(PROGRAM)).unwrap();
 //! // First statement is an assignment.
 //! assert_matches!(
 //!     block.statements[0].extra,
@@ -86,6 +59,7 @@ use nom_locate::{LocatedSpan, LocatedSpanEx};
 
 use std::fmt;
 
+pub mod grammars;
 mod helpers;
 pub mod interpreter;
 mod parser;

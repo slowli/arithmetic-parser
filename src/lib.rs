@@ -182,7 +182,7 @@ where
     Tuple(Vec<SpannedExpr<'a, T>>),
 
     /// Block expression, e.g., `{ x = 3; x + y }`.
-    Block(Vec<SpannedStatement<'a, T>>),
+    Block(Block<'a, T>),
 }
 
 impl<T: Grammar> Expr<'_, T> {
@@ -395,9 +395,6 @@ pub enum Statement<'a, T>
 where
     T: Grammar,
 {
-    /// Empty statement.
-    // TODO: remove in favor returning a structured statement list for blocks.
-    Empty,
     /// Expression, e.g., `x + (1, 2)`.
     Expr(SpannedExpr<'a, T>),
 
@@ -420,7 +417,6 @@ where
         use self::Statement::*;
 
         match (self, other) {
-            (Empty, Empty) => true,
             (Expr(this), Expr(that)) => this == that,
 
             (
@@ -439,7 +435,34 @@ where
 /// Statement with the associated code span.
 pub type SpannedStatement<'a, T> = Spanned<'a, Statement<'a, T>>;
 
-/// Function definition, e.g., `|x, y| { x + y }`.
+/// Block of statements.
+///
+/// A block may end with a return expression, e.g., `{ x = 1; x }`.
+#[derive(Debug, Clone)]
+pub struct Block<'a, T>
+where
+    T: Grammar,
+{
+    /// Statements in the block.
+    pub statements: Vec<SpannedStatement<'a, T>>,
+    /// The last statement in the block which is returned from the block.
+    pub return_value: Option<Box<SpannedExpr<'a, T>>>,
+}
+
+impl<T> PartialEq for Block<'_, T>
+where
+    T: Grammar,
+    T::Lit: PartialEq,
+    T::Type: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.return_value == other.return_value && self.statements == other.statements
+    }
+}
+
+/// Function definition, e.g., `|x, y| x + y`.
+///
+/// A function definition consists of a list of arguments and the function body.
 #[derive(Debug, Clone)]
 pub struct FnDefinition<'a, T>
 where
@@ -448,7 +471,7 @@ where
     /// Function arguments, e.g., `x, y`.
     pub args: Vec<SpannedLvalue<'a, T::Type>>,
     /// Function body, e.g., `x + y`.
-    pub body: Vec<SpannedStatement<'a, T>>,
+    pub body: Block<'a, T>,
 }
 
 impl<T> PartialEq for FnDefinition<'_, T>

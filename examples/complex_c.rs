@@ -19,8 +19,8 @@ use std::{
 };
 
 use arithmetic_parser::{
-    BinaryOp, Expr, Features, FnDefinition, Grammar, GrammarExt, Lvalue, NomResult, Span,
-    SpannedExpr, SpannedStatement, Statement, UnaryOp,
+    BinaryOp, Block, Expr, Features, FnDefinition, Grammar, GrammarExt, Lvalue, NomResult, Span,
+    SpannedExpr, SpannedLvalue, Statement, UnaryOp,
 };
 
 /// Grammar that supports complex-value literals (of form `<float>[ij]?`, such as `5.0`,
@@ -221,10 +221,10 @@ impl<'a> Context<'a> {
         }
     }
 
-    fn generate_code(statements: &[SpannedStatement<'a, ComplexGrammar>]) -> String {
+    fn generate_code(block: &Block<'a, ComplexGrammar>) -> String {
         let mut code = String::new();
 
-        for statement in statements {
+        for statement in &block.statements {
             match &statement.extra {
                 Statement::Assignment { lhs, rhs } => match &rhs.extra {
                     Expr::FnDefinition(fn_def) => {
@@ -235,7 +235,6 @@ impl<'a> Context<'a> {
                     }
                     _ => panic!("Top-level statements should be function definitions"),
                 },
-                Statement::Empty => { /* do nothing */ }
                 _ => panic!("Top-level statements should be function definitions"),
             }
         }
@@ -263,52 +262,52 @@ impl<'a> Context<'a> {
         }
         evaluated += ") {\n";
 
-        for (i, statement) in fn_def.body.iter().enumerate() {
-            if i + 1 < fn_def.body.len() {
-                if let Statement::Expr(_) = statement.extra {
-                    panic!("Useless expression: {}", statement.fragment);
+        for statement in &fn_def.body.statements {
+            match &statement.extra {
+                Statement::Expr(_) => panic!("Useless expression: {}", statement.fragment),
+                Statement::Assignment { lhs, rhs } => {
+                    if let Some(line) = context.eval_assignment(lhs, rhs) {
+                        evaluated += "    ";
+                        evaluated += &line;
+                        evaluated += "\n";
+                    }
                 }
-            }
-
-            if let Some(line) = context.eval(statement) {
-                evaluated += "    ";
-                evaluated += &line;
-                evaluated += "\n";
             }
         }
 
+        let return_value = fn_def
+            .body
+            .return_value
+            .as_ref()
+            .expect("Function does not have return value");
+        evaluated += &format!("    return {};\n", context.eval_expr(return_value));
         evaluated += "}";
         evaluated
     }
 
-    fn eval(&mut self, statement: &SpannedStatement<'a, ComplexGrammar>) -> Option<String> {
-        match &statement.extra {
-            Statement::Empty => None,
-            Statement::Expr(expr) => {
-                let value = self.eval_expr(expr);
-                Some(format!("return {};", value))
-            }
-            Statement::Assignment { lhs, rhs } => {
-                let variable_name = match lhs.extra {
-                    Lvalue::Variable { .. } => lhs.fragment,
-                    Lvalue::Tuple(_) => unreachable!("Tuples are disabled in parser"),
-                };
+    fn eval_assignment(
+        &mut self,
+        lhs: &SpannedLvalue<'a, ()>,
+        rhs: &SpannedExpr<'a, ComplexGrammar>,
+    ) -> Option<String> {
+        let variable_name = match lhs.extra {
+            Lvalue::Variable { .. } => lhs.fragment,
+            Lvalue::Tuple(_) => unreachable!("Tuples are disabled in parser"),
+        };
 
-                if self.variables.contains_key(variable_name) {
-                    panic!("Cannot redefine variable `{}`", variable_name);
-                }
-
-                // Evaluate the RHS.
-                let value = self.eval_expr(rhs);
-                let return_value = if let Evaluated::Symbolic { .. } = value {
-                    Some(format!("float2 {} = {};", variable_name, value))
-                } else {
-                    None
-                };
-                self.variables.insert(variable_name, value);
-                return_value
-            }
+        if self.variables.contains_key(variable_name) {
+            panic!("Cannot redefine variable `{}`", variable_name);
         }
+
+        // Evaluate the RHS.
+        let value = self.eval_expr(rhs);
+        let return_value = if let Evaluated::Symbolic { .. } = value {
+            Some(format!("float2 {} = {};", variable_name, value))
+        } else {
+            None
+        };
+        self.variables.insert(variable_name, value);
+        return_value
     }
 
     fn eval_expr(&self, expr: &SpannedExpr<'a, ComplexGrammar>) -> Evaluated {
@@ -385,7 +384,7 @@ fn main() {
         sinh(z^2 + c) * d
     };
 
-    other_computation = |a, b| sinh(a^2 + b^2) * tanh(a / b)";
+    other_computation = |a, b| sinh(a^2 + b^2) * tanh(a / b);";
 
     let span = Span::new(EXPR);
     let statements = ComplexGrammar::parse_statements(span).unwrap();

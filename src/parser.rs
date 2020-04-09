@@ -17,8 +17,8 @@ use nom::{
 use std::{fmt, mem};
 
 use crate::{
-    BinaryOp, Context, Expr, FnDefinition, Grammar, Lvalue, NomResult, Span, Spanned, SpannedExpr,
-    SpannedLvalue, SpannedStatement, Statement, UnaryOp,
+    BinaryOp, Block, Context, Expr, FnDefinition, Grammar, Lvalue, NomResult, Span, Spanned,
+    SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
 };
 
 #[cfg(test)]
@@ -651,9 +651,7 @@ where
 }
 
 /// Parses a complete list of statements.
-pub(crate) fn statements<T>(
-    input_span: Span<'_>,
-) -> Result<Vec<SpannedStatement<'_, T>>, Spanned<'_, Error<'_>>>
+pub(crate) fn statements<T>(input_span: Span<'_>) -> Result<Block<'_, T>, Spanned<'_, Error<'_>>>
 where
     T: Grammar,
 {
@@ -667,7 +665,7 @@ where
 /// Parses a potentially incomplete list of statements.
 pub(crate) fn streaming_statements<T>(
     input_span: Span<'_>,
-) -> Result<Vec<SpannedStatement<'_, T>>, Spanned<'_, Error<'_>>>
+) -> Result<Block<'_, T>, Spanned<'_, Error<'_>>>
 where
     T: Grammar,
 {
@@ -679,9 +677,7 @@ where
         .or_else(|_| statements_inner::<T, Streaming>(input_span))
 }
 
-fn statements_inner<T, Ty>(
-    input_span: Span<'_>,
-) -> Result<Vec<SpannedStatement<'_, T>>, Spanned<'_, Error<'_>>>
+fn statements_inner<T, Ty>(input_span: Span<'_>) -> Result<Block<'_, T>, Spanned<'_, Error<'_>>>
 where
     T: Grammar,
     Ty: GrammarType,
@@ -709,7 +705,7 @@ where
 }
 
 /// List of statements separated by semicolons.
-fn separated_statements<T, Ty>(input: Span<'_>) -> NomResult<'_, Vec<SpannedStatement<'_, T>>>
+fn separated_statements<T, Ty>(input: Span<'_>) -> NomResult<'_, Block<'_, T>>
 where
     T: Grammar,
     Ty: GrammarType,
@@ -717,28 +713,17 @@ where
     map(
         tuple((
             many0(terminated(separated_statement::<T, Ty>, ws::<Ty>)),
-            opt(statement::<T, Ty>),
+            opt(expr::<T, Ty>),
         )),
-        |(mut statements, final_statement)| {
-            statements.push(final_statement.unwrap_or_else(|| {
-                if let Some(statement) = statements.last() {
-                    create_span_ref(statement, Statement::Empty)
-                } else {
-                    Spanned {
-                        offset: input.offset,
-                        line: input.line,
-                        fragment: "",
-                        extra: Statement::Empty,
-                    }
-                }
-            }));
-            statements
+        |(statements, return_value)| Block {
+            statements,
+            return_value: return_value.map(Box::new),
         },
     )(input)
 }
 
 /// Block of statements, e.g., `{ x = 3; x + y }`.
-fn block<T, Ty>(input: Span<'_>) -> NomResult<'_, Vec<SpannedStatement<'_, T>>>
+fn block<T, Ty>(input: Span<'_>) -> NomResult<'_, Block<'_, T>>
 where
     T: Grammar,
     Ty: GrammarType,
@@ -758,13 +743,9 @@ where
 {
     let body_parser = alt((
         block::<T, Ty>,
-        map(expr::<T, Ty>, |spanned| {
-            vec![Spanned {
-                offset: spanned.offset,
-                line: spanned.line,
-                fragment: spanned.fragment,
-                extra: Statement::Expr(spanned),
-            }]
+        map(expr::<T, Ty>, |spanned| Block {
+            statements: vec![],
+            return_value: Some(Box::new(spanned)),
         }),
     ));
     let parser = tuple((

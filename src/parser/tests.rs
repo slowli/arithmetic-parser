@@ -871,9 +871,9 @@ fn block_parsing() {
     let input = Span::new("{ x + y }");
     assert_eq!(
         block::<FieldGrammar, Complete>(input).unwrap().1,
-        vec![create_span(
-            span(2, "x + y"),
-            Statement::Expr(sp(
+        Block {
+            statements: vec![],
+            return_value: Some(Box::new(sp(
                 2,
                 "x + y",
                 Expr::Binary {
@@ -881,19 +881,20 @@ fn block_parsing() {
                     op: BinaryOp::from_span(span(4, "+")),
                     rhs: Box::new(sp(6, "y", Expr::Variable)),
                 }
-            ))
-        )]
+            ))),
+        }
     );
 
     let input = Span::new("{ x = 1 + 2; x * 3 }");
     let parsed = block::<FieldGrammar, Complete>(input).unwrap().1;
-    assert_eq!(parsed.len(), 2);
-    assert_eq!(parsed[1].fragment, "x * 3");
+    assert_eq!(parsed.statements.len(), 1);
+    let return_value = parsed.return_value.unwrap();
+    assert_eq!(return_value.fragment, "x * 3");
 
     let input = Span::new("{ x = 1 + 2; x * 3; }");
     let parsed = block::<FieldGrammar, Complete>(input).unwrap().1;
-    assert_eq!(parsed.len(), 3);
-    assert_eq!(parsed[2].extra, Statement::Empty);
+    assert_eq!(parsed.statements.len(), 2);
+    assert!(parsed.return_value.is_none());
 }
 
 #[test]
@@ -903,9 +904,9 @@ fn fn_definition_parsing() {
         fn_def::<FieldGrammar, Complete>(input).unwrap().1,
         FnDefinition {
             args: vec![lsp(1, "x", Lvalue::Variable { ty: None })],
-            body: vec![create_span(
-                span(4, "x + z"),
-                Statement::Expr(sp(
+            body: Block {
+                statements: vec![],
+                return_value: Some(Box::new(sp(
                     4,
                     "x + z",
                     Expr::Binary {
@@ -913,8 +914,8 @@ fn fn_definition_parsing() {
                         op: BinaryOp::from_span(span(6, "+")),
                         rhs: Box::new(sp(8, "z", Expr::Variable)),
                     }
-                ))
-            )],
+                ))),
+            }
         }
     );
 
@@ -923,9 +924,9 @@ fn fn_definition_parsing() {
         fn_def::<FieldGrammar, Complete>(input).unwrap().1,
         FnDefinition {
             args: vec![lsp(1, "x", Lvalue::Variable { ty: None }),],
-            body: vec![create_span(
-                span(6, "x + 3"),
-                Statement::Expr(sp(
+            body: Block {
+                statements: vec![],
+                return_value: Some(Box::new(sp(
                     6,
                     "x + 3",
                     Expr::Binary {
@@ -933,15 +934,20 @@ fn fn_definition_parsing() {
                         op: BinaryOp::from_span(span(8, "+")),
                         rhs: Box::new(sp(10, "3", Expr::Literal(Literal::Number))),
                     }
-                ))
-            )],
+                )))
+            }
         }
     );
 
     let input = Span::new("|x: Sc, (y, _: Ge)| { x + y }");
     let mut def = fn_def::<FieldGrammar, Complete>(input).unwrap().1;
-    assert_eq!(def.body.len(), 1);
-    def.body.clear();
+    assert!(def.body.statements.is_empty());
+    assert!(def.body.return_value.is_some());
+
+    def.body = Block {
+        statements: vec![],
+        return_value: None,
+    };
     assert_eq!(
         def,
         FnDefinition {
@@ -968,7 +974,10 @@ fn fn_definition_parsing() {
                     ])
                 ),
             ],
-            body: vec![],
+            body: Block {
+                statements: vec![],
+                return_value: None
+            },
         }
     );
 }
@@ -1027,35 +1036,32 @@ fn incomplete_statement() {
 #[test]
 fn separated_statements_parse() {
     let input = Span::new("x = 1 + 2; x");
-    let statements = separated_statements::<FieldGrammar, Complete>(input)
+    let block = separated_statements::<FieldGrammar, Complete>(input)
         .unwrap()
         .1;
-    assert_eq!(statements.len(), 2);
-    assert_eq!(
-        statements[1].extra,
-        Statement::Expr(sp(11, "x", Expr::Variable))
-    );
+    assert_eq!(block.statements.len(), 1);
+    assert_eq!(*block.return_value.unwrap(), sp(11, "x", Expr::Variable));
 
     let input = Span::new("foo = |x| { 2*x }; foo(3)");
-    let statements = separated_statements::<FieldGrammar, Complete>(input)
+    let block = separated_statements::<FieldGrammar, Complete>(input)
         .unwrap()
         .1;
-    assert_eq!(statements.len(), 2);
-    assert_eq!(statements[1].fragment, "foo(3)");
+    assert_eq!(block.statements.len(), 1);
+    assert_eq!(block.return_value.unwrap().fragment, "foo(3)");
 
     let input = Span::new("{ x = 2; }; foo(3)");
-    let statements = separated_statements::<FieldGrammar, Complete>(input)
+    let block = separated_statements::<FieldGrammar, Complete>(input)
         .unwrap()
         .1;
-    assert_eq!(statements.len(), 2);
-    assert_eq!(statements[1].fragment, "foo(3)");
+    assert_eq!(block.statements.len(), 1);
+    assert_eq!(block.return_value.unwrap().fragment, "foo(3)");
 
     let input = Span::new("y = { x = 2; x + 3 }; foo(y)");
-    let statements = separated_statements::<FieldGrammar, Complete>(input)
+    let block = separated_statements::<FieldGrammar, Complete>(input)
         .unwrap()
         .1;
-    assert_eq!(statements.len(), 2);
-    assert_eq!(statements[1].fragment, "foo(y)");
+    assert_eq!(block.statements.len(), 1);
+    assert_eq!(block.return_value.unwrap().fragment, "foo(y)");
 }
 
 #[test]

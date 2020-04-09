@@ -9,14 +9,19 @@
 //!     Grammar, GrammarExt, Span,
 //! };
 //!
+//! const MIN: BinaryFn<fn(f32, f32) -> f32> =
+//!     BinaryFn::new(|x, y| if x < y { x } else { y });
+//! const MAX: BinaryFn<fn(f32, f32) -> f32> =
+//!     BinaryFn::new(|x, y| if x > y { x } else { y });
+//!
 //! let mut context = Context::new();
 //! // Add some native functions to the interpreter.
 //! context
 //!     .innermost_scope()
-//!     .insert_native_fn("min", BinaryFn::new(|x, y| if x < y { x } else { y }))
-//!     .insert_native_fn("max", BinaryFn::new(|x, y| if x > y { x } else { y }))
+//!     .insert_native_fn("min", MIN)
+//!     .insert_native_fn("max", MAX)
 //!     .insert_native_fn("assert", Assert);
-//! // Create a new scope to make native functions non-overridable.
+//! // Create a new scope to make native functions non-deletable.
 //! context.create_scope();
 //!
 //! let program = r#"
@@ -47,7 +52,7 @@ use crate::{
 };
 
 mod functions;
-pub use self::functions::{Assert, BinaryFn};
+pub use self::functions::{Assert, BinaryFn, UnaryFn};
 
 /// Errors that can occur during interpreting expressions and statements.
 #[derive(Debug)]
@@ -884,8 +889,9 @@ mod tests {
     use super::*;
     use crate::{grammars::F32Grammar, GrammarExt};
 
-    use anyhow::format_err;
     use assert_matches::assert_matches;
+
+    const SIN: UnaryFn<fn(f32) -> f32> = UnaryFn::new(f32::sin);
 
     #[test]
     fn basic_program() {
@@ -1021,25 +1027,10 @@ mod tests {
         assert!(context.get_var("lambda").is_none());
     }
 
-    #[derive(Debug, Clone, Copy)]
-    struct Sin;
-
-    impl NativeFn<F32Grammar> for Sin {
-        fn execute<'a>(
-            &self,
-            args: &[Value<'a, F32Grammar>],
-        ) -> anyhow::Result<Value<'a, F32Grammar>> {
-            match args {
-                [Value::Simple(x)] => Ok(Value::Simple(x.sin())),
-                _ => Err(format_err!("Invalid args supplied to `sin`")),
-            }
-        }
-    }
-
     #[test]
     fn program_with_native_function() {
         let mut context = Context::new();
-        context.innermost_scope().insert_native_fn("sin", Sin);
+        context.innermost_scope().insert_native_fn("sin", SIN);
 
         let program = Span::new("sin(1.0) - 3");
         let block = F32Grammar::parse_statements(program).unwrap();
@@ -1053,7 +1044,7 @@ mod tests {
         let program = Span::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let mut context = Context::new();
-        context.innermost_scope().insert_native_fn("sin", Sin);
+        context.innermost_scope().insert_native_fn("sin", SIN);
         let return_value = context.evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Simple(1.0_f32.sin()));
 
@@ -1162,7 +1153,7 @@ mod tests {
     #[test]
     fn native_fn_error() {
         let mut context = Context::new();
-        context.innermost_scope().insert_native_fn("sin", Sin);
+        context.innermost_scope().insert_native_fn("sin", SIN);
 
         let program = "1 + sin(-5.0, 2.0)";
         let program = Span::new(program);
@@ -1171,7 +1162,8 @@ mod tests {
         assert_eq!(err.inner.fragment, "sin(-5.0, 2.0)");
         assert_matches!(
             err.inner.extra,
-            EvalError::NativeCall(ref e) if e.to_string().contains("Invalid args")
+            EvalError::NativeCall(ref e)
+                if e.to_string().contains("requires one primitive argument")
         );
     }
 }

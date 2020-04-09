@@ -54,14 +54,14 @@
 //!     other_function(y - z)
 //! "#;
 //!
-//! let statements = SimpleGrammar::parse_statements(Span::new(PROGRAM)).unwrap();
+//! let block = SimpleGrammar::parse_statements(Span::new(PROGRAM)).unwrap();
 //! // First statement is an assignment.
 //! assert_matches!(
-//!     statements[0].extra,
+//!     block.statements[0].extra,
 //!     Statement::Assignment { ref lhs, .. } if lhs.fragment == "x"
 //! );
 //! // The RHS of the second statement is a function.
-//! let some_function = match &statements[1].extra {
+//! let some_function = match &block.statements[1].extra {
 //!     Statement::Assignment { rhs, .. } => &rhs.extra,
 //!     _ => panic!("Unexpected parsing result"),
 //! };
@@ -69,7 +69,9 @@
 //! assert_matches!(
 //!     some_function,
 //!     Expr::FnDefinition(FnDefinition { ref args, ref body })
-//!         if args.len() == 2 && body.len() == 1
+//!         if args.len() == 2
+//!             && body.statements.is_empty()
+//!             && body.return_value.is_some()
 //! );
 //! ```
 

@@ -49,7 +49,8 @@ jobs:
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
-          command: test --all-features
+          command: test
+          args: --all-features
 
       - name: Run example
         uses: actions-rs/cargo@v1
@@ -59,3 +60,42 @@ jobs:
 
       - name: Check docs
         run: cargo clean --doc && cargo doc --no-deps && cargo deadlinks --dir target/doc
+
+  document:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          persist-credentials: false
+
+      - name: Cache cargo build
+        uses: actions/cache@v1
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-document-target
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly-2020-03-10
+          profile: minimal
+          override: true
+
+      - name: Build docs
+        run: |
+          cargo clean --doc && \
+          cargo rustdoc --all-features -- -Z unstable-options \
+            --extern-html-root-url anyhow=https://docs.rs/anyhow/1.0.27 \
+            --extern-html-root-url nom=https://docs.rs/nom/5.1.1 \
+            --extern-html-root-url nom-locate=https://docs.rs/nom-locate/1.0.0
+
+      - name: Deploy
+        uses: JamesIves/github-pages-deploy-action@releases/v3
+        with:
+          ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          BRANCH: gh-pages
+          FOLDER: target/doc
+          SINGLE_COMMIT: true

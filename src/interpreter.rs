@@ -151,13 +151,13 @@ impl<'a, T: Grammar> FnContext<'a, T> {
 
     /// Extracts local variables from the provided lvalue.
     fn set_local_vars(&mut self, lvalue: &SpannedLvalue<'a, T::Type>) {
-        match lvalue.extra {
+        match &lvalue.extra {
             Lvalue::Variable { .. } => {
                 if lvalue.fragment != "_" {
                     self.local_vars.insert(lvalue.fragment);
                 }
             }
-            Lvalue::Tuple(ref fragments) => {
+            Lvalue::Tuple(fragments) => {
                 for fragment in fragments {
                     self.set_local_vars(fragment);
                 }
@@ -665,7 +665,7 @@ where
 
         if let Some(backtrace) = backtrace {
             backtrace.push_call(
-                &name.fragment[1..],
+                name.fragment,
                 create_span_ref(&func.definition, ()),
                 create_span_ref(expr, ()),
             );
@@ -770,7 +770,7 @@ where
                 fragments.map(Value::Tuple)
             }
 
-            Expr::Function { name, ref args } => {
+            Expr::Function { name, args } => {
                 let args: Result<Vec<_>, _> = args
                     .iter()
                     .map(|arg| self.evaluate_expr_inner(arg, backtrace))
@@ -787,11 +787,11 @@ where
                         }
                     };
 
-                    match func {
-                        Function::Interpreted(ref func) => {
+                    match &func {
+                        Function::Interpreted(func) => {
                             self.evaluate_fn(expr, func, &args, backtrace)
                         }
-                        Function::Native(ref func) => func
+                        Function::Native(func) => func
                             .execute(&args)
                             .map_err(|e| create_span_ref(expr, EvalError::NativeCall(e))),
                     }
@@ -858,7 +858,7 @@ where
                     self.evaluate_expr_inner(expr, backtrace)?;
                 }
 
-                Assignment { ref lhs, ref rhs } => {
+                Assignment { lhs, rhs } => {
                     let evaluated = self.evaluate_expr_inner(rhs, backtrace)?;
                     self.scopes.last_mut().unwrap().assign(lhs, evaluated)?;
                 }

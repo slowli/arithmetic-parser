@@ -44,18 +44,18 @@ jobs:
         uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-targets
+          args: --all-features --all-targets
 
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
-          command: test
+          command: test --all-features
 
       - name: Run example
         uses: actions-rs/cargo@v1
         with:
           command: run
-          args: --example complex_c
+          args: --all-features --example complex_c
 
       - name: Check docs
         run: cargo clean --doc && cargo doc --no-deps && cargo deadlinks --dir target/doc

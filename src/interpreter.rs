@@ -169,10 +169,11 @@ impl<'a, T: Grammar> InterpretedFn<'a, T> {
         definition: Spanned<'a, FnDefinition<'a, T>>,
         context: &Context<'a, T>,
     ) -> Result<Self, Spanned<'a, EvalError>> {
-        let captures = FnValidator::captures(&definition, context)?;
+        let mut validator = FnValidator::new();
+        validator.eval_function(&definition.extra, context)?;
         Ok(Self {
             definition,
-            captures,
+            captures: validator.captures,
         })
     }
 }
@@ -259,30 +260,42 @@ struct FnValidator<'a, T>
 where
     T: Grammar,
 {
-    local_vars: HashSet<&'a str>,
+    local_vars: Vec<HashSet<&'a str>>,
     captures: Scope<'a, T>,
 }
 
 impl<'a, T: Grammar> FnValidator<'a, T> {
-    /// Collects variables captured by the function into a single `Scope`.
-    fn captures(
-        definition: &Spanned<'a, FnDefinition<'a, T>>,
-        context: &Context<'a, T>,
-    ) -> Result<Scope<'a, T>, Spanned<'a, EvalError>> {
-        let mut fn_context = Self {
-            local_vars: HashSet::new(),
+    fn new() -> Self {
+        Self {
+            local_vars: vec![],
             captures: Scope::new(),
-        };
-
-        extract_vars(&mut fn_context.local_vars, definition.extra.args.iter())?;
-        for statement in &definition.extra.body.statements {
-            fn_context.eval_statement(statement, context)?;
         }
-        if let Some(ref return_expr) = definition.extra.body.return_value {
-            fn_context.eval(return_expr, context)?;
+    }
+
+    /// Collects variables captured by the function into a single `Scope`.
+    fn eval_function(
+        &mut self,
+        definition: &FnDefinition<'a, T>,
+        context: &Context<'a, T>,
+    ) -> Result<(), Spanned<'a, EvalError>> {
+        self.local_vars.push(HashSet::new());
+
+        extract_vars(self.local_vars.last_mut().unwrap(), definition.args.iter())?;
+        for statement in &definition.body.statements {
+            self.eval_statement(statement, context)?;
+        }
+        if let Some(ref return_expr) = definition.body.return_value {
+            self.eval(return_expr, context)?;
         }
 
-        Ok(fn_context.captures)
+        // Remove local vars defined *within* the function.
+        self.local_vars.pop();
+        Ok(())
+    }
+
+    fn has_var(&self, var_name: &str) -> bool {
+        self.captures.contains_var(var_name)
+            || self.local_vars.iter().any(|set| set.contains(var_name))
     }
 
     /// Processes a local variable in the rvalue position.
@@ -291,7 +304,7 @@ impl<'a, T: Grammar> FnValidator<'a, T> {
         var_name: &str,
         context: &Context<'a, T>,
     ) -> Result<(), EvalError> {
-        if self.local_vars.contains(var_name) || self.captures.contains_var(var_name) {
+        if self.has_var(var_name) {
             // No action needs to be performed.
         } else if let Some(val) = context.get_var(var_name) {
             self.captures.insert_var(var_name, val.clone());
@@ -302,7 +315,8 @@ impl<'a, T: Grammar> FnValidator<'a, T> {
         Ok(())
     }
 
-    /// Evaluates an expression using the provided context.
+    /// Evaluates an expression with the function validation semantics, i.e., to determine
+    /// function captures.
     fn eval(
         &mut self,
         expr: &SpannedExpr<'a, T>,
@@ -349,8 +363,8 @@ impl<'a, T: Grammar> FnValidator<'a, T> {
                 }
             }
 
-            Expr::FnDefinition(_) => {
-                return Err(create_span_ref(expr, EvalError::EmbeddedFunction));
+            Expr::FnDefinition(def) => {
+                self.eval_function(def, context)?;
             }
         }
         Ok(())
@@ -368,7 +382,7 @@ impl<'a, T: Grammar> FnValidator<'a, T> {
                 self.eval(rhs, context)?;
                 let mut new_vars = HashSet::new();
                 extract_vars(&mut new_vars, iter::once(lhs))?;
-                self.local_vars.extend(&new_vars);
+                self.local_vars.last_mut().unwrap().extend(&new_vars);
                 Ok(())
             }
         }
@@ -474,6 +488,7 @@ where
     fn eq(&self, rhs: &Self) -> bool {
         match (self, rhs) {
             (Self::Simple(this), Self::Simple(other)) => this == other,
+            (Self::Bool(this), Self::Bool(other)) => this == other,
             (Self::Tuple(this), Self::Tuple(other)) => this == other,
             _ => false,
         }
@@ -1131,6 +1146,116 @@ mod tests {
         let mut context = Context::new();
         let return_value = context.evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Simple(2.0));
+    }
+
+    #[test]
+    fn captured_function() {
+        let program = r#"
+            gen = |op| { |u, v| op(u, v) - op(v, u) };
+            add = gen(|x, y| x + y);
+            add((1, 2), (3, 4))
+        "#;
+        let program = Span::new(program);
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let mut context = Context::new();
+        let return_value = context.evaluate(&block).unwrap();
+        assert_eq!(
+            return_value,
+            Value::Tuple(vec![Value::Simple(0.0), Value::Simple(0.0)])
+        );
+
+        let add = context.get_var("add").unwrap();
+        let add = match add {
+            Value::Function(Function::Interpreted(function)) => function,
+            other => panic!("Unexpected `add` value: {:?}", other),
+        };
+        assert_eq!(add.captures.variables.len(), 1);
+        assert_matches!(add.captures.variables["op"], Value::Function(_));
+
+        let program = r#"
+            div = gen(|x, y| x / y);
+            div(1, 2) == -1.5 # 1/2 - 2/1
+        "#;
+        let program = Span::new(program);
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let return_value = context.evaluate(&block).unwrap();
+        assert_eq!(return_value, Value::Bool(true));
+    }
+
+    #[test]
+    fn indirectly_captured_function() {
+        let program = r#"
+            gen = {
+                div = |x, y| x / y;
+                |u| { |v| div(u, v) - div(v, u) }
+            };
+            fn = gen(4);
+            fn(1) == 3.75
+        "#;
+        let program = Span::new(program);
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let mut context = Context::new();
+        let return_value = context.evaluate(&block).unwrap();
+        assert_eq!(return_value, Value::Bool(true));
+
+        // Check that `div` is captured both by the external and internal functions.
+        let functions = [
+            context.get_var("fn").unwrap(),
+            context.get_var("gen").unwrap(),
+        ];
+        for function in &functions {
+            let function = match function {
+                Value::Function(Function::Interpreted(function)) => function,
+                other => panic!("Unexpected `fn` value: {:?}", other),
+            };
+            assert!(function.captures.get_var("div").unwrap().is_function());
+        }
+    }
+
+    #[test]
+    fn captured_var_in_returned_fn() {
+        let program = r#"
+            gen = |x| {
+                y = (x, x^2);
+                # Check that `x` below is not taken from the arg above, but rather
+                # from the function argument. `y` though should be captured
+                # from the surrounding function.
+                |x| y - (x, x^2)
+            };
+            foo = gen(2);
+            foo(1) == (1, 3) && foo(2) == (0, 0) && foo(3) == (-1, -5)
+        "#;
+        let program = Span::new(program);
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let mut context = Context::new();
+        let return_value = context.evaluate(&block).unwrap();
+        assert_eq!(return_value, Value::Bool(true));
+    }
+
+    #[test]
+    fn embedded_function() {
+        let program = r#"
+            gen_add = |x| |y| x + y;
+            add = gen_add(5.0);
+            add(-3) + add(-5)
+        "#;
+        let program = Span::new(program);
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let mut context = Context::new();
+        let return_value = context.evaluate(&block).unwrap();
+        assert_eq!(return_value, Value::Simple(2.0));
+
+        let program = Span::new("add = gen_add(-3); add(-1)");
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let return_value = context.evaluate(&block).unwrap();
+        assert_eq!(return_value, Value::Simple(-4.0));
+
+        let function = match context.get_var("add").unwrap() {
+            Value::Function(Function::Interpreted(function)) => function,
+            other => panic!("Unexpected `add` value: {:?}", other),
+        };
+        let captures: Vec<_> = function.captures.variables().collect();
+        assert_eq!(captures, [("x", &Value::Simple(-3.0))]);
     }
 
     #[test]

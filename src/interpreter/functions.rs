@@ -48,13 +48,11 @@ where
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(args, 3)?;
         match args {
-            [Value::Bool(condition), then_val, else_val] => {
-                Ok(if *condition {
-                    then_val.to_owned()
-                } else {
-                    else_val.to_owned()
-                })
-            }
+            [Value::Bool(condition), then_val, else_val] => Ok(if *condition {
+                then_val.to_owned()
+            } else {
+                else_val.to_owned()
+            }),
             _ => {
                 let err = EvalError::native("`if` requires 3 arguments");
                 Err(ctx.call_site_error(err))
@@ -297,19 +295,38 @@ mod tests {
         context
             .innermost_scope()
             .insert_native_fn("loop", Loop)
-            .insert_native_fn("if", EagerIf)
+            .insert_native_fn("if", LazyIf)
             .insert_native_fn("cmp", Compare);
 
         let program = r#"
-            x = 9.0;
-            # Finds the greatest power of 2 lesser on equal to the value.
-            loop((0, 1), |(i, pow)| {
-                continue = cmp(pow, x) != 1;
-                (continue, if(continue, (i + 1, pow * 2), i - 1))
-            })
+            # Finds the greatest power of 2 lesser or equal to the value.
+            discrete_log2 = |x| {
+                loop(0, |i| {
+                    continue = cmp(2^i, x) != 1;
+                    # We could use eager `if` here, but use the more complex lazy variant
+                    # to test function embedding.
+                    (continue, if(continue, || i + 1, || i - 1))
+                })
+            };
+            discrete_log2(9)
         "#;
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
         let ret = context.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Simple(3.0));
+
+        let program = "(discrete_log2(1), discrete_log2(2), \
+            discrete_log2(4), discrete_log2(6.5), discrete_log2(1000))";
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let ret = context.evaluate(&block).unwrap();
+        assert_eq!(
+            ret,
+            Value::Tuple(vec![
+                Value::Simple(0.0),
+                Value::Simple(1.0),
+                Value::Simple(2.0),
+                Value::Simple(2.0),
+                Value::Simple(9.0),
+            ])
+        );
     }
 }

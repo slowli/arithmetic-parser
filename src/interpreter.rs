@@ -52,7 +52,7 @@ use crate::{
 };
 
 mod functions;
-pub use self::functions::{Assert, BinaryFn, UnaryFn};
+pub use self::functions::{Assert, BinaryFn, Compare, EagerIf, LazyIf, Loop, UnaryFn};
 
 /// Errors that can occur during interpreting expressions and statements.
 #[derive(Debug)]
@@ -86,8 +86,8 @@ pub enum EvalError {
     /// Variable with the enclosed name is not callable (i.e., is not a function).
     CannotCall(String),
 
-    /// Error during execution of a native function.
-    NativeCall(anyhow::Error),
+    /// Generic error during execution of a native function.
+    NativeCall(String),
 
     /// Embedded function definitions are not yet supported by the interpreter.
     EmbeddedFunction,
@@ -99,10 +99,55 @@ pub enum EvalError {
     },
 }
 
+impl EvalError {
+    /// Creates a native error.
+    pub fn native(message: impl Into<String>) -> Self {
+        Self::NativeCall(message.into())
+    }
+}
+
+/// Result of an expression evaluation.
+pub type EvalResult<'a, T> = Result<Value<'a, T>, Spanned<'a, EvalError>>;
+
+/// Opaque context for native calls.
+#[derive(Debug)]
+pub struct CallContext<'r, 'a> {
+    fn_name: Span<'a>,
+    call_span: Span<'a>,
+    backtrace: &'r mut Option<Backtrace<'a>>,
+}
+
+impl<'a> CallContext<'_, 'a> {
+    /// Creates the error spanning the call site.
+    pub fn call_site_error(&self, error: EvalError) -> Spanned<'a, EvalError> {
+        create_span(self.call_span, error)
+    }
+
+    /// Checks argument count and returns an error if it doesn't match.
+    pub fn check_args_count<T: Grammar>(
+        &self,
+        args: &[Value<'a, T>],
+        expected_count: usize,
+    ) -> Result<(), Spanned<'a, EvalError>> {
+        if args.len() == expected_count {
+            Ok(())
+        } else {
+            Err(self.call_site_error(EvalError::ArgsLenMismatch {
+                def: expected_count,
+                call: args.len(),
+            }))
+        }
+    }
+}
+
 /// Function on zero or more `Value`s.
 pub trait NativeFn<T: Grammar> {
     /// Executes the function on the specified arguments.
-    fn execute<'a>(&self, args: &[Value<'a, T>]) -> anyhow::Result<Value<'a, T>>;
+    fn evaluate<'a>(
+        &self,
+        args: &[Value<'a, T>],
+        context: &mut CallContext<'_, 'a>,
+    ) -> EvalResult<'a, T>;
 }
 
 impl<T: Grammar> fmt::Debug for dyn NativeFn<T> {
@@ -124,7 +169,7 @@ impl<'a, T: Grammar> InterpretedFn<'a, T> {
         definition: Spanned<'a, FnDefinition<'a, T>>,
         context: &Context<'a, T>,
     ) -> Result<Self, Spanned<'a, EvalError>> {
-        let captures = FnContext::captures(&definition, context)?;
+        let captures = FnValidator::captures(&definition, context)?;
         Ok(Self {
             definition,
             captures,
@@ -137,32 +182,37 @@ where
     T: Grammar,
     T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
 {
+    /// Evaluates the function. This can be used from native functions.
+    pub fn evaluate(
+        &self,
+        args: &[Value<'a, T>],
+        context: &mut CallContext<'_, 'a>,
+    ) -> EvalResult<'a, T> {
+        self.eval_inner(context.fn_name, context.call_span, args, context.backtrace)
+    }
+
     fn eval_inner(
         &self,
-        call_span: &SpannedExpr<'a, T>,
+        fn_name: Span<'a>,
+        call_span: Span<'a>,
         args: &[Value<'a, T>],
         backtrace: &mut Option<Backtrace<'a>>,
-    ) -> Result<Value<'a, T>, Spanned<'a, EvalError>> {
+    ) -> EvalResult<'a, T> {
         if args.len() != self.definition.extra.args.len() {
             let err = EvalError::ArgsLenMismatch {
                 def: self.definition.extra.args.len(),
                 call: args.len(),
             };
-            return Err(create_span_ref(call_span, err));
+            return Err(create_span(call_span, err));
         }
 
-        let fn_name = match call_span.extra {
-            Expr::Function { name, .. } => name,
-            _ => unreachable!(),
-        };
         let def = &self.definition.extra;
-
         if let Some(backtrace) = backtrace {
             // FIXME: distinguish between interpreted and native calls.
             backtrace.push_call(
                 fn_name.fragment,
                 create_span_ref(&self.definition, ()),
-                create_span_ref(call_span, ()),
+                call_span,
             );
         }
 
@@ -205,7 +255,7 @@ fn extract_vars<'it, 'a: 'it, T: 'it>(
 /// Helper context for symbolic execution of a function body in order to determine
 /// variables captured by the function.
 #[derive(Debug)]
-struct FnContext<'a, T>
+struct FnValidator<'a, T>
 where
     T: Grammar,
 {
@@ -213,7 +263,7 @@ where
     captures: Scope<'a, T>,
 }
 
-impl<'a, T: Grammar> FnContext<'a, T> {
+impl<'a, T: Grammar> FnValidator<'a, T> {
     /// Collects variables captured by the function into a single `Scope`.
     fn captures(
         definition: &Spanned<'a, FnDefinition<'a, T>>,
@@ -343,6 +393,24 @@ impl<T: Grammar> Clone for Function<'_, T> {
         match self {
             Self::Native(function) => Self::Native(Rc::clone(&function)),
             Self::Interpreted(function) => Self::Interpreted(Rc::clone(&function)),
+        }
+    }
+}
+
+impl<'a, T> Function<'a, T>
+where
+    T: Grammar,
+    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+{
+    /// Evaluates the function on the specified arguments.
+    pub fn evaluate(
+        &self,
+        args: &[Value<'a, T>],
+        ctx: &mut CallContext<'_, 'a>,
+    ) -> EvalResult<'a, T> {
+        match self {
+            Self::Native(function) => function.evaluate(args, ctx),
+            Self::Interpreted(function) => function.evaluate(args, ctx),
         }
     }
 }
@@ -738,7 +806,7 @@ where
         spanned_rhs: &SpannedExpr<'a, T>,
         op: Spanned<'a, BinaryOp>,
         backtrace: &mut Option<Backtrace<'a>>,
-    ) -> Result<Value<'a, T>, Spanned<'a, EvalError>> {
+    ) -> EvalResult<'a, T> {
         let lhs = self.evaluate_expr_inner(spanned_lhs, backtrace)?;
 
         // Short-circuit logic for bool operations.
@@ -801,7 +869,7 @@ where
         &mut self,
         expr: &SpannedExpr<'a, T>,
         backtrace: &mut Option<Backtrace<'a>>,
-    ) -> Result<Value<'a, T>, Spanned<'a, EvalError>> {
+    ) -> EvalResult<'a, T> {
         match &expr.extra {
             Expr::Variable => self.get_var(expr.fragment).cloned().ok_or_else(|| {
                 create_span_ref(expr, EvalError::Undefined(expr.fragment.to_owned()))
@@ -832,13 +900,12 @@ where
                             return Err(create_span_ref(expr, err));
                         }
                     };
-
-                    match &func {
-                        Function::Interpreted(func) => func.eval_inner(expr, &args, backtrace),
-                        Function::Native(func) => func
-                            .execute(&args)
-                            .map_err(|e| create_span_ref(expr, EvalError::NativeCall(e))),
-                    }
+                    let mut context = CallContext {
+                        fn_name: create_span_ref(name, ()),
+                        call_span: create_span_ref(expr, ()),
+                        backtrace,
+                    };
+                    func.evaluate(&args, &mut context)
                 } else {
                     Err(create_span(
                         *name,
@@ -893,7 +960,7 @@ where
         &mut self,
         block: &Block<'a, T>,
         backtrace: &mut Option<Backtrace<'a>>,
-    ) -> Result<Value<'a, T>, Spanned<'a, EvalError>> {
+    ) -> EvalResult<'a, T> {
         use crate::Statement::*;
 
         for statement in &block.statements {
@@ -1293,15 +1360,22 @@ mod tests {
         let mut context = Context::new();
         context.innermost_scope().insert_native_fn("sin", SIN);
 
-        let program = "1 + sin(-5.0, 2.0)";
-        let program = Span::new(program);
+        let program = Span::new("1 + sin(-5.0, 2.0)");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = context.evaluate(&block).unwrap_err();
         assert_eq!(err.inner.fragment, "sin(-5.0, 2.0)");
         assert_matches!(
             err.inner.extra,
-            EvalError::NativeCall(ref e)
-                if e.to_string().contains("requires one primitive argument")
+            EvalError::ArgsLenMismatch { def: 1, call: 2 }
+        );
+
+        let program = Span::new("1 + sin((-5, 2))");
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let err = context.evaluate(&block).unwrap_err();
+        assert_eq!(err.inner.fragment, "sin((-5, 2))");
+        assert_matches!(
+            err.inner.extra,
+            EvalError::NativeCall(ref msg) if msg.contains("requires one primitive argument")
         );
     }
 }

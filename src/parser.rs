@@ -303,28 +303,11 @@ where
     })
 }
 
-fn var_or_fn_call<T, Ty>(input: Span<'_>) -> NomResult<'_, SpannedExpr<'_, T>>
-where
-    T: Grammar,
-    Ty: GrammarType,
-{
-    let parser = tuple((var_name, opt(preceded(ws::<Ty>, fn_args::<T, Ty>))));
-    map(with_span(parser), |spanned| {
-        map_span(spanned, |(name, maybe_args)| {
-            if let Some(args) = maybe_args {
-                Expr::Function { name, args }
-            } else {
-                Expr::Variable
-            }
-        })
-    })(input)
-}
-
-/// Parses a simple expression, i.e., one not containing binary operations.
+/// Parses a simple expression, i.e., one not containing binary operations or function calls.
 ///
 /// From the construction, the evaluation priorities within such an expression are always higher
 /// than for possible binary ops surrounding it.
-fn simple_expr<'a, T, Ty>(input: Span<'a>) -> NomResult<'a, SpannedExpr<'a, T>>
+fn simplest_expr<'a, T, Ty>(input: Span<'a>) -> NomResult<'a, SpannedExpr<'a, T>>
 where
     T: Grammar,
     Ty: GrammarType,
@@ -361,7 +344,9 @@ where
         };
 
     alt((
-        var_or_fn_call::<T, Ty>,
+        map(with_span(var_name), |span| {
+            create_span(span, Expr::Variable)
+        }),
         map(with_span(T::parse_literal), |span| Spanned {
             offset: span.offset,
             line: span.line,
@@ -390,6 +375,28 @@ where
         block_parser,
         paren_expr::<T, Ty>,
     ))(input)
+}
+
+/// Simple expression, which includes, besides `simplest_expr`s, function calls.
+fn simple_expr<T, Ty>(input: Span<'_>) -> NomResult<'_, SpannedExpr<'_, T>>
+where
+    T: Grammar,
+    Ty: GrammarType,
+{
+    let parser = tuple((
+        simplest_expr::<T, Ty>,
+        many0(with_span(preceded(ws::<Ty>, fn_args::<T, Ty>))),
+    ));
+    map(parser, |(base, args_vec)| {
+        args_vec.into_iter().fold(base, |name, spanned_args| {
+            let united_span = unite_spans(input, &name, &spanned_args);
+            let expr = Expr::Function {
+                name: Box::new(name),
+                args: spanned_args.extra,
+            };
+            create_span(united_span, expr)
+        })
+    })(input)
 }
 
 /// Parses an expression with binary operations into a tree with the hierarchy reflecting

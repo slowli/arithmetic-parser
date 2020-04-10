@@ -130,10 +130,11 @@ where
     /// Function definition, e.g., `|x, y| { x + y }`.
     FnDefinition(FnDefinition<'a, T>),
 
-    /// Function call, e.g., `foo(x, y)`.
+    /// Function call, e.g., `foo(x, y)` or `|x| { x + 5 }(3)`.
     Function {
-        /// Function name.
-        name: Span<'a>,
+        /// Function value. In the simplest case, this is a variable, but may also be another
+        /// kind of expression, such as `|x| { x + 5 }` in `|x| { x + 5 }(3)`.
+        name: Box<SpannedExpr<'a, T>>,
         /// Function arguments.
         args: Vec<SpannedExpr<'a, T>>,
     },
@@ -190,7 +191,7 @@ impl<T: Grammar> Clone for Expr<'_, T> {
             Self::Tuple(tuple) => Self::Tuple(tuple.clone()),
             Self::Block(block) => Self::Block(block.clone()),
             Self::Function { name, args } => Self::Function {
-                name: *name,
+                name: name.clone(),
                 args: args.clone(),
             },
             Self::Unary { op, inner } => Self::Unary {

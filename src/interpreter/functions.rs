@@ -93,8 +93,7 @@ impl<T: Grammar> NativeFn<T> for Assert {
 /// #     interpreter::{If, EvalError, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
-/// # // FIXME: remove `f` assignment once parser is improved
-/// let program = "x = 3; f = if(x == 2, || -1, || x + 1); f()";
+/// let program = "x = 3; if(x == 2, || -1, || x + 1)()";
 /// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
@@ -360,8 +359,7 @@ mod tests {
 
         let program = r#"
             x = 4.5;
-            fn = if(cmp(x, 2) == -1, || x + 5, || 3 - x);
-            fn()
+            if(cmp(x, 2) == -1, || x + 5, || 3 - x)()
         "#;
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();

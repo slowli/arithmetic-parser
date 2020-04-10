@@ -294,12 +294,12 @@ fn var_name_works() {
 fn fun_works() {
     let input = Span::new("ge(0x123456) + 1");
     assert_eq!(
-        var_or_fn_call::<FieldGrammar, Complete>(input).unwrap().1,
+        simple_expr::<FieldGrammar, Complete>(input).unwrap().1,
         sp(
             0,
             "ge(0x123456)",
             Expr::Function {
-                name: span(0, "ge"),
+                name: Box::new(sp(0, "ge", Expr::Variable)),
                 args: vec![sp(
                     3,
                     "0x123456",
@@ -314,12 +314,12 @@ fn fun_works() {
 
     let input = Span::new("ge (  0x123456\t) + A");
     assert_eq!(
-        var_or_fn_call::<FieldGrammar, Complete>(input).unwrap().1,
+        simple_expr::<FieldGrammar, Complete>(input).unwrap().1,
         sp(
             0,
             "ge (  0x123456\t)",
             Expr::Function {
-                name: span(0, "ge"),
+                name: Box::new(sp(0, "ge", Expr::Variable)),
                 args: vec![sp(
                     6,
                     "0x123456",
@@ -327,10 +327,60 @@ fn fun_works() {
                         value: vec![0x12, 0x34, 0x56],
                         ty: LiteralType::Bytes,
                     })
-                ),]
+                )]
             }
         )
     );
+}
+
+#[test]
+fn fun_works_with_complex_called_values() {
+    let input = Span::new("ge(x, 3)(0x123456) + 5");
+    let inner_fn = sp(
+        0,
+        "ge(x, 3)",
+        Expr::Function {
+            name: Box::new(sp(0, "ge", Expr::Variable)),
+            args: vec![
+                sp(3, "x", Expr::Variable),
+                sp(6, "3", Expr::Literal(Literal::Number)),
+            ],
+        },
+    );
+    assert_eq!(
+        simple_expr::<FieldGrammar, Complete>(input).unwrap().1,
+        sp(
+            0,
+            "ge(x, 3)(0x123456)",
+            Expr::Function {
+                name: Box::new(inner_fn),
+                args: vec![sp(
+                    9,
+                    "0x123456",
+                    Expr::Literal(Literal::Bytes {
+                        value: vec![0x12, 0x34, 0x56],
+                        ty: LiteralType::Bytes,
+                    })
+                )]
+            }
+        )
+    );
+
+    let input = Span::new("(|x| x + 1)(0xs_123456) + 5");
+    let (_, function) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+    let function_value = match function.extra {
+        Expr::Function { name, .. } => name.extra,
+        other => panic!("unexpected expr: {:?}", other),
+    };
+    assert_matches!(function_value, Expr::FnDefinition(_));
+
+    let input = Span::new("|x| { x + 1 }(0xs_123456) + 5");
+    let (_, function) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+    let function_value = match function.extra {
+        Expr::Function { name, .. } => name.extra,
+        other => panic!("unexpected expr: {:?}", other),
+    };
+    assert_matches!(function_value, Expr::FnDefinition(_));
 }
 
 #[test]
@@ -345,7 +395,7 @@ fn element_expr_works() {
     assert_eq!(
         expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
         Expr::Function {
-            name: span(1, "ge"),
+            name: Box::new(sp(1, "ge", Expr::Variable)),
             args: vec![sp(
                 4,
                 "0x1234",
@@ -363,7 +413,7 @@ fn element_expr_works() {
         Expr::Binary {
             lhs: Box::new(sp(0, "ge(0x1234)", {
                 Expr::Function {
-                    name: span(0, "ge"),
+                    name: Box::new(sp(0, "ge", Expr::Variable)),
                     args: vec![sp(
                         3,
                         "0x1234",
@@ -389,7 +439,7 @@ fn element_expr_works() {
                         0,
                         "ge(0x1234)",
                         Expr::Function {
-                            name: span(0, "ge"),
+                            name: Box::new(sp(0, "ge", Expr::Variable)),
                             args: vec![sp(
                                 3,
                                 "0x1234",
@@ -419,7 +469,7 @@ fn element_expr_works() {
                         1,
                         "ge(0x1234)",
                         Expr::Function {
-                            name: span(1, "ge"),
+                            name: Box::new(sp(1, "ge", Expr::Variable)),
                             args: vec![sp(
                                 4,
                                 "0x1234",
@@ -447,7 +497,7 @@ fn element_expr_works() {
                                 26,
                                 "ge(0x00)",
                                 Expr::Function {
-                                    name: span(26, "ge"),
+                                    name: Box::new(sp(26, "ge", Expr::Variable)),
                                     args: vec![sp(
                                         29,
                                         "0x00",
@@ -574,7 +624,7 @@ fn assignment_works() {
                 4,
                 "sc(0x1234)",
                 Expr::Function {
-                    name: span(4, "sc"),
+                    name: Box::new(sp(4, "sc", Expr::Variable)),
                     args: vec![sp(
                         7,
                         "0x1234",
@@ -605,7 +655,7 @@ fn assignment_works() {
                                 9,
                                 "sc(0x0001)",
                                 Expr::Function {
-                                    name: span(9, "sc"),
+                                    name: Box::new(sp(9, "sc", Expr::Variable)),
                                     args: vec![sp(
                                         12,
                                         "0x0001",
@@ -986,7 +1036,7 @@ fn fn_definition_parsing() {
 fn incomplete_fn() {
     let input = Span::new("sc(1,");
     assert_matches!(
-        var_or_fn_call::<FieldGrammar, Streaming>(input).unwrap_err(),
+        simple_expr::<FieldGrammar, Streaming>(input).unwrap_err(),
         NomErr::Incomplete(_)
     );
 }

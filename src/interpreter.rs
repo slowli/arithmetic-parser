@@ -98,8 +98,8 @@ pub enum EvalError {
     /// Variable with the enclosed name is not defined.
     Undefined(String),
 
-    /// Variable with the enclosed name is not callable (i.e., is not a function).
-    CannotCall(String),
+    /// Variable is not callable (i.e., is not a function).
+    CannotCall,
 
     /// Generic error during execution of a native function.
     NativeCall(String),
@@ -914,33 +914,26 @@ where
             }
 
             Expr::Function { name, args } => {
+                let func = self.evaluate_expr_inner(name, backtrace)?;
+                let func = match func {
+                    Value::Function(func) => func,
+                    _ => {
+                        let err = EvalError::CannotCall;
+                        return Err(create_span_ref(expr, err));
+                    }
+                };
+
                 let args: Result<Vec<_>, _> = args
                     .iter()
                     .map(|arg| self.evaluate_expr_inner(arg, backtrace))
                     .collect();
                 let args = args?;
-
-                let resolved_name = name.fragment;
-                if let Some(func) = self.get_var(resolved_name).cloned() {
-                    let func = match func {
-                        Value::Function(func) => func,
-                        _ => {
-                            let err = EvalError::CannotCall(resolved_name.to_owned());
-                            return Err(create_span_ref(expr, err));
-                        }
-                    };
-                    let mut context = CallContext {
-                        fn_name: create_span_ref(name, ()),
-                        call_span: create_span_ref(expr, ()),
-                        backtrace,
-                    };
-                    func.evaluate(&args, &mut context)
-                } else {
-                    Err(create_span(
-                        *name,
-                        EvalError::Undefined(resolved_name.to_owned()),
-                    ))
-                }
+                let mut context = CallContext {
+                    fn_name: create_span_ref(name, ()),
+                    call_span: create_span_ref(expr, ()),
+                    backtrace,
+                };
+                func.evaluate(&args, &mut context)
             }
 
             // Arithmetic operations
@@ -1302,6 +1295,25 @@ mod tests {
     }
 
     #[test]
+    fn immediately_executed_function() {
+        let mut interpreter = Interpreter::new();
+        let program = "-|x| { x + 5 }(-3)";
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let return_value = interpreter.evaluate(&block).unwrap();
+        assert_eq!(return_value, Value::Simple(-2.0));
+
+        let program = "2 + |x| { x + 5 }(-3)";
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let return_value = interpreter.evaluate(&block).unwrap();
+        assert_eq!(return_value, Value::Simple(4.0));
+
+        let program = "add = |x, y| x + y; add(10, |x| { x + 5 }(-3))";
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let return_value = interpreter.evaluate(&block).unwrap();
+        assert_eq!(return_value, Value::Simple(12.0));
+    }
+
+    #[test]
     fn program_with_native_function() {
         let mut interpreter = Interpreter::new();
         interpreter.innermost_scope().insert_native_fn("sin", SIN);
@@ -1427,7 +1439,7 @@ mod tests {
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         assert_eq!(err.inner.offset, 7);
-        assert_matches!(err.inner.extra, EvalError::CannotCall(ref var) if var == "x");
+        assert_matches!(err.inner.extra, EvalError::CannotCall);
     }
 
     #[test]

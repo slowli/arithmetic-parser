@@ -1,7 +1,8 @@
-# Flexible Arithmetic Parser
+# Flexible Arithmetic Parser & Interpreter
 
 Versatile parser for arithmetic expressions which allows to customize literal definitions,
-type annotations and several other aspects of parsing.
+type annotations and several other aspects of parsing. There is a [simple interpreter](#interpreter)
+as well, but its utility heavily depends on the domain.
 
 ## Supported Features
 
@@ -54,15 +55,12 @@ other_function = |x| {
 other_function(y - z)
 ```
 
-## Unsupported Features
+## Interpreter
 
-Since the versatility of literals / type annotations is the entire point of the library,
-it does little besides parsing. In particular, the library does not provide means
-to interpret / compile the produced AST or analyze it in other ways
-(e.g., by performing Hindley – Milner type inference).
-
-Another missing feature is control flow (such as conditionals and loops). This is to
-keep the grammar reasonably short.
+The library provides a simple interpreter, which can be used for *some* grammars
+(e.g., real-valued arithmetic). The interpreter provides support for native functions,
+which allows to overcome some syntax limitations (e.g., the lack of control flow
+can be solved with native `if` / `loop` functions).
 
 ## Implementation Details 
 

@@ -7,6 +7,8 @@
 //! - Arithmetic operations are assumed to be infallible; panics during their execution
 //!   are **not** caught by the interpreter.
 //! - Grammar literals are directly parsed to the aforementioned numeric type.
+//! - All variables are immutable. Re-declaring a var shadows the previous declaration.
+//! - Functions can capture variables (including other functions). All captures are by value.
 //! - Type annotations are completely ignored. This means that the interpreter may execute
 //!   code that is incorrect with annotations (e.g., assignment of a tuple to a variable which
 //!   is annotated to have a numeric type).
@@ -1434,11 +1436,16 @@ mod tests {
 
     #[test]
     fn cannot_call_error() {
-        let program = "x = 5; x(1.0)";
-        let program = Span::new(program);
+        let program = Span::new("x = 5; x(1.0)");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         assert_eq!(err.inner.offset, 7);
+        assert_matches!(err.inner.extra, EvalError::CannotCall);
+
+        let program = Span::new("2 + 1.0(5)");
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let err = Interpreter::new().evaluate(&block).unwrap_err();
+        assert_eq!(err.inner.fragment, "1.0(5)");
         assert_matches!(err.inner.extra, EvalError::CannotCall);
     }
 

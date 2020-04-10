@@ -41,7 +41,7 @@ use num_traits::{Num, Pow};
 
 use std::{
     collections::{HashMap, HashSet},
-    fmt, ops,
+    fmt, iter, ops,
     rc::Rc,
 };
 
@@ -64,16 +64,34 @@ pub enum EvalError {
         /// Length of a tuple on the right-hand side.
         rhs: usize,
     },
+
+    /// Mismatch between the number of arguments in the function definition and its call.
+    ArgsLenMismatch {
+        /// Number of args at the function definition.
+        def: usize,
+        /// Number of args at the function call.
+        call: usize,
+    },
+
     /// Cannot destructure a no-tuple variable.
+    // TODO: span the RHS?
     CannotDestructure,
+
+    /// Repeated assignment to the same variable in function args or tuple destructuring.
+    RepeatedAssignment,
+
     /// Variable with the enclosed name is not defined.
     Undefined(String),
+
     /// Variable with the enclosed name is not callable (i.e., is not a function).
     CannotCall(String),
+
     /// Error during execution of a native function.
     NativeCall(anyhow::Error),
+
     /// Embedded function definitions are not yet supported by the interpreter.
     EmbeddedFunction,
+
     /// Unexpected operand type(s) for the specified operation.
     UnexpectedOperand {
         /// Operation which failed.
@@ -114,6 +132,76 @@ impl<'a, T: Grammar> InterpretedFn<'a, T> {
     }
 }
 
+impl<'a, T> InterpretedFn<'a, T>
+where
+    T: Grammar,
+    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+{
+    fn eval_inner(
+        &self,
+        call_span: &SpannedExpr<'a, T>,
+        args: &[Value<'a, T>],
+        backtrace: &mut Option<Backtrace<'a>>,
+    ) -> Result<Value<'a, T>, Spanned<'a, EvalError>> {
+        if args.len() != self.definition.extra.args.len() {
+            let err = EvalError::ArgsLenMismatch {
+                def: self.definition.extra.args.len(),
+                call: args.len(),
+            };
+            return Err(create_span_ref(call_span, err));
+        }
+
+        let fn_name = match call_span.extra {
+            Expr::Function { name, .. } => name,
+            _ => unreachable!(),
+        };
+        let def = &self.definition.extra;
+
+        if let Some(backtrace) = backtrace {
+            // FIXME: distinguish between interpreted and native calls.
+            backtrace.push_call(
+                fn_name.fragment,
+                create_span_ref(&self.definition, ()),
+                create_span_ref(call_span, ()),
+            );
+        }
+
+        let mut context = Context::from_scope(self.captures.clone());
+        for (lvalue, val) in def.args.iter().zip(args) {
+            context.innermost_scope().assign(lvalue, val.clone())?;
+        }
+        let result = context.evaluate_inner(&def.body, backtrace);
+
+        if result.is_ok() {
+            if let Some(backtrace) = backtrace {
+                backtrace.pop_call();
+            }
+        }
+        result
+    }
+}
+
+fn extract_vars<'it, 'a: 'it, T: 'it>(
+    vars: &mut HashSet<&'a str>,
+    lvalues: impl Iterator<Item = &'it SpannedLvalue<'a, T>>,
+) -> Result<(), Spanned<'a, EvalError>> {
+    for lvalue in lvalues {
+        match &lvalue.extra {
+            Lvalue::Variable { .. } => {
+                if lvalue.fragment != "_" && !vars.insert(lvalue.fragment) {
+                    let err = EvalError::RepeatedAssignment;
+                    return Err(create_span_ref(lvalue, err));
+                }
+            }
+
+            Lvalue::Tuple(fragments) => {
+                extract_vars(vars, fragments.iter())?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Helper context for symbolic execution of a function body in order to determine
 /// variables captured by the function.
 #[derive(Debug)]
@@ -136,9 +224,7 @@ impl<'a, T: Grammar> FnContext<'a, T> {
             captures: Scope::new(),
         };
 
-        for arg in &definition.extra.args {
-            fn_context.set_local_vars(arg);
-        }
+        extract_vars(&mut fn_context.local_vars, definition.extra.args.iter())?;
         for statement in &definition.extra.body.statements {
             fn_context.eval_statement(statement, context)?;
         }
@@ -147,22 +233,6 @@ impl<'a, T: Grammar> FnContext<'a, T> {
         }
 
         Ok(fn_context.captures)
-    }
-
-    /// Extracts local variables from the provided lvalue.
-    fn set_local_vars(&mut self, lvalue: &SpannedLvalue<'a, T::Type>) {
-        match &lvalue.extra {
-            Lvalue::Variable { .. } => {
-                if lvalue.fragment != "_" {
-                    self.local_vars.insert(lvalue.fragment);
-                }
-            }
-            Lvalue::Tuple(fragments) => {
-                for fragment in fragments {
-                    self.set_local_vars(fragment);
-                }
-            }
-        }
     }
 
     /// Processes a local variable in the rvalue position.
@@ -246,7 +316,9 @@ impl<'a, T: Grammar> FnContext<'a, T> {
             Statement::Expr(expr) => self.eval(expr, context),
             Statement::Assignment { lhs, rhs } => {
                 self.eval(rhs, context)?;
-                self.set_local_vars(lhs);
+                let mut new_vars = HashSet::new();
+                extract_vars(&mut new_vars, iter::once(lhs))?;
+                self.local_vars.extend(&new_vars);
                 Ok(())
             }
         }
@@ -512,11 +584,14 @@ impl<'a, T: Grammar> Scope<'a, T> {
         self
     }
 
-    pub(crate) fn assign<'lv>(
+    fn assign<'lv>(
         &mut self,
         lvalue: &SpannedLvalue<'lv, T::Type>,
         rvalue: Value<'a, T>,
     ) -> Result<(), Spanned<'lv, EvalError>> {
+        // TODO: This check is repeated for function bodies.
+        extract_vars(&mut HashSet::new(), iter::once(lvalue))?;
+
         match &lvalue.extra {
             Lvalue::Variable { .. } => {
                 let var_name = lvalue.fragment;
@@ -616,6 +691,12 @@ impl<'a, T: Grammar> Context<'a, T> {
         }
     }
 
+    fn from_scope(scope: Scope<'a, T>) -> Self {
+        Self {
+            scopes: vec![scope],
+        }
+    }
+
     /// Returns an exclusive reference to the innermost scope.
     pub fn innermost_scope(&mut self) -> &mut Scope<'a, T> {
         self.scopes.last_mut().unwrap()
@@ -650,41 +731,6 @@ impl<'a, T: Grammar> Context<'a, T>
 where
     T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
 {
-    fn evaluate_fn(
-        &mut self,
-        expr: &SpannedExpr<'a, T>,
-        func: &InterpretedFn<'a, T>,
-        args: &[Value<'a, T>],
-        backtrace: &mut Option<Backtrace<'a>>,
-    ) -> Result<Value<'a, T>, Spanned<'a, EvalError>> {
-        let name = match expr.extra {
-            Expr::Function { name, .. } => name,
-            _ => unreachable!(),
-        };
-        let def = &func.definition.extra;
-
-        if let Some(backtrace) = backtrace {
-            backtrace.push_call(
-                name.fragment,
-                create_span_ref(&func.definition, ()),
-                create_span_ref(expr, ()),
-            );
-        }
-        self.scopes.push(func.captures.clone());
-        for (lvalue, val) in def.args.iter().zip(args) {
-            self.innermost_scope().assign(lvalue, val.clone())?;
-        }
-        let result = self.evaluate_inner(&def.body, backtrace);
-
-        if result.is_ok() {
-            if let Some(backtrace) = backtrace {
-                backtrace.pop_call();
-            }
-        }
-        self.pop_scope();
-        result
-    }
-
     fn evaluate_binary_expr(
         &mut self,
         expr_span: Span<'a>,
@@ -788,9 +834,7 @@ where
                     };
 
                     match &func {
-                        Function::Interpreted(func) => {
-                            self.evaluate_fn(expr, func, &args, backtrace)
-                        }
+                        Function::Interpreted(func) => func.eval_inner(expr, &args, backtrace),
                         Function::Native(func) => func
                             .execute(&args)
                             .map_err(|e| create_span_ref(expr, EvalError::NativeCall(e))),
@@ -958,6 +1002,33 @@ mod tests {
     }
 
     #[test]
+    fn destructuring_in_fn_args() {
+        let program = r#"
+            swap = |x, (y, z)| ((x, y), z);
+            swap(1, (2, 3))
+        "#;
+        let program = Span::new(program);
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let mut context = Context::new();
+        let return_value = context.evaluate(&block).unwrap();
+        let inner_tuple = Value::Tuple(vec![Value::Simple(1.0), Value::Simple(2.0)]);
+        assert_eq!(
+            return_value,
+            Value::Tuple(vec![inner_tuple, Value::Simple(3.0)])
+        );
+
+        let program = r#"
+            add = |x, (_, z)| x + z;
+            add(1, (2, 3))
+        "#;
+        let program = Span::new(program);
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let mut context = Context::new();
+        let return_value = context.evaluate(&block).unwrap();
+        assert_eq!(return_value, Value::Simple(4.0));
+    }
+
+    #[test]
     fn captures_in_function() {
         let program = r#"
             x = 5;
@@ -1081,6 +1152,73 @@ mod tests {
         let err = context.evaluate(&block).unwrap_err();
         assert_eq!(err.inner.fragment, "sin");
         assert_matches!(err.inner.extra, EvalError::Undefined(ref var) if var == "sin");
+    }
+
+    #[test]
+    fn arg_len_mismatch() {
+        let mut context = Context::new();
+        let program = Span::new("foo = |x| x + 5; foo()");
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let err = context.evaluate(&block).unwrap_err();
+        assert_eq!(err.inner.fragment, "foo()");
+        assert_matches!(
+            err.inner.extra,
+            EvalError::ArgsLenMismatch { def: 1, call: 0 }
+        );
+
+        let program = Span::new("foo(1, 2) * 3.0");
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let err = context.evaluate(&block).unwrap_err();
+        assert_eq!(err.inner.fragment, "foo(1, 2)");
+        assert_matches!(
+            err.inner.extra,
+            EvalError::ArgsLenMismatch { def: 1, call: 2 }
+        );
+    }
+
+    #[test]
+    fn repeated_args_in_fn_definition() {
+        let mut context = Context::new();
+
+        let program = Span::new("add = |x, x| x + 2;");
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let err = context.evaluate(&block).unwrap_err();
+        assert_eq!(err.inner.fragment, "x");
+        assert_eq!(err.inner.offset, 10);
+        assert_matches!(err.inner.extra, EvalError::RepeatedAssignment);
+
+        let program = Span::new("add = |x, (y, x)| x + y;");
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let err = context.evaluate(&block).unwrap_err();
+        assert_eq!(err.inner.fragment, "x");
+        assert_eq!(err.inner.offset, 14);
+        assert_matches!(err.inner.extra, EvalError::RepeatedAssignment);
+    }
+
+    #[test]
+    fn repeated_var_in_lvalue() {
+        let mut context = Context::new();
+        let program = Span::new("(x, x) = (1, 2);");
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let err = context.evaluate(&block).unwrap_err();
+        assert_eq!(err.inner.fragment, "x");
+        assert_eq!(err.inner.offset, 4);
+        assert_matches!(err.inner.extra, EvalError::RepeatedAssignment);
+    }
+
+    #[test]
+    fn error_in_function_args() {
+        let program = r#"
+            add = |x, (_, z)| x + z;
+            add(1, 2)
+        "#;
+        let program = Span::new(program);
+        let block = F32Grammar::parse_statements(program).unwrap();
+
+        let mut context = Context::new();
+        let err = context.evaluate(&block).unwrap_err();
+        assert_eq!(err.inner.fragment, "(_, z)");
+        assert_matches!(err.inner.extra, EvalError::CannotDestructure);
     }
 
     #[test]

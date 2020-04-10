@@ -8,6 +8,35 @@ use super::{CallContext, EvalError, EvalResult, NativeFn, Value};
 use crate::Grammar;
 
 /// Assertion function.
+///
+/// # Type
+///
+/// ```text
+/// fn(bool)
+/// ```
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::{
+/// #     interpreter::{Assert, EvalError, Interpreter}, grammars::F32Grammar, GrammarExt, Span,
+/// # };
+/// # use assert_matches::assert_matches;
+/// let program = r#"
+///     assert(1 + 2 == 3); # this assertion is fine
+///     assert(3^2 == 10); # this one will fail
+/// "#;
+/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+///
+/// let mut interpreter = Interpreter::new();
+/// interpreter.innermost_scope().insert_native_fn("assert", Assert);
+/// let err = interpreter.evaluate(&block).unwrap_err();
+/// assert_eq!(err.inner.fragment, "assert(3^2 == 10)");
+/// assert_matches!(
+///     err.inner.extra,
+///     EvalError::NativeCall(ref msg) if msg == "Assertion failed"
+/// );
+/// ```
 #[derive(Debug, Clone, Copy)]
 pub struct Assert;
 
@@ -33,10 +62,50 @@ impl<T: Grammar> NativeFn<T> for Assert {
 }
 
 /// `if` function that eagerly evaluates "if" / "else" terms.
+///
+/// # Type
+///
+/// ```text
+/// fn<T>(bool, T, T) -> T
+/// ```
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::{
+/// #     interpreter::{If, EvalError, Interpreter, Value}, grammars::F32Grammar,
+/// #     GrammarExt, Span,
+/// # };
+/// let program = "x = 3; if(x == 2, -1, x + 1)";
+/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+///
+/// let mut interpreter = Interpreter::new();
+/// interpreter.innermost_scope().insert_native_fn("if", If);
+/// let ret = interpreter.evaluate(&block).unwrap();
+/// assert_eq!(ret, Value::Simple(4.0));
+/// ```
+///
+/// You can also use the lazy evaluation by returning a function and evaluating it
+/// afterwards:
+///
+/// ```
+/// # use arithmetic_parser::{
+/// #     interpreter::{If, EvalError, Interpreter, Value}, grammars::F32Grammar,
+/// #     GrammarExt, Span,
+/// # };
+/// # // FIXME: remove `f` assignment once parser is improved
+/// let program = "x = 3; f = if(x == 2, || -1, || x + 1); f()";
+/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+///
+/// let mut interpreter = Interpreter::new();
+/// interpreter.innermost_scope().insert_native_fn("if", If);
+/// let ret = interpreter.evaluate(&block).unwrap();
+/// assert_eq!(ret, Value::Simple(4.0));
+/// ```
 #[derive(Debug, Clone, Copy)]
-pub struct EagerIf;
+pub struct If;
 
-impl<T> NativeFn<T> for EagerIf
+impl<T> NativeFn<T> for If
 where
     T: Grammar,
     T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
@@ -61,38 +130,41 @@ where
     }
 }
 
-/// `if` function that lazily evaluates "if" / "else" terms.
-#[derive(Debug, Clone, Copy)]
-pub struct LazyIf;
-
-impl<T> NativeFn<T> for LazyIf
-where
-    T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
-{
-    fn evaluate<'a>(
-        &self,
-        args: &[Value<'a, T>],
-        ctx: &mut CallContext<'_, 'a>,
-    ) -> EvalResult<'a, T> {
-        ctx.check_args_count(args, 3)?;
-        match args {
-            [Value::Bool(condition), Value::Function(then_fn), Value::Function(else_fn)] => {
-                if *condition {
-                    then_fn.evaluate(&[], ctx)
-                } else {
-                    else_fn.evaluate(&[], ctx)
-                }
-            }
-            _ => {
-                let err = EvalError::native("`if` requires 3 arguments");
-                Err(ctx.call_site_error(err))
-            }
-        }
-    }
-}
-
-/// Type signature: `fn(T, fn(T) -> (false, R) | (true, T)) -> R
+/// Loop function that evaluates the provided closure one or more times.
+///
+/// # Type
+///
+/// ```text
+/// fn<T, R>(T, fn(T) -> (false, R) | (true, T)) -> R
+/// ```
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::{
+/// #     interpreter::{Compare, EvalError, If, Interpreter, Loop, Value}, grammars::F32Grammar,
+/// #     GrammarExt, Span,
+/// # };
+/// let program = r#"
+///     factorial = |x| {
+///         loop((x, 1), |(i, acc)| {
+///             continue = cmp(i, 1) != -1; # i >= 1
+///             (continue, if(continue, (i - 1, acc * i), acc))
+///         })
+///     };
+///     factorial(5) == 120 && factorial(10) == 3628800
+/// "#;
+/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+///
+/// let mut interpreter = Interpreter::new();
+/// interpreter
+///     .innermost_scope()
+///     .insert_native_fn("cmp", Compare)
+///     .insert_native_fn("if", If)
+///     .insert_native_fn("loop", Loop);
+/// let ret = interpreter.evaluate(&block).unwrap();
+/// assert_eq!(ret, Value::Bool(true));
+/// ```
 #[derive(Debug, Clone, Copy)]
 pub struct Loop;
 
@@ -155,6 +227,12 @@ where
 
 /// Comparator function on two arguments. Returns `-1` if the first argument is lesser than
 /// the second, `1` if the first argument is greater, and `0` in other cases.
+///
+/// # Type
+///
+/// ```text
+/// fn(Num, Num) -> Num
+/// ```
 #[derive(Debug, Clone, Copy)]
 pub struct Compare;
 
@@ -262,40 +340,41 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{grammars::F32Grammar, interpreter::Context, GrammarExt, Span};
+    use crate::{grammars::F32Grammar, interpreter::Interpreter, GrammarExt, Span};
 
     #[test]
-    fn lazy_if_basic() {
-        let mut context = Context::new();
-        context
+    fn if_basic() {
+        let mut interpreter = Interpreter::new();
+        interpreter
             .innermost_scope()
-            .insert_native_fn("if", LazyIf)
+            .insert_native_fn("if", If)
             .insert_native_fn("cmp", Compare);
 
         let program = r#"
             x = 1.0;
-            if(cmp(x, 2) == -1, || x + 5, || 3 - x)
+            if(cmp(x, 2) == -1, x + 5, 3 - x)
         "#;
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
-        let ret = context.evaluate(&block).unwrap();
+        let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Simple(6.0));
 
         let program = r#"
             x = 4.5;
-            if(cmp(x, 2) == -1, || x + 5, || 3 - x)
+            fn = if(cmp(x, 2) == -1, || x + 5, || 3 - x);
+            fn()
         "#;
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
-        let ret = context.evaluate(&block).unwrap();
+        let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Simple(-1.5));
     }
 
     #[test]
     fn loop_basic() {
-        let mut context = Context::new();
-        context
+        let mut interpreter = Interpreter::new();
+        interpreter
             .innermost_scope()
             .insert_native_fn("loop", Loop)
-            .insert_native_fn("if", LazyIf)
+            .insert_native_fn("if", If)
             .insert_native_fn("cmp", Compare);
 
         let program = r#"
@@ -303,21 +382,19 @@ mod tests {
             discrete_log2 = |x| {
                 loop(0, |i| {
                     continue = cmp(2^i, x) != 1;
-                    # We could use eager `if` here, but use the more complex lazy variant
-                    # to test function embedding.
-                    (continue, if(continue, || i + 1, || i - 1))
+                    (continue, if(continue, i + 1, i - 1))
                 })
             };
             discrete_log2(9)
         "#;
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
-        let ret = context.evaluate(&block).unwrap();
+        let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Simple(3.0));
 
         let program = "(discrete_log2(1), discrete_log2(2), \
             discrete_log2(4), discrete_log2(6.5), discrete_log2(1000))";
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
-        let ret = context.evaluate(&block).unwrap();
+        let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(
             ret,
             Value::Tuple(vec![

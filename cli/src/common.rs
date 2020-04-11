@@ -92,17 +92,17 @@ impl<'a> Env<'a> {
 
     pub fn report_eval_error(&self, e: ErrorWithBacktrace) -> anyhow::Error {
         let severity = Severity::Error;
-        let (file, range) = self.code_map.locate(&e.inner).unwrap();
+        let (file, range) = self.code_map.locate(&e.main_span()).unwrap();
         let main_label = Label::primary(file, range);
 
         // FIXME: make human-readable error descriptions.
-        let message: Cow<str> = match &e.inner.extra {
+        let message: Cow<str> = match e.source() {
             EvalError::NativeCall(e) => Cow::Borrowed(e),
             e => Cow::Owned(format!("{:?}", e)),
         };
 
         let mut labels = vec![main_label.with_message(message)];
-        let mut calls_iter = e.backtrace.calls();
+        let mut calls_iter = e.backtrace().calls();
         if let Some(BacktraceElement {
             fn_name,
             def_span,
@@ -141,7 +141,7 @@ impl<'a> Env<'a> {
         }
 
         let diagnostic = Diagnostic::new(severity)
-            .with_message(e.inner.extra.to_string())
+            .with_message(e.source().to_string())
             .with_code("EVAL")
             .with_labels(labels);
         emit(
@@ -152,7 +152,7 @@ impl<'a> Env<'a> {
         )
         .unwrap();
 
-        format_err!("{}", e.inner.extra)
+        format_err!("{}", e.source())
     }
 
     pub fn dump_value<T>(&mut self, value: &Value<T>, indent: usize) -> io::Result<()>

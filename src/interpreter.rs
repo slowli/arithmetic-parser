@@ -63,7 +63,7 @@
 //! "#;
 //! let program = F32Grammar::parse_statements(Span::new(program)).unwrap();
 //! let ret = context.evaluate(&program).unwrap();
-//! assert_eq!(ret, Value::Simple(9.0));
+//! assert_eq!(ret, Value::Number(9.0));
 //! ```
 
 use num_traits::{Num, Pow};
@@ -462,7 +462,7 @@ where
     T: Grammar,
 {
     /// Primitive value: a single literal.
-    Simple(T::Lit),
+    Number(T::Lit),
     /// Boolean value.
     Bool(bool),
     /// Function.
@@ -499,7 +499,7 @@ impl<'a, T: Grammar> Value<'a, T> {
 impl<T: Grammar> Clone for Value<'_, T> {
     fn clone(&self) -> Self {
         match self {
-            Self::Simple(lit) => Self::Simple(lit.clone()),
+            Self::Number(lit) => Self::Number(lit.clone()),
             Self::Bool(bool) => Self::Bool(*bool),
             Self::Function(function) => Self::Function(function.clone()),
             Self::Tuple(tuple) => Self::Tuple(tuple.clone()),
@@ -513,7 +513,7 @@ where
 {
     fn eq(&self, rhs: &Self) -> bool {
         match (self, rhs) {
-            (Self::Simple(this), Self::Simple(other)) => this == other,
+            (Self::Number(this), Self::Number(other)) => this == other,
             (Self::Bool(this), Self::Bool(other)) => this == other,
             (Self::Tuple(this), Self::Tuple(other)) => this == other,
             _ => false,
@@ -533,26 +533,26 @@ where
         primitive_op: fn(T::Lit, T::Lit) -> T::Lit,
     ) -> Result<Self, EvalError> {
         match (self, rhs) {
-            (Self::Simple(this), Self::Simple(other)) => {
-                Ok(Self::Simple(primitive_op(this, other)))
+            (Self::Number(this), Self::Number(other)) => {
+                Ok(Self::Number(primitive_op(this, other)))
             }
 
-            (Self::Simple(this), Self::Tuple(other)) => {
+            (Self::Number(this), Self::Tuple(other)) => {
                 let res: Result<Vec<_>, _> = other
                     .into_iter()
                     .map(|y| match y {
-                        Self::Simple(y) => Ok(Self::Simple(primitive_op(this.clone(), y))),
+                        Self::Number(y) => Ok(Self::Number(primitive_op(this.clone(), y))),
                         _ => Err(EvalError::UnexpectedOperand { op: Op::Binary(op) }),
                     })
                     .collect();
                 res.map(Self::Tuple)
             }
 
-            (Self::Tuple(this), Self::Simple(other)) => {
+            (Self::Tuple(this), Self::Number(other)) => {
                 let res: Result<Vec<_>, _> = this
                     .into_iter()
                     .map(|x| match x {
-                        Self::Simple(x) => Ok(Self::Simple(primitive_op(x, other.clone()))),
+                        Self::Number(x) => Ok(Self::Number(primitive_op(x, other.clone()))),
                         _ => Err(EvalError::UnexpectedOperand { op: Op::Binary(op) }),
                     })
                     .collect();
@@ -601,7 +601,7 @@ where
 
     fn try_neg(self) -> Result<Self, EvalError> {
         match self {
-            Self::Simple(val) => Ok(Self::Simple(-val)),
+            Self::Number(val) => Ok(Self::Number(-val)),
             Self::Tuple(tuple) => {
                 let res: Result<Vec<_>, _> = tuple.into_iter().map(|elem| elem.try_neg()).collect();
                 res.map(Self::Tuple)
@@ -629,7 +629,7 @@ where
 
     fn try_compare(self, rhs: Self) -> Result<bool, EvalError> {
         match (self, rhs) {
-            (Self::Simple(this), Self::Simple(other)) => Ok(this == other),
+            (Self::Number(this), Self::Number(other)) => Ok(this == other),
             (Self::Tuple(this), Self::Tuple(other)) => {
                 if this.len() == other.len() {
                     this.into_iter()
@@ -940,7 +940,7 @@ where
             Expr::Variable => self.get_var(expr.fragment).cloned().ok_or_else(|| {
                 create_span_ref(expr, EvalError::Undefined(expr.fragment.to_owned()))
             }),
-            Expr::Literal(value) => Ok(Value::Simple(value.to_owned())),
+            Expr::Literal(value) => Ok(Value::Number(value.to_owned())),
 
             Expr::Tuple(fragments) => {
                 let fragments: Result<Vec<_>, _> = fragments
@@ -1072,9 +1072,9 @@ mod tests {
         let block = F32Grammar::parse_statements(program).unwrap();
         let mut interpreter = Interpreter::new();
         let return_value = interpreter.evaluate(&block).unwrap();
-        assert_eq!(return_value, Value::Simple(3.0));
-        assert_eq!(*interpreter.get_var("x").unwrap(), Value::Simple(1.0));
-        assert_eq!(*interpreter.get_var("y").unwrap(), Value::Simple(2.0));
+        assert_eq!(return_value, Value::Number(3.0));
+        assert_eq!(*interpreter.get_var("x").unwrap(), Value::Number(1.0));
+        assert_eq!(*interpreter.get_var("y").unwrap(), Value::Number(2.0));
     }
 
     #[test]
@@ -1086,9 +1086,9 @@ mod tests {
         assert_eq!(return_value, Value::void());
         assert_eq!(
             *interpreter.get_var("tuple").unwrap(),
-            Value::Tuple(vec![Value::Simple(-2.0), Value::Simple(2.0)])
+            Value::Tuple(vec![Value::Number(-2.0), Value::Number(2.0)])
         );
-        assert_eq!(*interpreter.get_var("x").unwrap(), Value::Simple(-2.0));
+        assert_eq!(*interpreter.get_var("x").unwrap(), Value::Number(-2.0));
     }
 
     #[test]
@@ -1103,13 +1103,13 @@ mod tests {
         interpreter.evaluate(&block).unwrap();
         assert_eq!(
             *interpreter.get_var("x").unwrap(),
-            Value::Tuple(vec![Value::Simple(4.0), Value::Simple(6.0)])
+            Value::Tuple(vec![Value::Number(4.0), Value::Number(6.0)])
         );
-        assert_eq!(*interpreter.get_var("y").unwrap(), Value::Simple(-4.0));
-        assert_eq!(*interpreter.get_var("z").unwrap(), Value::Simple(-4.5));
+        assert_eq!(*interpreter.get_var("y").unwrap(), Value::Number(-4.0));
+        assert_eq!(*interpreter.get_var("z").unwrap(), Value::Number(-4.5));
         assert_eq!(
             *interpreter.get_var("u").unwrap(),
-            Value::Tuple(vec![Value::Simple(2.5), Value::Simple(-11.5)])
+            Value::Tuple(vec![Value::Number(2.5), Value::Number(-11.5)])
         );
 
         let program = "1 / (2, 4)";
@@ -1117,7 +1117,7 @@ mod tests {
         let return_value = interpreter.evaluate(&block).unwrap();
         assert_eq!(
             return_value,
-            Value::Tuple(vec![Value::Simple(0.5), Value::Simple(0.25)])
+            Value::Tuple(vec![Value::Number(0.5), Value::Number(0.25)])
         );
 
         let program = "1 / (2, (4, 0.2))";
@@ -1136,7 +1136,7 @@ mod tests {
         let mut interpreter = Interpreter::new();
         let return_value = interpreter.evaluate(&block).unwrap();
         assert_eq!(return_value, Value::void());
-        assert_eq!(*interpreter.get_var("z").unwrap(), Value::Simple(4.0));
+        assert_eq!(*interpreter.get_var("z").unwrap(), Value::Number(4.0));
         assert!(interpreter.get_var("x").is_none());
     }
 
@@ -1146,7 +1146,7 @@ mod tests {
         let block = F32Grammar::parse_statements(program).unwrap();
         let mut interpreter = Interpreter::new();
         let return_value = interpreter.evaluate(&block).unwrap();
-        assert_eq!(return_value, Value::Simple(8.0));
+        assert_eq!(return_value, Value::Number(8.0));
         assert!(interpreter.get_var("foo").unwrap().is_function());
     }
 
@@ -1159,10 +1159,10 @@ mod tests {
         let program = Span::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = Interpreter::new().evaluate(&block).unwrap();
-        let inner_tuple = Value::Tuple(vec![Value::Simple(1.0), Value::Simple(2.0)]);
+        let inner_tuple = Value::Tuple(vec![Value::Number(1.0), Value::Number(2.0)]);
         assert_eq!(
             return_value,
-            Value::Tuple(vec![inner_tuple, Value::Simple(3.0)])
+            Value::Tuple(vec![inner_tuple, Value::Number(3.0)])
         );
 
         let program = r#"
@@ -1172,7 +1172,7 @@ mod tests {
         let program = Span::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = Interpreter::new().evaluate(&block).unwrap();
-        assert_eq!(return_value, Value::Simple(4.0));
+        assert_eq!(return_value, Value::Number(4.0));
     }
 
     #[test]
@@ -1184,7 +1184,7 @@ mod tests {
         let program = Span::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = Interpreter::new().evaluate(&block).unwrap();
-        assert_eq!(return_value, Value::Simple(2.0));
+        assert_eq!(return_value, Value::Number(2.0));
 
         // All captures are by value, so that redefining the captured var does not influence
         // the result.
@@ -1196,7 +1196,7 @@ mod tests {
         let program = Span::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = Interpreter::new().evaluate(&block).unwrap();
-        assert_eq!(return_value, Value::Simple(2.0));
+        assert_eq!(return_value, Value::Number(2.0));
 
         // Functions may be captured as well.
         let program = r#"
@@ -1207,7 +1207,7 @@ mod tests {
         let program = Span::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = Interpreter::new().evaluate(&block).unwrap();
-        assert_eq!(return_value, Value::Simple(2.0));
+        assert_eq!(return_value, Value::Number(2.0));
     }
 
     #[test]
@@ -1223,7 +1223,7 @@ mod tests {
         let return_value = interpreter.evaluate(&block).unwrap();
         assert_eq!(
             return_value,
-            Value::Tuple(vec![Value::Simple(0.0), Value::Simple(0.0)])
+            Value::Tuple(vec![Value::Number(0.0), Value::Number(0.0)])
         );
 
         let add = interpreter.get_var("add").unwrap();
@@ -1304,19 +1304,19 @@ mod tests {
         let block = F32Grammar::parse_statements(program).unwrap();
         let mut interpreter = Interpreter::new();
         let return_value = interpreter.evaluate(&block).unwrap();
-        assert_eq!(return_value, Value::Simple(2.0));
+        assert_eq!(return_value, Value::Number(2.0));
 
         let program = Span::new("add = gen_add(-3); add(-1)");
         let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = interpreter.evaluate(&block).unwrap();
-        assert_eq!(return_value, Value::Simple(-4.0));
+        assert_eq!(return_value, Value::Number(-4.0));
 
         let function = match interpreter.get_var("add").unwrap() {
             Value::Function(Function::Interpreted(function)) => function,
             other => panic!("Unexpected `add` value: {:?}", other),
         };
         let captures: Vec<_> = function.captures.variables().collect();
-        assert_eq!(captures, [("x", &Value::Simple(-3.0))]);
+        assert_eq!(captures, [("x", &Value::Number(-3.0))]);
     }
 
     #[test]
@@ -1330,7 +1330,7 @@ mod tests {
         let return_value = interpreter.evaluate(&block).unwrap();
         assert_eq!(
             return_value,
-            Value::Tuple(vec![Value::Simple(4.0), Value::Simple(1.0)])
+            Value::Tuple(vec![Value::Number(4.0), Value::Number(1.0)])
         );
 
         let program = r#"
@@ -1346,7 +1346,7 @@ mod tests {
         let return_value = interpreter.evaluate(&block).unwrap();
         assert_eq!(
             return_value,
-            Value::Tuple(vec![Value::Simple(8.0), Value::Simple(-1.5)])
+            Value::Tuple(vec![Value::Number(8.0), Value::Number(-1.5)])
         );
         assert!(interpreter.get_var("lambda").is_none());
     }
@@ -1357,17 +1357,17 @@ mod tests {
         let program = "-|x| { x + 5 }(-3)";
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
         let return_value = interpreter.evaluate(&block).unwrap();
-        assert_eq!(return_value, Value::Simple(-2.0));
+        assert_eq!(return_value, Value::Number(-2.0));
 
         let program = "2 + |x| { x + 5 }(-3)";
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
         let return_value = interpreter.evaluate(&block).unwrap();
-        assert_eq!(return_value, Value::Simple(4.0));
+        assert_eq!(return_value, Value::Number(4.0));
 
         let program = "add = |x, y| x + y; add(10, |x| { x + 5 }(-3))";
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
         let return_value = interpreter.evaluate(&block).unwrap();
-        assert_eq!(return_value, Value::Simple(12.0));
+        assert_eq!(return_value, Value::Number(12.0));
     }
 
     #[test]
@@ -1378,7 +1378,7 @@ mod tests {
         let program = Span::new("sin(1.0) - 3");
         let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = interpreter.evaluate(&block).unwrap();
-        assert_eq!(return_value, Value::Simple(1.0_f32.sin() - 3.0));
+        assert_eq!(return_value, Value::Number(1.0_f32.sin() - 3.0));
     }
 
     #[test]
@@ -1389,7 +1389,7 @@ mod tests {
         let mut interpreter = Interpreter::new();
         interpreter.innermost_scope().insert_native_fn("sin", SIN);
         let return_value = interpreter.evaluate(&block).unwrap();
-        assert_eq!(return_value, Value::Simple(1.0_f32.sin()));
+        assert_eq!(return_value, Value::Number(1.0_f32.sin()));
 
         let sin = interpreter.get_var("sin").unwrap();
         let sin = match sin {

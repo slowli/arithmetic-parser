@@ -82,7 +82,7 @@ impl<T: Grammar> NativeFn<T> for Assert {
 /// let mut interpreter = Interpreter::new();
 /// interpreter.innermost_scope().insert_native_fn("if", If);
 /// let ret = interpreter.evaluate(&block).unwrap();
-/// assert_eq!(ret, Value::Simple(4.0));
+/// assert_eq!(ret, Value::Number(4.0));
 /// ```
 ///
 /// You can also use the lazy evaluation by returning a function and evaluating it
@@ -99,7 +99,7 @@ impl<T: Grammar> NativeFn<T> for Assert {
 /// let mut interpreter = Interpreter::new();
 /// interpreter.innermost_scope().insert_native_fn("if", If);
 /// let ret = interpreter.evaluate(&block).unwrap();
-/// assert_eq!(ret, Value::Simple(4.0));
+/// assert_eq!(ret, Value::Number(4.0));
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct If;
@@ -247,7 +247,7 @@ where
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(args, 2)?;
         match args {
-            [Value::Simple(x), Value::Simple(y)] => Ok(Value::Simple(if *x < *y {
+            [Value::Number(x), Value::Number(y)] => Ok(Value::Number(if *x < *y {
                 -<T::Lit as One>::one()
             } else if *x > *y {
                 <T::Lit as One>::one()
@@ -287,9 +287,9 @@ where
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(args, 1)?;
         match args {
-            [Value::Simple(x)] => {
+            [Value::Number(x)] => {
                 let output = (self.function)(x.to_owned());
-                Ok(Value::Simple(output))
+                Ok(Value::Number(output))
             }
             _ => {
                 let err = EvalError::native("Unary function requires one primitive argument");
@@ -324,9 +324,9 @@ where
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(args, 2)?;
         match args {
-            [Value::Simple(x), Value::Simple(y)] => {
+            [Value::Number(x), Value::Number(y)] => {
                 let output = (self.function)(x.to_owned(), y.to_owned());
-                Ok(Value::Simple(output))
+                Ok(Value::Number(output))
             }
             _ => {
                 let err = EvalError::native("Binary function requires two primitive arguments");
@@ -355,7 +355,7 @@ mod tests {
         "#;
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
-        assert_eq!(ret, Value::Simple(6.0));
+        assert_eq!(ret, Value::Number(6.0));
 
         let program = r#"
             x = 4.5;
@@ -363,7 +363,7 @@ mod tests {
         "#;
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
-        assert_eq!(ret, Value::Simple(-1.5));
+        assert_eq!(ret, Value::Number(-1.5));
     }
 
     #[test]
@@ -387,7 +387,7 @@ mod tests {
         "#;
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
-        assert_eq!(ret, Value::Simple(3.0));
+        assert_eq!(ret, Value::Number(3.0));
 
         let program = "(discrete_log2(1), discrete_log2(2), \
             discrete_log2(4), discrete_log2(6.5), discrete_log2(1000))";
@@ -396,11 +396,11 @@ mod tests {
         assert_eq!(
             ret,
             Value::Tuple(vec![
-                Value::Simple(0.0),
-                Value::Simple(1.0),
-                Value::Simple(2.0),
-                Value::Simple(2.0),
-                Value::Simple(9.0),
+                Value::Number(0.0),
+                Value::Number(1.0),
+                Value::Number(2.0),
+                Value::Number(2.0),
+                Value::Number(9.0),
             ])
         );
     }

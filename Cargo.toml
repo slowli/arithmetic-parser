@@ -15,7 +15,10 @@ nom = "5.1.1"
 nom_locate = "1.0.0"
 num-traits = "0.2.11"
 
-# Optional dependencies
+# Private dependencies.
+thiserror = "1.0.14"
+
+# Optional dependencies (public)
 num-complex = { version = "0.2.4", optional = true }
 
 [dev-dependencies]
@@ -26,3 +29,6 @@ hex = "0.4.2"
 name = "complex_c"
 path = "examples/complex_c.rs"
 required-features = ["num-complex"]
+
+[workspace]
+members = [".", "cli"]

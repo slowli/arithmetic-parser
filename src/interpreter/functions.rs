@@ -122,7 +122,7 @@ where
                 else_val.to_owned()
             }),
             _ => {
-                let err = EvalError::native("`if` requires 3 arguments");
+                let err = EvalError::native("`if` requires first arg to be boolean");
                 Err(ctx.call_site_error(err))
             }
         }

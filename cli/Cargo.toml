@@ -1,0 +1,22 @@
+[package]
+name = "arithmetic-parser-cli"
+version = "0.1.0"
+authors = ["Alex Ostrovski <ostrovski.alex@gmail.com>"]
+edition = "2018"
+readme = "README.md"
+license = "Apache-2.0"
+description = "CLI / REPL for arithmetic expressions."
+repository = "https://github.com/slowli/arithmetic-parser"
+
+[dependencies]
+anyhow = "1.0.27"
+codespan = "0.9.0"
+codespan-reporting = "0.9.0"
+num-complex = "0.2.4"
+rustyline = "6.0.0"
+structopt = "0.3.13"
+
+[dependencies.arithmetic-parser]
+version = "0.1.0"
+path = ".."
+features = ["num-complex"]

@@ -67,6 +67,7 @@
 //! ```
 
 use num_traits::{Num, Pow};
+use thiserror::Error;
 
 use std::{
     collections::{HashMap, HashSet},
@@ -84,9 +85,14 @@ mod functions;
 pub use self::functions::{Assert, BinaryFn, Compare, If, Loop, UnaryFn};
 
 /// Errors that can occur during interpreting expressions and statements.
-#[derive(Debug)]
+// TODO: Add ability to add spans to error.
+#[derive(Debug, Error)]
 pub enum EvalError {
     /// Mismatch between length of tuples in a binary operation or assignment.
+    #[error(
+        "Mismatch between length of tuples in a binary operation or assignment: \
+         LHS has {lhs} element(s), whereas RHS has {rhs}"
+    )]
     TupleLenMismatch {
         /// Length of a tuple on the left-hand side.
         lhs: usize,
@@ -95,6 +101,10 @@ pub enum EvalError {
     },
 
     /// Mismatch between the number of arguments in the function definition and its call.
+    #[error(
+        "Mismatch between the number of arguments in the function definition and its call: \
+         definition requires {def} arg(s), call has {call}"
+    )]
     ArgsLenMismatch {
         /// Number of args at the function definition.
         def: usize,
@@ -103,22 +113,27 @@ pub enum EvalError {
     },
 
     /// Cannot destructure a no-tuple variable.
-    // TODO: span the RHS?
+    #[error("Cannot destructure a no-tuple variable.")]
     CannotDestructure,
 
     /// Repeated assignment to the same variable in function args or tuple destructuring.
+    #[error("Repeated assignment to the same variable in function args or tuple destructuring.")]
     RepeatedAssignment,
 
     /// Variable with the enclosed name is not defined.
+    #[error("Variable {0} is not defined")]
     Undefined(String),
 
-    /// Variable is not callable (i.e., is not a function).
+    /// Value is not callable (i.e., is not a function).
+    #[error("Value is not callable")]
     CannotCall,
 
     /// Generic error during execution of a native function.
+    #[error("Failed executing native function: {0}")]
     NativeCall(String),
 
     /// Unexpected operand type(s) for the specified operation.
+    #[error("Unexpected operand type(s) for {op}")]
     UnexpectedOperand {
         /// Operation which failed.
         op: Op,
@@ -201,6 +216,16 @@ impl<'a, T: Grammar> InterpretedFn<'a, T> {
             definition,
             captures: validator.captures,
         })
+    }
+
+    /// Returns the number of arguments for this function.
+    pub fn arg_count(&self) -> usize {
+        self.definition.extra.args.len()
+    }
+
+    /// Returns values captures by this function.
+    pub fn captures(&self) -> &HashMap<String, Value<'a, T>> {
+        &self.captures.variables
     }
 }
 

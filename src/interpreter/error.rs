@@ -206,18 +206,22 @@ pub enum AuxErrorInfo {
     /// [`TupleLenMismatch`]: enum.EvalError.html#variant.TupleLenMismatch
     Rvalue,
 
+    /// RHS of a binary operation on differently sized tuples.
+    UnbalancedRhs(usize),
+
     /// Invalid argument.
     InvalidArg,
 }
 
 impl fmt::Display for AuxErrorInfo {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::FnArgs => "Function arguments declared here",
-            Self::PrevAssignment => "Previous declaration",
-            Self::Rvalue => "RHS containing the invalid assignment",
-            Self::InvalidArg => "Invalid argument",
-        })
+        match self {
+            Self::FnArgs => formatter.write_str("Function arguments declared here"),
+            Self::PrevAssignment => formatter.write_str("Previous declaration"),
+            Self::Rvalue => formatter.write_str("RHS containing the invalid assignment"),
+            Self::UnbalancedRhs(size) => write!(formatter, "RHS with the {}-element tuple", size),
+            Self::InvalidArg => formatter.write_str("Invalid argument"),
+        }
     }
 }
 

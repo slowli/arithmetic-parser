@@ -545,7 +545,7 @@ impl BinaryOpError {
                 rhs,
                 context: TupleLenMismatchContext::BinaryOp(op),
             },
-            side: None,
+            side: Some(OpSide::Lhs),
         }
     }
 
@@ -565,7 +565,18 @@ impl BinaryOpError {
             Some(OpSide::Rhs) => rhs_span,
             None => total_span,
         };
-        SpannedEvalError::new(&main_span, self.inner)
+
+        let aux_info = if let EvalError::TupleLenMismatch { rhs, .. } = self.inner {
+            Some(AuxErrorInfo::UnbalancedRhs(rhs))
+        } else {
+            None
+        };
+
+        let mut err = SpannedEvalError::new(&main_span, self.inner);
+        if let Some(aux_info) = aux_info {
+            err = err.with_span(&rhs_span, aux_info);
+        }
+        err
     }
 }
 

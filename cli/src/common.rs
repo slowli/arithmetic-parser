@@ -16,8 +16,9 @@ use std::{
 };
 
 use arithmetic_parser::{
-    interpreter::{BacktraceElement, ErrorWithBacktrace, Function, Value},
-    Error, Grammar, Spanned,
+    grammars::NumLiteral,
+    interpreter::{BacktraceElement, ErrorWithBacktrace, Function, Interpreter, Scope, Value},
+    Block, Error, Grammar, GrammarExt, Span, Spanned,
 };
 
 /// Code map containing evaluated code snippets.
@@ -56,7 +57,7 @@ pub struct Env<'a> {
 }
 
 impl<'a> Env<'a> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             code_map: CodeMap::default(),
             writer: StandardStream::stderr(ColorChoice::Auto),
@@ -68,6 +69,22 @@ impl<'a> Env<'a> {
         let mut this = Self::new();
         this.code_map.add(code);
         this
+    }
+
+    pub fn print_greeting(&mut self) -> io::Result<()> {
+        let mut writer = self.writer.lock();
+        writer.set_color(ColorSpec::new().set_bold(true))?;
+        writeln!(
+            writer,
+            "arithmetic-parser REPL v{}",
+            env!("CARGO_PKG_VERSION")
+        )?;
+        writer.reset()?;
+        writeln!(writer, "{}", env!("CARGO_PKG_DESCRIPTION"))
+    }
+
+    fn print_help(&mut self) -> io::Result<()> {
+        unimplemented!()
     }
 
     /// Reports a parsing error.
@@ -223,5 +240,84 @@ impl<'a> Env<'a> {
                 write!(self.writer, "{})", " ".repeat(indent))
             }
         }
+    }
+
+    fn dump_scope<T>(&mut self, scope: &Scope<'_, T>) -> io::Result<()>
+    where
+        T: Grammar,
+        T::Lit: fmt::Display,
+    {
+        for (name, var) in scope.variables() {
+            write!(self.writer, "{} = ", name)?;
+            self.dump_value(var, 0)?;
+            writeln!(self.writer)?;
+        }
+        Ok(())
+    }
+
+    pub fn parse_and_eval<T>(
+        &mut self,
+        line: &'a str,
+        interpreter: &mut Interpreter<'a, T>,
+    ) -> Result<bool, ()>
+    where
+        T: Grammar,
+        T::Lit: fmt::Display + NumLiteral,
+    {
+        let (file, start_position) = self.code_map.add(line);
+        let visible_span = 0..line.len();
+
+        if line.starts_with('.') {
+            match line {
+                ".clear" => interpreter.innermost_scope().clear(),
+                ".dump" => self.dump_scope(interpreter.innermost_scope()).unwrap(),
+                ".help" => self.print_help().unwrap(),
+
+                _ => {
+                    let label = Label::primary(file, visible_span)
+                        .with_message("Use `.help commands` to find out commands");
+                    let diagnostic = Diagnostic::error()
+                        .with_message("Unknown command")
+                        .with_code("CMD")
+                        .with_labels(vec![label]);
+                    emit(
+                        &mut self.writer.lock(),
+                        &self.config,
+                        &self.code_map.files,
+                        &diagnostic,
+                    )
+                    .unwrap();
+                }
+            }
+
+            return Ok(false);
+        }
+
+        let span = Span {
+            offset: start_position,
+            line: 0,
+            fragment: line,
+            extra: (),
+        };
+        let mut incomplete = false;
+        let statements = T::parse_streaming_statements(span).or_else(|e| {
+            if let Error::Incomplete = e.extra {
+                incomplete = true;
+                Ok(Block::empty())
+            } else {
+                self.report_parse_error(e);
+                Err(())
+            }
+        })?;
+
+        if !incomplete {
+            let output = interpreter.evaluate(&statements).map_err(|e| {
+                self.report_eval_error(e);
+            })?;
+            if !output.is_void() {
+                self.dump_value(&output, 0).unwrap();
+            }
+        }
+        Ok(incomplete)
     }
 }

@@ -13,7 +13,8 @@ use arithmetic_parser::{
 };
 
 mod common;
-use crate::common::Env;
+mod repl;
+use crate::{common::Env, repl::repl};
 
 #[derive(Debug, Clone, Copy)]
 enum Arithmetic {
@@ -55,29 +56,35 @@ struct Args {
 
     /// Command to parse and interpret. The line will be ignored in the interactive mode.
     #[structopt(name = "command")]
-    command: String,
+    command: Option<String>,
 }
 
 impl Args {
-    fn run(&self) -> anyhow::Result<()> {
+    fn run(self) -> anyhow::Result<()> {
         if self.interactive {
-            unimplemented!();
-        }
-
-        match self.arithmetic {
-            Arithmetic::F32 => self.run_command::<f32>(),
-            Arithmetic::F64 => self.run_command::<f64>(),
-            Arithmetic::Complex32 => self.run_command::<Complex32>(),
-            Arithmetic::Complex64 => self.run_command::<Complex64>(),
+            match self.arithmetic {
+                Arithmetic::F32 => repl::<NumGrammar<f32>>(),
+                Arithmetic::F64 => repl::<NumGrammar<f64>>(),
+                Arithmetic::Complex32 => repl::<NumGrammar<Complex32>>(),
+                Arithmetic::Complex64 => repl::<NumGrammar<Complex64>>(),
+            }
+        } else {
+            match self.arithmetic {
+                Arithmetic::F32 => self.run_command::<f32>(),
+                Arithmetic::F64 => self.run_command::<f64>(),
+                Arithmetic::Complex32 => self.run_command::<Complex32>(),
+                Arithmetic::Complex64 => self.run_command::<Complex64>(),
+            }
         }
     }
 
-    fn run_command<T>(&self) -> anyhow::Result<()>
+    fn run_command<T>(self) -> anyhow::Result<()>
     where
         T: NumLiteral + fmt::Display,
     {
-        let mut env = Env::non_interactive(&self.command);
-        let command = Span::new(&self.command);
+        let command = self.command.unwrap_or_default();
+        let mut env = Env::non_interactive(&command);
+        let command = Span::new(&command);
         let parsed =
             NumGrammar::<T>::parse_statements(command).map_err(|e| env.report_parse_error(e))?;
         if self.ast {

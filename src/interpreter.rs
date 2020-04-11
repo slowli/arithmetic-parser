@@ -476,6 +476,14 @@ impl<'a, T: Grammar> Value<'a, T> {
         Self::Tuple(vec![])
     }
 
+    /// Checks if the value is void.
+    pub fn is_void(&self) -> bool {
+        match self {
+            Self::Tuple(tuple) if tuple.is_empty() => true,
+            _ => false,
+        }
+    }
+
     /// Checks if this value is a function.
     pub fn is_function(&self) -> bool {
         match self {

@@ -501,6 +501,16 @@ where
     }
 }
 
+impl<T: Grammar> Block<'_, T> {
+    /// Creates an empty block.
+    pub fn empty() -> Self {
+        Self {
+            statements: vec![],
+            return_value: None,
+        }
+    }
+}
+
 /// Function definition, e.g., `|x, y| x + y`.
 ///
 /// A function definition consists of a list of arguments and the function body.

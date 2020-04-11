@@ -3,19 +3,31 @@
 //! # Assumptions
 //!
 //! - There is only one numeric type, which is complete w.r.t. all arithmetic operations.
-//!   This is expressed via type constraints, in `Interpreter`.
+//!   This is expressed via type constraints, in [`Interpreter`].
 //! - Arithmetic operations are assumed to be infallible; panics during their execution
 //!   are **not** caught by the interpreter.
 //! - Grammar literals are directly parsed to the aforementioned numeric type.
-//! - All variables are immutable. Re-declaring a var shadows the previous declaration.
-//! - Functions can capture variables (including other functions). All captures are by value.
-//! - Type annotations are completely ignored. This means that the interpreter may execute
-//!   code that is incorrect with annotations (e.g., assignment of a tuple to a variable which
-//!   is annotated to have a numeric type).
 //!
 //! These assumptions do not hold for some grammars parsed by the crate. For example, finite
 //! cyclic groups have two types (scalars and group elements) and thus cannot be effectively
 //! interpreted.
+//!
+//! # Semantics
+//!
+//! - All variables are immutable. Re-declaring a var shadows the previous declaration.
+//! - Functions are first-class (in fact, a function is just a variant of a [`Value`]).
+//! - Functions can capture variables (including other functions). All captures are by value.
+//! - Arithmetic operations are defined on primitive vars and tuples. With tuples, operations
+//!   are performed per-element. Binary operations require tuples of the same size,
+//!   or a tuple and a primitive value. As an example, `(1, 2) + 3` and `(2, 3) / (4, 5)` are valid,
+//!   but `(1, 2) * (3, 4, 5)` isn't.
+//! - No type checks are performed before evaluation.
+//! - Type annotations are completely ignored. This means that the interpreter may execute
+//!   code that is incorrect with annotations (e.g., assignment of a tuple to a variable which
+//!   is annotated to have a numeric type).
+//!
+//! [`Interpreter`]: struct.Interpreter.html
+//! [`Value`]: enum.Value.html
 //!
 //! # Examples
 //!
@@ -524,6 +536,29 @@ where
             (Self::Simple(this), Self::Simple(other)) => {
                 Ok(Self::Simple(primitive_op(this, other)))
             }
+
+            (Self::Simple(this), Self::Tuple(other)) => {
+                let res: Result<Vec<_>, _> = other
+                    .into_iter()
+                    .map(|y| match y {
+                        Self::Simple(y) => Ok(Self::Simple(primitive_op(this.clone(), y))),
+                        _ => Err(EvalError::UnexpectedOperand { op: Op::Binary(op) }),
+                    })
+                    .collect();
+                res.map(Self::Tuple)
+            }
+
+            (Self::Tuple(this), Self::Simple(other)) => {
+                let res: Result<Vec<_>, _> = this
+                    .into_iter()
+                    .map(|x| match x {
+                        Self::Simple(x) => Ok(Self::Simple(primitive_op(x, other.clone()))),
+                        _ => Err(EvalError::UnexpectedOperand { op: Op::Binary(op) }),
+                    })
+                    .collect();
+                res.map(Self::Tuple)
+            }
+
             (Self::Tuple(this), Self::Tuple(other)) => {
                 if this.len() == other.len() {
                     let res: Result<Vec<_>, _> = this
@@ -1061,7 +1096,7 @@ mod tests {
         let program = Span::new(
             r#"x = (1, 2) + (3, 4);
             (y, z) = (0, 3) * (2, 0.5) - x;
-            # u = (1, 2) + 3 * (0.5, z);"#,
+            u = (1, 2) + 3 * (0.5, z);"#,
         );
         let block = F32Grammar::parse_statements(program).unwrap();
         let mut interpreter = Interpreter::new();
@@ -1072,6 +1107,26 @@ mod tests {
         );
         assert_eq!(*interpreter.get_var("y").unwrap(), Value::Simple(-4.0));
         assert_eq!(*interpreter.get_var("z").unwrap(), Value::Simple(-4.5));
+        assert_eq!(
+            *interpreter.get_var("u").unwrap(),
+            Value::Tuple(vec![Value::Simple(2.5), Value::Simple(-11.5)])
+        );
+
+        let program = "1 / (2, 4)";
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let return_value = interpreter.evaluate(&block).unwrap();
+        assert_eq!(
+            return_value,
+            Value::Tuple(vec![Value::Simple(0.5), Value::Simple(0.25)])
+        );
+
+        let program = "1 / (2, (4, 0.2))";
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let err = interpreter.evaluate(&block).unwrap_err();
+        assert_matches!(
+            err.inner.extra,
+            EvalError::UnexpectedOperand { ref op } if *op == BinaryOp::Div.into()
+        );
     }
 
     #[test]

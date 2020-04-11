@@ -9,7 +9,6 @@ use codespan_reporting::{
 };
 
 use std::{
-    borrow::Cow,
     collections::BTreeMap,
     fmt,
     io::{self, Write},
@@ -17,7 +16,7 @@ use std::{
 };
 
 use arithmetic_parser::{
-    interpreter::{BacktraceElement, ErrorWithBacktrace, EvalError, Function, Value},
+    interpreter::{BacktraceElement, ErrorWithBacktrace, Function, Value},
     Error, Grammar, Spanned,
 };
 
@@ -94,14 +93,15 @@ impl<'a> Env<'a> {
         let severity = Severity::Error;
         let (file, range) = self.code_map.locate(&e.main_span()).unwrap();
         let main_label = Label::primary(file, range);
-
-        // FIXME: make human-readable error descriptions.
-        let message: Cow<str> = match e.source() {
-            EvalError::NativeCall(e) => Cow::Borrowed(e),
-            e => Cow::Owned(format!("{:?}", e)),
-        };
+        let message = e.source().main_span_info();
 
         let mut labels = vec![main_label.with_message(message)];
+        for aux_span in e.aux_spans() {
+            let (file, range) = self.code_map.locate(&aux_span).unwrap();
+            let label = Label::primary(file, range).with_message(aux_span.extra.to_string());
+            labels.push(label);
+        }
+
         let mut calls_iter = e.backtrace().calls();
         if let Some(BacktraceElement {
             fn_name,
@@ -140,10 +140,15 @@ impl<'a> Env<'a> {
             labels.push(call_label);
         }
 
-        let diagnostic = Diagnostic::new(severity)
-            .with_message(e.source().to_string())
+        let mut diagnostic = Diagnostic::new(severity)
+            .with_message(e.source().to_short_string())
             .with_code("EVAL")
             .with_labels(labels);
+
+        if let Some(help) = e.source().help() {
+            diagnostic = diagnostic.with_notes(vec![help]);
+        }
+
         emit(
             &mut self.writer.lock(),
             &self.config,

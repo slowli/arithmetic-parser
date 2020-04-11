@@ -8,7 +8,7 @@ use std::{fmt, str::FromStr};
 
 use arithmetic_parser::{
     grammars::{NumGrammar, NumLiteral},
-    interpreter::{If, Interpreter, Loop},
+    interpreter::{If, Interpreter, Loop, Value},
     GrammarExt, Span,
 };
 
@@ -87,6 +87,8 @@ impl Args {
             let mut interpreter = Interpreter::<NumGrammar<T>>::new();
             interpreter
                 .innermost_scope()
+                .insert_var("false", Value::Bool(false))
+                .insert_var("true", Value::Bool(true))
                 .insert_native_fn("if", If)
                 .insert_native_fn("loop", Loop);
             let value = interpreter

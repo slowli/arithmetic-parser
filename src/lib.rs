@@ -306,15 +306,15 @@ pub enum BinaryOp {
 impl fmt::Display for BinaryOp {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            BinaryOp::Add => formatter.write_str("addition"),
-            BinaryOp::Sub => formatter.write_str("subtraction"),
-            BinaryOp::Mul => formatter.write_str("multiplication"),
-            BinaryOp::Div => formatter.write_str("division"),
-            BinaryOp::Power => formatter.write_str("exponentiation"),
-            BinaryOp::Eq => formatter.write_str("comparison"),
-            BinaryOp::NotEq => formatter.write_str("non-equality comparison"),
-            BinaryOp::And => formatter.write_str("AND"),
-            BinaryOp::Or => formatter.write_str("OR"),
+            Self::Add => formatter.write_str("addition"),
+            Self::Sub => formatter.write_str("subtraction"),
+            Self::Mul => formatter.write_str("multiplication"),
+            Self::Div => formatter.write_str("division"),
+            Self::Power => formatter.write_str("exponentiation"),
+            Self::Eq => formatter.write_str("comparison"),
+            Self::NotEq => formatter.write_str("non-equality comparison"),
+            Self::And => formatter.write_str("AND"),
+            Self::Or => formatter.write_str("OR"),
         }
     }
 }
@@ -323,15 +323,15 @@ impl BinaryOp {
     /// Returns the string representation of this operation.
     pub fn as_str(self) -> &'static str {
         match self {
-            BinaryOp::Add => "+",
-            BinaryOp::Sub => "-",
-            BinaryOp::Mul => "*",
-            BinaryOp::Div => "/",
-            BinaryOp::Power => "^",
-            BinaryOp::Eq => "==",
-            BinaryOp::NotEq => "!=",
-            BinaryOp::And => "&&",
-            BinaryOp::Or => "||",
+            Self::Add => "+",
+            Self::Sub => "-",
+            Self::Mul => "*",
+            Self::Div => "/",
+            Self::Power => "^",
+            Self::Eq => "==",
+            Self::NotEq => "!=",
+            Self::And => "&&",
+            Self::Or => "||",
         }
     }
 
@@ -339,11 +339,27 @@ impl BinaryOp {
     // TODO: replace with enum?
     pub fn priority(self) -> usize {
         match self {
-            BinaryOp::And | BinaryOp::Or => 0,
-            BinaryOp::Eq | BinaryOp::NotEq => 1,
-            BinaryOp::Add | BinaryOp::Sub => 2,
-            BinaryOp::Mul | BinaryOp::Div => 3,
-            BinaryOp::Power => 4,
+            Self::And | Self::Or => 0,
+            Self::Eq | Self::NotEq => 1,
+            Self::Add | Self::Sub => 2,
+            Self::Mul | Self::Div => 3,
+            Self::Power => 4,
+        }
+    }
+
+    /// Checks if this operation is arithmetic.
+    pub fn is_arithmetic(self) -> bool {
+        match self {
+            Self::Add | Self::Sub | Self::Mul | Self::Div | Self::Power => true,
+            _ => false,
+        }
+    }
+
+    /// Checks if this operation is a comparison.
+    pub fn is_comparison(self) -> bool {
+        match self {
+            Self::Eq | Self::NotEq => true,
+            _ => false,
         }
     }
 }

@@ -4,8 +4,26 @@ use num_traits::{Num, One, Pow, Zero};
 
 use std::ops;
 
-use super::{CallContext, EvalError, EvalResult, NativeFn, Value};
-use crate::Grammar;
+use crate::{
+    interpreter::{
+        AuxErrorInfo, CallContext, EvalError, EvalResult, NativeFn, SpannedEvalError, SpannedValue,
+        Value,
+    },
+    Grammar,
+};
+
+fn extract_number<'a, T: Grammar>(
+    ctx: &CallContext<'_, 'a>,
+    value: SpannedValue<'a, T>,
+    error_msg: &str,
+) -> Result<T::Lit, SpannedEvalError<'a>> {
+    match value.extra {
+        Value::Number(value) => Ok(value),
+        _ => Err(ctx
+            .call_site_error(EvalError::native(error_msg))
+            .with_span(&value, AuxErrorInfo::InvalidArg)),
+    }
+}
 
 /// Assertion function.
 ///
@@ -43,11 +61,11 @@ pub struct Assert;
 impl<T: Grammar> NativeFn<T> for Assert {
     fn evaluate<'a>(
         &self,
-        args: &[Value<'a, T>],
+        args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
     ) -> EvalResult<'a, T> {
-        ctx.check_args_count(args, 1)?;
-        match args[0] {
+        ctx.check_args_count(&args, 1)?;
+        match args[0].extra {
             Value::Bool(true) => Ok(Value::void()),
             Value::Bool(false) => {
                 let err = EvalError::native("Assertion failed");
@@ -55,7 +73,9 @@ impl<T: Grammar> NativeFn<T> for Assert {
             }
             _ => {
                 let err = EvalError::native("`assert` requires a single boolean argument");
-                Err(ctx.call_site_error(err))
+                Err(ctx
+                    .call_site_error(err)
+                    .with_span(&args[0], AuxErrorInfo::InvalidArg))
             }
         }
     }
@@ -111,19 +131,21 @@ where
 {
     fn evaluate<'a>(
         &self,
-        args: &[Value<'a, T>],
+        mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
     ) -> EvalResult<'a, T> {
-        ctx.check_args_count(args, 3)?;
-        match args {
-            [Value::Bool(condition), then_val, else_val] => Ok(if *condition {
-                then_val.to_owned()
-            } else {
-                else_val.to_owned()
-            }),
+        ctx.check_args_count(&args, 3)?;
+        let else_val = args.pop().unwrap().extra;
+        let then_val = args.pop().unwrap().extra;
+
+        match &args[0].extra {
+            Value::Bool(condition) => Ok(if *condition { then_val } else { else_val }),
+
             _ => {
                 let err = EvalError::native("`if` requires first arg to be boolean");
-                Err(ctx.call_site_error(err))
+                Err(ctx
+                    .call_site_error(err)
+                    .with_span(&args[0], AuxErrorInfo::InvalidArg))
             }
         }
     }
@@ -179,33 +201,37 @@ where
 {
     fn evaluate<'a>(
         &self,
-        args: &[Value<'a, T>],
+        mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
     ) -> EvalResult<'a, T> {
-        ctx.check_args_count(args, 2)?;
-        match args {
-            [init, Value::Function(iter)] => {
-                let mut arg = init.clone();
-                loop {
-                    match iter.evaluate(&[arg], ctx)? {
-                        Value::Tuple(mut tuple) => {
-                            let (ret_or_next_arg, flag) = if tuple.len() == 2 {
-                                (tuple.pop().unwrap(), tuple.pop().unwrap())
-                            } else {
-                                let err = EvalError::native(Self::ITER_ERROR);
-                                break Err(ctx.call_site_error(err));
-                            };
+        ctx.check_args_count(&args, 2)?;
+        let iter = args.pop().unwrap();
+        let iter = match iter.extra {
+            Value::Function(iter) => iter,
+            _ => {
+                let err =
+                    EvalError::native("Second argument of `loop` should be an iterator function");
+                return Err(ctx
+                    .call_site_error(err)
+                    .with_span(&iter, AuxErrorInfo::InvalidArg));
+            }
+        };
 
-                            match (flag, ret_or_next_arg) {
-                                (Value::Bool(false), ret) => break Ok(ret),
-                                (Value::Bool(true), next_arg) => {
-                                    arg = next_arg;
-                                }
-                                _ => {
-                                    let err = EvalError::native(Self::ITER_ERROR);
-                                    break Err(ctx.call_site_error(err));
-                                }
-                            }
+        let mut arg = args.pop().unwrap();
+        loop {
+            match iter.evaluate(vec![arg], ctx)? {
+                Value::Tuple(mut tuple) => {
+                    let (ret_or_next_arg, flag) = if tuple.len() == 2 {
+                        (tuple.pop().unwrap(), tuple.pop().unwrap())
+                    } else {
+                        let err = EvalError::native(Self::ITER_ERROR);
+                        break Err(ctx.call_site_error(err));
+                    };
+
+                    match (flag, ret_or_next_arg) {
+                        (Value::Bool(false), ret) => break Ok(ret),
+                        (Value::Bool(true), next_arg) => {
+                            arg = ctx.apply_call_span(next_arg);
                         }
                         _ => {
                             let err = EvalError::native(Self::ITER_ERROR);
@@ -213,12 +239,10 @@ where
                         }
                     }
                 }
-            }
-            _ => {
-                let err = EvalError::native(
-                    "loop requires two arguments: an initializer and iteration fn",
-                );
-                Err(ctx.call_site_error(err))
+                _ => {
+                    let err = EvalError::native(Self::ITER_ERROR);
+                    break Err(ctx.call_site_error(err));
+                }
             }
         }
     }
@@ -235,6 +259,8 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Compare;
 
+const COMPARE_ERROR_MSG: &str = "Compare requires 2 primitive arguments";
+
 impl<T> NativeFn<T> for Compare
 where
     T: Grammar,
@@ -242,23 +268,23 @@ where
 {
     fn evaluate<'a>(
         &self,
-        args: &[Value<'a, T>],
+        mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
     ) -> EvalResult<'a, T> {
-        ctx.check_args_count(args, 2)?;
-        match args {
-            [Value::Number(x), Value::Number(y)] => Ok(Value::Number(if *x < *y {
-                -<T::Lit as One>::one()
-            } else if *x > *y {
-                <T::Lit as One>::one()
-            } else {
-                <T::Lit as Zero>::zero()
-            })),
-            _ => {
-                let err = EvalError::native("Compare requires 2 primitive arguments");
-                Err(ctx.call_site_error(err))
-            }
-        }
+        ctx.check_args_count(&args, 2)?;
+        let y = args.pop().unwrap();
+        let x = args.pop().unwrap();
+
+        let x = extract_number(ctx, x, COMPARE_ERROR_MSG)?;
+        let y = extract_number(ctx, y, COMPARE_ERROR_MSG)?;
+
+        Ok(Value::Number(if x < y {
+            -<T::Lit as One>::one()
+        } else if x > y {
+            <T::Lit as One>::one()
+        } else {
+            <T::Lit as Zero>::zero()
+        }))
     }
 }
 
@@ -282,22 +308,28 @@ where
 {
     fn evaluate<'a>(
         &self,
-        args: &[Value<'a, T>],
+        mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
     ) -> EvalResult<'a, T> {
-        ctx.check_args_count(args, 1)?;
-        match args {
-            [Value::Number(x)] => {
-                let output = (self.function)(x.to_owned());
+        ctx.check_args_count(&args, 1)?;
+        let arg = args.pop().unwrap();
+
+        match arg.extra {
+            Value::Number(x) => {
+                let output = (self.function)(x);
                 Ok(Value::Number(output))
             }
             _ => {
                 let err = EvalError::native("Unary function requires one primitive argument");
-                Err(ctx.call_site_error(err))
+                Err(ctx
+                    .call_site_error(err)
+                    .with_span(&arg, AuxErrorInfo::InvalidArg))
             }
         }
     }
 }
+
+const BINARY_FN_MSG: &str = "Binary function requires two primitive arguments";
 
 /// Binary function wrapper.
 #[derive(Debug, Clone, Copy)]
@@ -319,20 +351,17 @@ where
 {
     fn evaluate<'a>(
         &self,
-        args: &[Value<'a, T>],
+        mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
     ) -> EvalResult<'a, T> {
-        ctx.check_args_count(args, 2)?;
-        match args {
-            [Value::Number(x), Value::Number(y)] => {
-                let output = (self.function)(x.to_owned(), y.to_owned());
-                Ok(Value::Number(output))
-            }
-            _ => {
-                let err = EvalError::native("Binary function requires two primitive arguments");
-                Err(ctx.call_site_error(err))
-            }
-        }
+        ctx.check_args_count(&args, 2)?;
+        let y = args.pop().unwrap();
+        let x = args.pop().unwrap();
+
+        let x = extract_number(ctx, x, BINARY_FN_MSG)?;
+        let y = extract_number(ctx, y, BINARY_FN_MSG)?;
+        let output = (self.function)(x, y);
+        Ok(Value::Number(output))
     }
 }
 

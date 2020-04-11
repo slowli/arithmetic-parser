@@ -68,7 +68,8 @@
 
 pub use self::{
     error::{
-        Backtrace, BacktraceElement, ErrorWithBacktrace, EvalError, EvalResult, SpannedEvalError,
+        AuxErrorInfo, Backtrace, BacktraceElement, ErrorWithBacktrace, EvalError, EvalResult,
+        RepeatedAssignmentContext, SpannedEvalError, TupleLenMismatchContext,
     },
     functions::{Assert, BinaryFn, Compare, If, Loop, UnaryFn},
 };
@@ -78,8 +79,9 @@ use num_traits::{Num, Pow};
 use std::{collections::HashMap, fmt, iter, ops, rc::Rc};
 
 use crate::{
-    helpers::create_span_ref, BinaryOp, Block, Expr, FnDefinition, Grammar, Lvalue, Op, Span,
-    Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
+    helpers::{cover_spans, create_span_ref},
+    BinaryOp, Block, Expr, FnDefinition, Grammar, Lvalue, Op, Span, Spanned, SpannedExpr,
+    SpannedLvalue, SpannedStatement, Statement, UnaryOp,
 };
 
 mod error;
@@ -94,6 +96,11 @@ pub struct CallContext<'r, 'a> {
 }
 
 impl<'a> CallContext<'_, 'a> {
+    /// Returns the call span.
+    pub fn apply_call_span<T>(&self, value: T) -> Spanned<'a, T> {
+        create_span_ref(&self.call_span, value)
+    }
+
     /// Creates the error spanning the call site.
     pub fn call_site_error(&self, error: EvalError) -> SpannedEvalError<'a> {
         SpannedEvalError::new(&self.call_span, error)
@@ -102,7 +109,7 @@ impl<'a> CallContext<'_, 'a> {
     /// Checks argument count and returns an error if it doesn't match.
     pub fn check_args_count<T: Grammar>(
         &self,
-        args: &[Value<'a, T>],
+        args: &[SpannedValue<'a, T>],
         expected_count: usize,
     ) -> Result<(), SpannedEvalError<'a>> {
         if args.len() == expected_count {
@@ -121,7 +128,7 @@ pub trait NativeFn<T: Grammar> {
     /// Executes the function on the specified arguments.
     fn evaluate<'a>(
         &self,
-        args: &[Value<'a, T>],
+        args: Vec<SpannedValue<'a, T>>,
         context: &mut CallContext<'_, 'a>,
     ) -> EvalResult<'a, T>;
 }
@@ -172,7 +179,7 @@ where
     /// Evaluates the function. This can be used from native functions.
     pub fn evaluate(
         &self,
-        args: &[Value<'a, T>],
+        args: Vec<SpannedValue<'a, T>>,
         context: &mut CallContext<'_, 'a>,
     ) -> EvalResult<'a, T> {
         self.eval_inner(context.fn_name, context.call_span, args, context.backtrace)
@@ -182,7 +189,7 @@ where
         &self,
         fn_name: Span<'a>,
         call_span: Span<'a>,
-        args: &[Value<'a, T>],
+        args: Vec<SpannedValue<'a, T>>,
         backtrace: &mut Option<Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
         if args.len() != self.definition.extra.args.len() {
@@ -190,8 +197,13 @@ where
                 def: self.definition.extra.args.len(),
                 call: args.len(),
             };
-            // FIXME: add def span
-            return Err(SpannedEvalError::new(&call_span, err));
+            let args_span = cover_spans(
+                create_span_ref(&self.definition, ()),
+                &self.definition.extra.args,
+            );
+            let err =
+                SpannedEvalError::new(&call_span, err).with_span(&args_span, AuxErrorInfo::FnArgs);
+            return Err(err);
         }
 
         let def = &self.definition.extra;
@@ -206,7 +218,7 @@ where
 
         let mut context = Interpreter::from_scope(self.captures.clone());
         for (lvalue, val) in def.args.iter().zip(args) {
-            context.innermost_scope().assign(lvalue, val.clone())?;
+            context.innermost_scope().assign(lvalue, val)?;
         }
         let result = context.evaluate_inner(&def.body, backtrace);
 
@@ -222,23 +234,23 @@ where
 fn extract_vars<'it, 'a: 'it, T: 'it>(
     vars: &mut HashMap<&'a str, Span<'a>>,
     lvalues: impl Iterator<Item = &'it SpannedLvalue<'a, T>>,
+    context: RepeatedAssignmentContext,
 ) -> Result<(), SpannedEvalError<'a>> {
     for lvalue in lvalues {
         match &lvalue.extra {
             Lvalue::Variable { .. } => {
-                if lvalue.fragment != "_"
-                    && vars
-                        .insert(lvalue.fragment, create_span_ref(lvalue, ()))
-                        .is_some()
-                {
-                    // FIXME: add previous declaration span to the error.
-                    let err = EvalError::RepeatedAssignment;
-                    return Err(SpannedEvalError::new(lvalue, err));
+                if lvalue.fragment != "_" {
+                    let var_span = create_span_ref(lvalue, ());
+                    if let Some(prev_span) = vars.insert(lvalue.fragment, var_span) {
+                        let err = EvalError::RepeatedAssignment { context };
+                        return Err(SpannedEvalError::new(lvalue, err)
+                            .with_span(&prev_span, AuxErrorInfo::PrevAssignment));
+                    }
                 }
             }
 
             Lvalue::Tuple(fragments) => {
-                extract_vars(vars, fragments.iter())?;
+                extract_vars(vars, fragments.iter(), context)?;
             }
         }
     }
@@ -272,7 +284,11 @@ impl<'a, T: Grammar> FnValidator<'a, T> {
     ) -> Result<(), SpannedEvalError<'a>> {
         self.local_vars.push(HashMap::new());
 
-        extract_vars(self.local_vars.last_mut().unwrap(), definition.args.iter())?;
+        extract_vars(
+            self.local_vars.last_mut().unwrap(),
+            definition.args.iter(),
+            RepeatedAssignmentContext::FnArgs,
+        )?;
         for statement in &definition.body.statements {
             self.eval_statement(statement, context)?;
         }
@@ -373,7 +389,11 @@ impl<'a, T: Grammar> FnValidator<'a, T> {
             Statement::Assignment { lhs, rhs } => {
                 self.eval(rhs, context)?;
                 let mut new_vars = HashMap::new();
-                extract_vars(&mut new_vars, iter::once(lhs))?;
+                extract_vars(
+                    &mut new_vars,
+                    iter::once(lhs),
+                    RepeatedAssignmentContext::Assignment,
+                )?;
                 self.local_vars.last_mut().unwrap().extend(&new_vars);
                 Ok(())
             }
@@ -411,7 +431,7 @@ where
     /// Evaluates the function on the specified arguments.
     pub fn evaluate(
         &self,
-        args: &[Value<'a, T>],
+        args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
     ) -> EvalResult<'a, T> {
         match self {
@@ -436,6 +456,9 @@ where
     /// Tuple of zero or more values.
     Tuple(Vec<Value<'a, T>>),
 }
+
+/// Value together with a span that has produced it.
+pub type SpannedValue<'a, T> = Spanned<'a, Value<'a, T>>;
 
 impl<'a, T: Grammar> Value<'a, T> {
     /// Creates a value for a native function.
@@ -507,9 +530,13 @@ impl BinaryOpError {
         }
     }
 
-    fn tuple(lhs: usize, rhs: usize) -> Self {
+    fn tuple(op: BinaryOp, lhs: usize, rhs: usize) -> Self {
         Self {
-            inner: EvalError::TupleLenMismatch { lhs, rhs },
+            inner: EvalError::TupleLenMismatch {
+                lhs,
+                rhs,
+                context: TupleLenMismatchContext::BinaryOp(op),
+            },
             side: None,
         }
     }
@@ -581,7 +608,7 @@ where
                         .collect();
                     res.map(Self::Tuple)
                 } else {
-                    Err(BinaryOpError::tuple(this.len(), other.len()))
+                    Err(BinaryOpError::tuple(op, this.len(), other.len()))
                 }
             }
 
@@ -686,6 +713,7 @@ where
                     Err(EvalError::TupleLenMismatch {
                         lhs: this.len(),
                         rhs: other.len(),
+                        context: TupleLenMismatchContext::BinaryOp(BinaryOp::Eq),
                     })
                 }
             }
@@ -763,13 +791,27 @@ impl<'a, T: Grammar> Scope<'a, T> {
         self
     }
 
-    fn assign<'lv>(
+    fn assign(
         &mut self,
-        lvalue: &SpannedLvalue<'lv, T::Type>,
+        lvalue: &SpannedLvalue<'a, T::Type>,
+        rvalue: SpannedValue<'a, T>,
+    ) -> Result<(), SpannedEvalError<'a>> {
+        let total_rvalue_span = create_span_ref(&rvalue, ());
+        self.do_assign(lvalue, rvalue.extra, total_rvalue_span)
+    }
+
+    fn do_assign(
+        &mut self,
+        lvalue: &SpannedLvalue<'a, T::Type>,
         rvalue: Value<'a, T>,
-    ) -> Result<(), SpannedEvalError<'lv>> {
+        total_rvalue_span: Span<'a>,
+    ) -> Result<(), SpannedEvalError<'a>> {
         // TODO: This check is repeated for function bodies.
-        extract_vars(&mut HashMap::new(), iter::once(lvalue))?;
+        extract_vars(
+            &mut HashMap::new(),
+            iter::once(lvalue),
+            RepeatedAssignmentContext::Assignment,
+        )?;
 
         match &lvalue.extra {
             Lvalue::Variable { .. } => {
@@ -782,19 +824,21 @@ impl<'a, T: Grammar> Scope<'a, T> {
             Lvalue::Tuple(assignments) => {
                 if let Value::Tuple(fragments) = rvalue {
                     if assignments.len() != fragments.len() {
-                        // FIXME: span both sides.
                         let err = EvalError::TupleLenMismatch {
                             lhs: assignments.len(),
                             rhs: fragments.len(),
+                            context: TupleLenMismatchContext::Assignment,
                         };
-                        return Err(SpannedEvalError::new(&lvalue, err));
+                        return Err(SpannedEvalError::new(&lvalue, err)
+                            .with_span(&total_rvalue_span, AuxErrorInfo::Rvalue));
                     }
 
                     for (assignment, fragment) in assignments.iter().zip(fragments) {
-                        self.assign(assignment, fragment)?;
+                        self.do_assign(assignment, fragment, total_rvalue_span)?;
                     }
                 } else {
-                    return Err(SpannedEvalError::new(&lvalue, EvalError::CannotDestructure));
+                    return Err(SpannedEvalError::new(&lvalue, EvalError::CannotDestructure)
+                        .with_span(&total_rvalue_span, AuxErrorInfo::Rvalue));
                 }
             }
         }
@@ -962,7 +1006,11 @@ where
 
                 let args: Result<Vec<_>, _> = args
                     .iter()
-                    .map(|arg| self.evaluate_expr_inner(arg, backtrace))
+                    .map(|arg| {
+                        let span = create_span_ref(&arg, ());
+                        self.evaluate_expr_inner(arg, backtrace)
+                            .map(|value| create_span_ref(&span, value))
+                    })
                     .collect();
                 let args = args?;
                 let mut context = CallContext {
@@ -970,7 +1018,7 @@ where
                     call_span: create_span_ref(expr, ()),
                     backtrace,
                 };
-                func.evaluate(&args, &mut context)
+                func.evaluate(args, &mut context)
             }
 
             // Arithmetic operations
@@ -1027,6 +1075,7 @@ where
 
                 Assignment { lhs, rhs } => {
                     let evaluated = self.evaluate_expr_inner(rhs, backtrace)?;
+                    let evaluated = create_span_ref(&rhs, evaluated);
                     self.scopes.last_mut().unwrap().assign(lhs, evaluated)?;
                 }
             }
@@ -1443,14 +1492,19 @@ mod tests {
         let err = interpreter.evaluate(&block).unwrap_err();
         assert_eq!(err.main_span().fragment, "x");
         assert_eq!(err.main_span().offset, 10);
-        assert_matches!(err.source(), EvalError::RepeatedAssignment);
+        assert_matches!(
+            err.source(),
+            EvalError::RepeatedAssignment {
+                context: RepeatedAssignmentContext::FnArgs
+            }
+        );
 
         let program = Span::new("add = |x, (y, x)| x + y;");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
         assert_eq!(err.main_span().fragment, "x");
         assert_eq!(err.main_span().offset, 14);
-        assert_matches!(err.source(), EvalError::RepeatedAssignment);
+        assert_matches!(err.source(), EvalError::RepeatedAssignment { .. });
     }
 
     #[test]
@@ -1460,7 +1514,12 @@ mod tests {
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         assert_eq!(err.main_span().fragment, "x");
         assert_eq!(err.main_span().offset, 4);
-        assert_matches!(err.source(), EvalError::RepeatedAssignment);
+        assert_matches!(
+            err.source(),
+            EvalError::RepeatedAssignment {
+                context: RepeatedAssignmentContext::Assignment,
+            }
+        );
     }
 
     #[test]
@@ -1499,7 +1558,7 @@ mod tests {
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         assert_eq!(err.main_span().fragment, "(1, 2) + (3, 4, 5)");
-        assert_matches!(err.source(), EvalError::TupleLenMismatch { lhs: 2, rhs: 3 });
+        assert_matches!(err.source(), EvalError::TupleLenMismatch { lhs: 2, rhs: 3, .. });
     }
 
     #[test]

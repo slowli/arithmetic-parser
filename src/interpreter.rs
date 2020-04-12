@@ -66,14 +66,9 @@
 //! assert_eq!(ret, Value::Number(9.0));
 //! ```
 
-pub use self::{
-    error::{
-        AuxErrorInfo, Backtrace, BacktraceElement, ErrorWithBacktrace, EvalError, EvalResult,
-        RepeatedAssignmentContext, SpannedEvalError, TupleLenMismatchContext,
-    },
-    functions::{
-        Assert, BinaryFn, Compare, FilterFn, FoldFn, If, Loop, MapFn, MergeFn, PushFn, UnaryFn,
-    },
+pub use self::error::{
+    AuxErrorInfo, Backtrace, BacktraceElement, ErrorWithBacktrace, EvalError, EvalResult,
+    RepeatedAssignmentContext, SpannedEvalError, TupleLenMismatchContext,
 };
 
 use num_traits::{Num, Pow};
@@ -87,7 +82,7 @@ use crate::{
 };
 
 mod error;
-mod functions;
+pub mod fns;
 
 /// Opaque context for native calls.
 #[derive(Debug)]
@@ -1180,7 +1175,7 @@ mod tests {
 
     use assert_matches::assert_matches;
 
-    const SIN: UnaryFn<fn(f32) -> f32> = UnaryFn::new(f32::sin);
+    const SIN: fns::Unary<fn(f32) -> f32> = fns::Unary::new(f32::sin);
 
     #[test]
     fn basic_program() {

@@ -18,10 +18,7 @@ use std::{
 
 use arithmetic_parser::{
     grammars::{NumGrammar, NumLiteral},
-    interpreter::{
-        BacktraceElement, BinaryFn, Compare, ErrorWithBacktrace, FilterFn, FoldFn, Function, If,
-        Interpreter, Loop, MapFn, MergeFn, PushFn, Scope, UnaryFn, Value,
-    },
+    interpreter::{fns, BacktraceElement, ErrorWithBacktrace, Function, Interpreter, Scope, Value},
     Block, Error, Grammar, GrammarExt, Span, Spanned,
 };
 
@@ -332,13 +329,13 @@ fn init_interpreter<'a, T: NumLiteral>() -> Interpreter<'a, NumGrammar<T>> {
         .innermost_scope()
         .insert_var("false", Value::Bool(false))
         .insert_var("true", Value::Bool(true))
-        .insert_native_fn("if", If)
-        .insert_native_fn("loop", Loop)
-        .insert_native_fn("map", MapFn)
-        .insert_native_fn("filter", FilterFn)
-        .insert_native_fn("fold", FoldFn)
-        .insert_native_fn("push", PushFn)
-        .insert_native_fn("merge", MergeFn);
+        .insert_native_fn("if", fns::If)
+        .insert_native_fn("loop", fns::Loop)
+        .insert_native_fn("map", fns::Map)
+        .insert_native_fn("filter", fns::Filter)
+        .insert_native_fn("fold", fns::Fold)
+        .insert_native_fn("push", fns::Push)
+        .insert_native_fn("merge", fns::Merge);
     interpreter
 }
 
@@ -362,10 +359,10 @@ impl<T: NumLiteral> StdLibrary<T> {
             scope.insert_var(name, Value::Number(*c));
         }
         for (name, unary_fn) in self.unary {
-            scope.insert_native_fn(name, UnaryFn::new(*unary_fn));
+            scope.insert_native_fn(name, fns::Unary::new(*unary_fn));
         }
         for (name, binary_fn) in self.binary {
-            scope.insert_native_fn(name, BinaryFn::new(*binary_fn));
+            scope.insert_native_fn(name, fns::Binary::new(*binary_fn));
         }
     }
 }
@@ -416,7 +413,7 @@ impl ReplLiteral for f32 {
         F32_FUNCTIONS.add_to_interpreter(&mut interpreter);
         interpreter
             .innermost_scope()
-            .insert_native_fn("cmp", Compare);
+            .insert_native_fn("cmp", fns::Compare);
         interpreter
     }
 }
@@ -427,7 +424,7 @@ impl ReplLiteral for f64 {
         F64_FUNCTIONS.add_to_interpreter(&mut interpreter);
         interpreter
             .innermost_scope()
-            .insert_native_fn("cmp", Compare);
+            .insert_native_fn("cmp", fns::Compare);
         interpreter
     }
 }

@@ -290,7 +290,7 @@ where
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{Compare, EvalError, If, Interpreter, MapFn, Value}, grammars::F32Grammar,
+/// #     interpreter::{fns, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = r#"
@@ -302,16 +302,16 @@ where
 /// let mut interpreter = Interpreter::new();
 /// interpreter
 ///     .innermost_scope()
-///     .insert_native_fn("cmp", Compare)
-///     .insert_native_fn("if", If)
-///     .insert_native_fn("map", MapFn);
+///     .insert_native_fn("cmp", fns::Compare)
+///     .insert_native_fn("if", fns::If)
+///     .insert_native_fn("map", fns::Map);
 /// let ret = interpreter.evaluate(&block).unwrap();
 /// assert_eq!(ret, Value::Bool(true));
 /// ```
 #[derive(Debug, Clone, Copy)]
-pub struct MapFn;
+pub struct Map;
 
-impl<T> NativeFn<T> for MapFn
+impl<T> NativeFn<T> for Map
 where
     T: Grammar,
     T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
@@ -357,7 +357,7 @@ where
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{Compare, EvalError, FilterFn, Interpreter, Value}, grammars::F32Grammar,
+/// #     interpreter::{fns, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = r#"
@@ -369,15 +369,15 @@ where
 /// let mut interpreter = Interpreter::new();
 /// interpreter
 ///     .innermost_scope()
-///     .insert_native_fn("cmp", Compare)
-///     .insert_native_fn("filter", FilterFn);
+///     .insert_native_fn("cmp", fns::Compare)
+///     .insert_native_fn("filter", fns::Filter);
 /// let ret = interpreter.evaluate(&block).unwrap();
 /// assert_eq!(ret, Value::Bool(true));
 /// ```
 #[derive(Debug, Clone, Copy)]
-pub struct FilterFn;
+pub struct Filter;
 
-impl<T> NativeFn<T> for FilterFn
+impl<T> NativeFn<T> for Filter
 where
     T: Grammar,
     T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
@@ -429,7 +429,7 @@ where
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{FoldFn, Interpreter, Value}, grammars::F32Grammar,
+/// #     interpreter::{fns, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = r#"
@@ -441,14 +441,14 @@ where
 /// let mut interpreter = Interpreter::new();
 /// interpreter
 ///     .innermost_scope()
-///     .insert_native_fn("fold", FoldFn);
+///     .insert_native_fn("fold", fns::Fold);
 /// let ret = interpreter.evaluate(&block).unwrap();
 /// assert_eq!(ret, Value::Bool(true));
 /// ```
 #[derive(Debug, Clone, Copy)]
-pub struct FoldFn;
+pub struct Fold;
 
-impl<T> NativeFn<T> for FoldFn
+impl<T> NativeFn<T> for Fold
 where
     T: Grammar,
     T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
@@ -490,7 +490,7 @@ where
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{Compare, Loop, If, Interpreter, PushFn, Value}, grammars::F32Grammar,
+/// #     interpreter::{fns, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = r#"
@@ -509,17 +509,17 @@ where
 /// let mut interpreter = Interpreter::new();
 /// interpreter
 ///     .innermost_scope()
-///     .insert_native_fn("cmp", Compare)
-///     .insert_native_fn("if", If)
-///     .insert_native_fn("loop", Loop)
-///     .insert_native_fn("push", PushFn);
+///     .insert_native_fn("cmp", fns::Compare)
+///     .insert_native_fn("if", fns::If)
+///     .insert_native_fn("loop", fns::Loop)
+///     .insert_native_fn("push", fns::Push);
 /// let ret = interpreter.evaluate(&block).unwrap();
 /// assert_eq!(ret, Value::Bool(true));
 /// ```
 #[derive(Debug, Clone, Copy)]
-pub struct PushFn;
+pub struct Push;
 
-impl<T> NativeFn<T> for PushFn
+impl<T> NativeFn<T> for Push
 where
     T: Grammar,
     T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
@@ -554,7 +554,7 @@ where
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{FoldFn, Interpreter, MergeFn, Value}, grammars::F32Grammar,
+/// #     interpreter::{fns, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = r#"
@@ -567,15 +567,15 @@ where
 /// let mut interpreter = Interpreter::new();
 /// interpreter
 ///     .innermost_scope()
-///     .insert_native_fn("fold", FoldFn)
-///     .insert_native_fn("merge", MergeFn);
+///     .insert_native_fn("fold", fns::Fold)
+///     .insert_native_fn("merge", fns::Merge);
 /// let ret = interpreter.evaluate(&block).unwrap();
 /// assert_eq!(ret, Value::Bool(true));
 /// ```
 #[derive(Debug, Clone, Copy)]
-pub struct MergeFn;
+pub struct Merge;
 
-impl<T> NativeFn<T> for MergeFn
+impl<T> NativeFn<T> for Merge
 where
     T: Grammar,
     T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
@@ -644,18 +644,18 @@ where
 
 /// Unary function wrapper.
 #[derive(Debug, Clone, Copy)]
-pub struct UnaryFn<F> {
+pub struct Unary<F> {
     function: F,
 }
 
-impl<F> UnaryFn<F> {
+impl<F> Unary<F> {
     /// Creates a new function.
     pub const fn new(function: F) -> Self {
         Self { function }
     }
 }
 
-impl<F, T> NativeFn<T> for UnaryFn<F>
+impl<F, T> NativeFn<T> for Unary<F>
 where
     T: Grammar,
     F: Fn(T::Lit) -> T::Lit,
@@ -687,18 +687,18 @@ const BINARY_FN_MSG: &str = "Binary function requires two primitive arguments";
 
 /// Binary function wrapper.
 #[derive(Debug, Clone, Copy)]
-pub struct BinaryFn<F> {
+pub struct Binary<F> {
     function: F,
 }
 
-impl<F> BinaryFn<F> {
+impl<F> Binary<F> {
     /// Creates a new function.
     pub const fn new(function: F) -> Self {
         Self { function }
     }
 }
 
-impl<F, T> NativeFn<T> for BinaryFn<F>
+impl<F, T> NativeFn<T> for Binary<F>
 where
     T: Grammar,
     F: Fn(T::Lit, T::Lit) -> T::Lit,
@@ -795,7 +795,7 @@ mod tests {
             .innermost_scope()
             .insert_native_fn("cmp", Compare)
             .insert_native_fn("if", If)
-            .insert_native_fn("fold", FoldFn);
+            .insert_native_fn("fold", Fold);
 
         let program = r#"
             max_value = |...xs| {
@@ -813,8 +813,8 @@ mod tests {
         let mut interpreter = Interpreter::new();
         interpreter
             .innermost_scope()
-            .insert_native_fn("merge", MergeFn)
-            .insert_native_fn("fold", FoldFn);
+            .insert_native_fn("merge", Merge)
+            .insert_native_fn("fold", Fold);
 
         let program = r#"
             reverse = |xs| {

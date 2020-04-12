@@ -9,7 +9,7 @@
 //! # use assert_matches::assert_matches;
 //! use arithmetic_parser::{
 //!     grammars::F32Grammar,
-//!     GrammarExt, NomResult, Span, Statement, Expr, FnDefinition,
+//!     GrammarExt, NomResult, Span, Statement, Expr, FnDefinition, LvalueLen,
 //! };
 //! use nom::number::complete::float;
 //!
@@ -42,7 +42,7 @@
 //! assert_matches!(
 //!     some_function,
 //!     Expr::FnDefinition(FnDefinition { ref args, ref body })
-//!         if args.len() == 2
+//!         if args.extra.len() == LvalueLen::Exact(2)
 //!             && body.statements.is_empty()
 //!             && body.return_value.is_some()
 //! );

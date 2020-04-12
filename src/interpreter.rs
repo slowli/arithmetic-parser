@@ -71,17 +71,17 @@ pub use self::{
         AuxErrorInfo, Backtrace, BacktraceElement, ErrorWithBacktrace, EvalError, EvalResult,
         RepeatedAssignmentContext, SpannedEvalError, TupleLenMismatchContext,
     },
-    functions::{Assert, BinaryFn, Compare, If, Loop, UnaryFn},
+    functions::{Assert, BinaryFn, Compare, FilterFn, FoldFn, If, Loop, MapFn, UnaryFn},
 };
 
 use num_traits::{Num, Pow};
 
 use std::{collections::HashMap, fmt, iter, ops, rc::Rc};
 
-use crate::helpers::cover_spans;
 use crate::{
-    helpers::create_span_ref, BinaryOp, Block, Destructure, Expr, FnDefinition, Grammar, Lvalue,
-    LvalueLen, Op, Span, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
+    helpers::{cover_spans, create_span_ref},
+    BinaryOp, Block, Destructure, Expr, FnDefinition, Grammar, Lvalue, LvalueLen, Op, Span,
+    Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
 };
 
 mod error;

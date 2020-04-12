@@ -19,8 +19,8 @@ use std::{
 use arithmetic_parser::{
     grammars::{NumGrammar, NumLiteral},
     interpreter::{
-        BacktraceElement, BinaryFn, Compare, ErrorWithBacktrace, Function, If, Interpreter, Loop,
-        Scope, UnaryFn, Value,
+        BacktraceElement, BinaryFn, Compare, ErrorWithBacktrace, FilterFn, FoldFn, Function, If,
+        Interpreter, Loop, MapFn, Scope, UnaryFn, Value,
     },
     Block, Error, Grammar, GrammarExt, Span, Spanned,
 };
@@ -333,7 +333,10 @@ fn init_interpreter<'a, T: NumLiteral>() -> Interpreter<'a, NumGrammar<T>> {
         .insert_var("false", Value::Bool(false))
         .insert_var("true", Value::Bool(true))
         .insert_native_fn("if", If)
-        .insert_native_fn("loop", Loop);
+        .insert_native_fn("loop", Loop)
+        .insert_native_fn("map", MapFn)
+        .insert_native_fn("filter", FilterFn)
+        .insert_native_fn("fold", FoldFn);
     interpreter
 }
 

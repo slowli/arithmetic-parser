@@ -6,8 +6,8 @@ use std::ops;
 
 use crate::{
     interpreter::{
-        AuxErrorInfo, CallContext, EvalError, EvalResult, NativeFn, SpannedEvalError, SpannedValue,
-        Value,
+        AuxErrorInfo, CallContext, EvalError, EvalResult, Function, NativeFn, SpannedEvalError,
+        SpannedValue, Value,
     },
     Grammar,
 };
@@ -22,6 +22,36 @@ fn extract_number<'a, T: Grammar>(
         _ => Err(ctx
             .call_site_error(EvalError::native(error_msg))
             .with_span(&value, AuxErrorInfo::InvalidArg)),
+    }
+}
+
+fn extract_array<'a, T: Grammar>(
+    ctx: &CallContext<'_, 'a>,
+    value: SpannedValue<'a, T>,
+    error_msg: &str,
+) -> Result<Vec<Value<'a, T>>, SpannedEvalError<'a>> {
+    if let Value::Tuple(array) = value.extra {
+        Ok(array)
+    } else {
+        let err = EvalError::native(error_msg);
+        Err(ctx
+            .call_site_error(err)
+            .with_span(&value, AuxErrorInfo::InvalidArg))
+    }
+}
+
+fn extract_fn<'a, T: Grammar>(
+    ctx: &CallContext<'_, 'a>,
+    value: SpannedValue<'a, T>,
+    error_msg: &str,
+) -> Result<Function<'a, T>, SpannedEvalError<'a>> {
+    if let Value::Function(function) = value.extra {
+        Ok(function)
+    } else {
+        let err = EvalError::native(error_msg);
+        Err(ctx
+            .call_site_error(err)
+            .with_span(&value, AuxErrorInfo::InvalidArg))
     }
 }
 
@@ -49,9 +79,9 @@ fn extract_number<'a, T: Grammar>(
 /// let mut interpreter = Interpreter::new();
 /// interpreter.innermost_scope().insert_native_fn("assert", Assert);
 /// let err = interpreter.evaluate(&block).unwrap_err();
-/// assert_eq!(err.inner.fragment, "assert(3^2 == 10)");
+/// assert_eq!(err.main_span().fragment, "assert(3^2 == 10)");
 /// assert_matches!(
-///     err.inner.extra,
+///     err.source(),
 ///     EvalError::NativeCall(ref msg) if msg == "Assertion failed"
 /// );
 /// ```
@@ -248,6 +278,206 @@ where
     }
 }
 
+/// Map function that evaluates the provided function on each item of the tuple.
+///
+/// # Type
+///
+/// ```text
+/// fn<T, U>([T], fn(T) -> U) -> [U]
+/// ```
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::{
+/// #     interpreter::{Compare, EvalError, If, Interpreter, MapFn, Value}, grammars::F32Grammar,
+/// #     GrammarExt, Span,
+/// # };
+/// let program = r#"
+///     xs = (1, -2, 3, -0.3);
+///     map(xs, |x| if(cmp(x, 0) == 1, x, 0)) == (1, 0, 3, 0)
+/// "#;
+/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+///
+/// let mut interpreter = Interpreter::new();
+/// interpreter
+///     .innermost_scope()
+///     .insert_native_fn("cmp", Compare)
+///     .insert_native_fn("if", If)
+///     .insert_native_fn("map", MapFn);
+/// let ret = interpreter.evaluate(&block).unwrap();
+/// assert_eq!(ret, Value::Bool(true));
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct MapFn;
+
+impl<T> NativeFn<T> for MapFn
+where
+    T: Grammar,
+    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+{
+    fn evaluate<'a>(
+        &self,
+        mut args: Vec<SpannedValue<'a, T>>,
+        ctx: &mut CallContext<'_, 'a>,
+    ) -> EvalResult<'a, T> {
+        ctx.check_args_count(&args, 2)?;
+        let map_fn = extract_fn(
+            ctx,
+            args.pop().unwrap(),
+            "`map` requires second arg to be a mapping function",
+        )?;
+        let array = extract_array(
+            ctx,
+            args.pop().unwrap(),
+            "`map` requires first arg to be a tuple",
+        )?;
+
+        let mapped: Result<Vec<_>, _> = array
+            .into_iter()
+            .map(|value| {
+                let spanned = ctx.apply_call_span(value);
+                map_fn.evaluate(vec![spanned], ctx)
+            })
+            .collect();
+        mapped.map(Value::Tuple)
+    }
+}
+
+/// Filter function that evaluates the provided function on each item of the tuple and retains
+/// only elements for which the function returned `true`.
+///
+/// # Type
+///
+/// ```text
+/// fn<T>([T], fn(T) -> bool) -> [T]
+/// ```
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::{
+/// #     interpreter::{Compare, EvalError, FilterFn, Interpreter, Value}, grammars::F32Grammar,
+/// #     GrammarExt, Span,
+/// # };
+/// let program = r#"
+///     xs = (1, -2, 3, -7, -0.3);
+///     filter(xs, |x| cmp(x, -1) == 1) == (1, 3, -0.3)
+/// "#;
+/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+///
+/// let mut interpreter = Interpreter::new();
+/// interpreter
+///     .innermost_scope()
+///     .insert_native_fn("cmp", Compare)
+///     .insert_native_fn("filter", FilterFn);
+/// let ret = interpreter.evaluate(&block).unwrap();
+/// assert_eq!(ret, Value::Bool(true));
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct FilterFn;
+
+impl<T> NativeFn<T> for FilterFn
+where
+    T: Grammar,
+    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+{
+    fn evaluate<'a>(
+        &self,
+        mut args: Vec<SpannedValue<'a, T>>,
+        ctx: &mut CallContext<'_, 'a>,
+    ) -> EvalResult<'a, T> {
+        ctx.check_args_count(&args, 2)?;
+        let filter_fn = extract_fn(
+            ctx,
+            args.pop().unwrap(),
+            "`filter` requires second arg to be a filter function",
+        )?;
+        let array = extract_array(
+            ctx,
+            args.pop().unwrap(),
+            "`filter` requires first arg to be a tuple",
+        )?;
+
+        let mut filtered = vec![];
+        for value in array {
+            let spanned = ctx.apply_call_span(value.clone());
+            match filter_fn.evaluate(vec![spanned], ctx)? {
+                Value::Bool(true) => filtered.push(value),
+                Value::Bool(false) => { /* do nothing */ }
+                _ => {
+                    let err = EvalError::native(
+                        "`filter` requires filtering function to return booleans",
+                    );
+                    return Err(ctx.call_site_error(err));
+                }
+            }
+        }
+        Ok(Value::Tuple(filtered))
+    }
+}
+
+/// Reduce function that reduces the provided tuple to a single value.
+///
+/// # Type
+///
+/// ```text
+/// fn<T, Acc>([T], Acc, fn(Acc, T) -> Acc) -> Acc
+/// ```
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::{
+/// #     interpreter::{FoldFn, Interpreter, Value}, grammars::F32Grammar,
+/// #     GrammarExt, Span,
+/// # };
+/// let program = r#"
+///     xs = (1, -2, 3, -7);
+///     fold(xs, 1, |acc, x| acc * x) == 42
+/// "#;
+/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+///
+/// let mut interpreter = Interpreter::new();
+/// interpreter
+///     .innermost_scope()
+///     .insert_native_fn("fold", FoldFn);
+/// let ret = interpreter.evaluate(&block).unwrap();
+/// assert_eq!(ret, Value::Bool(true));
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct FoldFn;
+
+impl<T> NativeFn<T> for FoldFn
+where
+    T: Grammar,
+    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+{
+    fn evaluate<'a>(
+        &self,
+        mut args: Vec<SpannedValue<'a, T>>,
+        ctx: &mut CallContext<'_, 'a>,
+    ) -> EvalResult<'a, T> {
+        ctx.check_args_count(&args, 3)?;
+        let fold_fn = extract_fn(
+            ctx,
+            args.pop().unwrap(),
+            "`fold` requires third arg to be a folding function",
+        )?;
+        let acc = args.pop().unwrap().extra;
+        let array = extract_array(
+            ctx,
+            args.pop().unwrap(),
+            "`fold` requires first arg to be a tuple",
+        )?;
+
+        array.into_iter().try_fold(acc, |acc, value| {
+            let spanned_args = vec![ctx.apply_call_span(acc), ctx.apply_call_span(value)];
+            fold_fn.evaluate(spanned_args, ctx)
+        })
+    }
+}
+
 /// Comparator function on two arguments. Returns `-1` if the first argument is lesser than
 /// the second, `1` if the first argument is greater, and `0` in other cases.
 ///
@@ -432,5 +662,25 @@ mod tests {
                 Value::Number(9.0),
             ])
         );
+    }
+
+    #[test]
+    fn max_value_with_fold() {
+        let mut interpreter = Interpreter::new();
+        interpreter
+            .innermost_scope()
+            .insert_native_fn("cmp", Compare)
+            .insert_native_fn("if", If)
+            .insert_native_fn("fold", FoldFn);
+
+        let program = r#"
+            max_value = |...xs| {
+                fold(xs, -Inf, |acc, x| if(cmp(x, acc) == 1, x, acc))
+            };
+            max_value(1, -2, 7, 2, 5) == 7 && max_value(3, -5, 9) == 9
+        "#;
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let ret = interpreter.evaluate(&block).unwrap();
+        assert_eq!(ret, Value::Bool(true));
     }
 }

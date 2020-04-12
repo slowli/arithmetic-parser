@@ -470,6 +470,15 @@ where
             Self::Interpreted(function) => function.evaluate(args, ctx),
         }
     }
+
+    /// Checks if the provided function is the same as this one.
+    pub fn is_same_function(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Native(this), Self::Native(other)) => Rc::ptr_eq(this, other),
+            (Self::Interpreted(this), Self::Interpreted(other)) => Rc::ptr_eq(this, other),
+            _ => false,
+        }
+    }
 }
 
 /// Values produced by expressions during their interpretation.
@@ -627,24 +636,18 @@ where
                 Ok(Self::Number(primitive_op(this, other)))
             }
 
-            (Self::Number(this), Self::Tuple(other)) => {
+            (this @ Self::Number(_), Self::Tuple(other)) => {
                 let res: Result<Vec<_>, _> = other
                     .into_iter()
-                    .map(|y| match y {
-                        Self::Number(y) => Ok(Self::Number(primitive_op(this.clone(), y))),
-                        _ => Err(BinaryOpError::new(op).with_side(OpSide::Rhs)),
-                    })
+                    .map(|y| this.clone().try_binary_op_inner(y, op, primitive_op))
                     .collect();
                 res.map(Self::Tuple)
             }
 
-            (Self::Tuple(this), Self::Number(other)) => {
+            (Self::Tuple(this), other @ Self::Number(_)) => {
                 let res: Result<Vec<_>, _> = this
                     .into_iter()
-                    .map(|x| match x {
-                        Self::Number(x) => Ok(Self::Number(primitive_op(x, other.clone()))),
-                        _ => Err(BinaryOpError::new(op).with_side(OpSide::Lhs)),
-                    })
+                    .map(|x| x.try_binary_op_inner(other.clone(), op, primitive_op))
                     .collect();
                 res.map(Self::Tuple)
             }
@@ -751,26 +754,22 @@ where
         }
     }
 
-    fn try_compare(self, rhs: Self) -> Result<bool, EvalError> {
+    fn compare(&self, rhs: &Self) -> bool {
         match (self, rhs) {
-            (Self::Number(this), Self::Number(other)) => Ok(this == other),
+            (Self::Bool(this), Self::Bool(other)) => this == other,
+            (Self::Number(this), Self::Number(other)) => this == other,
+
             (Self::Tuple(this), Self::Tuple(other)) => {
                 if this.len() == other.len() {
-                    this.into_iter()
-                        .zip(other)
-                        .try_fold(true, |acc, (x, y)| Ok(acc && x.try_compare(y)?))
+                    this.iter().zip(other).all(|(x, y)| x.compare(y))
                 } else {
-                    Err(EvalError::TupleLenMismatch {
-                        lhs: this.len().into(),
-                        rhs: other.len(),
-                        context: TupleLenMismatchContext::BinaryOp(BinaryOp::Eq),
-                    })
+                    false
                 }
             }
 
-            _ => Err(EvalError::UnexpectedOperand {
-                op: BinaryOp::Eq.into(),
-            }),
+            (Self::Function(this), Self::Function(other)) => this.is_same_function(other),
+
+            _ => false,
         }
     }
 }
@@ -1032,10 +1031,7 @@ where
             BinaryOp::Power => Value::try_pow(expr_span, lhs, rhs),
 
             BinaryOp::Eq | BinaryOp::NotEq => {
-                let eq = lhs
-                    .extra
-                    .try_compare(rhs.extra)
-                    .map_err(|e| SpannedEvalError::new(&expr_span, e))?;
+                let eq = lhs.extra.compare(&rhs.extra);
                 Ok(Value::Bool(if op.extra == BinaryOp::Eq { eq } else { !eq }))
             }
 
@@ -1274,11 +1270,45 @@ mod tests {
 
         let program = "1 / (2, (4, 0.2))";
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let return_value = interpreter.evaluate(&block).unwrap();
+        assert_eq!(
+            return_value,
+            Value::Tuple(vec![
+                Value::Number(0.5),
+                Value::Tuple(vec![Value::Number(0.25), Value::Number(5.0)])
+            ])
+        );
+
+        let program = "(1, 2) / |x| { x + 1 }";
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
         assert_matches!(
             err.source(),
             EvalError::UnexpectedOperand { ref op } if *op == BinaryOp::Div.into()
         );
+    }
+
+    #[test]
+    fn comparisons() {
+        let mut interpreter = Interpreter::new();
+        interpreter
+            .innermost_scope()
+            .insert_var("true", Value::Bool(true))
+            .insert_var("false", Value::Bool(false))
+            .insert_native_fn("sin", SIN);
+
+        let program = r#"
+            foo = |x| { x + 1 };
+            alias = foo;
+
+            1 == foo(0) && 1 != (1,) && (2, 3) != (2,) && (2, 3) != (2, 3, 4) && () == ()
+                && true == true && true != false && (true, false) == (true, false)
+                && foo == foo && foo == alias && foo != 1 && sin == sin && foo != sin
+                && (foo, (-1, 3)) == (alias, (-1, 3))
+        "#;
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let return_value = interpreter.evaluate(&block).unwrap();
+        assert_eq!(return_value, Value::Bool(true));
     }
 
     #[test]

@@ -3,21 +3,15 @@
 use rustyline::{error::ReadlineError, Editor};
 use typed_arena::Arena;
 
-use std::fmt;
+use crate::common::{Env, ReplLiteral};
 
-use crate::common::Env;
-use arithmetic_parser::{grammars::NumLiteral, interpreter::Interpreter, Grammar};
-
-pub fn repl<T>() -> anyhow::Result<()>
-where
-    T: Grammar,
-    T::Lit: fmt::Display + NumLiteral,
-{
+pub fn repl<T: ReplLiteral>() -> anyhow::Result<()> {
     let mut rl = Editor::<()>::new();
     let mut env = Env::new();
     env.print_greeting()?;
 
-    let mut interpreter = Interpreter::<T>::new();
+    let mut interpreter = T::create_interpreter();
+    interpreter.create_scope();
     let snippet_arena = Arena::new();
     let mut snippet = String::new();
     let mut prompt = ">>> ";

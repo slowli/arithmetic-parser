@@ -4,17 +4,16 @@ use anyhow::format_err;
 use num_complex::{Complex32, Complex64};
 use structopt::StructOpt;
 
-use std::{fmt, str::FromStr};
+use std::str::FromStr;
 
-use arithmetic_parser::{
-    grammars::{NumGrammar, NumLiteral},
-    interpreter::{If, Interpreter, Loop, Value},
-    GrammarExt, Span,
-};
+use arithmetic_parser::{grammars::NumGrammar, GrammarExt, Span};
 
 mod common;
 mod repl;
-use crate::{common::Env, repl::repl};
+use crate::{
+    common::{Env, ReplLiteral},
+    repl::repl,
+};
 
 #[derive(Debug, Clone, Copy)]
 enum Arithmetic {
@@ -63,10 +62,10 @@ impl Args {
     fn run(self) -> anyhow::Result<()> {
         if self.interactive {
             match self.arithmetic {
-                Arithmetic::F32 => repl::<NumGrammar<f32>>(),
-                Arithmetic::F64 => repl::<NumGrammar<f64>>(),
-                Arithmetic::Complex32 => repl::<NumGrammar<Complex32>>(),
-                Arithmetic::Complex64 => repl::<NumGrammar<Complex64>>(),
+                Arithmetic::F32 => repl::<f32>(),
+                Arithmetic::F64 => repl::<f64>(),
+                Arithmetic::Complex32 => repl::<Complex32>(),
+                Arithmetic::Complex64 => repl::<Complex64>(),
             }
         } else {
             match self.arithmetic {
@@ -80,7 +79,7 @@ impl Args {
 
     fn run_command<T>(self) -> anyhow::Result<()>
     where
-        T: NumLiteral + fmt::Display,
+        T: ReplLiteral,
     {
         let command = self.command.unwrap_or_default();
         let mut env = Env::non_interactive(&command);
@@ -91,13 +90,7 @@ impl Args {
             println!("{:#?}", parsed);
             Ok(())
         } else {
-            let mut interpreter = Interpreter::<NumGrammar<T>>::new();
-            interpreter
-                .innermost_scope()
-                .insert_var("false", Value::Bool(false))
-                .insert_var("true", Value::Bool(true))
-                .insert_native_fn("if", If)
-                .insert_native_fn("loop", Loop);
+            let mut interpreter = T::create_interpreter();
             let value = interpreter
                 .evaluate(&parsed)
                 .map_err(|e| env.report_eval_error(e))?;

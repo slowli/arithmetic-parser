@@ -7,6 +7,7 @@ use codespan_reporting::{
     term::termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor},
     term::{emit, Config as ReportingConfig},
 };
+use num_complex::{Complex, Complex32, Complex64};
 
 use std::{
     collections::BTreeMap,
@@ -16,8 +17,11 @@ use std::{
 };
 
 use arithmetic_parser::{
-    grammars::NumLiteral,
-    interpreter::{BacktraceElement, ErrorWithBacktrace, Function, Interpreter, Scope, Value},
+    grammars::{NumGrammar, NumLiteral},
+    interpreter::{
+        BacktraceElement, BinaryFn, Compare, ErrorWithBacktrace, Function, If, Interpreter, Loop,
+        Scope, UnaryFn, Value,
+    },
     Block, Error, Grammar, GrammarExt, Span, Spanned,
 };
 
@@ -319,5 +323,161 @@ impl<'a> Env<'a> {
             }
         }
         Ok(incomplete)
+    }
+}
+
+fn init_interpreter<'a, T: NumLiteral>() -> Interpreter<'a, NumGrammar<T>> {
+    let mut interpreter = Interpreter::<NumGrammar<T>>::new();
+    interpreter
+        .innermost_scope()
+        .insert_var("false", Value::Bool(false))
+        .insert_var("true", Value::Bool(true))
+        .insert_native_fn("if", If)
+        .insert_native_fn("loop", Loop);
+    interpreter
+}
+
+pub trait ReplLiteral: NumLiteral + fmt::Display {
+    fn create_interpreter<'a>() -> Interpreter<'a, NumGrammar<Self>>;
+}
+
+#[derive(Debug, Clone, Copy)]
+#[allow(clippy::type_complexity)] // not that complex, really
+pub struct StdLibrary<T: 'static> {
+    constants: &'static [(&'static str, T)],
+    unary: &'static [(&'static str, fn(T) -> T)],
+    binary: &'static [(&'static str, fn(T, T) -> T)],
+}
+
+impl<T: NumLiteral> StdLibrary<T> {
+    fn add_to_interpreter(self, interpreter: &mut Interpreter<NumGrammar<T>>) {
+        let scope = interpreter.innermost_scope();
+
+        for (name, c) in self.constants {
+            scope.insert_var(name, Value::Number(*c));
+        }
+        for (name, unary_fn) in self.unary {
+            scope.insert_native_fn(name, UnaryFn::new(*unary_fn));
+        }
+        for (name, binary_fn) in self.binary {
+            scope.insert_native_fn(name, BinaryFn::new(*binary_fn));
+        }
+    }
+}
+
+macro_rules! declare_real_functions {
+    ($functions:ident : $type:ident) => {
+        const $functions: StdLibrary<$type> = StdLibrary {
+            constants: &[("E", std::$type::consts::E), ("PI", std::$type::consts::PI)],
+
+            unary: &[
+                // Rounding functions.
+                ("floor", $type::floor),
+                ("ceil", $type::ceil),
+                ("round", $type::round),
+                ("frac", $type::fract),
+                // Exponential functions.
+                ("exp", $type::exp),
+                ("ln", $type::ln),
+                ("sinh", $type::sinh),
+                ("cosh", $type::cosh),
+                ("tanh", $type::tanh),
+                ("asinh", $type::asinh),
+                ("acosh", $type::acosh),
+                ("atanh", $type::atanh),
+                // Trigonometric functions.
+                ("sin", $type::sin),
+                ("cos", $type::cos),
+                ("tan", $type::tan),
+                ("asin", $type::asin),
+                ("acos", $type::acos),
+                ("atan", $type::atan),
+            ],
+
+            binary: &[
+                ("min", |x, y| if x < y { x } else { y }),
+                ("max", |x, y| if x > y { x } else { y }),
+            ],
+        };
+    };
+}
+
+declare_real_functions!(F32_FUNCTIONS: f32);
+declare_real_functions!(F64_FUNCTIONS: f64);
+
+impl ReplLiteral for f32 {
+    fn create_interpreter<'a>() -> Interpreter<'a, NumGrammar<Self>> {
+        let mut interpreter = init_interpreter::<f32>();
+        F32_FUNCTIONS.add_to_interpreter(&mut interpreter);
+        interpreter
+            .innermost_scope()
+            .insert_native_fn("cmp", Compare);
+        interpreter
+    }
+}
+
+impl ReplLiteral for f64 {
+    fn create_interpreter<'a>() -> Interpreter<'a, NumGrammar<Self>> {
+        let mut interpreter = init_interpreter::<f64>();
+        F64_FUNCTIONS.add_to_interpreter(&mut interpreter);
+        interpreter
+            .innermost_scope()
+            .insert_native_fn("cmp", Compare);
+        interpreter
+    }
+}
+
+macro_rules! declare_complex_functions {
+    ($functions:ident : $type:ident, $real:ident) => {
+        const $functions: StdLibrary<$type> = StdLibrary {
+            constants: &[
+                ("E", Complex::new(std::$real::consts::E, 0.0)),
+                ("PI", Complex::new(std::$real::consts::PI, 0.0)),
+            ],
+
+            unary: &[
+                ("norm", |x| Complex::new(x.norm(), 0.0)),
+                ("arg", |x| Complex::new(x.arg(), 0.0)),
+                // Exponential functions.
+                ("exp", |x| x.exp()),
+                ("ln", |x| x.ln()),
+                ("sinh", |x| x.sinh()),
+                ("cosh", |x| x.cosh()),
+                ("tanh", |x| x.tanh()),
+                ("asinh", |x| x.asinh()),
+                ("acosh", |x| x.acosh()),
+                ("atanh", |x| x.atanh()),
+                // Trigonometric functions.
+                ("sin", |x| x.sin()),
+                ("cos", |x| x.cos()),
+                ("tan", |x| x.tan()),
+                ("asin", |x| x.asin()),
+                ("acos", |x| x.acos()),
+                ("atan", |x| x.atan()),
+            ],
+
+            binary: &[],
+        };
+    };
+}
+
+// FIXME: add real-value comparisons
+
+declare_complex_functions!(COMPLEX32_FUNCTIONS: Complex32, f32);
+declare_complex_functions!(COMPLEX64_FUNCTIONS: Complex64, f64);
+
+impl ReplLiteral for Complex32 {
+    fn create_interpreter<'a>() -> Interpreter<'a, NumGrammar<Self>> {
+        let mut interpreter = init_interpreter::<Complex32>();
+        COMPLEX32_FUNCTIONS.add_to_interpreter(&mut interpreter);
+        interpreter
+    }
+}
+
+impl ReplLiteral for Complex64 {
+    fn create_interpreter<'a>() -> Interpreter<'a, NumGrammar<Self>> {
+        let mut interpreter = init_interpreter::<Complex64>();
+        COMPLEX64_FUNCTIONS.add_to_interpreter(&mut interpreter);
+        interpreter
     }
 }

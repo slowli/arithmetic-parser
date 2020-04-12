@@ -17,8 +17,9 @@ use nom::{
 use std::{fmt, mem};
 
 use crate::{
-    helpers::*, BinaryOp, Block, Context, Expr, FnDefinition, Grammar, Lvalue, NomResult, Span,
-    Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
+    helpers::*, BinaryOp, Block, Context, Destructure, DestructureRest, Expr, FnDefinition,
+    Grammar, Lvalue, NomResult, Span, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement,
+    Statement, UnaryOp,
 };
 
 #[cfg(test)]
@@ -522,6 +523,95 @@ where
     context(Context::Expr.to_str(), binary_expr::<T, Ty>)(input)
 }
 
+fn comma_sep<Ty: GrammarType>(input: Span<'_>) -> NomResult<'_, char> {
+    delimited(ws::<Ty>, tag_char(','), ws::<Ty>)(input)
+}
+
+fn comma_separated_lvalues<T, Ty>(input: Span<'_>) -> NomResult<'_, Vec<SpannedLvalue<'_, T::Type>>>
+where
+    T: Grammar,
+    Ty: GrammarType,
+{
+    separated_list(comma_sep::<Ty>, lvalue::<T, Ty>)(input)
+}
+
+fn destructure_rest<T, Ty>(
+    input: Span<'_>,
+) -> NomResult<'_, Spanned<'_, DestructureRest<'_, T::Type>>>
+where
+    T: Grammar,
+    Ty: GrammarType,
+{
+    map(
+        preceded(
+            ws::<Ty>,
+            with_span(preceded(
+                terminated(tag("..."), ws::<Ty>),
+                cut(opt(var_name)),
+            )),
+        ),
+        |spanned| {
+            map_span(spanned, |maybe_name| {
+                if let Some(name) = maybe_name {
+                    DestructureRest::Named {
+                        variable: name,
+                        ty: None,
+                    }
+                } else {
+                    DestructureRest::Unnamed
+                }
+            })
+        },
+    )(input)
+}
+
+type DestructureTail<'a, T> = (
+    Spanned<'a, DestructureRest<'a, T>>,
+    Option<Vec<SpannedLvalue<'a, T>>>,
+);
+
+fn destructure_tail<T, Ty>(input: Span<'_>) -> NomResult<'_, DestructureTail<'_, T::Type>>
+where
+    T: Grammar,
+    Ty: GrammarType,
+{
+    tuple((
+        destructure_rest::<T, Ty>,
+        opt(preceded(comma_sep::<Ty>, comma_separated_lvalues::<T, Ty>)),
+    ))(input)
+}
+
+/// Parse the destructuring *without* the surrounding delimiters.
+fn destructure<T, Ty>(input: Span<'_>) -> NomResult<'_, Destructure<'_, T::Type>>
+where
+    T: Grammar,
+    Ty: GrammarType,
+{
+    let main_parser = alt((
+        map(destructure_tail::<T, Ty>, |rest| (vec![], Some(rest))),
+        tuple((
+            comma_separated_lvalues::<T, Ty>,
+            opt(preceded(comma_sep::<Ty>, destructure_tail::<T, Ty>)),
+        )),
+    ));
+
+    map(main_parser, |(start, maybe_rest)| {
+        if let Some((middle, end)) = maybe_rest {
+            Destructure {
+                start,
+                middle: Some(middle),
+                end: end.unwrap_or_default(),
+            }
+        } else {
+            Destructure {
+                start,
+                middle: None,
+                end: vec![],
+            }
+        }
+    })(input)
+}
+
 /// Parses an `Lvalue`.
 fn lvalue<'a, T, Ty>(input: Span<'a>) -> NomResult<'a, SpannedLvalue<'a, T::Type>>
 where
@@ -553,10 +643,7 @@ where
             with_span(map(
                 delimited(
                     terminated(tag_char('('), ws::<Ty>),
-                    separated_list(
-                        delimited(ws::<Ty>, tag_char(','), ws::<Ty>),
-                        lvalue::<T, Ty>,
-                    ),
+                    destructure::<T, Ty>,
                     preceded(ws::<Ty>, tag_char(')')),
                 ),
                 Lvalue::Tuple,
@@ -693,14 +780,11 @@ where
         }),
     ));
     let parser = tuple((
-        delimited(
+        with_span(delimited(
             terminated(tag_char('|'), ws::<Ty>),
-            separated_list(
-                delimited(ws::<Ty>, tag_char(','), ws::<Ty>),
-                lvalue::<T, Ty>,
-            ),
+            destructure::<T, Ty>,
             preceded(ws::<Ty>, tag_char('|')),
-        ),
+        )),
         cut(preceded(ws::<Ty>, body_parser)),
     ));
     map(parser, |(args, body)| FnDefinition { args, body })(input)

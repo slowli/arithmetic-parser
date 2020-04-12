@@ -78,10 +78,10 @@ use num_traits::{Num, Pow};
 
 use std::{collections::HashMap, fmt, iter, ops, rc::Rc};
 
+use crate::helpers::cover_spans;
 use crate::{
-    helpers::{cover_spans, create_span_ref},
-    BinaryOp, Block, Expr, FnDefinition, Grammar, Lvalue, Op, Span, Spanned, SpannedExpr,
-    SpannedLvalue, SpannedStatement, Statement, UnaryOp,
+    helpers::create_span_ref, BinaryOp, Block, Destructure, Expr, FnDefinition, Grammar, Lvalue,
+    LvalueLen, Op, Span, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
 };
 
 mod error;
@@ -110,9 +110,10 @@ impl<'a> CallContext<'_, 'a> {
     pub fn check_args_count<T: Grammar>(
         &self,
         args: &[SpannedValue<'a, T>],
-        expected_count: usize,
+        expected_count: impl Into<LvalueLen>,
     ) -> Result<(), SpannedEvalError<'a>> {
-        if args.len() == expected_count {
+        let expected_count = expected_count.into();
+        if expected_count.matches(args.len()) {
             Ok(())
         } else {
             Err(self.call_site_error(EvalError::ArgsLenMismatch {
@@ -161,8 +162,8 @@ impl<'a, T: Grammar> InterpretedFn<'a, T> {
     }
 
     /// Returns the number of arguments for this function.
-    pub fn arg_count(&self) -> usize {
-        self.definition.extra.args.len()
+    pub fn arg_count(&self) -> LvalueLen {
+        self.definition.extra.args.extra.len()
     }
 
     /// Returns values captures by this function.
@@ -192,15 +193,13 @@ where
         args: Vec<SpannedValue<'a, T>>,
         backtrace: &mut Option<Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
-        if args.len() != self.definition.extra.args.len() {
+        let def_len = self.arg_count();
+        if !def_len.matches(args.len()) {
             let err = EvalError::ArgsLenMismatch {
-                def: self.definition.extra.args.len(),
+                def: def_len,
                 call: args.len(),
             };
-            let args_span = cover_spans(
-                create_span_ref(&self.definition, ()),
-                &self.definition.extra.args,
-            );
+            let args_span = create_span_ref(&self.definition.extra.args, ());
             let err =
                 SpannedEvalError::new(&call_span, err).with_span(&args_span, AuxErrorInfo::FnArgs);
             return Err(err);
@@ -217,9 +216,15 @@ where
         }
 
         let mut context = Interpreter::from_scope(self.captures.clone());
-        for (lvalue, val) in def.args.iter().zip(args) {
-            context.innermost_scope().assign(lvalue, val)?;
-        }
+        let def_args_span = create_span_ref(&def.args, ());
+        let call_args_span = cover_spans(call_span, &args);
+        let args = args.into_iter().map(|spanned| spanned.extra).collect();
+        context.innermost_scope().destructure(
+            &def.args.extra,
+            args,
+            def_args_span,
+            call_args_span,
+        )?;
         let result = context.evaluate_inner(&def.body, backtrace);
 
         if result.is_ok() {
@@ -231,7 +236,24 @@ where
     }
 }
 
-fn extract_vars<'it, 'a: 'it, T: 'it>(
+fn extract_vars<'a, T>(
+    vars: &mut HashMap<&'a str, Span<'a>>,
+    lvalues: &Destructure<'a, T>,
+    context: RepeatedAssignmentContext,
+) -> Result<(), SpannedEvalError<'a>> {
+    let middle = lvalues
+        .middle
+        .as_ref()
+        .and_then(|rest| rest.extra.to_lvalue());
+    let all_lvalues = lvalues
+        .start
+        .iter()
+        .chain(middle.as_ref())
+        .chain(&lvalues.end);
+    extract_vars_iter(vars, all_lvalues, context)
+}
+
+fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
     vars: &mut HashMap<&'a str, Span<'a>>,
     lvalues: impl Iterator<Item = &'it SpannedLvalue<'a, T>>,
     context: RepeatedAssignmentContext,
@@ -250,7 +272,7 @@ fn extract_vars<'it, 'a: 'it, T: 'it>(
             }
 
             Lvalue::Tuple(fragments) => {
-                extract_vars(vars, fragments.iter(), context)?;
+                extract_vars(vars, fragments, context)?;
             }
         }
     }
@@ -286,7 +308,7 @@ impl<'a, T: Grammar> FnValidator<'a, T> {
 
         extract_vars(
             self.local_vars.last_mut().unwrap(),
-            definition.args.iter(),
+            &definition.args.extra,
             RepeatedAssignmentContext::FnArgs,
         )?;
         for statement in &definition.body.statements {
@@ -389,7 +411,7 @@ impl<'a, T: Grammar> FnValidator<'a, T> {
             Statement::Assignment { lhs, rhs } => {
                 self.eval(rhs, context)?;
                 let mut new_vars = HashMap::new();
-                extract_vars(
+                extract_vars_iter(
                     &mut new_vars,
                     iter::once(lhs),
                     RepeatedAssignmentContext::Assignment,
@@ -541,7 +563,7 @@ impl BinaryOpError {
     fn tuple(op: BinaryOp, lhs: usize, rhs: usize) -> Self {
         Self {
             inner: EvalError::TupleLenMismatch {
-                lhs,
+                lhs: lhs.into(),
                 rhs,
                 context: TupleLenMismatchContext::BinaryOp(op),
             },
@@ -730,7 +752,7 @@ where
                         .try_fold(true, |acc, (x, y)| Ok(acc && x.try_compare(y)?))
                 } else {
                     Err(EvalError::TupleLenMismatch {
-                        lhs: this.len(),
+                        lhs: this.len().into(),
                         rhs: other.len(),
                         context: TupleLenMismatchContext::BinaryOp(BinaryOp::Eq),
                     })
@@ -815,6 +837,13 @@ impl<'a, T: Grammar> Scope<'a, T> {
         lvalue: &SpannedLvalue<'a, T::Type>,
         rvalue: SpannedValue<'a, T>,
     ) -> Result<(), SpannedEvalError<'a>> {
+        // TODO: This check is repeated for function bodies.
+        extract_vars_iter(
+            &mut HashMap::new(),
+            iter::once(lvalue),
+            RepeatedAssignmentContext::Assignment,
+        )?;
+
         let total_rvalue_span = create_span_ref(&rvalue, ());
         self.do_assign(lvalue, rvalue.extra, total_rvalue_span)
     }
@@ -825,13 +854,6 @@ impl<'a, T: Grammar> Scope<'a, T> {
         rvalue: Value<'a, T>,
         total_rvalue_span: Span<'a>,
     ) -> Result<(), SpannedEvalError<'a>> {
-        // TODO: This check is repeated for function bodies.
-        extract_vars(
-            &mut HashMap::new(),
-            iter::once(lvalue),
-            RepeatedAssignmentContext::Assignment,
-        )?;
-
         match &lvalue.extra {
             Lvalue::Variable { .. } => {
                 let var_name = lvalue.fragment;
@@ -842,25 +864,55 @@ impl<'a, T: Grammar> Scope<'a, T> {
 
             Lvalue::Tuple(assignments) => {
                 if let Value::Tuple(fragments) = rvalue {
-                    if assignments.len() != fragments.len() {
-                        let err = EvalError::TupleLenMismatch {
-                            lhs: assignments.len(),
-                            rhs: fragments.len(),
-                            context: TupleLenMismatchContext::Assignment,
-                        };
-                        return Err(SpannedEvalError::new(&lvalue, err)
-                            .with_span(&total_rvalue_span, AuxErrorInfo::Rvalue));
-                    }
-
-                    for (assignment, fragment) in assignments.iter().zip(fragments) {
-                        self.do_assign(assignment, fragment, total_rvalue_span)?;
-                    }
+                    let lvalue_span = create_span_ref(lvalue, ());
+                    self.destructure(assignments, fragments, lvalue_span, total_rvalue_span)?;
                 } else {
                     return Err(SpannedEvalError::new(&lvalue, EvalError::CannotDestructure)
                         .with_span(&total_rvalue_span, AuxErrorInfo::Rvalue));
                 }
             }
         }
+        Ok(())
+    }
+
+    fn destructure(
+        &mut self,
+        lvalue: &Destructure<'a, T::Type>,
+        mut rvalues: Vec<Value<'a, T>>,
+        lvalue_span: Span<'a>,
+        total_rvalue_span: Span<'a>,
+    ) -> Result<(), SpannedEvalError<'a>> {
+        let rvalues_len = rvalues.len();
+        if !lvalue.len().matches(rvalues_len) {
+            let err = EvalError::TupleLenMismatch {
+                lhs: lvalue.len(),
+                rhs: rvalues_len,
+                context: TupleLenMismatchContext::Assignment,
+            };
+            return Err(SpannedEvalError::new(&lvalue_span, err)
+                .with_span(&total_rvalue_span, AuxErrorInfo::Rvalue));
+        }
+
+        let end_values = rvalues.split_off(rvalues_len - lvalue.end.len());
+        let middle_values = rvalues.split_off(lvalue.start.len());
+        let start_values = rvalues;
+
+        // Assign the start part.
+        for (assignment, val) in lvalue.start.iter().zip(start_values) {
+            self.do_assign(assignment, val, total_rvalue_span)?;
+        }
+        // Assign the middle.
+        if let Some(middle) = &lvalue.middle {
+            if let Some(var) = middle.extra.to_lvalue() {
+                self.do_assign(&var, Value::Tuple(middle_values), total_rvalue_span)?;
+            }
+        }
+
+        // Assign the end.
+        for (assignment, val) in lvalue.end.iter().zip(end_values) {
+            self.do_assign(assignment, val, total_rvalue_span)?;
+        }
+
         Ok(())
     }
 }
@@ -1192,6 +1244,21 @@ mod tests {
     }
 
     #[test]
+    fn tuple_destructuring_with_middle() {
+        let program = r#"
+            (x, ...) = (1, 2, 3);
+            (..., u, v) = (-5, -4, -3, -2, -1);
+            (_, _, ...middle, y) = (1, 2, 3, 4, 5);
+            ((_, a), ..., (b, ...)) = ((1, 2), (3, 4, 5));
+            x == 1 && u == -2 && v == -1 && middle == (3, 4) && y == 5 && a == 2 && b == 3
+        "#;
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let mut interpreter = Interpreter::new();
+        let return_value = interpreter.evaluate(&block).unwrap();
+        assert_eq!(return_value, Value::Bool(true));
+    }
+
+    #[test]
     fn program_with_blocks() {
         let program = Span::new("z = { x = 1; x + 3 };");
         let block = F32Grammar::parse_statements(program).unwrap();
@@ -1302,6 +1369,34 @@ mod tests {
         "#;
         let program = Span::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
+        let return_value = interpreter.evaluate(&block).unwrap();
+        assert_eq!(return_value, Value::Bool(true));
+    }
+
+    #[test]
+    fn variadic_function() {
+        let program = r#"
+            call = |fn, ...xs| fn(xs);
+            (call(|x| -x, 1, 2, -3.5), call(|x| 1/x, 4, -0.125))
+        "#;
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let mut interpreter = Interpreter::new();
+        let return_value = interpreter.evaluate(&block).unwrap();
+
+        let first = Value::Tuple(vec![
+            Value::Number(-1.0),
+            Value::Number(-2.0),
+            Value::Number(3.5),
+        ]);
+        let second = Value::Tuple(vec![Value::Number(0.25), Value::Number(-8.0)]);
+        assert_eq!(return_value, Value::Tuple(vec![first, second]));
+
+        let program = r#"
+            call = |fn, ...xs, y| fn(xs, y);
+            call(|x, y| x + y, 1, 2, -3.5) == (-2.5, -1.5)
+        "#;
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let mut interpreter = Interpreter::new();
         let return_value = interpreter.evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Bool(true));
     }
@@ -1493,13 +1588,41 @@ mod tests {
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
         assert_eq!(err.main_span().fragment, "foo()");
-        assert_matches!(err.source(), EvalError::ArgsLenMismatch { def: 1, call: 0 });
+        assert_matches!(
+            err.source(),
+            EvalError::ArgsLenMismatch {
+                def: LvalueLen::Exact(1),
+                call: 0,
+            }
+        );
 
         let program = Span::new("foo(1, 2) * 3.0");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
         assert_eq!(err.main_span().fragment, "foo(1, 2)");
-        assert_matches!(err.source(), EvalError::ArgsLenMismatch { def: 1, call: 2 });
+        assert_matches!(
+            err.source(),
+            EvalError::ArgsLenMismatch {
+                def: LvalueLen::Exact(1),
+                call: 2,
+            }
+        );
+    }
+
+    #[test]
+    fn arg_len_mismatch_with_variadic_function() {
+        let mut interpreter = Interpreter::new();
+        let program = Span::new("foo = |fn, ...xs| fn(xs); foo()");
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let err = interpreter.evaluate(&block).unwrap_err();
+        assert_eq!(err.main_span().fragment, "foo()");
+        assert_matches!(
+            err.source(),
+            EvalError::ArgsLenMismatch {
+                def: LvalueLen::AtLeast(1),
+                call: 0,
+            }
+        );
     }
 
     #[test]
@@ -1533,6 +1656,18 @@ mod tests {
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         assert_eq!(err.main_span().fragment, "x");
         assert_eq!(err.main_span().offset, 4);
+        assert_matches!(
+            err.source(),
+            EvalError::RepeatedAssignment {
+                context: RepeatedAssignmentContext::Assignment,
+            }
+        );
+
+        let program = Span::new("(x, ...x) = (1, 2);");
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let err = Interpreter::new().evaluate(&block).unwrap_err();
+        assert_eq!(err.main_span().fragment, "x");
+        assert_eq!(err.main_span().offset, 7);
         assert_matches!(
             err.source(),
             EvalError::RepeatedAssignment {
@@ -1576,8 +1711,11 @@ mod tests {
         let program = Span::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
-        assert_eq!(err.main_span().fragment, "(1, 2) + (3, 4, 5)");
-        assert_matches!(err.source(), EvalError::TupleLenMismatch { lhs: 2, rhs: 3, .. });
+        assert_eq!(err.main_span().fragment, "(1, 2)");
+        assert_matches!(
+            err.source(),
+            EvalError::TupleLenMismatch { lhs: LvalueLen::Exact(2), rhs: 3, .. }
+        );
     }
 
     #[test]
@@ -1630,7 +1768,13 @@ mod tests {
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
         assert_eq!(err.main_span().fragment, "sin(-5.0, 2.0)");
-        assert_matches!(err.source(), EvalError::ArgsLenMismatch { def: 1, call: 2 });
+        assert_matches!(
+            err.source(),
+            EvalError::ArgsLenMismatch {
+                def: LvalueLen::Exact(1),
+                call: 2
+            }
+        );
 
         let program = Span::new("1 + sin((-5, 2))");
         let block = F32Grammar::parse_statements(program).unwrap();

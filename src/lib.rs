@@ -57,6 +57,7 @@ pub use crate::{
 
 use nom_locate::{LocatedSpan, LocatedSpanEx};
 
+use crate::helpers::create_span_ref;
 use std::fmt;
 
 pub mod grammars;
@@ -394,6 +395,92 @@ impl From<BinaryOp> for Op {
     }
 }
 
+/// Length of an assigned lvalue.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LvalueLen {
+    /// Exact length.
+    Exact(usize),
+    /// Minimum length.
+    AtLeast(usize),
+}
+
+impl LvalueLen {
+    /// Checks if this length matches the provided length of the rvalue.
+    pub fn matches(self, value: usize) -> bool {
+        match self {
+            Self::Exact(len) => value == len,
+            Self::AtLeast(len) => value >= len,
+        }
+    }
+}
+
+impl fmt::Display for LvalueLen {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Exact(len) => write!(formatter, "{}", len),
+            Self::AtLeast(len) => write!(formatter, "at least {}", len),
+        }
+    }
+}
+
+impl From<usize> for LvalueLen {
+    fn from(value: usize) -> Self {
+        Self::Exact(value)
+    }
+}
+
+/// Tuple destructuring, such as `(a, b, ..., c)`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Destructure<'a, T> {
+    /// Start part of the destructuring, e.g, `a` and `b` in `(a, b, ..., c)`.
+    pub start: Vec<SpannedLvalue<'a, T>>,
+    /// Middle part of the destructuring, e.g., `rest` in `(a, b, ...rest, _)`.
+    pub middle: Option<Spanned<'a, DestructureRest<'a, T>>>,
+    /// End part of the destructuring, e.g., `c` in `(a, b, ..., c)`.
+    pub end: Vec<SpannedLvalue<'a, T>>,
+}
+
+impl<T> Destructure<'_, T> {
+    /// Returns the length of destructured elements.
+    pub fn len(&self) -> LvalueLen {
+        if self.middle.is_some() {
+            LvalueLen::AtLeast(self.start.len() + self.end.len())
+        } else {
+            LvalueLen::Exact(self.start.len())
+        }
+    }
+
+    /// Checks if the destructuring is empty.
+    pub fn is_empty(&self) -> bool {
+        self.start.is_empty()
+    }
+}
+
+/// Rest syntax, such as `...rest` in `(a, ...rest, b)`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DestructureRest<'a, T> {
+    /// Unnamed rest syntax, i.e., `...`.
+    Unnamed,
+    /// Named rest syntax, e.g., `...rest`.
+    Named {
+        /// Variable span, e.g., `rest`.
+        variable: Span<'a>,
+        /// Type annotation of the value.
+        ty: Option<Spanned<'a, T>>,
+    },
+}
+
+impl<'a, T> DestructureRest<'a, T> {
+    pub(crate) fn to_lvalue(&self) -> Option<SpannedLvalue<'a, T>> {
+        match self {
+            Self::Named { variable, .. } => {
+                Some(create_span_ref(variable, Lvalue::Variable { ty: None }))
+            }
+            _ => None,
+        }
+    }
+}
+
 /// Assignable value.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Lvalue<'a, T> {
@@ -403,7 +490,7 @@ pub enum Lvalue<'a, T> {
         ty: Option<Spanned<'a, T>>,
     },
     /// Tuple destructuring, e.g., `(x, y)`.
-    Tuple(Vec<SpannedLvalue<'a, T>>),
+    Tuple(Destructure<'a, T>),
 }
 
 /// `Lvalue` with the associated code span.
@@ -520,7 +607,7 @@ where
     T: Grammar,
 {
     /// Function arguments, e.g., `x, y`.
-    pub args: Vec<SpannedLvalue<'a, T::Type>>,
+    pub args: Spanned<'a, Destructure<'a, T::Type>>,
     /// Function body, e.g., `x + y`.
     pub body: Block<'a, T>,
 }

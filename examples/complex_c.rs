@@ -211,8 +211,10 @@ impl<'a> Context<'a> {
     fn eval_function(fn_def: &FnDefinition<ComplexGrammar>, name: &str) -> String {
         let mut context = Self::new();
         let mut evaluated = format!("float2 {}(", name);
+        // FIXME: use checked access.
+        let args = &fn_def.args.extra.start;
 
-        for (i, arg) in fn_def.args.iter().enumerate() {
+        for (i, arg) in args.iter().enumerate() {
             let was_present = context
                 .variables
                 .insert(arg.fragment, Evaluated::var(arg.fragment));
@@ -222,7 +224,7 @@ impl<'a> Context<'a> {
 
             evaluated += "float2 ";
             evaluated += arg.fragment;
-            if i + 1 < fn_def.args.len() {
+            if i + 1 < args.len() {
                 evaluated += ", ";
             }
         }

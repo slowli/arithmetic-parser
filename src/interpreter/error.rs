@@ -4,7 +4,9 @@ use thiserror::Error;
 
 use std::fmt;
 
-use crate::{helpers::create_span_ref, interpreter::Value, BinaryOp, Op, Span, Spanned, UnaryOp};
+use crate::{
+    helpers::create_span_ref, interpreter::Value, BinaryOp, LvalueLen, Op, Span, Spanned, UnaryOp,
+};
 
 /// Context for [`EvalError::TupleLenMismatch`].
 ///
@@ -56,7 +58,7 @@ pub enum EvalError {
     )]
     TupleLenMismatch {
         /// Length of a tuple on the left-hand side.
-        lhs: usize,
+        lhs: LvalueLen,
         /// Length of a tuple on the right-hand side.
         rhs: usize,
         /// Context in which the error has occurred.
@@ -70,7 +72,7 @@ pub enum EvalError {
     )]
     ArgsLenMismatch {
         /// Number of args at the function definition.
-        def: usize,
+        def: LvalueLen,
         /// Number of args at the function call.
         call: usize,
     },

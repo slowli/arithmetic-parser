@@ -168,6 +168,28 @@ fn lsp<'a>(
     create_span(span(offset, fragment), lvalue)
 }
 
+fn lvalue_tuple(elements: Vec<SpannedLvalue<'_, ValueType>>) -> Lvalue<'_, ValueType> {
+    Lvalue::Tuple(Destructure {
+        start: elements,
+        middle: None,
+        end: vec![],
+    })
+}
+
+fn args<'a>(
+    span: Span<'a>,
+    elements: Vec<SpannedLvalue<'a, ValueType>>,
+) -> Spanned<'a, Destructure<'a, ValueType>> {
+    create_span(
+        span,
+        Destructure {
+            start: elements,
+            middle: None,
+            end: vec![],
+        },
+    )
+}
+
 #[test]
 fn whitespace_can_include_comments() {
     let input = Span::new("ge(1)");
@@ -801,6 +823,100 @@ fn tuples_are_parsed() {
 }
 
 #[test]
+fn destructuring_is_parsed() {
+    let input = Span::new("x, y)");
+    assert_eq!(
+        destructure::<FieldGrammar, Complete>(input).unwrap().1,
+        Destructure {
+            start: vec![
+                lsp(0, "x", Lvalue::Variable { ty: None }),
+                lsp(3, "y", Lvalue::Variable { ty: None }),
+            ],
+            middle: None,
+            end: vec![],
+        }
+    );
+
+    let input = Span::new("x, ..., y)");
+    assert_eq!(
+        destructure::<FieldGrammar, Complete>(input).unwrap().1,
+        Destructure {
+            start: vec![lsp(0, "x", Lvalue::Variable { ty: None })],
+            middle: Some(create_span(span(3, "..."), DestructureRest::Unnamed)),
+            end: vec![lsp(8, "y", Lvalue::Variable { ty: None })],
+        }
+    );
+
+    let input = Span::new("x, ...rest, y: Ge, z)");
+    assert_eq!(
+        destructure::<FieldGrammar, Complete>(input).unwrap().1,
+        Destructure {
+            start: vec![lsp(0, "x", Lvalue::Variable { ty: None })],
+            middle: Some(create_span(
+                span(3, "...rest"),
+                DestructureRest::Named {
+                    variable: span(6, "rest"),
+                    ty: None,
+                }
+            )),
+            end: vec![
+                lsp(
+                    12,
+                    "y",
+                    Lvalue::Variable {
+                        ty: Some(create_span(span(15, "Ge"), ValueType::Element))
+                    }
+                ),
+                lsp(19, "z", Lvalue::Variable { ty: None })
+            ],
+        }
+    );
+
+    let input = Span::new("..., end)");
+    assert_eq!(
+        destructure::<FieldGrammar, Complete>(input).unwrap().1,
+        Destructure {
+            start: vec![],
+            middle: Some(create_span(span(0, "..."), DestructureRest::Unnamed)),
+            end: vec![lsp(5, "end", Lvalue::Variable { ty: None })],
+        }
+    );
+}
+
+#[test]
+fn nested_destructuring_is_parsed() {
+    let input = Span::new("(x, y), ..., (_, ...rest)|");
+    let start = Destructure {
+        start: vec![
+            lsp(1, "x", Lvalue::Variable { ty: None }),
+            lsp(4, "y", Lvalue::Variable { ty: None }),
+        ],
+        middle: None,
+        end: vec![],
+    };
+    let end = Destructure {
+        start: vec![lsp(14, "_", Lvalue::Variable { ty: None })],
+        middle: Some(create_span(
+            span(17, "...rest"),
+            DestructureRest::Named {
+                variable: span(20, "rest"),
+                ty: None,
+            },
+        )),
+        end: vec![],
+    };
+
+    assert_eq!(
+        destructure::<FieldGrammar, Complete>(input).unwrap().1,
+        Destructure {
+            start: vec![create_span(span(0, "(x, y)"), Lvalue::Tuple(start))],
+            middle: Some(create_span(span(8, "..."), DestructureRest::Unnamed)),
+            end: vec![create_span(span(13, "(_, ...rest)"), Lvalue::Tuple(end))],
+        }
+    );
+}
+
+#[test]
 fn lvalues_are_parsed() {
     let input = Span::new("x =");
     assert_eq!(
@@ -811,12 +927,12 @@ fn lvalues_are_parsed() {
     let input = Span::new("(x, (y, z)) =");
     assert_eq!(
         lvalue::<FieldGrammar, Complete>(input).unwrap().1.extra,
-        Lvalue::Tuple(vec![
+        lvalue_tuple(vec![
             lsp(1, "x", Lvalue::Variable { ty: None }),
             lsp(
                 4,
                 "(y, z)",
-                Lvalue::Tuple(vec![
+                lvalue_tuple(vec![
                     lsp(5, "y", Lvalue::Variable { ty: None }),
                     lsp(8, "z", Lvalue::Variable { ty: None }),
                 ])
@@ -827,7 +943,7 @@ fn lvalues_are_parsed() {
     let input = Span::new("(x: (Sc, _), (y, z: Ge)) =");
     assert_eq!(
         lvalue::<FieldGrammar, Complete>(input).unwrap().1.extra,
-        Lvalue::Tuple(vec![
+        lvalue_tuple(vec![
             lsp(
                 1,
                 "x",
@@ -841,7 +957,7 @@ fn lvalues_are_parsed() {
             lsp(
                 13,
                 "(y, z: Ge)",
-                Lvalue::Tuple(vec![
+                lvalue_tuple(vec![
                     lsp(14, "y", Lvalue::Variable { ty: None }),
                     lsp(
                         17,
@@ -953,7 +1069,10 @@ fn fn_definition_parsing() {
     assert_eq!(
         fn_def::<FieldGrammar, Complete>(input).unwrap().1,
         FnDefinition {
-            args: vec![lsp(1, "x", Lvalue::Variable { ty: None })],
+            args: args(
+                span(0, "|x|"),
+                vec![lsp(1, "x", Lvalue::Variable { ty: None })]
+            ),
             body: Block {
                 statements: vec![],
                 return_value: Some(Box::new(sp(
@@ -973,7 +1092,10 @@ fn fn_definition_parsing() {
     assert_eq!(
         fn_def::<FieldGrammar, Complete>(input).unwrap().1,
         FnDefinition {
-            args: vec![lsp(1, "x", Lvalue::Variable { ty: None }),],
+            args: args(
+                span(0, "|x|"),
+                vec![lsp(1, "x", Lvalue::Variable { ty: None })]
+            ),
             body: Block {
                 statements: vec![],
                 return_value: Some(Box::new(sp(
@@ -1001,29 +1123,32 @@ fn fn_definition_parsing() {
     assert_eq!(
         def,
         FnDefinition {
-            args: vec![
-                lsp(
-                    1,
-                    "x",
-                    Lvalue::Variable {
-                        ty: Some(create_span(span(4, "Sc"), ValueType::Scalar)),
-                    }
-                ),
-                lsp(
-                    8,
-                    "(y, _: Ge)",
-                    Lvalue::Tuple(vec![
-                        lsp(9, "y", Lvalue::Variable { ty: None }),
-                        lsp(
-                            12,
-                            "_",
-                            Lvalue::Variable {
-                                ty: Some(create_span(span(15, "Ge"), ValueType::Element)),
-                            }
-                        )
-                    ])
-                ),
-            ],
+            args: args(
+                span(0, "|x: Sc, (y, _: Ge)|"),
+                vec![
+                    lsp(
+                        1,
+                        "x",
+                        Lvalue::Variable {
+                            ty: Some(create_span(span(4, "Sc"), ValueType::Scalar)),
+                        }
+                    ),
+                    lsp(
+                        8,
+                        "(y, _: Ge)",
+                        lvalue_tuple(vec![
+                            lsp(9, "y", Lvalue::Variable { ty: None }),
+                            lsp(
+                                12,
+                                "_",
+                                Lvalue::Variable {
+                                    ty: Some(create_span(span(15, "Ge"), ValueType::Element)),
+                                }
+                            )
+                        ])
+                    ),
+                ]
+            ),
             body: Block {
                 statements: vec![],
                 return_value: None

@@ -334,6 +334,7 @@ impl<'a> Context<'a> {
                 }
             }
 
+            Expr::Method { .. } => panic!("Method are not supported"),
             Expr::FnDefinition(_) => panic!("Embedded function declarations are not supported"),
             Expr::Block(_) | Expr::Tuple(_) => unreachable!("Disabled in parser"),
         }

@@ -375,6 +375,18 @@ impl<'a, T: Grammar> FnValidator<'a, T> {
                 for arg in args {
                     self.eval(arg, context)?;
                 }
+                self.eval(name, context)?;
+            }
+
+            Expr::Method {
+                args,
+                receiver,
+                name,
+            } => {
+                self.eval(receiver, context)?;
+                for arg in args {
+                    self.eval(arg, context)?;
+                }
 
                 let fn_name = name.fragment;
                 self.eval_local_var(fn_name, context)
@@ -1043,6 +1055,40 @@ where
         }
     }
 
+    fn evaluate_call<'it>(
+        &mut self,
+        call_span: Span<'a>,
+        fn_name: Span<'a>,
+        func: Value<'a, T>,
+        args: impl Iterator<Item = &'it SpannedExpr<'a, T>>,
+        backtrace: &mut Option<Backtrace<'a>>,
+    ) -> EvalResult<'a, T>
+    where
+        'a: 'it,
+    {
+        let func = match func {
+            Value::Function(func) => func,
+            _ => {
+                return Err(SpannedEvalError::new(&call_span, EvalError::CannotCall));
+            }
+        };
+
+        let args: Result<Vec<_>, _> = args
+            .map(|arg| {
+                let span = create_span_ref(&arg, ());
+                self.evaluate_expr_inner(arg, backtrace)
+                    .map(|value| create_span_ref(&span, value))
+            })
+            .collect();
+        let args = args?;
+        let mut context = CallContext {
+            fn_name,
+            call_span,
+            backtrace,
+        };
+        func.evaluate(args, &mut context)
+    }
+
     fn evaluate_expr_inner(
         &mut self,
         expr: &SpannedExpr<'a, T>,
@@ -1065,28 +1111,23 @@ where
 
             Expr::Function { name, args } => {
                 let func = self.evaluate_expr_inner(name, backtrace)?;
-                let func = match func {
-                    Value::Function(func) => func,
-                    _ => {
-                        return Err(SpannedEvalError::new(expr, EvalError::CannotCall));
-                    }
-                };
+                let call_span = create_span_ref(&expr, ());
+                let fn_name = create_span_ref(&name, ());
+                self.evaluate_call(call_span, fn_name, func, args.iter(), backtrace)
+            }
 
-                let args: Result<Vec<_>, _> = args
-                    .iter()
-                    .map(|arg| {
-                        let span = create_span_ref(&arg, ());
-                        self.evaluate_expr_inner(arg, backtrace)
-                            .map(|value| create_span_ref(&span, value))
-                    })
-                    .collect();
-                let args = args?;
-                let mut context = CallContext {
-                    fn_name: create_span_ref(name, ()),
-                    call_span: create_span_ref(expr, ()),
-                    backtrace,
-                };
-                func.evaluate(args, &mut context)
+            Expr::Method {
+                name,
+                receiver,
+                args,
+            } => {
+                let func = self.get_var(name.fragment).cloned().ok_or_else(|| {
+                    let err = EvalError::Undefined(expr.fragment.to_owned());
+                    SpannedEvalError::new(expr, err)
+                })?;
+                let call_span = create_span_ref(&expr, ());
+                let args = iter::once(receiver.as_ref()).chain(args);
+                self.evaluate_call(call_span, *name, func, args, backtrace)
             }
 
             // Arithmetic operations
@@ -1556,6 +1597,22 @@ mod tests {
             _ => panic!("Unexpected `alias` value: {:?}", alias),
         };
         assert!(Rc::ptr_eq(sin, alias));
+    }
+
+    #[test]
+    fn method_call() {
+        let program = "add = |x, y| x + y; 1.0.add(2)";
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let return_value = Interpreter::new().evaluate(&block).unwrap();
+        assert_eq!(return_value, Value::Number(3.0));
+
+        let program = r#"
+            gen = |x| { |y| x + y };
+            (1, -2).gen()(3) == (4, 1)
+        "#;
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let return_value = Interpreter::new().evaluate(&block).unwrap();
+        assert_eq!(return_value, Value::Bool(true));
     }
 
     #[test]

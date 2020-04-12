@@ -12,6 +12,8 @@ use std::{f32, f64, fmt, marker::PhantomData, ops};
 
 use crate::{Features, Grammar, NomResult, Span};
 
+// FIXME: `1.foo()` does not work because float parser consumes `1.`
+
 /// Single-type numeric grammar parameterized by the literal type.
 #[derive(Debug)]
 pub struct NumGrammar<T>(PhantomData<T>);

@@ -140,6 +140,16 @@ where
         args: Vec<SpannedExpr<'a, T>>,
     },
 
+    /// Method call, e.g., `foo.bar(x, 5)`.
+    Method {
+        /// Name of the called method.
+        name: Span<'a>,
+        /// Receiver of the call.
+        receiver: Box<SpannedExpr<'a, T>>,
+        /// Arguments.
+        args: Vec<SpannedExpr<'a, T>>,
+    },
+
     /// Unary operation, e.g., `-x`.
     Unary {
         /// Operator.
@@ -195,6 +205,15 @@ impl<T: Grammar> Clone for Expr<'_, T> {
                 name: name.clone(),
                 args: args.clone(),
             },
+            Self::Method {
+                name,
+                receiver,
+                args,
+            } => Self::Method {
+                name: *name,
+                receiver: receiver.clone(),
+                args: args.clone(),
+            },
             Self::Unary { op, inner } => Self::Unary {
                 op: *op,
                 inner: inner.clone(),
@@ -231,6 +250,19 @@ where
                     args: that_args,
                 },
             ) => name == that_name && args == that_args,
+
+            (
+                Method {
+                    name,
+                    receiver,
+                    args,
+                },
+                Method {
+                    name: that_name,
+                    receiver: that_receiver,
+                    args: that_args,
+                },
+            ) => name == that_name && receiver == that_receiver && args == that_args,
 
             (
                 Unary { op, inner },

@@ -425,6 +425,67 @@ fn fun_works_with_complex_called_values() {
 }
 
 #[test]
+fn method_expr_works() {
+    let input = Span::new("x.sin();");
+    let (_, call) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+    assert_eq!(
+        call,
+        sp(
+            0,
+            "x.sin()",
+            Expr::Method {
+                name: span(2, "sin"),
+                receiver: Box::new(sp(0, "x", Expr::Variable)),
+                args: vec![],
+            }
+        )
+    );
+
+    let input = Span::new("(1, x, 2).foo(y) + 3;");
+    let (_, call) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+    let expected = sp(
+        0,
+        "(1, x, 2).foo(y)",
+        Expr::Method {
+            name: span(10, "foo"),
+            receiver: Box::new(sp(
+                0,
+                "(1, x, 2)",
+                Expr::Tuple(vec![
+                    sp(1, "1", Expr::Literal(Literal::Number)),
+                    sp(4, "x", Expr::Variable),
+                    sp(7, "2", Expr::Literal(Literal::Number)),
+                ]),
+            )),
+            args: vec![sp(14, "y", Expr::Variable)],
+        },
+    );
+    assert_eq!(call, expected);
+
+    let input = Span::new("(1, x, 2).foo(y)(7.bar());");
+    let (_, call) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+    assert_eq!(
+        call,
+        sp(
+            0,
+            "(1, x, 2).foo(y)(7.bar())",
+            Expr::Function {
+                name: Box::new(expected),
+                args: vec![sp(
+                    17,
+                    "7.bar()",
+                    Expr::Method {
+                        name: span(19, "bar"),
+                        receiver: Box::new(sp(17, "7", Expr::Literal(Literal::Number))),
+                        args: vec![],
+                    }
+                )],
+            }
+        )
+    );
+}
+
+#[test]
 fn element_expr_works() {
     let input = Span::new("A;");
     assert_eq!(

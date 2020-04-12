@@ -391,16 +391,34 @@ where
     T: Grammar,
     Ty: GrammarType,
 {
+    let method_or_fn_call = alt((
+        preceded(
+            tuple((tag_char('.'), ws::<Ty>)),
+            cut(tuple((map(var_name, Some), fn_args::<T, Ty>))),
+        ),
+        map(fn_args::<T, Ty>, |args| (None, args)),
+    ));
+
     let parser = tuple((
         simplest_expr::<T, Ty>,
-        many0(with_span(preceded(ws::<Ty>, fn_args::<T, Ty>))),
+        many0(with_span(preceded(ws::<Ty>, method_or_fn_call))),
     ));
+
     map(parser, |(base, args_vec)| {
         args_vec.into_iter().fold(base, |name, spanned_args| {
             let united_span = unite_spans(input, &name, &spanned_args);
-            let expr = Expr::Function {
-                name: Box::new(name),
-                args: spanned_args.extra.0,
+            let (maybe_fn_name, (args, _)) = spanned_args.extra;
+            let expr = if let Some(fn_name) = maybe_fn_name {
+                Expr::Method {
+                    name: fn_name,
+                    receiver: Box::new(name),
+                    args,
+                }
+            } else {
+                Expr::Function {
+                    name: Box::new(name),
+                    args,
+                }
             };
             create_span(united_span, expr)
         })

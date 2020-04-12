@@ -265,13 +265,13 @@ where
     T: Grammar,
     Ty: GrammarType,
 {
-    delimited(
+    preceded(
         terminated(tag_char('('), ws::<Ty>),
-        cut(separated_list(
-            delimited(ws::<Ty>, tag_char(','), ws::<Ty>),
-            expr::<T, Ty>,
+        // Once we've encountered the opening `(`, the input *must* correspond to the parser.
+        cut(terminated(
+            separated_list(delimited(ws::<Ty>, tag_char(','), ws::<Ty>), expr::<T, Ty>),
+            preceded(ws::<Ty>, tag_char(')')),
         )),
-        preceded(ws::<Ty>, tag_char(')')),
     )(input)
 }
 
@@ -759,10 +759,12 @@ where
     T: Grammar,
     Ty: GrammarType,
 {
-    delimited(
+    preceded(
         terminated(tag_char('{'), ws::<Ty>),
-        separated_statements::<T, Ty>,
-        preceded(ws::<Ty>, tag_char('}')),
+        cut(terminated(
+            separated_statements::<T, Ty>,
+            preceded(ws::<Ty>, tag_char('}')),
+        )),
     )(input)
 }
 
@@ -779,13 +781,15 @@ where
             return_value: Some(Box::new(spanned)),
         }),
     ));
-    let parser = tuple((
-        with_span(delimited(
-            terminated(tag_char('|'), ws::<Ty>),
+
+    let args_parser = preceded(
+        terminated(tag_char('|'), ws::<Ty>),
+        cut(terminated(
             destructure::<T, Ty>,
             preceded(ws::<Ty>, tag_char('|')),
         )),
-        cut(preceded(ws::<Ty>, body_parser)),
-    ));
+    );
+
+    let parser = tuple((with_span(args_parser), cut(preceded(ws::<Ty>, body_parser))));
     map(parser, |(args, body)| FnDefinition { args, body })(input)
 }

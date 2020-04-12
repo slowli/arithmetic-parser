@@ -345,14 +345,14 @@ where
         };
 
     alt((
-        map(with_span(var_name), |span| {
-            create_span(span, Expr::Variable)
-        }),
         map(with_span(T::parse_literal), |span| Spanned {
             offset: span.offset,
             line: span.line,
             fragment: span.fragment,
             extra: Expr::Literal(span.extra),
+        }),
+        map(with_span(var_name), |span| {
+            create_span(span, Expr::Variable)
         }),
         fn_def_parser,
         map(

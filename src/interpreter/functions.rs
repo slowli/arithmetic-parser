@@ -417,7 +417,7 @@ where
     }
 }
 
-/// Reduce function that reduces the provided tuple to a single value.
+/// Reduce (aka fold) function that reduces the provided tuple to a single value.
 ///
 /// # Type
 ///
@@ -475,6 +475,130 @@ where
             let spanned_args = vec![ctx.apply_call_span(acc), ctx.apply_call_span(value)];
             fold_fn.evaluate(spanned_args, ctx)
         })
+    }
+}
+
+/// Function that appends a value onto a tuple.
+///
+/// # Type
+///
+/// ```text
+/// fn<T>([T], T) -> [T]
+/// ```
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::{
+/// #     interpreter::{Compare, Loop, If, Interpreter, PushFn, Value}, grammars::F32Grammar,
+/// #     GrammarExt, Span,
+/// # };
+/// let program = r#"
+///     repeat = |x, times| loop(
+///         (0, ()),
+///         |(i, acc)| {
+///             continue = cmp(i, times) == -1;
+///             ret = if(continue, (i + 1, push(acc, x)), acc);
+///             (continue, ret)
+///         },
+///     );
+///     repeat(-2, 3) == (-2, -2, -2) && repeat((7,), 4) == ((7,), (7,), (7,), (7,))
+/// "#;
+/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+///
+/// let mut interpreter = Interpreter::new();
+/// interpreter
+///     .innermost_scope()
+///     .insert_native_fn("cmp", Compare)
+///     .insert_native_fn("if", If)
+///     .insert_native_fn("loop", Loop)
+///     .insert_native_fn("push", PushFn);
+/// let ret = interpreter.evaluate(&block).unwrap();
+/// assert_eq!(ret, Value::Bool(true));
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct PushFn;
+
+impl<T> NativeFn<T> for PushFn
+where
+    T: Grammar,
+    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+{
+    fn evaluate<'a>(
+        &self,
+        mut args: Vec<SpannedValue<'a, T>>,
+        ctx: &mut CallContext<'_, 'a>,
+    ) -> EvalResult<'a, T> {
+        ctx.check_args_count(&args, 2)?;
+        let elem = args.pop().unwrap().extra;
+        let mut array = extract_array(
+            ctx,
+            args.pop().unwrap(),
+            "`fold` requires first arg to be a tuple",
+        )?;
+
+        array.push(elem);
+        Ok(Value::Tuple(array))
+    }
+}
+
+/// Function that merges two tuples.
+///
+/// # Type
+///
+/// ```text
+/// fn<T>([T], [T]) -> [T]
+/// ```
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::{
+/// #     interpreter::{FoldFn, Interpreter, MergeFn, Value}, grammars::F32Grammar,
+/// #     GrammarExt, Span,
+/// # };
+/// let program = r#"
+///     ## Merges all arguments (which should be tuples) into a single tuple.
+///     super_merge = |...xs| fold(xs, (), merge);
+///     super_merge((1, 2), (3,), (), (4, 5, 6)) == (1, 2, 3, 4, 5, 6)
+/// "#;
+/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+///
+/// let mut interpreter = Interpreter::new();
+/// interpreter
+///     .innermost_scope()
+///     .insert_native_fn("fold", FoldFn)
+///     .insert_native_fn("merge", MergeFn);
+/// let ret = interpreter.evaluate(&block).unwrap();
+/// assert_eq!(ret, Value::Bool(true));
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct MergeFn;
+
+impl<T> NativeFn<T> for MergeFn
+where
+    T: Grammar,
+    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+{
+    fn evaluate<'a>(
+        &self,
+        mut args: Vec<SpannedValue<'a, T>>,
+        ctx: &mut CallContext<'_, 'a>,
+    ) -> EvalResult<'a, T> {
+        ctx.check_args_count(&args, 2)?;
+        let second = extract_array(
+            ctx,
+            args.pop().unwrap(),
+            "`merge` requires second arg to be a tuple",
+        )?;
+        let mut first = extract_array(
+            ctx,
+            args.pop().unwrap(),
+            "`merge` requires first arg to be a tuple",
+        )?;
+
+        first.extend_from_slice(&second);
+        Ok(Value::Tuple(first))
     }
 }
 
@@ -678,6 +802,25 @@ mod tests {
                 fold(xs, -Inf, |acc, x| if(cmp(x, acc) == 1, x, acc))
             };
             max_value(1, -2, 7, 2, 5) == 7 && max_value(3, -5, 9) == 9
+        "#;
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let ret = interpreter.evaluate(&block).unwrap();
+        assert_eq!(ret, Value::Bool(true));
+    }
+
+    #[test]
+    fn reverse_list_with_fold() {
+        let mut interpreter = Interpreter::new();
+        interpreter
+            .innermost_scope()
+            .insert_native_fn("merge", MergeFn)
+            .insert_native_fn("fold", FoldFn);
+
+        let program = r#"
+            reverse = |xs| {
+                fold(xs, (), |acc, x| merge((x,), acc))
+            };
+            reverse((-4, 3, 0, 1)) == (1, 0, 3, -4)
         "#;
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();

@@ -71,7 +71,9 @@ pub use self::{
         AuxErrorInfo, Backtrace, BacktraceElement, ErrorWithBacktrace, EvalError, EvalResult,
         RepeatedAssignmentContext, SpannedEvalError, TupleLenMismatchContext,
     },
-    functions::{Assert, BinaryFn, Compare, FilterFn, FoldFn, If, Loop, MapFn, UnaryFn},
+    functions::{
+        Assert, BinaryFn, Compare, FilterFn, FoldFn, If, Loop, MapFn, MergeFn, PushFn, UnaryFn,
+    },
 };
 
 use num_traits::{Num, Pow};

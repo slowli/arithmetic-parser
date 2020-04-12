@@ -20,7 +20,7 @@ use arithmetic_parser::{
     grammars::{NumGrammar, NumLiteral},
     interpreter::{
         BacktraceElement, BinaryFn, Compare, ErrorWithBacktrace, FilterFn, FoldFn, Function, If,
-        Interpreter, Loop, MapFn, Scope, UnaryFn, Value,
+        Interpreter, Loop, MapFn, MergeFn, PushFn, Scope, UnaryFn, Value,
     },
     Block, Error, Grammar, GrammarExt, Span, Spanned,
 };
@@ -336,7 +336,9 @@ fn init_interpreter<'a, T: NumLiteral>() -> Interpreter<'a, NumGrammar<T>> {
         .insert_native_fn("loop", Loop)
         .insert_native_fn("map", MapFn)
         .insert_native_fn("filter", FilterFn)
-        .insert_native_fn("fold", FoldFn);
+        .insert_native_fn("fold", FoldFn)
+        .insert_native_fn("push", PushFn)
+        .insert_native_fn("merge", MergeFn);
     interpreter
 }
 

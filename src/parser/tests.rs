@@ -356,6 +356,25 @@ fn fun_works() {
 }
 
 #[test]
+fn fun_call_with_terminating_comma() {
+    let input = Span::new("ge(1, 2 ,\n)");
+    assert_eq!(
+        simple_expr::<FieldGrammar, Complete>(input).unwrap().1,
+        sp(
+            0,
+            "ge(1, 2 ,\n)",
+            Expr::Function {
+                name: Box::new(sp(0, "ge", Expr::Variable)),
+                args: vec![
+                    sp(3, "1", Expr::Literal(Literal::Number)),
+                    sp(6, "2", Expr::Literal(Literal::Number)),
+                ],
+            }
+        )
+    );
+}
+
+#[test]
 fn fun_works_with_complex_called_values() {
     let input = Span::new("ge(x, 3)(0x123456) + 5");
     let inner_fn = sp(
@@ -823,19 +842,46 @@ fn tuples_are_parsed() {
 }
 
 #[test]
+fn empty_tuple_is_parsed() {
+    let input = Span::new("();");
+    let value = expr::<FieldGrammar, Complete>(input).unwrap().1;
+    assert_eq!(value, sp(0, "()", Expr::Tuple(vec![])));
+}
+
+#[test]
+fn single_value_tuple_is_parsed() {
+    let input = Span::new("(1,);");
+    let value = expr::<FieldGrammar, Complete>(input).unwrap().1;
+    assert_eq!(
+        value,
+        sp(
+            0,
+            "(1,)",
+            Expr::Tuple(vec![sp(1, "1", Expr::Literal(Literal::Number))])
+        )
+    );
+}
+
+#[test]
 fn destructuring_is_parsed() {
     let input = Span::new("x, y)");
+    let expected = Destructure {
+        start: vec![
+            lsp(0, "x", Lvalue::Variable { ty: None }),
+            lsp(3, "y", Lvalue::Variable { ty: None }),
+        ],
+        middle: None,
+        end: vec![],
+    };
     assert_eq!(
         destructure::<FieldGrammar, Complete>(input).unwrap().1,
-        Destructure {
-            start: vec![
-                lsp(0, "x", Lvalue::Variable { ty: None }),
-                lsp(3, "y", Lvalue::Variable { ty: None }),
-            ],
-            middle: None,
-            end: vec![],
-        }
+        expected
     );
+
+    let input = Span::new("x, y ,\n)");
+    let (rest, parsed) = destructure::<FieldGrammar, Complete>(input).unwrap();
+    assert_eq!(parsed, expected);
+    assert_eq!(rest.fragment, ")");
 
     let input = Span::new("x, ..., y)");
     assert_eq!(
@@ -885,7 +931,7 @@ fn destructuring_is_parsed() {
 
 #[test]
 fn nested_destructuring_is_parsed() {
-    let input = Span::new("(x, y), ..., (_, ...rest)|");
+    let input = Span::new("(x, y), ..., (_, ...rest),\n|");
     let start = Destructure {
         start: vec![
             lsp(1, "x", Lvalue::Variable { ty: None }),

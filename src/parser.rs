@@ -259,19 +259,25 @@ fn var_name(input: Span<'_>) -> NomResult<'_, Span<'_>> {
     )(input)
 }
 
-/// Function arguments, e.g., `(a, B + 1)`
-fn fn_args<T, Ty>(input: Span<'_>) -> NomResult<'_, Vec<SpannedExpr<'_, T>>>
+/// Function arguments in the call position; e.g., `(a, B + 1)`.
+///
+/// # Return value
+///
+/// The second component of the returned tuple is set to `true` if the list is `,`-terminated.
+fn fn_args<T, Ty>(input: Span<'_>) -> NomResult<'_, (Vec<SpannedExpr<'_, T>>, bool)>
 where
     T: Grammar,
     Ty: GrammarType,
 {
+    let maybe_comma = map(opt(preceded(ws::<Ty>, tag_char(','))), |c| c.is_some());
+
     preceded(
         terminated(tag_char('('), ws::<Ty>),
         // Once we've encountered the opening `(`, the input *must* correspond to the parser.
-        cut(terminated(
+        cut(tuple((
             separated_list(delimited(ws::<Ty>, tag_char(','), ws::<Ty>), expr::<T, Ty>),
-            preceded(ws::<Ty>, tag_char(')')),
-        )),
+            terminated(maybe_comma, tuple((ws::<Ty>, tag_char(')')))),
+        ))),
     )(input)
 }
 
@@ -282,23 +288,24 @@ where
     T: Grammar,
     Ty: GrammarType,
 {
-    with_span(fn_args::<T, Ty>)(input).and_then(|(rest, parsed)| match parsed.extra.len() {
-        0 => Err(NomErr::Failure(
-            Error::UnexpectedChar { context: None }.with_span(parsed),
-        )),
+    with_span(fn_args::<T, Ty>)(input).and_then(|(rest, parsed)| {
+        let comma_terminated = parsed.extra.1;
+        let terms = map_span(parsed, |terms| terms.0);
 
-        1 => Ok((
-            rest,
-            map_span(parsed, |mut terms| terms.pop().unwrap().extra),
-        )),
+        match (terms.extra.len(), comma_terminated) {
+            (1, false) => Ok((
+                rest,
+                map_span(terms, |mut terms| terms.pop().unwrap().extra),
+            )),
 
-        _ => {
-            if T::FEATURES.tuples {
-                Ok((rest, map_span(parsed, Expr::Tuple)))
-            } else {
-                Err(NomErr::Failure(
-                    Error::UnexpectedTerm { context: None }.with_span(parsed),
-                ))
+            _ => {
+                if T::FEATURES.tuples {
+                    Ok((rest, map_span(terms, Expr::Tuple)))
+                } else {
+                    Err(NomErr::Failure(
+                        Error::UnexpectedTerm { context: None }.with_span(terms),
+                    ))
+                }
             }
         }
     })
@@ -393,7 +400,7 @@ where
             let united_span = unite_spans(input, &name, &spanned_args);
             let expr = Expr::Function {
                 name: Box::new(name),
-                args: spanned_args.extra,
+                args: spanned_args.extra.0,
             };
             create_span(united_span, expr)
         })
@@ -543,13 +550,10 @@ where
     Ty: GrammarType,
 {
     map(
-        preceded(
-            ws::<Ty>,
-            with_span(preceded(
-                terminated(tag("..."), ws::<Ty>),
-                cut(opt(var_name)),
-            )),
-        ),
+        with_span(preceded(
+            terminated(tag("..."), ws::<Ty>),
+            cut(opt(var_name)),
+        )),
         |spanned| {
             map_span(spanned, |maybe_name| {
                 if let Some(name) = maybe_name {
@@ -588,12 +592,15 @@ where
     Ty: GrammarType,
 {
     let main_parser = alt((
+        // `destructure_tail` has fast fail path: the input must start with `...`.
         map(destructure_tail::<T, Ty>, |rest| (vec![], Some(rest))),
         tuple((
             comma_separated_lvalues::<T, Ty>,
             opt(preceded(comma_sep::<Ty>, destructure_tail::<T, Ty>)),
         )),
     ));
+    // Allow for `,`-terminated lists.
+    let main_parser = terminated(main_parser, opt(comma_sep::<Ty>));
 
     map(main_parser, |(start, maybe_rest)| {
         if let Some((middle, end)) = maybe_rest {

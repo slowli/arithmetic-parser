@@ -23,12 +23,20 @@ num-complex = { version = "0.2.4", optional = true }
 
 [dev-dependencies]
 assert_matches = "1.3.0"
+criterion = "0.3.1"
 hex = "0.4.2"
+rand = "0.7.3"
+typed-arena = "2.0.1"
 
 [[example]]
 name = "complex_c"
 path = "examples/complex_c.rs"
 required-features = ["num-complex"]
+
+[[bench]]
+name = "interpreter"
+harness = false
+path = "benches/interpreter.rs"
 
 [workspace]
 members = [".", "cli"]

@@ -50,7 +50,12 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all-features
+          args: --all-features --all-targets
+      - name: Run doc tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --all-features --doc
 
       - name: Run example
         uses: actions-rs/cargo@v1

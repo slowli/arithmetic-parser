@@ -672,6 +672,7 @@ where
         }
     }
 
+    #[inline]
     fn try_binary_op(
         total_span: Span<'a>,
         lhs: Spanned<'a, Self>,

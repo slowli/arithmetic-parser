@@ -67,7 +67,7 @@ fn extract_fn<'a, T: Grammar>(
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{Assert, EvalError, Interpreter}, grammars::F32Grammar, GrammarExt, Span,
+/// #     interpreter::{fns, EvalError, Interpreter}, grammars::F32Grammar, GrammarExt, Span,
 /// # };
 /// # use assert_matches::assert_matches;
 /// let program = r#"
@@ -77,7 +77,7 @@ fn extract_fn<'a, T: Grammar>(
 /// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
-/// interpreter.innermost_scope().insert_native_fn("assert", Assert);
+/// interpreter.innermost_scope().insert_native_fn("assert", fns::Assert);
 /// let err = interpreter.evaluate(&block).unwrap_err();
 /// assert_eq!(err.main_span().fragment, "assert(3^2 == 10)");
 /// assert_matches!(
@@ -123,7 +123,7 @@ impl<T: Grammar> NativeFn<T> for Assert {
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{If, EvalError, Interpreter, Value}, grammars::F32Grammar,
+/// #     interpreter::{fns::If, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = "x = 3; if(x == 2, -1, x + 1)";
@@ -140,7 +140,7 @@ impl<T: Grammar> NativeFn<T> for Assert {
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{If, EvalError, Interpreter, Value}, grammars::F32Grammar,
+/// #     interpreter::{fns::If, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = "x = 3; if(x == 2, || -1, || x + 1)()";
@@ -193,7 +193,7 @@ where
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{Compare, EvalError, If, Interpreter, Loop, Value}, grammars::F32Grammar,
+/// #     interpreter::{fns, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = r#"
@@ -210,9 +210,9 @@ where
 /// let mut interpreter = Interpreter::new();
 /// interpreter
 ///     .innermost_scope()
-///     .insert_native_fn("cmp", Compare)
-///     .insert_native_fn("if", If)
-///     .insert_native_fn("loop", Loop);
+///     .insert_native_fn("cmp", fns::Compare)
+///     .insert_native_fn("if", fns::If)
+///     .insert_native_fn("loop", fns::Loop);
 /// let ret = interpreter.evaluate(&block).unwrap();
 /// assert_eq!(ret, Value::Bool(true));
 /// ```

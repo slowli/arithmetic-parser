@@ -34,14 +34,14 @@
 //! ```
 //! use arithmetic_parser::{
 //!     grammars::F32Grammar,
-//!     interpreter::{Assert, BinaryFn, Interpreter, Value},
+//!     interpreter::{fns, Interpreter, Value},
 //!     Grammar, GrammarExt, Span,
 //! };
 //!
-//! const MIN: BinaryFn<fn(f32, f32) -> f32> =
-//!     BinaryFn::new(|x, y| if x < y { x } else { y });
-//! const MAX: BinaryFn<fn(f32, f32) -> f32> =
-//!     BinaryFn::new(|x, y| if x > y { x } else { y });
+//! const MIN: fns::Binary<fn(f32, f32) -> f32> =
+//!     fns::Binary::new(|x, y| if x < y { x } else { y });
+//! const MAX: fns::Binary<fn(f32, f32) -> f32> =
+//!     fns::Binary::new(|x, y| if x > y { x } else { y });
 //!
 //! let mut context = Interpreter::new();
 //! // Add some native functions to the interpreter.
@@ -49,7 +49,7 @@
 //!     .innermost_scope()
 //!     .insert_native_fn("min", MIN)
 //!     .insert_native_fn("max", MAX)
-//!     .insert_native_fn("assert", Assert);
+//!     .insert_native_fn("assert", fns::Assert);
 //! // Create a new scope to make native functions non-deletable.
 //! context.create_scope();
 //!
@@ -65,6 +65,9 @@
 //! let ret = context.evaluate(&program).unwrap();
 //! assert_eq!(ret, Value::Number(9.0));
 //! ```
+
+// TODO: "Compile" expressions / statements into reverse Polish notation
+// TODO: Use "linear addressing" instead of named vars (?)
 
 pub use self::error::{
     AuxErrorInfo, Backtrace, BacktraceElement, ErrorWithBacktrace, EvalError, EvalResult,
@@ -89,10 +92,19 @@ pub mod fns;
 pub struct CallContext<'r, 'a> {
     fn_name: Span<'a>,
     call_span: Span<'a>,
-    backtrace: &'r mut Option<Backtrace<'a>>,
+    backtrace: Option<&'r mut Backtrace<'a>>,
 }
 
 impl<'a> CallContext<'_, 'a> {
+    /// Creates a mock call context.
+    pub fn mock() -> Self {
+        Self {
+            fn_name: Span::new(""),
+            call_span: Span::new(""),
+            backtrace: None,
+        }
+    }
+
     /// Returns the call span.
     pub fn apply_call_span<T>(&self, value: T) -> Spanned<'a, T> {
         create_span_ref(&self.call_span, value)
@@ -164,7 +176,7 @@ impl<'a, T: Grammar> InterpretedFn<'a, T> {
     }
 
     /// Returns values captures by this function.
-    pub fn captures(&self) -> &HashMap<String, Value<'a, T>> {
+    pub fn captures(&self) -> &HashMap<&'a str, Value<'a, T>> {
         &self.captures.variables
     }
 }
@@ -180,7 +192,12 @@ where
         args: Vec<SpannedValue<'a, T>>,
         context: &mut CallContext<'_, 'a>,
     ) -> EvalResult<'a, T> {
-        self.eval_inner(context.fn_name, context.call_span, args, context.backtrace)
+        self.eval_inner(
+            context.fn_name,
+            context.call_span,
+            args,
+            context.backtrace.as_deref_mut(),
+        )
     }
 
     fn eval_inner(
@@ -188,22 +205,23 @@ where
         fn_name: Span<'a>,
         call_span: Span<'a>,
         args: Vec<SpannedValue<'a, T>>,
-        backtrace: &mut Option<Backtrace<'a>>,
+        mut backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
+        let def = &self.definition.extra;
         let def_len = self.arg_count();
+
         if !def_len.matches(args.len()) {
             let err = EvalError::ArgsLenMismatch {
                 def: def_len,
                 call: args.len(),
             };
-            let args_span = create_span_ref(&self.definition.extra.args, ());
+            let args_span = create_span_ref(&def.args, ());
             let err =
                 SpannedEvalError::new(&call_span, err).with_span(&args_span, AuxErrorInfo::FnArgs);
             return Err(err);
         }
 
-        let def = &self.definition.extra;
-        if let Some(backtrace) = backtrace {
+        if let Some(backtrace) = backtrace.as_deref_mut() {
             // FIXME: distinguish between interpreted and native calls.
             backtrace.push_call(
                 fn_name.fragment,
@@ -216,13 +234,14 @@ where
         let def_args_span = create_span_ref(&def.args, ());
         let call_args_span = cover_spans(call_span, &args);
         let args = args.into_iter().map(|spanned| spanned.extra).collect();
+        //context.innermost_scope().v.reserve(2);
         context.innermost_scope().destructure(
             &def.args.extra,
             args,
             def_args_span,
             call_args_span,
         )?;
-        let result = context.evaluate_inner(&def.body, backtrace);
+        let result = context.evaluate_inner(&def.body, backtrace.as_deref_mut());
 
         if result.is_ok() {
             if let Some(backtrace) = backtrace {
@@ -328,7 +347,7 @@ impl<'a, T: Grammar> FnValidator<'a, T> {
     /// Processes a local variable in the rvalue position.
     fn eval_local_var(
         &mut self,
-        var_name: &str,
+        var_name: &'a str,
         context: &Interpreter<'a, T>,
     ) -> Result<(), EvalError> {
         if self.has_var(var_name) {
@@ -778,7 +797,7 @@ where
 /// Variable scope containing functions and variables.
 #[derive(Debug)]
 pub struct Scope<'a, T: Grammar> {
-    variables: HashMap<String, Value<'a, T>>,
+    variables: HashMap<&'a str, Value<'a, T>>,
 }
 
 impl<T: Grammar> Clone for Scope<'_, T> {
@@ -814,15 +833,13 @@ impl<'a, T: Grammar> Scope<'a, T> {
     }
 
     /// Returns an iterator over all variables in this scope.
-    pub fn variables(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
-        self.variables
-            .iter()
-            .map(|(name, value)| (name.as_str(), value))
+    pub fn variables(&self) -> impl Iterator<Item = (&'a str, &Value<'a, T>)> + '_ {
+        self.variables.iter().map(|(name, value)| (*name, value))
     }
 
     /// Defines a variable with the specified name and value.
-    pub fn insert_var(&mut self, name: &str, value: Value<'a, T>) -> &mut Self {
-        self.variables.insert(name.to_owned(), value);
+    pub fn insert_var(&mut self, name: &'a str, value: Value<'a, T>) -> &mut Self {
+        self.variables.insert(name, value);
         self
     }
 
@@ -832,12 +849,11 @@ impl<'a, T: Grammar> Scope<'a, T> {
     }
 
     /// Inserts a native function into the context.
-    pub fn insert_native_fn<F>(&mut self, name: &str, fun: F) -> &mut Self
+    pub fn insert_native_fn<F>(&mut self, name: &'a str, fun: F) -> &mut Self
     where
         F: NativeFn<T> + 'static,
     {
-        self.variables
-            .insert(name.to_owned(), Value::native_fn(fun));
+        self.variables.insert(name, Value::native_fn(fun));
         self
     }
 
@@ -867,7 +883,7 @@ impl<'a, T: Grammar> Scope<'a, T> {
             Lvalue::Variable { .. } => {
                 let var_name = lvalue.fragment;
                 if var_name != "_" {
-                    self.variables.insert(var_name.to_owned(), rvalue);
+                    self.variables.insert(var_name, rvalue);
                 }
             }
 
@@ -916,7 +932,6 @@ impl<'a, T: Grammar> Scope<'a, T> {
                 self.do_assign(&var, Value::Tuple(middle_values), total_rvalue_span)?;
             }
         }
-
         // Assign the end.
         for (assignment, val) in lvalue.end.iter().zip(end_values) {
             self.do_assign(assignment, val, total_rvalue_span)?;
@@ -994,9 +1009,9 @@ where
         spanned_lhs: &SpannedExpr<'a, T>,
         spanned_rhs: &SpannedExpr<'a, T>,
         op: Spanned<'a, BinaryOp>,
-        backtrace: &mut Option<Backtrace<'a>>,
+        mut backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
-        let lhs = self.evaluate_expr_inner(spanned_lhs, backtrace)?;
+        let lhs = self.evaluate_expr_inner(spanned_lhs, backtrace.as_deref_mut())?;
 
         // Short-circuit logic for bool operations.
         match op.extra {
@@ -1058,7 +1073,7 @@ where
         fn_name: Span<'a>,
         func: Value<'a, T>,
         args: impl Iterator<Item = &'it SpannedExpr<'a, T>>,
-        backtrace: &mut Option<Backtrace<'a>>,
+        mut backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T>
     where
         'a: 'it,
@@ -1073,7 +1088,7 @@ where
         let args: Result<Vec<_>, _> = args
             .map(|arg| {
                 let span = create_span_ref(&arg, ());
-                self.evaluate_expr_inner(arg, backtrace)
+                self.evaluate_expr_inner(arg, backtrace.as_deref_mut())
                     .map(|value| create_span_ref(&span, value))
             })
             .collect();
@@ -1089,7 +1104,7 @@ where
     fn evaluate_expr_inner(
         &mut self,
         expr: &SpannedExpr<'a, T>,
-        backtrace: &mut Option<Backtrace<'a>>,
+        mut backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
         match &expr.extra {
             Expr::Variable => self.get_var(expr.fragment).cloned().ok_or_else(|| {
@@ -1101,13 +1116,13 @@ where
             Expr::Tuple(fragments) => {
                 let fragments: Result<Vec<_>, _> = fragments
                     .iter()
-                    .map(|frag| self.evaluate_expr_inner(frag, backtrace))
+                    .map(|frag| self.evaluate_expr_inner(frag, backtrace.as_deref_mut()))
                     .collect();
                 fragments.map(Value::Tuple)
             }
 
             Expr::Function { name, args } => {
-                let func = self.evaluate_expr_inner(name, backtrace)?;
+                let func = self.evaluate_expr_inner(name, backtrace.as_deref_mut())?;
                 let call_span = create_span_ref(&expr, ());
                 let fn_name = create_span_ref(&name, ());
                 self.evaluate_call(call_span, fn_name, func, args.iter(), backtrace)
@@ -1160,27 +1175,27 @@ where
         &mut self,
         expr: &SpannedExpr<'a, T>,
     ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
-        let mut backtrace = Some(Backtrace::default());
-        self.evaluate_expr_inner(expr, &mut backtrace)
-            .map_err(|e| ErrorWithBacktrace::new(e, backtrace.unwrap()))
+        let mut backtrace = Backtrace::default();
+        self.evaluate_expr_inner(expr, Some(&mut backtrace))
+            .map_err(|e| ErrorWithBacktrace::new(e, backtrace))
     }
 
     /// Evaluates a list of statements.
     fn evaluate_inner(
         &mut self,
         block: &Block<'a, T>,
-        backtrace: &mut Option<Backtrace<'a>>,
+        mut backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
         use crate::Statement::*;
 
         for statement in &block.statements {
             match &statement.extra {
                 Expr(expr) => {
-                    self.evaluate_expr_inner(expr, backtrace)?;
+                    self.evaluate_expr_inner(expr, backtrace.as_deref_mut())?;
                 }
 
                 Assignment { lhs, rhs } => {
-                    let evaluated = self.evaluate_expr_inner(rhs, backtrace)?;
+                    let evaluated = self.evaluate_expr_inner(rhs, backtrace.as_deref_mut())?;
                     let evaluated = create_span_ref(&rhs, evaluated);
                     self.scopes.last_mut().unwrap().assign(lhs, evaluated)?;
                 }
@@ -1200,9 +1215,9 @@ where
         &mut self,
         block: &Block<'a, T>,
     ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
-        let mut backtrace = Some(Backtrace::default());
-        self.evaluate_inner(block, &mut backtrace)
-            .map_err(|e| ErrorWithBacktrace::new(e, backtrace.unwrap()))
+        let mut backtrace = Backtrace::default();
+        self.evaluate_inner(block, Some(&mut backtrace))
+            .map_err(|e| ErrorWithBacktrace::new(e, backtrace))
     }
 }
 

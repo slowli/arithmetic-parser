@@ -62,6 +62,9 @@ The library provides a simple interpreter, which can be used for *some* grammars
 which allows to overcome some syntax limitations (e.g., the lack of control flow
 can be solved with native `if` / `loop` functions).
 
+The interpreter is quite slow – ~2 orders of magnitude slower than native
+floating-point arithmetic.
+
 ## Implementation Details 
 
 The parser is based on the [`nom`](https://docs.rs/nom/) crate. The core trait of the library,

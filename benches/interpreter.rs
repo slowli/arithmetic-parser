@@ -11,7 +11,7 @@ use typed_arena::Arena;
 
 use arithmetic_parser::{
     grammars::F32Grammar,
-    interpreter::{fns, Interpreter, Value},
+    interpreter::{fns, CallContext, Interpreter, NativeFn, Value},
     GrammarExt, Span,
 };
 
@@ -94,6 +94,63 @@ fn bench_mul_fold(bencher: &mut Bencher<'_>) {
     );
 }
 
+fn bench_fold_fn(bencher: &mut Bencher<'_>) {
+    let mut ctx = CallContext::mock();
+    let acc = ctx.apply_call_span(Value::Number(1.0));
+    let fold_fn = fns::Binary::new(|x, y| x * y);
+    let fold_fn = ctx.apply_call_span(Value::native_fn(fold_fn));
+
+    let mut rng = StdRng::seed_from_u64(SEED);
+
+    bencher.iter_batched(
+        || {
+            (0..ELEMENTS)
+                .map(|_| rng.gen_range(0.5_f32, 1.5))
+                .map(Value::<F32Grammar>::Number)
+                .collect::<Vec<_>>()
+        },
+        |array| {
+            let array = ctx.apply_call_span(Value::Tuple(array));
+            fns::Fold
+                .evaluate(vec![array, acc.clone(), fold_fn.clone()], &mut ctx)
+                .unwrap()
+        },
+        BatchSize::SmallInput,
+    );
+}
+
+fn bench_interpreted_fn(bencher: &mut Bencher<'_>) {
+    let mut ctx = CallContext::mock();
+    let interpreted_fn = F32Grammar::parse_statements(Span::new("|x, y| x * y")).unwrap();
+    let interpreted_fn = Interpreter::new().evaluate(&interpreted_fn).unwrap();
+    let interpreted_fn = match interpreted_fn {
+        Value::Function(function) => function,
+        _ => unreachable!("Wrong function type"),
+    };
+
+    let mut rng = StdRng::seed_from_u64(SEED);
+
+    bencher.iter_batched(
+        || {
+            (0..ELEMENTS)
+                .map(|_| rng.gen_range(0.5_f32, 1.5))
+                .map(Value::<F32Grammar>::Number)
+                .collect::<Vec<_>>()
+        },
+        |array| {
+            let results = array.chunks(2).map(|chunk| {
+                let args = chunk
+                    .iter()
+                    .map(|val| ctx.apply_call_span(val.to_owned()))
+                    .collect();
+                interpreted_fn.evaluate(args, &mut ctx).unwrap()
+            });
+            results.collect::<Vec<_>>()
+        },
+        BatchSize::SmallInput,
+    );
+}
+
 fn bench_reverse_native(bencher: &mut Bencher<'_>) {
     let mut rng = StdRng::seed_from_u64(SEED);
 
@@ -155,6 +212,9 @@ fn bench_interpreter(criterion: &mut Criterion) {
         .bench_function("int", bench_mul)
         .bench_function("int_fold", bench_mul_fold)
         .throughput(Throughput::Elements(ELEMENTS));
+
+    criterion.bench_function("fold_fn", bench_fold_fn);
+    criterion.bench_function("int_fn", bench_interpreted_fn);
 
     criterion
         .benchmark_group("reverse")

@@ -32,6 +32,28 @@ fn bench_mul_native(bencher: &mut Bencher<'_>) {
     );
 }
 
+fn bench_mul_native_with_value(bencher: &mut Bencher<'_>) {
+    let mut rng = StdRng::seed_from_u64(SEED);
+
+    bencher.iter_batched(
+        || {
+            (0..ELEMENTS)
+                .map(|_| rng.gen_range(0.5_f32, 1.5))
+                .map(Value::<F32Grammar>::Number)
+                .collect::<Vec<_>>()
+        },
+        |values| {
+            values
+                .into_iter()
+                .fold(Value::<F32Grammar>::Number(1.0), |acc, x| match (acc, x) {
+                    (Value::Number(acc), Value::Number(x)) => Value::Number(acc * x),
+                    _ => unimplemented!("oops"),
+                })
+        },
+        BatchSize::SmallInput,
+    );
+}
+
 fn bench_mul(bencher: &mut Bencher<'_>) {
     let mut rng = StdRng::seed_from_u64(SEED);
     let arena = Arena::new();
@@ -129,6 +151,7 @@ fn bench_interpreter(criterion: &mut Criterion) {
     criterion
         .benchmark_group("mul")
         .bench_function("native", bench_mul_native)
+        .bench_function("native_value", bench_mul_native_with_value)
         .bench_function("int", bench_mul)
         .bench_function("int_fold", bench_mul_fold)
         .throughput(Throughput::Elements(ELEMENTS));

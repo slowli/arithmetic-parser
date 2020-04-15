@@ -724,6 +724,8 @@ mod tests {
     use super::*;
     use crate::{grammars::F32Grammar, interpreter::Interpreter, GrammarExt, Span};
 
+    use std::f32;
+
     #[test]
     fn if_basic() {
         let mut interpreter = Interpreter::new();
@@ -793,6 +795,7 @@ mod tests {
         let mut interpreter = Interpreter::new();
         interpreter
             .innermost_scope()
+            .insert_var("Inf", Value::Number(f32::INFINITY))
             .insert_native_fn("cmp", Compare)
             .insert_native_fn("if", If)
             .insert_native_fn("fold", Fold);

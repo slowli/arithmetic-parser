@@ -1,7 +1,5 @@
 //! Transformation of AST output by the parser into non-recursive format.
 
-#![allow(missing_docs)]
-
 use num_traits::{Num, Pow};
 use smallvec::{smallvec, SmallVec};
 
@@ -31,8 +29,8 @@ type SpannedAtom<'a, T> = Spanned<'a, Atom<T>>;
 
 #[derive(Debug, Clone)]
 enum CompiledExpr<'a, T: Grammar> {
-    Atom(SpannedAtom<'a, T>),
-    Tuple(Vec<SpannedAtom<'a, T>>),
+    Atom(Atom<T>),
+    Tuple(Vec<Atom<T>>),
     Unary {
         op: UnaryOp,
         inner: SpannedAtom<'a, T>,
@@ -52,6 +50,7 @@ enum CompiledExpr<'a, T: Grammar> {
     },
 }
 
+/// Commands for a primitive register VM used to execute compiled programs.
 #[derive(Debug)]
 enum Command<'a, T: Grammar> {
     /// Create a new register and push the result of the specified computation there.
@@ -75,19 +74,16 @@ enum Command<'a, T: Grammar> {
     },
 
     /// Copies the source register into the destination. The destination register must exist.
-    Copy {
-        source: usize,
-        destination: usize,
-    },
+    Copy { source: usize, destination: usize },
 
     /// Annotates a register as containing the specified variable.
-    Annotate {
-        register: usize,
-        name: &'a str,
-    },
+    Annotate { register: usize, name: &'a str },
 
+    /// Signals that the following commands are executed in the inner scope.
     StartInnerScope,
+    /// Signals that the following commands are executed in the global scope.
     EndInnerScope,
+    /// Signals to truncate registers to the specified number.
     TruncateRegisters(usize),
 }
 
@@ -139,9 +135,11 @@ where
     }
 }
 
+type Registers<'a, T> = SmallVec<[Value<'a, T>; 16]>;
+
 #[derive(Debug)]
 pub(super) struct Env<'a, T: Grammar> {
-    registers: SmallVec<[Value<'a, T>; 16]>,
+    registers: Registers<'a, T>,
     // Maps variables to registers. Variables are mapped only from the global scope;
     // thus, we don't need to remove them on error in an inner scope.
     vars: HashMap<&'a str, usize>,
@@ -187,10 +185,22 @@ impl<'a, T: Grammar> Env<'a, T> {
         self.registers[register] = value;
     }
 
+    /// Allocates a new register with the specified name. If the name was previously assigned,
+    /// the name association is updated, but the old register itself remains intact.
     pub fn push_var(&mut self, name: &'a str, value: Value<'a, T>) {
         let register = self.registers.len();
         self.registers.push(value);
         self.vars.insert(name, register);
+    }
+
+    /// Retains only registers corresponding to named variables.
+    pub fn compress(&mut self) {
+        let mut registers = SmallVec::with_capacity(self.vars.len());
+        for (i, register) in self.vars.values_mut().enumerate() {
+            registers.push(self.registers[*register].clone());
+            *register = i;
+        }
+        self.registers = registers;
     }
 }
 
@@ -301,12 +311,12 @@ where
         match expr {
             CompiledExpr::Atom(atom) => Ok(self.resolve_atom(atom)),
             CompiledExpr::Tuple(atoms) => {
-                let atoms = atoms.iter().map(|atom| self.resolve_atom(atom)).collect();
-                Ok(Value::Tuple(atoms))
+                let values = atoms.iter().map(|atom| self.resolve_atom(atom)).collect();
+                Ok(Value::Tuple(values))
             }
 
             CompiledExpr::Unary { op, inner } => {
-                let inner_value = self.resolve_atom(inner);
+                let inner_value = self.resolve_atom(&inner.extra);
                 match op {
                     UnaryOp::Neg => inner_value.try_neg(),
                     UnaryOp::Not => inner_value.try_not(),
@@ -315,8 +325,8 @@ where
             }
 
             CompiledExpr::Binary { op, lhs, rhs } => {
-                let lhs_value = create_span_ref(lhs, self.resolve_atom(lhs));
-                let rhs_value = create_span_ref(rhs, self.resolve_atom(rhs));
+                let lhs_value = create_span_ref(lhs, self.resolve_atom(&lhs.extra));
+                let rhs_value = create_span_ref(rhs, self.resolve_atom(&rhs.extra));
                 match op {
                     BinaryOp::Add => Value::try_add(span, lhs_value, rhs_value),
                     BinaryOp::Sub => Value::try_sub(span, lhs_value, rhs_value),
@@ -333,10 +343,10 @@ where
             }
 
             CompiledExpr::Function { name, args } => {
-                if let Value::Function(function) = self.resolve_atom(name) {
+                if let Value::Function(function) = self.resolve_atom(&name.extra) {
                     let arg_values = args
                         .iter()
-                        .map(|arg| create_span_ref(arg, self.resolve_atom(arg)))
+                        .map(|arg| create_span_ref(arg, self.resolve_atom(&arg.extra)))
                         .collect();
 
                     if let Some(backtrace) = backtrace.as_deref_mut() {
@@ -358,11 +368,11 @@ where
 
             CompiledExpr::DefineFunction { ptr, captures } => {
                 let fn_executable = executable.child_fns[*ptr].clone();
-                let captured_values: Vec<_> = captures
+                let captured_values = captures
                     .iter()
-                    .map(|capture| self.resolve_atom(capture))
+                    .map(|capture| self.resolve_atom(&capture.extra))
                     .collect();
-                let capture_spans: Vec<_> = captures
+                let capture_spans = captures
                     .iter()
                     .map(|capture| create_span_ref(capture, ()))
                     .collect();
@@ -374,8 +384,8 @@ where
     }
 
     #[inline]
-    fn resolve_atom(&self, atom: &SpannedAtom<'a, T>) -> Value<'a, T> {
-        match &atom.extra {
+    fn resolve_atom(&self, atom: &Atom<T>) -> Value<'a, T> {
+        match atom {
             Atom::Register(index) => self.registers[*index].clone(),
             Atom::Constant(value) => Value::Number(value.clone()),
             Atom::Void => Value::void(),
@@ -384,6 +394,42 @@ where
 }
 
 /// Executable module together with its imports.
+///
+/// # Examples
+///
+/// ```
+/// use arithmetic_parser::{
+///     interpreter::{fns, Interpreter, Value},
+///     grammars::F32Grammar, GrammarExt, Span,
+/// };
+/// # use std::{collections::HashSet, f32, iter::FromIterator};
+///
+/// let mut interpreter = Interpreter::new();
+/// interpreter
+///     .insert_native_fn(
+///         "max",
+///         fns::Binary::new(|x, y| if x > y { x } else { y }),
+///     )
+///     .insert_native_fn("fold", fns::Fold)
+///     .insert_var("INF", Value::Number(f32::INFINITY))
+///     .insert_var("xs", Value::Tuple(vec![]));
+///
+/// let module = "xs.fold(-INF, max)";
+/// let module = F32Grammar::parse_statements(Span::new(module)).unwrap();
+/// let mut module = interpreter.compile(&module).unwrap();
+///
+/// // With the original imports, the returned value is `-INF`.
+/// assert_eq!(module.run().unwrap(), Value::Number(f32::NEG_INFINITY));
+///
+/// // Imports can be changed. Let's check that `xs` is indeed an import.
+/// let imports: HashSet<_> = module.imports().map(|(name, _)| name).collect();
+/// assert_eq!(imports, HashSet::from_iter(vec!["max", "fold", "xs", "INF"]));
+///
+/// // Change the `xs` import and run the module again.
+/// let array = [1.0, -3.0, 2.0, 0.5].iter().copied().map(Value::Number).collect();
+/// module.set_import("xs", Value::Tuple(array));
+/// assert_eq!(module.run().unwrap(), Value::Number(2.0));
+/// ```
 #[derive(Debug)]
 pub struct ExecutableModule<'a, T: Grammar> {
     inner: Executable<'a, T>,
@@ -392,13 +438,18 @@ pub struct ExecutableModule<'a, T: Grammar> {
 
 impl<'a, T: Grammar> ExecutableModule<'a, T> {
     /// Sets the value of an imported variable.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the variable with the specified name is not an import.
     pub fn set_import(&mut self, name: &str, value: Value<'a, T>) -> &mut Self {
         self.imports.set_var(name, value);
         self
     }
 
-    pub(super) fn set_imports(&mut self, env: &Env<'a, T>) {
-        self.imports = env.clone();
+    /// Enumerates imports of this module together with their current values.
+    pub fn imports(&self) -> impl Iterator<Item = (&'a str, &Value<'a, T>)> + '_ {
+        self.imports.variables()
     }
 
     pub(super) fn inner(&self) -> &Executable<'a, T> {
@@ -410,6 +461,7 @@ impl<'a, T: Grammar> ExecutableModule<'a, T>
 where
     T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
 {
+    /// Runs the module with the current values of imports.
     pub fn run(&self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
         let mut backtrace = Backtrace::default();
         self.imports
@@ -431,7 +483,7 @@ impl<'a> Compiler<'a> {
         Self::default()
     }
 
-    pub(super) fn from_env<T: Grammar>(env: &Env<'a, T>) -> Self {
+    fn from_env<T: Grammar>(env: &Env<'a, T>) -> Self {
         Self {
             vars_to_registers: env.vars.clone(),
             register_count: env.registers.len(),
@@ -475,7 +527,10 @@ impl<'a> Compiler<'a> {
             Expr::Tuple(tuple) => {
                 let registers = tuple
                     .iter()
-                    .map(|elem| self.compile_expr(executable, elem))
+                    .map(|elem| {
+                        self.compile_expr(executable, elem)
+                            .map(|spanned| spanned.extra)
+                    })
                     .collect::<Result<Vec<_>, _>>()?;
                 let register =
                     self.push_assignment(executable, CompiledExpr::Tuple(registers), expr);
@@ -585,14 +640,14 @@ impl<'a> Compiler<'a> {
             }
 
             Expr::FnDefinition(def) => {
-                let mut validator = FnValidator::new();
-                validator.eval_function(def, self)?;
-                let captures = validator
+                let mut extractor = CapturesExtractor::new();
+                extractor.eval_function(def, self)?;
+                let captures = extractor
                     .captures
                     .values()
                     .map(|capture| create_span_ref(capture, Atom::Register(capture.extra)))
                     .collect();
-                let fn_executable = Self::compile_function(def, &validator.captures)?;
+                let fn_executable = Self::compile_function(def, &extractor.captures)?;
                 let fn_executable = ExecutableFn {
                     inner: fn_executable,
                     def_span: create_span_ref(expr, ()),
@@ -667,7 +722,7 @@ impl<'a> Compiler<'a> {
                 // Allocate the register for the constant if necessary.
                 let rhs_register = match rhs.extra {
                     Atom::Constant(_) | Atom::Void => {
-                        self.push_assignment(compiled, CompiledExpr::Atom(rhs), statement)
+                        self.push_assignment(compiled, CompiledExpr::Atom(rhs.extra), statement)
                     }
                     Atom::Register(register) => register,
                 };
@@ -678,22 +733,40 @@ impl<'a> Compiler<'a> {
     }
 
     pub(super) fn compile_module<T: Grammar>(
-        &mut self,
+        env: &Env<'a, T>,
         block: &Block<'a, T>,
+        execute_in_env: bool,
     ) -> Result<ExecutableModule<'a, T>, SpannedEvalError<'a>> {
+        let mut compiler = Self::from_env(env);
+        let captures = if execute_in_env {
+            // We don't care about captures since we won't execute the module with them anyway.
+            Env::new()
+        } else {
+            let mut extractor = CapturesExtractor::new();
+            extractor.local_vars.push(HashMap::new());
+            extractor.eval_block(&block, &compiler)?;
+
+            let mut captures = Env::new();
+            for (var_name, register) in extractor.captures {
+                captures.push_var(var_name, env.registers[register.extra].clone());
+            }
+            compiler = Self::from_env(&captures);
+            captures
+        };
+
         let mut executable = Executable::new();
         let empty_span = Span::new("");
-        let last_atom = self
+        let last_atom = compiler
             .compile_block_inner(&mut executable, block)?
-            .unwrap_or_else(|| create_span_ref(&empty_span, Atom::Void));
-
+            .map(|spanned| spanned.extra)
+            .unwrap_or(Atom::Void);
         // Push the last variable to a register to be popped during execution.
-        self.push_assignment(&mut executable, CompiledExpr::Atom(last_atom), &empty_span);
+        compiler.push_assignment(&mut executable, CompiledExpr::Atom(last_atom), &empty_span);
 
-        executable.register_capacity = self.register_count;
+        executable.register_capacity = compiler.register_count;
         Ok(ExecutableModule {
             inner: executable,
-            imports: Env::new(),
+            imports: captures,
         })
     }
 
@@ -779,15 +852,15 @@ impl<'a> Compiler<'a> {
     }
 }
 
-/// Helper context for symbolic execution of a function body in order to determine
-/// variables captured by the function.
+/// Helper context for symbolic execution of a function body or a block in order to determine
+/// variables captured by it.
 #[derive(Debug)]
-struct FnValidator<'a> {
+struct CapturesExtractor<'a> {
     local_vars: Vec<HashMap<&'a str, Span<'a>>>,
     captures: HashMap<&'a str, Spanned<'a, usize>>,
 }
 
-impl<'a> FnValidator<'a> {
+impl<'a> CapturesExtractor<'a> {
     fn new() -> Self {
         Self {
             local_vars: vec![],
@@ -802,22 +875,12 @@ impl<'a> FnValidator<'a> {
         context: &Compiler<'a>,
     ) -> Result<(), SpannedEvalError<'a>> {
         self.local_vars.push(HashMap::new());
-
         extract_vars(
             self.local_vars.last_mut().unwrap(),
             &definition.args.extra,
             RepeatedAssignmentContext::FnArgs,
         )?;
-        for statement in &definition.body.statements {
-            self.eval_statement(statement, context)?;
-        }
-        if let Some(ref return_expr) = definition.body.return_value {
-            self.eval(return_expr, context)?;
-        }
-
-        // Remove local vars defined *within* the function.
-        self.local_vars.pop();
-        Ok(())
+        self.eval_block(&definition.body, context)
     }
 
     fn has_var(&self, var_name: &str) -> bool {
@@ -895,12 +958,8 @@ impl<'a> FnValidator<'a> {
             }
 
             Expr::Block(block) => {
-                for statement in &block.statements {
-                    self.eval_statement(statement, context)?;
-                }
-                if let Some(ref return_expr) = block.return_value {
-                    self.eval(return_expr, context)?;
-                }
+                self.local_vars.push(HashMap::new());
+                self.eval_block(block, context)?;
             }
 
             Expr::FnDefinition(def) => {
@@ -930,6 +989,22 @@ impl<'a> FnValidator<'a> {
                 Ok(())
             }
         }
+    }
+
+    fn eval_block<T: Grammar>(
+        &mut self,
+        block: &Block<'a, T>,
+        context: &Compiler<'a>,
+    ) -> Result<(), SpannedEvalError<'a>> {
+        self.local_vars.push(HashMap::new());
+        for statement in &block.statements {
+            self.eval_statement(statement, context)?;
+        }
+        if let Some(ref return_expr) = block.return_value {
+            self.eval(return_expr, context)?;
+        }
+        self.local_vars.pop();
+        Ok(())
     }
 }
 
@@ -981,11 +1056,13 @@ mod tests {
     use super::*;
     use crate::{grammars::F32Grammar, GrammarExt, Span};
 
+    use std::iter::FromIterator;
+
     #[test]
     fn compilation_basics() {
         let block = Span::new("x = 3; 1 + { y = 2; y * x } == 7");
         let block = F32Grammar::parse_statements(block).unwrap();
-        let module = Compiler::new().compile_module(&block).unwrap();
+        let module = Compiler::compile_module(&Env::new(), &block, false).unwrap();
         let value = module.run().unwrap();
         assert_eq!(value, Value::Bool(true));
     }
@@ -994,8 +1071,7 @@ mod tests {
     fn compiled_function() {
         let block = Span::new("add = |x, y| x + y; add(2, 3) == 5");
         let block = F32Grammar::parse_statements(block).unwrap();
-        let value = Compiler::new()
-            .compile_module(&block)
+        let value = Compiler::compile_module(&Env::new(), &block, false)
             .unwrap()
             .run()
             .unwrap();
@@ -1006,8 +1082,7 @@ mod tests {
     fn compiled_function_with_capture() {
         let block = "A = 2; add = |x, y| x + y / A; add(2, 3) == 3.5";
         let block = F32Grammar::parse_statements(Span::new(block)).unwrap();
-        let value = Compiler::new()
-            .compile_module(&block)
+        let value = Compiler::compile_module(&Env::new(), &block, false)
             .unwrap()
             .run()
             .unwrap();
@@ -1020,11 +1095,97 @@ mod tests {
         env.push_var("x", Value::<F32Grammar>::Number(5.0));
 
         let block = F32Grammar::parse_statements(Span::new("x")).unwrap();
-        let mut module = Compiler::from_env(&env).compile_module(&block).unwrap();
+        let mut module = Compiler::compile_module(&env, &block, true).unwrap();
         assert_eq!(module.inner.register_capacity, 2);
         assert_eq!(module.inner.commands.len(), 1); // push `x` from r0 to r1
         module.imports = env;
         let value = module.run().unwrap();
         assert_eq!(value, Value::Number(5.0));
+    }
+
+    #[test]
+    fn env_compression() {
+        let mut env = Env::new();
+        env.push_var("x", Value::<F32Grammar>::Number(5.0));
+
+        let block = "y = x + 2 * (x + 1) + 1; y";
+        let block = F32Grammar::parse_statements(Span::new(block)).unwrap();
+        let module = Compiler::compile_module(&env, &block, true).unwrap();
+        let value = env.execute(&module.inner, None).unwrap();
+        assert_eq!(value, Value::Number(18.0));
+
+        assert!(env.registers.len() > 2);
+        env.compress();
+        assert_eq!(env.registers.len(), 2);
+        assert_eq!(env.vars.len(), 2);
+        assert!(env.vars.contains_key("x"));
+        assert!(env.vars.contains_key("y"));
+    }
+
+    #[test]
+    fn variable_extraction() {
+        let compiler = Compiler {
+            vars_to_registers: HashMap::from_iter(vec![("x", 0), ("y", 1)]),
+            scope_depth: 0,
+            register_count: 2,
+        };
+
+        let def = "|a, b| ({ x = a * b + y; x - 2 }, a / b)";
+        let def = F32Grammar::parse_statements(Span::new(def))
+            .unwrap()
+            .return_value
+            .unwrap();
+        let def = match def.extra {
+            Expr::FnDefinition(def) => def,
+            other => panic!("Unexpected function parsing result: {:?}", other),
+        };
+
+        let mut validator = CapturesExtractor::new();
+        validator.eval_function(&def, &compiler).unwrap();
+        assert!(validator.captures.contains_key("y"));
+        assert!(!validator.captures.contains_key("x"));
+    }
+
+    #[test]
+    fn variable_extraction_with_scoping() {
+        let compiler = Compiler {
+            vars_to_registers: HashMap::from_iter(vec![("x", 0), ("y", 1)]),
+            scope_depth: 0,
+            register_count: 2,
+        };
+
+        let def = "|a, b| ({ x = a * b + y; x - 2 }, a / x)";
+        let def = F32Grammar::parse_statements(Span::new(def))
+            .unwrap()
+            .return_value
+            .unwrap();
+        let def = match def.extra {
+            Expr::FnDefinition(def) => def,
+            other => panic!("Unexpected function parsing result: {:?}", other),
+        };
+
+        let mut validator = CapturesExtractor::new();
+        validator.eval_function(&def, &compiler).unwrap();
+        assert!(validator.captures.contains_key("y"));
+        assert!(validator.captures.contains_key("x"));
+    }
+
+    #[test]
+    fn module_imports() {
+        let mut env = Env::new();
+        env.push_var("x", Value::<F32Grammar>::Number(1.0));
+        env.push_var("y", Value::Number(-3.0));
+
+        let module = "y = 5 * x; y - 3";
+        let module = F32Grammar::parse_statements(Span::new(module)).unwrap();
+        let mut module = Compiler::compile_module(&env, &module, false).unwrap();
+
+        let imports = module.imports().collect::<Vec<_>>();
+        assert_eq!(imports, &[("x", &Value::Number(1.0))]);
+        let value = module.run().unwrap();
+        assert_eq!(value, Value::Number(2.0));
+        module.set_import("x", Value::Number(2.0));
+        let value = module.run().unwrap();
+        assert_eq!(value, Value::Number(7.0));
     }
 }

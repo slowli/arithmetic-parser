@@ -813,10 +813,28 @@ mod tests {
             reverse = |xs| {
                 fold(xs, (), |acc, x| merge((x,), acc))
             };
-            reverse((-4, 3, 0, 1)) == (1, 0, 3, -4)
+            xs = (-4, 3, 0, 1);
+            xs.reverse() == (1, 0, 3, -4)
         "#;
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
+
+        let program = "xs.reverse()";
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let mut module = interpreter.compile(&block).unwrap();
+
+        const SAMPLES: &[(&[f32], &[f32])] = &[
+            (&[1.0, 2.0, 3.0], &[3.0, 2.0, 1.0]),
+            (&[], &[]),
+            (&[1.0], &[1.0]),
+        ];
+
+        for &(input, expected) in SAMPLES {
+            let input = input.iter().copied().map(Value::Number).collect();
+            let expected = expected.iter().copied().map(Value::Number).collect();
+            module.set_import("xs", Value::Tuple(input));
+            assert_eq!(module.run().unwrap(), Value::Tuple(expected));
+        }
     }
 }

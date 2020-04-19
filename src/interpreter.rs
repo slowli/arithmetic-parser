@@ -144,13 +144,15 @@ where
         &mut self,
         block: &Block<'a, T>,
     ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
-        let executable = Compiler::from_env(&self.env)
-            .compile_module(block)
+        let executable = Compiler::compile_module(&self.env, block, true)
             .map_err(ErrorWithBacktrace::with_empty_trace)?;
         let mut backtrace = Backtrace::default();
-        self.env
+        let result = self
+            .env
             .execute(executable.inner(), Some(&mut backtrace))
-            .map_err(|err| ErrorWithBacktrace::new(err, backtrace))
+            .map_err(|err| ErrorWithBacktrace::new(err, backtrace));
+        self.env.compress();
+        result
     }
 
     /// Compiles the provided block, returning the compiled module and its imports.
@@ -159,9 +161,7 @@ where
         &self,
         program: &Block<'a, T>,
     ) -> Result<ExecutableModule<'a, T>, SpannedEvalError<'a>> {
-        let mut module = Compiler::from_env(&self.env).compile_module(program)?;
-        module.set_imports(&self.env);
-        Ok(module)
+        Compiler::compile_module(&self.env, program, false)
     }
 }
 

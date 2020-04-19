@@ -64,11 +64,11 @@
 //! ```
 
 pub use self::{
-    compiler::ExecutableModule,
     error::{
         AuxErrorInfo, Backtrace, BacktraceElement, ErrorWithBacktrace, EvalError, EvalResult,
         RepeatedAssignmentContext, SpannedEvalError, TupleLenMismatchContext,
     },
+    executable::ExecutableModule,
     values::{CallContext, Function, InterpretedFn, NativeFn, SpannedValue, Value},
 };
 
@@ -76,11 +76,12 @@ use num_traits::{Num, Pow};
 
 use std::ops;
 
-use self::compiler::{Compiler, Env};
+use self::{compiler::Compiler, executable::Env};
 use crate::{Block, Grammar};
 
 mod compiler;
 mod error;
+mod executable;
 pub mod fns;
 mod values;
 

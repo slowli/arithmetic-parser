@@ -6,9 +6,9 @@ use std::{collections::HashMap, fmt, ops, rc::Rc};
 
 use crate::{
     helpers::create_span_ref,
-    interpreter::compiler::ExecutableFn,
-    interpreter::error::{
-        AuxErrorInfo, Backtrace, EvalError, EvalResult, SpannedEvalError, TupleLenMismatchContext,
+    interpreter::{
+        executable::ExecutableFn, AuxErrorInfo, Backtrace, EvalError, EvalResult, SpannedEvalError,
+        TupleLenMismatchContext,
     },
     BinaryOp, Grammar, LvalueLen, Op, Span, Spanned, UnaryOp,
 };

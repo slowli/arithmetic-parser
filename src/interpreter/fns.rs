@@ -77,7 +77,7 @@ fn extract_fn<'a, T: Grammar>(
 /// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
-/// interpreter.innermost_scope().insert_native_fn("assert", fns::Assert);
+/// interpreter.insert_native_fn("assert", fns::Assert);
 /// let err = interpreter.evaluate(&block).unwrap_err();
 /// assert_eq!(err.main_span().fragment, "assert(3^2 == 10)");
 /// assert_matches!(
@@ -130,7 +130,7 @@ impl<T: Grammar> NativeFn<T> for Assert {
 /// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
-/// interpreter.innermost_scope().insert_native_fn("if", If);
+/// interpreter.insert_native_fn("if", If);
 /// let ret = interpreter.evaluate(&block).unwrap();
 /// assert_eq!(ret, Value::Number(4.0));
 /// ```
@@ -147,7 +147,7 @@ impl<T: Grammar> NativeFn<T> for Assert {
 /// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
-/// interpreter.innermost_scope().insert_native_fn("if", If);
+/// interpreter.insert_native_fn("if", If);
 /// let ret = interpreter.evaluate(&block).unwrap();
 /// assert_eq!(ret, Value::Number(4.0));
 /// ```
@@ -209,7 +209,6 @@ where
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
-///     .innermost_scope()
 ///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("if", fns::If)
 ///     .insert_native_fn("loop", fns::Loop);
@@ -301,7 +300,6 @@ where
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
-///     .innermost_scope()
 ///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("if", fns::If)
 ///     .insert_native_fn("map", fns::Map);
@@ -368,7 +366,6 @@ where
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
-///     .innermost_scope()
 ///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("filter", fns::Filter);
 /// let ret = interpreter.evaluate(&block).unwrap();
@@ -440,7 +437,6 @@ where
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
-///     .innermost_scope()
 ///     .insert_native_fn("fold", fns::Fold);
 /// let ret = interpreter.evaluate(&block).unwrap();
 /// assert_eq!(ret, Value::Bool(true));
@@ -508,7 +504,6 @@ where
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
-///     .innermost_scope()
 ///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("if", fns::If)
 ///     .insert_native_fn("loop", fns::Loop)
@@ -566,7 +561,6 @@ where
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
-///     .innermost_scope()
 ///     .insert_native_fn("fold", fns::Fold)
 ///     .insert_native_fn("merge", fns::Merge);
 /// let ret = interpreter.evaluate(&block).unwrap();
@@ -730,7 +724,6 @@ mod tests {
     fn if_basic() {
         let mut interpreter = Interpreter::new();
         interpreter
-            .innermost_scope()
             .insert_native_fn("if", If)
             .insert_native_fn("cmp", Compare);
 
@@ -755,7 +748,6 @@ mod tests {
     fn loop_basic() {
         let mut interpreter = Interpreter::new();
         interpreter
-            .innermost_scope()
             .insert_native_fn("loop", Loop)
             .insert_native_fn("if", If)
             .insert_native_fn("cmp", Compare);
@@ -794,7 +786,6 @@ mod tests {
     fn max_value_with_fold() {
         let mut interpreter = Interpreter::new();
         interpreter
-            .innermost_scope()
             .insert_var("Inf", Value::Number(f32::INFINITY))
             .insert_native_fn("cmp", Compare)
             .insert_native_fn("if", If)
@@ -815,7 +806,6 @@ mod tests {
     fn reverse_list_with_fold() {
         let mut interpreter = Interpreter::new();
         interpreter
-            .innermost_scope()
             .insert_native_fn("merge", Merge)
             .insert_native_fn("fold", Fold);
 

@@ -265,7 +265,7 @@ pub struct BacktraceElement<'a> {
     /// Function name.
     pub fn_name: &'a str,
     /// Code span of the function definition.
-    pub def_span: Span<'a>,
+    pub def_span: Option<Span<'a>>,
     /// Code span of the function call.
     pub call_span: Span<'a>,
 }
@@ -277,7 +277,12 @@ impl<'a> Backtrace<'a> {
     }
 
     /// Appends a function call into the backtrace.
-    pub(super) fn push_call(&mut self, fn_name: &'a str, def_span: Span<'a>, call_span: Span<'a>) {
+    pub(super) fn push_call(
+        &mut self,
+        fn_name: &'a str,
+        def_span: Option<Span<'a>>,
+        call_span: Span<'a>,
+    ) {
         self.calls.push(BacktraceElement {
             fn_name,
             def_span,
@@ -303,6 +308,13 @@ pub struct ErrorWithBacktrace<'a> {
 impl<'a> ErrorWithBacktrace<'a> {
     pub(super) fn new(inner: SpannedEvalError<'a>, backtrace: Backtrace<'a>) -> Self {
         Self { inner, backtrace }
+    }
+
+    pub(super) fn with_empty_trace(inner: SpannedEvalError<'a>) -> Self {
+        Self {
+            inner,
+            backtrace: Backtrace::default(),
+        }
     }
 
     /// Returns the source of the error.

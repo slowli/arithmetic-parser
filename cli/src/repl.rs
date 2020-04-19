@@ -10,9 +10,8 @@ pub fn repl<T: ReplLiteral>() -> anyhow::Result<()> {
     let mut env = Env::new();
     env.print_greeting()?;
 
-    let mut interpreter = T::create_interpreter();
-    interpreter.create_scope();
     let snippet_arena = Arena::new();
+    let mut interpreter = T::create_interpreter();
     let mut snippet = String::new();
     let mut prompt = ">>> ";
 

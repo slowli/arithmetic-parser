@@ -49,8 +49,6 @@
 //!     .insert_native_fn("min", MIN)
 //!     .insert_native_fn("max", MAX)
 //!     .insert_native_fn("assert", fns::Assert);
-//! // Create a new scope to make native functions non-deletable.
-//! context.create_scope();
 //!
 //! let program = r#"
 //!     ## The interpreter supports all parser features, including

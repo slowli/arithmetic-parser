@@ -54,20 +54,33 @@ enum CompiledExpr<'a, T: Grammar> {
 
 #[derive(Debug)]
 enum Command<'a, T: Grammar> {
+    /// Create a new register and push the result of the specified computation there.
     Push(CompiledExpr<'a, T>),
 
+    /// Destructure a tuple value. This will push `start_len` starting elements from the tuple,
+    /// the middle of the tuple (as a tuple), and `end_len` ending elements from the tuple
+    /// as new registers, in this order.
     Destructure {
+        /// Index of the register with the value.
         source: usize,
+        /// Number of starting arguments to place in separate registers.
         start_len: usize,
+        /// Number of ending arguments to place in separate registers.
         end_len: usize,
+        /// Acceptable length(s) of the source.
         lvalue_len: LvalueLen,
+        /// Does `lvalue_len` should be checked? When destructuring arguments for functions,
+        /// this check was performed previously.
+        unchecked: bool,
     },
 
+    /// Copies the source register into the destination. The destination register must exist.
     Copy {
         source: usize,
         destination: usize,
     },
 
+    /// Annotates a register as containing the specified variable.
     Annotate {
         register: usize,
         name: &'a str,
@@ -236,10 +249,11 @@ where
                     start_len,
                     end_len,
                     lvalue_len,
+                    unchecked,
                 } => {
                     let source = self.registers[*source].clone();
                     if let Value::Tuple(mut elements) = source {
-                        if !lvalue_len.matches(elements.len()) {
+                        if !*unchecked && !lvalue_len.matches(elements.len()) {
                             let err = EvalError::TupleLenMismatch {
                                 lhs: *lvalue_len,
                                 rhs: elements.len(),
@@ -326,7 +340,6 @@ where
                         .collect();
 
                     if let Some(backtrace) = backtrace.as_deref_mut() {
-                        // FIXME: distinguish between interpreted and native calls.
                         backtrace.push_call(name.fragment, function.def_span(), span);
                     }
                     let mut context =
@@ -615,6 +628,14 @@ impl<'a> Compiler<'a> {
         let mut executable = Executable::new();
         let args_span = create_span_ref(&def.args, ());
         this.destructure(&mut executable, &def.args.extra, args_span, captures.len());
+        // We check number of arguments in `InterpretedFn::evaluate()` in order to provide
+        // a more precise error.
+        match &mut executable.commands[0].extra {
+            Command::Destructure { unchecked, .. } => {
+                *unchecked = true;
+            }
+            _ => unreachable!(),
+        }
 
         for statement in &def.body.statements {
             this.compile_statement(&mut executable, statement)?;
@@ -636,6 +657,12 @@ impl<'a> Compiler<'a> {
             Statement::Expr(expr) => Some(self.compile_expr(compiled, expr)?),
 
             Statement::Assignment { lhs, rhs } => {
+                extract_vars_iter(
+                    &mut HashMap::new(),
+                    iter::once(lhs),
+                    RepeatedAssignmentContext::Assignment,
+                )?;
+
                 let rhs = self.compile_expr(compiled, rhs)?;
                 // Allocate the register for the constant if necessary.
                 let rhs_register = match rhs.extra {
@@ -728,6 +755,7 @@ impl<'a> Compiler<'a> {
             start_len: destructure.start.len(),
             end_len: destructure.end.len(),
             lvalue_len: destructure.len(),
+            unchecked: false,
         };
         compiled.commands.push(create_span_ref(&span, command));
         let start_register = self.register_count;

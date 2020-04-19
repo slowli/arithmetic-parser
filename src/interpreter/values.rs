@@ -138,6 +138,14 @@ where
         args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
     ) -> EvalResult<'a, T> {
+        if !self.arg_count().matches(args.len()) {
+            let err = EvalError::ArgsLenMismatch {
+                def: self.arg_count(),
+                call: args.len(),
+            };
+            return Err(SpannedEvalError::new(&ctx.call_span, err));
+        }
+
         let args = args.into_iter().map(|arg| arg.extra).collect();
         self.definition
             .inner

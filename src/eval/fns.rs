@@ -5,7 +5,7 @@ use num_traits::{Num, One, Pow, Zero};
 use std::ops;
 
 use crate::{
-    interpreter::{
+    eval::{
         AuxErrorInfo, CallContext, EvalError, EvalResult, Function, NativeFn, SpannedEvalError,
         SpannedValue, Value,
     },
@@ -67,7 +67,7 @@ fn extract_fn<'a, T: Grammar>(
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{fns, EvalError, Interpreter}, grammars::F32Grammar, GrammarExt, Span,
+/// #     eval::{fns, EvalError, Interpreter}, grammars::F32Grammar, GrammarExt, Span,
 /// # };
 /// # use assert_matches::assert_matches;
 /// let program = r#"
@@ -123,7 +123,7 @@ impl<T: Grammar> NativeFn<T> for Assert {
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{fns::If, Interpreter, Value}, grammars::F32Grammar,
+/// #     eval::{fns::If, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = "x = 3; if(x == 2, -1, x + 1)";
@@ -140,7 +140,7 @@ impl<T: Grammar> NativeFn<T> for Assert {
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{fns::If, Interpreter, Value}, grammars::F32Grammar,
+/// #     eval::{fns::If, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = "x = 3; if(x == 2, || -1, || x + 1)()";
@@ -193,7 +193,7 @@ where
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{fns, Interpreter, Value}, grammars::F32Grammar,
+/// #     eval::{fns, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = r#"
@@ -289,7 +289,7 @@ where
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{fns, Interpreter, Value}, grammars::F32Grammar,
+/// #     eval::{fns, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = r#"
@@ -355,7 +355,7 @@ where
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{fns, Interpreter, Value}, grammars::F32Grammar,
+/// #     eval::{fns, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = r#"
@@ -426,7 +426,7 @@ where
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{fns, Interpreter, Value}, grammars::F32Grammar,
+/// #     eval::{fns, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = r#"
@@ -486,7 +486,7 @@ where
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{fns, Interpreter, Value}, grammars::F32Grammar,
+/// #     eval::{fns, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = r#"
@@ -549,7 +549,7 @@ where
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{fns, Interpreter, Value}, grammars::F32Grammar,
+/// #     eval::{fns, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = r#"
@@ -716,7 +716,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{grammars::F32Grammar, interpreter::Interpreter, GrammarExt, Span};
+    use crate::{eval::Interpreter, grammars::F32Grammar, GrammarExt, Span};
 
     use std::f32;
 

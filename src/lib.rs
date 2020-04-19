@@ -60,9 +60,9 @@ use nom_locate::{LocatedSpan, LocatedSpanEx};
 use crate::helpers::create_span_ref;
 use std::fmt;
 
+pub mod eval;
 pub mod grammars;
 mod helpers;
-pub mod interpreter;
 mod parser;
 mod traits;
 

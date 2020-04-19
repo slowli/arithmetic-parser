@@ -17,8 +17,8 @@ use std::{
 };
 
 use arithmetic_parser::{
+    eval::{fns, BacktraceElement, ErrorWithBacktrace, Function, Interpreter, Value},
     grammars::{NumGrammar, NumLiteral},
-    interpreter::{fns, BacktraceElement, ErrorWithBacktrace, Function, Interpreter, Value},
     Block, Error, Grammar, GrammarExt, Span, Spanned,
 };
 

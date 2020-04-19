@@ -5,7 +5,7 @@ use thiserror::Error;
 use std::fmt;
 
 use crate::{
-    helpers::create_span_ref, interpreter::Value, BinaryOp, LvalueLen, Op, Span, Spanned, UnaryOp,
+    eval::Value, helpers::create_span_ref, BinaryOp, LvalueLen, Op, Span, Spanned, UnaryOp,
 };
 
 /// Context for [`EvalError::TupleLenMismatch`].

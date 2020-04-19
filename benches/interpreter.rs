@@ -10,8 +10,8 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 use typed_arena::Arena;
 
 use arithmetic_parser::{
+    eval::{fns, CallContext, Interpreter, NativeFn, Value},
     grammars::F32Grammar,
-    interpreter::{fns, CallContext, Interpreter, NativeFn, Value},
     GrammarExt, Span,
 };
 

@@ -3,14 +3,14 @@
 use std::{collections::HashMap, iter};
 
 use crate::{
-    helpers::create_span_ref,
-    interpreter::{
+    eval::{
         executable::{
             Atom, Command, CompiledExpr, Env, Executable, ExecutableFn, ExecutableModule,
             SpannedAtom,
         },
         AuxErrorInfo, EvalError, RepeatedAssignmentContext, SpannedEvalError,
     },
+    helpers::create_span_ref,
     Block, Destructure, Expr, FnDefinition, Grammar, Lvalue, Span, Spanned, SpannedExpr,
     SpannedLvalue, SpannedStatement, Statement,
 };
@@ -586,7 +586,7 @@ fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{grammars::F32Grammar, interpreter::Value, GrammarExt, Span};
+    use crate::{eval::Value, grammars::F32Grammar, GrammarExt, Span};
 
     use std::iter::FromIterator;
 

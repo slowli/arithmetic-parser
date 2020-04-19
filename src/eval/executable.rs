@@ -1,4 +1,4 @@
-//! Executables output by a `Compiler`, and related types.
+//! Executables output by a `Compiler` and related types.
 
 use num_traits::{Num, Pow};
 use smallvec::{smallvec, SmallVec};
@@ -6,11 +6,11 @@ use smallvec::{smallvec, SmallVec};
 use std::{collections::HashMap, ops, rc::Rc};
 
 use crate::{
-    helpers::create_span_ref,
-    interpreter::{
+    eval::{
         Backtrace, CallContext, ErrorWithBacktrace, EvalError, EvalResult, InterpretedFn,
         SpannedEvalError, TupleLenMismatchContext, Value,
     },
+    helpers::create_span_ref,
     BinaryOp, Grammar, LvalueLen, Span, Spanned, UnaryOp,
 };
 
@@ -431,7 +431,7 @@ where
 ///
 /// ```
 /// use arithmetic_parser::{
-///     interpreter::{fns, Interpreter, Value},
+///     eval::{fns, Interpreter, Value},
 ///     grammars::F32Grammar, GrammarExt, Span,
 /// };
 /// # use std::{collections::HashSet, f32, iter::FromIterator};
@@ -510,7 +510,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{grammars::F32Grammar, interpreter::compiler::Compiler, GrammarExt};
+    use crate::{eval::compiler::Compiler, grammars::F32Grammar, GrammarExt};
 
     #[test]
     fn iterative_evaluation() {

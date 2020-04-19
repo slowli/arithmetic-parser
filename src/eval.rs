@@ -34,7 +34,7 @@
 //! ```
 //! use arithmetic_parser::{
 //!     grammars::F32Grammar,
-//!     interpreter::{fns, Interpreter, Value},
+//!     eval::{fns, Interpreter, Value},
 //!     Grammar, GrammarExt, Span,
 //! };
 //!

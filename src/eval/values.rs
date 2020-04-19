@@ -5,11 +5,11 @@ use num_traits::{Num, Pow};
 use std::{collections::HashMap, fmt, ops, rc::Rc};
 
 use crate::{
-    helpers::create_span_ref,
-    interpreter::{
+    eval::{
         executable::ExecutableFn, AuxErrorInfo, Backtrace, EvalError, EvalResult, SpannedEvalError,
         TupleLenMismatchContext,
     },
+    helpers::create_span_ref,
     BinaryOp, Grammar, LvalueLen, Op, Span, Spanned, UnaryOp,
 };
 

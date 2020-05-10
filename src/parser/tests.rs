@@ -1500,3 +1500,35 @@ fn blocks_when_switched_off() {
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
     assert_matches!(err, NomErr::Failure(ref spanned) if spanned.0.offset == 4);
 }
+
+#[test]
+fn methods_when_switched_off() {
+    #[derive(Debug, Clone)]
+    struct SimpleGrammar;
+
+    impl Grammar for SimpleGrammar {
+        type Lit = Literal;
+        type Type = ValueType;
+
+        const FEATURES: Features = Features {
+            methods: false,
+            ..Features::all()
+        };
+
+        fn parse_literal(span: Span<'_>) -> NomResult<'_, Self::Lit> {
+            Literal::parse(span)
+        }
+
+        fn parse_type(span: Span<'_>) -> NomResult<'_, Self::Type> {
+            type_info::<Complete>(span)
+        }
+    }
+
+    let input = Span::new("foo.bar(1)");
+    let (rest, _) = statement::<SimpleGrammar, Complete>(input).unwrap();
+    assert_eq!(rest.fragment, ".bar(1)");
+
+    let input = Span::new("(1, 2).bar(1)");
+    let (rest, _) = statement::<SimpleGrammar, Complete>(input).unwrap();
+    assert_eq!(rest.fragment, ".bar(1)");
+}

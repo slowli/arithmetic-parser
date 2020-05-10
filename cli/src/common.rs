@@ -187,7 +187,6 @@ impl<'a> Env<'a> {
     {
         let bool_color = ColorSpec::new().set_fg(Some(Color::Cyan)).clone();
         let num_color = ColorSpec::new().set_fg(Some(Color::Green)).clone();
-        let fn_color = ColorSpec::new().set_fg(Some(Color::Magenta)).clone();
 
         match value {
             Value::Bool(b) => {
@@ -196,16 +195,10 @@ impl<'a> Env<'a> {
                 self.writer.reset()
             }
 
-            Value::Function(Function::Native(_)) => {
-                self.writer.set_color(&fn_color)?;
-                write!(self.writer, "(native fn)")?;
-                self.writer.reset()
-            }
+            Value::Function(Function::Native(_)) => write!(self.writer, "(native fn)"),
 
             Value::Function(Function::Interpreted(function)) => {
-                self.writer.set_color(&fn_color)?;
                 write!(self.writer, "fn({} args)", function.arg_count())?;
-                self.writer.reset()?;
                 let captures = function.captures();
                 if !captures.is_empty() {
                     writeln!(self.writer, "[")?;

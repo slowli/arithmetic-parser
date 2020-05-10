@@ -32,6 +32,8 @@ These features can be switched on or off when defining a grammar.
 - **Blocks.** A block is several `;`-delimited statements enclosed in `{}` braces,
   e.g, `{ z = max(x, y); (z - x, z - y) }`. The blocks can be used in all contexts
   instead of a simple expression; for example, `min({ z = 5; z - 1 }, 3)`.
+- **Methods.** Method call is a function call separated from the receiver with a `.` char;
+  for example, `foo.bar(2, x)`. 
 - **Type annotations.** A type annotation in the form `var: Type` can be present
   in the lvalues or in the function argument definitions. The parser for type annotations
   is user-defined.

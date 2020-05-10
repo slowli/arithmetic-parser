@@ -142,11 +142,11 @@ where
 
     /// Method call, e.g., `foo.bar(x, 5)`.
     Method {
-        /// Name of the called method.
+        /// Name of the called method, e.g. `bar` in `foo.bar(x, 5)`.
         name: Span<'a>,
-        /// Receiver of the call.
+        /// Receiver of the call, e.g., `foo` in `foo.bar(x, 5)`.
         receiver: Box<SpannedExpr<'a, T>>,
-        /// Arguments.
+        /// Arguments; e.g., `x, 5` in `foo.bar(x, 5)`.
         args: Vec<SpannedExpr<'a, T>>,
     },
 

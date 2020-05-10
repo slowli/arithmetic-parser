@@ -21,6 +21,9 @@
 //!   are performed per-element. Binary operations require tuples of the same size,
 //!   or a tuple and a primitive value. As an example, `(1, 2) + 3` and `(2, 3) / (4, 5)` are valid,
 //!   but `(1, 2) * (3, 4, 5)` isn't.
+//! - Methods are considered syntactic sugar for functions, with the method receiver considered
+//!   the first function argument. For example, `(1, 2).map(sin)` is equivalent to
+//!   `map((1, 2), sin)`.
 //! - No type checks are performed before evaluation.
 //! - Type annotations are completely ignored. This means that the interpreter may execute
 //!   code that is incorrect with annotations (e.g., assignment of a tuple to a variable which

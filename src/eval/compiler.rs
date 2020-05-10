@@ -231,7 +231,10 @@ impl<'a> Compiler<'a> {
             this.compile_statement(&mut executable, statement)?;
         }
         if let Some(ref return_value) = def.body.return_value {
-            this.compile_expr(&mut executable, return_value)?;
+            let return_atom = this.compile_expr(&mut executable, return_value)?;
+            let return_span = create_span_ref(&return_atom, ());
+            let command = Command::Push(CompiledExpr::Atom(return_atom.extra));
+            executable.push_command(create_span_ref(&return_span, command));
         }
 
         executable.finalize_function(this.register_count);

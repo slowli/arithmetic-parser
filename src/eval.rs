@@ -834,4 +834,25 @@ mod tests {
             EvalError::NativeCall(ref msg) if msg.contains("requires one primitive argument")
         );
     }
+
+    #[test]
+    fn single_statement_fn() {
+        let program = Span::new("(|| 5)()");
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let return_value = Interpreter::new().evaluate(&block).unwrap();
+        assert_eq!(return_value, Value::Number(5.0));
+
+        let program = Span::new("x = 3; (|| x)()");
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let return_value = Interpreter::new().evaluate(&block).unwrap();
+        assert_eq!(return_value, Value::Number(3.0));
+    }
+
+    #[test]
+    fn function_with_non_linear_flow() {
+        let program = Span::new("(|x| { y = x - 3; x })(2)");
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let return_value = Interpreter::new().evaluate(&block).unwrap();
+        assert_eq!(return_value, Value::Number(2.0));
+    }
 }

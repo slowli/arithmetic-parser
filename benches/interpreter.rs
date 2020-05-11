@@ -47,7 +47,7 @@ fn bench_mul_native_with_value(bencher: &mut Bencher<'_>) {
                 .into_iter()
                 .fold(Value::<F32Grammar>::Number(1.0), |acc, x| match (acc, x) {
                     (Value::Number(acc), Value::Number(x)) => Value::Number(acc * x),
-                    _ => unimplemented!("oops"),
+                    _ => unreachable!(),
                 })
         },
         BatchSize::SmallInput,

@@ -175,6 +175,17 @@ impl<T: Grammar> Clone for Function<'_, T> {
     }
 }
 
+impl<T: Grammar> Function<'_, T> {
+    /// Checks if the provided function is the same as this one.
+    pub fn is_same_function(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Native(this), Self::Native(other)) => Rc::ptr_eq(this, other),
+            (Self::Interpreted(this), Self::Interpreted(other)) => Rc::ptr_eq(this, other),
+            _ => false,
+        }
+    }
+}
+
 impl<'a, T> Function<'a, T>
 where
     T: Grammar,
@@ -189,15 +200,6 @@ where
         match self {
             Self::Native(function) => function.evaluate(args, ctx),
             Self::Interpreted(function) => function.evaluate(args, ctx),
-        }
-    }
-
-    /// Checks if the provided function is the same as this one.
-    pub fn is_same_function(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Native(this), Self::Native(other)) => Rc::ptr_eq(this, other),
-            (Self::Interpreted(this), Self::Interpreted(other)) => Rc::ptr_eq(this, other),
-            _ => false,
         }
     }
 
@@ -281,6 +283,7 @@ where
             (Self::Number(this), Self::Number(other)) => this == other,
             (Self::Bool(this), Self::Bool(other)) => this == other,
             (Self::Tuple(this), Self::Tuple(other)) => this == other,
+            (Self::Function(this), Self::Function(other)) => this.is_same_function(other),
             _ => false,
         }
     }
@@ -480,25 +483,6 @@ where
             _ => Err(EvalError::UnexpectedOperand {
                 op: UnaryOp::Not.into(),
             }),
-        }
-    }
-
-    pub(super) fn compare(&self, rhs: &Self) -> bool {
-        match (self, rhs) {
-            (Self::Bool(this), Self::Bool(other)) => this == other,
-            (Self::Number(this), Self::Number(other)) => this == other,
-
-            (Self::Tuple(this), Self::Tuple(other)) => {
-                if this.len() == other.len() {
-                    this.iter().zip(other).all(|(x, y)| x.compare(y))
-                } else {
-                    false
-                }
-            }
-
-            (Self::Function(this), Self::Function(other)) => this.is_same_function(other),
-
-            _ => false,
         }
     }
 

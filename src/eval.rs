@@ -103,6 +103,14 @@ where
     }
 }
 
+impl<T: Grammar> Clone for Interpreter<'_, T> {
+    fn clone(&self) -> Self {
+        Self {
+            env: self.env.clone(),
+        }
+    }
+}
+
 impl<'a, T> Interpreter<'a, T>
 where
     T: Grammar,

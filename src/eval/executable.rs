@@ -366,8 +366,8 @@ where
                     BinaryOp::Div => Value::try_div(span, lhs_value, rhs_value),
                     BinaryOp::Power => Value::try_pow(span, lhs_value, rhs_value),
 
-                    BinaryOp::Eq => Ok(Value::Bool(lhs_value.extra.compare(&rhs_value.extra))),
-                    BinaryOp::NotEq => Ok(Value::Bool(!lhs_value.extra.compare(&rhs_value.extra))),
+                    BinaryOp::Eq => Ok(Value::Bool(lhs_value.extra == rhs_value.extra)),
+                    BinaryOp::NotEq => Ok(Value::Bool(lhs_value.extra != rhs_value.extra)),
 
                     BinaryOp::And => Value::try_and(&lhs_value, &rhs_value),
                     BinaryOp::Or => Value::try_or(&lhs_value, &rhs_value),

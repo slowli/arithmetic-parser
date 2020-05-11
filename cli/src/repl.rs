@@ -12,6 +12,7 @@ pub fn repl<T: ReplLiteral>() -> anyhow::Result<()> {
 
     let snippet_arena = Arena::new();
     let mut interpreter = T::create_interpreter();
+    let original_interpreter = interpreter.clone();
     let mut snippet = String::new();
     let mut prompt = ">>> ";
 
@@ -21,8 +22,9 @@ pub fn repl<T: ReplLiteral>() -> anyhow::Result<()> {
             Ok(line) => {
                 snippet.push_str(&line);
                 let arena_ref = &*snippet_arena.alloc(snippet.clone());
+                let res = env.parse_and_eval(arena_ref, &mut interpreter, &original_interpreter);
 
-                if let Ok(incomplete) = env.parse_and_eval(arena_ref, &mut interpreter) {
+                if let Ok(incomplete) = res {
                     if incomplete {
                         prompt = "... ";
                         snippet.push('\n');

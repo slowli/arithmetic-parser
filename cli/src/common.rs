@@ -238,12 +238,23 @@ impl<'a> Env<'a> {
         }
     }
 
-    fn dump_scope<T>(&mut self, scope: &Interpreter<'_, T>) -> io::Result<()>
+    fn dump_scope<T>(
+        &mut self,
+        scope: &Interpreter<'a, T>,
+        original_scope: &Interpreter<'a, T>,
+    ) -> io::Result<()>
     where
         T: Grammar,
-        T::Lit: fmt::Display,
+        T::Lit: PartialEq + fmt::Display,
     {
         for (name, var) in scope.variables() {
+            if let Some(original_var) = original_scope.get_var(name) {
+                if original_var == var {
+                    // The variable is present in the original scope, no need to output it.
+                    continue;
+                }
+            }
+
             write!(self.writer, "{} = ", name)?;
             self.dump_value(var, 0)?;
             writeln!(self.writer)?;
@@ -255,6 +266,7 @@ impl<'a> Env<'a> {
         &mut self,
         line: &'a str,
         interpreter: &mut Interpreter<'a, T>,
+        original_interpreter: &Interpreter<'a, T>,
     ) -> Result<bool, ()>
     where
         T: Grammar,
@@ -265,8 +277,8 @@ impl<'a> Env<'a> {
 
         if line.starts_with('.') {
             match line {
-                ".clear" => unimplemented!(),
-                ".dump" => self.dump_scope(interpreter).unwrap(),
+                ".clear" => interpreter.clone_from(original_interpreter),
+                ".dump" => self.dump_scope(interpreter, original_interpreter).unwrap(),
                 ".help" => self.print_help().unwrap(),
 
                 _ => {

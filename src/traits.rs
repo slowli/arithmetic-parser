@@ -17,6 +17,8 @@ pub struct Features {
     pub fn_definitions: bool,
     /// Parse blocks?
     pub blocks: bool,
+    /// Parse methods?
+    pub methods: bool,
 }
 
 impl Features {
@@ -27,6 +29,7 @@ impl Features {
             type_annotations: true,
             fn_definitions: true,
             blocks: true,
+            methods: true,
         }
     }
 
@@ -37,6 +40,7 @@ impl Features {
             type_annotations: false,
             fn_definitions: false,
             blocks: false,
+            methods: false,
         }
     }
 }

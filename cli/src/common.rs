@@ -17,8 +17,8 @@ use std::{
 };
 
 use arithmetic_parser::{
+    eval::{fns, BacktraceElement, ErrorWithBacktrace, Function, Interpreter, Value},
     grammars::{NumGrammar, NumLiteral},
-    interpreter::{fns, BacktraceElement, ErrorWithBacktrace, Function, Interpreter, Scope, Value},
     Block, Error, Grammar, GrammarExt, Span, Spanned,
 };
 
@@ -127,13 +127,15 @@ impl<'a> Env<'a> {
             call_span,
         }) = calls_iter.next()
         {
-            let (file_id, def_range) = self
-                .code_map
-                .locate(&def_span)
-                .expect("Cannot locate span in previously recorded snippets");
-            let def_label = Label::secondary(file_id, def_range)
-                .with_message(format!("The error occurred in function `{}`", fn_name));
-            labels.push(def_label);
+            if let Some(def_span) = def_span {
+                let (file_id, def_range) = self
+                    .code_map
+                    .locate(&def_span)
+                    .expect("Cannot locate span in previously recorded snippets");
+                let def_label = Label::secondary(file_id, def_range)
+                    .with_message(format!("The error occurred in function `{}`", fn_name));
+                labels.push(def_label);
+            }
 
             let mut call_site = call_span;
             for call in calls_iter {
@@ -185,7 +187,6 @@ impl<'a> Env<'a> {
     {
         let bool_color = ColorSpec::new().set_fg(Some(Color::Cyan)).clone();
         let num_color = ColorSpec::new().set_fg(Some(Color::Green)).clone();
-        let fn_color = ColorSpec::new().set_fg(Some(Color::Magenta)).clone();
 
         match value {
             Value::Bool(b) => {
@@ -194,16 +195,10 @@ impl<'a> Env<'a> {
                 self.writer.reset()
             }
 
-            Value::Function(Function::Native(_)) => {
-                self.writer.set_color(&fn_color)?;
-                write!(self.writer, "(native fn)")?;
-                self.writer.reset()
-            }
+            Value::Function(Function::Native(_)) => write!(self.writer, "(native fn)"),
 
             Value::Function(Function::Interpreted(function)) => {
-                self.writer.set_color(&fn_color)?;
                 write!(self.writer, "fn({} args)", function.arg_count())?;
-                self.writer.reset()?;
                 let captures = function.captures();
                 if !captures.is_empty() {
                     writeln!(self.writer, "[")?;
@@ -243,12 +238,23 @@ impl<'a> Env<'a> {
         }
     }
 
-    fn dump_scope<T>(&mut self, scope: &Scope<'_, T>) -> io::Result<()>
+    fn dump_scope<T>(
+        &mut self,
+        scope: &Interpreter<'a, T>,
+        original_scope: &Interpreter<'a, T>,
+    ) -> io::Result<()>
     where
         T: Grammar,
-        T::Lit: fmt::Display,
+        T::Lit: PartialEq + fmt::Display,
     {
         for (name, var) in scope.variables() {
+            if let Some(original_var) = original_scope.get_var(name) {
+                if original_var == var {
+                    // The variable is present in the original scope, no need to output it.
+                    continue;
+                }
+            }
+
             write!(self.writer, "{} = ", name)?;
             self.dump_value(var, 0)?;
             writeln!(self.writer)?;
@@ -260,6 +266,7 @@ impl<'a> Env<'a> {
         &mut self,
         line: &'a str,
         interpreter: &mut Interpreter<'a, T>,
+        original_interpreter: &Interpreter<'a, T>,
     ) -> Result<bool, ()>
     where
         T: Grammar,
@@ -270,8 +277,8 @@ impl<'a> Env<'a> {
 
         if line.starts_with('.') {
             match line {
-                ".clear" => interpreter.innermost_scope().clear(),
-                ".dump" => self.dump_scope(interpreter.innermost_scope()).unwrap(),
+                ".clear" => interpreter.clone_from(original_interpreter),
+                ".dump" => self.dump_scope(interpreter, original_interpreter).unwrap(),
                 ".help" => self.print_help().unwrap(),
 
                 _ => {
@@ -326,7 +333,6 @@ impl<'a> Env<'a> {
 fn init_interpreter<'a, T: NumLiteral>() -> Interpreter<'a, NumGrammar<T>> {
     let mut interpreter = Interpreter::<NumGrammar<T>>::new();
     interpreter
-        .innermost_scope()
         .insert_var("false", Value::Bool(false))
         .insert_var("true", Value::Bool(true))
         .insert_native_fn("if", fns::If)
@@ -353,16 +359,14 @@ pub struct StdLibrary<T: 'static> {
 
 impl<T: NumLiteral> StdLibrary<T> {
     fn add_to_interpreter(self, interpreter: &mut Interpreter<NumGrammar<T>>) {
-        let scope = interpreter.innermost_scope();
-
         for (name, c) in self.constants {
-            scope.insert_var(name, Value::Number(*c));
+            interpreter.insert_var(name, Value::Number(*c));
         }
         for (name, unary_fn) in self.unary {
-            scope.insert_native_fn(name, fns::Unary::new(*unary_fn));
+            interpreter.insert_native_fn(name, fns::Unary::new(*unary_fn));
         }
         for (name, binary_fn) in self.binary {
-            scope.insert_native_fn(name, fns::Binary::new(*binary_fn));
+            interpreter.insert_native_fn(name, fns::Binary::new(*binary_fn));
         }
     }
 }
@@ -411,9 +415,7 @@ impl ReplLiteral for f32 {
     fn create_interpreter<'a>() -> Interpreter<'a, NumGrammar<Self>> {
         let mut interpreter = init_interpreter::<f32>();
         F32_FUNCTIONS.add_to_interpreter(&mut interpreter);
-        interpreter
-            .innermost_scope()
-            .insert_native_fn("cmp", fns::Compare);
+        interpreter.insert_native_fn("cmp", fns::Compare);
         interpreter
     }
 }
@@ -422,9 +424,7 @@ impl ReplLiteral for f64 {
     fn create_interpreter<'a>() -> Interpreter<'a, NumGrammar<Self>> {
         let mut interpreter = init_interpreter::<f64>();
         F64_FUNCTIONS.add_to_interpreter(&mut interpreter);
-        interpreter
-            .innermost_scope()
-            .insert_native_fn("cmp", fns::Compare);
+        interpreter.insert_native_fn("cmp", fns::Compare);
         interpreter
     }
 }

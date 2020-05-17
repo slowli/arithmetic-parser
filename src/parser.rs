@@ -386,18 +386,26 @@ where
 }
 
 /// Simple expression, which includes, besides `simplest_expr`s, function calls.
-fn simple_expr<T, Ty>(input: Span<'_>) -> NomResult<'_, SpannedExpr<'_, T>>
+fn simple_expr<'a, T, Ty>(input: Span<'a>) -> NomResult<'a, SpannedExpr<'a, T>>
 where
     T: Grammar,
     Ty: GrammarType,
 {
-    let method_or_fn_call = alt((
-        preceded(
-            tuple((tag_char('.'), ws::<Ty>)),
-            cut(tuple((map(var_name, Some), fn_args::<T, Ty>))),
-        ),
-        map(fn_args::<T, Ty>, |args| (None, args)),
-    ));
+    type MethodOrFnCallReturn<'s, T> = (Option<Span<'s>>, (Vec<SpannedExpr<'s, T>>, bool));
+
+    let method_or_fn_call: Box<dyn Fn(Span<'a>) -> NomResult<'a, MethodOrFnCallReturn<'a, T>>> =
+        if T::FEATURES.methods {
+            let parser = alt((
+                preceded(
+                    tuple((tag_char('.'), ws::<Ty>)),
+                    cut(tuple((map(var_name, Some), fn_args::<T, Ty>))),
+                ),
+                map(fn_args::<T, Ty>, |args| (None, args)),
+            ));
+            Box::new(parser)
+        } else {
+            Box::new(map(fn_args::<T, Ty>, |args| (None, args)))
+        };
 
     let parser = tuple((
         simplest_expr::<T, Ty>,

@@ -10,8 +10,8 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 use typed_arena::Arena;
 
 use arithmetic_parser::{
+    eval::{fns, CallContext, Interpreter, NativeFn, Value},
     grammars::F32Grammar,
-    interpreter::{fns, CallContext, Interpreter, NativeFn, Value},
     GrammarExt, Span,
 };
 
@@ -47,7 +47,7 @@ fn bench_mul_native_with_value(bencher: &mut Bencher<'_>) {
                 .into_iter()
                 .fold(Value::<F32Grammar>::Number(1.0), |acc, x| match (acc, x) {
                     (Value::Number(acc), Value::Number(x)) => Value::Number(acc * x),
-                    _ => unimplemented!("oops"),
+                    _ => unreachable!(),
                 })
         },
         BatchSize::SmallInput,
@@ -64,9 +64,10 @@ fn bench_mul(bencher: &mut Bencher<'_>) {
                 .map(|_| rng.gen_range(0.5_f32, 1.5).to_string())
                 .collect();
             let program = arena.alloc(values.join(" * "));
-            F32Grammar::parse_statements(Span::new(program)).unwrap()
+            let program = F32Grammar::parse_statements(Span::new(program)).unwrap();
+            Interpreter::new().compile(&program).unwrap()
         },
-        |block| Interpreter::new().evaluate(&block).unwrap(),
+        |block| block.run().unwrap(),
         BatchSize::SmallInput,
     );
 }
@@ -78,18 +79,21 @@ fn bench_mul_fold(bencher: &mut Bencher<'_>) {
 
     bencher.iter_batched(
         || {
+            let mut interpreter = Interpreter::new();
+            let mut module = interpreter
+                .insert_native_fn("fold", fns::Fold)
+                .insert_var("xs", Value::Tuple(vec![]))
+                .compile(&program)
+                .unwrap();
+
             let values: Vec<_> = (0..ELEMENTS)
                 .map(|_| rng.gen_range(0.5_f32, 1.5))
                 .map(Value::Number)
                 .collect();
-            let mut interpreter = Interpreter::new();
-            interpreter
-                .innermost_scope()
-                .insert_native_fn("fold", fns::Fold)
-                .insert_var("xs", Value::Tuple(values));
-            interpreter
+            module.set_import("xs", Value::Tuple(values));
+            module
         },
-        |mut interpreter| interpreter.evaluate(&program).unwrap(),
+        |module| module.run(),
         BatchSize::SmallInput,
     );
 }
@@ -182,7 +186,6 @@ fn bench_reverse(bencher: &mut Bencher<'_>) {
 
     let mut interpreter = Interpreter::new();
     interpreter
-        .innermost_scope()
         .insert_native_fn("fold", fns::Fold)
         .insert_native_fn("merge", fns::Merge);
     interpreter.evaluate(&rev_fn).unwrap();
@@ -195,9 +198,7 @@ fn bench_reverse(bencher: &mut Bencher<'_>) {
                 .collect::<Vec<_>>()
         },
         |values| {
-            interpreter
-                .innermost_scope()
-                .insert_var("xs", Value::Tuple(values));
+            interpreter.insert_var("xs", Value::Tuple(values));
             interpreter.evaluate(&program).unwrap()
         },
         BatchSize::SmallInput,

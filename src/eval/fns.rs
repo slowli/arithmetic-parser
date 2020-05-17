@@ -5,7 +5,7 @@ use num_traits::{Num, One, Pow, Zero};
 use std::ops;
 
 use crate::{
-    interpreter::{
+    eval::{
         AuxErrorInfo, CallContext, EvalError, EvalResult, Function, NativeFn, SpannedEvalError,
         SpannedValue, Value,
     },
@@ -67,7 +67,7 @@ fn extract_fn<'a, T: Grammar>(
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{fns, EvalError, Interpreter}, grammars::F32Grammar, GrammarExt, Span,
+/// #     eval::{fns, EvalError, Interpreter}, grammars::F32Grammar, GrammarExt, Span,
 /// # };
 /// # use assert_matches::assert_matches;
 /// let program = r#"
@@ -77,7 +77,7 @@ fn extract_fn<'a, T: Grammar>(
 /// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
-/// interpreter.innermost_scope().insert_native_fn("assert", fns::Assert);
+/// interpreter.insert_native_fn("assert", fns::Assert);
 /// let err = interpreter.evaluate(&block).unwrap_err();
 /// assert_eq!(err.main_span().fragment, "assert(3^2 == 10)");
 /// assert_matches!(
@@ -123,14 +123,14 @@ impl<T: Grammar> NativeFn<T> for Assert {
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{fns::If, Interpreter, Value}, grammars::F32Grammar,
+/// #     eval::{fns::If, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = "x = 3; if(x == 2, -1, x + 1)";
 /// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
-/// interpreter.innermost_scope().insert_native_fn("if", If);
+/// interpreter.insert_native_fn("if", If);
 /// let ret = interpreter.evaluate(&block).unwrap();
 /// assert_eq!(ret, Value::Number(4.0));
 /// ```
@@ -140,14 +140,14 @@ impl<T: Grammar> NativeFn<T> for Assert {
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{fns::If, Interpreter, Value}, grammars::F32Grammar,
+/// #     eval::{fns::If, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = "x = 3; if(x == 2, || -1, || x + 1)()";
 /// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
-/// interpreter.innermost_scope().insert_native_fn("if", If);
+/// interpreter.insert_native_fn("if", If);
 /// let ret = interpreter.evaluate(&block).unwrap();
 /// assert_eq!(ret, Value::Number(4.0));
 /// ```
@@ -193,7 +193,7 @@ where
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{fns, Interpreter, Value}, grammars::F32Grammar,
+/// #     eval::{fns, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = r#"
@@ -209,7 +209,6 @@ where
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
-///     .innermost_scope()
 ///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("if", fns::If)
 ///     .insert_native_fn("loop", fns::Loop);
@@ -290,7 +289,7 @@ where
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{fns, Interpreter, Value}, grammars::F32Grammar,
+/// #     eval::{fns, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = r#"
@@ -301,7 +300,6 @@ where
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
-///     .innermost_scope()
 ///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("if", fns::If)
 ///     .insert_native_fn("map", fns::Map);
@@ -357,7 +355,7 @@ where
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{fns, Interpreter, Value}, grammars::F32Grammar,
+/// #     eval::{fns, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = r#"
@@ -368,7 +366,6 @@ where
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
-///     .innermost_scope()
 ///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("filter", fns::Filter);
 /// let ret = interpreter.evaluate(&block).unwrap();
@@ -429,7 +426,7 @@ where
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{fns, Interpreter, Value}, grammars::F32Grammar,
+/// #     eval::{fns, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = r#"
@@ -440,7 +437,6 @@ where
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
-///     .innermost_scope()
 ///     .insert_native_fn("fold", fns::Fold);
 /// let ret = interpreter.evaluate(&block).unwrap();
 /// assert_eq!(ret, Value::Bool(true));
@@ -490,7 +486,7 @@ where
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{fns, Interpreter, Value}, grammars::F32Grammar,
+/// #     eval::{fns, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = r#"
@@ -508,7 +504,6 @@ where
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
-///     .innermost_scope()
 ///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("if", fns::If)
 ///     .insert_native_fn("loop", fns::Loop)
@@ -554,7 +549,7 @@ where
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     interpreter::{fns, Interpreter, Value}, grammars::F32Grammar,
+/// #     eval::{fns, Interpreter, Value}, grammars::F32Grammar,
 /// #     GrammarExt, Span,
 /// # };
 /// let program = r#"
@@ -566,7 +561,6 @@ where
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
-///     .innermost_scope()
 ///     .insert_native_fn("fold", fns::Fold)
 ///     .insert_native_fn("merge", fns::Merge);
 /// let ret = interpreter.evaluate(&block).unwrap();
@@ -722,7 +716,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{grammars::F32Grammar, interpreter::Interpreter, GrammarExt, Span};
+    use crate::{eval::Interpreter, grammars::F32Grammar, GrammarExt, Span};
 
     use std::f32;
 
@@ -730,7 +724,6 @@ mod tests {
     fn if_basic() {
         let mut interpreter = Interpreter::new();
         interpreter
-            .innermost_scope()
             .insert_native_fn("if", If)
             .insert_native_fn("cmp", Compare);
 
@@ -755,7 +748,6 @@ mod tests {
     fn loop_basic() {
         let mut interpreter = Interpreter::new();
         interpreter
-            .innermost_scope()
             .insert_native_fn("loop", Loop)
             .insert_native_fn("if", If)
             .insert_native_fn("cmp", Compare);
@@ -794,7 +786,6 @@ mod tests {
     fn max_value_with_fold() {
         let mut interpreter = Interpreter::new();
         interpreter
-            .innermost_scope()
             .insert_var("Inf", Value::Number(f32::INFINITY))
             .insert_native_fn("cmp", Compare)
             .insert_native_fn("if", If)
@@ -815,7 +806,6 @@ mod tests {
     fn reverse_list_with_fold() {
         let mut interpreter = Interpreter::new();
         interpreter
-            .innermost_scope()
             .insert_native_fn("merge", Merge)
             .insert_native_fn("fold", Fold);
 
@@ -823,10 +813,28 @@ mod tests {
             reverse = |xs| {
                 fold(xs, (), |acc, x| merge((x,), acc))
             };
-            reverse((-4, 3, 0, 1)) == (1, 0, 3, -4)
+            xs = (-4, 3, 0, 1);
+            xs.reverse() == (1, 0, 3, -4)
         "#;
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
+
+        let program = "xs.reverse()";
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let mut module = interpreter.compile(&block).unwrap();
+
+        const SAMPLES: &[(&[f32], &[f32])] = &[
+            (&[1.0, 2.0, 3.0], &[3.0, 2.0, 1.0]),
+            (&[], &[]),
+            (&[1.0], &[1.0]),
+        ];
+
+        for &(input, expected) in SAMPLES {
+            let input = input.iter().copied().map(Value::Number).collect();
+            let expected = expected.iter().copied().map(Value::Number).collect();
+            module.set_import("xs", Value::Tuple(input));
+            assert_eq!(module.run().unwrap(), Value::Tuple(expected));
+        }
     }
 }

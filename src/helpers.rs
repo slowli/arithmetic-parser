@@ -64,16 +64,3 @@ pub fn unite_spans<'a, T, U>(
         extra: (),
     }
 }
-
-pub fn cover_spans<'a, T>(input: Span<'a>, items: &[Spanned<'a, T>]) -> Span<'a> {
-    match items {
-        [] => Span {
-            offset: input.offset,
-            line: input.line,
-            fragment: "",
-            extra: (),
-        },
-        [item] => create_span_ref(item, ()),
-        items => unite_spans(input, items.first().unwrap(), items.last().unwrap()),
-    }
-}

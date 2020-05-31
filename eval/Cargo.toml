@@ -7,6 +7,8 @@ readme = "README.md"
 license = "Apache-2.0"
 description = "Simple interpreter for arithmetic expressions."
 repository = "https://github.com/slowli/arithmetic-parser"
+categories = ["mathematics", "no-std"]
+keywords = ["interpreter", "arithmetic"]
 
 [dependencies]
 # Public dependencies (present in the public API).

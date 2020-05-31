@@ -9,11 +9,8 @@ use criterion::{criterion_group, criterion_main, BatchSize, Bencher, Criterion, 
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use typed_arena::Arena;
 
-use arithmetic_parser::{
-    eval::{fns, CallContext, Interpreter, NativeFn, Value},
-    grammars::F32Grammar,
-    GrammarExt, Span,
-};
+use arithmetic_eval::{fns, CallContext, Interpreter, NativeFn, Value};
+use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
 
 const SEED: u64 = 123;
 const ELEMENTS: u64 = 100;

@@ -5,12 +5,10 @@ use num_traits::{Num, One, Pow, Zero};
 use std::ops;
 
 use crate::{
-    eval::{
-        AuxErrorInfo, CallContext, EvalError, EvalResult, Function, NativeFn, SpannedEvalError,
-        SpannedValue, Value,
-    },
-    Grammar,
+    AuxErrorInfo, CallContext, EvalError, EvalResult, Function, NativeFn, SpannedEvalError,
+    SpannedValue, Value,
 };
+use arithmetic_parser::Grammar;
 
 fn extract_number<'a, T: Grammar>(
     ctx: &CallContext<'_, 'a>,
@@ -716,7 +714,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{eval::Interpreter, grammars::F32Grammar, GrammarExt, Span};
+    use crate::Interpreter;
+
+    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
 
     use std::f32;
 

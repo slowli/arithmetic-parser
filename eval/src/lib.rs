@@ -35,11 +35,8 @@
 //! # Examples
 //!
 //! ```
-//! use arithmetic_parser::{
-//!     grammars::F32Grammar,
-//!     eval::{fns, Interpreter, Value},
-//!     Grammar, GrammarExt, Span,
-//! };
+//! use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, Span};
+//! use arithmetic_eval::{fns, Interpreter, Value};
 //!
 //! const MIN: fns::Binary<fn(f32, f32) -> f32> =
 //!     fns::Binary::new(|x, y| if x < y { x } else { y });
@@ -79,8 +76,8 @@ use num_traits::{Num, Pow};
 
 use std::ops;
 
-use self::{compiler::Compiler, executable::Env};
-use crate::{Block, Grammar};
+use crate::{compiler::Compiler, executable::Env};
+use arithmetic_parser::{Block, Grammar};
 
 mod compiler;
 mod error;
@@ -180,7 +177,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{grammars::F32Grammar, BinaryOp, GrammarExt, LvalueLen, Span, UnaryOp};
+    use arithmetic_parser::{grammars::F32Grammar, BinaryOp, GrammarExt, LvalueLen, Span, UnaryOp};
 
     use assert_matches::assert_matches;
     use std::{collections::HashMap, iter::FromIterator, rc::Rc};

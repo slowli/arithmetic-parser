@@ -6,12 +6,11 @@ use smallvec::{smallvec, SmallVec};
 use std::{collections::HashMap, ops, rc::Rc};
 
 use crate::{
-    eval::{
-        Backtrace, CallContext, ErrorWithBacktrace, EvalError, EvalResult, InterpretedFn,
-        SpannedEvalError, TupleLenMismatchContext, Value,
-    },
-    helpers::create_span_ref,
-    BinaryOp, Grammar, LvalueLen, Span, Spanned, UnaryOp,
+    Backtrace, CallContext, ErrorWithBacktrace, EvalError, EvalResult, InterpretedFn,
+    SpannedEvalError, TupleLenMismatchContext, Value,
+};
+use arithmetic_parser::{
+    helpers::create_span_ref, BinaryOp, Grammar, LvalueLen, Span, Spanned, UnaryOp,
 };
 
 /// Pointer to a register or constant.
@@ -510,7 +509,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{eval::compiler::Compiler, grammars::F32Grammar, GrammarExt};
+    use crate::compiler::Compiler;
+
+    use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 
     #[test]
     fn iterative_evaluation() {

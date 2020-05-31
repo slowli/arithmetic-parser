@@ -60,9 +60,9 @@ use nom_locate::{LocatedSpan, LocatedSpanEx};
 use crate::helpers::create_span_ref;
 use std::fmt;
 
-pub mod eval;
 pub mod grammars;
-mod helpers;
+#[doc(hidden)]
+pub mod helpers;
 mod parser;
 mod traits;
 
@@ -503,7 +503,9 @@ pub enum DestructureRest<'a, T> {
 }
 
 impl<'a, T> DestructureRest<'a, T> {
-    pub(crate) fn to_lvalue(&self) -> Option<SpannedLvalue<'a, T>> {
+    /// Tries to convert this rest declaration into an lvalue. Return `None` if the rest declaration
+    /// is unnamed.
+    pub fn to_lvalue(&self) -> Option<SpannedLvalue<'a, T>> {
         match self {
             Self::Named { variable, .. } => {
                 Some(create_span_ref(variable, Lvalue::Variable { ty: None }))

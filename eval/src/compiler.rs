@@ -3,16 +3,14 @@
 use std::{collections::HashMap, iter};
 
 use crate::{
-    eval::{
-        executable::{
-            Atom, Command, CompiledExpr, Env, Executable, ExecutableFn, ExecutableModule,
-            SpannedAtom,
-        },
-        AuxErrorInfo, EvalError, RepeatedAssignmentContext, SpannedEvalError,
+    executable::{
+        Atom, Command, CompiledExpr, Env, Executable, ExecutableFn, ExecutableModule, SpannedAtom,
     },
-    helpers::create_span_ref,
-    Block, Destructure, Expr, FnDefinition, Grammar, Lvalue, Span, Spanned, SpannedExpr,
-    SpannedLvalue, SpannedStatement, Statement,
+    AuxErrorInfo, EvalError, RepeatedAssignmentContext, SpannedEvalError,
+};
+use arithmetic_parser::{
+    helpers::create_span_ref, Block, Destructure, Expr, FnDefinition, Grammar, Lvalue, Span,
+    Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -589,7 +587,9 @@ fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{eval::Value, grammars::F32Grammar, GrammarExt, Span};
+    use crate::Value;
+
+    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
 
     use std::iter::FromIterator;
 

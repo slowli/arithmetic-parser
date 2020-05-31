@@ -5,12 +5,11 @@ use num_traits::{Num, Pow};
 use std::{collections::HashMap, fmt, ops, rc::Rc};
 
 use crate::{
-    eval::{
-        executable::ExecutableFn, AuxErrorInfo, Backtrace, EvalError, EvalResult, SpannedEvalError,
-        TupleLenMismatchContext,
-    },
-    helpers::create_span_ref,
-    BinaryOp, Grammar, LvalueLen, Op, Span, Spanned, UnaryOp,
+    executable::ExecutableFn, AuxErrorInfo, Backtrace, EvalError, EvalResult, SpannedEvalError,
+    TupleLenMismatchContext,
+};
+use arithmetic_parser::{
+    helpers::create_span_ref, BinaryOp, Grammar, LvalueLen, Op, Span, Spanned, UnaryOp,
 };
 
 /// Opaque context for native calls.

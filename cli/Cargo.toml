@@ -21,3 +21,7 @@ typed-arena = "1.5.0"
 version = "0.1.0"
 path = ".."
 features = ["num-complex"]
+
+[dependencies.arithmetic-eval]
+version = "0.1.0"
+path = "../eval"

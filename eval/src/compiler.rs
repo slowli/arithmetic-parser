@@ -1,8 +1,11 @@
 //! Transformation of AST output by the parser into non-recursive format.
 
-use std::{collections::HashMap, iter};
+use hashbrown::HashMap;
+
+use core::iter;
 
 use crate::{
+    alloc::{vec, ToOwned, Vec},
     executable::{
         Atom, Command, CompiledExpr, Env, Executable, ExecutableFn, ExecutableModule, SpannedAtom,
     },
@@ -591,7 +594,7 @@ mod tests {
 
     use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
 
-    use std::iter::FromIterator;
+    use core::iter::FromIterator;
 
     #[test]
     fn compilation_basics() {

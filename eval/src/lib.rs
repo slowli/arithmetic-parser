@@ -64,6 +64,36 @@
 //! assert_eq!(ret, Value::Number(9.0));
 //! ```
 
+#![cfg_attr(not(feature = "std"), no_std)]
+#![warn(missing_docs, missing_debug_implementations)]
+
+// Polyfill for `alloc` types.
+mod alloc {
+    #[cfg(not(feature = "std"))]
+    extern crate alloc;
+
+    #[cfg(not(feature = "std"))]
+    pub use alloc::{
+        borrow::ToOwned,
+        boxed::Box,
+        format,
+        rc::Rc,
+        string::{String, ToString},
+        vec,
+        vec::Vec,
+    };
+    #[cfg(feature = "std")]
+    pub use std::{
+        borrow::ToOwned,
+        boxed::Box,
+        format,
+        rc::Rc,
+        string::{String, ToString},
+        vec,
+        vec::Vec,
+    };
+}
+
 pub use self::{
     error::{
         AuxErrorInfo, Backtrace, BacktraceElement, ErrorWithBacktrace, EvalError, EvalResult,
@@ -75,7 +105,7 @@ pub use self::{
 
 use num_traits::{Num, Pow};
 
-use std::ops;
+use core::ops;
 
 use crate::{compiler::Compiler, executable::Env};
 use arithmetic_parser::{Block, Grammar};
@@ -178,10 +208,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::alloc::{vec, Rc};
     use arithmetic_parser::{grammars::F32Grammar, BinaryOp, GrammarExt, LvalueLen, Span, UnaryOp};
 
     use assert_matches::assert_matches;
-    use std::{collections::HashMap, iter::FromIterator, rc::Rc};
+    use hashbrown::HashMap;
+
+    use core::iter::FromIterator;
 
     const SIN: fns::Unary<fn(f32) -> f32> = fns::Unary::new(f32::sin);
 
@@ -393,14 +426,16 @@ mod tests {
             Value::Tuple(vec![Value::Number(0.0), Value::Number(0.0)])
         );
 
-        let add = interpreter.get_var("add").unwrap();
-        let add = match add {
-            Value::Function(Function::Interpreted(function)) => function,
-            other => panic!("Unexpected `add` value: {:?}", other),
-        };
-        let captures = add.captures();
-        assert_eq!(captures.len(), 1);
-        assert_matches!(captures["op"], Value::Function(_));
+        {
+            let add = interpreter.get_var("add").unwrap();
+            let add = match add {
+                Value::Function(Function::Interpreted(function)) => function,
+                other => panic!("Unexpected `add` value: {:?}", other),
+            };
+            let captures = add.captures();
+            assert_eq!(captures.len(), 1);
+            assert_matches!(captures["op"], Value::Function(_));
+        }
 
         let program = r#"
             div = gen(|x, y| x / y);

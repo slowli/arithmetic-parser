@@ -1,11 +1,13 @@
 //! Executables output by a `Compiler` and related types.
 
+use hashbrown::HashMap;
 use num_traits::{Num, Pow};
 use smallvec::{smallvec, SmallVec};
 
-use std::{collections::HashMap, ops, rc::Rc};
+use core::ops;
 
 use crate::{
+    alloc::{vec, Rc, Vec},
     Backtrace, CallContext, ErrorWithBacktrace, EvalError, EvalResult, InterpretedFn,
     SpannedEvalError, TupleLenMismatchContext, Value,
 };

@@ -14,14 +14,20 @@ arithmetic-parser = { version = "0.1.0", path = ".." }
 num-traits = "0.2.11"
 
 # Private dependencies.
+derive_more = "0.99.7"
+hashbrown = "0.7.2"
 smallvec = "1.3.0"
-thiserror = "1.0.14"
 
 [dev-dependencies]
 assert_matches = "1.3.0"
 criterion = "0.3.1"
 rand = "0.7.3"
 typed-arena = "2.0.1"
+
+[features]
+default = ["std"]
+# Enables support of types from `std`, such as the `Error` trait.
+std = []
 
 [[bench]]
 name = "interpreter"

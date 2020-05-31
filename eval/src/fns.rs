@@ -2,9 +2,10 @@
 
 use num_traits::{Num, One, Pow, Zero};
 
-use std::ops;
+use core::ops;
 
 use crate::{
+    alloc::{vec, Vec},
     AuxErrorInfo, CallContext, EvalError, EvalResult, Function, NativeFn, SpannedEvalError,
     SpannedValue, Value,
 };
@@ -701,7 +702,7 @@ mod tests {
 
     use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
 
-    use std::f32;
+    use core::f32;
 
     #[test]
     fn if_basic() {

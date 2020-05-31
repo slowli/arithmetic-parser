@@ -11,6 +11,7 @@ pub fn create_span<T, U>(span: Spanned<T>, extra: U) -> Spanned<U> {
     }
 }
 
+/// Spans the given value based on the provided spanned reference.
 pub fn create_span_ref<'a, T, U>(span: &Spanned<'a, T>, extra: U) -> Spanned<'a, U> {
     Spanned {
         offset: span.offset,

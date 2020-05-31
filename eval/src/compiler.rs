@@ -9,8 +9,8 @@ use crate::{
     AuxErrorInfo, EvalError, RepeatedAssignmentContext, SpannedEvalError,
 };
 use arithmetic_parser::{
-    helpers::create_span_ref, Block, Destructure, Expr, FnDefinition, Grammar, Lvalue, Span,
-    Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
+    create_span_ref, Block, Destructure, Expr, FnDefinition, Grammar, Lvalue, Span, Spanned,
+    SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
 };
 
 #[derive(Debug, Clone, Default)]

@@ -50,6 +50,8 @@
 
 #![warn(missing_docs, missing_debug_implementations)]
 
+#[doc(hidden)] // used in the `eval` crate
+pub use crate::helpers::create_span_ref;
 pub use crate::{
     parser::{Error, SpannedError},
     traits::{Features, Grammar, GrammarExt},
@@ -57,12 +59,10 @@ pub use crate::{
 
 use nom_locate::{LocatedSpan, LocatedSpanEx};
 
-use crate::helpers::create_span_ref;
 use std::fmt;
 
 pub mod grammars;
-#[doc(hidden)]
-pub mod helpers;
+mod helpers;
 mod parser;
 mod traits;
 

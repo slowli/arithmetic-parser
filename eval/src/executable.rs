@@ -9,9 +9,7 @@ use crate::{
     Backtrace, CallContext, ErrorWithBacktrace, EvalError, EvalResult, InterpretedFn,
     SpannedEvalError, TupleLenMismatchContext, Value,
 };
-use arithmetic_parser::{
-    helpers::create_span_ref, BinaryOp, Grammar, LvalueLen, Span, Spanned, UnaryOp,
-};
+use arithmetic_parser::{create_span_ref, BinaryOp, Grammar, LvalueLen, Span, Spanned, UnaryOp};
 
 /// Pointer to a register or constant.
 #[derive(Debug, Clone, Copy)]

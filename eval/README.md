@@ -15,4 +15,8 @@ can be solved with native `if` / `loop` functions).
 The interpreter is quite slow – 1–2 orders of magnitude slower than native
 floating-point arithmetic.
 
+## License
+
+Licensed under the [Apache-2.0 license](LICENSE).
+
 [`arithmetic-parser`]: https://docs.rs/crates/arithmetic-parser

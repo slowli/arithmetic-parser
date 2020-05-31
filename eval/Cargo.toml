@@ -10,7 +10,7 @@ repository = "https://github.com/slowli/arithmetic-parser"
 
 [dependencies]
 # Public dependencies (present in the public API).
-arithmetic-parser = { version = "0.1.0", path = ".." }
+arithmetic-parser = { version = "0.1.0", path = "../parser" }
 num-traits = "0.2.11"
 
 # Private dependencies.

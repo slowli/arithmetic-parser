@@ -16,8 +16,8 @@ use std::{
     ops::Range,
 };
 
+use arithmetic_eval::{fns, BacktraceElement, ErrorWithBacktrace, Function, Interpreter, Value};
 use arithmetic_parser::{
-    eval::{fns, BacktraceElement, ErrorWithBacktrace, Function, Interpreter, Value},
     grammars::{NumGrammar, NumLiteral},
     Block, Error, Grammar, GrammarExt, Span, Spanned,
 };

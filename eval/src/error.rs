@@ -1,12 +1,14 @@
 //! Evaluation errors.
 
-use thiserror::Error;
+use derive_more::Display;
 
-use std::fmt;
+use core::fmt;
 
 use crate::{
-    eval::Value, helpers::create_span_ref, BinaryOp, LvalueLen, Op, Span, Spanned, UnaryOp,
+    alloc::{format, vec, String, ToOwned, Vec},
+    Value,
 };
+use arithmetic_parser::{create_span_ref, BinaryOp, LvalueLen, Op, Span, Spanned, UnaryOp};
 
 /// Context for [`EvalError::TupleLenMismatch`].
 ///
@@ -49,12 +51,14 @@ impl fmt::Display for RepeatedAssignmentContext {
 }
 
 /// Errors that can occur during interpreting expressions and statements.
-#[derive(Debug, Error)]
+#[derive(Debug, Display)]
 pub enum EvalError {
     /// Mismatch between length of tuples in a binary operation or assignment.
-    #[error(
-        "Mismatch between length of tuples in {context}: \
-         LHS has {lhs} element(s), whereas RHS has {rhs}"
+    #[display(
+        fmt = "Mismatch between length of tuples in {}: LHS has {} element(s), whereas RHS has {}",
+        context,
+        lhs,
+        rhs
     )]
     TupleLenMismatch {
         /// Length of a tuple on the left-hand side.
@@ -66,9 +70,11 @@ pub enum EvalError {
     },
 
     /// Mismatch between the number of arguments in the function definition and its call.
-    #[error(
-        "Mismatch between the number of arguments in the function definition and its call: \
-         definition requires {def} arg(s), call has {call}"
+    #[display(
+        fmt = "Mismatch between the number of arguments in the function definition and its call: \
+            definition requires {} arg(s), call has {}",
+        def,
+        call
     )]
     ArgsLenMismatch {
         /// Number of args at the function definition.
@@ -78,30 +84,30 @@ pub enum EvalError {
     },
 
     /// Cannot destructure a non-tuple variable.
-    #[error("Cannot destructure a non-tuple variable.")]
+    #[display(fmt = "Cannot destructure a non-tuple variable")]
     CannotDestructure,
 
     /// Repeated assignment to the same variable in function args or tuple destructuring.
-    #[error("Repeated assignment to the same variable in {context}")]
+    #[display(fmt = "Repeated assignment to the same variable in {}", context)]
     RepeatedAssignment {
         /// Context in which the error has occurred.
         context: RepeatedAssignmentContext,
     },
 
     /// Variable with the enclosed name is not defined.
-    #[error("Variable `{0}` is not defined")]
+    #[display(fmt = "Variable `{}` is not defined", _0)]
     Undefined(String),
 
     /// Value is not callable (i.e., is not a function).
-    #[error("Value is not callable")]
+    #[display(fmt = "Value is not callable")]
     CannotCall,
 
     /// Generic error during execution of a native function.
-    #[error("Failed executing native function: {0}")]
+    #[display(fmt = "Failed executing native function: {}", _0)]
     NativeCall(String),
 
     /// Unexpected operand type for the specified operation.
-    #[error("Unexpected operand type for {op}")]
+    #[display(fmt = "Unexpected operand type for {}", op)]
     UnexpectedOperand {
         /// Operation which failed.
         op: Op,
@@ -188,6 +194,9 @@ impl EvalError {
         })
     }
 }
+
+#[cfg(feature = "std")]
+impl std::error::Error for EvalError {}
 
 /// Auxiliary information about error.
 #[derive(Debug)]
@@ -335,5 +344,25 @@ impl<'a> ErrorWithBacktrace<'a> {
     /// Returns error backtrace.
     pub fn backtrace(&self) -> &Backtrace<'a> {
         &self.backtrace
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::alloc::ToString;
+
+    #[test]
+    fn display_for_error() {
+        let err = EvalError::Undefined("test".to_owned());
+        assert_eq!(err.to_string(), "Variable `test` is not defined");
+
+        let err = EvalError::ArgsLenMismatch {
+            def: LvalueLen::AtLeast(2),
+            call: 1,
+        };
+        assert!(err
+            .to_string()
+            .ends_with("definition requires at least 2 arg(s), call has 1"));
     }
 }

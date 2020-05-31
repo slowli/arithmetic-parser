@@ -19,5 +19,9 @@ typed-arena = "1.5.0"
 
 [dependencies.arithmetic-parser]
 version = "0.1.0"
-path = ".."
+path = "../parser"
 features = ["num-complex"]
+
+[dependencies.arithmetic-eval]
+version = "0.1.0"
+path = "../eval"

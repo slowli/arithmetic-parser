@@ -1,4 +1,4 @@
-//! Simple interpreter for ASTs produced by the parser.
+//! Simple interpreter for ASTs produced by [`arithmetic-parser`].
 //!
 //! # Assumptions
 //!
@@ -15,7 +15,7 @@
 //! # Semantics
 //!
 //! - All variables are immutable. Re-declaring a var shadows the previous declaration.
-//! - Functions are first-class (in fact, a function is just a variant of a [`Value`]).
+//! - Functions are first-class (in fact, a function is just a variant of the [`Value`] enum).
 //! - Functions can capture variables (including other functions). All captures are by value.
 //! - Arithmetic operations are defined on primitive vars and tuples. With tuples, operations
 //!   are performed per-element. Binary operations require tuples of the same size,
@@ -29,17 +29,15 @@
 //!   code that is incorrect with annotations (e.g., assignment of a tuple to a variable which
 //!   is annotated to have a numeric type).
 //!
+//! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
 //! [`Interpreter`]: struct.Interpreter.html
 //! [`Value`]: enum.Value.html
 //!
 //! # Examples
 //!
 //! ```
-//! use arithmetic_parser::{
-//!     grammars::F32Grammar,
-//!     eval::{fns, Interpreter, Value},
-//!     Grammar, GrammarExt, Span,
-//! };
+//! use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, Span};
+//! use arithmetic_eval::{fns, Interpreter, Value};
 //!
 //! const MIN: fns::Binary<fn(f32, f32) -> f32> =
 //!     fns::Binary::new(|x, y| if x < y { x } else { y });
@@ -66,6 +64,36 @@
 //! assert_eq!(ret, Value::Number(9.0));
 //! ```
 
+#![cfg_attr(not(feature = "std"), no_std)]
+#![warn(missing_docs, missing_debug_implementations)]
+
+// Polyfill for `alloc` types.
+mod alloc {
+    #[cfg(not(feature = "std"))]
+    extern crate alloc;
+
+    #[cfg(not(feature = "std"))]
+    pub use alloc::{
+        borrow::ToOwned,
+        boxed::Box,
+        format,
+        rc::Rc,
+        string::{String, ToString},
+        vec,
+        vec::Vec,
+    };
+    #[cfg(feature = "std")]
+    pub use std::{
+        borrow::ToOwned,
+        boxed::Box,
+        format,
+        rc::Rc,
+        string::{String, ToString},
+        vec,
+        vec::Vec,
+    };
+}
+
 pub use self::{
     error::{
         AuxErrorInfo, Backtrace, BacktraceElement, ErrorWithBacktrace, EvalError, EvalResult,
@@ -77,10 +105,10 @@ pub use self::{
 
 use num_traits::{Num, Pow};
 
-use std::ops;
+use core::ops;
 
-use self::{compiler::Compiler, executable::Env};
-use crate::{Block, Grammar};
+use crate::{compiler::Compiler, executable::Env};
+use arithmetic_parser::{Block, Grammar};
 
 mod compiler;
 mod error;
@@ -180,10 +208,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{grammars::F32Grammar, BinaryOp, GrammarExt, LvalueLen, Span, UnaryOp};
+    use crate::alloc::{vec, Rc};
+    use arithmetic_parser::{grammars::F32Grammar, BinaryOp, GrammarExt, LvalueLen, Span, UnaryOp};
 
     use assert_matches::assert_matches;
-    use std::{collections::HashMap, iter::FromIterator, rc::Rc};
+    use hashbrown::HashMap;
+
+    use core::iter::FromIterator;
 
     const SIN: fns::Unary<fn(f32) -> f32> = fns::Unary::new(f32::sin);
 
@@ -395,14 +426,16 @@ mod tests {
             Value::Tuple(vec![Value::Number(0.0), Value::Number(0.0)])
         );
 
-        let add = interpreter.get_var("add").unwrap();
-        let add = match add {
-            Value::Function(Function::Interpreted(function)) => function,
-            other => panic!("Unexpected `add` value: {:?}", other),
-        };
-        let captures = add.captures();
-        assert_eq!(captures.len(), 1);
-        assert_matches!(captures["op"], Value::Function(_));
+        {
+            let add = interpreter.get_var("add").unwrap();
+            let add = match add {
+                Value::Function(Function::Interpreted(function)) => function,
+                other => panic!("Unexpected `add` value: {:?}", other),
+            };
+            let captures = add.captures();
+            assert_eq!(captures.len(), 1);
+            assert_matches!(captures["op"], Value::Function(_));
+        }
 
         let program = r#"
             div = gen(|x, y| x / y);

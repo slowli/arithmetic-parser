@@ -8,7 +8,7 @@ use nom::{
 };
 use num_traits::{Num, Pow};
 
-use std::{f32, f64, fmt, marker::PhantomData, ops};
+use core::{f32, f64, fmt, marker::PhantomData, ops};
 
 use crate::{Features, Grammar, NomResult, Span};
 
@@ -120,7 +120,7 @@ mod tests {
     use crate::{Expr, GrammarExt};
 
     use assert_matches::assert_matches;
-    use std::f32::INFINITY;
+    use core::f32::INFINITY;
 
     #[test]
     fn parsing_infinity() {

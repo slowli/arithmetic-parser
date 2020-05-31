@@ -1,16 +1,17 @@
 //! Values used by the interpreter.
 
+use hashbrown::HashMap;
 use num_traits::{Num, Pow};
 
-use std::{collections::HashMap, fmt, ops, rc::Rc};
+use core::{fmt, ops};
 
 use crate::{
-    eval::{
-        executable::ExecutableFn, AuxErrorInfo, Backtrace, EvalError, EvalResult, SpannedEvalError,
-        TupleLenMismatchContext,
-    },
-    helpers::create_span_ref,
-    BinaryOp, Grammar, LvalueLen, Op, Span, Spanned, UnaryOp,
+    alloc::{vec, Rc, Vec},
+    executable::ExecutableFn,
+    AuxErrorInfo, Backtrace, EvalError, EvalResult, SpannedEvalError, TupleLenMismatchContext,
+};
+use arithmetic_parser::{
+    create_span_ref, BinaryOp, Grammar, LvalueLen, Op, Span, Spanned, UnaryOp,
 };
 
 /// Opaque context for native calls.

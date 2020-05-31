@@ -1,18 +1,19 @@
 //! Transformation of AST output by the parser into non-recursive format.
 
-use std::{collections::HashMap, iter};
+use hashbrown::HashMap;
+
+use core::iter;
 
 use crate::{
-    eval::{
-        executable::{
-            Atom, Command, CompiledExpr, Env, Executable, ExecutableFn, ExecutableModule,
-            SpannedAtom,
-        },
-        AuxErrorInfo, EvalError, RepeatedAssignmentContext, SpannedEvalError,
+    alloc::{vec, ToOwned, Vec},
+    executable::{
+        Atom, Command, CompiledExpr, Env, Executable, ExecutableFn, ExecutableModule, SpannedAtom,
     },
-    helpers::create_span_ref,
-    Block, Destructure, Expr, FnDefinition, Grammar, Lvalue, Span, Spanned, SpannedExpr,
-    SpannedLvalue, SpannedStatement, Statement,
+    AuxErrorInfo, EvalError, RepeatedAssignmentContext, SpannedEvalError,
+};
+use arithmetic_parser::{
+    create_span_ref, Block, Destructure, Expr, FnDefinition, Grammar, Lvalue, Span, Spanned,
+    SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -589,9 +590,11 @@ fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{eval::Value, grammars::F32Grammar, GrammarExt, Span};
+    use crate::Value;
 
-    use std::iter::FromIterator;
+    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+
+    use core::iter::FromIterator;
 
     #[test]
     fn compilation_basics() {

@@ -48,8 +48,13 @@
 //! );
 //! ```
 
+#![no_std]
 #![warn(missing_docs, missing_debug_implementations)]
 
+extern crate alloc;
+
+#[doc(hidden)] // used in the `eval` crate; logically not public
+pub use crate::helpers::create_span_ref;
 pub use crate::{
     parser::{Error, SpannedError},
     traits::{Features, Grammar, GrammarExt},
@@ -57,10 +62,9 @@ pub use crate::{
 
 use nom_locate::{LocatedSpan, LocatedSpanEx};
 
-use crate::helpers::create_span_ref;
-use std::fmt;
+use alloc::{boxed::Box, vec, vec::Vec};
+use core::fmt;
 
-pub mod eval;
 pub mod grammars;
 mod helpers;
 mod parser;
@@ -503,7 +507,9 @@ pub enum DestructureRest<'a, T> {
 }
 
 impl<'a, T> DestructureRest<'a, T> {
-    pub(crate) fn to_lvalue(&self) -> Option<SpannedLvalue<'a, T>> {
+    /// Tries to convert this rest declaration into an lvalue. Return `None` if the rest declaration
+    /// is unnamed.
+    pub fn to_lvalue(&self) -> Option<SpannedLvalue<'a, T>> {
         match self {
             Self::Named { variable, .. } => {
                 Some(create_span_ref(variable, Lvalue::Variable { ty: None }))

@@ -30,6 +30,14 @@ jobs:
           toolchain: 1.42.0
           override: true
           components: rustfmt, clippy
+      - name: Install Node.js
+        uses: actions/setup-node@v1
+        with:
+          node-version: '12'
+      - name: Install wasm-pack
+        uses: jetli/wasm-pack-action@v0.3.0
+        with:
+          version: 'latest'
       - name: Install deadlinks
         run: cargo deadlinks -V | grep $DEADLINKS_VERS || cargo install cargo-deadlinks --vers $DEADLINKS_VERS --force
         env:
@@ -39,32 +47,37 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: fmt
-          args: -- --check
+          args: --all -- --check
       - name: Clippy
         uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-features --all-targets
+          args: --all --all-features --all-targets
 
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all-features --all-targets
+          args: --all --all-features --all-targets
       - name: Run doc tests
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all-features --doc
+          args: --all --all-features --doc
 
       - name: Run example
         uses: actions-rs/cargo@v1
         with:
           command: run
-          args: --all-features --example complex_c
+          args: -p arithmetic-parser --all-features --example complex_c
+
+      - name: Compile WASM
+        run: (cd test-wasm; wasm-pack build --target nodejs)
+      - name: Run WASM
+        run: node test-wasm/test.js
 
       - name: Check docs
-        run: cargo clean --doc && cargo doc --no-deps && cargo deadlinks --dir target/doc
+        run: cargo clean --doc && cargo doc --all --no-deps && cargo deadlinks --dir target/doc
 
   document:
     needs: build
@@ -92,10 +105,11 @@ jobs:
       - name: Build docs
         run: |
           cargo clean --doc && \
-          cargo rustdoc --all-features -- -Z unstable-options \
+          cargo rustdoc -p arithmetic-parser --all-features -- -Z unstable-options \
             --extern-html-root-url anyhow=https://docs.rs/anyhow/1.0.27 \
             --extern-html-root-url nom=https://docs.rs/nom/5.1.1 \
-            --extern-html-root-url nom-locate=https://docs.rs/nom-locate/1.0.0
+            --extern-html-root-url nom-locate=https://docs.rs/nom-locate/1.0.0 && \
+          cargo rustdoc -p arithmetic-eval
 
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@releases/v3

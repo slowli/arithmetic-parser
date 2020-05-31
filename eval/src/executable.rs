@@ -1,18 +1,17 @@
 //! Executables output by a `Compiler` and related types.
 
+use hashbrown::HashMap;
 use num_traits::{Num, Pow};
 use smallvec::{smallvec, SmallVec};
 
-use std::{collections::HashMap, ops, rc::Rc};
+use core::ops;
 
 use crate::{
-    eval::{
-        Backtrace, CallContext, ErrorWithBacktrace, EvalError, EvalResult, InterpretedFn,
-        SpannedEvalError, TupleLenMismatchContext, Value,
-    },
-    helpers::create_span_ref,
-    BinaryOp, Grammar, LvalueLen, Span, Spanned, UnaryOp,
+    alloc::{vec, Rc, Vec},
+    Backtrace, CallContext, ErrorWithBacktrace, EvalError, EvalResult, InterpretedFn,
+    SpannedEvalError, TupleLenMismatchContext, Value,
 };
+use arithmetic_parser::{create_span_ref, BinaryOp, Grammar, LvalueLen, Span, Spanned, UnaryOp};
 
 /// Pointer to a register or constant.
 #[derive(Debug, Clone, Copy)]
@@ -430,10 +429,8 @@ where
 /// # Examples
 ///
 /// ```
-/// use arithmetic_parser::{
-///     eval::{fns, Interpreter, Value},
-///     grammars::F32Grammar, GrammarExt, Span,
-/// };
+/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// use arithmetic_eval::{fns, Interpreter, Value};
 /// # use std::{collections::HashSet, f32, iter::FromIterator};
 ///
 /// let mut interpreter = Interpreter::new();
@@ -510,7 +507,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{eval::compiler::Compiler, grammars::F32Grammar, GrammarExt};
+    use crate::compiler::Compiler;
+
+    use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 
     #[test]
     fn iterative_evaluation() {

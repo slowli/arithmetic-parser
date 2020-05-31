@@ -429,10 +429,8 @@ where
 /// # Examples
 ///
 /// ```
-/// use arithmetic_parser::{
-///     eval::{fns, Interpreter, Value},
-///     grammars::F32Grammar, GrammarExt, Span,
-/// };
+/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// use arithmetic_eval::{fns, Interpreter, Value};
 /// # use std::{collections::HashSet, f32, iter::FromIterator};
 ///
 /// let mut interpreter = Interpreter::new();

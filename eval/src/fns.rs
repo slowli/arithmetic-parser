@@ -64,9 +64,8 @@ fn extract_fn<'a, T: Grammar>(
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{
-/// #     eval::{fns, EvalError, Interpreter}, grammars::F32Grammar, GrammarExt, Span,
-/// # };
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_eval::{fns, EvalError, Interpreter};
 /// # use assert_matches::assert_matches;
 /// let program = r#"
 ///     assert(1 + 2 == 3); # this assertion is fine
@@ -120,10 +119,8 @@ impl<T: Grammar> NativeFn<T> for Assert {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{
-/// #     eval::{fns::If, Interpreter, Value}, grammars::F32Grammar,
-/// #     GrammarExt, Span,
-/// # };
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_eval::{fns::If, Interpreter, Value};
 /// let program = "x = 3; if(x == 2, -1, x + 1)";
 /// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
 ///
@@ -137,10 +134,8 @@ impl<T: Grammar> NativeFn<T> for Assert {
 /// afterwards:
 ///
 /// ```
-/// # use arithmetic_parser::{
-/// #     eval::{fns::If, Interpreter, Value}, grammars::F32Grammar,
-/// #     GrammarExt, Span,
-/// # };
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_eval::{fns::If, Interpreter, Value};
 /// let program = "x = 3; if(x == 2, || -1, || x + 1)()";
 /// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
 ///
@@ -190,10 +185,8 @@ where
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{
-/// #     eval::{fns, Interpreter, Value}, grammars::F32Grammar,
-/// #     GrammarExt, Span,
-/// # };
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_eval::{fns, Interpreter, Value};
 /// let program = r#"
 ///     factorial = |x| {
 ///         loop((x, 1), |(i, acc)| {
@@ -286,10 +279,8 @@ where
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{
-/// #     eval::{fns, Interpreter, Value}, grammars::F32Grammar,
-/// #     GrammarExt, Span,
-/// # };
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_eval::{fns, Interpreter, Value};
 /// let program = r#"
 ///     xs = (1, -2, 3, -0.3);
 ///     map(xs, |x| if(cmp(x, 0) == 1, x, 0)) == (1, 0, 3, 0)
@@ -352,10 +343,8 @@ where
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{
-/// #     eval::{fns, Interpreter, Value}, grammars::F32Grammar,
-/// #     GrammarExt, Span,
-/// # };
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_eval::{fns, Interpreter, Value};
 /// let program = r#"
 ///     xs = (1, -2, 3, -7, -0.3);
 ///     filter(xs, |x| cmp(x, -1) == 1) == (1, 3, -0.3)
@@ -423,10 +412,8 @@ where
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{
-/// #     eval::{fns, Interpreter, Value}, grammars::F32Grammar,
-/// #     GrammarExt, Span,
-/// # };
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_eval::{fns, Interpreter, Value};
 /// let program = r#"
 ///     xs = (1, -2, 3, -7);
 ///     fold(xs, 1, |acc, x| acc * x) == 42
@@ -483,10 +470,8 @@ where
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{
-/// #     eval::{fns, Interpreter, Value}, grammars::F32Grammar,
-/// #     GrammarExt, Span,
-/// # };
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_eval::{fns, Interpreter, Value};
 /// let program = r#"
 ///     repeat = |x, times| loop(
 ///         (0, ()),
@@ -546,10 +531,8 @@ where
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{
-/// #     eval::{fns, Interpreter, Value}, grammars::F32Grammar,
-/// #     GrammarExt, Span,
-/// # };
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_eval::{fns, Interpreter, Value};
 /// let program = r#"
 ///     ## Merges all arguments (which should be tuples) into a single tuple.
 ///     super_merge = |...xs| fold(xs, (), merge);

@@ -5,6 +5,8 @@ use nom::{
     multi::fold_many1,
 };
 
+use alloc::string::String;
+
 use super::*;
 use crate::Features;
 

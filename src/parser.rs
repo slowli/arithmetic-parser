@@ -14,7 +14,8 @@ use nom::{
     Err as NomErr,
 };
 
-use std::{fmt, mem};
+use alloc::{borrow::ToOwned, boxed::Box, vec, vec::Vec};
+use core::{fmt, mem};
 
 use crate::{
     helpers::*, BinaryOp, Block, Context, Destructure, DestructureRest, Expr, FnDefinition,

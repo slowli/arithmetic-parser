@@ -3,7 +3,7 @@ use crate::{
     Block, Error, NomResult, Span, Spanned,
 };
 
-use std::fmt;
+use core::fmt;
 
 /// Parsing features for a `Grammar`.
 // TODO: make boolean expressions optional, too.

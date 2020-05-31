@@ -48,9 +48,12 @@
 //! );
 //! ```
 
+#![no_std]
 #![warn(missing_docs, missing_debug_implementations)]
 
-#[doc(hidden)] // used in the `eval` crate
+extern crate alloc;
+
+#[doc(hidden)] // used in the `eval` crate; logically not public
 pub use crate::helpers::create_span_ref;
 pub use crate::{
     parser::{Error, SpannedError},
@@ -59,7 +62,8 @@ pub use crate::{
 
 use nom_locate::{LocatedSpan, LocatedSpanEx};
 
-use std::fmt;
+use alloc::{boxed::Box, vec, vec::Vec};
+use core::fmt;
 
 pub mod grammars;
 mod helpers;

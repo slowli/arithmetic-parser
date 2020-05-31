@@ -30,6 +30,14 @@ jobs:
           toolchain: 1.42.0
           override: true
           components: rustfmt, clippy
+      - name: Install Node.js
+        uses: actions/setup-node@v1
+        with:
+          node-version: '12'
+      - name: Install wasm-pack
+        uses: jetli/wasm-pack-action@v0.3.0
+        with:
+          version: 'latest'
       - name: Install deadlinks
         run: cargo deadlinks -V | grep $DEADLINKS_VERS || cargo install cargo-deadlinks --vers $DEADLINKS_VERS --force
         env:
@@ -62,6 +70,11 @@ jobs:
         with:
           command: run
           args: -p arithmetic-parser --all-features --example complex_c
+
+      - name: Compile WASM
+        run: (cd test-wasm; wasm-pack build --target nodejs)
+      - name: Run WASM
+        run: node test-wasm/test.js
 
       - name: Check docs
         run: cargo clean --doc && cargo doc --all --no-deps && cargo deadlinks --dir target/doc

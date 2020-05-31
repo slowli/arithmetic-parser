@@ -1,4 +1,4 @@
-//! Simple interpreter for ASTs produced by the parser.
+//! Simple interpreter for ASTs produced by [`arithmetic-parser`].
 //!
 //! # Assumptions
 //!
@@ -15,7 +15,7 @@
 //! # Semantics
 //!
 //! - All variables are immutable. Re-declaring a var shadows the previous declaration.
-//! - Functions are first-class (in fact, a function is just a variant of a [`Value`]).
+//! - Functions are first-class (in fact, a function is just a variant of the [`Value`] enum).
 //! - Functions can capture variables (including other functions). All captures are by value.
 //! - Arithmetic operations are defined on primitive vars and tuples. With tuples, operations
 //!   are performed per-element. Binary operations require tuples of the same size,
@@ -29,6 +29,7 @@
 //!   code that is incorrect with annotations (e.g., assignment of a tuple to a variable which
 //!   is annotated to have a numeric type).
 //!
+//! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
 //! [`Interpreter`]: struct.Interpreter.html
 //! [`Value`]: enum.Value.html
 //!

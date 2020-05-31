@@ -1,0 +1,19 @@
+[package]
+name = "arithmetic-parser-wasm"
+version = "0.0.0"
+authors = ["Alex Ostrovski <ostrovski.alex@gmail.com>"]
+edition = "2018"
+license = "Apache-2.0"
+description = "Testing usability of `arithmetic-parser` & `arithmetic-eval` in WASM"
+repository = "https://github.com/slowli/arithmetic-parser"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+arithmetic-parser = { version = "0.1.0", path = "../parser" }
+arithmetic-eval = { version = "0.1.0", path = "../eval" }
+
+# WASM glue
+wasm-bindgen = { version = "0.2.50", features = ["serde-serialize"] }

@@ -1,2 +1,2 @@
 [workspace]
-members = ["parser", "eval", "cli"]
+members = ["parser", "eval", "cli", "test-wasm"]

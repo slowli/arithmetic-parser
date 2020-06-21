@@ -2,7 +2,6 @@
 
 use arithmetic_eval::{
     fns, CallContext, EvalError, EvalResult, Function, Interpreter, NativeFn, Number, SpannedValue,
-    Value,
 };
 use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, Span};
 
@@ -40,7 +39,7 @@ fn repeat<G: Grammar<Lit = f32>>(
     function: Function<'_, G>,
     times: f32,
 ) -> Result<Function<'_, G>, String> {
-    if times < 0.0 {
+    if times <= 0.0 {
         Err("`times` should be positive".to_owned())
     } else {
         let function = Repeated {
@@ -54,15 +53,18 @@ fn repeat<G: Grammar<Lit = f32>>(
 #[test]
 fn repeated_function() {
     let mut interpreter = Interpreter::new();
-    interpreter.insert_native_fn("repeat", fns::wrap(repeat));
+    interpreter
+        .insert_native_fn("repeat", fns::wrap(repeat))
+        .insert_native_fn("assert", fns::Assert);
 
     let program = r#"
-        fn = |x| 2*x + 1;
+        fn = |x| 2 * x + 1;
         repeated = fn.repeat(3);
-        repeated(1) == 15 &&    # 2 * 1 + 1 = 3 -> 2 * 3 + 1 = 7 -> 2 * 7 + 1 = 15
-            repeated(-1) == -1  # -1 is the immovable point of the transform
+        # 2 * 1 + 1 = 3 -> 2 * 3 + 1 = 7 -> 2 * 7 + 1 = 15
+        assert(repeated(1) == 15);
+        # -1 is the immovable point of the transform
+        assert(repeated(-1) == -1);
     "#;
     let program = F32Grammar::parse_statements(Span::new(program)).unwrap();
-    let ret = interpreter.evaluate(&program).unwrap();
-    assert_eq!(ret, Value::Bool(true));
+    interpreter.evaluate(&program).unwrap();
 }

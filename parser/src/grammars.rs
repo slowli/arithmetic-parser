@@ -6,9 +6,9 @@ use nom::{
     number::complete::{double, float},
     sequence::terminated,
 };
-use num_traits::{Num, Pow};
+use num_traits::Num;
 
-use core::{f32, f64, fmt, marker::PhantomData, ops};
+use core::{f32, f64, fmt, marker::PhantomData};
 
 use crate::{Features, Grammar, NomResult, Span};
 
@@ -42,9 +42,7 @@ impl<T: NumLiteral> Grammar for NumGrammar<T> {
 }
 
 /// Numeric literal used in `NumGrammar`s.
-pub trait NumLiteral:
-    'static + Copy + Num + fmt::Debug + ops::Neg<Output = Self> + Pow<Self, Output = Self>
-{
+pub trait NumLiteral: 'static + Copy + Num + fmt::Debug {
     /// Tries to parse a literal.
     fn parse(input: Span<'_>) -> NomResult<'_, Self>;
 }

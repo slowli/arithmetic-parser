@@ -11,6 +11,12 @@ use crate::{
 };
 use arithmetic_parser::Grammar;
 
+mod arity;
+pub use self::arity::{
+    Binary, Denary, FnWrapper, Novenary, Octonary, Quaternary, Quinary, Senary, Septenary, Ternary,
+    Unary,
+};
+
 fn extract_number<'a, T: Grammar>(
     ctx: &CallContext<'_, 'a>,
     value: SpannedValue<'a, T>,
@@ -615,83 +621,6 @@ where
         } else {
             <T::Lit as Zero>::zero()
         }))
-    }
-}
-
-/// Unary function wrapper.
-#[derive(Debug, Clone, Copy)]
-pub struct Unary<F> {
-    function: F,
-}
-
-impl<F> Unary<F> {
-    /// Creates a new function.
-    pub const fn new(function: F) -> Self {
-        Self { function }
-    }
-}
-
-impl<F, T> NativeFn<T> for Unary<F>
-where
-    T: Grammar,
-    F: Fn(T::Lit) -> T::Lit,
-{
-    fn evaluate<'a>(
-        &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
-    ) -> EvalResult<'a, T> {
-        ctx.check_args_count(&args, 1)?;
-        let arg = args.pop().unwrap();
-
-        match arg.extra {
-            Value::Number(x) => {
-                let output = (self.function)(x);
-                Ok(Value::Number(output))
-            }
-            _ => {
-                let err = EvalError::native("Unary function requires one primitive argument");
-                Err(ctx
-                    .call_site_error(err)
-                    .with_span(&arg, AuxErrorInfo::InvalidArg))
-            }
-        }
-    }
-}
-
-const BINARY_FN_MSG: &str = "Binary function requires two primitive arguments";
-
-/// Binary function wrapper.
-#[derive(Debug, Clone, Copy)]
-pub struct Binary<F> {
-    function: F,
-}
-
-impl<F> Binary<F> {
-    /// Creates a new function.
-    pub const fn new(function: F) -> Self {
-        Self { function }
-    }
-}
-
-impl<F, T> NativeFn<T> for Binary<F>
-where
-    T: Grammar,
-    F: Fn(T::Lit, T::Lit) -> T::Lit,
-{
-    fn evaluate<'a>(
-        &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
-    ) -> EvalResult<'a, T> {
-        ctx.check_args_count(&args, 2)?;
-        let y = args.pop().unwrap();
-        let x = args.pop().unwrap();
-
-        let x = extract_number(ctx, x, BINARY_FN_MSG)?;
-        let y = extract_number(ctx, y, BINARY_FN_MSG)?;
-        let output = (self.function)(x, y);
-        Ok(Value::Number(output))
     }
 }
 

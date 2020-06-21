@@ -39,9 +39,9 @@
 //! use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, Span};
 //! use arithmetic_eval::{fns, Interpreter, Value};
 //!
-//! const MIN: fns::Binary<fn(f32, f32) -> f32> =
+//! const MIN: fns::Binary<f32> =
 //!     fns::Binary::new(|x, y| if x < y { x } else { y });
-//! const MAX: fns::Binary<fn(f32, f32) -> f32> =
+//! const MAX: fns::Binary<f32> =
 //!     fns::Binary::new(|x, y| if x > y { x } else { y });
 //!
 //! let mut context = Interpreter::new();
@@ -103,18 +103,27 @@ pub use self::{
     values::{CallContext, Function, InterpretedFn, NativeFn, SpannedValue, Value},
 };
 
+use num_complex::{Complex32, Complex64};
 use num_traits::{Num, Pow};
 
 use core::ops;
 
 use crate::{compiler::Compiler, executable::Env};
-use arithmetic_parser::{Block, Grammar};
+use arithmetic_parser::{grammars::NumLiteral, Block, Grammar};
 
 mod compiler;
 mod error;
 mod executable;
 pub mod fns;
 mod values;
+
+/// Number with fully defined arithmetic operations.
+pub trait Number: NumLiteral + ops::Neg<Output = Self> + Pow<Self, Output = Self> {}
+
+impl Number for f32 {}
+impl Number for f64 {}
+impl Number for Complex32 {}
+impl Number for Complex64 {}
 
 /// Simple interpreter for arithmetic expressions.
 #[derive(Debug)]
@@ -168,7 +177,7 @@ where
     pub fn insert_native_fn(
         &mut self,
         name: &'a str,
-        native_fn: impl NativeFn<T> + 'static,
+        native_fn: impl NativeFn<'a, T> + 'a,
     ) -> &mut Self {
         self.insert_var(name, Value::native_fn(native_fn))
     }
@@ -216,7 +225,7 @@ mod tests {
 
     use core::iter::FromIterator;
 
-    const SIN: fns::Unary<fn(f32) -> f32> = fns::Unary::new(f32::sin);
+    const SIN: fns::Unary<f32> = fns::Unary::new(f32::sin);
 
     #[test]
     fn basic_program() {
@@ -875,7 +884,7 @@ mod tests {
         assert_eq!(err.main_span().fragment, "sin((-5, 2))");
         assert_matches!(
             err.source(),
-            EvalError::NativeCall(ref msg) if msg.contains("requires one primitive argument")
+            EvalError::NativeCall(ref msg) if msg.contains("Expected number")
         );
     }
 

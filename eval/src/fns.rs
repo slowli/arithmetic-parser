@@ -1,4 +1,8 @@
-//! Standard functions for the interpreter.
+//! Standard functions for the interpreter, and the tools to define new native functions.
+//!
+//! See [`FnWrapper`] documentation for the details how to define native functions.
+//!
+//! [`FnWrapper`]: struct.FnWrapper.html
 
 use num_traits::{Num, One, Pow, Zero};
 
@@ -13,8 +17,8 @@ use arithmetic_parser::Grammar;
 
 mod arity;
 pub use self::arity::{
-    Binary, Denary, FnWrapper, Novenary, Octonary, Quaternary, Quinary, Senary, Septenary, Ternary,
-    Unary,
+    wrap, Binary, ErrorOutput, FnWrapper, Quaternary, Ternary, TryFromValue, TryIntoValue, Unary,
+    WithContext,
 };
 
 fn extract_number<'a, T: Grammar>(
@@ -92,8 +96,8 @@ fn extract_fn<'a, T: Grammar>(
 #[derive(Debug, Clone, Copy)]
 pub struct Assert;
 
-impl<T: Grammar> NativeFn<T> for Assert {
-    fn evaluate<'a>(
+impl<'a, T: Grammar> NativeFn<'a, T> for Assert {
+    fn evaluate(
         &self,
         args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -154,12 +158,12 @@ impl<T: Grammar> NativeFn<T> for Assert {
 #[derive(Debug, Clone, Copy)]
 pub struct If;
 
-impl<T> NativeFn<T> for If
+impl<'a, T> NativeFn<'a, T> for If
 where
     T: Grammar,
     T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
 {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -221,12 +225,12 @@ impl Loop {
         "iteration function should return a 2-element tuple with first bool value";
 }
 
-impl<T> NativeFn<T> for Loop
+impl<'a, T> NativeFn<'a, T> for Loop
 where
     T: Grammar,
     T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
 {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -305,12 +309,12 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Map;
 
-impl<T> NativeFn<T> for Map
+impl<'a, T> NativeFn<'a, T> for Map
 where
     T: Grammar,
     T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
 {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -368,12 +372,12 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Filter;
 
-impl<T> NativeFn<T> for Filter
+impl<'a, T> NativeFn<'a, T> for Filter
 where
     T: Grammar,
     T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
 {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -436,12 +440,12 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Fold;
 
-impl<T> NativeFn<T> for Fold
+impl<'a, T> NativeFn<'a, T> for Fold
 where
     T: Grammar,
     T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
 {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -504,12 +508,12 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Push;
 
-impl<T> NativeFn<T> for Push
+impl<'a, T> NativeFn<'a, T> for Push
 where
     T: Grammar,
     T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
 {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -557,12 +561,12 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Merge;
 
-impl<T> NativeFn<T> for Merge
+impl<'a, T> NativeFn<'a, T> for Merge
 where
     T: Grammar,
     T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
 {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -597,12 +601,12 @@ pub struct Compare;
 
 const COMPARE_ERROR_MSG: &str = "Compare requires 2 primitive arguments";
 
-impl<T> NativeFn<T> for Compare
+impl<'a, T> NativeFn<'a, T> for Compare
 where
     T: Grammar,
     T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit> + PartialOrd,
 {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,

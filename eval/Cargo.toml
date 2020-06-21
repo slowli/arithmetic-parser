@@ -12,8 +12,9 @@ keywords = ["interpreter", "arithmetic"]
 
 [dependencies]
 # Public dependencies (present in the public API).
-arithmetic-parser = { version = "0.1.0", path = "../parser" }
+arithmetic-parser = { version = "0.1.0", path = "../parser", features = ["num-complex"] }
 num-traits = "0.2.11"
+num-complex = "0.2.4"
 
 # Private dependencies.
 derive_more = "0.99.7"

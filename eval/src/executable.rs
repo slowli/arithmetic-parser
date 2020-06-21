@@ -437,7 +437,7 @@ where
 /// interpreter
 ///     .insert_native_fn(
 ///         "max",
-///         fns::Binary::new(|x, y| if x > y { x } else { y }),
+///         fns::Binary::new(|x: f32, y: f32| if x > y { x } else { y }),
 ///     )
 ///     .insert_native_fn("fold", fns::Fold)
 ///     .insert_var("INF", Value::Number(f32::INFINITY))

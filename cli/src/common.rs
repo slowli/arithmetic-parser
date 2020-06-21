@@ -16,11 +16,10 @@ use std::{
     ops::Range,
 };
 
-use arithmetic_eval::{fns, BacktraceElement, ErrorWithBacktrace, Function, Interpreter, Value};
-use arithmetic_parser::{
-    grammars::{NumGrammar, NumLiteral},
-    Block, Error, Grammar, GrammarExt, Span, Spanned,
+use arithmetic_eval::{
+    fns, BacktraceElement, ErrorWithBacktrace, Function, Interpreter, Number, Value,
 };
+use arithmetic_parser::{grammars::NumGrammar, Block, Error, Grammar, GrammarExt, Span, Spanned};
 
 /// Code map containing evaluated code snippets.
 #[derive(Debug, Default)]
@@ -270,7 +269,7 @@ impl<'a> Env<'a> {
     ) -> Result<bool, ()>
     where
         T: Grammar,
-        T::Lit: fmt::Display + NumLiteral,
+        T::Lit: fmt::Display + Number,
     {
         let (file, start_position) = self.code_map.add(line);
         let visible_span = 0..line.len();
@@ -330,7 +329,7 @@ impl<'a> Env<'a> {
     }
 }
 
-fn init_interpreter<'a, T: NumLiteral>() -> Interpreter<'a, NumGrammar<T>> {
+fn init_interpreter<'a, T: Number>() -> Interpreter<'a, NumGrammar<T>> {
     let mut interpreter = Interpreter::<NumGrammar<T>>::new();
     interpreter
         .insert_var("false", Value::Bool(false))
@@ -345,7 +344,7 @@ fn init_interpreter<'a, T: NumLiteral>() -> Interpreter<'a, NumGrammar<T>> {
     interpreter
 }
 
-pub trait ReplLiteral: NumLiteral + fmt::Display {
+pub trait ReplLiteral: Number + fmt::Display {
     fn create_interpreter<'a>() -> Interpreter<'a, NumGrammar<Self>>;
 }
 
@@ -357,7 +356,7 @@ pub struct StdLibrary<T: 'static> {
     binary: &'static [(&'static str, fn(T, T) -> T)],
 }
 
-impl<T: NumLiteral> StdLibrary<T> {
+impl<T: Number> StdLibrary<T> {
     fn add_to_interpreter(self, interpreter: &mut Interpreter<NumGrammar<T>>) {
         for (name, c) in self.constants {
             interpreter.insert_var(name, Value::Number(*c));

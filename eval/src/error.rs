@@ -257,6 +257,11 @@ impl<'a> SpannedEvalError<'a> {
         self.aux_spans.push(create_span_ref(span, info));
         self
     }
+
+    /// Returns the source of the error.
+    pub fn source(&self) -> &EvalError {
+        &self.error
+    }
 }
 
 /// Result of an expression evaluation.

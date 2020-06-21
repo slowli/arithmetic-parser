@@ -4,20 +4,18 @@
 //!
 //! [`FnWrapper`]: struct.FnWrapper.html
 
-use num_traits::{Num, One, Pow, Zero};
-
-use core::ops;
+use arithmetic_parser::Grammar;
+use num_traits::{One, Zero};
 
 use crate::{
     alloc::{vec, Vec},
-    AuxErrorInfo, CallContext, EvalError, EvalResult, Function, NativeFn, SpannedEvalError,
+    AuxErrorInfo, CallContext, EvalError, EvalResult, Function, NativeFn, Number, SpannedEvalError,
     SpannedValue, Value,
 };
-use arithmetic_parser::Grammar;
 
-mod arity;
-pub use self::arity::{
-    wrap, Binary, ErrorOutput, FnWrapper, Quaternary, Ternary, TryFromValue, TryIntoValue, Unary,
+mod wrapper;
+pub use self::wrapper::{
+    wrap, Binary, ErrorOutput, FnWrapper, IntoEvalResult, Quaternary, Ternary, TryFromValue, Unary,
     WithContext,
 };
 
@@ -161,7 +159,7 @@ pub struct If;
 impl<'a, T> NativeFn<'a, T> for If
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
     fn evaluate(
         &self,
@@ -228,7 +226,7 @@ impl Loop {
 impl<'a, T> NativeFn<'a, T> for Loop
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
     fn evaluate(
         &self,
@@ -312,7 +310,7 @@ pub struct Map;
 impl<'a, T> NativeFn<'a, T> for Map
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
     fn evaluate(
         &self,
@@ -375,7 +373,7 @@ pub struct Filter;
 impl<'a, T> NativeFn<'a, T> for Filter
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
     fn evaluate(
         &self,
@@ -443,7 +441,7 @@ pub struct Fold;
 impl<'a, T> NativeFn<'a, T> for Fold
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
     fn evaluate(
         &self,
@@ -511,7 +509,7 @@ pub struct Push;
 impl<'a, T> NativeFn<'a, T> for Push
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
     fn evaluate(
         &self,
@@ -564,7 +562,7 @@ pub struct Merge;
 impl<'a, T> NativeFn<'a, T> for Merge
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
     fn evaluate(
         &self,
@@ -604,7 +602,7 @@ const COMPARE_ERROR_MSG: &str = "Compare requires 2 primitive arguments";
 impl<'a, T> NativeFn<'a, T> for Compare
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit> + PartialOrd,
+    T::Lit: Number + PartialOrd,
 {
     fn evaluate(
         &self,

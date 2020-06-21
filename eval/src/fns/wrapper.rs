@@ -21,14 +21,14 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// and with increased type safety.
 ///
 /// Arguments of a wrapped function should implement [`TryFromValue`] trait for the applicable
-/// grammar, and the output type should implement [`TryIntoValue`]. If the [`CallContext`] is
+/// grammar, and the output type should implement [`IntoEvalResult`]. If the [`CallContext`] is
 /// necessary for execution (for example, if one of args is a [`Function`], which is called
 /// during execution), then it can be specified as the first argument
 /// as shown [below](#usage-of-context).
 ///
 /// [native functions]: ../trait.NativeFn.html
 /// [`TryFromValue`]: trait.TryFromValue.html
-/// [`TryIntoValue`]: trait.TryIntoValue.html
+/// [`IntoEvalResult`]: trait.IntoEvalResult.html
 /// [`CallContext`]: ../struct.CallContext.html
 /// [`Function`]: ../enum.Function.html
 ///
@@ -270,57 +270,57 @@ impl<'a> ErrorOutput<'a> {
 /// [wrapped functions]: struct.FnWrapper.html
 /// [`NativeFn`]: ../trait.NativeFn.html
 /// [`ErrorOutput`]: enum.ErrorOutput.html
-pub trait TryIntoValue<'a, G: Grammar> {
+pub trait IntoEvalResult<'a, G: Grammar> {
     /// Performs the conversion.
-    fn try_into_value(self) -> Result<Value<'a, G>, ErrorOutput<'a>>;
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>>;
 }
 
-impl<'a, G: Grammar, U> TryIntoValue<'a, G> for Result<U, String>
+impl<'a, G: Grammar, U> IntoEvalResult<'a, G> for Result<U, String>
 where
-    U: TryIntoValue<'a, G>,
+    U: IntoEvalResult<'a, G>,
 {
-    fn try_into_value(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
         self.map_err(ErrorOutput::Message)
-            .and_then(U::try_into_value)
+            .and_then(U::into_eval_result)
     }
 }
 
-impl<'a, G: Grammar, U> TryIntoValue<'a, G> for Result<U, SpannedEvalError<'a>>
+impl<'a, G: Grammar, U> IntoEvalResult<'a, G> for Result<U, SpannedEvalError<'a>>
 where
-    U: TryIntoValue<'a, G>,
+    U: IntoEvalResult<'a, G>,
 {
-    fn try_into_value(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
         self.map_err(ErrorOutput::Spanned)
-            .and_then(U::try_into_value)
+            .and_then(U::into_eval_result)
     }
 }
 
-impl<'a, G: Grammar> TryIntoValue<'a, G> for Value<'a, G> {
-    fn try_into_value(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+impl<'a, G: Grammar> IntoEvalResult<'a, G> for Value<'a, G> {
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
         Ok(self)
     }
 }
 
-impl<'a, G: Grammar> TryIntoValue<'a, G> for Function<'a, G> {
-    fn try_into_value(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+impl<'a, G: Grammar> IntoEvalResult<'a, G> for Function<'a, G> {
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
         Ok(Value::Function(self))
     }
 }
 
-impl<'a, T: Number, G: Grammar<Lit = T>> TryIntoValue<'a, G> for T {
-    fn try_into_value(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+impl<'a, T: Number, G: Grammar<Lit = T>> IntoEvalResult<'a, G> for T {
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
         Ok(Value::Number(self))
     }
 }
 
-impl<'a, U, G: Grammar> TryIntoValue<'a, G> for Vec<U>
+impl<'a, U, G: Grammar> IntoEvalResult<'a, G> for Vec<U>
 where
-    U: TryIntoValue<'a, G>,
+    U: IntoEvalResult<'a, G>,
 {
-    fn try_into_value(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
         let values = self
             .into_iter()
-            .map(U::try_into_value)
+            .map(U::into_eval_result)
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Value::Tuple(values))
     }
@@ -328,12 +328,12 @@ where
 
 macro_rules! into_value_for_tuple {
     ($($i:tt : $ty:ident),+) => {
-        impl<'a, G: Grammar, $($ty,)+> TryIntoValue<'a, G> for ($($ty,)+)
+        impl<'a, G: Grammar, $($ty,)+> IntoEvalResult<'a, G> for ($($ty,)+)
         where
-            $($ty: TryIntoValue<'a, G>,)+
+            $($ty: IntoEvalResult<'a, G>,)+
         {
-            fn try_into_value(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
-                Ok(Value::Tuple(vec![$(self.$i.try_into_value()?,)+]))
+            fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+                Ok(Value::Tuple(vec![$(self.$i.into_eval_result()?,)+]))
             }
         }
     };
@@ -363,7 +363,7 @@ macro_rules! arity_fn {
             G: Grammar,
             F: Fn($($t,)+) -> Ret,
             $($t: TryFromValue<'a, G>,)+
-            Ret: TryIntoValue<'a, G>,
+            Ret: IntoEvalResult<'a, G>,
         {
             fn evaluate(
                 &self,
@@ -376,16 +376,15 @@ macro_rules! arity_fn {
                 $(
                     let $arg_name = args_iter.next().unwrap();
                     let span = create_span_ref(&$arg_name, ());
-                    let $arg_name = $t::try_from_value($arg_name.extra)
-                        .map_err(|error_msg| {
-                            context
-                                .call_site_error(EvalError::native(error_msg))
-                                .with_span(&span, AuxErrorInfo::InvalidArg)
-                        })?;
+                    let $arg_name = $t::try_from_value($arg_name.extra).map_err(|error_msg| {
+                        context
+                            .call_site_error(EvalError::native(error_msg))
+                            .with_span(&span, AuxErrorInfo::InvalidArg)
+                    })?;
                 )+
 
                 let output = (self.function)($($arg_name,)+);
-                output.try_into_value().map_err(|err| err.into_spanned(context))
+                output.into_eval_result().map_err(|err| err.into_spanned(context))
             }
         }
 
@@ -394,7 +393,7 @@ macro_rules! arity_fn {
             G: Grammar,
             F: Fn(&mut CallContext<'_, 'a>, $($t,)+) -> Ret,
             $($t: TryFromValue<'a, G>,)+
-            Ret: TryIntoValue<'a, G>,
+            Ret: IntoEvalResult<'a, G>,
         {
             fn evaluate(
                 &self,
@@ -407,16 +406,15 @@ macro_rules! arity_fn {
                 $(
                     let $arg_name = args_iter.next().unwrap();
                     let span = create_span_ref(&$arg_name, ());
-                    let $arg_name = $t::try_from_value($arg_name.extra)
-                        .map_err(|error_msg| {
-                            context
-                                .call_site_error(EvalError::native(error_msg))
-                                .with_span(&span, AuxErrorInfo::InvalidArg)
-                        })?;
+                    let $arg_name = $t::try_from_value($arg_name.extra).map_err(|error_msg| {
+                        context
+                            .call_site_error(EvalError::native(error_msg))
+                            .with_span(&span, AuxErrorInfo::InvalidArg)
+                    })?;
                 )+
 
                 let output = (self.function)(context, $($arg_name,)+);
-                output.try_into_value().map_err(|err| err.into_spanned(context))
+                output.into_eval_result().map_err(|err| err.into_spanned(context))
             }
         }
     };

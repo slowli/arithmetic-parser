@@ -55,18 +55,18 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// ```
 /// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
 /// # use arithmetic_eval::{fns::FnWrapper, Interpreter, Value};
-/// fn sum_arrays(xs: Vec<f32>, ys: Vec<f32>) -> Result<Vec<f32>, String> {
+/// fn zip_arrays(xs: Vec<f32>, ys: Vec<f32>) -> Result<Vec<(f32, f32)>, String> {
 ///     if xs.len() == ys.len() {
-///         Ok(xs.into_iter().zip(ys).map(|(x, y)| x + y).collect())
+///         Ok(xs.into_iter().zip(ys).map(|(x, y)| (x, y)).collect())
 ///     } else {
 ///         Err("Arrays must have the same size".to_owned())
 ///     }
 /// }
 ///
 /// let mut interpreter = Interpreter::new();
-/// interpreter.insert_native_fn("sum_arrays", FnWrapper::new(sum_arrays));
+/// interpreter.insert_native_fn("zip", FnWrapper::new(zip_arrays));
 ///
-/// let program = "(1, 2, 3).sum_arrays((4, 5, 6)) == (5, 7, 9)";
+/// let program = "(1, 2, 3).zip((4, 5, 6)) == ((1, 4), (2, 5), (3, 6))";
 /// let program = F32Grammar::parse_statements(Span::new(program)).unwrap();
 /// let ret = interpreter.evaluate(&program).unwrap();
 /// assert_eq!(ret, Value::Bool(true));

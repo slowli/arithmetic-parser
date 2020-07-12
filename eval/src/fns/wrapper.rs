@@ -181,6 +181,7 @@ impl FromValueError {
 
     fn set_arg_index(&mut self, index: usize) {
         self.arg_index = index;
+        self.location.reverse();
     }
 
     /// Returns the error kind.
@@ -193,7 +194,7 @@ impl FromValueError {
         self.arg_index
     }
 
-    /// Returns the error location, starting from the most generic one (such as the argument index).
+    /// Returns the error location, starting from the outermost one.
     pub fn location(&self) -> &[FromValueErrorLocation] {
         &self.location
     }
@@ -203,11 +204,14 @@ impl fmt::Display for FromValueError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
-            "{}\nError location: Argument #{}",
+            "{}. Error location: arg{}",
             self.kind, self.arg_index
         )?;
         for location_element in &self.location {
-            write!(formatter, " -> {}", location_element)?;
+            match location_element {
+                FromValueErrorLocation::Tuple { index, .. } => write!(formatter, ".{}", index)?,
+                FromValueErrorLocation::Array { index, .. } => write!(formatter, "[{}]", index)?,
+            }
         }
         Ok(())
     }
@@ -264,15 +268,6 @@ pub enum FromValueErrorLocation {
         /// Zero-based index of the erroneous element.
         index: usize,
     },
-}
-
-impl fmt::Display for FromValueErrorLocation {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Tuple { index, .. } => write!(formatter, "tuple[{}]", index),
-            Self::Array { index, .. } => write!(formatter, "array[{}]", index),
-        }
-    }
 }
 
 /// Fallible conversion from `Value` to a function argument.
@@ -765,5 +760,32 @@ mod tests {
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
+    }
+
+    #[test]
+    fn error_reporting_with_destructuring() {
+        let mut interpreter = Interpreter::new();
+        interpreter
+            .insert_var("true", Value::Bool(true))
+            .insert_var("false", Value::Bool(false));
+        interpreter.insert_native_fn(
+            "destructure",
+            wrap(|values: Vec<(bool, f32)>| {
+                values
+                    .into_iter()
+                    .map(|(flag, x)| if flag { x } else { 0.0 })
+                    .sum::<f32>()
+            }),
+        );
+
+        let program = "((true, 1), (2, 3)).destructure()";
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let err_message = interpreter
+            .evaluate(&block)
+            .unwrap_err()
+            .source()
+            .to_short_string();
+        assert!(err_message.contains("Cannot convert number to bool"));
+        assert!(err_message.contains("location: arg0[1].0"));
     }
 }

@@ -685,7 +685,7 @@ mod tests {
         let module = F32Grammar::parse_statements(Span::new(module)).unwrap();
         let mut module = Compiler::compile_module(&env, &module, false).unwrap();
 
-        let imports = module.imports().collect::<Vec<_>>();
+        let imports = module.imports().iter().collect::<Vec<_>>();
         assert_eq!(imports, &[("x", &Value::Number(1.0))]);
         let value = module.run().unwrap();
         assert_eq!(value, Value::Number(2.0));

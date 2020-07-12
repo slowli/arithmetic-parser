@@ -552,7 +552,7 @@ where
 #[derive(Debug)]
 pub struct ExecutableModule<'a, T: Grammar> {
     inner: Executable<'a, T>,
-    imports: Env<'a, T>,
+    imports: ModuleImports<'a, T>,
 }
 
 impl<T: Grammar> Clone for ExecutableModule<'_, T> {
@@ -566,18 +566,10 @@ impl<T: Grammar> Clone for ExecutableModule<'_, T> {
 
 impl<'a, T: Grammar> ExecutableModule<'a, T> {
     pub(super) fn new(inner: Executable<'a, T>, imports: Env<'a, T>) -> Self {
-        Self { inner, imports }
-    }
-
-    /// Checks if a variable with the specified name is imported to this module.
-    pub fn has_import(&self, name: &str) -> bool {
-        self.imports.vars.contains_key(name)
-    }
-
-    /// Gets the current value of the import with the specified name, or `None` if the import
-    /// is not defined.
-    pub fn import(&self, name: &str) -> Option<&Value<'a, T>> {
-        self.imports.get_var(name)
+        Self {
+            inner,
+            imports: ModuleImports { inner: imports },
+        }
     }
 
     /// Sets the value of an imported variable.
@@ -588,13 +580,13 @@ impl<'a, T: Grammar> ExecutableModule<'a, T> {
     /// that the import exists beforehand via [`has_import()`](#method.has_import) if this is
     /// unknown at compile time.
     pub fn set_import(&mut self, name: &str, value: Value<'a, T>) -> &mut Self {
-        self.imports.set_var(name, value);
+        self.imports.set(name, value);
         self
     }
 
-    /// Enumerates imports of this module together with their current values.
-    pub fn imports(&self) -> impl Iterator<Item = (&'a str, &Value<'a, T>)> + '_ {
-        self.imports.variables()
+    /// Returns shared reference to imports of this module.
+    pub fn imports(&self) -> &ModuleImports<'a, T> {
+        &self.imports
     }
 
     pub(super) fn inner(&self) -> &Executable<'a, T> {
@@ -608,11 +600,100 @@ where
 {
     /// Runs the module with the current values of imports.
     pub fn run(&self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
+        self.run_with_imports_unchecked(self.imports.clone())
+    }
+
+    /// Runs the module with the specified imports.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if the imports are not compatible with the module.
+    pub fn run_with_imports(
+        &self,
+        imports: ModuleImports<'a, T>,
+    ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
+        assert!(
+            imports.is_compatible(self),
+            "Cannot run module with incompatible imports"
+        );
+        self.run_with_imports_unchecked(imports)
+    }
+
+    /// Runs the module with the specified imports. Unlike [`run_with_imports`], this method
+    /// does not check if the imports are compatible with the module; it is the caller's
+    /// responsibility to ensure this.
+    ///
+    /// # Safety
+    ///
+    /// If the module and imports are incompatible, the module execution may lead to panics
+    /// or unpredictable results.
+    ///
+    /// [`run_with_imports`]: #method.run_with_imports
+    pub fn run_with_imports_unchecked(
+        &self,
+        mut imports: ModuleImports<'a, T>,
+    ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
         let mut backtrace = Backtrace::default();
-        self.imports
-            .clone()
+        imports
+            .inner
             .execute(&self.inner, Some(&mut backtrace))
             .map_err(|err| ErrorWithBacktrace::new(err, backtrace))
+    }
+}
+
+/// Imports of an [`ExecutableModule`].
+///
+/// [`ExecutableModule`]: struct.ExecutableModule.html
+#[derive(Debug)]
+pub struct ModuleImports<'a, T: Grammar> {
+    inner: Env<'a, T>,
+}
+
+impl<T: Grammar> Clone for ModuleImports<'_, T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+impl<'a, T: Grammar> ModuleImports<'a, T> {
+    /// Checks if the imports contain a variable with the specified name.
+    pub fn contains(&mut self, name: &str) -> bool {
+        self.inner.vars.contains_key(name)
+    }
+
+    /// Gets the current value of the import with the specified name, or `None` if the import
+    /// is not defined.
+    pub fn get(&self, name: &str) -> Option<&Value<'a, T>> {
+        self.inner.get_var(name)
+    }
+
+    /// Sets the value of an imported variable.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the variable with the specified name is not an import.
+    pub fn set(&mut self, name: &str, value: Value<'a, T>) -> &mut Self {
+        self.inner.set_var(name, value);
+        self
+    }
+
+    /// Iterates over imported variables.
+    pub fn iter(&self) -> impl Iterator<Item = (&'a str, &Value<'a, T>)> + '_ {
+        self.inner.variables()
+    }
+
+    /// Checks if these imports could be compatible with the provided module.
+    ///
+    /// Imports produced by cloning imports of a module and then changing variables
+    /// via [`set`](#method.set) are guaranteed to remain compatible with the module.
+    /// Imports taken from another module are almost always incompatible with the module.
+    ///
+    /// The compatibility does not guarantee that the module execution will succeed; however,
+    /// it guarantees that the execution will not lead to a panic or unpredictable results.
+    pub fn is_compatible(&self, module: &ExecutableModule<'a, T>) -> bool {
+        self.inner.vars == module.imports.inner.vars
     }
 }
 
@@ -632,7 +713,7 @@ mod tests {
         let mut module = Compiler::compile_module(&env, &block, true).unwrap();
         assert_eq!(module.inner.register_capacity, 2);
         assert_eq!(module.inner.commands.len(), 1); // push `x` from r0 to r1
-        module.imports = env;
+        module.imports = ModuleImports { inner: env };
         let value = module.run().unwrap();
         assert_eq!(value, Value::Number(5.0));
     }

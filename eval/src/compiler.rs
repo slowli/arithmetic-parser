@@ -17,18 +17,18 @@ use arithmetic_parser::{
 };
 
 #[derive(Debug, Clone, Default)]
-pub struct Compiler<'a> {
-    vars_to_registers: HashMap<&'a str, usize>,
+pub struct Compiler {
+    vars_to_registers: HashMap<String, usize>,
     scope_depth: usize,
     register_count: usize,
 }
 
-impl<'a> Compiler<'a> {
+impl Compiler {
     pub fn new() -> Self {
         Self::default()
     }
 
-    fn from_env<T: Grammar>(env: &Env<'a, T>) -> Self {
+    fn from_env<T: Grammar>(env: &Env<'_, T>) -> Self {
         Self {
             vars_to_registers: env.variables_map(),
             register_count: env.register_count(),
@@ -40,7 +40,7 @@ impl<'a> Compiler<'a> {
         self.vars_to_registers.get(name).copied()
     }
 
-    fn push_assignment<T: Grammar, U>(
+    fn push_assignment<'a, T: Grammar, U>(
         &mut self,
         executable: &mut Executable<'a, T>,
         rhs: CompiledExpr<'a, T>,
@@ -53,7 +53,7 @@ impl<'a> Compiler<'a> {
         register
     }
 
-    fn compile_expr<T: Grammar>(
+    fn compile_expr<'a, T: Grammar>(
         &mut self,
         executable: &mut Executable<'a, T>,
         expr: &SpannedExpr<'a, T>,
@@ -211,7 +211,7 @@ impl<'a> Compiler<'a> {
         Ok(create_span_ref(expr, atom))
     }
 
-    fn compile_function<T: Grammar>(
+    fn compile_function<'a, T: Grammar>(
         def: &FnDefinition<'a, T>,
         captures: &HashMap<&'a str, Spanned<'a, usize>>,
     ) -> Result<Executable<'a, T>, SpannedEvalError<'a>> {
@@ -220,7 +220,7 @@ impl<'a> Compiler<'a> {
         this.scope_depth = 1; // Disable generating variable annotations.
 
         for (i, &name) in captures.keys().enumerate() {
-            this.vars_to_registers.insert(name, i);
+            this.vars_to_registers.insert(name.to_owned(), i);
         }
         this.register_count = captures.len() + 1; // one additional register for args
 
@@ -242,7 +242,7 @@ impl<'a> Compiler<'a> {
         Ok(executable)
     }
 
-    fn compile_statement<T: Grammar>(
+    fn compile_statement<'a, T: Grammar>(
         &mut self,
         executable: &mut Executable<'a, T>,
         statement: &SpannedStatement<'a, T>,
@@ -271,7 +271,7 @@ impl<'a> Compiler<'a> {
         })
     }
 
-    pub(super) fn compile_module<T: Grammar>(
+    pub(super) fn compile_module<'a, T: Grammar>(
         env: &Env<'a, T>,
         block: &Block<'a, T>,
         execute_in_env: bool,
@@ -306,7 +306,7 @@ impl<'a> Compiler<'a> {
         Ok(ExecutableModule::new(executable, captures))
     }
 
-    fn compile_block_inner<T: Grammar>(
+    fn compile_block_inner<'a, T: Grammar>(
         &mut self,
         executable: &mut Executable<'a, T>,
         block: &Block<'a, T>,
@@ -322,7 +322,7 @@ impl<'a> Compiler<'a> {
         })
     }
 
-    fn assign<T: Grammar>(
+    fn assign<'a, T: Grammar>(
         &mut self,
         executable: &mut Executable<'a, T>,
         lhs: &SpannedLvalue<'a, T::Type>,
@@ -331,7 +331,8 @@ impl<'a> Compiler<'a> {
         match &lhs.extra {
             Lvalue::Variable { .. } => {
                 if lhs.fragment != "_" {
-                    self.vars_to_registers.insert(lhs.fragment, rhs_register);
+                    self.vars_to_registers
+                        .insert(lhs.fragment.to_owned(), rhs_register);
 
                     // It does not make sense to annotate vars in the inner scopes, since
                     // they cannot be accessed externally.
@@ -352,7 +353,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn destructure<T: Grammar>(
+    fn destructure<'a, T: Grammar>(
         &mut self,
         executable: &mut Executable<'a, T>,
         destructure: &Destructure<'a, T::Type>,
@@ -408,7 +409,7 @@ impl<'a> CapturesExtractor<'a> {
     fn eval_function<T: Grammar>(
         &mut self,
         definition: &FnDefinition<'a, T>,
-        context: &Compiler<'a>,
+        context: &Compiler,
     ) -> Result<(), SpannedEvalError<'a>> {
         self.local_vars.push(HashMap::new());
         extract_vars(
@@ -428,7 +429,7 @@ impl<'a> CapturesExtractor<'a> {
     fn eval_local_var<T>(
         &mut self,
         var_span: &Spanned<'a, T>,
-        context: &Compiler<'a>,
+        context: &Compiler,
     ) -> Result<(), EvalError> {
         let var_name = var_span.fragment;
 
@@ -449,7 +450,7 @@ impl<'a> CapturesExtractor<'a> {
     fn eval<T: Grammar>(
         &mut self,
         expr: &SpannedExpr<'a, T>,
-        context: &Compiler<'a>,
+        context: &Compiler,
     ) -> Result<(), SpannedEvalError<'a>> {
         match &expr.extra {
             Expr::Variable => {
@@ -509,7 +510,7 @@ impl<'a> CapturesExtractor<'a> {
     fn eval_statement<T: Grammar>(
         &mut self,
         statement: &SpannedStatement<'a, T>,
-        context: &Compiler<'a>,
+        context: &Compiler,
     ) -> Result<(), SpannedEvalError<'a>> {
         match &statement.extra {
             Statement::Expr(expr) => self.eval(expr, context),
@@ -530,7 +531,7 @@ impl<'a> CapturesExtractor<'a> {
     fn eval_block<T: Grammar>(
         &mut self,
         block: &Block<'a, T>,
-        context: &Compiler<'a>,
+        context: &Compiler,
     ) -> Result<(), SpannedEvalError<'a>> {
         self.local_vars.push(HashMap::new());
         for statement in &block.statements {
@@ -630,7 +631,7 @@ mod tests {
     #[test]
     fn variable_extraction() {
         let compiler = Compiler {
-            vars_to_registers: HashMap::from_iter(vec![("x", 0), ("y", 1)]),
+            vars_to_registers: HashMap::from_iter(vec![("x".to_owned(), 0), ("y".to_owned(), 1)]),
             scope_depth: 0,
             register_count: 2,
         };
@@ -654,7 +655,7 @@ mod tests {
     #[test]
     fn variable_extraction_with_scoping() {
         let compiler = Compiler {
-            vars_to_registers: HashMap::from_iter(vec![("x", 0), ("y", 1)]),
+            vars_to_registers: HashMap::from_iter(vec![("x".to_owned(), 0), ("y".to_owned(), 1)]),
             scope_depth: 0,
             register_count: 2,
         };

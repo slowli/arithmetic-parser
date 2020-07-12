@@ -157,17 +157,17 @@ where
     }
 
     /// Gets a variable by name.
-    pub fn get_var(&self, name: &'a str) -> Option<&Value<'a, T>> {
+    pub fn get_var(&self, name: &str) -> Option<&Value<'a, T>> {
         self.env.get_var(name)
     }
 
     /// Iterates over variables.
-    pub fn variables(&self) -> impl Iterator<Item = (&'a str, &Value<'a, T>)> + '_ {
+    pub fn variables(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
         self.env.variables()
     }
 
     /// Inserts a variable with the specified name.
-    pub fn insert_var(&mut self, name: &'a str, value: Value<'a, T>) -> &mut Self {
+    pub fn insert_var(&mut self, name: &str, value: Value<'a, T>) -> &mut Self {
         self.env.push_var(name, value);
         self
     }
@@ -175,7 +175,7 @@ where
     /// Inserts a native function with the specified name.
     pub fn insert_native_fn(
         &mut self,
-        name: &'a str,
+        name: &str,
         native_fn: impl NativeFn<'a, T> + 'a,
     ) -> &mut Self {
         self.insert_var(name, Value::native_fn(native_fn))
@@ -191,7 +191,7 @@ where
     ///
     /// [wrapped function]: fns/struct.FnWrapper.html
     /// [`wrap`]: fns/fn.wrap.html
-    pub fn insert_wrapped_fn<Args: 'a, F: 'a>(&mut self, name: &'a str, fn_to_wrap: F) -> &mut Self
+    pub fn insert_wrapped_fn<Args: 'a, F: 'a>(&mut self, name: &str, fn_to_wrap: F) -> &mut Self
     where
         fns::FnWrapper<Args, F>: NativeFn<'a, T>,
     {

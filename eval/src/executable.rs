@@ -162,7 +162,8 @@ pub(super) struct Env<'a, T: Grammar> {
     registers: Registers<'a, T>,
     // Maps variables to registers. Variables are mapped only from the global scope;
     // thus, we don't need to remove them on error in an inner scope.
-    vars: HashMap<&'a str, usize>,
+    // TODO: investigate using stack-hosted small strings for keys.
+    vars: HashMap<String, usize>,
     // Marks the start of a first inner scope currently being evaluated. This is used
     // to quickly remove registers from the inner scopes on error.
     inner_scope_start: Option<usize>,
@@ -192,13 +193,13 @@ impl<'a, T: Grammar> Env<'a, T> {
         Some(&self.registers[register])
     }
 
-    pub fn variables(&self) -> impl Iterator<Item = (&'a str, &Value<'a, T>)> + '_ {
+    pub fn variables(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
         self.vars
             .iter()
-            .map(move |(name, register)| (*name, &self.registers[*register]))
+            .map(move |(name, register)| (name.as_str(), &self.registers[*register]))
     }
 
-    pub fn variables_map(&self) -> HashMap<&'a str, usize> {
+    pub fn variables_map(&self) -> HashMap<String, usize> {
         self.vars.clone()
     }
 
@@ -215,10 +216,10 @@ impl<'a, T: Grammar> Env<'a, T> {
 
     /// Allocates a new register with the specified name. If the name was previously assigned,
     /// the name association is updated, but the old register itself remains intact.
-    pub fn push_var(&mut self, name: &'a str, value: Value<'a, T>) {
+    pub fn push_var(&mut self, name: &str, value: Value<'a, T>) {
         let register = self.registers.len();
         self.registers.push(value);
-        self.vars.insert(name, register);
+        self.vars.insert(name.to_owned(), register);
     }
 
     /// Retains only registers corresponding to named variables.
@@ -312,7 +313,7 @@ where
                 }
 
                 Command::Annotate { register, name } => {
-                    self.vars.insert(*name, *register);
+                    self.vars.insert((*name).to_owned(), *register);
                 }
 
                 Command::StartInnerScope => {
@@ -478,7 +479,7 @@ impl<'a, T: Grammar> ExecutableModule<'a, T> {
     }
 
     /// Enumerates imports of this module together with their current values.
-    pub fn imports(&self) -> impl Iterator<Item = (&'a str, &Value<'a, T>)> + '_ {
+    pub fn imports(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
         self.imports.variables()
     }
 

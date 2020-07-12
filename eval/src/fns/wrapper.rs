@@ -460,6 +460,12 @@ impl<'a, T: Number, G: Grammar<Lit = T>> IntoEvalResult<'a, G> for T {
     }
 }
 
+impl<'a, G: Grammar> IntoEvalResult<'a, G> for () {
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+        Ok(Value::void())
+    }
+}
+
 impl<'a, G: Grammar> IntoEvalResult<'a, G> for bool {
     fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
         Ok(Value::Bool(self))
@@ -602,8 +608,9 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 mod tests {
     use super::*;
     use crate::Interpreter;
-    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
 
+    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+    use assert_matches::assert_matches;
     use core::f32;
 
     #[test]
@@ -701,5 +708,36 @@ mod tests {
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
+    }
+
+    #[test]
+    fn function_with_void_return_value() {
+        let mut interpreter = Interpreter::new();
+        interpreter.insert_native_fn(
+            "assert_eq",
+            wrap(|expected: f32, actual: f32| {
+                if (expected - actual).abs() < f32::EPSILON {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "Assertion failed: expected {}, got {}",
+                        expected, actual
+                    ))
+                }
+            }),
+        );
+
+        let program = "assert_eq(3, 1 + 2)";
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let ret = interpreter.evaluate(&block).unwrap();
+        assert!(ret.is_void());
+
+        let program = "assert_eq(3, 1 - 2)";
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let err = interpreter.evaluate(&block).unwrap_err();
+        assert_matches!(
+            err.source(),
+            EvalError::NativeCall(ref msg) if msg.contains("Assertion failed")
+        );
     }
 }

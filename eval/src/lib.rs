@@ -180,6 +180,24 @@ where
     ) -> &mut Self {
         self.insert_var(name, Value::native_fn(native_fn))
     }
+
+    /// Inserts a [wrapped function] with the specified name.
+    ///
+    /// Calling this method is equivalent to [`wrap`]ping a function and calling
+    /// [`insert_native_fn()`](#method.insert_native_fn) on it. Thanks to type inference magic,
+    /// the Rust compiler will usually be able to extract the `Args` type param
+    /// from the function definition, provided that type of function arguments and its return type
+    /// are defined explicitly or can be unequivocally inferred from the declaration.
+    ///
+    /// [wrapped function]: fns/struct.FnWrapper.html
+    /// [`wrap`]: fns/fn.wrap.html
+    pub fn insert_wrapped_fn<Args: 'a, F: 'a>(&mut self, name: &'a str, fn_to_wrap: F) -> &mut Self
+    where
+        fns::FnWrapper<Args, F>: NativeFn<'a, T>,
+    {
+        let wrapped = fns::wrap::<Args, _>(fn_to_wrap);
+        self.insert_var(name, Value::native_fn(wrapped))
+    }
 }
 
 impl<'a, T> Interpreter<'a, T>

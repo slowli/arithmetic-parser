@@ -437,22 +437,22 @@ where
 /// interpreter
 ///     .insert_native_fn(
 ///         "max",
-///         fns::Binary::new(|x, y| if x > y { x } else { y }),
+///         fns::Binary::new(|x: f32, y: f32| if x > y { x } else { y }),
 ///     )
 ///     .insert_native_fn("fold", fns::Fold)
-///     .insert_var("INF", Value::Number(f32::INFINITY))
+///     .insert_var("INFINITY", Value::Number(f32::INFINITY))
 ///     .insert_var("xs", Value::Tuple(vec![]));
 ///
-/// let module = "xs.fold(-INF, max)";
+/// let module = "xs.fold(-INFINITY, max)";
 /// let module = F32Grammar::parse_statements(Span::new(module)).unwrap();
 /// let mut module = interpreter.compile(&module).unwrap();
 ///
-/// // With the original imports, the returned value is `-INF`.
+/// // With the original imports, the returned value is `-INFINITY`.
 /// assert_eq!(module.run().unwrap(), Value::Number(f32::NEG_INFINITY));
 ///
 /// // Imports can be changed. Let's check that `xs` is indeed an import.
 /// let imports: HashSet<_> = module.imports().map(|(name, _)| name).collect();
-/// assert_eq!(imports, HashSet::from_iter(vec!["max", "fold", "xs", "INF"]));
+/// assert!(imports.is_superset(&HashSet::from_iter(vec!["max", "fold", "xs"])));
 ///
 /// // Change the `xs` import and run the module again.
 /// let array = [1.0, -3.0, 2.0, 0.5].iter().copied().map(Value::Number).collect();

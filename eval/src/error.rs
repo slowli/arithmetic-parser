@@ -6,6 +6,7 @@ use core::fmt;
 
 use crate::{
     alloc::{format, vec, String, ToOwned, Vec},
+    fns::FromValueError,
     Value,
 };
 use arithmetic_parser::{create_span_ref, BinaryOp, LvalueLen, Op, Span, Spanned, UnaryOp};
@@ -52,6 +53,7 @@ impl fmt::Display for RepeatedAssignmentContext {
 
 /// Errors that can occur during interpreting expressions and statements.
 #[derive(Debug, Display)]
+#[non_exhaustive]
 pub enum EvalError {
     /// Mismatch between length of tuples in a binary operation or assignment.
     #[display(
@@ -106,6 +108,15 @@ pub enum EvalError {
     #[display(fmt = "Failed executing native function: {}", _0)]
     NativeCall(String),
 
+    /// Error while converting arguments for [`FnWrapper`].
+    ///
+    /// [`FnWrapper`]: fns/struct.FnWrapper.html
+    #[display(
+        fmt = "Failed converting arguments for native function wrapper: {}",
+        _0
+    )]
+    Wrapper(FromValueError),
+
     /// Unexpected operand type for the specified operation.
     #[display(fmt = "Unexpected operand type for {}", op)]
     UnexpectedOperand {
@@ -137,6 +148,7 @@ impl EvalError {
             Self::Undefined(name) => format!("Variable `{}` is not defined", name),
             Self::CannotCall => "Value is not callable".to_owned(),
             Self::NativeCall(message) => message.to_owned(),
+            Self::Wrapper(err) => err.to_string(),
             Self::UnexpectedOperand { op } => format!("Unexpected operand type for {}", op),
         }
     }
@@ -151,7 +163,7 @@ impl EvalError {
             Self::CannotDestructure => "Failed destructuring".to_owned(),
             Self::RepeatedAssignment { .. } => "Re-assigned variable".to_owned(),
             Self::Undefined(_) => "Undefined variable occurrence".to_owned(),
-            Self::CannotCall | Self::NativeCall(_) => "Failed call".to_owned(),
+            Self::CannotCall | Self::NativeCall(_) | Self::Wrapper(_) => "Failed call".to_owned(),
             Self::UnexpectedOperand { .. } => "Operand of wrong type".to_owned(),
         }
     }
@@ -256,6 +268,11 @@ impl<'a> SpannedEvalError<'a> {
     pub(super) fn with_span<T>(mut self, span: &Spanned<'a, T>, info: AuxErrorInfo) -> Self {
         self.aux_spans.push(create_span_ref(span, info));
         self
+    }
+
+    /// Returns the source of the error.
+    pub fn source(&self) -> &EvalError {
+        &self.error
     }
 }
 

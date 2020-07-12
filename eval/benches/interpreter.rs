@@ -98,7 +98,7 @@ fn bench_mul_fold(bencher: &mut Bencher<'_>) {
 fn bench_fold_fn(bencher: &mut Bencher<'_>) {
     let mut ctx = CallContext::mock();
     let acc = ctx.apply_call_span(Value::Number(1.0));
-    let fold_fn = fns::Binary::new(|x, y| x * y);
+    let fold_fn = fns::Binary::new(|x: f32, y| x * y);
     let fold_fn = ctx.apply_call_span(Value::native_fn(fold_fn));
 
     let mut rng = StdRng::seed_from_u64(SEED);

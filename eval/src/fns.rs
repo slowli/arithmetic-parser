@@ -1,15 +1,23 @@
-//! Standard functions for the interpreter.
+//! Standard functions for the interpreter, and the tools to define new native functions.
+//!
+//! See [`FnWrapper`] documentation for the details how to define native functions.
+//!
+//! [`FnWrapper`]: struct.FnWrapper.html
 
-use num_traits::{Num, One, Pow, Zero};
-
-use core::ops;
+use arithmetic_parser::Grammar;
+use num_traits::{One, Zero};
 
 use crate::{
     alloc::{vec, Vec},
-    AuxErrorInfo, CallContext, EvalError, EvalResult, Function, NativeFn, SpannedEvalError,
+    AuxErrorInfo, CallContext, EvalError, EvalResult, Function, NativeFn, Number, SpannedEvalError,
     SpannedValue, Value,
 };
-use arithmetic_parser::Grammar;
+
+mod wrapper;
+pub use self::wrapper::{
+    wrap, Binary, ErrorOutput, FnWrapper, FromValueError, FromValueErrorKind,
+    FromValueErrorLocation, IntoEvalResult, Quaternary, Ternary, TryFromValue, Unary, WithContext,
+};
 
 fn extract_number<'a, T: Grammar>(
     ctx: &CallContext<'_, 'a>,
@@ -86,8 +94,8 @@ fn extract_fn<'a, T: Grammar>(
 #[derive(Debug, Clone, Copy)]
 pub struct Assert;
 
-impl<T: Grammar> NativeFn<T> for Assert {
-    fn evaluate<'a>(
+impl<'a, T: Grammar> NativeFn<'a, T> for Assert {
+    fn evaluate(
         &self,
         args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -148,12 +156,12 @@ impl<T: Grammar> NativeFn<T> for Assert {
 #[derive(Debug, Clone, Copy)]
 pub struct If;
 
-impl<T> NativeFn<T> for If
+impl<'a, T> NativeFn<'a, T> for If
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -215,12 +223,12 @@ impl Loop {
         "iteration function should return a 2-element tuple with first bool value";
 }
 
-impl<T> NativeFn<T> for Loop
+impl<'a, T> NativeFn<'a, T> for Loop
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -299,12 +307,12 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Map;
 
-impl<T> NativeFn<T> for Map
+impl<'a, T> NativeFn<'a, T> for Map
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -362,12 +370,12 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Filter;
 
-impl<T> NativeFn<T> for Filter
+impl<'a, T> NativeFn<'a, T> for Filter
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -430,12 +438,12 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Fold;
 
-impl<T> NativeFn<T> for Fold
+impl<'a, T> NativeFn<'a, T> for Fold
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -498,12 +506,12 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Push;
 
-impl<T> NativeFn<T> for Push
+impl<'a, T> NativeFn<'a, T> for Push
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -551,12 +559,12 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Merge;
 
-impl<T> NativeFn<T> for Merge
+impl<'a, T> NativeFn<'a, T> for Merge
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -591,12 +599,12 @@ pub struct Compare;
 
 const COMPARE_ERROR_MSG: &str = "Compare requires 2 primitive arguments";
 
-impl<T> NativeFn<T> for Compare
+impl<'a, T> NativeFn<'a, T> for Compare
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit> + PartialOrd,
+    T::Lit: Number + PartialOrd,
 {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -615,83 +623,6 @@ where
         } else {
             <T::Lit as Zero>::zero()
         }))
-    }
-}
-
-/// Unary function wrapper.
-#[derive(Debug, Clone, Copy)]
-pub struct Unary<F> {
-    function: F,
-}
-
-impl<F> Unary<F> {
-    /// Creates a new function.
-    pub const fn new(function: F) -> Self {
-        Self { function }
-    }
-}
-
-impl<F, T> NativeFn<T> for Unary<F>
-where
-    T: Grammar,
-    F: Fn(T::Lit) -> T::Lit,
-{
-    fn evaluate<'a>(
-        &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
-    ) -> EvalResult<'a, T> {
-        ctx.check_args_count(&args, 1)?;
-        let arg = args.pop().unwrap();
-
-        match arg.extra {
-            Value::Number(x) => {
-                let output = (self.function)(x);
-                Ok(Value::Number(output))
-            }
-            _ => {
-                let err = EvalError::native("Unary function requires one primitive argument");
-                Err(ctx
-                    .call_site_error(err)
-                    .with_span(&arg, AuxErrorInfo::InvalidArg))
-            }
-        }
-    }
-}
-
-const BINARY_FN_MSG: &str = "Binary function requires two primitive arguments";
-
-/// Binary function wrapper.
-#[derive(Debug, Clone, Copy)]
-pub struct Binary<F> {
-    function: F,
-}
-
-impl<F> Binary<F> {
-    /// Creates a new function.
-    pub const fn new(function: F) -> Self {
-        Self { function }
-    }
-}
-
-impl<F, T> NativeFn<T> for Binary<F>
-where
-    T: Grammar,
-    F: Fn(T::Lit, T::Lit) -> T::Lit,
-{
-    fn evaluate<'a>(
-        &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
-    ) -> EvalResult<'a, T> {
-        ctx.check_args_count(&args, 2)?;
-        let y = args.pop().unwrap();
-        let x = args.pop().unwrap();
-
-        let x = extract_number(ctx, x, BINARY_FN_MSG)?;
-        let y = extract_number(ctx, y, BINARY_FN_MSG)?;
-        let output = (self.function)(x, y);
-        Ok(Value::Number(output))
     }
 }
 

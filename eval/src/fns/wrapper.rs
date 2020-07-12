@@ -297,6 +297,15 @@ impl<'a, T: Number, G: Grammar<Lit = T>> TryFromValue<'a, G> for T {
     }
 }
 
+impl<'a, G: Grammar> TryFromValue<'a, G> for bool {
+    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
+        match value {
+            Value::Bool(flag) => Ok(flag),
+            _ => Err(FromValueError::invalid_type(ValueType::Bool, &value)),
+        }
+    }
+}
+
 impl<'a, U, G: Grammar> TryFromValue<'a, G> for Vec<U>
 where
     U: TryFromValue<'a, G>,
@@ -739,5 +748,22 @@ mod tests {
             err.source(),
             EvalError::NativeCall(ref msg) if msg.contains("Assertion failed")
         );
+    }
+
+    #[test]
+    fn function_with_bool_argument() {
+        let mut interpreter = Interpreter::new();
+        interpreter
+            .insert_var("true", Value::Bool(true))
+            .insert_var("false", Value::Bool(false));
+        interpreter.insert_native_fn(
+            "flip_sign",
+            wrap(|val: f32, flag: bool| if flag { -val } else { val }),
+        );
+
+        let program = "flip_sign(-1, true) == 1 && flip_sign(-1, false) == -1";
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let ret = interpreter.evaluate(&block).unwrap();
+        assert_eq!(ret, Value::Bool(true));
     }
 }

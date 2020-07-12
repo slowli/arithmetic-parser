@@ -451,6 +451,7 @@ where
 /// assert_eq!(module.run().unwrap(), Value::Number(f32::NEG_INFINITY));
 ///
 /// // Imports can be changed. Let's check that `xs` is indeed an import.
+/// assert!(module.has_import("xs"));
 /// let imports: HashSet<_> = module.imports().map(|(name, _)| name).collect();
 /// assert!(imports.is_superset(&HashSet::from_iter(vec!["max", "fold", "xs"])));
 ///
@@ -470,11 +471,24 @@ impl<'a, T: Grammar> ExecutableModule<'a, T> {
         Self { inner, imports }
     }
 
+    /// Checks if a variable with the specified name is imported to this module.
+    pub fn has_import(&self, name: &str) -> bool {
+        self.imports.vars.contains_key(name)
+    }
+
+    /// Gets the current value of the import with the specified name, or `None` if the import
+    /// is not defined.
+    pub fn import(&self, name: &str) -> Option<&Value<'a, T>> {
+        self.imports.get_var(name)
+    }
+
     /// Sets the value of an imported variable.
     ///
     /// # Panics
     ///
-    /// Panics if the variable with the specified name is not an import.
+    /// Panics if the variable with the specified name is not an import. Check
+    /// that the import exists beforehand via [`has_import()`](#method.has_import) if this is
+    /// unknown at compile time.
     pub fn set_import(&mut self, name: &str, value: Value<'a, T>) -> &mut Self {
         self.imports.set_var(name, value);
         self

@@ -14,17 +14,27 @@ use crate::{
 use arithmetic_parser::{create_span_ref, BinaryOp, Grammar, LvalueLen, Span, Spanned, UnaryOp};
 
 /// Pointer to a register or constant.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 pub enum Atom<T: Grammar> {
     Constant(T::Lit),
     Register(usize),
     Void,
 }
 
+impl<T: Grammar> Clone for Atom<T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Constant(literal) => Self::Constant(literal.clone()),
+            Self::Register(index) => Self::Register(*index),
+            Self::Void => Self::Void,
+        }
+    }
+}
+
 pub type SpannedAtom<'a, T> = Spanned<'a, Atom<T>>;
 
 /// Atomic operation on registers and/or constants.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum CompiledExpr<'a, T: Grammar> {
     Atom(Atom<T>),
     Tuple(Vec<Atom<T>>),
@@ -45,6 +55,36 @@ pub enum CompiledExpr<'a, T: Grammar> {
         ptr: usize,
         captures: Vec<SpannedAtom<'a, T>>,
     },
+}
+
+impl<T: Grammar> Clone for CompiledExpr<'_, T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Atom(atom) => Self::Atom(atom.clone()),
+            Self::Tuple(atoms) => Self::Tuple(atoms.clone()),
+
+            Self::Unary { op, inner } => Self::Unary {
+                op: *op,
+                inner: inner.clone(),
+            },
+
+            Self::Binary { op, lhs, rhs } => Self::Binary {
+                op: *op,
+                lhs: lhs.clone(),
+                rhs: rhs.clone(),
+            },
+
+            Self::Function { name, args } => Self::Function {
+                name: name.clone(),
+                args: args.clone(),
+            },
+
+            Self::DefineFunction { ptr, captures } => Self::DefineFunction {
+                ptr: *ptr,
+                captures: captures.clone(),
+            },
+        }
+    }
 }
 
 /// Commands for a primitive register VM used to execute compiled programs.
@@ -84,6 +124,45 @@ pub enum Command<'a, T: Grammar> {
     TruncateRegisters(usize),
 }
 
+impl<T: Grammar> Clone for Command<'_, T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Push(expr) => Self::Push(expr.clone()),
+
+            Self::Destructure {
+                source,
+                start_len,
+                end_len,
+                lvalue_len,
+                unchecked,
+            } => Self::Destructure {
+                source: *source,
+                start_len: *start_len,
+                end_len: *end_len,
+                lvalue_len: *lvalue_len,
+                unchecked: *unchecked,
+            },
+
+            Self::Copy {
+                source,
+                destination,
+            } => Self::Copy {
+                source: *source,
+                destination: *destination,
+            },
+
+            Self::Annotate { register, name } => Self::Annotate {
+                register: *register,
+                name,
+            },
+
+            Self::StartInnerScope => Self::StartInnerScope,
+            Self::EndInnerScope => Self::EndInnerScope,
+            Self::TruncateRegisters(size) => Self::TruncateRegisters(*size),
+        }
+    }
+}
+
 type SpannedCommand<'a, T> = Spanned<'a, Command<'a, T>>;
 
 #[derive(Debug)]
@@ -99,6 +178,16 @@ pub(super) struct Executable<'a, T: Grammar> {
     child_fns: Vec<Rc<ExecutableFn<'a, T>>>,
     // Hint how many registers the executable requires.
     register_capacity: usize,
+}
+
+impl<'a, T: Grammar> Clone for Executable<'a, T> {
+    fn clone(&self) -> Self {
+        Self {
+            commands: self.commands.clone(),
+            child_fns: self.child_fns.clone(),
+            register_capacity: self.register_capacity,
+        }
+    }
 }
 
 impl<'a, T: Grammar> Executable<'a, T> {
@@ -466,6 +555,15 @@ pub struct ExecutableModule<'a, T: Grammar> {
     imports: Env<'a, T>,
 }
 
+impl<T: Grammar> Clone for ExecutableModule<'_, T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            imports: self.imports.clone(),
+        }
+    }
+}
+
 impl<'a, T: Grammar> ExecutableModule<'a, T> {
     pub(super) fn new(inner: Executable<'a, T>, imports: Env<'a, T>) -> Self {
         Self { inner, imports }
@@ -556,5 +654,22 @@ mod tests {
         assert_eq!(env.vars.len(), 2);
         assert!(env.vars.contains_key("x"));
         assert!(env.vars.contains_key("y"));
+    }
+
+    #[test]
+    fn cloning_module() {
+        let mut env = Env::new();
+        env.push_var("x", Value::<F32Grammar>::Number(5.0));
+
+        let block = "y = x + 2 * (x + 1) + 1; y";
+        let block = F32Grammar::parse_statements(Span::new(block)).unwrap();
+        let module = Compiler::compile_module(&env, &block, false).unwrap();
+
+        let mut module_copy = module.clone();
+        module_copy.set_import("x", Value::Number(10.0));
+        let value = module_copy.run().unwrap();
+        assert_eq!(value, Value::Number(33.0));
+        let value = module.run().unwrap();
+        assert_eq!(value, Value::Number(18.0));
     }
 }

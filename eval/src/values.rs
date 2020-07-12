@@ -217,6 +217,41 @@ where
     }
 }
 
+/// Possible high-level types of [`Value`]s.
+///
+/// [`Value`]: enum.Value.html
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ValueType {
+    /// Number.
+    Number,
+    /// Boolean value.
+    Bool,
+    /// Function value.
+    Function,
+    /// Tuple of a specific size.
+    Tuple(usize),
+    /// Array (a tuple of arbitrary size).
+    ///
+    /// This variant is never returned from [`Value::value_type()`]; at the same time, it is
+    /// used for error reporting etc.
+    ///
+    /// [`Value::value_type()`]: enum.Value.html#method.value_type
+    Array,
+}
+
+impl fmt::Display for ValueType {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Number => formatter.write_str("number"),
+            Self::Bool => formatter.write_str("boolean value"),
+            Self::Function => formatter.write_str("function"),
+            Self::Tuple(1) => write!(formatter, "tuple with 1 element"),
+            Self::Tuple(size) => write!(formatter, "tuple with {} elements", size),
+            Self::Array => formatter.write_str("array"),
+        }
+    }
+}
+
 /// Values produced by expressions during their interpretation.
 #[derive(Debug)]
 pub enum Value<'a, T>
@@ -250,6 +285,16 @@ impl<'a, T: Grammar> Value<'a, T> {
     /// Creates a void value (an empty tuple).
     pub fn void() -> Self {
         Self::Tuple(vec![])
+    }
+
+    /// Returns the type of this value.
+    pub fn value_type(&self) -> ValueType {
+        match self {
+            Self::Number(_) => ValueType::Number,
+            Self::Bool(_) => ValueType::Bool,
+            Self::Function(_) => ValueType::Function,
+            Self::Tuple(elements) => ValueType::Tuple(elements.len()),
+        }
     }
 
     /// Checks if the value is void.

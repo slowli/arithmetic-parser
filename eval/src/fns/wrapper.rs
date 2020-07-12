@@ -4,7 +4,7 @@ use core::{fmt, marker::PhantomData};
 
 use crate::{
     AuxErrorInfo, CallContext, EvalError, EvalResult, Function, NativeFn, Number, SpannedEvalError,
-    SpannedValue, Value,
+    SpannedValue, Value, ValueType,
 };
 
 /// Wraps a function enriching it with the information about its arguments.
@@ -148,6 +148,133 @@ impl<T, F> FnWrapper<T, F> {
     }
 }
 
+/// Error raised when a value cannot be converted to the expected type when using
+/// [`FnWrapper`].
+///
+/// [`FnWrapper`]: struct.FnWrapper.html
+#[derive(Debug, Clone)]
+pub struct FromValueError {
+    kind: FromValueErrorKind,
+    arg_index: usize,
+    location: Vec<FromValueErrorLocation>,
+}
+
+impl FromValueError {
+    pub(crate) fn invalid_type<T>(expected: ValueType, actual_value: &Value<'_, T>) -> Self
+    where
+        T: Grammar,
+    {
+        Self {
+            kind: FromValueErrorKind::InvalidType {
+                expected,
+                actual: actual_value.value_type(),
+            },
+            arg_index: 0,
+            location: vec![],
+        }
+    }
+
+    fn add_location(mut self, location: FromValueErrorLocation) -> Self {
+        self.location.push(location);
+        self
+    }
+
+    fn set_arg_index(&mut self, index: usize) {
+        self.arg_index = index;
+    }
+
+    /// Returns the error kind.
+    pub fn kind(&self) -> &FromValueErrorKind {
+        &self.kind
+    }
+
+    /// Returns the zero-based index of the argument where the error has occurred.
+    pub fn arg_index(&self) -> usize {
+        self.arg_index
+    }
+
+    /// Returns the error location, starting from the most generic one (such as the argument index).
+    pub fn location(&self) -> &[FromValueErrorLocation] {
+        &self.location
+    }
+}
+
+impl fmt::Display for FromValueError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "{}\nError location: Argument #{}",
+            self.kind, self.arg_index
+        )?;
+        for location_element in &self.location {
+            write!(formatter, " -> {}", location_element)?;
+        }
+        Ok(())
+    }
+}
+
+/// Error kinds for [`FromValueError`].
+///
+/// [`FromValueError`]: struct.FromValueError.html
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum FromValueErrorKind {
+    /// Mismatch between expected and actual value type.
+    InvalidType {
+        /// Expected value type.
+        expected: ValueType,
+        /// Actual value type.
+        actual: ValueType,
+    },
+}
+
+impl fmt::Display for FromValueErrorKind {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidType { expected, actual } => {
+                write!(formatter, "Cannot convert {} to {}", actual, expected)
+            }
+        }
+    }
+}
+
+/// Element of the [`FromValueError`] location.
+///
+/// Note that the distinction between tuples and arrays is determined by the [`FnWrapper`].
+/// If the corresponding type in the wrapper is defined as a tuple, then
+/// a [`Tuple`](#variant.Tuple) element will be added to the location; otherwise,
+/// an [`Array`](#variant.Array) will be added.
+///
+/// [`FromValueError`]: struct.FromValueError.html
+/// [`FnWrapper`]: struct.FnWrapper.html
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub enum FromValueErrorLocation {
+    /// Location within a tuple.
+    Tuple {
+        /// Tuple size.
+        size: usize,
+        /// Zero-based index of the erroneous element.
+        index: usize,
+    },
+    /// Location within an array.
+    Array {
+        /// Factual array size.
+        size: usize,
+        /// Zero-based index of the erroneous element.
+        index: usize,
+    },
+}
+
+impl fmt::Display for FromValueErrorLocation {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Tuple { index, .. } => write!(formatter, "tuple[{}]", index),
+            Self::Array { index, .. } => write!(formatter, "array[{}]", index),
+        }
+    }
+}
+
 /// Fallible conversion from `Value` to a function argument.
 ///
 /// This trait is implemented for base value types (such as [`Number`]s, [`Function`]s, [`Value`]s),
@@ -158,14 +285,14 @@ impl<T, F> FnWrapper<T, F> {
 /// [`Value`]: ../enum.Value.html
 pub trait TryFromValue<'a, G: Grammar>: Sized {
     /// Attempts to convert `value` to a type supported by the function.
-    fn try_from_value(value: Value<'a, G>) -> Result<Self, String>;
+    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError>;
 }
 
 impl<'a, T: Number, G: Grammar<Lit = T>> TryFromValue<'a, G> for T {
-    fn try_from_value(value: Value<'a, G>) -> Result<Self, String> {
+    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
         match value {
             Value::Number(number) => Ok(number),
-            _ => Err("Expected number".to_owned()),
+            _ => Err(FromValueError::invalid_type(ValueType::Number, &value)),
         }
     }
 }
@@ -174,25 +301,39 @@ impl<'a, U, G: Grammar> TryFromValue<'a, G> for Vec<U>
 where
     U: TryFromValue<'a, G>,
 {
-    fn try_from_value(value: Value<'a, G>) -> Result<Self, String> {
+    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
         match value {
-            Value::Tuple(values) => values.into_iter().map(U::try_from_value).collect(),
-            _ => Err("Expected tuple".to_owned()),
+            Value::Tuple(values) => {
+                let tuple_len = values.len();
+                let mut collected = Vec::with_capacity(tuple_len);
+
+                for (index, element) in values.into_iter().enumerate() {
+                    let converted = U::try_from_value(element).map_err(|err| {
+                        err.add_location(FromValueErrorLocation::Array {
+                            size: tuple_len,
+                            index,
+                        })
+                    })?;
+                    collected.push(converted);
+                }
+                Ok(collected)
+            }
+            _ => Err(FromValueError::invalid_type(ValueType::Array, &value)),
         }
     }
 }
 
 impl<'a, G: Grammar> TryFromValue<'a, G> for Value<'a, G> {
-    fn try_from_value(value: Value<'a, G>) -> Result<Self, String> {
+    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
         Ok(value)
     }
 }
 
 impl<'a, G: Grammar> TryFromValue<'a, G> for Function<'a, G> {
-    fn try_from_value(value: Value<'a, G>) -> Result<Self, String> {
+    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
         match value {
             Value::Function(function) => Ok(function),
-            _ => Err("Expected function".to_owned()),
+            _ => Err(FromValueError::invalid_type(ValueType::Function, &value)),
         }
     }
 }
@@ -203,18 +344,24 @@ macro_rules! try_from_value_for_tuple {
         where
             $($ty: TryFromValue<'a, G>,)+
         {
-            fn try_from_value(value: Value<'a, G>) -> Result<Self, String> {
-                const MSG: &str = concat!("Expected ", $size, "-element tuple");
+            fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
+                const EXPECTED_TYPE: ValueType = ValueType::Tuple($size);
 
                 match value {
                     Value::Tuple(values) if values.len() == $size => {
-                        let mut values_iter = values.into_iter();
+                        let mut values_iter = values.into_iter().enumerate();
                         $(
-                            let $var = $ty::try_from_value(values_iter.next().unwrap())?;
+                            let (index, $var) = values_iter.next().unwrap();
+                            let $var = $ty::try_from_value($var).map_err(|err| {
+                                err.add_location(FromValueErrorLocation::Tuple {
+                                    size: $size,
+                                    index,
+                                })
+                            })?;
                         )+
                         Ok(($($var,)+))
                     }
-                    _ => Err(MSG.to_owned()),
+                    _ => Err(FromValueError::invalid_type(EXPECTED_TYPE, &value)),
                 }
             }
         }
@@ -371,14 +518,15 @@ macro_rules! arity_fn {
                 context: &mut CallContext<'_, 'a>,
             ) -> EvalResult<'a, G> {
                 context.check_args_count(&args, $arity)?;
-                let mut args_iter = args.into_iter();
+                let mut args_iter = args.into_iter().enumerate();
 
                 $(
-                    let $arg_name = args_iter.next().unwrap();
+                    let (index, $arg_name) = args_iter.next().unwrap();
                     let span = create_span_ref(&$arg_name, ());
-                    let $arg_name = $t::try_from_value($arg_name.extra).map_err(|error_msg| {
+                    let $arg_name = $t::try_from_value($arg_name.extra).map_err(|mut err| {
+                        err.set_arg_index(index);
                         context
-                            .call_site_error(EvalError::native(error_msg))
+                            .call_site_error(EvalError::Wrapper(err))
                             .with_span(&span, AuxErrorInfo::InvalidArg)
                     })?;
                 )+
@@ -401,14 +549,15 @@ macro_rules! arity_fn {
                 context: &mut CallContext<'_, 'a>,
             ) -> EvalResult<'a, G> {
                 context.check_args_count(&args, $arity)?;
-                let mut args_iter = args.into_iter();
+                let mut args_iter = args.into_iter().enumerate();
 
                 $(
-                    let $arg_name = args_iter.next().unwrap();
+                    let (index, $arg_name) = args_iter.next().unwrap();
                     let span = create_span_ref(&$arg_name, ());
-                    let $arg_name = $t::try_from_value($arg_name.extra).map_err(|error_msg| {
+                    let $arg_name = $t::try_from_value($arg_name.extra).map_err(|mut err| {
+                        err.set_arg_index(index);
                         context
-                            .call_site_error(EvalError::native(error_msg))
+                            .call_site_error(EvalError::Wrapper(err))
                             .with_span(&span, AuxErrorInfo::InvalidArg)
                     })?;
                 )+

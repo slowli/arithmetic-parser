@@ -100,7 +100,7 @@ pub use self::{
         RepeatedAssignmentContext, SpannedEvalError, TupleLenMismatchContext,
     },
     executable::ExecutableModule,
-    values::{CallContext, Function, InterpretedFn, NativeFn, SpannedValue, Value},
+    values::{CallContext, Function, InterpretedFn, NativeFn, SpannedValue, Value, ValueType},
 };
 
 use num_complex::{Complex32, Complex64};
@@ -217,7 +217,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::alloc::{vec, Rc};
+    use crate::{
+        alloc::{vec, Rc},
+        fns::FromValueErrorKind,
+    };
     use arithmetic_parser::{grammars::F32Grammar, BinaryOp, GrammarExt, LvalueLen, Span, UnaryOp};
 
     use assert_matches::assert_matches;
@@ -882,9 +885,14 @@ mod tests {
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
         assert_eq!(err.main_span().fragment, "sin((-5, 2))");
+
+        let expected_err_kind = FromValueErrorKind::InvalidType {
+            expected: ValueType::Number,
+            actual: ValueType::Tuple(2),
+        };
         assert_matches!(
             err.source(),
-            EvalError::NativeCall(ref msg) if msg.contains("Expected number")
+            EvalError::Wrapper(err) if *err.kind() == expected_err_kind && err.arg_index() == 0
         );
     }
 

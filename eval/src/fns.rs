@@ -15,8 +15,8 @@ use crate::{
 
 mod wrapper;
 pub use self::wrapper::{
-    wrap, Binary, ErrorOutput, FnWrapper, IntoEvalResult, Quaternary, Ternary, TryFromValue, Unary,
-    WithContext,
+    wrap, Binary, ErrorOutput, FnWrapper, FromValueError, FromValueErrorKind,
+    FromValueErrorLocation, IntoEvalResult, Quaternary, Ternary, TryFromValue, Unary, WithContext,
 };
 
 fn extract_number<'a, T: Grammar>(

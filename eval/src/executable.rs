@@ -1,14 +1,11 @@
 //! Executables output by a `Compiler` and related types.
 
 use hashbrown::HashMap;
-use num_traits::{Num, Pow};
 use smallvec::{smallvec, SmallVec};
-
-use core::ops;
 
 use crate::{
     alloc::{vec, Rc, Vec},
-    Backtrace, CallContext, ErrorWithBacktrace, EvalError, EvalResult, InterpretedFn,
+    Backtrace, CallContext, ErrorWithBacktrace, EvalError, EvalResult, InterpretedFn, Number,
     SpannedEvalError, TupleLenMismatchContext, Value,
 };
 use arithmetic_parser::{create_span_ref, BinaryOp, Grammar, LvalueLen, Span, Spanned, UnaryOp};
@@ -140,7 +137,7 @@ impl<'a, T: Grammar> Executable<'a, T> {
 impl<'a, T> Executable<'a, T>
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
     pub(super) fn call_function(
         &self,
@@ -238,7 +235,7 @@ impl<'a, T: Grammar> Env<'a, T> {
 impl<'a, T> Env<'a, T>
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
     pub fn execute(
         &mut self,
@@ -418,7 +415,7 @@ where
     fn resolve_atom(&self, atom: &Atom<T>) -> Value<'a, T> {
         match atom {
             Atom::Register(index) => self.registers[*index].clone(),
-            Atom::Constant(value) => Value::Number(value.clone()),
+            Atom::Constant(value) => Value::Number(*value),
             Atom::Void => Value::void(),
         }
     }
@@ -492,7 +489,7 @@ impl<'a, T: Grammar> ExecutableModule<'a, T> {
 
 impl<'a, T: Grammar> ExecutableModule<'a, T>
 where
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
     /// Runs the module with the current values of imports.
     pub fn run(&self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {

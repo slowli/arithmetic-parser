@@ -1,14 +1,15 @@
 //! Values used by the interpreter.
 
 use hashbrown::HashMap;
-use num_traits::{Num, Pow};
+use num_traits::Pow;
 
-use core::{fmt, ops};
+use core::fmt;
 
 use crate::{
     alloc::{vec, Rc, Vec},
     executable::ExecutableFn,
-    AuxErrorInfo, Backtrace, EvalError, EvalResult, SpannedEvalError, TupleLenMismatchContext,
+    AuxErrorInfo, Backtrace, EvalError, EvalResult, Number, SpannedEvalError,
+    TupleLenMismatchContext,
 };
 use arithmetic_parser::{
     create_span_ref, BinaryOp, Grammar, LvalueLen, Op, Span, Spanned, UnaryOp,
@@ -131,7 +132,7 @@ impl<'a, T: Grammar> InterpretedFn<'a, T> {
 impl<'a, T> InterpretedFn<'a, T>
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
     /// Evaluates this function with the provided arguments and the execution context.
     pub fn evaluate(
@@ -195,7 +196,7 @@ impl<'a, T: Grammar> Function<'a, T> {
 impl<'a, T> Function<'a, T>
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
     /// Evaluates the function on the specified arguments.
     pub fn evaluate(
@@ -405,7 +406,7 @@ impl BinaryOpError {
 impl<'a, T> Value<'a, T>
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
     fn try_binary_op_inner(
         self,

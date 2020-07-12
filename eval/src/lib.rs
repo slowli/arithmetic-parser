@@ -104,7 +104,7 @@ pub use self::{
 };
 
 use num_complex::{Complex32, Complex64};
-use num_traits::{Num, Pow};
+use num_traits::Pow;
 
 use core::ops;
 
@@ -133,7 +133,7 @@ pub struct Interpreter<'a, T: Grammar> {
 
 impl<T: Grammar> Default for Interpreter<'_, T>
 where
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
     fn default() -> Self {
         Self::new()
@@ -186,7 +186,7 @@ where
 impl<'a, T> Interpreter<'a, T>
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
     /// Evaluates a list of statements.
     pub fn evaluate(

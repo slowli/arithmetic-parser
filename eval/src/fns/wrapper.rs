@@ -460,6 +460,12 @@ impl<'a, T: Number, G: Grammar<Lit = T>> IntoEvalResult<'a, G> for T {
     }
 }
 
+impl<'a, G: Grammar> IntoEvalResult<'a, G> for bool {
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+        Ok(Value::Bool(self))
+    }
+}
+
 impl<'a, U, G: Grammar> IntoEvalResult<'a, G> for Vec<U>
 where
     U: IntoEvalResult<'a, G>,
@@ -681,5 +687,19 @@ mod tests {
             .source()
             .to_short_string()
             .contains("Summed arrays must have the same size"));
+    }
+
+    #[test]
+    fn function_with_bool_return_value() {
+        let mut interpreter = Interpreter::new();
+        interpreter.insert_native_fn(
+            "contains",
+            wrap(|(a, b): (f32, f32), x: f32| (a..=b).contains(&x)),
+        );
+
+        let program = "(-1, 2).contains(0) && !(1, 3).contains(0)";
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let ret = interpreter.evaluate(&block).unwrap();
+        assert_eq!(ret, Value::Bool(true));
     }
 }

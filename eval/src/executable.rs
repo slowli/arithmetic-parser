@@ -284,6 +284,11 @@ impl<'a, T: Grammar> Env<'a, T> {
         Some(&self.registers[register])
     }
 
+    pub fn get_var_mut(&mut self, name: &str) -> Option<&mut Value<'a, T>> {
+        let register = *self.vars.get(name)?;
+        Some(&mut self.registers[register])
+    }
+
     pub fn variables(&self) -> impl Iterator<Item = (&'a str, &Value<'a, T>)> + '_ {
         self.vars
             .iter()
@@ -519,7 +524,7 @@ where
 ///
 /// ```
 /// use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
-/// use arithmetic_eval::{fns, Interpreter, Value};
+/// use arithmetic_eval::{fns, Interpreter, Value, ValueType};
 /// # use std::{collections::HashSet, f32, iter::FromIterator};
 ///
 /// let mut interpreter = Interpreter::new();
@@ -541,6 +546,9 @@ where
 ///
 /// // Imports can be changed. Let's check that `xs` is indeed an import.
 /// assert!(module.imports().contains("xs"));
+/// // ...or even
+/// assert!(module.imports()["fold"].is_function());
+/// // It's possible to iterate over imports, too.
 /// let imports: HashSet<_> = module.imports().iter().map(|(name, _)| name).collect();
 /// assert!(imports.is_superset(&HashSet::from_iter(vec!["max", "fold", "xs"])));
 ///
@@ -565,7 +573,7 @@ where
 /// assert_eq!(module.run().unwrap(), Value::Number(8.0));
 ///
 /// let mut imports = module.imports().to_owned();
-/// imports.set("x", Value::Number(-1.0));
+/// imports["x"] = Value::Number(-1.0);
 /// assert_eq!(module.run_with_imports(imports).unwrap(), Value::Number(4.0));
 /// ```
 #[derive(Debug)]
@@ -664,7 +672,12 @@ where
 
 /// Imports of an [`ExecutableModule`].
 ///
+/// Note that imports implement [`Index`] / [`IndexMut`] traits, which allows to eloquently
+/// access or modify imports.
+///
 /// [`ExecutableModule`]: struct.ExecutableModule.html
+/// [`Index`]: https://doc.rust-lang.org/std/ops/trait.Index.html
+/// [`IndexMut`]: https://doc.rust-lang.org/std/ops/trait.IndexMut.html
 #[derive(Debug)]
 pub struct ModuleImports<'a, T: Grammar> {
     inner: Env<'a, T>,
@@ -715,6 +728,24 @@ impl<'a, T: Grammar> ModuleImports<'a, T> {
     /// it guarantees that the execution will not lead to a panic or unpredictable results.
     pub fn is_compatible(&self, module: &ExecutableModule<'a, T>) -> bool {
         self.inner.vars == module.imports.inner.vars
+    }
+}
+
+impl<'a, T: Grammar> ops::Index<&str> for ModuleImports<'a, T> {
+    type Output = Value<'a, T>;
+
+    fn index(&self, index: &str) -> &Self::Output {
+        self.inner
+            .get_var(index)
+            .unwrap_or_else(|| panic!("Import `{}` is not defined", index))
+    }
+}
+
+impl<'a, T: Grammar> ops::IndexMut<&str> for ModuleImports<'a, T> {
+    fn index_mut(&mut self, index: &str) -> &mut Self::Output {
+        self.inner
+            .get_var_mut(index)
+            .unwrap_or_else(|| panic!("Import `{}` is not defined", index))
     }
 }
 

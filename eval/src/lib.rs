@@ -44,12 +44,11 @@
 //! const MAX: fns::Binary<f32> =
 //!     fns::Binary::new(|x, y| if x > y { x } else { y });
 //!
-//! let mut context = Interpreter::new();
+//! let mut context = Interpreter::with_prelude();
 //! // Add some native functions to the interpreter.
 //! context
 //!     .insert_native_fn("min", MIN)
-//!     .insert_native_fn("max", MAX)
-//!     .insert_native_fn("assert", fns::Assert);
+//!     .insert_native_fn("max", MAX);
 //!
 //! let program = r#"
 //!     ## The interpreter supports all parser features, including
@@ -188,6 +187,34 @@ where
     T: Grammar,
     T::Lit: Number,
 {
+    /// Returns an interpreter with most of functions from the [`fns` module] imported in.
+    ///
+    /// # Return value
+    ///
+    /// The returned interpreter contains the following variables:
+    ///
+    /// - All functions from the `fns` module, except for [`Compare`] (since it requires
+    ///   `PartialOrd` implementation for numbers). All functions are named in lowercase,
+    ///   e.g., `if`, `map`.
+    /// - `true` and `false` Boolean constants.
+    ///
+    /// [`fns` module]: fns/index.html
+    /// [`Compare`]: fns/struct.Compare.html
+    pub fn with_prelude() -> Self {
+        let mut this = Self::new();
+        this.insert_var("false", Value::Bool(false))
+            .insert_var("true", Value::Bool(true))
+            .insert_native_fn("assert", fns::Assert)
+            .insert_native_fn("if", fns::If)
+            .insert_native_fn("loop", fns::Loop)
+            .insert_native_fn("map", fns::Map)
+            .insert_native_fn("filter", fns::Filter)
+            .insert_native_fn("fold", fns::Fold)
+            .insert_native_fn("push", fns::Push)
+            .insert_native_fn("merge", fns::Merge);
+        this
+    }
+
     /// Evaluates a list of statements.
     pub fn evaluate(
         &mut self,

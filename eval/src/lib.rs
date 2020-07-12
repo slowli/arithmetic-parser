@@ -99,7 +99,7 @@ pub use self::{
         AuxErrorInfo, Backtrace, BacktraceElement, ErrorWithBacktrace, EvalError, EvalResult,
         RepeatedAssignmentContext, SpannedEvalError, TupleLenMismatchContext,
     },
-    executable::ExecutableModule,
+    executable::{ExecutableModule, ModuleImports},
     values::{CallContext, Function, InterpretedFn, NativeFn, SpannedValue, Value, ValueType},
 };
 

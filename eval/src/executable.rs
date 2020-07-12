@@ -540,14 +540,33 @@ where
 /// assert_eq!(module.run().unwrap(), Value::Number(f32::NEG_INFINITY));
 ///
 /// // Imports can be changed. Let's check that `xs` is indeed an import.
-/// assert!(module.has_import("xs"));
-/// let imports: HashSet<_> = module.imports().map(|(name, _)| name).collect();
+/// assert!(module.imports().contains("xs"));
+/// let imports: HashSet<_> = module.imports().iter().map(|(name, _)| name).collect();
 /// assert!(imports.is_superset(&HashSet::from_iter(vec!["max", "fold", "xs"])));
 ///
 /// // Change the `xs` import and run the module again.
 /// let array = [1.0, -3.0, 2.0, 0.5].iter().copied().map(Value::Number).collect();
 /// module.set_import("xs", Value::Tuple(array));
 /// assert_eq!(module.run().unwrap(), Value::Number(2.0));
+/// ```
+///
+/// The same module can be run with multiple imports:
+///
+/// ```
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_eval::{Interpreter, Value};
+/// let mut interpreter = Interpreter::new();
+/// interpreter
+///     .insert_var("x", Value::Number(3.0))
+///     .insert_var("y", Value::Number(5.0));
+/// let module = "x + y";
+/// let module = F32Grammar::parse_statements(Span::new(module)).unwrap();
+/// let mut module = interpreter.compile(&module).unwrap();
+/// assert_eq!(module.run().unwrap(), Value::Number(8.0));
+///
+/// let mut imports = module.imports().to_owned();
+/// imports.set("x", Value::Number(-1.0));
+/// assert_eq!(module.run_with_imports(imports).unwrap(), Value::Number(4.0));
 /// ```
 #[derive(Debug)]
 pub struct ExecutableModule<'a, T: Grammar> {
@@ -577,8 +596,10 @@ impl<'a, T: Grammar> ExecutableModule<'a, T> {
     /// # Panics
     ///
     /// Panics if the variable with the specified name is not an import. Check
-    /// that the import exists beforehand via [`has_import()`](#method.has_import) if this is
+    /// that the import exists beforehand via [`imports().contains()`] if this is
     /// unknown at compile time.
+    ///
+    /// [`imports().contains()`]: struct.ModuleImports.html#method.contains
     pub fn set_import(&mut self, name: &str, value: Value<'a, T>) -> &mut Self {
         self.imports.set(name, value);
         self
@@ -659,7 +680,7 @@ impl<T: Grammar> Clone for ModuleImports<'_, T> {
 
 impl<'a, T: Grammar> ModuleImports<'a, T> {
     /// Checks if the imports contain a variable with the specified name.
-    pub fn contains(&mut self, name: &str) -> bool {
+    pub fn contains(&self, name: &str) -> bool {
         self.inner.vars.contains_key(name)
     }
 
@@ -690,7 +711,7 @@ impl<'a, T: Grammar> ModuleImports<'a, T> {
     /// via [`set`](#method.set) are guaranteed to remain compatible with the module.
     /// Imports taken from another module are almost always incompatible with the module.
     ///
-    /// The compatibility does not guarantee that the module execution will succeed; however,
+    /// The compatibility does not guarantee that the module execution will succeed; instead,
     /// it guarantees that the execution will not lead to a panic or unpredictable results.
     pub fn is_compatible(&self, module: &ExecutableModule<'a, T>) -> bool {
         self.inner.vars == module.imports.inner.vars
@@ -752,5 +773,43 @@ mod tests {
         assert_eq!(value, Value::Number(33.0));
         let value = module.run().unwrap();
         assert_eq!(value, Value::Number(18.0));
+    }
+
+    #[test]
+    fn checking_import_compatibility() {
+        let mut env = Env::new();
+        env.push_var("x", Value::<F32Grammar>::Number(5.0));
+        env.push_var("y", Value::Bool(true));
+
+        let block = "x + y";
+        let block = F32Grammar::parse_statements(Span::new(block)).unwrap();
+        let module = Compiler::compile_module(&env, &block, false).unwrap();
+
+        let mut imports = module.imports().to_owned();
+        assert!(imports.is_compatible(&module));
+        imports.set("x", Value::Number(-1.0));
+        assert!(imports.is_compatible(&module));
+
+        let mut other_env = Env::new();
+        other_env.push_var("y", Value::<F32Grammar>::Number(1.0));
+        assert!(!ModuleImports { inner: other_env }.is_compatible(&module));
+    }
+
+    #[test]
+    #[should_panic(expected = "Cannot run module with incompatible imports")]
+    fn running_module_with_incompatible_imports() {
+        let mut env = Env::new();
+        env.push_var("x", Value::<F32Grammar>::Number(5.0));
+        env.push_var("y", Value::Number(1.0));
+
+        let block = "x + y";
+        let block = F32Grammar::parse_statements(Span::new(block)).unwrap();
+        let module = Compiler::compile_module(&env, &block, false).unwrap();
+
+        let mut other_env = Env::new();
+        other_env.push_var("y", Value::<F32Grammar>::Number(1.0));
+        module
+            .run_with_imports(ModuleImports { inner: other_env })
+            .ok();
     }
 }

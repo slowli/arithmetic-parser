@@ -94,6 +94,7 @@ mod alloc {
 }
 
 pub use self::{
+    compiler::CompilerExt,
     error::{
         AuxErrorInfo, Backtrace, BacktraceElement, ErrorWithBacktrace, EvalError, EvalResult,
         RepeatedAssignmentContext, SpannedEvalError, TupleLenMismatchContext,

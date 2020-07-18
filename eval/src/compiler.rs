@@ -586,13 +586,76 @@ fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
     Ok(())
 }
 
+/// Compiler extensions defined for some AST nodes, most notably, `Block`.
+///
+/// # Examples
+///
+/// ```
+/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// use arithmetic_eval::CompilerExt;
+/// # use hashbrown::HashSet;
+/// # use core::iter::FromIterator;
+///
+/// let block = Span::new("x = sin(0.5) / PI; y = x * E; (x, y)");
+/// let block = F32Grammar::parse_statements(block).unwrap();
+/// let undefined_vars = block.undefined_variables().unwrap();
+/// assert_eq!(
+///     undefined_vars.keys().copied().collect::<HashSet<_>>(),
+///     HashSet::from_iter(vec!["sin", "PI", "E"])
+/// );
+/// assert_eq!(undefined_vars["PI"].offset, 15);
+/// ```
+pub trait CompilerExt<'a> {
+    /// Returns variables not defined within the AST node, together with the span of their first
+    /// occurrence.
+    ///
+    /// # Errors
+    ///
+    /// - Returns an error if the AST is intrinsically malformed. This may be the case if it
+    ///   contains destructuring with the same variable on left-hand side,
+    ///   such as `(x, x) = ...`.
+    ///
+    /// The fact that an error is *not* returned does not guarantee that the AST node will evaluate
+    /// successfully if all variables are assigned.
+    fn undefined_variables(&self) -> Result<HashMap<&'a str, Span<'a>>, SpannedEvalError<'a>>;
+}
+
+impl<'a, T: Grammar> CompilerExt<'a> for Block<'a, T> {
+    fn undefined_variables(&self) -> Result<HashMap<&'a str, Span<'a>>, SpannedEvalError<'a>> {
+        let mut undefined_vars = HashMap::new();
+        let mut extractor = CapturesExtractor::new(|var_span| {
+            if !undefined_vars.contains_key(var_span.fragment) {
+                undefined_vars.insert(var_span.fragment, var_span);
+            }
+            Ok(())
+        });
+        extractor.eval_block(self)?;
+
+        Ok(undefined_vars)
+    }
+}
+
+impl<'a, T: Grammar> CompilerExt<'a> for FnDefinition<'a, T> {
+    fn undefined_variables(&self) -> Result<HashMap<&'a str, Span<'a>>, SpannedEvalError<'a>> {
+        let mut undefined_vars = HashMap::new();
+        let mut extractor = CapturesExtractor::new(|var_span| {
+            if !undefined_vars.contains_key(var_span.fragment) {
+                undefined_vars.insert(var_span.fragment, var_span);
+            }
+            Ok(())
+        });
+        extractor.eval_function(self)?;
+
+        Ok(undefined_vars)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::Value;
 
     use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
-    use hashbrown::HashSet;
 
     #[test]
     fn compilation_basics() {
@@ -637,14 +700,9 @@ mod tests {
             other => panic!("Unexpected function parsing result: {:?}", other),
         };
 
-        let mut captures = HashSet::new();
-        let mut validator = CapturesExtractor::new(|var_span| {
-            captures.insert(var_span.fragment);
-            Ok(())
-        });
-        validator.eval_function(&def).unwrap();
-        assert!(captures.contains("y"));
-        assert!(!captures.contains("x"));
+        let captures = def.undefined_variables().unwrap();
+        assert_eq!(captures["y"].offset, 22);
+        assert!(!captures.contains_key("x"));
     }
 
     #[test]
@@ -659,14 +717,9 @@ mod tests {
             other => panic!("Unexpected function parsing result: {:?}", other),
         };
 
-        let mut captures = HashSet::new();
-        let mut validator = CapturesExtractor::new(|var_span| {
-            captures.insert(var_span.fragment);
-            Ok(())
-        });
-        validator.eval_function(&def).unwrap();
-        assert!(captures.contains("y"));
-        assert!(captures.contains("x"));
+        let captures = def.undefined_variables().unwrap();
+        assert_eq!(captures["y"].offset, 22);
+        assert_eq!(captures["x"].offset, 38);
     }
 
     #[test]

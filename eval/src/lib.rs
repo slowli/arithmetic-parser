@@ -44,12 +44,11 @@
 //! const MAX: fns::Binary<f32> =
 //!     fns::Binary::new(|x, y| if x > y { x } else { y });
 //!
-//! let mut context = Interpreter::new();
+//! let mut context = Interpreter::with_prelude();
 //! // Add some native functions to the interpreter.
 //! context
 //!     .insert_native_fn("min", MIN)
-//!     .insert_native_fn("max", MAX)
-//!     .insert_native_fn("assert", fns::Assert);
+//!     .insert_native_fn("max", MAX);
 //!
 //! let program = r#"
 //!     ## The interpreter supports all parser features, including
@@ -104,7 +103,7 @@ pub use self::{
 };
 
 use num_complex::{Complex32, Complex64};
-use num_traits::{Num, Pow};
+use num_traits::Pow;
 
 use core::ops;
 
@@ -133,7 +132,7 @@ pub struct Interpreter<'a, T: Grammar> {
 
 impl<T: Grammar> Default for Interpreter<'_, T>
 where
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
     fn default() -> Self {
         Self::new()
@@ -158,17 +157,17 @@ where
     }
 
     /// Gets a variable by name.
-    pub fn get_var(&self, name: &'a str) -> Option<&Value<'a, T>> {
+    pub fn get_var(&self, name: &str) -> Option<&Value<'a, T>> {
         self.env.get_var(name)
     }
 
     /// Iterates over variables.
-    pub fn variables(&self) -> impl Iterator<Item = (&'a str, &Value<'a, T>)> + '_ {
+    pub fn variables(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
         self.env.variables()
     }
 
     /// Inserts a variable with the specified name.
-    pub fn insert_var(&mut self, name: &'a str, value: Value<'a, T>) -> &mut Self {
+    pub fn insert_var(&mut self, name: &str, value: Value<'a, T>) -> &mut Self {
         self.env.push_var(name, value);
         self
     }
@@ -176,18 +175,64 @@ where
     /// Inserts a native function with the specified name.
     pub fn insert_native_fn(
         &mut self,
-        name: &'a str,
+        name: &str,
         native_fn: impl NativeFn<'a, T> + 'a,
     ) -> &mut Self {
         self.insert_var(name, Value::native_fn(native_fn))
+    }
+
+    /// Inserts a [wrapped function] with the specified name.
+    ///
+    /// Calling this method is equivalent to [`wrap`]ping a function and calling
+    /// [`insert_native_fn()`](#method.insert_native_fn) on it. Thanks to type inference magic,
+    /// the Rust compiler will usually be able to extract the `Args` type param
+    /// from the function definition, provided that type of function arguments and its return type
+    /// are defined explicitly or can be unequivocally inferred from the declaration.
+    ///
+    /// [wrapped function]: fns/struct.FnWrapper.html
+    /// [`wrap`]: fns/fn.wrap.html
+    pub fn insert_wrapped_fn<Args: 'a, F: 'a>(&mut self, name: &str, fn_to_wrap: F) -> &mut Self
+    where
+        fns::FnWrapper<Args, F>: NativeFn<'a, T>,
+    {
+        let wrapped = fns::wrap::<Args, _>(fn_to_wrap);
+        self.insert_var(name, Value::native_fn(wrapped))
     }
 }
 
 impl<'a, T> Interpreter<'a, T>
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
+    /// Returns an interpreter with most of functions from the [`fns` module] imported in.
+    ///
+    /// # Return value
+    ///
+    /// The returned interpreter contains the following variables:
+    ///
+    /// - All functions from the `fns` module, except for [`Compare`] (since it requires
+    ///   `PartialOrd` implementation for numbers). All functions are named in lowercase,
+    ///   e.g., `if`, `map`.
+    /// - `true` and `false` Boolean constants.
+    ///
+    /// [`fns` module]: fns/index.html
+    /// [`Compare`]: fns/struct.Compare.html
+    pub fn with_prelude() -> Self {
+        let mut this = Self::new();
+        this.insert_var("false", Value::Bool(false))
+            .insert_var("true", Value::Bool(true))
+            .insert_native_fn("assert", fns::Assert)
+            .insert_native_fn("if", fns::If)
+            .insert_native_fn("loop", fns::Loop)
+            .insert_native_fn("map", fns::Map)
+            .insert_native_fn("filter", fns::Filter)
+            .insert_native_fn("fold", fns::Fold)
+            .insert_native_fn("push", fns::Push)
+            .insert_native_fn("merge", fns::Merge);
+        this
+    }
+
     /// Evaluates a list of statements.
     pub fn evaluate(
         &mut self,

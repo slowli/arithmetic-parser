@@ -217,6 +217,9 @@ impl fmt::Display for FromValueError {
     }
 }
 
+#[cfg(feature = "std")]
+impl std::error::Error for FromValueError {}
+
 /// Error kinds for [`FromValueError`].
 ///
 /// [`FromValueError`]: struct.FromValueError.html

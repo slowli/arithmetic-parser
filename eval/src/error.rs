@@ -208,7 +208,14 @@ impl EvalError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for EvalError {}
+impl std::error::Error for EvalError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Wrapper(error) => Some(error),
+            _ => None,
+        }
+    }
+}
 
 /// Auxiliary information about error.
 #[derive(Debug)]
@@ -273,6 +280,25 @@ impl<'a> SpannedEvalError<'a> {
     /// Returns the source of the error.
     pub fn source(&self) -> &EvalError {
         &self.error
+    }
+}
+
+impl fmt::Display for SpannedEvalError<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "{}:{}: {}",
+            self.main_span.line,
+            self.main_span.get_column(),
+            self.error
+        )
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for SpannedEvalError<'_> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.error)
     }
 }
 
@@ -361,6 +387,19 @@ impl<'a> ErrorWithBacktrace<'a> {
     /// Returns error backtrace.
     pub fn backtrace(&self) -> &Backtrace<'a> {
         &self.backtrace
+    }
+}
+
+impl fmt::Display for ErrorWithBacktrace<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.inner, formatter)
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for ErrorWithBacktrace<'_> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        std::error::Error::source(&self.inner)
     }
 }
 

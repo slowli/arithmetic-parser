@@ -1,14 +1,13 @@
 //! Executables output by a `Compiler` and related types.
 
 use hashbrown::HashMap;
-use num_traits::{Num, Pow};
 use smallvec::{smallvec, SmallVec};
 
 use core::ops;
 
 use crate::{
     alloc::{vec, Rc, Vec},
-    Backtrace, CallContext, ErrorWithBacktrace, EvalError, EvalResult, InterpretedFn,
+    Backtrace, CallContext, ErrorWithBacktrace, EvalError, EvalResult, InterpretedFn, Number,
     SpannedEvalError, TupleLenMismatchContext, Value,
 };
 use arithmetic_parser::{create_span_ref, BinaryOp, Grammar, LvalueLen, Span, Spanned, UnaryOp};
@@ -229,7 +228,7 @@ impl<'a, T: Grammar> Executable<'a, T> {
 impl<'a, T> Executable<'a, T>
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
     pub(super) fn call_function(
         &self,
@@ -254,7 +253,8 @@ pub(super) struct Env<'a, T: Grammar> {
     registers: Registers<'a, T>,
     // Maps variables to registers. Variables are mapped only from the global scope;
     // thus, we don't need to remove them on error in an inner scope.
-    vars: HashMap<&'a str, usize>,
+    // TODO: investigate using stack-hosted small strings for keys.
+    vars: HashMap<String, usize>,
     // Marks the start of a first inner scope currently being evaluated. This is used
     // to quickly remove registers from the inner scopes on error.
     inner_scope_start: Option<usize>,
@@ -289,13 +289,13 @@ impl<'a, T: Grammar> Env<'a, T> {
         Some(&mut self.registers[register])
     }
 
-    pub fn variables(&self) -> impl Iterator<Item = (&'a str, &Value<'a, T>)> + '_ {
+    pub fn variables(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
         self.vars
             .iter()
-            .map(move |(name, register)| (*name, &self.registers[*register]))
+            .map(move |(name, register)| (name.as_str(), &self.registers[*register]))
     }
 
-    pub fn variables_map(&self) -> HashMap<&'a str, usize> {
+    pub fn variables_map(&self) -> HashMap<String, usize> {
         self.vars.clone()
     }
 
@@ -312,10 +312,10 @@ impl<'a, T: Grammar> Env<'a, T> {
 
     /// Allocates a new register with the specified name. If the name was previously assigned,
     /// the name association is updated, but the old register itself remains intact.
-    pub fn push_var(&mut self, name: &'a str, value: Value<'a, T>) {
+    pub fn push_var(&mut self, name: &str, value: Value<'a, T>) {
         let register = self.registers.len();
         self.registers.push(value);
-        self.vars.insert(name, register);
+        self.vars.insert(name.to_owned(), register);
     }
 
     /// Retains only registers corresponding to named variables.
@@ -332,7 +332,7 @@ impl<'a, T: Grammar> Env<'a, T> {
 impl<'a, T> Env<'a, T>
 where
     T: Grammar,
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
     pub fn execute(
         &mut self,
@@ -409,7 +409,7 @@ where
                 }
 
                 Command::Annotate { register, name } => {
-                    self.vars.insert(*name, *register);
+                    self.vars.insert((*name).to_owned(), *register);
                 }
 
                 Command::StartInnerScope => {
@@ -512,7 +512,7 @@ where
     fn resolve_atom(&self, atom: &Atom<T>) -> Value<'a, T> {
         match atom {
             Atom::Register(index) => self.registers[*index].clone(),
-            Atom::Constant(value) => Value::Number(value.clone()),
+            Atom::Constant(value) => Value::Number(*value),
             Atom::Void => Value::void(),
         }
     }
@@ -625,7 +625,7 @@ impl<'a, T: Grammar> ExecutableModule<'a, T> {
 
 impl<'a, T: Grammar> ExecutableModule<'a, T>
 where
-    T::Lit: Num + ops::Neg<Output = T::Lit> + Pow<T::Lit, Output = T::Lit>,
+    T::Lit: Number,
 {
     /// Runs the module with the current values of imports.
     pub fn run(&self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
@@ -714,7 +714,7 @@ impl<'a, T: Grammar> ModuleImports<'a, T> {
     }
 
     /// Iterates over imported variables.
-    pub fn iter(&self) -> impl Iterator<Item = (&'a str, &Value<'a, T>)> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
         self.inner.variables()
     }
 

@@ -217,6 +217,9 @@ impl fmt::Display for FromValueError {
     }
 }
 
+#[cfg(feature = "std")]
+impl std::error::Error for FromValueError {}
+
 /// Error kinds for [`FromValueError`].
 ///
 /// [`FromValueError`]: struct.FromValueError.html
@@ -661,8 +664,8 @@ mod tests {
     fn functions_with_composite_args() {
         let mut interpreter = Interpreter::new();
         interpreter
-            .insert_native_fn("array_min_max", FnWrapper::new(array_min_max))
-            .insert_native_fn("total_sum", FnWrapper::new(overly_convoluted_fn));
+            .insert_wrapped_fn("array_min_max", array_min_max)
+            .insert_wrapped_fn("total_sum", overly_convoluted_fn);
 
         let program = r#"
             (1, 5, -3, 2, 1).array_min_max() == (-3, 5) &&
@@ -684,7 +687,7 @@ mod tests {
     #[test]
     fn fallible_function() {
         let mut interpreter = Interpreter::new();
-        interpreter.insert_native_fn("sum_arrays", FnWrapper::new(sum_arrays));
+        interpreter.insert_wrapped_fn("sum_arrays", sum_arrays);
 
         let program = "(1, 2, 3).sum_arrays((4, 5, 6)) == (5, 7, 9)";
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
@@ -717,19 +720,16 @@ mod tests {
     #[test]
     fn function_with_void_return_value() {
         let mut interpreter = Interpreter::new();
-        interpreter.insert_native_fn(
-            "assert_eq",
-            wrap(|expected: f32, actual: f32| {
-                if (expected - actual).abs() < f32::EPSILON {
-                    Ok(())
-                } else {
-                    Err(format!(
-                        "Assertion failed: expected {}, got {}",
-                        expected, actual
-                    ))
-                }
-            }),
-        );
+        interpreter.insert_wrapped_fn("assert_eq", |expected: f32, actual: f32| {
+            if (expected - actual).abs() < f32::EPSILON {
+                Ok(())
+            } else {
+                Err(format!(
+                    "Assertion failed: expected {}, got {}",
+                    expected, actual
+                ))
+            }
+        });
 
         let program = "assert_eq(3, 1 + 2)";
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
@@ -751,9 +751,9 @@ mod tests {
         interpreter
             .insert_var("true", Value::Bool(true))
             .insert_var("false", Value::Bool(false));
-        interpreter.insert_native_fn(
+        interpreter.insert_wrapped_fn(
             "flip_sign",
-            wrap(|val: f32, flag: bool| if flag { -val } else { val }),
+            |val: f32, flag: bool| if flag { -val } else { val },
         );
 
         let program = "flip_sign(-1, true) == 1 && flip_sign(-1, false) == -1";
@@ -768,15 +768,12 @@ mod tests {
         interpreter
             .insert_var("true", Value::Bool(true))
             .insert_var("false", Value::Bool(false));
-        interpreter.insert_native_fn(
-            "destructure",
-            wrap(|values: Vec<(bool, f32)>| {
-                values
-                    .into_iter()
-                    .map(|(flag, x)| if flag { x } else { 0.0 })
-                    .sum::<f32>()
-            }),
-        );
+        interpreter.insert_wrapped_fn("destructure", |values: Vec<(bool, f32)>| {
+            values
+                .into_iter()
+                .map(|(flag, x)| if flag { x } else { 0.0 })
+                .sum::<f32>()
+        });
 
         let program = "((true, 1), (2, 3)).destructure()";
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();

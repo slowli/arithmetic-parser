@@ -330,18 +330,7 @@ impl<'a> Env<'a> {
 }
 
 fn init_interpreter<'a, T: Number>() -> Interpreter<'a, NumGrammar<T>> {
-    let mut interpreter = Interpreter::<NumGrammar<T>>::new();
-    interpreter
-        .insert_var("false", Value::Bool(false))
-        .insert_var("true", Value::Bool(true))
-        .insert_native_fn("if", fns::If)
-        .insert_native_fn("loop", fns::Loop)
-        .insert_native_fn("map", fns::Map)
-        .insert_native_fn("filter", fns::Filter)
-        .insert_native_fn("fold", fns::Fold)
-        .insert_native_fn("push", fns::Push)
-        .insert_native_fn("merge", fns::Merge);
-    interpreter
+    Interpreter::<NumGrammar<T>>::with_prelude()
 }
 
 pub trait ReplLiteral: Number + fmt::Display {

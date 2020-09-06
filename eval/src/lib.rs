@@ -263,10 +263,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        alloc::{vec, Rc},
-        fns::FromValueErrorKind,
-    };
+    use crate::{alloc::vec, fns::FromValueErrorKind};
     use arithmetic_parser::{grammars::F32Grammar, BinaryOp, GrammarExt, LvalueLen, Span, UnaryOp};
 
     use assert_matches::assert_matches;
@@ -693,7 +690,7 @@ mod tests {
             Value::Function(Function::Native(function)) => function,
             _ => panic!("Unexpected `alias` value: {:?}", alias),
         };
-        assert!(Rc::ptr_eq(sin, alias));
+        assert_eq!(sin.data_ptr(), alias.data_ptr());
     }
 
     #[test]

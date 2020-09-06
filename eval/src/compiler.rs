@@ -185,14 +185,22 @@ impl Compiler {
             }
 
             Expr::FnDefinition(def) => {
-                let mut extractor = CapturesExtractor::new();
-                extractor.eval_function(def, self)?;
-                let captures = extractor
-                    .captures
-                    .values()
-                    .map(|capture| create_span_ref(capture, Atom::Register(capture.extra)))
-                    .collect();
-                let fn_executable = Self::compile_function(def, &extractor.captures)?;
+                let mut captures = HashMap::new();
+                let mut extractor = CapturesExtractor::new(|var_span| {
+                    let var_name = var_span.fragment;
+                    if let Some(register) = self.get_var(var_name) {
+                        captures.insert(
+                            var_name,
+                            create_span_ref(&var_span, Atom::Register(register)),
+                        );
+                        Ok(())
+                    } else {
+                        Err(EvalError::Undefined(var_name.to_owned()))
+                    }
+                });
+
+                extractor.eval_function(def)?;
+                let fn_executable = Self::compile_function(def, &captures)?;
                 let fn_executable = ExecutableFn {
                     inner: fn_executable,
                     def_span: create_span_ref(expr, ()),
@@ -202,7 +210,10 @@ impl Compiler {
                 let ptr = executable.push_child_fn(fn_executable);
                 let register = self.push_assignment(
                     executable,
-                    CompiledExpr::DefineFunction { ptr, captures },
+                    CompiledExpr::DefineFunction {
+                        ptr,
+                        captures: captures.into_iter().map(|(_, value)| value).collect(),
+                    },
                     expr,
                 );
                 Atom::Register(register)
@@ -213,7 +224,7 @@ impl Compiler {
 
     fn compile_function<'a, T: Grammar>(
         def: &FnDefinition<'a, T>,
-        captures: &HashMap<&'a str, Spanned<'a, usize>>,
+        captures: &HashMap<&'a str, SpannedAtom<'a, T>>,
     ) -> Result<Executable<'a, T>, SpannedEvalError<'a>> {
         // Allocate registers for captures.
         let mut this = Self::new();
@@ -281,14 +292,19 @@ impl Compiler {
             // We don't care about captures since we won't execute the module with them anyway.
             Env::new()
         } else {
-            let mut extractor = CapturesExtractor::new();
-            extractor.local_vars.push(HashMap::new());
-            extractor.eval_block(&block, &compiler)?;
-
             let mut captures = Env::new();
-            for &var_name in extractor.captures.keys() {
-                captures.push_var(var_name, env.get_var(var_name).unwrap().clone());
-            }
+            let mut extractor = CapturesExtractor::new(|var_span| {
+                let var_name = var_span.fragment;
+                if let Some(value) = env.get_var(var_name) {
+                    captures.push_var(var_name, value.clone());
+                    Ok(())
+                } else {
+                    Err(EvalError::Undefined(var_name.to_owned()))
+                }
+            });
+            extractor.local_vars.push(HashMap::new());
+            extractor.eval_block(&block)?;
+
             compiler = Self::from_env(&captures);
             captures
         };
@@ -392,16 +408,19 @@ impl Compiler {
 /// Helper context for symbolic execution of a function body or a block in order to determine
 /// variables captured by it.
 #[derive(Debug)]
-struct CapturesExtractor<'a> {
+struct CapturesExtractor<'a, F> {
     local_vars: Vec<HashMap<&'a str, Span<'a>>>,
-    captures: HashMap<&'a str, Spanned<'a, usize>>,
+    action: F,
 }
 
-impl<'a> CapturesExtractor<'a> {
-    fn new() -> Self {
+impl<'a, F> CapturesExtractor<'a, F>
+where
+    F: FnMut(Span<'a>) -> Result<(), EvalError>,
+{
+    fn new(action: F) -> Self {
         Self {
             local_vars: vec![],
-            captures: HashMap::new(),
+            action,
         }
     }
 
@@ -409,7 +428,6 @@ impl<'a> CapturesExtractor<'a> {
     fn eval_function<T: Grammar>(
         &mut self,
         definition: &FnDefinition<'a, T>,
-        context: &Compiler,
     ) -> Result<(), SpannedEvalError<'a>> {
         self.local_vars.push(HashMap::new());
         extract_vars(
@@ -417,44 +435,29 @@ impl<'a> CapturesExtractor<'a> {
             &definition.args.extra,
             RepeatedAssignmentContext::FnArgs,
         )?;
-        self.eval_block(&definition.body, context)
+        self.eval_block(&definition.body)
     }
 
     fn has_var(&self, var_name: &str) -> bool {
-        self.captures.contains_key(var_name)
-            || self.local_vars.iter().any(|set| set.contains_key(var_name))
+        self.local_vars.iter().any(|set| set.contains_key(var_name))
     }
 
     /// Processes a local variable in the rvalue position.
-    fn eval_local_var<T>(
-        &mut self,
-        var_span: &Spanned<'a, T>,
-        context: &Compiler,
-    ) -> Result<(), EvalError> {
-        let var_name = var_span.fragment;
-
-        if self.has_var(var_name) {
+    fn eval_local_var<T>(&mut self, var_span: &Spanned<'a, T>) -> Result<(), EvalError> {
+        if self.has_var(var_span.fragment) {
             // No action needs to be performed.
-        } else if let Some(register) = context.get_var(var_name) {
-            self.captures
-                .insert(var_name, create_span_ref(var_span, register));
+            Ok(())
         } else {
-            return Err(EvalError::Undefined(var_name.to_owned()));
+            (self.action)(create_span_ref(var_span, ()))
         }
-
-        Ok(())
     }
 
     /// Evaluates an expression with the function validation semantics, i.e., to determine
     /// function captures.
-    fn eval<T: Grammar>(
-        &mut self,
-        expr: &SpannedExpr<'a, T>,
-        context: &Compiler,
-    ) -> Result<(), SpannedEvalError<'a>> {
+    fn eval<T: Grammar>(&mut self, expr: &SpannedExpr<'a, T>) -> Result<(), SpannedEvalError<'a>> {
         match &expr.extra {
             Expr::Variable => {
-                self.eval_local_var(expr, context)
+                self.eval_local_var(expr)
                     .map_err(|e| SpannedEvalError::new(expr, e))?;
             }
 
@@ -462,22 +465,22 @@ impl<'a> CapturesExtractor<'a> {
 
             Expr::Tuple(fragments) => {
                 for fragment in fragments {
-                    self.eval(fragment, context)?;
+                    self.eval(fragment)?;
                 }
             }
             Expr::Unary { inner, .. } => {
-                self.eval(inner, context)?;
+                self.eval(inner)?;
             }
             Expr::Binary { lhs, rhs, .. } => {
-                self.eval(lhs, context)?;
-                self.eval(rhs, context)?;
+                self.eval(lhs)?;
+                self.eval(rhs)?;
             }
 
             Expr::Function { args, name } => {
                 for arg in args {
-                    self.eval(arg, context)?;
+                    self.eval(arg)?;
                 }
-                self.eval(name, context)?;
+                self.eval(name)?;
             }
 
             Expr::Method {
@@ -485,22 +488,22 @@ impl<'a> CapturesExtractor<'a> {
                 receiver,
                 name,
             } => {
-                self.eval(receiver, context)?;
+                self.eval(receiver)?;
                 for arg in args {
-                    self.eval(arg, context)?;
+                    self.eval(arg)?;
                 }
 
-                self.eval_local_var(name, context)
+                self.eval_local_var(name)
                     .map_err(|e| SpannedEvalError::new(name, e))?;
             }
 
             Expr::Block(block) => {
                 self.local_vars.push(HashMap::new());
-                self.eval_block(block, context)?;
+                self.eval_block(block)?;
             }
 
             Expr::FnDefinition(def) => {
-                self.eval_function(def, context)?;
+                self.eval_function(def)?;
             }
         }
         Ok(())
@@ -510,12 +513,11 @@ impl<'a> CapturesExtractor<'a> {
     fn eval_statement<T: Grammar>(
         &mut self,
         statement: &SpannedStatement<'a, T>,
-        context: &Compiler,
     ) -> Result<(), SpannedEvalError<'a>> {
         match &statement.extra {
-            Statement::Expr(expr) => self.eval(expr, context),
+            Statement::Expr(expr) => self.eval(expr),
             Statement::Assignment { lhs, rhs } => {
-                self.eval(rhs, context)?;
+                self.eval(rhs)?;
                 let mut new_vars = HashMap::new();
                 extract_vars_iter(
                     &mut new_vars,
@@ -528,17 +530,13 @@ impl<'a> CapturesExtractor<'a> {
         }
     }
 
-    fn eval_block<T: Grammar>(
-        &mut self,
-        block: &Block<'a, T>,
-        context: &Compiler,
-    ) -> Result<(), SpannedEvalError<'a>> {
+    fn eval_block<T: Grammar>(&mut self, block: &Block<'a, T>) -> Result<(), SpannedEvalError<'a>> {
         self.local_vars.push(HashMap::new());
         for statement in &block.statements {
-            self.eval_statement(statement, context)?;
+            self.eval_statement(statement)?;
         }
         if let Some(ref return_expr) = block.return_value {
-            self.eval(return_expr, context)?;
+            self.eval(return_expr)?;
         }
         self.local_vars.pop();
         Ok(())
@@ -588,14 +586,76 @@ fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
     Ok(())
 }
 
+/// Compiler extensions defined for some AST nodes, most notably, `Block`.
+///
+/// # Examples
+///
+/// ```
+/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// use arithmetic_eval::CompilerExt;
+/// # use hashbrown::HashSet;
+/// # use core::iter::FromIterator;
+///
+/// let block = Span::new("x = sin(0.5) / PI; y = x * E; (x, y)");
+/// let block = F32Grammar::parse_statements(block).unwrap();
+/// let undefined_vars = block.undefined_variables().unwrap();
+/// assert_eq!(
+///     undefined_vars.keys().copied().collect::<HashSet<_>>(),
+///     HashSet::from_iter(vec!["sin", "PI", "E"])
+/// );
+/// assert_eq!(undefined_vars["PI"].offset, 15);
+/// ```
+pub trait CompilerExt<'a> {
+    /// Returns variables not defined within the AST node, together with the span of their first
+    /// occurrence.
+    ///
+    /// # Errors
+    ///
+    /// - Returns an error if the AST is intrinsically malformed. This may be the case if it
+    ///   contains destructuring with the same variable on left-hand side,
+    ///   such as `(x, x) = ...`.
+    ///
+    /// The fact that an error is *not* returned does not guarantee that the AST node will evaluate
+    /// successfully if all variables are assigned.
+    fn undefined_variables(&self) -> Result<HashMap<&'a str, Span<'a>>, SpannedEvalError<'a>>;
+}
+
+impl<'a, T: Grammar> CompilerExt<'a> for Block<'a, T> {
+    fn undefined_variables(&self) -> Result<HashMap<&'a str, Span<'a>>, SpannedEvalError<'a>> {
+        let mut undefined_vars = HashMap::new();
+        let mut extractor = CapturesExtractor::new(|var_span| {
+            if !undefined_vars.contains_key(var_span.fragment) {
+                undefined_vars.insert(var_span.fragment, var_span);
+            }
+            Ok(())
+        });
+        extractor.eval_block(self)?;
+
+        Ok(undefined_vars)
+    }
+}
+
+impl<'a, T: Grammar> CompilerExt<'a> for FnDefinition<'a, T> {
+    fn undefined_variables(&self) -> Result<HashMap<&'a str, Span<'a>>, SpannedEvalError<'a>> {
+        let mut undefined_vars = HashMap::new();
+        let mut extractor = CapturesExtractor::new(|var_span| {
+            if !undefined_vars.contains_key(var_span.fragment) {
+                undefined_vars.insert(var_span.fragment, var_span);
+            }
+            Ok(())
+        });
+        extractor.eval_function(self)?;
+
+        Ok(undefined_vars)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::Value;
 
     use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
-
-    use core::iter::FromIterator;
 
     #[test]
     fn compilation_basics() {
@@ -630,12 +690,6 @@ mod tests {
 
     #[test]
     fn variable_extraction() {
-        let compiler = Compiler {
-            vars_to_registers: HashMap::from_iter(vec![("x".to_owned(), 0), ("y".to_owned(), 1)]),
-            scope_depth: 0,
-            register_count: 2,
-        };
-
         let def = "|a, b| ({ x = a * b + y; x - 2 }, a / b)";
         let def = F32Grammar::parse_statements(Span::new(def))
             .unwrap()
@@ -646,20 +700,13 @@ mod tests {
             other => panic!("Unexpected function parsing result: {:?}", other),
         };
 
-        let mut validator = CapturesExtractor::new();
-        validator.eval_function(&def, &compiler).unwrap();
-        assert!(validator.captures.contains_key("y"));
-        assert!(!validator.captures.contains_key("x"));
+        let captures = def.undefined_variables().unwrap();
+        assert_eq!(captures["y"].offset, 22);
+        assert!(!captures.contains_key("x"));
     }
 
     #[test]
     fn variable_extraction_with_scoping() {
-        let compiler = Compiler {
-            vars_to_registers: HashMap::from_iter(vec![("x".to_owned(), 0), ("y".to_owned(), 1)]),
-            scope_depth: 0,
-            register_count: 2,
-        };
-
         let def = "|a, b| ({ x = a * b + y; x - 2 }, a / x)";
         let def = F32Grammar::parse_statements(Span::new(def))
             .unwrap()
@@ -670,10 +717,9 @@ mod tests {
             other => panic!("Unexpected function parsing result: {:?}", other),
         };
 
-        let mut validator = CapturesExtractor::new();
-        validator.eval_function(&def, &compiler).unwrap();
-        assert!(validator.captures.contains_key("y"));
-        assert!(validator.captures.contains_key("x"));
+        let captures = def.undefined_variables().unwrap();
+        assert_eq!(captures["y"].offset, 22);
+        assert_eq!(captures["x"].offset, 38);
     }
 
     #[test]

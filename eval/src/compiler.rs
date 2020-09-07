@@ -62,13 +62,11 @@ impl Compiler {
             Expr::Literal(lit) => Atom::Constant(lit.clone()),
 
             Expr::Variable => {
-                let register = self
-                    .vars_to_registers
-                    .get(*expr.fragment())
-                    .ok_or_else(|| {
-                        let err = EvalError::Undefined(expr.fragment().to_string());
-                        SpannedEvalError::new(expr, err)
-                    })?;
+                let var_name = *expr.fragment();
+                let register = self.vars_to_registers.get(var_name).ok_or_else(|| {
+                    let err = EvalError::Undefined(var_name.to_owned());
+                    SpannedEvalError::new(expr, err)
+                })?;
                 Atom::Register(*register)
             }
 
@@ -299,12 +297,12 @@ impl Compiler {
         } else {
             let mut captures = Env::new();
             let mut extractor = CapturesExtractor::new(|var_span| {
-                let var_name = var_span.fragment();
+                let var_name = *var_span.fragment();
                 if let Some(value) = env.get_var(var_name) {
                     captures.push_var(var_name, value.clone());
                     Ok(())
                 } else {
-                    Err(EvalError::Undefined(var_name.to_string()))
+                    Err(EvalError::Undefined(var_name.to_owned()))
                 }
             });
             extractor.local_vars.push(HashMap::new());

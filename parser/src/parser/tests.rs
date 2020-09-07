@@ -61,7 +61,7 @@ impl Literal {
                             opt(tag_char('_')),
                             take_while1(|c: char| c.is_ascii_hexdigit()),
                         ),
-                        |digits: Span| hex::decode(digits.fragment).map_err(anyhow::Error::from),
+                        |digits: Span| hex::decode(digits.fragment()).map_err(anyhow::Error::from),
                     ),
                     vec![],
                     |mut acc, digits| {
@@ -149,12 +149,14 @@ impl Grammar for FieldGrammar {
     }
 }
 
-fn span(offset: usize, fragment: &str) -> Span {
-    Span {
-        offset,
-        line: 1,
-        fragment,
-        extra: (),
+fn span(offset: usize, fragment: &str) -> Span<'_> {
+    span_on_line(offset, 1, fragment)
+}
+
+fn span_on_line(offset: usize, line: u32, fragment: &str) -> Span<'_> {
+    unsafe {
+        // SAFETY: `offset` is small (hand-picked).
+        Span::new_from_raw_offset(offset, line, fragment, ())
     }
 }
 
@@ -203,32 +205,17 @@ fn whitespace_can_include_comments() {
     let input = Span::new("  \nge(1)");
     assert_eq!(
         ws::<Complete>(input).unwrap().0,
-        Span {
-            offset: 3,
-            line: 2,
-            fragment: "ge(1)",
-            extra: (),
-        }
+        span_on_line(3, 2, "ge(1)")
     );
     let input = Span::new("# Comment\nge(1)");
     assert_eq!(
         ws::<Complete>(input).unwrap().0,
-        Span {
-            offset: 10,
-            line: 2,
-            fragment: "ge(1)",
-            extra: (),
-        }
+        span_on_line(10, 2, "ge(1)")
     );
     let input = Span::new("#!\nge(1)");
     assert_eq!(
         ws::<Complete>(input).unwrap().0,
-        Span {
-            offset: 3,
-            line: 2,
-            fragment: "ge(1)",
-            extra: (),
-        }
+        span_on_line(3, 2, "ge(1)")
     );
 
     let input = Span::new(
@@ -238,12 +225,7 @@ fn whitespace_can_include_comments() {
     );
     assert_eq!(
         ws::<Complete>(input).unwrap().0,
-        Span {
-            offset: 76,
-            line: 3,
-            fragment: "this_is_not # although this *is*",
-            extra: (),
-        }
+        span_on_line(76, 3, "this_is_not # although this *is*")
     );
 }
 
@@ -687,13 +669,13 @@ fn unary_expr_works() {
 
     let input = Span::new("!f && x == 2;");
     assert_eq!(
-        expr::<FieldGrammar, Complete>(input)
+        *expr::<FieldGrammar, Complete>(input)
             .unwrap()
             .1
             .extra
             .binary_lhs()
             .unwrap()
-            .fragment,
+            .fragment(),
         "!f"
     );
 }
@@ -944,7 +926,7 @@ fn destructuring_is_parsed() {
     let input = Span::new("x, y ,\n)");
     let (rest, parsed) = destructure::<FieldGrammar, Complete>(input).unwrap();
     assert_eq!(parsed, expected);
-    assert_eq!(rest.fragment, ")");
+    assert_eq!(*rest.fragment(), ")");
 
     let input = Span::new("x, ..., y)");
     assert_eq!(
@@ -1115,11 +1097,11 @@ fn evaluation_order_with_bool_expressions() {
     assert_matches!(
         output,
         Expr::Binary { op, ref lhs, ref rhs } if op == BinaryOp::from_span(span(15, "&&")) &&
-            lhs.fragment == "x == 2 + 3 * 4" &&
-            rhs.fragment == "y == G^x"
+            *lhs.fragment() == "x == 2 + 3 * 4" &&
+            *rhs.fragment() == "y == G^x"
     );
     let scalar_expr = output.binary_lhs().unwrap().extra.binary_rhs().unwrap();
-    assert_eq!(scalar_expr.fragment, "2 + 3 * 4");
+    assert_eq!(*scalar_expr.fragment(), "2 + 3 * 4");
     assert_matches!(
         scalar_expr.extra,
         Expr::Binary { op, .. } if op == BinaryOp::from_span(span(7, "+"))
@@ -1130,11 +1112,11 @@ fn evaluation_order_with_bool_expressions() {
     assert_matches!(
         output,
         Expr::Binary { op, ref lhs, ref rhs } if op == BinaryOp::from_span(span(19, "&&")) &&
-            lhs.fragment == "x == 2 * z + 3 * 4" &&
-            rhs.fragment == "(y, z) == (G^x, 2)"
+            *lhs.fragment() == "x == 2 * z + 3 * 4" &&
+            *rhs.fragment() == "(y, z) == (G^x, 2)"
     );
     let scalar_expr = output.binary_lhs().unwrap().extra.binary_rhs().unwrap();
-    assert_eq!(scalar_expr.fragment, "2 * z + 3 * 4");
+    assert_eq!(*scalar_expr.fragment(), "2 * z + 3 * 4");
     assert_matches!(
         scalar_expr.extra,
         Expr::Binary { op, .. } if op == BinaryOp::from_span(span(11, "+"))
@@ -1164,7 +1146,7 @@ fn block_parsing() {
     let parsed = block::<FieldGrammar, Complete>(input).unwrap().1;
     assert_eq!(parsed.statements.len(), 1);
     let return_value = parsed.return_value.unwrap();
-    assert_eq!(return_value.fragment, "x * 3");
+    assert_eq!(*return_value.fragment(), "x * 3");
 
     let input = Span::new("{ x = 1 + 2; x * 3; }");
     let parsed = block::<FieldGrammar, Complete>(input).unwrap().1;
@@ -1331,21 +1313,21 @@ fn separated_statements_parse() {
         .unwrap()
         .1;
     assert_eq!(block.statements.len(), 1);
-    assert_eq!(block.return_value.unwrap().fragment, "foo(3)");
+    assert_eq!(*block.return_value.unwrap().fragment(), "foo(3)");
 
     let input = Span::new("{ x = 2; }; foo(3)");
     let block = separated_statements::<FieldGrammar, Complete>(input)
         .unwrap()
         .1;
     assert_eq!(block.statements.len(), 1);
-    assert_eq!(block.return_value.unwrap().fragment, "foo(3)");
+    assert_eq!(*block.return_value.unwrap().fragment(), "foo(3)");
 
     let input = Span::new("y = { x = 2; x + 3 }; foo(y)");
     let block = separated_statements::<FieldGrammar, Complete>(input)
         .unwrap()
         .1;
     assert_eq!(block.statements.len(), 1);
-    assert_eq!(block.return_value.unwrap().fragment, "foo(y)");
+    assert_eq!(*block.return_value.unwrap().fragment(), "foo(y)");
 }
 
 #[test]
@@ -1392,23 +1374,23 @@ fn type_hints_when_switched_off() {
 
     let input = Span::new("x: Sc = 1 + 2");
     let (rem, _) = statement::<SimpleGrammar, Complete>(input).unwrap();
-    assert!(rem.fragment.starts_with(": Sc"));
+    assert!(rem.fragment().starts_with(": Sc"));
 
     let input = Span::new("(x, y) = (1 + 2, 3 + 5)");
     let (rem, _) = statement::<SimpleGrammar, Complete>(input).unwrap();
-    assert_eq!(rem.fragment, "");
+    assert_eq!(*rem.fragment(), "");
 
     let input = Span::new("(x, y: Sc) = (1 + 2, 3 + 5)");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(ref spanned) if spanned.0.offset == 5);
+    assert_matches!(err, NomErr::Failure(ref spanned) if spanned.0.location_offset() == 5);
 
     let input = Span::new("duplicate = |x| { x * (1, 2) }");
     let (rem, _) = statement::<SimpleGrammar, Complete>(input).unwrap();
-    assert_eq!(rem.fragment, "");
+    assert_eq!(*rem.fragment(), "");
 
     let input = Span::new("duplicate = |x: Sc| { x * (1, 2) }");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(ref spanned) if spanned.0.fragment == ":");
+    assert_matches!(err, NomErr::Failure(ref spanned) if *spanned.0.fragment() == ":");
 }
 
 #[test]
@@ -1436,7 +1418,7 @@ fn fn_defs_when_switched_off() {
 
     let input = Span::new("foo = |x| { x + 3 }");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Error(ref spanned) if spanned.0.fragment == "|");
+    assert_matches!(err, NomErr::Error(ref spanned) if *spanned.0.fragment() == "|");
 }
 
 #[test]
@@ -1464,11 +1446,11 @@ fn tuples_when_switched_off() {
 
     let input = Span::new("tup = (1 + 2, 3 + 5)");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(ref spanned) if spanned.0.offset == 6);
+    assert_matches!(err, NomErr::Failure(ref spanned) if spanned.0.location_offset() == 6);
 
     let input = Span::new("(x, y) = (1 + 2, 3 + 5)");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(ref spanned) if spanned.0.offset == 0);
+    assert_matches!(err, NomErr::Failure(ref spanned) if spanned.0.location_offset() == 0);
 }
 
 #[test]
@@ -1496,11 +1478,11 @@ fn blocks_when_switched_off() {
 
     let input = Span::new("x = { y = 10; y * 2 }");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Error(ref spanned) if spanned.0.offset == 4);
+    assert_matches!(err, NomErr::Error(ref spanned) if spanned.0.location_offset() == 4);
 
     let input = Span::new("foo({ y = 10; y * 2 }, z)");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(ref spanned) if spanned.0.offset == 4);
+    assert_matches!(err, NomErr::Failure(ref spanned) if spanned.0.location_offset() == 4);
 }
 
 #[test]
@@ -1528,9 +1510,9 @@ fn methods_when_switched_off() {
 
     let input = Span::new("foo.bar(1)");
     let (rest, _) = statement::<SimpleGrammar, Complete>(input).unwrap();
-    assert_eq!(rest.fragment, ".bar(1)");
+    assert_eq!(*rest.fragment(), ".bar(1)");
 
     let input = Span::new("(1, 2).bar(1)");
     let (rest, _) = statement::<SimpleGrammar, Complete>(input).unwrap();
-    assert_eq!(rest.fragment, ".bar(1)");
+    assert_eq!(*rest.fragment(), ".bar(1)");
 }

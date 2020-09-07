@@ -31,7 +31,7 @@
 //! // First statement is an assignment.
 //! assert_matches!(
 //!     block.statements[0].extra,
-//!     Statement::Assignment { ref lhs, .. } if lhs.fragment == "x"
+//!     Statement::Assignment { ref lhs, .. } if *lhs.fragment() == "x"
 //! );
 //! // The RHS of the second statement is a function.
 //! let some_function = match &block.statements[1].extra {
@@ -60,7 +60,7 @@ pub use crate::{
     traits::{Features, Grammar, GrammarExt},
 };
 
-use nom_locate::{LocatedSpan, LocatedSpanEx};
+use nom_locate::LocatedSpan;
 
 use alloc::{boxed::Box, vec, vec::Vec};
 use core::fmt;
@@ -71,9 +71,9 @@ mod parser;
 mod traits;
 
 /// Code span.
-pub type Span<'a> = LocatedSpan<&'a str>;
+pub type Span<'a> = LocatedSpan<&'a str, ()>;
 /// Value with an associated code span.
-pub type Spanned<'a, T> = LocatedSpanEx<&'a str, T>;
+pub type Spanned<'a, T> = LocatedSpan<&'a str, T>;
 /// Parsing outcome generalized by the type returned on success.
 pub type NomResult<'a, T> = nom::IResult<Span<'a>, T, SpannedError<'a>>;
 

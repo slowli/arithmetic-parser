@@ -62,8 +62,9 @@ impl Compiler {
             Expr::Literal(lit) => Atom::Constant(lit.clone()),
 
             Expr::Variable => {
-                let register = self.vars_to_registers.get(expr.fragment).ok_or_else(|| {
-                    let err = EvalError::Undefined(expr.fragment.to_owned());
+                let var_name = *expr.fragment();
+                let register = self.vars_to_registers.get(var_name).ok_or_else(|| {
+                    let err = EvalError::Undefined(var_name.to_owned());
                     SpannedEvalError::new(expr, err)
                 })?;
                 Atom::Register(*register)
@@ -126,8 +127,10 @@ impl Compiler {
                 receiver,
                 args,
             } => {
-                let name =
-                    create_span_ref(name, Atom::Register(self.vars_to_registers[name.fragment]));
+                let name = create_span_ref(
+                    name,
+                    Atom::Register(self.vars_to_registers[*name.fragment()]),
+                );
                 let args = iter::once(receiver.as_ref())
                     .chain(args)
                     .map(|arg| self.compile_expr(executable, arg))
@@ -187,7 +190,7 @@ impl Compiler {
             Expr::FnDefinition(def) => {
                 let mut captures = HashMap::new();
                 let mut extractor = CapturesExtractor::new(|var_span| {
-                    let var_name = var_span.fragment;
+                    let var_name = *var_span.fragment();
                     if let Some(register) = self.get_var(var_name) {
                         captures.insert(
                             var_name,
@@ -294,7 +297,7 @@ impl Compiler {
         } else {
             let mut captures = Env::new();
             let mut extractor = CapturesExtractor::new(|var_span| {
-                let var_name = var_span.fragment;
+                let var_name = *var_span.fragment();
                 if let Some(value) = env.get_var(var_name) {
                     captures.push_var(var_name, value.clone());
                     Ok(())
@@ -346,16 +349,17 @@ impl Compiler {
     ) {
         match &lhs.extra {
             Lvalue::Variable { .. } => {
-                if lhs.fragment != "_" {
+                let var_name = *lhs.fragment();
+                if var_name != "_" {
                     self.vars_to_registers
-                        .insert(lhs.fragment.to_owned(), rhs_register);
+                        .insert(var_name.to_owned(), rhs_register);
 
                     // It does not make sense to annotate vars in the inner scopes, since
                     // they cannot be accessed externally.
                     if self.scope_depth == 0 {
                         let command = Command::Annotate {
                             register: rhs_register,
-                            name: lhs.fragment,
+                            name: var_name,
                         };
                         executable.push_command(create_span_ref(lhs, command));
                     }
@@ -444,7 +448,7 @@ where
 
     /// Processes a local variable in the rvalue position.
     fn eval_local_var<T>(&mut self, var_span: &Spanned<'a, T>) -> Result<(), EvalError> {
-        if self.has_var(var_span.fragment) {
+        if self.has_var(var_span.fragment()) {
             // No action needs to be performed.
             Ok(())
         } else {
@@ -568,9 +572,10 @@ fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
     for lvalue in lvalues {
         match &lvalue.extra {
             Lvalue::Variable { .. } => {
-                if lvalue.fragment != "_" {
+                let var_name = *lvalue.fragment();
+                if var_name != "_" {
                     let var_span = create_span_ref(lvalue, ());
-                    if let Some(prev_span) = vars.insert(lvalue.fragment, var_span) {
+                    if let Some(prev_span) = vars.insert(var_name, var_span) {
                         let err = EvalError::RepeatedAssignment { context };
                         return Err(SpannedEvalError::new(lvalue, err)
                             .with_span(&prev_span, AuxErrorInfo::PrevAssignment));
@@ -603,7 +608,7 @@ fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
 ///     undefined_vars.keys().copied().collect::<HashSet<_>>(),
 ///     HashSet::from_iter(vec!["sin", "PI", "E"])
 /// );
-/// assert_eq!(undefined_vars["PI"].offset, 15);
+/// assert_eq!(undefined_vars["PI"].location_offset(), 15);
 /// ```
 pub trait CompilerExt<'a> {
     /// Returns variables not defined within the AST node, together with the span of their first
@@ -624,8 +629,9 @@ impl<'a, T: Grammar> CompilerExt<'a> for Block<'a, T> {
     fn undefined_variables(&self) -> Result<HashMap<&'a str, Span<'a>>, SpannedEvalError<'a>> {
         let mut undefined_vars = HashMap::new();
         let mut extractor = CapturesExtractor::new(|var_span| {
-            if !undefined_vars.contains_key(var_span.fragment) {
-                undefined_vars.insert(var_span.fragment, var_span);
+            let var_name = *var_span.fragment();
+            if !undefined_vars.contains_key(var_name) {
+                undefined_vars.insert(var_name, var_span);
             }
             Ok(())
         });
@@ -639,8 +645,9 @@ impl<'a, T: Grammar> CompilerExt<'a> for FnDefinition<'a, T> {
     fn undefined_variables(&self) -> Result<HashMap<&'a str, Span<'a>>, SpannedEvalError<'a>> {
         let mut undefined_vars = HashMap::new();
         let mut extractor = CapturesExtractor::new(|var_span| {
-            if !undefined_vars.contains_key(var_span.fragment) {
-                undefined_vars.insert(var_span.fragment, var_span);
+            let var_name = *var_span.fragment();
+            if !undefined_vars.contains_key(var_name) {
+                undefined_vars.insert(var_name, var_span);
             }
             Ok(())
         });
@@ -701,7 +708,7 @@ mod tests {
         };
 
         let captures = def.undefined_variables().unwrap();
-        assert_eq!(captures["y"].offset, 22);
+        assert_eq!(captures["y"].location_offset(), 22);
         assert!(!captures.contains_key("x"));
     }
 
@@ -718,8 +725,8 @@ mod tests {
         };
 
         let captures = def.undefined_variables().unwrap();
-        assert_eq!(captures["y"].offset, 22);
-        assert_eq!(captures["x"].offset, 38);
+        assert_eq!(captures["y"].location_offset(), 22);
+        assert_eq!(captures["x"].location_offset(), 38);
     }
 
     #[test]

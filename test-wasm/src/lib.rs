@@ -84,7 +84,7 @@ pub fn evaluate(program: &str) -> Result<JsValue, JsValue> {
     let statements = F64Grammar::parse_statements(program).map_err(|spanned_err| {
         let message = format!(
             "{}:{}: {}",
-            spanned_err.line,
+            spanned_err.location_line(),
             spanned_err.get_column(),
             spanned_err.extra
         );
@@ -98,7 +98,7 @@ pub fn evaluate(program: &str) -> Result<JsValue, JsValue> {
         let main_span = err.main_span();
         let message = format!(
             "{}:{}: {}",
-            main_span.line,
+            main_span.location_line(),
             main_span.get_column(),
             err.source()
         );

@@ -93,6 +93,17 @@ impl<'a, T: Grammar> fmt::Debug for dyn NativeFn<'a, T> + 'a {
     }
 }
 
+impl<'a, T: Grammar> dyn NativeFn<'a, T> + 'a {
+    /// Extracts a data pointer from this trait object reference.
+    pub(crate) fn data_ptr(&self) -> *const () {
+        // `*const dyn Trait as *const ()` extracts the data pointer,
+        // see https://github.com/rust-lang/rust/issues/27751. This is seemingly
+        // the simplest way to extract the data pointer; `TraitObject` in `std::raw` is
+        // a more future-proof alternative, but it is unstable.
+        self as *const dyn NativeFn<T> as *const ()
+    }
+}
+
 /// Function defined within the interpreter.
 #[derive(Debug)]
 pub struct InterpretedFn<'a, T: Grammar> {
@@ -124,7 +135,7 @@ impl<'a, T: Grammar> InterpretedFn<'a, T> {
         self.capture_spans
             .iter()
             .zip(&self.captures)
-            .map(|(span, val)| (span.fragment, val))
+            .map(|(span, val)| (*span.fragment(), val))
             .collect()
     }
 }
@@ -186,7 +197,7 @@ impl<'a, T: Grammar> Function<'a, T> {
     /// Checks if the provided function is the same as this one.
     pub fn is_same_function(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Native(this), Self::Native(other)) => Rc::ptr_eq(this, other),
+            (Self::Native(this), Self::Native(other)) => this.data_ptr() == other.data_ptr(),
             (Self::Interpreted(this), Self::Interpreted(other)) => Rc::ptr_eq(this, other),
             _ => false,
         }

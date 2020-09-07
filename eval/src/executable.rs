@@ -475,7 +475,7 @@ where
                         .collect();
 
                     if let Some(backtrace) = backtrace.as_deref_mut() {
-                        backtrace.push_call(name.fragment, function.def_span(), span);
+                        backtrace.push_call(name.fragment(), function.def_span(), span);
                     }
                     let mut context =
                         CallContext::new(create_span_ref(name, ()), span, backtrace.as_deref_mut());

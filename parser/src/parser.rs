@@ -11,7 +11,7 @@ use nom::{
     error::{context, ErrorKind},
     multi::{many0, separated_list},
     sequence::{delimited, preceded, terminated, tuple},
-    Err as NomErr,
+    Err as NomErr, Slice,
 };
 
 use alloc::{borrow::ToOwned, boxed::Box, vec, vec::Vec};
@@ -55,12 +55,10 @@ impl UnaryOp {
 }
 
 impl BinaryOp {
-    fn from_span(span: Span) -> Spanned<Self> {
-        Spanned {
-            offset: span.offset,
-            line: span.line,
-            fragment: span.fragment,
-            extra: match span.fragment {
+    fn from_span(span: Span<'_>) -> Spanned<'_, Self> {
+        create_span(
+            span,
+            match *span.fragment() {
                 "+" => BinaryOp::Add,
                 "-" => BinaryOp::Sub,
                 "*" => BinaryOp::Mul,
@@ -72,7 +70,7 @@ impl BinaryOp {
                 "||" => BinaryOp::Or,
                 _ => unreachable!(),
             },
-        }
+        )
     }
 }
 
@@ -198,15 +196,15 @@ pub struct SpannedError<'a>(Spanned<'a, Error<'a>>);
 
 impl<'a> nom::error::ParseError<Span<'a>> for SpannedError<'a> {
     fn from_error_kind(mut input: Span<'a>, kind: ErrorKind) -> Self {
-        if kind == ErrorKind::Char && !input.fragment.is_empty() {
+        if kind == ErrorKind::Char && !input.fragment().is_empty() {
             // Truncate the error span to the first ineligible char.
-            input.fragment = &input.fragment[..1];
+            input = input.slice(..1);
         }
 
         SpannedError(create_span(
             input,
             if kind == ErrorKind::Char {
-                if input.fragment.is_empty() {
+                if input.fragment().is_empty() {
                     Error::UnexpectedTerm { context: None }
                 } else {
                     Error::UnexpectedChar { context: None }
@@ -225,7 +223,7 @@ impl<'a> nom::error::ParseError<Span<'a>> for SpannedError<'a> {
     }
 
     fn add_context(input: Span<'a>, ctx: &'static str, mut other: Self) -> Self {
-        if other.0.extra.accepts_context() && input.offset < other.0.offset {
+        if other.0.extra.accepts_context() && input.location_offset() < other.0.location_offset() {
             other.0.extra.set_context(Context::new(ctx), input);
         }
         other
@@ -337,11 +335,8 @@ where
 
     let fn_def_parser: Box<dyn Fn(Span<'a>) -> NomResult<'a, SpannedExpr<'a, T>>> =
         if T::FEATURES.fn_definitions {
-            let parser = map(with_span(fn_def::<T, Ty>), |span| Spanned {
-                offset: span.offset,
-                line: span.line,
-                fragment: span.fragment,
-                extra: Expr::FnDefinition(span.extra),
+            let parser = map(with_span(fn_def::<T, Ty>), |span| {
+                map_span(span, Expr::FnDefinition)
             });
             Box::new(parser)
         } else {
@@ -353,11 +348,8 @@ where
         };
 
     alt((
-        map(with_span(T::parse_literal), |span| Spanned {
-            offset: span.offset,
-            line: span.line,
-            fragment: span.fragment,
-            extra: Expr::Literal(span.extra),
+        map(with_span(T::parse_literal), |span| {
+            map_span(span, Expr::Literal)
         }),
         map(with_span(var_name), |span| {
             create_span(span, Expr::Variable)
@@ -369,16 +361,10 @@ where
                 simple_expr::<T, Ty>,
             ))),
             |spanned| {
-                let (op, inner) = spanned.extra;
-                Spanned {
-                    offset: spanned.offset,
-                    line: spanned.line,
-                    fragment: spanned.fragment,
-                    extra: Expr::Unary {
-                        op: UnaryOp::from_span(op),
-                        inner: Box::new(inner),
-                    },
-                }
+                map_span(spanned, |(op, inner)| Expr::Unary {
+                    op: UnaryOp::from_span(op),
+                    inner: Box::new(inner),
+                })
             },
         ),
         block_parser,
@@ -530,7 +516,7 @@ where
                     };
                 }
 
-                parent.fragment = unite_spans(input, &parent, &expr).fragment;
+                *parent = create_span(unite_spans(input, &parent, &expr), parent.extra.clone());
                 if let Expr::Binary { ref mut rhs, .. } = parent.extra {
                     let rhs_span = unite_spans(input, rhs, &expr);
                     let dummy = Box::new(create_span_ref(rhs, Expr::Variable));
@@ -542,7 +528,7 @@ where
                     };
                     *rhs = Box::new(create_span(rhs_span, new_expr));
                 }
-                acc.fragment = united_span.fragment;
+                acc = create_span(united_span, acc.extra);
                 acc
             }
         })
@@ -720,7 +706,7 @@ pub(crate) fn statements<T>(input_span: Span<'_>) -> Result<Block<'_, T>, Spanne
 where
     T: Grammar,
 {
-    if !input_span.fragment.is_ascii() {
+    if !input_span.fragment().is_ascii() {
         return Err(create_span(input_span, Error::NonAsciiInput));
     }
 
@@ -734,7 +720,7 @@ pub(crate) fn streaming_statements<T>(
 where
     T: Grammar,
 {
-    if !input_span.fragment.is_ascii() {
+    if !input_span.fragment().is_ascii() {
         return Err(create_span(input_span, Error::NonAsciiInput));
     }
 
@@ -753,7 +739,7 @@ where
             NomErr::Incomplete(_) => Error::Incomplete.with_span(input_span).0,
         })
         .and_then(|(remaining, statements)| {
-            if remaining.fragment.is_empty() {
+            if remaining.fragment().is_empty() {
                 Ok(statements)
             } else {
                 Err(Error::Leftovers.with_span(remaining).0)

@@ -288,7 +288,7 @@ impl fmt::Display for SpannedEvalError<'_> {
         write!(
             formatter,
             "{}:{}: {}",
-            self.main_span.line,
+            self.main_span.location_line(),
             self.main_span.get_column(),
             self.error
         )

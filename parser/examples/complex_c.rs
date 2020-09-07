@@ -197,7 +197,7 @@ impl<'a> Context<'a> {
                         if !code.is_empty() {
                             code += "\n\n";
                         }
-                        code += &Self::eval_function(fn_def, lhs.fragment);
+                        code += &Self::eval_function(fn_def, lhs.fragment());
                     }
                     _ => panic!("Top-level statements should be function definitions"),
                 },
@@ -217,13 +217,13 @@ impl<'a> Context<'a> {
         for (i, arg) in args.iter().enumerate() {
             let was_present = context
                 .variables
-                .insert(arg.fragment, Evaluated::var(arg.fragment));
+                .insert(arg.fragment(), Evaluated::var(*arg.fragment()));
             if was_present.is_some() {
-                panic!("Cannot redefine function argument `{}`", arg.fragment);
+                panic!("Cannot redefine function argument `{}`", arg.fragment());
             }
 
             evaluated += "float2 ";
-            evaluated += arg.fragment;
+            evaluated += arg.fragment();
             if i + 1 < args.len() {
                 evaluated += ", ";
             }
@@ -232,7 +232,7 @@ impl<'a> Context<'a> {
 
         for statement in &fn_def.body.statements {
             match &statement.extra {
-                Statement::Expr(_) => panic!("Useless expression: {}", statement.fragment),
+                Statement::Expr(_) => panic!("Useless expression: {}", statement.fragment()),
                 Statement::Assignment { lhs, rhs } => {
                     if let Some(line) = context.eval_assignment(lhs, rhs) {
                         evaluated += "    ";
@@ -259,7 +259,7 @@ impl<'a> Context<'a> {
         rhs: &SpannedExpr<'a, ComplexGrammar>,
     ) -> Option<String> {
         let variable_name = match lhs.extra {
-            Lvalue::Variable { .. } => lhs.fragment,
+            Lvalue::Variable { .. } => *lhs.fragment(),
             Lvalue::Tuple(_) => unreachable!("Tuples are disabled in parser"),
         };
 
@@ -283,11 +283,11 @@ impl<'a> Context<'a> {
             Expr::Variable => {
                 let var = self
                     .variables
-                    .get(expr.fragment)
-                    .unwrap_or_else(|| panic!("Variable {} is not defined", expr.fragment));
+                    .get(expr.fragment())
+                    .unwrap_or_else(|| panic!("Variable {} is not defined", expr.fragment()));
 
                 match var {
-                    Evaluated::Symbolic { .. } => Evaluated::var(expr.fragment),
+                    Evaluated::Symbolic { .. } => Evaluated::var(*expr.fragment()),
                     value => value.to_owned(),
                 }
             }
@@ -295,7 +295,7 @@ impl<'a> Context<'a> {
 
             Expr::Unary { op, inner } => match op.extra {
                 UnaryOp::Neg => -self.eval_expr(inner),
-                UnaryOp::Not => panic!("Boolean operations are not supported: {}", expr.fragment),
+                UnaryOp::Not => panic!("Boolean operations are not supported: {}", expr.fragment()),
             },
 
             Expr::Binary { lhs, op, rhs } => {
@@ -308,12 +308,12 @@ impl<'a> Context<'a> {
                     BinaryOp::Mul => lhs_value * rhs_value,
                     BinaryOp::Div => lhs_value / rhs_value,
                     BinaryOp::Power => lhs_value ^ rhs_value,
-                    _ => panic!("Boolean operations are not supported: {}", expr.fragment),
+                    _ => panic!("Boolean operations are not supported: {}", expr.fragment()),
                 }
             }
 
             Expr::Function { name, args } => {
-                let fn_name = name.fragment;
+                let fn_name = name.fragment();
                 if !self.functions.contains(fn_name) {
                     panic!("Undefined function `{}`", fn_name);
                 }

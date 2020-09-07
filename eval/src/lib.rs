@@ -715,7 +715,7 @@ mod tests {
         let program = Span::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
-        assert_eq!(err.main_span().fragment, "x");
+        assert_eq!(*err.main_span().fragment(), "x");
         assert_matches!(err.source(), EvalError::Undefined(ref var) if var == "x");
     }
 
@@ -725,7 +725,7 @@ mod tests {
         let program = Span::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
-        assert_eq!(err.main_span().fragment, "sin");
+        assert_eq!(*err.main_span().fragment(), "sin");
         assert_matches!(err.source(), EvalError::Undefined(ref var) if var == "sin");
     }
 
@@ -735,7 +735,7 @@ mod tests {
         let program = Span::new("foo = |x| x + 5; foo()");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
-        assert_eq!(err.main_span().fragment, "foo()");
+        assert_eq!(*err.main_span().fragment(), "foo()");
         assert_matches!(
             err.source(),
             EvalError::ArgsLenMismatch {
@@ -747,7 +747,7 @@ mod tests {
         let program = Span::new("foo(1, 2) * 3.0");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
-        assert_eq!(err.main_span().fragment, "foo(1, 2)");
+        assert_eq!(*err.main_span().fragment(), "foo(1, 2)");
         assert_matches!(
             err.source(),
             EvalError::ArgsLenMismatch {
@@ -763,7 +763,7 @@ mod tests {
         let program = Span::new("foo = |fn, ...xs| fn(xs); foo()");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
-        assert_eq!(err.main_span().fragment, "foo()");
+        assert_eq!(*err.main_span().fragment(), "foo()");
         assert_matches!(
             err.source(),
             EvalError::ArgsLenMismatch {
@@ -780,8 +780,8 @@ mod tests {
         let program = Span::new("add = |x, x| x + 2;");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
-        assert_eq!(err.main_span().fragment, "x");
-        assert_eq!(err.main_span().offset, 10);
+        assert_eq!(*err.main_span().fragment(), "x");
+        assert_eq!(err.main_span().location_offset(), 10);
         assert_matches!(
             err.source(),
             EvalError::RepeatedAssignment {
@@ -792,8 +792,8 @@ mod tests {
         let program = Span::new("add = |x, (y, x)| x + y;");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
-        assert_eq!(err.main_span().fragment, "x");
-        assert_eq!(err.main_span().offset, 14);
+        assert_eq!(*err.main_span().fragment(), "x");
+        assert_eq!(err.main_span().location_offset(), 14);
         assert_matches!(err.source(), EvalError::RepeatedAssignment { .. });
     }
 
@@ -802,8 +802,8 @@ mod tests {
         let program = Span::new("(x, x) = (1, 2);");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
-        assert_eq!(err.main_span().fragment, "x");
-        assert_eq!(err.main_span().offset, 4);
+        assert_eq!(*err.main_span().fragment(), "x");
+        assert_eq!(err.main_span().location_offset(), 4);
         assert_matches!(
             err.source(),
             EvalError::RepeatedAssignment {
@@ -814,8 +814,8 @@ mod tests {
         let program = Span::new("(x, ...x) = (1, 2);");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
-        assert_eq!(err.main_span().fragment, "x");
-        assert_eq!(err.main_span().offset, 7);
+        assert_eq!(*err.main_span().fragment(), "x");
+        assert_eq!(err.main_span().location_offset(), 7);
         assert_matches!(
             err.source(),
             EvalError::RepeatedAssignment {
@@ -834,7 +834,7 @@ mod tests {
         let block = F32Grammar::parse_statements(program).unwrap();
 
         let err = Interpreter::new().evaluate(&block).unwrap_err();
-        assert_eq!(err.main_span().fragment, "(_, z)");
+        assert_eq!(*err.main_span().fragment(), "(_, z)");
         assert_matches!(err.source(), EvalError::CannotDestructure);
     }
 
@@ -843,13 +843,13 @@ mod tests {
         let program = Span::new("x = 5; x(1.0)");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
-        assert_eq!(err.main_span().offset, 7);
+        assert_eq!(err.main_span().location_offset(), 7);
         assert_matches!(err.source(), EvalError::CannotCall);
 
         let program = Span::new("2 + 1.0(5)");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
-        assert_eq!(err.main_span().fragment, "1.0(5)");
+        assert_eq!(*err.main_span().fragment(), "1.0(5)");
         assert_matches!(err.source(), EvalError::CannotCall);
     }
 
@@ -859,7 +859,7 @@ mod tests {
         let program = Span::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
-        assert_eq!(err.main_span().fragment, "(1, 2)");
+        assert_eq!(*err.main_span().fragment(), "(1, 2)");
         assert_matches!(
             err.source(),
             EvalError::TupleLenMismatch { lhs: LvalueLen::Exact(2), rhs: 3, .. }
@@ -872,7 +872,7 @@ mod tests {
         let program = Span::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
-        assert_eq!(err.main_span().fragment, "(x, y)");
+        assert_eq!(*err.main_span().fragment(), "(x, y)");
         assert_matches!(err.source(), EvalError::CannotDestructure);
     }
 
@@ -883,7 +883,7 @@ mod tests {
         let program = Span::new("1 / || 2");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
-        assert_eq!(err.main_span().fragment, "|| 2");
+        assert_eq!(*err.main_span().fragment(), "|| 2");
         assert_matches!(
             err.source(),
             EvalError::UnexpectedOperand { ref op } if *op == BinaryOp::Div.into()
@@ -892,7 +892,7 @@ mod tests {
         let program = Span::new("1 == 1 && !(2, 3)");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
-        assert_eq!(err.main_span().fragment, "!(2, 3)");
+        assert_eq!(*err.main_span().fragment(), "!(2, 3)");
         assert_matches!(
             err.source(),
             EvalError::UnexpectedOperand { ref op } if *op == UnaryOp::Not.into()
@@ -915,7 +915,7 @@ mod tests {
         let program = Span::new("1 + sin(-5.0, 2.0)");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
-        assert_eq!(err.main_span().fragment, "sin(-5.0, 2.0)");
+        assert_eq!(*err.main_span().fragment(), "sin(-5.0, 2.0)");
         assert_matches!(
             err.source(),
             EvalError::ArgsLenMismatch {
@@ -927,7 +927,7 @@ mod tests {
         let program = Span::new("1 + sin((-5, 2))");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
-        assert_eq!(err.main_span().fragment, "sin((-5, 2))");
+        assert_eq!(*err.main_span().fragment(), "sin((-5, 2))");
 
         let expected_err_kind = FromValueErrorKind::InvalidType {
             expected: ValueType::Number,

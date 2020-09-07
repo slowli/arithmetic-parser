@@ -40,12 +40,16 @@ impl<'a> CodeMap<'a> {
     }
 
     fn locate<T>(&self, span: &Spanned<'_, T>) -> Option<(FileId, Range<usize>)> {
-        if span.offset > self.next_position {
+        if span.location_offset() > self.next_position {
             return None;
         }
-        let (&file_start, &file_id) = self.code_positions.range(..=span.offset).rev().next()?;
-        let start = span.offset - file_start;
-        let range = start..(start + span.fragment.len());
+        let (&file_start, &file_id) = self
+            .code_positions
+            .range(..=span.location_offset())
+            .rev()
+            .next()?;
+        let start = span.location_offset() - file_start;
+        let range = start..(start + span.fragment().len());
         Some((file_id, range))
     }
 }
@@ -300,11 +304,11 @@ impl<'a> Env<'a> {
             return Ok(false);
         }
 
-        let span = Span {
-            offset: start_position,
-            line: 0,
-            fragment: line,
-            extra: (),
+        let span = unsafe {
+            // SAFETY: We do not traverse the portion of the program preceding the `span`
+            // (this could lead to UB since `line` is not necessarily sliced from a larger program).
+            // Instead, the span offset is used for diagnostic messages only.
+            Span::new_from_raw_offset(start_position, 1, line, ())
         };
         let mut incomplete = false;
         let statements = T::parse_streaming_statements(span).or_else(|e| {

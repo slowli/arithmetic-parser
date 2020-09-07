@@ -135,7 +135,7 @@ impl<'a, T: Grammar> InterpretedFn<'a, T> {
         self.capture_spans
             .iter()
             .zip(&self.captures)
-            .map(|(span, val)| (span.fragment, val))
+            .map(|(span, val)| (*span.fragment(), val))
             .collect()
     }
 }

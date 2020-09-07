@@ -3,30 +3,42 @@
 use crate::{NomResult, Span, Spanned};
 
 pub fn create_span<T, U>(span: Spanned<T>, extra: U) -> Spanned<U> {
-    Spanned {
-        offset: span.offset,
-        line: span.line,
-        fragment: span.fragment,
-        extra,
+    unsafe {
+        // SAFETY: Safe since offset coincides with the input offset (which we consider
+        // well-formed).
+        Spanned::new_from_raw_offset(
+            span.location_offset(),
+            span.location_line(),
+            span.fragment(),
+            extra,
+        )
     }
 }
 
 /// Spans the given value based on the provided spanned reference.
 pub fn create_span_ref<'a, T, U>(span: &Spanned<'a, T>, extra: U) -> Spanned<'a, U> {
-    Spanned {
-        offset: span.offset,
-        line: span.line,
-        fragment: span.fragment,
-        extra,
+    unsafe {
+        // SAFETY: Safe since offset coincides with the input offset (which we consider
+        // well-formed).
+        Spanned::new_from_raw_offset(
+            span.location_offset(),
+            span.location_line(),
+            span.fragment(),
+            extra,
+        )
     }
 }
 
 pub fn map_span<T, U>(span: Spanned<'_, T>, f: impl FnOnce(T) -> U) -> Spanned<'_, U> {
-    Spanned {
-        offset: span.offset,
-        line: span.line,
-        fragment: span.fragment,
-        extra: f(span.extra),
+    unsafe {
+        // SAFETY: Safe since offset coincides with the input offset (which we consider
+        // well-formed).
+        Spanned::new_from_raw_offset(
+            span.location_offset(),
+            span.location_line(),
+            span.fragment(),
+            f(span.extra),
+        )
     }
 }
 
@@ -36,11 +48,16 @@ pub fn with_span<'a, O>(
 ) -> impl Fn(Span<'a>) -> NomResult<'a, Spanned<O>> {
     move |input: Span| {
         parser(input).map(|(rest, output)| {
-            let spanned = Spanned {
-                offset: input.offset,
-                line: input.line,
-                extra: output,
-                fragment: &input.fragment[..(rest.offset - input.offset)],
+            let len = rest.location_offset() - input.location_offset();
+            let spanned = unsafe {
+                // SAFETY: Safe since offset coincides with the input offset (which we consider
+                // well-formed).
+                Spanned::new_from_raw_offset(
+                    input.location_offset(),
+                    input.location_line(),
+                    &input.fragment()[..len],
+                    output,
+                )
             };
             (rest, spanned)
         })
@@ -52,16 +69,23 @@ pub fn unite_spans<'a, T, U>(
     start: &Spanned<'_, T>,
     end: &Spanned<'_, U>,
 ) -> Span<'a> {
-    debug_assert!(input.offset <= start.offset);
-    debug_assert!(start.offset <= end.offset);
-    debug_assert!(input.offset + input.fragment.len() >= end.offset + end.fragment.len());
+    debug_assert!(input.location_offset() <= start.location_offset());
+    debug_assert!(start.location_offset() <= end.location_offset());
+    debug_assert!(
+        input.location_offset() + input.fragment().len()
+            >= end.location_offset() + end.fragment().len()
+    );
 
-    let start_idx = start.offset - input.offset;
-    let end_idx = end.offset + end.fragment.len() - input.offset;
-    Span {
-        offset: start.offset,
-        line: start.line,
-        fragment: &input.fragment[start_idx..end_idx],
-        extra: (),
+    let start_idx = start.location_offset() - input.location_offset();
+    let end_idx = end.location_offset() + end.fragment().len() - input.location_offset();
+    unsafe {
+        // SAFETY: Safe since offset coincides with the input offset (which we consider
+        // well-formed).
+        Spanned::new_from_raw_offset(
+            start.location_offset(),
+            start.location_line(),
+            &input.fragment()[start_idx..end_idx],
+            (),
+        )
     }
 }

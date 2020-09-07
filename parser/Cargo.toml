@@ -14,7 +14,7 @@ keywords = ["parser", "arithmetic"]
 # Public dependencies (present in the public API).
 anyhow = "1.0.27"
 nom = "5.1.1"
-nom_locate = "1.0.0"
+nom_locate = "2.0.0"
 num-traits = "0.2.11"
 
 # Optional dependencies (public)

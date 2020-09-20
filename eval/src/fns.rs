@@ -597,7 +597,7 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Compare;
 
-const COMPARE_ERROR_MSG: &str = "Compare requires 2 primitive arguments";
+const COMPARE_ERROR_MSG: &str = "Compare requires 2 number arguments";
 
 impl<'a, T> NativeFn<'a, T> for Compare
 where

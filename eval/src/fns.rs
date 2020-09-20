@@ -632,6 +632,7 @@ mod tests {
     use crate::Interpreter;
 
     use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+    use assert_matches::assert_matches;
 
     use core::f32;
 
@@ -657,6 +658,28 @@ mod tests {
         let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Number(-1.5));
+    }
+
+    #[test]
+    fn cmp_sugar() {
+        let mut interpreter = Interpreter::new();
+        interpreter.insert_native_fn("cmp", Compare);
+
+        let program = "x = 1.0; x > 0 && x <= 3";
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let ret = interpreter.evaluate(&block).unwrap();
+        assert_eq!(ret, Value::Bool(true));
+
+        let program = "x = 1.0; x > (1, 2)";
+        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let err = interpreter.evaluate(&block).unwrap_err();
+        assert_matches!(
+            err.source(),
+            EvalError::NativeCall(ref message) if message.contains("Compare requires")
+        );
+        assert_eq!(*err.main_span().fragment(), "x > (1, 2)");
+        assert_eq!(err.aux_spans().len(), 1);
+        assert_eq!(*err.aux_spans()[0].fragment(), "(1, 2)");
     }
 
     #[test]

@@ -7,14 +7,18 @@ use core::iter;
 use crate::{
     alloc::{vec, ToOwned, Vec},
     executable::{
-        Atom, Command, CompiledExpr, Env, Executable, ExecutableFn, ExecutableModule, SpannedAtom,
+        Atom, Command, ComparisonOp, CompiledExpr, Env, Executable, ExecutableFn, ExecutableModule,
+        SpannedAtom,
     },
     AuxErrorInfo, EvalError, RepeatedAssignmentContext, SpannedEvalError,
 };
 use arithmetic_parser::{
-    create_span_ref, Block, Destructure, Expr, FnDefinition, Grammar, Lvalue, Span, Spanned,
-    SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
+    create_span_ref, BinaryOp, Block, Destructure, Expr, FnDefinition, Grammar, Lvalue, Span,
+    Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
 };
+
+/// Name of the comparison function used in desugaring order comparisons.
+const CMP_FUNCTION_NAME: &str = "cmp";
 
 #[derive(Debug, Clone, Default)]
 pub struct Compiler {
@@ -99,15 +103,34 @@ impl Compiler {
             Expr::Binary { op, lhs, rhs } => {
                 let lhs = self.compile_expr(executable, lhs)?;
                 let rhs = self.compile_expr(executable, rhs)?;
-                let register = self.push_assignment(
-                    executable,
+
+                let compiled = if op.extra.is_order_comparison() {
+                    let cmp_function = self.get_var(CMP_FUNCTION_NAME).ok_or_else(|| {
+                        let err = EvalError::MissingCmpFunction {
+                            name: CMP_FUNCTION_NAME.to_owned(),
+                        };
+                        SpannedEvalError::new(expr, err)
+                    })?;
+                    let cmp_function = create_span_ref(op, Atom::Register(cmp_function));
+
+                    let cmp_invocation = CompiledExpr::Function {
+                        name: cmp_function,
+                        args: vec![lhs, rhs],
+                    };
+                    let cmp_register = self.push_assignment(executable, cmp_invocation, expr);
+                    CompiledExpr::Compare {
+                        inner: create_span_ref(expr, Atom::Register(cmp_register)),
+                        op: ComparisonOp::from(op.extra),
+                    }
+                } else {
                     CompiledExpr::Binary {
                         op: op.extra,
                         lhs,
                         rhs,
-                    },
-                    expr,
-                );
+                    }
+                };
+
+                let register = self.push_assignment(executable, compiled, expr);
                 Atom::Register(register)
             }
 
@@ -189,8 +212,7 @@ impl Compiler {
 
             Expr::FnDefinition(def) => {
                 let mut captures = HashMap::new();
-                let mut extractor = CapturesExtractor::new(|var_span| {
-                    let var_name = *var_span.fragment();
+                let mut extractor = CapturesExtractor::new(|var_name, var_span| {
                     if let Some(register) = self.get_var(var_name) {
                         captures.insert(
                             var_name,
@@ -296,8 +318,7 @@ impl Compiler {
             Env::new()
         } else {
             let mut captures = Env::new();
-            let mut extractor = CapturesExtractor::new(|var_span| {
-                let var_name = *var_span.fragment();
+            let mut extractor = CapturesExtractor::new(|var_name, _| {
                 if let Some(value) = env.get_var(var_name) {
                     captures.push_var(var_name, value.clone());
                     Ok(())
@@ -419,7 +440,7 @@ struct CapturesExtractor<'a, F> {
 
 impl<'a, F> CapturesExtractor<'a, F>
 where
-    F: FnMut(Span<'a>) -> Result<(), EvalError>,
+    F: FnMut(&'a str, Span<'a>) -> Result<(), EvalError>,
 {
     fn new(action: F) -> Self {
         Self {
@@ -452,7 +473,15 @@ where
             // No action needs to be performed.
             Ok(())
         } else {
-            (self.action)(create_span_ref(var_span, ()))
+            (self.action)(var_span.fragment(), create_span_ref(var_span, ()))
+        }
+    }
+
+    fn eval_cmp(&mut self, op_span: &Spanned<'a, BinaryOp>) -> Result<(), EvalError> {
+        if self.has_var(CMP_FUNCTION_NAME) {
+            Ok(())
+        } else {
+            (self.action)(CMP_FUNCTION_NAME, create_span_ref(op_span, ()))
         }
     }
 
@@ -475,9 +504,14 @@ where
             Expr::Unary { inner, .. } => {
                 self.eval(inner)?;
             }
-            Expr::Binary { lhs, rhs, .. } => {
+            Expr::Binary { lhs, rhs, op } => {
                 self.eval(lhs)?;
                 self.eval(rhs)?;
+
+                if op.extra.is_order_comparison() {
+                    self.eval_cmp(op)
+                        .map_err(|e| SpannedEvalError::new(op, e))?;
+                }
             }
 
             Expr::Function { args, name } => {
@@ -628,8 +662,7 @@ pub trait CompilerExt<'a> {
 impl<'a, T: Grammar> CompilerExt<'a> for Block<'a, T> {
     fn undefined_variables(&self) -> Result<HashMap<&'a str, Span<'a>>, SpannedEvalError<'a>> {
         let mut undefined_vars = HashMap::new();
-        let mut extractor = CapturesExtractor::new(|var_span| {
-            let var_name = *var_span.fragment();
+        let mut extractor = CapturesExtractor::new(|var_name, var_span| {
             if !undefined_vars.contains_key(var_name) {
                 undefined_vars.insert(var_name, var_span);
             }
@@ -644,8 +677,7 @@ impl<'a, T: Grammar> CompilerExt<'a> for Block<'a, T> {
 impl<'a, T: Grammar> CompilerExt<'a> for FnDefinition<'a, T> {
     fn undefined_variables(&self) -> Result<HashMap<&'a str, Span<'a>>, SpannedEvalError<'a>> {
         let mut undefined_vars = HashMap::new();
-        let mut extractor = CapturesExtractor::new(|var_span| {
-            let var_name = *var_span.fragment();
+        let mut extractor = CapturesExtractor::new(|var_name, var_span| {
             if !undefined_vars.contains_key(var_name) {
                 undefined_vars.insert(var_name, var_span);
             }

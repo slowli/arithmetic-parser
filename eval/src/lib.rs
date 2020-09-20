@@ -940,6 +940,27 @@ mod tests {
     }
 
     #[test]
+    fn comparison_desugaring_with_no_cmp() {
+        let program = Span::new("2 > 5");
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let err = Interpreter::new().evaluate(&block).unwrap_err();
+        assert_matches!(
+            err.source(),
+            EvalError::MissingCmpFunction { ref name } if name == "cmp"
+        );
+        assert_eq!(*err.main_span().fragment(), "2 > 5");
+    }
+
+    #[test]
+    fn comparison_desugaring_with_invalid_cmp() {
+        let program = Span::new("cmp = |_, _| 2; 1 > 3");
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let err = Interpreter::new().evaluate(&block).unwrap_err();
+        assert_matches!(err.source(), EvalError::InvalidCmpResult);
+        assert_eq!(*err.main_span().fragment(), "1 > 3");
+    }
+
+    #[test]
     fn single_statement_fn() {
         let program = Span::new("(|| 5)()");
         let block = F32Grammar::parse_statements(program).unwrap();
@@ -958,5 +979,25 @@ mod tests {
         let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = Interpreter::new().evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Number(2.0));
+    }
+
+    #[test]
+    fn comparison_desugaring_with_capture() {
+        let program = Span::new("ge = |x, y| x >= y; ge(2, 3)");
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let return_value = Interpreter::new()
+            .insert_native_fn("cmp", fns::Compare)
+            .evaluate(&block)
+            .unwrap();
+        assert_eq!(return_value, Value::Bool(false));
+    }
+
+    #[test]
+    fn comparison_desugaring_with_capture_and_no_cmp() {
+        let program = Span::new("ge = |x, y| x >= y; ge(2, 3)");
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let err = Interpreter::new().evaluate(&block).unwrap_err();
+        assert_matches!(err.source(), EvalError::Undefined(ref name) if name == "cmp");
+        assert_eq!(*err.main_span().fragment(), ">=");
     }
 }

@@ -42,6 +42,9 @@ These features can be switched on or off when defining a grammar.
 - **Type annotations.** A type annotation in the form `var: Type` can be present
   in the lvalues or in the function argument definitions. The parser for type annotations
   is user-defined.
+- **Order comparisons,** that is, `>`, `<`, `>=`, and `<=` boolean ops.
+  (The reason is that these ops do not make sense for some grammars, 
+  such as for modular arithmetic.)
 
 ### Code Sample
 

@@ -28,10 +28,17 @@
 //! - Type annotations are completely ignored. This means that the interpreter may execute
 //!   code that is incorrect with annotations (e.g., assignment of a tuple to a variable which
 //!   is annotated to have a numeric type).
+//! - Order comparisons (`>`, `<`, `>=`, `<=`) are desugared as follows. First, the `cmp` function
+//!   is called with LHS and RHS as args (in this order). The result is then interpreted as
+//!   [`Ordering`] (-1 is `Less`, 1 is `Greater`, 0 is `Equal`; anything else leads to an error).
+//!   Finally, the `Ordering` is used to compute the original comparison operation. For example,
+//!   if `cmp(x, y) == -1`, then `x < y` and `x <= y` will return `true`, and `x > y` will
+//!   return `false`.
 //!
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
 //! [`Interpreter`]: struct.Interpreter.html
 //! [`Value`]: enum.Value.html
+//! [`Ordering`]: https://doc.rust-lang.org/std/cmp/enum.Ordering.html
 //!
 //! # Examples
 //!

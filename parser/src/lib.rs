@@ -338,21 +338,33 @@ pub enum BinaryOp {
     And,
     /// Boolean OR (`||`).
     Or,
+    /// "Greater than" comparison.
+    Gt,
+    /// "Lesser than" comparison.
+    Lt,
+    /// "Greater or equal" comparison.
+    Ge,
+    /// "Lesser or equal" comparison.
+    Le,
 }
 
 impl fmt::Display for BinaryOp {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Add => formatter.write_str("addition"),
-            Self::Sub => formatter.write_str("subtraction"),
-            Self::Mul => formatter.write_str("multiplication"),
-            Self::Div => formatter.write_str("division"),
-            Self::Power => formatter.write_str("exponentiation"),
-            Self::Eq => formatter.write_str("comparison"),
-            Self::NotEq => formatter.write_str("non-equality comparison"),
-            Self::And => formatter.write_str("AND"),
-            Self::Or => formatter.write_str("OR"),
-        }
+        formatter.write_str(match self {
+            Self::Add => "addition",
+            Self::Sub => "subtraction",
+            Self::Mul => "multiplication",
+            Self::Div => "division",
+            Self::Power => "exponentiation",
+            Self::Eq => "equality comparison",
+            Self::NotEq => "non-equality comparison",
+            Self::And => "AND",
+            Self::Or => "OR",
+            Self::Gt => "greater comparison",
+            Self::Lt => "lesser comparison",
+            Self::Ge => "greater-or-equal comparison",
+            Self::Le => "lesser-or-equal comparison",
+        })
     }
 }
 
@@ -369,6 +381,10 @@ impl BinaryOp {
             Self::NotEq => "!=",
             Self::And => "&&",
             Self::Or => "||",
+            Self::Gt => ">",
+            Self::Lt => "<",
+            Self::Ge => ">=",
+            Self::Le => "<=",
         }
     }
 
@@ -377,7 +393,7 @@ impl BinaryOp {
     pub fn priority(self) -> usize {
         match self {
             Self::And | Self::Or => 0,
-            Self::Eq | Self::NotEq => 1,
+            Self::Eq | Self::NotEq | Self::Gt | Self::Lt | Self::Le | Self::Ge => 1,
             Self::Add | Self::Sub => 2,
             Self::Mul | Self::Div => 3,
             Self::Power => 4,
@@ -395,7 +411,15 @@ impl BinaryOp {
     /// Checks if this operation is a comparison.
     pub fn is_comparison(self) -> bool {
         match self {
-            Self::Eq | Self::NotEq => true,
+            Self::Eq | Self::NotEq | Self::Gt | Self::Lt | Self::Le | Self::Ge => true,
+            _ => false,
+        }
+    }
+
+    /// Checks if this operation is an order comparison.
+    pub fn is_order_comparison(self) -> bool {
+        match self {
+            Self::Gt | Self::Lt | Self::Le | Self::Ge => true,
             _ => false,
         }
     }

@@ -700,6 +700,44 @@ fn expr_with_numbers_works() {
 }
 
 #[test]
+fn comparison_expr_works() {
+    let input = Span::new("a == b && c > d;");
+    assert_eq!(
+        expr::<FieldGrammar, Streaming>(input).unwrap().1.extra,
+        Expr::Binary {
+            lhs: Box::new(sp(0, "a == b", {
+                Expr::Binary {
+                    lhs: Box::new(sp(0, "a", Expr::Variable)),
+                    op: BinaryOp::from_span(span(3, "==")),
+                    rhs: Box::new(sp(5, "b", Expr::Variable)),
+                }
+            })),
+            op: BinaryOp::from_span(span(7, "&&")),
+            rhs: Box::new(sp(10, "c > d", {
+                Expr::Binary {
+                    lhs: Box::new(sp(10, "c", Expr::Variable)),
+                    op: BinaryOp::from_span(span(12, ">")),
+                    rhs: Box::new(sp(14, "d", Expr::Variable)),
+                }
+            })),
+        }
+    );
+}
+
+#[test]
+fn two_char_comparisons_are_parsed() {
+    let input = Span::new("a >= b;");
+    assert_eq!(
+        expr::<FieldGrammar, Streaming>(input).unwrap().1.extra,
+        Expr::Binary {
+            lhs: Box::new(sp(0, "a", Expr::Variable)),
+            op: BinaryOp::from_span(span(2, ">=")),
+            rhs: Box::new(sp(5, "b", Expr::Variable)),
+        }
+    );
+}
+
+#[test]
 fn assignment_works() {
     let input = Span::new("x = sc(0x1234);");
     assert_eq!(
@@ -1515,4 +1553,41 @@ fn methods_when_switched_off() {
     let input = Span::new("(1, 2).bar(1)");
     let (rest, _) = statement::<SimpleGrammar, Complete>(input).unwrap();
     assert_eq!(*rest.fragment(), ".bar(1)");
+}
+
+#[test]
+fn order_comparisons_when_switched_off() {
+    #[derive(Debug, Clone)]
+    struct SimpleGrammar;
+
+    impl Grammar for SimpleGrammar {
+        type Lit = Literal;
+        type Type = ValueType;
+
+        const FEATURES: Features = Features {
+            order_comparisons: false,
+            ..Features::all()
+        };
+
+        fn parse_literal(span: Span<'_>) -> NomResult<'_, Self::Lit> {
+            Literal::parse(span)
+        }
+
+        fn parse_type(span: Span<'_>) -> NomResult<'_, Self::Type> {
+            type_info::<Complete>(span)
+        }
+    }
+
+    let input = Span::new("x >= 1;");
+    let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
+    let SpannedError(spanned_err) = match err {
+        NomErr::Failure(spanned) => spanned,
+        _ => panic!("Unexpected error: {}", err),
+    };
+    assert_eq!(spanned_err.location_offset(), 2);
+    assert_eq!(*spanned_err.fragment(), ">=");
+    assert_matches!(
+        spanned_err.extra,
+        Error::UnsupportedOp(Op::Binary(BinaryOp::Ge))
+    );
 }

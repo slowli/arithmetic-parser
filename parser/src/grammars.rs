@@ -80,6 +80,7 @@ mod complex {
     use super::*;
 
     use nom::{
+        branch::alt,
         character::complete::one_of,
         combinator::{map, opt},
         sequence::tuple,
@@ -89,14 +90,18 @@ mod complex {
     fn complex_parser<'a, T: Num>(
         num_parser: impl Fn(Span<'a>) -> NomResult<'a, T>,
     ) -> impl Fn(Span<'a>) -> NomResult<'a, Complex<T>> {
+        let i_parser = map(one_of("ij"), |_| Complex::new(T::zero(), T::one()));
+
         let parser = tuple((num_parser, opt(one_of("ij"))));
-        map(parser, |(value, maybe_imag)| {
+        let parser = map(parser, |(value, maybe_imag)| {
             if maybe_imag.is_some() {
                 Complex::new(T::zero(), value)
             } else {
                 Complex::new(value, T::zero())
             }
-        })
+        });
+
+        alt((i_parser, parser))
     }
 
     impl NumLiteral for num_complex::Complex32 {
@@ -115,7 +120,7 @@ mod complex {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Expr, GrammarExt};
+    use crate::{Expr, GrammarExt, UnaryOp};
 
     use assert_matches::assert_matches;
     use core::f32::INFINITY;
@@ -145,5 +150,49 @@ mod tests {
         let parsed = F32Grammar::parse_statements(Span::new("-Infer(2, 3)")).unwrap();
         let ret = parsed.return_value.unwrap().extra;
         assert_matches!(ret, Expr::Unary { .. });
+    }
+
+    #[cfg(feature = "num-complex")]
+    #[test]
+    fn parsing_i() {
+        use num_complex::Complex32;
+
+        let parsed = NumGrammar::<Complex32>::parse_statements(Span::new("i")).unwrap();
+        let ret = parsed.return_value.unwrap().extra;
+        assert_matches!(ret, Expr::Literal(lit) if lit == Complex32::i());
+
+        let parsed = NumGrammar::<Complex32>::parse_statements(Span::new("i + 5")).unwrap();
+        let ret = parsed.return_value.unwrap().extra;
+        let lhs = &ret.binary_lhs().unwrap().extra;
+        assert_matches!(*lhs, Expr::Literal(lit) if lit == Complex32::i());
+
+        let parsed = NumGrammar::<Complex32>::parse_statements(Span::new("5 - i")).unwrap();
+        let ret = parsed.return_value.unwrap().extra;
+        let rhs = &ret.binary_rhs().unwrap().extra;
+        assert_matches!(*rhs, Expr::Literal(lit) if lit == Complex32::i());
+
+        // `i` should not be parsed as a literal if it's a part of larger expression.
+        let parsed = NumGrammar::<Complex32>::parse_statements(Span::new("ix + 5")).unwrap();
+        let ret = parsed.return_value.unwrap().extra;
+        let lhs = &ret.binary_lhs().unwrap().extra;
+        assert_matches!(*lhs, Expr::Variable);
+
+        let parsed = NumGrammar::<Complex32>::parse_statements(Span::new("-i + 5")).unwrap();
+        let ret = parsed.return_value.unwrap().extra;
+        let lhs = &ret.binary_lhs().unwrap().extra;
+        let inner_lhs = match lhs {
+            Expr::Unary { inner, op } if op.extra == UnaryOp::Neg => &inner.extra,
+            _ => panic!("Unexpected LHS: {:?}", lhs),
+        };
+        assert_matches!(inner_lhs, Expr::Literal(lit) if *lit == Complex32::i());
+
+        let parsed = NumGrammar::<Complex32>::parse_statements(Span::new("-ix + 5")).unwrap();
+        let ret = parsed.return_value.unwrap().extra;
+        let lhs = &ret.binary_lhs().unwrap().extra;
+        let inner_lhs = match lhs {
+            Expr::Unary { inner, op } if op.extra == UnaryOp::Neg => &inner.extra,
+            _ => panic!("Unexpected LHS: {:?}", lhs),
+        };
+        assert_matches!(inner_lhs, Expr::Variable);
     }
 }

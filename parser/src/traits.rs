@@ -19,6 +19,8 @@ pub struct Features {
     pub blocks: bool,
     /// Parse methods?
     pub methods: bool,
+    /// Parse order comparison operations (`>`, `<`, `>=`, `<=`)?
+    pub order_comparisons: bool,
 }
 
 impl Features {
@@ -30,6 +32,7 @@ impl Features {
             fn_definitions: true,
             blocks: true,
             methods: true,
+            order_comparisons: true,
         }
     }
 
@@ -41,6 +44,7 @@ impl Features {
             fn_definitions: false,
             blocks: false,
             methods: false,
+            order_comparisons: false,
         }
     }
 }

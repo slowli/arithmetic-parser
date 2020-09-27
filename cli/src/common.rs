@@ -153,14 +153,6 @@ impl<'a> Env<'a> {
                 labels.push(call_label);
                 call_site = call.call_span;
             }
-
-            let (file_id, call_range) = self
-                .code_map
-                .locate(&call_site)
-                .expect("Cannot locate span in previously recorded snippets");
-            let call_label =
-                Label::secondary(file_id, call_range).with_message("...which was called from here");
-            labels.push(call_label);
         }
 
         let mut diagnostic = Diagnostic::new(severity)

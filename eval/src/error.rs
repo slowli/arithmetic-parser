@@ -123,6 +123,21 @@ pub enum EvalError {
         /// Operation which failed.
         op: Op,
     },
+
+    /// Missing comparison function.
+    #[display(fmt = "Missing comparison function {}", name)]
+    MissingCmpFunction {
+        /// Expected function name.
+        name: String,
+    },
+
+    /// Unexpected result of a comparison function invocation. The comparison function should
+    /// always return -1, 0, or 1.
+    #[display(
+        fmt = "Unexpected result of a comparison function invocation. The comparison function \
+            should only return -1, 0, or 1."
+    )]
+    InvalidCmpResult,
 }
 
 impl EvalError {
@@ -150,6 +165,8 @@ impl EvalError {
             Self::NativeCall(message) => message.to_owned(),
             Self::Wrapper(err) => err.to_string(),
             Self::UnexpectedOperand { op } => format!("Unexpected operand type for {}", op),
+            Self::MissingCmpFunction { .. } => "Missing comparison function".to_owned(),
+            Self::InvalidCmpResult => "Invalid comparison result".to_owned(),
         }
     }
 
@@ -165,6 +182,10 @@ impl EvalError {
             Self::Undefined(_) => "Undefined variable occurrence".to_owned(),
             Self::CannotCall | Self::NativeCall(_) | Self::Wrapper(_) => "Failed call".to_owned(),
             Self::UnexpectedOperand { .. } => "Operand of wrong type".to_owned(),
+            Self::MissingCmpFunction { name } => {
+                format!("Function with name {} should exist in the context", name)
+            }
+            Self::InvalidCmpResult => "Comparison function must return -1, 0 or 1".to_owned(),
         }
     }
 

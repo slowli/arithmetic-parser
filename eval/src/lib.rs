@@ -28,10 +28,17 @@
 //! - Type annotations are completely ignored. This means that the interpreter may execute
 //!   code that is incorrect with annotations (e.g., assignment of a tuple to a variable which
 //!   is annotated to have a numeric type).
+//! - Order comparisons (`>`, `<`, `>=`, `<=`) are desugared as follows. First, the `cmp` function
+//!   is called with LHS and RHS as args (in this order). The result is then interpreted as
+//!   [`Ordering`] (-1 is `Less`, 1 is `Greater`, 0 is `Equal`; anything else leads to an error).
+//!   Finally, the `Ordering` is used to compute the original comparison operation. For example,
+//!   if `cmp(x, y) == -1`, then `x < y` and `x <= y` will return `true`, and `x > y` will
+//!   return `false`.
 //!
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
 //! [`Interpreter`]: struct.Interpreter.html
 //! [`Value`]: enum.Value.html
+//! [`Ordering`]: https://doc.rust-lang.org/std/cmp/enum.Ordering.html
 //!
 //! # Examples
 //!
@@ -940,6 +947,27 @@ mod tests {
     }
 
     #[test]
+    fn comparison_desugaring_with_no_cmp() {
+        let program = Span::new("2 > 5");
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let err = Interpreter::new().evaluate(&block).unwrap_err();
+        assert_matches!(
+            err.source(),
+            EvalError::MissingCmpFunction { ref name } if name == "cmp"
+        );
+        assert_eq!(*err.main_span().fragment(), "2 > 5");
+    }
+
+    #[test]
+    fn comparison_desugaring_with_invalid_cmp() {
+        let program = Span::new("cmp = |_, _| 2; 1 > 3");
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let err = Interpreter::new().evaluate(&block).unwrap_err();
+        assert_matches!(err.source(), EvalError::InvalidCmpResult);
+        assert_eq!(*err.main_span().fragment(), "1 > 3");
+    }
+
+    #[test]
     fn single_statement_fn() {
         let program = Span::new("(|| 5)()");
         let block = F32Grammar::parse_statements(program).unwrap();
@@ -958,5 +986,25 @@ mod tests {
         let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = Interpreter::new().evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Number(2.0));
+    }
+
+    #[test]
+    fn comparison_desugaring_with_capture() {
+        let program = Span::new("ge = |x, y| x >= y; ge(2, 3)");
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let return_value = Interpreter::new()
+            .insert_native_fn("cmp", fns::Compare)
+            .evaluate(&block)
+            .unwrap();
+        assert_eq!(return_value, Value::Bool(false));
+    }
+
+    #[test]
+    fn comparison_desugaring_with_capture_and_no_cmp() {
+        let program = Span::new("ge = |x, y| x >= y; ge(2, 3)");
+        let block = F32Grammar::parse_statements(program).unwrap();
+        let err = Interpreter::new().evaluate(&block).unwrap_err();
+        assert_matches!(err.source(), EvalError::Undefined(ref name) if name == "cmp");
+        assert_eq!(*err.main_span().fragment(), ">=");
     }
 }

@@ -3,14 +3,15 @@
 use hashbrown::HashMap;
 use smallvec::{smallvec, SmallVec};
 
-use core::ops;
+use core::{cmp::Ordering, ops};
 
 use crate::{
     alloc::{vec, Rc, Vec},
-    Backtrace, CallContext, ErrorWithBacktrace, EvalError, EvalResult, InterpretedFn, Number,
-    SpannedEvalError, TupleLenMismatchContext, Value,
+    Backtrace, CallContext, ErrorWithBacktrace, EvalError, EvalResult, Function, InterpretedFn,
+    Number, SpannedEvalError, SpannedValue, TupleLenMismatchContext, Value,
 };
 use arithmetic_parser::{create_span_ref, BinaryOp, Grammar, LvalueLen, Span, Spanned, UnaryOp};
+use num_traits::{One, Zero};
 
 /// Pointer to a register or constant.
 #[derive(Debug)]
@@ -46,6 +47,10 @@ pub enum CompiledExpr<'a, T: Grammar> {
         lhs: SpannedAtom<'a, T>,
         rhs: SpannedAtom<'a, T>,
     },
+    Compare {
+        inner: SpannedAtom<'a, T>,
+        op: ComparisonOp,
+    },
     Function {
         name: SpannedAtom<'a, T>,
         args: Vec<SpannedAtom<'a, T>>,
@@ -73,6 +78,11 @@ impl<T: Grammar> Clone for CompiledExpr<'_, T> {
                 rhs: rhs.clone(),
             },
 
+            Self::Compare { inner, op } => Self::Compare {
+                inner: inner.clone(),
+                op: *op,
+            },
+
             Self::Function { name, args } => Self::Function {
                 name: name.clone(),
                 args: args.clone(),
@@ -83,6 +93,45 @@ impl<T: Grammar> Clone for CompiledExpr<'_, T> {
                 captures: captures.clone(),
             },
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ComparisonOp {
+    Gt,
+    Lt,
+    Ge,
+    Le,
+}
+
+impl ComparisonOp {
+    pub fn from(op: BinaryOp) -> Self {
+        match op {
+            BinaryOp::Gt => Self::Gt,
+            BinaryOp::Lt => Self::Lt,
+            BinaryOp::Ge => Self::Ge,
+            BinaryOp::Le => Self::Le,
+            _ => unreachable!("Never called with other variants"),
+        }
+    }
+
+    fn compare<T>(self, cmp_value: Value<'_, T>) -> Option<bool>
+    where
+        T: Grammar,
+        T::Lit: Number,
+    {
+        let ordering = match cmp_value {
+            Value::Number(num) if num.is_one() => Ordering::Greater,
+            Value::Number(num) if num.is_zero() => Ordering::Equal,
+            Value::Number(num) if (-num).is_one() => Ordering::Less,
+            _ => return None,
+        };
+        Some(match self {
+            Self::Gt => ordering == Ordering::Greater,
+            Self::Lt => ordering == Ordering::Less,
+            Self::Ge => ordering != Ordering::Less,
+            Self::Le => ordering != Ordering::Greater,
+        })
     }
 }
 
@@ -431,7 +480,7 @@ where
         span: Span<'a>,
         expr: &CompiledExpr<'a, T>,
         executable: &Executable<'a, T>,
-        mut backtrace: Option<&mut Backtrace<'a>>,
+        backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
         match expr {
             CompiledExpr::Atom(atom) => Ok(self.resolve_atom(atom)),
@@ -464,28 +513,28 @@ where
 
                     BinaryOp::And => Value::try_and(&lhs_value, &rhs_value),
                     BinaryOp::Or => Value::try_or(&lhs_value, &rhs_value),
+
+                    BinaryOp::Gt | BinaryOp::Lt | BinaryOp::Ge | BinaryOp::Le => {
+                        unreachable!("Must be desugared by the compiler")
+                    }
                 }
+            }
+
+            CompiledExpr::Compare { inner, op } => {
+                let inner_value = self.resolve_atom(&inner.extra);
+                op.compare(inner_value)
+                    .map(Value::Bool)
+                    .ok_or_else(|| SpannedEvalError::new(&span, EvalError::InvalidCmpResult))
             }
 
             CompiledExpr::Function { name, args } => {
                 if let Value::Function(function) = self.resolve_atom(&name.extra) {
+                    let fn_name = create_span_ref(name, ());
                     let arg_values = args
                         .iter()
                         .map(|arg| create_span_ref(arg, self.resolve_atom(&arg.extra)))
                         .collect();
-
-                    if let Some(backtrace) = backtrace.as_deref_mut() {
-                        backtrace.push_call(name.fragment(), function.def_span(), span);
-                    }
-                    let mut context =
-                        CallContext::new(create_span_ref(name, ()), span, backtrace.as_deref_mut());
-
-                    function.evaluate(arg_values, &mut context).map(|value| {
-                        if let Some(backtrace) = backtrace {
-                            backtrace.pop_call();
-                        }
-                        value
-                    })
+                    Self::eval_function(&function, fn_name, span, arg_values, backtrace)
                 } else {
                     Err(SpannedEvalError::new(&span, EvalError::CannotCall))
                 }
@@ -506,6 +555,26 @@ where
                 Ok(Value::interpreted_fn(function))
             }
         }
+    }
+
+    fn eval_function(
+        function: &Function<'a, T>,
+        fn_name: Span<'a>,
+        call_span: Span<'a>,
+        arg_values: Vec<SpannedValue<'a, T>>,
+        mut backtrace: Option<&mut Backtrace<'a>>,
+    ) -> EvalResult<'a, T> {
+        if let Some(backtrace) = backtrace.as_deref_mut() {
+            backtrace.push_call(fn_name.fragment(), function.def_span(), call_span);
+        }
+        let mut context = CallContext::new(fn_name, call_span, backtrace.as_deref_mut());
+
+        function.evaluate(arg_values, &mut context).map(|value| {
+            if let Some(backtrace) = backtrace {
+                backtrace.pop_call();
+            }
+            value
+        })
     }
 
     #[inline]

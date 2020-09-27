@@ -19,7 +19,7 @@ use core::{fmt, mem};
 
 use crate::{
     helpers::*, BinaryOp, Block, Context, Destructure, DestructureRest, Expr, FnDefinition,
-    Grammar, Lvalue, NomResult, Span, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement,
+    Grammar, Lvalue, NomResult, Op, Span, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement,
     Statement, UnaryOp,
 };
 
@@ -59,15 +59,19 @@ impl BinaryOp {
         create_span(
             span,
             match *span.fragment() {
-                "+" => BinaryOp::Add,
-                "-" => BinaryOp::Sub,
-                "*" => BinaryOp::Mul,
-                "/" => BinaryOp::Div,
-                "^" => BinaryOp::Power,
-                "==" => BinaryOp::Eq,
-                "!=" => BinaryOp::NotEq,
-                "&&" => BinaryOp::And,
-                "||" => BinaryOp::Or,
+                "+" => Self::Add,
+                "-" => Self::Sub,
+                "*" => Self::Mul,
+                "/" => Self::Div,
+                "^" => Self::Power,
+                "==" => Self::Eq,
+                "!=" => Self::NotEq,
+                "&&" => Self::And,
+                "||" => Self::Or,
+                ">" => Self::Gt,
+                "<" => Self::Lt,
+                ">=" => Self::Ge,
+                "<=" => Self::Le,
                 _ => unreachable!(),
             },
         )
@@ -76,6 +80,7 @@ impl BinaryOp {
 
 /// Parsing error.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Error<'a> {
     /// Input is not in ASCII.
     NonAsciiInput,
@@ -85,6 +90,9 @@ pub enum Error<'a> {
 
     /// Error parsing type hint.
     Type(anyhow::Error),
+
+    /// Unary or binary operation switched off in the parser features.
+    UnsupportedOp(Op),
 
     /// No rules where expecting this character.
     UnexpectedChar {
@@ -121,6 +129,7 @@ impl Error<'_> {
             Self::Incomplete => Error::Incomplete,
             Self::Literal(source) => Error::Literal(source),
             Self::Type(source) => Error::Type(source),
+            Self::UnsupportedOp(op) => Error::UnsupportedOp(op),
             Self::UnexpectedChar { .. } => Error::UnexpectedChar { context: None },
             Self::UnexpectedTerm { .. } => Error::UnexpectedTerm { context: None },
             Self::Other { kind, .. } => Error::Other {
@@ -137,6 +146,12 @@ impl fmt::Display for Error<'_> {
             Error::NonAsciiInput => formatter.write_str("Non-ASCII inputs are not supported"),
             Error::Literal(e) => write!(formatter, "Invalid literal: {}", e),
             Error::Type(e) => write!(formatter, "Invalid type hint: {}", e),
+
+            Error::UnsupportedOp(op) => write!(
+                formatter,
+                "Encountered operation switched off in the parser features: {}",
+                op
+            ),
 
             Error::UnexpectedChar { context: Some(ctx) } => {
                 write!(formatter, "Unexpected character in {}", ctx.extra)
@@ -431,18 +446,27 @@ where
     // with binary operations. For example, `1 + 2 * foo(x, y)` is parsed into
     //
     //     [ 1, +, 2, *, foo(x, y) ]
+    #[rustfmt::skip]
     let binary_ops = alt((
-        tag("+"),
-        tag("-"),
-        tag("*"),
-        tag("/"),
-        tag("^"),
-        tag("=="),
-        tag("!="),
-        tag("&&"),
-        tag("||"),
+        tag("+"), tag("-"), tag("*"), tag("/"), tag("^"), // simple ops
+        tag("=="), tag("!="), // equality comparisons
+        tag("&&"), tag("||"), // logical ops
+        tag(">="), tag("<="), tag(">"), tag("<"), // order comparisons
     ));
     let binary_ops = with_span(map(binary_ops, drop));
+    let binary_ops = move |input| {
+        let (rest, span) = binary_ops(input)?;
+        let spanned_op = BinaryOp::from_span(span);
+        if spanned_op.extra.is_order_comparison() && !T::FEATURES.order_comparisons {
+            // Immediately drop parsing on an unsupported op, since there are no alternatives.
+            let err = Error::UnsupportedOp(spanned_op.extra.into());
+            let spanned_err = SpannedError(create_span(span, err));
+            Err(NomErr::Failure(spanned_err))
+        } else {
+            Ok((rest, spanned_op))
+        }
+    };
+
     let binary_parser = tuple((
         simple_expr::<T, Ty>,
         many0(tuple((
@@ -483,8 +507,7 @@ where
     //   2  foo(x, y)
     map(binary_parser, |(first, rest)| {
         let mut right_contour: Vec<BinaryOp> = vec![];
-        rest.into_iter().fold(first, |mut acc, (op, expr)| {
-            let new_op = BinaryOp::from_span(op);
+        rest.into_iter().fold(first, |mut acc, (new_op, expr)| {
             let united_span = unite_spans(input, &acc, &expr);
 
             let insert_pos = right_contour

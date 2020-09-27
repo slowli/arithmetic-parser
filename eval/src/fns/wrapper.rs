@@ -1,11 +1,12 @@
-use arithmetic_parser::{create_span_ref, Grammar};
+use num_traits::{One, Zero};
 
-use core::{fmt, marker::PhantomData};
+use core::{cmp, fmt, marker::PhantomData};
 
 use crate::{
     AuxErrorInfo, CallContext, EvalError, EvalResult, Function, NativeFn, Number, SpannedEvalError,
     SpannedValue, Value, ValueType,
 };
+use arithmetic_parser::{create_span_ref, Grammar};
 
 /// Wraps a function enriching it with the information about its arguments.
 /// This is a slightly shorter way to create wrappers compared to calling [`FnWrapper::new()`].
@@ -476,6 +477,20 @@ impl<'a, G: Grammar> IntoEvalResult<'a, G> for () {
 impl<'a, G: Grammar> IntoEvalResult<'a, G> for bool {
     fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
         Ok(Value::Bool(self))
+    }
+}
+
+impl<'a, G> IntoEvalResult<'a, G> for cmp::Ordering
+where
+    G: Grammar,
+    G::Lit: Number,
+{
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+        Ok(Value::Number(match self {
+            Self::Less => -<G::Lit as One>::one(),
+            Self::Equal => <G::Lit as Zero>::zero(),
+            Self::Greater => <G::Lit as One>::one(),
+        }))
     }
 }
 

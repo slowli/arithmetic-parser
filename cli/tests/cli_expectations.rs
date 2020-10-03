@@ -95,18 +95,18 @@ fn error_with_call_trace() {
     "#;
     const EXPECTED_ERR: &str = r#"
         error[EVAL]: Compare requires 2 number arguments
-          ┌─ Snip #1:2:27
+          ┌─ Snip #1:1:19
           │
-        2 │         is_positive = |x| x > 0;
-          │                           ^^^^^
-          │                           │
-          │                           Failed call
-          │                           Invalid argument
-        3 │         is_positive(3) && !is_positive((1, 2))
-          │                            ------------------- Call at depth 1
+        1 │ is_positive = |x| x > 0;
+          │                   ^^^^^
+          │                   │
+          │                   Failed call
+          │                   Invalid argument
+        2 │ is_positive(3) && !is_positive((1, 2))
+          │                    ------------------- Call at depth 1
     "#;
 
-    let assert = create_command(PROGRAM).assert();
+    let assert = create_command(&unindent(PROGRAM)).assert();
     assert
         .failure()
         .code(1)
@@ -121,22 +121,22 @@ fn error_with_call_complex_call_trace() {
     "#;
     const EXPECTED_ERR: &str = r#"
         error[EVAL]: Compare requires 2 number arguments
-          ┌─ Snip #1:2:34
+          ┌─ Snip #1:1:26
           │
-        2 │         all = |array, predicate| array.fold(true, |acc, x| acc && predicate(x));
-          │                                  ----------------------------------------------
-          │                                  │                                │
-          │                                  │                                Call at depth 1
-          │                                  Call at depth 2
-        3 │         (1, 2, map).all(|x| 0 < x)
-          │         --------------------^^^^^-
-          │         │                   │   │
-          │         │                   │   Invalid argument
-          │         │                   Failed call
-          │         Call at depth 3
+        1 │ all = |array, predicate| array.fold(true, |acc, x| acc && predicate(x));
+          │                          ----------------------------------------------
+          │                          │                                │
+          │                          │                                Call at depth 1
+          │                          Call at depth 2
+        2 │ (1, 2, map).all(|x| 0 < x)
+          │ --------------------^^^^^-
+          │ │                   │   │
+          │ │                   │   Invalid argument
+          │ │                   Failed call
+          │ Call at depth 3
     "#;
 
-    let assert = create_command(PROGRAM).assert();
+    let assert = create_command(&unindent(PROGRAM)).assert();
     assert
         .failure()
         .code(1)

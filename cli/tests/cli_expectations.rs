@@ -4,6 +4,8 @@ use unindent::unindent;
 
 use std::process::Command;
 
+const ERROR_EXIT_CODE: i32 = 2;
+
 fn create_command(program: &str) -> Command {
     let mut command = Command::cargo_bin(env!("CARGO_PKG_NAME")).expect("CLI binary");
     command
@@ -49,7 +51,7 @@ fn syntax_error() {
     let assert = create_command("let x = 5").assert();
     assert
         .failure()
-        .code(1)
+        .code(ERROR_EXIT_CODE)
         .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
 }
 
@@ -66,7 +68,7 @@ fn undefined_variable_error() {
     let assert = create_command("1 + 2 * x").assert();
     assert
         .failure()
-        .code(1)
+        .code(ERROR_EXIT_CODE)
         .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
 }
 
@@ -81,10 +83,10 @@ fn incompatible_arg_count_error() {
     "#;
 
     let assert = create_command("if(2 > 1, 3)").assert();
-    assert.failure().code(1).stderr(
-        predicate::str::starts_with(unindent(EXPECTED_ERR))
-            .and(predicate::str::contains("definition requires 3 arg(s)")),
-    );
+    assert
+        .failure()
+        .code(ERROR_EXIT_CODE)
+        .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
 }
 
 #[test]
@@ -109,7 +111,7 @@ fn error_with_call_trace() {
     let assert = create_command(&unindent(PROGRAM)).assert();
     assert
         .failure()
-        .code(1)
+        .code(ERROR_EXIT_CODE)
         .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
 }
 
@@ -139,6 +141,6 @@ fn error_with_call_complex_call_trace() {
     let assert = create_command(&unindent(PROGRAM)).assert();
     assert
         .failure()
-        .code(1)
+        .code(ERROR_EXIT_CODE)
         .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
 }

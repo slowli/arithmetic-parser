@@ -3,9 +3,11 @@
 use rustyline::{error::ReadlineError, Editor};
 use typed_arena::Arena;
 
-use crate::common::{Env, ReplLiteral};
+use std::io;
 
-pub fn repl<T: ReplLiteral>() -> anyhow::Result<()> {
+use crate::common::{Env, ParseAndEvalResult, ReplLiteral};
+
+pub fn repl<T: ReplLiteral>() -> io::Result<()> {
     let mut rl = Editor::<()>::new();
     let mut env = Env::new();
     env.print_greeting()?;
@@ -22,20 +24,23 @@ pub fn repl<T: ReplLiteral>() -> anyhow::Result<()> {
             Ok(line) => {
                 snippet.push_str(&line);
                 let arena_ref = &*snippet_arena.alloc(snippet.clone());
-                let res = env.parse_and_eval(arena_ref, &mut interpreter, &original_interpreter);
-
-                if let Ok(incomplete) = res {
-                    if incomplete {
+                let result =
+                    env.parse_and_eval(arena_ref, &mut interpreter, &original_interpreter)?;
+                match result {
+                    ParseAndEvalResult::Ok(_) => {
+                        prompt = ">>> ";
+                        snippet.clear();
+                        rl.add_history_entry(line);
+                    }
+                    ParseAndEvalResult::Incomplete => {
                         prompt = "... ";
                         snippet.push('\n');
-                    } else {
+                        rl.add_history_entry(line);
+                    }
+                    ParseAndEvalResult::Errored => {
                         prompt = ">>> ";
                         snippet.clear();
                     }
-                    rl.add_history_entry(line);
-                } else {
-                    prompt = ">>> ";
-                    snippet.clear();
                 }
             }
 

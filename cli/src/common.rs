@@ -1,6 +1,5 @@
 //! Common utils.
 
-use anyhow::format_err;
 use codespan::{FileId, Files};
 use codespan_reporting::{
     diagnostic::{Diagnostic, Label, Severity},
@@ -19,7 +18,10 @@ use std::{
 use arithmetic_eval::{
     fns, BacktraceElement, ErrorWithBacktrace, Function, Interpreter, Number, Value,
 };
-use arithmetic_parser::{grammars::NumGrammar, Block, Error, Grammar, GrammarExt, Span, Spanned};
+use arithmetic_parser::{grammars::NumGrammar, Error, Grammar, GrammarExt, Span, Spanned};
+
+/// Exit code on parse or evaluation error.
+pub const ERROR_EXIT_CODE: i32 = 2;
 
 /// Code map containing evaluated code snippets.
 #[derive(Debug, Default)]
@@ -51,6 +53,23 @@ impl<'a> CodeMap<'a> {
         let start = span.location_offset() - file_start;
         let range = start..(start + span.fragment().len());
         Some((file_id, range))
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ParseAndEvalResult<T = ()> {
+    Ok(T),
+    Incomplete,
+    Errored,
+}
+
+impl<T> ParseAndEvalResult<T> {
+    fn map<U>(self, map_fn: impl FnOnce(T) -> U) -> ParseAndEvalResult<U> {
+        match self {
+            Self::Ok(value) => ParseAndEvalResult::Ok(map_fn(value)),
+            Self::Incomplete => ParseAndEvalResult::Incomplete,
+            Self::Errored => ParseAndEvalResult::Errored,
+        }
     }
 }
 
@@ -92,33 +111,40 @@ impl<'a> Env<'a> {
     }
 
     /// Reports a parsing error.
-    pub fn report_parse_error(&self, err: Spanned<'_, Error<'_>>) -> anyhow::Error {
-        let (file, range) = self.code_map.locate(&err).unwrap();
+    pub fn report_parse_error(&self, err: Spanned<'_, Error<'_>>) -> io::Result<()> {
+        let (file, range) = self
+            .code_map
+            .locate(&err)
+            .expect("Cannot locate parse error span");
         let label = Label::primary(file, range).with_message("Error occurred here");
         let diagnostic = Diagnostic::error()
             .with_message(err.extra.to_string())
             .with_code("PARSE")
             .with_labels(vec![label]);
+
         emit(
             &mut self.writer.lock(),
             &self.config,
             &self.code_map.files,
             &diagnostic,
         )
-        .unwrap();
-
-        format_err!("{}", err.extra.to_string())
     }
 
-    pub fn report_eval_error(&self, e: ErrorWithBacktrace) -> anyhow::Error {
+    pub fn report_eval_error(&self, e: ErrorWithBacktrace) -> io::Result<()> {
         let severity = Severity::Error;
-        let (file, range) = self.code_map.locate(&e.main_span()).unwrap();
+        let (file, range) = self
+            .code_map
+            .locate(&e.main_span())
+            .expect("Cannot locate main error span");
         let main_label = Label::primary(file, range);
         let message = e.source().main_span_info();
 
         let mut labels = vec![main_label.with_message(message)];
         for aux_span in e.aux_spans() {
-            let (file, range) = self.code_map.locate(&aux_span).unwrap();
+            let (file, range) = self
+                .code_map
+                .locate(&aux_span)
+                .expect("Cannot locate aux error span");
             let label = Label::primary(file, range).with_message(aux_span.extra.to_string());
             labels.push(label);
         }
@@ -166,9 +192,6 @@ impl<'a> Env<'a> {
             &self.code_map.files,
             &diagnostic,
         )
-        .unwrap();
-
-        format_err!("{}", e.source())
     }
 
     pub fn writeln_value<T>(&mut self, value: &Value<T>) -> io::Result<()>
@@ -267,7 +290,7 @@ impl<'a> Env<'a> {
         line: &'a str,
         interpreter: &mut Interpreter<'a, T>,
         original_interpreter: &Interpreter<'a, T>,
-    ) -> Result<bool, ()>
+    ) -> io::Result<ParseAndEvalResult>
     where
         T: Grammar,
         T::Lit: fmt::Display + Number,
@@ -278,8 +301,8 @@ impl<'a> Env<'a> {
         if line.starts_with('.') {
             match line {
                 ".clear" => interpreter.clone_from(original_interpreter),
-                ".dump" => self.dump_scope(interpreter, original_interpreter).unwrap(),
-                ".help" => self.print_help().unwrap(),
+                ".dump" => self.dump_scope(interpreter, original_interpreter)?,
+                ".help" => self.print_help()?,
 
                 _ => {
                     let label = Label::primary(file, visible_span)
@@ -288,17 +311,17 @@ impl<'a> Env<'a> {
                         .with_message("Unknown command")
                         .with_code("CMD")
                         .with_labels(vec![label]);
+
                     emit(
                         &mut self.writer.lock(),
                         &self.config,
                         &self.code_map.files,
                         &diagnostic,
-                    )
-                    .unwrap();
+                    )?;
                 }
             }
 
-            return Ok(false);
+            return Ok(ParseAndEvalResult::Ok(()));
         }
 
         let span = unsafe {
@@ -307,26 +330,33 @@ impl<'a> Env<'a> {
             // Instead, the span offset is used for diagnostic messages only.
             Span::new_from_raw_offset(start_position, 1, line, ())
         };
-        let mut incomplete = false;
-        let statements = T::parse_streaming_statements(span).or_else(|e| {
-            if let Error::Incomplete = e.extra {
-                incomplete = true;
-                Ok(Block::empty())
-            } else {
-                self.report_parse_error(e);
-                Err(())
-            }
-        })?;
-
-        if !incomplete {
-            let output = interpreter.evaluate(&statements).map_err(|e| {
-                self.report_eval_error(e);
+        let parse_result = T::parse_streaming_statements(span)
+            .map(ParseAndEvalResult::Ok)
+            .or_else(|e| {
+                if let Error::Incomplete = e.extra {
+                    Ok(ParseAndEvalResult::Incomplete)
+                } else {
+                    self.report_parse_error(e)
+                        .map(|()| ParseAndEvalResult::Errored)
+                }
             })?;
-            if !output.is_void() {
-                self.dump_value(&output, 0).unwrap();
+
+        Ok(if let ParseAndEvalResult::Ok(statements) = parse_result {
+            match interpreter.evaluate(&statements) {
+                Ok(value) => {
+                    if !value.is_void() {
+                        self.dump_value(&value, 0)?;
+                    }
+                    ParseAndEvalResult::Ok(())
+                }
+                Err(err) => {
+                    self.report_eval_error(err)?;
+                    ParseAndEvalResult::Errored
+                }
             }
-        }
-        Ok(incomplete)
+        } else {
+            parse_result.map(drop)
+        })
     }
 }
 

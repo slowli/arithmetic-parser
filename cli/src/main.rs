@@ -94,7 +94,7 @@ impl Args {
             let value = interpreter
                 .evaluate(&parsed)
                 .map_err(|e| env.report_eval_error(e))?;
-            env.dump_value(&value, 0)?;
+            env.writeln_value(&value)?;
             Ok(())
         }
     }

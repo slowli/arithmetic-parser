@@ -25,3 +25,8 @@ features = ["num-complex"]
 [dependencies.arithmetic-eval]
 version = "0.1.0"
 path = "../eval"
+
+[dev-dependencies]
+assert_cmd = "1.0.1"
+indoc = "1.0.2"
+predicates = "1.0.5"

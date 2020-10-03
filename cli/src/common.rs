@@ -125,9 +125,7 @@ impl<'a> Env<'a> {
 
         let mut calls_iter = e.backtrace().calls();
         if let Some(BacktraceElement {
-            fn_name,
-            def_span,
-            call_span,
+            fn_name, def_span, ..
         }) = calls_iter.next()
         {
             if let Some(def_span) = def_span {
@@ -140,18 +138,16 @@ impl<'a> Env<'a> {
                 labels.push(def_label);
             }
 
-            let mut call_site = call_span;
-            for call in calls_iter {
+            let mut call_site;
+            for (depth, call) in calls_iter.enumerate() {
+                call_site = call.call_span;
                 let (file_id, call_range) = self
                     .code_map
                     .locate(&call_site)
                     .expect("Cannot locate span in previously recorded snippets");
-                let call_label = Label::secondary(file_id, call_range).with_message(format!(
-                    "...which was called from function `{}`",
-                    call.fn_name
-                ));
+                let call_label = Label::secondary(file_id, call_range)
+                    .with_message(format!("Call at depth {}", depth + 1));
                 labels.push(call_label);
-                call_site = call.call_span;
             }
         }
 
@@ -175,7 +171,16 @@ impl<'a> Env<'a> {
         format_err!("{}", e.source())
     }
 
-    pub fn dump_value<T>(&mut self, value: &Value<T>, indent: usize) -> io::Result<()>
+    pub fn writeln_value<T>(&mut self, value: &Value<T>) -> io::Result<()>
+    where
+        T: Grammar,
+        T::Lit: fmt::Display,
+    {
+        self.dump_value(value, 0)?;
+        writeln!(self.writer)
+    }
+
+    fn dump_value<T>(&mut self, value: &Value<T>, indent: usize) -> io::Result<()>
     where
         T: Grammar,
         T::Lit: fmt::Display,

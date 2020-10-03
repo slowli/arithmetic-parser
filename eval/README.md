@@ -4,7 +4,8 @@
 [![License: Apache-2.0](https://img.shields.io/github/license/slowli/arithmetic-parser.svg)](https://github.com/slowli/arithmetic-parser/blob/master/LICENSE)
 ![rust 1.41.0+ required](https://img.shields.io/badge/rust-1.41.0+-blue.svg) 
 
-**Documentation:** [![crate docs (master)](https://img.shields.io/badge/master-yellow.svg?label=docs)](https://slowli.github.io/arithmetic-parser/arithmetic_eval/) 
+**Documentation:** [![Docs.rs](https://docs.rs/arithmetic-eval/badge.svg)](https://docs.rs/arithmetic-eval/)
+[![crate docs (master)](https://img.shields.io/badge/master-yellow.svg?label=docs)](https://slowli.github.io/arithmetic-parser/arithmetic_eval/) 
 
 The library provides a simple interpreter, which can be used for *some* grammars
 recognized by [`arithmetic-parser`] (e.g., real-valued arithmetic).

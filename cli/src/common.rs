@@ -7,6 +7,7 @@ use codespan_reporting::{
     term::{emit, Config as ReportingConfig},
 };
 use num_complex::{Complex, Complex32, Complex64};
+use unindent::unindent;
 
 use std::{
     collections::BTreeMap,
@@ -103,11 +104,41 @@ impl<'a> Env<'a> {
             env!("CARGO_PKG_VERSION")
         )?;
         writer.reset()?;
-        writeln!(writer, "{}", env!("CARGO_PKG_DESCRIPTION"))
+        writeln!(writer, "{}", env!("CARGO_PKG_DESCRIPTION"))?;
+        write!(writer, "Use ")?;
+        writer.set_color(ColorSpec::new().set_bold(true))?;
+        write!(writer, ".help")?;
+        writer.reset()?;
+        writeln!(
+            writer,
+            " for more information about supported commands / operations."
+        )
     }
 
     fn print_help(&mut self) -> io::Result<()> {
-        unimplemented!()
+        const HELP: &str = "
+            REPL supports functions, blocks, methods, comparisons, etc.
+            Syntax is similar to Rust; see `arithmetic-parser` docs for details.
+            Use Ctrl+C / Cmd+C to exit the REPL.
+
+            EXAMPLE
+            Input each line separately.
+
+                sins = (1, 2, 3).map(sin); sins
+                min_sin = sins.fold(INF, min); min_sin
+                assert(min_sin > 0);
+
+            COMMANDS
+            Several commands are supported. All commands start with a dot '.'.
+
+                .help     Displays help.
+                .dump     Outputs all defined variables. Use '.dump all' to include
+                          built-in vars.
+                .clear    Resets the interpreter state to the original one.
+        ";
+
+        let mut writer = self.writer.lock();
+        writeln!(writer, "{}", unindent(HELP))
     }
 
     /// Reports a parsing error.
@@ -265,6 +296,7 @@ impl<'a> Env<'a> {
         &mut self,
         scope: &Interpreter<'a, T>,
         original_scope: &Interpreter<'a, T>,
+        dump_original_scope: bool,
     ) -> io::Result<()>
     where
         T: Grammar,
@@ -272,7 +304,7 @@ impl<'a> Env<'a> {
     {
         for (name, var) in scope.variables() {
             if let Some(original_var) = original_scope.get_var(name) {
-                if original_var == var {
+                if !dump_original_scope && original_var == var {
                     // The variable is present in the original scope, no need to output it.
                     continue;
                 }
@@ -301,7 +333,8 @@ impl<'a> Env<'a> {
         if line.starts_with('.') {
             match line {
                 ".clear" => interpreter.clone_from(original_interpreter),
-                ".dump" => self.dump_scope(interpreter, original_interpreter)?,
+                ".dump" => self.dump_scope(interpreter, original_interpreter, false)?,
+                ".dump all" => self.dump_scope(interpreter, original_interpreter, true)?,
                 ".help" => self.print_help()?,
 
                 _ => {
@@ -481,8 +514,6 @@ macro_rules! declare_complex_functions {
         };
     };
 }
-
-// FIXME: add real-value comparisons
 
 declare_complex_functions!(COMPLEX32_FUNCTIONS: Complex32, f32);
 declare_complex_functions!(COMPLEX64_FUNCTIONS: Complex64, f64);

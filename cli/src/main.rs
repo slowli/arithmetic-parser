@@ -4,16 +4,24 @@ use anyhow::format_err;
 use num_complex::{Complex32, Complex64};
 use structopt::StructOpt;
 
-use std::str::FromStr;
+use std::{io, process, str::FromStr};
 
 use arithmetic_parser::{grammars::NumGrammar, GrammarExt, Span};
 
 mod common;
 mod repl;
 use crate::{
-    common::{Env, ReplLiteral},
+    common::{Env, ReplLiteral, ERROR_EXIT_CODE},
     repl::repl,
 };
+
+const ABOUT: &str = "CLI and REPL for parsing and evaluating arithmetic expressions.";
+
+const AFTER_HELP: &str = "\
+EXIT CODES:
+    0    Normal exit
+    1    Invalid command-line option
+    2    Parsing or evaluation error in non-interactive mode";
 
 #[derive(Debug, Clone, Copy)]
 enum Arithmetic {
@@ -40,6 +48,7 @@ impl FromStr for Arithmetic {
 }
 
 #[derive(Debug, StructOpt)]
+#[structopt(about = ABOUT, after_help = AFTER_HELP)]
 struct Args {
     /// Launch the REPL for arithmetic expressions.
     #[structopt(name = "interactive", long, short = "i")]
@@ -59,7 +68,7 @@ struct Args {
 }
 
 impl Args {
-    fn run(self) -> anyhow::Result<()> {
+    fn run(self) -> io::Result<()> {
         if self.interactive {
             match self.arithmetic {
                 Arithmetic::F32 => repl::<f32>(),
@@ -77,30 +86,31 @@ impl Args {
         }
     }
 
-    fn run_command<T>(self) -> anyhow::Result<()>
-    where
-        T: ReplLiteral,
-    {
+    fn run_command<T: ReplLiteral>(self) -> io::Result<()> {
         let command = self.command.unwrap_or_default();
         let mut env = Env::non_interactive(&command);
+
         let command = Span::new(&command);
-        let parsed =
-            NumGrammar::<T>::parse_statements(command).map_err(|e| env.report_parse_error(e))?;
+        let parsed = NumGrammar::<T>::parse_statements(command).or_else(|e| {
+            env.report_parse_error(e)
+                .map(|()| process::exit(ERROR_EXIT_CODE))
+        })?;
+
         if self.ast {
             println!("{:#?}", parsed);
             Ok(())
         } else {
             let mut interpreter = T::create_interpreter();
-            let value = interpreter
-                .evaluate(&parsed)
-                .map_err(|e| env.report_eval_error(e))?;
-            env.dump_value(&value, 0)?;
-            Ok(())
+            let value = interpreter.evaluate(&parsed).or_else(|e| {
+                env.report_eval_error(e)
+                    .map(|()| process::exit(ERROR_EXIT_CODE))
+            })?;
+            env.writeln_value(&value)
         }
     }
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() -> io::Result<()> {
     let args = Args::from_args();
     args.run()
 }

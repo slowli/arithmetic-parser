@@ -1,6 +1,5 @@
 //! Common utils.
 
-use anyhow::format_err;
 use codespan::{FileId, Files};
 use codespan_reporting::{
     diagnostic::{Diagnostic, Label, Severity},
@@ -8,6 +7,7 @@ use codespan_reporting::{
     term::{emit, Config as ReportingConfig},
 };
 use num_complex::{Complex, Complex32, Complex64};
+use unindent::unindent;
 
 use std::{
     collections::BTreeMap,
@@ -19,7 +19,10 @@ use std::{
 use arithmetic_eval::{
     fns, BacktraceElement, ErrorWithBacktrace, Function, Interpreter, Number, Value,
 };
-use arithmetic_parser::{grammars::NumGrammar, Block, Error, Grammar, GrammarExt, Span, Spanned};
+use arithmetic_parser::{grammars::NumGrammar, Error, Grammar, GrammarExt, Span, Spanned};
+
+/// Exit code on parse or evaluation error.
+pub const ERROR_EXIT_CODE: i32 = 2;
 
 /// Code map containing evaluated code snippets.
 #[derive(Debug, Default)]
@@ -54,6 +57,23 @@ impl<'a> CodeMap<'a> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum ParseAndEvalResult<T = ()> {
+    Ok(T),
+    Incomplete,
+    Errored,
+}
+
+impl<T> ParseAndEvalResult<T> {
+    fn map<U>(self, map_fn: impl FnOnce(T) -> U) -> ParseAndEvalResult<U> {
+        match self {
+            Self::Ok(value) => ParseAndEvalResult::Ok(map_fn(value)),
+            Self::Incomplete => ParseAndEvalResult::Incomplete,
+            Self::Errored => ParseAndEvalResult::Errored,
+        }
+    }
+}
+
 pub struct Env<'a> {
     code_map: CodeMap<'a>,
     writer: StandardStream,
@@ -84,50 +104,85 @@ impl<'a> Env<'a> {
             env!("CARGO_PKG_VERSION")
         )?;
         writer.reset()?;
-        writeln!(writer, "{}", env!("CARGO_PKG_DESCRIPTION"))
+        writeln!(writer, "{}", env!("CARGO_PKG_DESCRIPTION"))?;
+        write!(writer, "Use ")?;
+        writer.set_color(ColorSpec::new().set_bold(true))?;
+        write!(writer, ".help")?;
+        writer.reset()?;
+        writeln!(
+            writer,
+            " for more information about supported commands / operations."
+        )
     }
 
     fn print_help(&mut self) -> io::Result<()> {
-        unimplemented!()
+        const HELP: &str = "
+            REPL supports functions, blocks, methods, comparisons, etc.
+            Syntax is similar to Rust; see `arithmetic-parser` docs for details.
+            Use Ctrl+C / Cmd+C to exit the REPL.
+
+            EXAMPLE
+            Input each line separately.
+
+                sins = (1, 2, 3).map(sin); sins
+                min_sin = sins.fold(INF, min); min_sin
+                assert(min_sin > 0);
+
+            COMMANDS
+            Several commands are supported. All commands start with a dot '.'.
+
+                .help     Displays help.
+                .dump     Outputs all defined variables. Use '.dump all' to include
+                          built-in vars.
+                .clear    Resets the interpreter state to the original one.
+        ";
+
+        let mut writer = self.writer.lock();
+        writeln!(writer, "{}", unindent(HELP))
     }
 
     /// Reports a parsing error.
-    pub fn report_parse_error(&self, err: Spanned<'_, Error<'_>>) -> anyhow::Error {
-        let (file, range) = self.code_map.locate(&err).unwrap();
+    pub fn report_parse_error(&self, err: Spanned<'_, Error<'_>>) -> io::Result<()> {
+        let (file, range) = self
+            .code_map
+            .locate(&err)
+            .expect("Cannot locate parse error span");
         let label = Label::primary(file, range).with_message("Error occurred here");
         let diagnostic = Diagnostic::error()
             .with_message(err.extra.to_string())
             .with_code("PARSE")
             .with_labels(vec![label]);
+
         emit(
             &mut self.writer.lock(),
             &self.config,
             &self.code_map.files,
             &diagnostic,
         )
-        .unwrap();
-
-        format_err!("{}", err.extra.to_string())
     }
 
-    pub fn report_eval_error(&self, e: ErrorWithBacktrace) -> anyhow::Error {
+    pub fn report_eval_error(&self, e: ErrorWithBacktrace) -> io::Result<()> {
         let severity = Severity::Error;
-        let (file, range) = self.code_map.locate(&e.main_span()).unwrap();
+        let (file, range) = self
+            .code_map
+            .locate(&e.main_span())
+            .expect("Cannot locate main error span");
         let main_label = Label::primary(file, range);
         let message = e.source().main_span_info();
 
         let mut labels = vec![main_label.with_message(message)];
         for aux_span in e.aux_spans() {
-            let (file, range) = self.code_map.locate(&aux_span).unwrap();
+            let (file, range) = self
+                .code_map
+                .locate(&aux_span)
+                .expect("Cannot locate aux error span");
             let label = Label::primary(file, range).with_message(aux_span.extra.to_string());
             labels.push(label);
         }
 
         let mut calls_iter = e.backtrace().calls();
         if let Some(BacktraceElement {
-            fn_name,
-            def_span,
-            call_span,
+            fn_name, def_span, ..
         }) = calls_iter.next()
         {
             if let Some(def_span) = def_span {
@@ -140,18 +195,16 @@ impl<'a> Env<'a> {
                 labels.push(def_label);
             }
 
-            let mut call_site = call_span;
-            for call in calls_iter {
+            let mut call_site;
+            for (depth, call) in calls_iter.enumerate() {
+                call_site = call.call_span;
                 let (file_id, call_range) = self
                     .code_map
                     .locate(&call_site)
                     .expect("Cannot locate span in previously recorded snippets");
-                let call_label = Label::secondary(file_id, call_range).with_message(format!(
-                    "...which was called from function `{}`",
-                    call.fn_name
-                ));
+                let call_label = Label::secondary(file_id, call_range)
+                    .with_message(format!("Call at depth {}", depth + 1));
                 labels.push(call_label);
-                call_site = call.call_span;
             }
         }
 
@@ -170,12 +223,18 @@ impl<'a> Env<'a> {
             &self.code_map.files,
             &diagnostic,
         )
-        .unwrap();
-
-        format_err!("{}", e.source())
     }
 
-    pub fn dump_value<T>(&mut self, value: &Value<T>, indent: usize) -> io::Result<()>
+    pub fn writeln_value<T>(&mut self, value: &Value<T>) -> io::Result<()>
+    where
+        T: Grammar,
+        T::Lit: fmt::Display,
+    {
+        self.dump_value(value, 0)?;
+        writeln!(self.writer)
+    }
+
+    fn dump_value<T>(&mut self, value: &Value<T>, indent: usize) -> io::Result<()>
     where
         T: Grammar,
         T::Lit: fmt::Display,
@@ -237,6 +296,7 @@ impl<'a> Env<'a> {
         &mut self,
         scope: &Interpreter<'a, T>,
         original_scope: &Interpreter<'a, T>,
+        dump_original_scope: bool,
     ) -> io::Result<()>
     where
         T: Grammar,
@@ -244,7 +304,7 @@ impl<'a> Env<'a> {
     {
         for (name, var) in scope.variables() {
             if let Some(original_var) = original_scope.get_var(name) {
-                if original_var == var {
+                if !dump_original_scope && original_var == var {
                     // The variable is present in the original scope, no need to output it.
                     continue;
                 }
@@ -262,7 +322,7 @@ impl<'a> Env<'a> {
         line: &'a str,
         interpreter: &mut Interpreter<'a, T>,
         original_interpreter: &Interpreter<'a, T>,
-    ) -> Result<bool, ()>
+    ) -> io::Result<ParseAndEvalResult>
     where
         T: Grammar,
         T::Lit: fmt::Display + Number,
@@ -273,8 +333,9 @@ impl<'a> Env<'a> {
         if line.starts_with('.') {
             match line {
                 ".clear" => interpreter.clone_from(original_interpreter),
-                ".dump" => self.dump_scope(interpreter, original_interpreter).unwrap(),
-                ".help" => self.print_help().unwrap(),
+                ".dump" => self.dump_scope(interpreter, original_interpreter, false)?,
+                ".dump all" => self.dump_scope(interpreter, original_interpreter, true)?,
+                ".help" => self.print_help()?,
 
                 _ => {
                     let label = Label::primary(file, visible_span)
@@ -283,17 +344,17 @@ impl<'a> Env<'a> {
                         .with_message("Unknown command")
                         .with_code("CMD")
                         .with_labels(vec![label]);
+
                     emit(
                         &mut self.writer.lock(),
                         &self.config,
                         &self.code_map.files,
                         &diagnostic,
-                    )
-                    .unwrap();
+                    )?;
                 }
             }
 
-            return Ok(false);
+            return Ok(ParseAndEvalResult::Ok(()));
         }
 
         let span = unsafe {
@@ -302,26 +363,33 @@ impl<'a> Env<'a> {
             // Instead, the span offset is used for diagnostic messages only.
             Span::new_from_raw_offset(start_position, 1, line, ())
         };
-        let mut incomplete = false;
-        let statements = T::parse_streaming_statements(span).or_else(|e| {
-            if let Error::Incomplete = e.extra {
-                incomplete = true;
-                Ok(Block::empty())
-            } else {
-                self.report_parse_error(e);
-                Err(())
-            }
-        })?;
-
-        if !incomplete {
-            let output = interpreter.evaluate(&statements).map_err(|e| {
-                self.report_eval_error(e);
+        let parse_result = T::parse_streaming_statements(span)
+            .map(ParseAndEvalResult::Ok)
+            .or_else(|e| {
+                if let Error::Incomplete = e.extra {
+                    Ok(ParseAndEvalResult::Incomplete)
+                } else {
+                    self.report_parse_error(e)
+                        .map(|()| ParseAndEvalResult::Errored)
+                }
             })?;
-            if !output.is_void() {
-                self.dump_value(&output, 0).unwrap();
+
+        Ok(if let ParseAndEvalResult::Ok(statements) = parse_result {
+            match interpreter.evaluate(&statements) {
+                Ok(value) => {
+                    if !value.is_void() {
+                        self.dump_value(&value, 0)?;
+                    }
+                    ParseAndEvalResult::Ok(())
+                }
+                Err(err) => {
+                    self.report_eval_error(err)?;
+                    ParseAndEvalResult::Errored
+                }
             }
-        }
-        Ok(incomplete)
+        } else {
+            parse_result.map(drop)
+        })
     }
 }
 
@@ -446,8 +514,6 @@ macro_rules! declare_complex_functions {
         };
     };
 }
-
-// FIXME: add real-value comparisons
 
 declare_complex_functions!(COMPLEX32_FUNCTIONS: Complex32, f32);
 declare_complex_functions!(COMPLEX64_FUNCTIONS: Complex64, f64);

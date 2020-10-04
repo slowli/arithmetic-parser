@@ -4,8 +4,9 @@
 [![License: Apache-2.0](https://img.shields.io/github/license/slowli/arithmetic-parser.svg)](https://github.com/slowli/arithmetic-parser/blob/master/LICENSE)
 ![rust 1.41.0+ required](https://img.shields.io/badge/rust-1.41.0+-blue.svg) 
 
-**Documentation:** [![Docs.rs](https://docs.rs/arithmetic-parser/badge.svg)](https://docs.rs/arithmetic-parser/)
+**Links:** [![Docs.rs](https://docs.rs/arithmetic-parser/badge.svg)](https://docs.rs/arithmetic-parser/)
 [![crate docs (master)](https://img.shields.io/badge/master-yellow.svg?label=docs)](https://slowli.github.io/arithmetic-parser/arithmetic_parser/) 
+[![changelog](https://img.shields.io/badge/-changelog-orange)](CHANGELOG.md)
 
 A versatile parser for arithmetic expressions which allows customizing literal definitions,
 type annotations and several other aspects of parsing.

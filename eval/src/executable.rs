@@ -567,7 +567,7 @@ where
         if let Some(backtrace) = backtrace.as_deref_mut() {
             backtrace.push_call(fn_name.fragment(), function.def_span(), call_span);
         }
-        let mut context = CallContext::new(fn_name, call_span, backtrace.as_deref_mut());
+        let mut context = CallContext::new(call_span, backtrace.as_deref_mut());
 
         function.evaluate(arg_values, &mut context).map(|value| {
             if let Some(backtrace) = backtrace {

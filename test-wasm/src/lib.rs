@@ -54,18 +54,7 @@ fn initialize_interpreter(interpreter: &mut Interpreter<'_, F64Grammar>) {
         ("max", |x, y| if x > y { x } else { y }),
     ];
 
-    interpreter
-        .insert_var("false", Value::Bool(false))
-        .insert_var("true", Value::Bool(true))
-        .insert_native_fn("assert", fns::Assert)
-        .insert_native_fn("if", fns::If)
-        .insert_native_fn("loop", fns::Loop)
-        .insert_native_fn("map", fns::Map)
-        .insert_native_fn("filter", fns::Filter)
-        .insert_native_fn("fold", fns::Fold)
-        .insert_native_fn("push", fns::Push)
-        .insert_native_fn("merge", fns::Merge)
-        .insert_native_fn("cmp", fns::Compare);
+    interpreter.insert_native_fn("cmp", fns::Compare);
 
     for (name, c) in CONSTANTS {
         interpreter.insert_var(name, Value::Number(*c));
@@ -91,7 +80,7 @@ pub fn evaluate(program: &str) -> Result<JsValue, JsValue> {
         Error::new(&message)
     })?;
 
-    let mut interpreter = Interpreter::new();
+    let mut interpreter = Interpreter::with_prelude();
     initialize_interpreter(&mut interpreter);
 
     let value = interpreter.evaluate(&statements).map_err(|err| {

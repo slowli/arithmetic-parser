@@ -18,7 +18,6 @@ use arithmetic_parser::{
 /// Opaque context for native calls.
 #[derive(Debug)]
 pub struct CallContext<'r, 'a> {
-    fn_name: Span<'a>,
     call_span: Span<'a>,
     backtrace: Option<&'r mut Backtrace<'a>>,
 }
@@ -27,19 +26,13 @@ impl<'r, 'a> CallContext<'r, 'a> {
     /// Creates a mock call context.
     pub fn mock() -> Self {
         Self {
-            fn_name: Span::new(""),
             call_span: Span::new(""),
             backtrace: None,
         }
     }
 
-    pub(super) fn new(
-        fn_name: Span<'a>,
-        call_span: Span<'a>,
-        backtrace: Option<&'r mut Backtrace<'a>>,
-    ) -> Self {
+    pub(super) fn new(call_span: Span<'a>, backtrace: Option<&'r mut Backtrace<'a>>) -> Self {
         Self {
-            fn_name,
             call_span,
             backtrace,
         }

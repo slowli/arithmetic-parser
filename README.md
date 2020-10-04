@@ -16,4 +16,4 @@ The repository also contains several auxiliary crates (for example, a simple int
 
 ## License
 
-All code in this repository is licensed under the [Apache-2.0 license](LICENSE).
+All code in this repository is licensed under the [Apache-2.0 license](parser/LICENSE).

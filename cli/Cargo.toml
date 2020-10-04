@@ -1,6 +1,6 @@
 [package]
 name = "arithmetic-parser-cli"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 authors = ["Alex Ostrovski <ostrovski.alex@gmail.com>"]
 edition = "2018"
 readme = "README.md"
@@ -19,12 +19,12 @@ typed-arena = "2.0.1"
 unindent = "0.1.6"
 
 [dependencies.arithmetic-parser]
-version = "0.1.0"
+version = "0.2.0-beta.1"
 path = "../parser"
 features = ["num-complex"]
 
 [dependencies.arithmetic-eval]
-version = "0.1.0"
+version = "0.2.0-beta.1"
 path = "../eval"
 
 [dev-dependencies]

@@ -661,21 +661,25 @@ pub trait CompilerExt<'a> {
 
 impl<'a, T: Grammar> CompilerExt<'a> for Block<'a, T> {
     fn undefined_variables(&self) -> Result<HashMap<&'a str, Span<'a>>, SpannedEvalError<'a>> {
-        let mut undefined_vars = HashMap::new();
-        let mut extractor = CapturesExtractor::new(|var_name, var_span| {
-            if !undefined_vars.contains_key(var_name) {
-                undefined_vars.insert(var_name, var_span);
-            }
-            Ok(())
-        });
-        extractor.eval_block(self)?;
-
-        Ok(undefined_vars)
+        CompilerExtTarget::Block(self).get_undefined_variables()
     }
 }
 
 impl<'a, T: Grammar> CompilerExt<'a> for FnDefinition<'a, T> {
     fn undefined_variables(&self) -> Result<HashMap<&'a str, Span<'a>>, SpannedEvalError<'a>> {
+        CompilerExtTarget::FnDefinition(self).get_undefined_variables()
+    }
+}
+
+/// Helper enum for `CompilerExt` implementations that allows to reduce code duplication.
+#[derive(Debug)]
+enum CompilerExtTarget<'r, 'a, T: Grammar> {
+    Block(&'r Block<'a, T>),
+    FnDefinition(&'r FnDefinition<'a, T>),
+}
+
+impl<'a, T: Grammar> CompilerExtTarget<'_, 'a, T> {
+    fn get_undefined_variables(self) -> Result<HashMap<&'a str, Span<'a>>, SpannedEvalError<'a>> {
         let mut undefined_vars = HashMap::new();
         let mut extractor = CapturesExtractor::new(|var_name, var_span| {
             if !undefined_vars.contains_key(var_name) {
@@ -683,7 +687,11 @@ impl<'a, T: Grammar> CompilerExt<'a> for FnDefinition<'a, T> {
             }
             Ok(())
         });
-        extractor.eval_function(self)?;
+
+        match self {
+            Self::Block(block) => extractor.eval_block(block)?,
+            Self::FnDefinition(definition) => extractor.eval_function(definition)?,
+        }
 
         Ok(undefined_vars)
     }

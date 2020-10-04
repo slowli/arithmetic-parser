@@ -1,6 +1,6 @@
 [package]
 name = "arithmetic-eval"
-version = "0.1.0"
+version = "0.2.0-beta.1"
 authors = ["Alex Ostrovski <ostrovski.alex@gmail.com>"]
 edition = "2018"
 readme = "README.md"
@@ -12,7 +12,7 @@ keywords = ["interpreter", "arithmetic"]
 
 [dependencies]
 # Public dependencies (present in the public API).
-arithmetic-parser = { version = "0.1.0", path = "../parser", features = ["num-complex"] }
+arithmetic-parser = { version = "0.2.0-beta.1", path = "../parser", features = ["num-complex"] }
 num-traits = "0.2.11"
 num-complex = "0.3.0"
 

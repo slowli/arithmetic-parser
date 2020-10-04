@@ -5,6 +5,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ## [Unreleased]
 
+## 0.2.0-beta.1 - 2020-10-04
+
 ### Added
 
 - Improve native function definitions. For example, it is now possible to

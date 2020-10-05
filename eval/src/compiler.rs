@@ -13,8 +13,8 @@ use crate::{
     AuxErrorInfo, EvalError, RepeatedAssignmentContext, SpannedEvalError,
 };
 use arithmetic_parser::{
-    BinaryOp, Block, Destructure, Expr, FnDefinition, Grammar, Lvalue, Span, Spanned, SpannedExpr,
-    SpannedLvalue, SpannedStatement, Statement,
+    BinaryOp, Block, Destructure, Expr, FnDefinition, Grammar, InputSpan, Lvalue, Spanned,
+    SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
 };
 
 /// Name of the comparison function used in desugaring order comparisons.
@@ -329,7 +329,7 @@ impl Compiler {
         };
 
         let mut executable = Executable::new();
-        let empty_span = Span::new("");
+        let empty_span = InputSpan::new("");
         let last_atom = compiler
             .compile_block_inner(&mut executable, block)?
             .map(|spanned| spanned.extra)
@@ -629,12 +629,12 @@ fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
 /// # Examples
 ///
 /// ```
-/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// use arithmetic_eval::CompilerExt;
 /// # use hashbrown::HashSet;
 /// # use core::iter::FromIterator;
 ///
-/// let block = Span::new("x = sin(0.5) / PI; y = x * E; (x, y)");
+/// let block = InputSpan::new("x = sin(0.5) / PI; y = x * E; (x, y)");
 /// let block = F32Grammar::parse_statements(block).unwrap();
 /// let undefined_vars = block.undefined_variables().unwrap();
 /// assert_eq!(
@@ -703,11 +703,11 @@ mod tests {
     use super::*;
     use crate::Value;
 
-    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 
     #[test]
     fn compilation_basics() {
-        let block = Span::new("x = 3; 1 + { y = 2; y * x } == 7");
+        let block = InputSpan::new("x = 3; 1 + { y = 2; y * x } == 7");
         let block = F32Grammar::parse_statements(block).unwrap();
         let module = Compiler::compile_module(&Env::new(), &block, false).unwrap();
         let value = module.run().unwrap();
@@ -716,7 +716,7 @@ mod tests {
 
     #[test]
     fn compiled_function() {
-        let block = Span::new("add = |x, y| x + y; add(2, 3) == 5");
+        let block = InputSpan::new("add = |x, y| x + y; add(2, 3) == 5");
         let block = F32Grammar::parse_statements(block).unwrap();
         let value = Compiler::compile_module(&Env::new(), &block, false)
             .unwrap()
@@ -728,7 +728,7 @@ mod tests {
     #[test]
     fn compiled_function_with_capture() {
         let block = "A = 2; add = |x, y| x + y / A; add(2, 3) == 3.5";
-        let block = F32Grammar::parse_statements(Span::new(block)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(block)).unwrap();
         let value = Compiler::compile_module(&Env::new(), &block, false)
             .unwrap()
             .run()
@@ -739,7 +739,7 @@ mod tests {
     #[test]
     fn variable_extraction() {
         let def = "|a, b| ({ x = a * b + y; x - 2 }, a / b)";
-        let def = F32Grammar::parse_statements(Span::new(def))
+        let def = F32Grammar::parse_statements(InputSpan::new(def))
             .unwrap()
             .return_value
             .unwrap();
@@ -756,7 +756,7 @@ mod tests {
     #[test]
     fn variable_extraction_with_scoping() {
         let def = "|a, b| ({ x = a * b + y; x - 2 }, a / x)";
-        let def = F32Grammar::parse_statements(Span::new(def))
+        let def = F32Grammar::parse_statements(InputSpan::new(def))
             .unwrap()
             .return_value
             .unwrap();
@@ -777,7 +777,7 @@ mod tests {
         env.push_var("y", Value::Number(-3.0));
 
         let module = "y = 5 * x; y - 3";
-        let module = F32Grammar::parse_statements(Span::new(module)).unwrap();
+        let module = F32Grammar::parse_statements(InputSpan::new(module)).unwrap();
         let mut module = Compiler::compile_module(&env, &module, false).unwrap();
 
         let imports = module.imports().iter().collect::<Vec<_>>();

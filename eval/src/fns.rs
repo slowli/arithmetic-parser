@@ -73,14 +73,14 @@ fn extract_fn<'a, T: Grammar>(
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns, EvalError, Interpreter};
 /// # use assert_matches::assert_matches;
 /// let program = r#"
 ///     assert(1 + 2 == 3); # this assertion is fine
 ///     assert(3^2 == 10); # this one will fail
 /// "#;
-/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter.insert_native_fn("assert", fns::Assert);
@@ -128,10 +128,10 @@ impl<'a, T: Grammar> NativeFn<'a, T> for Assert {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns::If, Interpreter, Value};
 /// let program = "x = 3; if(x == 2, -1, x + 1)";
-/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter.insert_native_fn("if", If);
@@ -143,10 +143,10 @@ impl<'a, T: Grammar> NativeFn<'a, T> for Assert {
 /// afterwards:
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns::If, Interpreter, Value};
 /// let program = "x = 3; if(x == 2, || -1, || x + 1)()";
-/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter.insert_native_fn("if", If);
@@ -194,7 +194,7 @@ where
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns, Interpreter, Value};
 /// let program = r#"
 ///     factorial = |x| {
@@ -205,7 +205,7 @@ where
 ///     };
 ///     factorial(5) == 120 && factorial(10) == 3628800
 /// "#;
-/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
@@ -288,13 +288,13 @@ where
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns, Interpreter, Value};
 /// let program = r#"
 ///     xs = (1, -2, 3, -0.3);
 ///     map(xs, |x| if(cmp(x, 0) == 1, x, 0)) == (1, 0, 3, 0)
 /// "#;
-/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
@@ -352,13 +352,13 @@ where
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns, Interpreter, Value};
 /// let program = r#"
 ///     xs = (1, -2, 3, -7, -0.3);
 ///     filter(xs, |x| cmp(x, -1) == 1) == (1, 3, -0.3)
 /// "#;
-/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
@@ -421,13 +421,13 @@ where
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns, Interpreter, Value};
 /// let program = r#"
 ///     xs = (1, -2, 3, -7);
 ///     fold(xs, 1, |acc, x| acc * x) == 42
 /// "#;
-/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
@@ -479,7 +479,7 @@ where
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns, Interpreter, Value};
 /// let program = r#"
 ///     repeat = |x, times| loop(
@@ -492,7 +492,7 @@ where
 ///     );
 ///     repeat(-2, 3) == (-2, -2, -2) && repeat((7,), 4) == ((7,), (7,), (7,), (7,))
 /// "#;
-/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
@@ -540,14 +540,14 @@ where
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns, Interpreter, Value};
 /// let program = r#"
 ///     ## Merges all arguments (which should be tuples) into a single tuple.
 ///     super_merge = |...xs| fold(xs, (), merge);
 ///     super_merge((1, 2), (3,), (), (4, 5, 6)) == (1, 2, 3, 4, 5, 6)
 /// "#;
-/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
@@ -631,7 +631,7 @@ mod tests {
     use super::*;
     use crate::Interpreter;
 
-    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
     use assert_matches::assert_matches;
 
     use core::f32;
@@ -647,7 +647,7 @@ mod tests {
             x = 1.0;
             if(cmp(x, 2) == -1, x + 5, 3 - x)
         "#;
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Number(6.0));
 
@@ -655,7 +655,7 @@ mod tests {
             x = 4.5;
             if(cmp(x, 2) == -1, || x + 5, || 3 - x)()
         "#;
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Number(-1.5));
     }
@@ -666,12 +666,12 @@ mod tests {
         interpreter.insert_native_fn("cmp", Compare);
 
         let program = "x = 1.0; x > 0 && x <= 3";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
 
         let program = "x = 1.0; x > (1, 2)";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
         assert_matches!(
             err.source(),
@@ -700,13 +700,13 @@ mod tests {
             };
             discrete_log2(9)
         "#;
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Number(3.0));
 
         let program = "(discrete_log2(1), discrete_log2(2), \
             discrete_log2(4), discrete_log2(6.5), discrete_log2(1000))";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(
             ret,
@@ -735,7 +735,7 @@ mod tests {
             };
             max_value(1, -2, 7, 2, 5) == 7 && max_value(3, -5, 9) == 9
         "#;
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
     }
@@ -754,12 +754,12 @@ mod tests {
             xs = (-4, 3, 0, 1);
             xs.reverse() == (1, 0, 3, -4)
         "#;
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
 
         let program = "xs.reverse()";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let mut module = interpreter.compile(&block).unwrap();
 
         const SAMPLES: &[(&[f32], &[f32])] = &[

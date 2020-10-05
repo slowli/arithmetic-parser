@@ -5,7 +5,7 @@ use num_complex::Complex64;
 use core::cmp::Ordering;
 
 use arithmetic_eval::Interpreter;
-use arithmetic_parser::{grammars::NumGrammar, GrammarExt, Span};
+use arithmetic_parser::{grammars::NumGrammar, GrammarExt, InputSpan};
 
 const PROGRAM: &str = r#"
     # The original comparison function compares numbers by their real part.
@@ -39,6 +39,6 @@ fn custom_cmp_function() {
         x.re.partial_cmp(&y.re).unwrap_or(Ordering::Equal)
     });
 
-    let block = ComplexGrammar::parse_statements(Span::new(PROGRAM)).unwrap();
+    let block = ComplexGrammar::parse_statements(InputSpan::new(PROGRAM)).unwrap();
     interpreter.evaluate(&block).unwrap();
 }

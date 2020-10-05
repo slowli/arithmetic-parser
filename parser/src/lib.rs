@@ -9,7 +9,7 @@
 //! # use assert_matches::assert_matches;
 //! use arithmetic_parser::{
 //!     grammars::F32Grammar,
-//!     GrammarExt, NomResult, Span, Statement, Expr, FnDefinition, LvalueLen,
+//!     GrammarExt, NomResult, InputSpan, Statement, Expr, FnDefinition, LvalueLen,
 //! };
 //! use nom::number::complete::float;
 //!
@@ -27,7 +27,7 @@
 //!     other_function(y - z)
 //! "#;
 //!
-//! let block = F32Grammar::parse_statements(Span::new(PROGRAM)).unwrap();
+//! let block = F32Grammar::parse_statements(InputSpan::new(PROGRAM)).unwrap();
 //! // First statement is an assignment.
 //! assert_matches!(
 //!     block.statements[0].extra,
@@ -67,11 +67,11 @@ mod parser;
 mod traits;
 
 /// Code span.
-pub type Span<'a> = nom_locate::LocatedSpan<&'a str, ()>;
+pub type InputSpan<'a> = nom_locate::LocatedSpan<&'a str, ()>;
 /// Value with an associated code span.
 pub type Spanned<'a, T = ()> = LocatedSpan<&'a str, T>;
 /// Parsing outcome generalized by the type returned on success.
-pub type NomResult<'a, T> = nom::IResult<Span<'a>, T, SpannedError<'a>>;
+pub type NomResult<'a, T> = nom::IResult<InputSpan<'a>, T, SpannedError<'a>>;
 
 /// FIXME
 #[derive(Debug, Clone, Copy)]
@@ -138,7 +138,7 @@ impl<Span, T> LocatedSpan<Span, T> {
 }
 
 impl<'a, T> LocatedSpan<&'a str, T> {
-    pub(crate) fn new(span: Span<'a>, extra: T) -> Self {
+    pub(crate) fn new(span: InputSpan<'a>, extra: T) -> Self {
         Self {
             offset: span.location_offset(),
             line: span.location_line(),

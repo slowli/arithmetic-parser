@@ -38,7 +38,7 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// ## Basic function
 ///
 /// ```
-/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// use arithmetic_eval::{fns::FnWrapper, Interpreter, Value};
 ///
 /// let mut interpreter = Interpreter::new();
@@ -46,7 +46,7 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// interpreter.insert_native_fn("max", max);
 ///
 /// let program = "max(1, 3) == 3 && max(-1, -3) == -1";
-/// let program = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 /// let ret = interpreter.evaluate(&program).unwrap();
 /// assert_eq!(ret, Value::Bool(true));
 /// ```
@@ -54,7 +54,7 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// ## Fallible function with complex args
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns::FnWrapper, Interpreter, Value};
 /// fn zip_arrays(xs: Vec<f32>, ys: Vec<f32>) -> Result<Vec<(f32, f32)>, String> {
 ///     if xs.len() == ys.len() {
@@ -68,7 +68,7 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// interpreter.insert_native_fn("zip", FnWrapper::new(zip_arrays));
 ///
 /// let program = "(1, 2, 3).zip((4, 5, 6)) == ((1, 4), (2, 5), (3, 6))";
-/// let program = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 /// let ret = interpreter.evaluate(&program).unwrap();
 /// assert_eq!(ret, Value::Bool(true));
 /// ```
@@ -76,7 +76,7 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// ## Usage of context
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{
 /// #     fns::FnWrapper, CallContext, Function, Interpreter, Value, SpannedEvalError,
 /// # };
@@ -98,7 +98,7 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// interpreter.insert_native_fn("map", FnWrapper::new(map_array));
 ///
 /// let program = "(1, 2, 3).map(|x| x + 3) == (4, 5, 6)";
-/// let program = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 /// let ret = interpreter.evaluate(&program).unwrap();
 /// assert_eq!(ret, Value::Bool(true));
 /// ```
@@ -631,7 +631,7 @@ mod tests {
     use super::*;
     use crate::Interpreter;
 
-    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
     use assert_matches::assert_matches;
     use core::f32;
 
@@ -651,7 +651,7 @@ mod tests {
             unary_fn(2) == 5 && binary_fn(1, -3) == -3 &&
                 ternary_fn(1, 2, 3) == 2 && ternary_fn(-1, 2, 3) == 3
         "#;
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
     }
@@ -686,7 +686,7 @@ mod tests {
             (1, 5, -3, 2, 1).array_min_max() == (-3, 5) &&
                 total_sum(((1, 2), (3, 4)), ((5, 6, 7), 8)) == 36
         "#;
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
     }
@@ -705,12 +705,12 @@ mod tests {
         interpreter.insert_wrapped_fn("sum_arrays", sum_arrays);
 
         let program = "(1, 2, 3).sum_arrays((4, 5, 6)) == (5, 7, 9)";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
 
         let program = "(1, 2, 3).sum_arrays((4, 5))";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
         assert!(err
             .source()
@@ -727,7 +727,7 @@ mod tests {
         );
 
         let program = "(-1, 2).contains(0) && !(1, 3).contains(0)";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
     }
@@ -747,12 +747,12 @@ mod tests {
         });
 
         let program = "assert_eq(3, 1 + 2)";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert!(ret.is_void());
 
         let program = "assert_eq(3, 1 - 2)";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
         assert_matches!(
             err.source(),
@@ -772,7 +772,7 @@ mod tests {
         );
 
         let program = "flip_sign(-1, true) == 1 && flip_sign(-1, false) == -1";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
     }
@@ -791,7 +791,7 @@ mod tests {
         });
 
         let program = "((true, 1), (2, 3)).destructure()";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let err_message = interpreter
             .evaluate(&block)
             .unwrap_err()

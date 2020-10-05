@@ -11,7 +11,7 @@ use crate::{
     AuxErrorInfo, Backtrace, EvalError, EvalResult, Number, SpannedEvalError,
     TupleLenMismatchContext,
 };
-use arithmetic_parser::{BinaryOp, Grammar, LvalueLen, Op, Span, Spanned, UnaryOp};
+use arithmetic_parser::{BinaryOp, Grammar, InputSpan, LvalueLen, Op, Spanned, UnaryOp};
 
 /// Opaque context for native calls.
 #[derive(Debug)]
@@ -24,7 +24,7 @@ impl<'r, 'a> CallContext<'r, 'a> {
     /// Creates a mock call context.
     pub fn mock() -> Self {
         Self {
-            call_span: Span::new("").into(),
+            call_span: InputSpan::new("").into(),
             backtrace: None,
         }
     }

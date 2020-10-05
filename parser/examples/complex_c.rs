@@ -13,7 +13,7 @@ use std::{
 };
 
 use arithmetic_parser::{
-    grammars::NumGrammar, BinaryOp, Block, Expr, FnDefinition, GrammarExt, Lvalue, Span,
+    grammars::NumGrammar, BinaryOp, Block, Expr, FnDefinition, GrammarExt, InputSpan, Lvalue,
     SpannedExpr, SpannedLvalue, Statement, UnaryOp,
 };
 
@@ -355,7 +355,7 @@ fn main() {
 
     other_computation = |a, b| sinh(a^2 + b^2) * tanh(a / b);";
 
-    let span = Span::new(EXPR);
+    let span = InputSpan::new(EXPR);
     let statements = ComplexGrammar::parse_statements(span).unwrap();
 
     let code = Context::generate_code(&statements);

@@ -1,12 +1,12 @@
 //! Misc helpers.
 
-use crate::{NomResult, Span, Spanned};
+use crate::{InputSpan, NomResult, Spanned};
 
 /// Wrapper around parsers allowing to capture both their output and the relevant span.
 pub fn with_span<'a, O>(
-    parser: impl Fn(Span<'a>) -> NomResult<'a, O>,
-) -> impl Fn(Span<'a>) -> NomResult<'a, Spanned<O>> {
-    move |input: Span| {
+    parser: impl Fn(InputSpan<'a>) -> NomResult<'a, O>,
+) -> impl Fn(InputSpan<'a>) -> NomResult<'a, Spanned<O>> {
+    move |input: InputSpan| {
         parser(input).map(|(rest, output)| {
             let len = rest.location_offset() - input.location_offset();
             let spanned = Spanned {
@@ -22,10 +22,10 @@ pub fn with_span<'a, O>(
 }
 
 pub fn unite_spans<'a, T, U>(
-    input: Span<'a>,
+    input: InputSpan<'a>,
     start: &Spanned<'_, T>,
     end: &Spanned<'_, U>,
-) -> Span<'a> {
+) -> InputSpan<'a> {
     debug_assert!(input.location_offset() <= start.location_offset());
     debug_assert!(start.location_offset() <= end.location_offset());
     debug_assert!(
@@ -38,7 +38,7 @@ pub fn unite_spans<'a, T, U>(
     unsafe {
         // SAFETY: Safe since offset coincides with the input offset (which we consider
         // well-formed).
-        Span::new_from_raw_offset(
+        InputSpan::new_from_raw_offset(
             start.location_offset(),
             start.location_line(),
             &input.fragment()[start_idx..end_idx],

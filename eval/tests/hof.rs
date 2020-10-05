@@ -3,7 +3,7 @@
 use arithmetic_eval::{
     fns, CallContext, EvalError, EvalResult, Function, Interpreter, NativeFn, Number, SpannedValue,
 };
-use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, Span};
+use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, InputSpan};
 
 /// Function that applies the `inner` function the specified amount of times to the result of
 /// the previous execution.
@@ -65,6 +65,6 @@ fn repeated_function() {
         # -1 is the immovable point of the transform
         assert(repeated(-1) == -1);
     "#;
-    let program = F32Grammar::parse_statements(Span::new(program)).unwrap();
+    let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
     interpreter.evaluate(&program).unwrap();
 }

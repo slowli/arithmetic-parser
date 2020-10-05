@@ -592,7 +592,7 @@ where
 /// # Examples
 ///
 /// ```
-/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// use arithmetic_eval::{fns, Interpreter, Value, ValueType};
 /// # use std::{collections::HashSet, f32, iter::FromIterator};
 ///
@@ -607,7 +607,7 @@ where
 ///     .insert_var("xs", Value::Tuple(vec![]));
 ///
 /// let module = "xs.fold(-INFINITY, max)";
-/// let module = F32Grammar::parse_statements(Span::new(module)).unwrap();
+/// let module = F32Grammar::parse_statements(InputSpan::new(module)).unwrap();
 /// let mut module = interpreter.compile(&module).unwrap();
 ///
 /// // With the original imports, the returned value is `-INFINITY`.
@@ -630,14 +630,14 @@ where
 /// The same module can be run with multiple imports:
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{Interpreter, Value};
 /// let mut interpreter = Interpreter::new();
 /// interpreter
 ///     .insert_var("x", Value::Number(3.0))
 ///     .insert_var("y", Value::Number(5.0));
 /// let module = "x + y";
-/// let module = F32Grammar::parse_statements(Span::new(module)).unwrap();
+/// let module = F32Grammar::parse_statements(InputSpan::new(module)).unwrap();
 /// let mut module = interpreter.compile(&module).unwrap();
 /// assert_eq!(module.run().unwrap(), Value::Number(8.0));
 ///
@@ -823,14 +823,14 @@ mod tests {
     use super::*;
     use crate::compiler::Compiler;
 
-    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 
     #[test]
     fn iterative_evaluation() {
         let mut env = Env::new();
         env.push_var("x", Value::<F32Grammar>::Number(5.0));
 
-        let block = F32Grammar::parse_statements(Span::new("x")).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new("x")).unwrap();
         let mut module = Compiler::compile_module(&env, &block, true).unwrap();
         assert_eq!(module.inner.register_capacity, 2);
         assert_eq!(module.inner.commands.len(), 1); // push `x` from r0 to r1
@@ -845,7 +845,7 @@ mod tests {
         env.push_var("x", Value::<F32Grammar>::Number(5.0));
 
         let block = "y = x + 2 * (x + 1) + 1; y";
-        let block = F32Grammar::parse_statements(Span::new(block)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(block)).unwrap();
         let module = Compiler::compile_module(&env, &block, true).unwrap();
         let value = env.execute(&module.inner, None).unwrap();
         assert_eq!(value, Value::Number(18.0));
@@ -864,7 +864,7 @@ mod tests {
         env.push_var("x", Value::<F32Grammar>::Number(5.0));
 
         let block = "y = x + 2 * (x + 1) + 1; y";
-        let block = F32Grammar::parse_statements(Span::new(block)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(block)).unwrap();
         let module = Compiler::compile_module(&env, &block, false).unwrap();
 
         let mut module_copy = module.clone();
@@ -882,7 +882,7 @@ mod tests {
         env.push_var("y", Value::Bool(true));
 
         let block = "x + y";
-        let block = F32Grammar::parse_statements(Span::new(block)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(block)).unwrap();
         let module = Compiler::compile_module(&env, &block, false).unwrap();
 
         let mut imports = module.imports().to_owned();
@@ -903,7 +903,7 @@ mod tests {
         env.push_var("y", Value::Number(1.0));
 
         let block = "x + y";
-        let block = F32Grammar::parse_statements(Span::new(block)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(block)).unwrap();
         let module = Compiler::compile_module(&env, &block, false).unwrap();
 
         let mut other_env = Env::new();

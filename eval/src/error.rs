@@ -9,7 +9,7 @@ use crate::{
     fns::FromValueError,
     Value,
 };
-use arithmetic_parser::{create_span_ref, BinaryOp, LvalueLen, Op, Span, Spanned, UnaryOp};
+use arithmetic_parser::{BinaryOp, LvalueLen, Op, Spanned, UnaryOp};
 
 /// Context for [`EvalError::TupleLenMismatch`].
 ///
@@ -280,7 +280,7 @@ impl fmt::Display for AuxErrorInfo {
 #[derive(Debug)]
 pub struct SpannedEvalError<'a> {
     error: EvalError,
-    main_span: Span<'a>,
+    main_span: Spanned<'a>,
     aux_spans: Vec<Spanned<'a, AuxErrorInfo>>,
 }
 
@@ -288,13 +288,13 @@ impl<'a> SpannedEvalError<'a> {
     pub(super) fn new<T>(main_span: &Spanned<'a, T>, error: EvalError) -> Self {
         Self {
             error,
-            main_span: create_span_ref(main_span, ()),
+            main_span: main_span.with_no_extra(),
             aux_spans: vec![],
         }
     }
 
     pub(super) fn with_span<T>(mut self, span: &Spanned<'a, T>, info: AuxErrorInfo) -> Self {
-        self.aux_spans.push(create_span_ref(span, info));
+        self.aux_spans.push(span.copy_with_extra(info));
         self
     }
 
@@ -338,9 +338,9 @@ pub struct BacktraceElement<'a> {
     /// Function name.
     pub fn_name: &'a str,
     /// Code span of the function definition.
-    pub def_span: Option<Span<'a>>,
+    pub def_span: Option<Spanned<'a>>,
     /// Code span of the function call.
-    pub call_span: Span<'a>,
+    pub call_span: Spanned<'a>,
 }
 
 impl<'a> Backtrace<'a> {
@@ -353,8 +353,8 @@ impl<'a> Backtrace<'a> {
     pub(super) fn push_call(
         &mut self,
         fn_name: &'a str,
-        def_span: Option<Span<'a>>,
-        call_span: Span<'a>,
+        def_span: Option<Spanned<'a>>,
+        call_span: Spanned<'a>,
     ) {
         self.calls.push(BacktraceElement {
             fn_name,
@@ -396,7 +396,7 @@ impl<'a> ErrorWithBacktrace<'a> {
     }
 
     /// Returns the main span for this error.
-    pub fn main_span(&self) -> Span<'a> {
+    pub fn main_span(&self) -> Spanned<'a> {
         self.inner.main_span
     }
 

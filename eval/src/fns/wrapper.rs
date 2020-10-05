@@ -6,7 +6,7 @@ use crate::{
     AuxErrorInfo, CallContext, EvalError, EvalResult, Function, NativeFn, Number, SpannedEvalError,
     SpannedValue, Value, ValueType,
 };
-use arithmetic_parser::{create_span_ref, Grammar};
+use arithmetic_parser::Grammar;
 
 /// Wraps a function enriching it with the information about its arguments.
 /// This is a slightly shorter way to create wrappers compared to calling [`FnWrapper::new()`].
@@ -556,7 +556,7 @@ macro_rules! arity_fn {
 
                 $(
                     let (index, $arg_name) = args_iter.next().unwrap();
-                    let span = create_span_ref(&$arg_name, ());
+                    let span = $arg_name.with_no_extra();
                     let $arg_name = $t::try_from_value($arg_name.extra).map_err(|mut err| {
                         err.set_arg_index(index);
                         context
@@ -587,7 +587,7 @@ macro_rules! arity_fn {
 
                 $(
                     let (index, $arg_name) = args_iter.next().unwrap();
-                    let span = create_span_ref(&$arg_name, ());
+                    let span = $arg_name.with_no_extra();
                     let $arg_name = $t::try_from_value($arg_name.extra).map_err(|mut err| {
                         err.set_arg_index(index);
                         context

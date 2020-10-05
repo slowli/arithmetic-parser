@@ -10,7 +10,7 @@ use crate::{
     Backtrace, CallContext, ErrorWithBacktrace, EvalError, EvalResult, Function, InterpretedFn,
     Number, SpannedEvalError, SpannedValue, TupleLenMismatchContext, Value,
 };
-use arithmetic_parser::{create_span_ref, BinaryOp, Grammar, LvalueLen, Span, Spanned, UnaryOp};
+use arithmetic_parser::{BinaryOp, Grammar, LvalueLen, Spanned, UnaryOp};
 use num_traits::{One, Zero};
 
 /// Pointer to a register or constant.
@@ -216,7 +216,7 @@ type SpannedCommand<'a, T> = Spanned<'a, Command<'a, T>>;
 #[derive(Debug)]
 pub(super) struct ExecutableFn<'a, T: Grammar> {
     pub inner: Executable<'a, T>,
-    pub def_span: Span<'a>,
+    pub def_span: Spanned<'a>,
     pub arg_count: LvalueLen,
 }
 
@@ -411,7 +411,7 @@ where
         for command in &executable.commands {
             match &command.extra {
                 Command::Push(expr) => {
-                    let expr_span = create_span_ref(command, ());
+                    let expr_span = command.with_no_extra();
                     let expr_value =
                         self.execute_expr(expr_span, expr, executable, backtrace.as_deref_mut())?;
                     self.registers.push(expr_value);
@@ -477,7 +477,7 @@ where
 
     fn execute_expr(
         &self,
-        span: Span<'a>,
+        span: Spanned<'a>,
         expr: &CompiledExpr<'a, T>,
         executable: &Executable<'a, T>,
         backtrace: Option<&mut Backtrace<'a>>,
@@ -499,8 +499,8 @@ where
             }
 
             CompiledExpr::Binary { op, lhs, rhs } => {
-                let lhs_value = create_span_ref(lhs, self.resolve_atom(&lhs.extra));
-                let rhs_value = create_span_ref(rhs, self.resolve_atom(&rhs.extra));
+                let lhs_value = lhs.copy_with_extra(self.resolve_atom(&lhs.extra));
+                let rhs_value = rhs.copy_with_extra(self.resolve_atom(&rhs.extra));
                 match op {
                     BinaryOp::Add => Value::try_add(span, lhs_value, rhs_value),
                     BinaryOp::Sub => Value::try_sub(span, lhs_value, rhs_value),
@@ -529,10 +529,10 @@ where
 
             CompiledExpr::Function { name, args } => {
                 if let Value::Function(function) = self.resolve_atom(&name.extra) {
-                    let fn_name = create_span_ref(name, ());
+                    let fn_name = name.with_no_extra();
                     let arg_values = args
                         .iter()
-                        .map(|arg| create_span_ref(arg, self.resolve_atom(&arg.extra)))
+                        .map(|arg| arg.copy_with_extra(self.resolve_atom(&arg.extra)))
                         .collect();
                     Self::eval_function(&function, fn_name, span, arg_values, backtrace)
                 } else {
@@ -548,7 +548,7 @@ where
                     .collect();
                 let capture_spans = captures
                     .iter()
-                    .map(|capture| create_span_ref(capture, ()))
+                    .map(|capture| capture.with_no_extra())
                     .collect();
 
                 let function = InterpretedFn::new(fn_executable, captured_values, capture_spans);
@@ -559,8 +559,8 @@ where
 
     fn eval_function(
         function: &Function<'a, T>,
-        fn_name: Span<'a>,
-        call_span: Span<'a>,
+        fn_name: Spanned<'a>,
+        call_span: Spanned<'a>,
         arg_values: Vec<SpannedValue<'a, T>>,
         mut backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
@@ -823,7 +823,7 @@ mod tests {
     use super::*;
     use crate::compiler::Compiler;
 
-    use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
 
     #[test]
     fn iterative_evaluation() {

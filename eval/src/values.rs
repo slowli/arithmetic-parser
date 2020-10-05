@@ -11,14 +11,12 @@ use crate::{
     AuxErrorInfo, Backtrace, EvalError, EvalResult, Number, SpannedEvalError,
     TupleLenMismatchContext,
 };
-use arithmetic_parser::{
-    create_span_ref, BinaryOp, Grammar, LvalueLen, Op, Span, Spanned, UnaryOp,
-};
+use arithmetic_parser::{BinaryOp, Grammar, LvalueLen, Op, Span, Spanned, UnaryOp};
 
 /// Opaque context for native calls.
 #[derive(Debug)]
 pub struct CallContext<'r, 'a> {
-    call_span: Span<'a>,
+    call_span: Spanned<'a>,
     backtrace: Option<&'r mut Backtrace<'a>>,
 }
 
@@ -26,12 +24,12 @@ impl<'r, 'a> CallContext<'r, 'a> {
     /// Creates a mock call context.
     pub fn mock() -> Self {
         Self {
-            call_span: Span::new(""),
+            call_span: Span::new("").into(),
             backtrace: None,
         }
     }
 
-    pub(super) fn new(call_span: Span<'a>, backtrace: Option<&'r mut Backtrace<'a>>) -> Self {
+    pub(super) fn new(call_span: Spanned<'a>, backtrace: Option<&'r mut Backtrace<'a>>) -> Self {
         Self {
             call_span,
             backtrace,
@@ -44,7 +42,7 @@ impl<'r, 'a> CallContext<'r, 'a> {
 
     /// Returns the call span.
     pub fn apply_call_span<T>(&self, value: T) -> Spanned<'a, T> {
-        create_span_ref(&self.call_span, value)
+        self.call_span.copy_with_extra(value)
     }
 
     /// Creates the error spanning the call site.
@@ -102,14 +100,14 @@ impl<'a, T: Grammar> dyn NativeFn<'a, T> + 'a {
 pub struct InterpretedFn<'a, T: Grammar> {
     definition: Rc<ExecutableFn<'a, T>>,
     captures: Vec<Value<'a, T>>,
-    capture_spans: Vec<Span<'a>>,
+    capture_spans: Vec<Spanned<'a>>,
 }
 
 impl<'a, T: Grammar> InterpretedFn<'a, T> {
     pub(super) fn new(
         definition: Rc<ExecutableFn<'a, T>>,
         captures: Vec<Value<'a, T>>,
-        capture_spans: Vec<Span<'a>>,
+        capture_spans: Vec<Spanned<'a>>,
     ) -> Self {
         Self {
             definition,
@@ -214,7 +212,7 @@ where
         }
     }
 
-    pub(super) fn def_span(&self) -> Option<Span<'a>> {
+    pub(super) fn def_span(&self) -> Option<Spanned<'a>> {
         match self {
             Self::Native(_) => None,
             Self::Interpreted(function) => Some(function.definition.def_span),
@@ -383,9 +381,9 @@ impl BinaryOpError {
 
     fn span<'a>(
         self,
-        total_span: Span<'a>,
-        lhs_span: Span<'a>,
-        rhs_span: Span<'a>,
+        total_span: Spanned<'a>,
+        lhs_span: Spanned<'a>,
+        rhs_span: Spanned<'a>,
     ) -> SpannedEvalError<'a> {
         let main_span = match self.side {
             Some(OpSide::Lhs) => lhs_span,
@@ -461,21 +459,21 @@ where
 
     #[inline]
     fn try_binary_op(
-        total_span: Span<'a>,
+        total_span: Spanned<'a>,
         lhs: Spanned<'a, Self>,
         rhs: Spanned<'a, Self>,
         op: BinaryOp,
         primitive_op: fn(T::Lit, T::Lit) -> T::Lit,
     ) -> Result<Self, SpannedEvalError<'a>> {
-        let lhs_span = create_span_ref(&lhs, ());
-        let rhs_span = create_span_ref(&rhs, ());
+        let lhs_span = lhs.with_no_extra();
+        let rhs_span = rhs.with_no_extra();
         lhs.extra
             .try_binary_op_inner(rhs.extra, op, primitive_op)
             .map_err(|e| e.span(total_span, lhs_span, rhs_span))
     }
 
     pub(super) fn try_add(
-        total_span: Span<'a>,
+        total_span: Spanned<'a>,
         lhs: Spanned<'a, Self>,
         rhs: Spanned<'a, Self>,
     ) -> Result<Self, SpannedEvalError<'a>> {
@@ -483,7 +481,7 @@ where
     }
 
     pub(super) fn try_sub(
-        total_span: Span<'a>,
+        total_span: Spanned<'a>,
         lhs: Spanned<'a, Self>,
         rhs: Spanned<'a, Self>,
     ) -> Result<Self, SpannedEvalError<'a>> {
@@ -491,7 +489,7 @@ where
     }
 
     pub(super) fn try_mul(
-        total_span: Span<'a>,
+        total_span: Spanned<'a>,
         lhs: Spanned<'a, Self>,
         rhs: Spanned<'a, Self>,
     ) -> Result<Self, SpannedEvalError<'a>> {
@@ -499,7 +497,7 @@ where
     }
 
     pub(super) fn try_div(
-        total_span: Span<'a>,
+        total_span: Spanned<'a>,
         lhs: Spanned<'a, Self>,
         rhs: Spanned<'a, Self>,
     ) -> Result<Self, SpannedEvalError<'a>> {
@@ -507,7 +505,7 @@ where
     }
 
     pub(super) fn try_pow(
-        total_span: Span<'a>,
+        total_span: Spanned<'a>,
         lhs: Spanned<'a, Self>,
         rhs: Spanned<'a, Self>,
     ) -> Result<Self, SpannedEvalError<'a>> {

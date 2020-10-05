@@ -53,14 +53,10 @@
 
 extern crate alloc;
 
-#[doc(hidden)] // used in the `eval` crate; logically not public
-pub use crate::helpers::create_span_ref;
 pub use crate::{
     parser::{Error, SpannedError},
     traits::{Features, Grammar, GrammarExt},
 };
-
-use nom_locate::LocatedSpan;
 
 use alloc::{boxed::Box, vec, vec::Vec};
 use core::fmt;
@@ -71,11 +67,130 @@ mod parser;
 mod traits;
 
 /// Code span.
-pub type Span<'a> = LocatedSpan<&'a str, ()>;
+pub type Span<'a> = nom_locate::LocatedSpan<&'a str, ()>;
 /// Value with an associated code span.
-pub type Spanned<'a, T> = LocatedSpan<&'a str, T>;
+pub type Spanned<'a, T = ()> = LocatedSpan<&'a str, T>;
 /// Parsing outcome generalized by the type returned on success.
 pub type NomResult<'a, T> = nom::IResult<Span<'a>, T, SpannedError<'a>>;
+
+/// FIXME
+#[derive(Debug, Clone, Copy)]
+pub struct LocatedSpan<Span, T = ()> {
+    offset: usize,
+    line: u32,
+    column: usize,
+    fragment: Span,
+
+    /// Extra information that can be embedded by the user.
+    pub extra: T,
+}
+
+impl<Span: PartialEq, T> PartialEq for LocatedSpan<Span, T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.line == other.line && self.offset == other.offset && self.fragment == other.fragment
+    }
+}
+
+impl<Span> LocatedSpan<Span> {
+    /// FIXME
+    pub fn at_start(span: Span) -> Self {
+        Self {
+            offset: 0,
+            line: 1,
+            column: 0,
+            fragment: span,
+            extra: (),
+        }
+    }
+}
+
+impl<Span, T> LocatedSpan<Span, T> {
+    /// The offset represents the position of the fragment relatively to
+    /// the input of the parser. It starts at offset 0.
+    pub fn location_offset(&self) -> usize {
+        self.offset
+    }
+
+    /// The line number of the fragment relatively to the input of the parser. It starts at line 1.
+    pub fn location_line(&self) -> u32 {
+        self.line
+    }
+
+    /// The column of the fragment start.
+    pub fn get_column(&self) -> usize {
+        self.column
+    }
+
+    /// The fragment that is spanned. The fragment represents a part of the input of the parser.
+    pub fn fragment(&self) -> &Span {
+        &self.fragment
+    }
+
+    pub(crate) fn map_extra<U>(self, map_fn: impl FnOnce(T) -> U) -> LocatedSpan<Span, U> {
+        LocatedSpan {
+            offset: self.offset,
+            line: self.line,
+            column: self.column,
+            fragment: self.fragment,
+            extra: map_fn(self.extra),
+        }
+    }
+}
+
+impl<'a, T> LocatedSpan<&'a str, T> {
+    pub(crate) fn new(span: Span<'a>, extra: T) -> Self {
+        Self {
+            offset: span.location_offset(),
+            line: span.location_line(),
+            column: span.get_column(),
+            fragment: *span.fragment(),
+            extra,
+        }
+    }
+}
+
+impl<Span: Copy, T> LocatedSpan<Span, T> {
+    /// FIXME
+    pub fn copy_with_extra<U>(&self, value: U) -> LocatedSpan<Span, U> {
+        LocatedSpan {
+            offset: self.offset,
+            line: self.line,
+            column: self.column,
+            fragment: self.fragment,
+            extra: value,
+        }
+    }
+
+    /// FIXME
+    pub fn with_no_extra(&self) -> LocatedSpan<Span> {
+        self.copy_with_extra(())
+    }
+}
+
+impl<Span: Copy, T: Clone> LocatedSpan<Span, T> {
+    /// FIXME
+    pub fn with_mapped_span<U>(&self, map_fn: impl FnOnce(Span) -> U) -> LocatedSpan<U, T> {
+        LocatedSpan {
+            offset: self.offset,
+            line: self.line,
+            column: self.column,
+            fragment: map_fn(self.fragment),
+            extra: self.extra.clone(),
+        }
+    }
+}
+
+impl<'a, T> From<nom_locate::LocatedSpan<&'a str, T>> for LocatedSpan<&'a str, T> {
+    fn from(value: nom_locate::LocatedSpan<&'a str, T>) -> Self {
+        Self {
+            offset: value.location_offset(),
+            line: value.location_line(),
+            column: value.get_column(),
+            fragment: *value.fragment(),
+            extra: value.extra,
+        }
+    }
+}
 
 /// Parsing context.
 // TODO: Add more fine-grained contexts.
@@ -147,7 +262,7 @@ where
     /// Method call, e.g., `foo.bar(x, 5)`.
     Method {
         /// Name of the called method, e.g. `bar` in `foo.bar(x, 5)`.
-        name: Span<'a>,
+        name: Spanned<'a>,
         /// Receiver of the call, e.g., `foo` in `foo.bar(x, 5)`.
         receiver: Box<SpannedExpr<'a, T>>,
         /// Arguments; e.g., `x, 5` in `foo.bar(x, 5)`.
@@ -524,7 +639,7 @@ pub enum DestructureRest<'a, T> {
     /// Named rest syntax, e.g., `...rest`.
     Named {
         /// Variable span, e.g., `rest`.
-        variable: Span<'a>,
+        variable: Spanned<'a>,
         /// Type annotation of the value.
         ty: Option<Spanned<'a, T>>,
     },
@@ -536,7 +651,7 @@ impl<'a, T> DestructureRest<'a, T> {
     pub fn to_lvalue(&self) -> Option<SpannedLvalue<'a, T>> {
         match self {
             Self::Named { variable, .. } => {
-                Some(create_span_ref(variable, Lvalue::Variable { ty: None }))
+                Some(variable.copy_with_extra(Lvalue::Variable { ty: None }))
             }
             _ => None,
         }

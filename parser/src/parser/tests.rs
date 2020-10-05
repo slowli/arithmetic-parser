@@ -161,7 +161,7 @@ fn span_on_line(offset: usize, line: u32, fragment: &str) -> Span<'_> {
 }
 
 fn sp<T>(offset: usize, fragment: &str, value: T) -> Spanned<'_, T> {
-    create_span(span(offset, fragment), value)
+    Spanned::new(span(offset, fragment), value)
 }
 
 fn lsp<'a>(
@@ -169,7 +169,7 @@ fn lsp<'a>(
     fragment: &'a str,
     lvalue: Lvalue<'a, ValueType>,
 ) -> SpannedLvalue<'a, ValueType> {
-    create_span(span(offset, fragment), lvalue)
+    Spanned::new(span(offset, fragment), lvalue)
 }
 
 fn lvalue_tuple(elements: Vec<SpannedLvalue<'_, ValueType>>) -> Lvalue<'_, ValueType> {
@@ -184,7 +184,7 @@ fn args<'a>(
     span: Span<'a>,
     elements: Vec<SpannedLvalue<'a, ValueType>>,
 ) -> Spanned<'a, Destructure<'a, ValueType>> {
-    create_span(
+    Spanned::new(
         span,
         Destructure {
             start: elements,
@@ -418,7 +418,7 @@ fn method_expr_works() {
             0,
             "x.sin()",
             Expr::Method {
-                name: span(2, "sin"),
+                name: span(2, "sin").into(),
                 receiver: Box::new(sp(0, "x", Expr::Variable)),
                 args: vec![],
             }
@@ -431,7 +431,7 @@ fn method_expr_works() {
         0,
         "(1, x, 2).foo(y)",
         Expr::Method {
-            name: span(10, "foo"),
+            name: span(10, "foo").into(),
             receiver: Box::new(sp(
                 0,
                 "(1, x, 2)",
@@ -459,7 +459,7 @@ fn method_expr_works() {
                     17,
                     "7.bar()",
                     Expr::Method {
-                        name: span(19, "bar"),
+                        name: span(19, "bar").into(),
                         receiver: Box::new(sp(17, "7", Expr::Literal(Literal::Number))),
                         args: vec![],
                     }
@@ -510,7 +510,7 @@ fn element_expr_works() {
                     )],
                 }
             })),
-            op: create_span(span(11, "+"), BinaryOp::Add),
+            op: Spanned::new(span(11, "+"), BinaryOp::Add),
             rhs: Box::new(sp(13, "A_b", Expr::Variable)),
         }
     );
@@ -536,11 +536,11 @@ fn element_expr_works() {
                             )],
                         },
                     )),
-                    op: create_span(span(11, "+"), BinaryOp::Add),
+                    op: Spanned::new(span(11, "+"), BinaryOp::Add),
                     rhs: Box::new(sp(13, "A_b", Expr::Variable)),
                 }
             })),
-            op: create_span(span(17, "-"), BinaryOp::Sub),
+            op: Spanned::new(span(17, "-"), BinaryOp::Sub),
             rhs: Box::new(sp(19, "C", Expr::Variable)),
         }
     );
@@ -566,11 +566,11 @@ fn element_expr_works() {
                             )],
                         },
                     )),
-                    op: BinaryOp::from_span(span(12, "+")),
+                    op: BinaryOp::from_span(span(12, "+").into()),
                     rhs: Box::new(sp(14, "A_b", Expr::Variable)),
                 }
             })),
-            op: BinaryOp::from_span(span(19, "-")),
+            op: BinaryOp::from_span(span(19, "-").into()),
             rhs: Box::new(sp(21, "(C + ge(0x00) + D)", {
                 Expr::Binary {
                     lhs: Box::new(sp(
@@ -578,7 +578,7 @@ fn element_expr_works() {
                         "C + ge(0x00)",
                         Expr::Binary {
                             lhs: Box::new(sp(22, "C", Expr::Variable)),
-                            op: BinaryOp::from_span(span(24, "+")),
+                            op: BinaryOp::from_span(span(24, "+").into()),
                             rhs: Box::new(sp(
                                 26,
                                 "ge(0x00)",
@@ -596,7 +596,7 @@ fn element_expr_works() {
                             )),
                         },
                     )),
-                    op: BinaryOp::from_span(span(35, "+")),
+                    op: BinaryOp::from_span(span(35, "+").into()),
                     rhs: Box::new(sp(37, "D", Expr::Variable)),
                 }
             }))
@@ -610,7 +610,7 @@ fn unary_expr_works() {
     assert_eq!(
         expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
         Expr::Unary {
-            op: create_span(span(0, "-"), UnaryOp::Neg),
+            op: Spanned::new(span(0, "-"), UnaryOp::Neg),
             inner: Box::new(sp(1, "3", Expr::Literal(Literal::Number))),
         }
     );
@@ -627,7 +627,7 @@ fn unary_expr_works() {
             0,
             "-x",
             Expr::Unary {
-                op: create_span(span(0, "-"), UnaryOp::Neg),
+                op: Spanned::new(span(0, "-"), UnaryOp::Neg),
                 inner: Box::new(sp(1, "x", Expr::Variable)),
             }
         ),
@@ -637,13 +637,13 @@ fn unary_expr_works() {
     assert_eq!(
         expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
         Expr::Unary {
-            op: create_span(span(0, "-"), UnaryOp::Neg),
+            op: Spanned::new(span(0, "-"), UnaryOp::Neg),
             inner: Box::new(sp(
                 1,
                 "(x + y)",
                 Expr::Binary {
                     lhs: Box::new(sp(2, "x", Expr::Variable)),
-                    op: BinaryOp::from_span(span(4, "+")),
+                    op: BinaryOp::from_span(span(4, "+").into()),
                     rhs: Box::new(sp(6, "y", Expr::Variable)),
                 }
             ))
@@ -655,12 +655,12 @@ fn unary_expr_works() {
         expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
         Expr::Binary {
             lhs: Box::new(sp(0, "2", Expr::Literal(Literal::Number))),
-            op: BinaryOp::from_span(span(2, "*")),
+            op: BinaryOp::from_span(span(2, "*").into()),
             rhs: Box::new(sp(
                 4,
                 "-3",
                 Expr::Unary {
-                    op: create_span(span(4, "-"), UnaryOp::Neg),
+                    op: Spanned::new(span(4, "-"), UnaryOp::Neg),
                     inner: Box::new(sp(5, "3", Expr::Literal(Literal::Number))),
                 }
             )),
@@ -689,11 +689,11 @@ fn expr_with_numbers_works() {
             lhs: Box::new(sp(0, "(2 + a)", {
                 Expr::Binary {
                     lhs: Box::new(sp(1, "2", Expr::Literal(Literal::Number))),
-                    op: BinaryOp::from_span(span(3, "+")),
+                    op: BinaryOp::from_span(span(3, "+").into()),
                     rhs: Box::new(sp(5, "a", Expr::Variable)),
                 }
             })),
-            op: BinaryOp::from_span(span(8, "*")),
+            op: BinaryOp::from_span(span(8, "*").into()),
             rhs: Box::new(sp(10, "b", Expr::Variable)),
         }
     );
@@ -708,15 +708,15 @@ fn comparison_expr_works() {
             lhs: Box::new(sp(0, "a == b", {
                 Expr::Binary {
                     lhs: Box::new(sp(0, "a", Expr::Variable)),
-                    op: BinaryOp::from_span(span(3, "==")),
+                    op: BinaryOp::from_span(span(3, "==").into()),
                     rhs: Box::new(sp(5, "b", Expr::Variable)),
                 }
             })),
-            op: BinaryOp::from_span(span(7, "&&")),
+            op: BinaryOp::from_span(span(7, "&&").into()),
             rhs: Box::new(sp(10, "c > d", {
                 Expr::Binary {
                     lhs: Box::new(sp(10, "c", Expr::Variable)),
-                    op: BinaryOp::from_span(span(12, ">")),
+                    op: BinaryOp::from_span(span(12, ">").into()),
                     rhs: Box::new(sp(14, "d", Expr::Variable)),
                 }
             })),
@@ -731,7 +731,7 @@ fn two_char_comparisons_are_parsed() {
         expr::<FieldGrammar, Streaming>(input).unwrap().1.extra,
         Expr::Binary {
             lhs: Box::new(sp(0, "a", Expr::Variable)),
-            op: BinaryOp::from_span(span(2, ">=")),
+            op: BinaryOp::from_span(span(2, ">=").into()),
             rhs: Box::new(sp(5, "b", Expr::Variable)),
         }
     );
@@ -774,7 +774,7 @@ fn assignment_works() {
                         "7 * sc(0x0001)",
                         Expr::Binary {
                             lhs: Box::new(sp(5, "7", Expr::Literal(Literal::Number))),
-                            op: BinaryOp::from_span(span(7, "*")),
+                            op: BinaryOp::from_span(span(7, "*").into()),
                             rhs: Box::new(sp(
                                 9,
                                 "sc(0x0001)",
@@ -792,7 +792,7 @@ fn assignment_works() {
                             )),
                         },
                     )),
-                    op: BinaryOp::from_span(span(20, "+")),
+                    op: BinaryOp::from_span(span(20, "+").into()),
                     rhs: Box::new(sp(22, "k", Expr::Variable)),
                 }
             }))
@@ -811,7 +811,7 @@ fn comparison_works() {
             Expr::Binary {
                 lhs: Box::new(sp(0, "x", Expr::Variable)),
                 rhs: Box::new(sp(5, "3", Expr::Literal(Literal::Number))),
-                op: BinaryOp::from_span(span(2, "==")),
+                op: BinaryOp::from_span(span(2, "==").into()),
             }
         ))
     );
@@ -826,26 +826,26 @@ fn comparison_works() {
                 lhs: Box::new(sp(0, "s*G", {
                     Expr::Binary {
                         lhs: Box::new(sp(0, "s", Expr::Variable)),
-                        op: BinaryOp::from_span(span(1, "*")),
+                        op: BinaryOp::from_span(span(1, "*").into()),
                         rhs: Box::new(sp(2, "G", Expr::Variable)),
                     }
                 })),
                 rhs: Box::new(sp(7, "R + h*A", {
                     Expr::Binary {
                         lhs: Box::new(sp(7, "R", Expr::Variable)),
-                        op: BinaryOp::from_span(span(9, "+")),
+                        op: BinaryOp::from_span(span(9, "+").into()),
                         rhs: Box::new(sp(
                             11,
                             "h*A",
                             Expr::Binary {
                                 lhs: Box::new(sp(11, "h", Expr::Variable)),
-                                op: BinaryOp::from_span(span(12, "*")),
+                                op: BinaryOp::from_span(span(12, "*").into()),
                                 rhs: Box::new(sp(13, "A", Expr::Variable)),
                             },
                         )),
                     }
                 })),
-                op: BinaryOp::from_span(span(4, "==")),
+                op: BinaryOp::from_span(span(4, "==").into()),
             }
         ))
     );
@@ -862,7 +862,7 @@ fn comparison_works() {
                     "G^s",
                     Expr::Binary {
                         lhs: Box::new(sp(0, "G", Expr::Variable)),
-                        op: BinaryOp::from_span(span(1, "^")),
+                        op: BinaryOp::from_span(span(1, "^").into()),
                         rhs: Box::new(sp(2, "s", Expr::Variable)),
                     }
                 )),
@@ -871,19 +871,19 @@ fn comparison_works() {
                     "R + A^h",
                     Expr::Binary {
                         lhs: Box::new(sp(7, "R", Expr::Variable)),
-                        op: BinaryOp::from_span(span(9, "+")),
+                        op: BinaryOp::from_span(span(9, "+").into()),
                         rhs: Box::new(sp(
                             11,
                             "A^h",
                             Expr::Binary {
                                 lhs: Box::new(sp(11, "A", Expr::Variable)),
-                                op: BinaryOp::from_span(span(12, "^")),
+                                op: BinaryOp::from_span(span(12, "^").into()),
                                 rhs: Box::new(sp(13, "h", Expr::Variable)),
                             },
                         )),
                     }
                 )),
-                op: BinaryOp::from_span(span(4, "!=")),
+                op: BinaryOp::from_span(span(4, "!=").into()),
             }
         ))
     );
@@ -906,7 +906,7 @@ fn tuples_are_parsed() {
                 "x / 2",
                 Expr::Binary {
                     lhs: Box::new(sp(1, "x", Expr::Variable)),
-                    op: BinaryOp::from_span(span(3, "/")),
+                    op: BinaryOp::from_span(span(3, "/").into()),
                     rhs: Box::new(sp(5, "2", Expr::Literal(Literal::Number))),
                 }
             ),
@@ -915,7 +915,7 @@ fn tuples_are_parsed() {
                 "G^y",
                 Expr::Binary {
                     lhs: Box::new(sp(8, "G", Expr::Variable)),
-                    op: BinaryOp::from_span(span(9, "^")),
+                    op: BinaryOp::from_span(span(9, "^").into()),
                     rhs: Box::new(sp(10, "y", Expr::Variable)),
                 }
             ),
@@ -971,7 +971,7 @@ fn destructuring_is_parsed() {
         destructure::<FieldGrammar, Complete>(input).unwrap().1,
         Destructure {
             start: vec![lsp(0, "x", Lvalue::Variable { ty: None })],
-            middle: Some(create_span(span(3, "..."), DestructureRest::Unnamed)),
+            middle: Some(Spanned::new(span(3, "..."), DestructureRest::Unnamed)),
             end: vec![lsp(8, "y", Lvalue::Variable { ty: None })],
         }
     );
@@ -981,10 +981,10 @@ fn destructuring_is_parsed() {
         destructure::<FieldGrammar, Complete>(input).unwrap().1,
         Destructure {
             start: vec![lsp(0, "x", Lvalue::Variable { ty: None })],
-            middle: Some(create_span(
+            middle: Some(Spanned::new(
                 span(3, "...rest"),
                 DestructureRest::Named {
-                    variable: span(6, "rest"),
+                    variable: span(6, "rest").into(),
                     ty: None,
                 }
             )),
@@ -993,7 +993,7 @@ fn destructuring_is_parsed() {
                     12,
                     "y",
                     Lvalue::Variable {
-                        ty: Some(create_span(span(15, "Ge"), ValueType::Element))
+                        ty: Some(Spanned::new(span(15, "Ge"), ValueType::Element))
                     }
                 ),
                 lsp(19, "z", Lvalue::Variable { ty: None })
@@ -1006,7 +1006,7 @@ fn destructuring_is_parsed() {
         destructure::<FieldGrammar, Complete>(input).unwrap().1,
         Destructure {
             start: vec![],
-            middle: Some(create_span(span(0, "..."), DestructureRest::Unnamed)),
+            middle: Some(Spanned::new(span(0, "..."), DestructureRest::Unnamed)),
             end: vec![lsp(5, "end", Lvalue::Variable { ty: None })],
         }
     );
@@ -1025,10 +1025,10 @@ fn nested_destructuring_is_parsed() {
     };
     let end = Destructure {
         start: vec![lsp(14, "_", Lvalue::Variable { ty: None })],
-        middle: Some(create_span(
+        middle: Some(Spanned::new(
             span(17, "...rest"),
             DestructureRest::Named {
-                variable: span(20, "rest"),
+                variable: span(20, "rest").into(),
                 ty: None,
             },
         )),
@@ -1038,9 +1038,9 @@ fn nested_destructuring_is_parsed() {
     assert_eq!(
         destructure::<FieldGrammar, Complete>(input).unwrap().1,
         Destructure {
-            start: vec![create_span(span(0, "(x, y)"), Lvalue::Tuple(start))],
-            middle: Some(create_span(span(8, "..."), DestructureRest::Unnamed)),
-            end: vec![create_span(span(13, "(_, ...rest)"), Lvalue::Tuple(end))],
+            start: vec![Spanned::new(span(0, "(x, y)"), Lvalue::Tuple(start))],
+            middle: Some(Spanned::new(span(8, "..."), DestructureRest::Unnamed)),
+            end: vec![Spanned::new(span(13, "(_, ...rest)"), Lvalue::Tuple(end))],
         }
     );
 }
@@ -1077,7 +1077,7 @@ fn lvalues_are_parsed() {
                 1,
                 "x",
                 Lvalue::Variable {
-                    ty: Some(create_span(
+                    ty: Some(Spanned::new(
                         span(4, "(Sc, _)"),
                         ValueType::Tuple(vec![ValueType::Scalar, ValueType::Any])
                     )),
@@ -1092,7 +1092,7 @@ fn lvalues_are_parsed() {
                         17,
                         "z",
                         Lvalue::Variable {
-                            ty: Some(create_span(span(20, "Ge"), ValueType::Element)),
+                            ty: Some(Spanned::new(span(20, "Ge"), ValueType::Element)),
                         }
                     ),
                 ])
@@ -1106,25 +1106,25 @@ fn expr_evaluation_order() {
     let input = Span::new("1 - 2 + 3 - 4;");
     assert_matches!(
         expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
-        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(10, "-"))
+        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(10, "-").into())
     );
 
     let input = Span::new("1 / 2 * 3 / 4;");
     assert_matches!(
         expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
-        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(10, "/"))
+        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(10, "/").into())
     );
 
     let input = Span::new("1 - 2 * 3 - 4;");
     assert_matches!(
         expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
-        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(10, "-"))
+        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(10, "-").into())
     );
 
     let input = Span::new("X - G^2 + y * Z;");
     assert_matches!(
         expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
-        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(8, "+"))
+        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(8, "+").into())
     );
 }
 
@@ -1134,7 +1134,7 @@ fn evaluation_order_with_bool_expressions() {
     let output = expr::<FieldGrammar, Complete>(input).unwrap().1.extra;
     assert_matches!(
         output,
-        Expr::Binary { op, ref lhs, ref rhs } if op == BinaryOp::from_span(span(15, "&&")) &&
+        Expr::Binary { op, ref lhs, ref rhs } if op == BinaryOp::from_span(span(15, "&&").into()) &&
             *lhs.fragment() == "x == 2 + 3 * 4" &&
             *rhs.fragment() == "y == G^x"
     );
@@ -1142,14 +1142,14 @@ fn evaluation_order_with_bool_expressions() {
     assert_eq!(*scalar_expr.fragment(), "2 + 3 * 4");
     assert_matches!(
         scalar_expr.extra,
-        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(7, "+"))
+        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(7, "+").into())
     );
 
     let input = Span::new("x == 2 * z + 3 * 4 && (y, z) == (G^x, 2);");
     let output = expr::<FieldGrammar, Complete>(input).unwrap().1.extra;
     assert_matches!(
         output,
-        Expr::Binary { op, ref lhs, ref rhs } if op == BinaryOp::from_span(span(19, "&&")) &&
+        Expr::Binary { op, ref lhs, ref rhs } if op == BinaryOp::from_span(span(19, "&&").into()) &&
             *lhs.fragment() == "x == 2 * z + 3 * 4" &&
             *rhs.fragment() == "(y, z) == (G^x, 2)"
     );
@@ -1157,7 +1157,7 @@ fn evaluation_order_with_bool_expressions() {
     assert_eq!(*scalar_expr.fragment(), "2 * z + 3 * 4");
     assert_matches!(
         scalar_expr.extra,
-        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(11, "+"))
+        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(11, "+").into())
     );
 }
 
@@ -1173,7 +1173,7 @@ fn block_parsing() {
                 "x + y",
                 Expr::Binary {
                     lhs: Box::new(sp(2, "x", Expr::Variable)),
-                    op: BinaryOp::from_span(span(4, "+")),
+                    op: BinaryOp::from_span(span(4, "+").into()),
                     rhs: Box::new(sp(6, "y", Expr::Variable)),
                 }
             ))),
@@ -1209,7 +1209,7 @@ fn fn_definition_parsing() {
                     "x + z",
                     Expr::Binary {
                         lhs: Box::new(sp(4, "x", Expr::Variable)),
-                        op: BinaryOp::from_span(span(6, "+")),
+                        op: BinaryOp::from_span(span(6, "+").into()),
                         rhs: Box::new(sp(8, "z", Expr::Variable)),
                     }
                 ))),
@@ -1232,7 +1232,7 @@ fn fn_definition_parsing() {
                     "x + 3",
                     Expr::Binary {
                         lhs: Box::new(sp(6, "x", Expr::Variable)),
-                        op: BinaryOp::from_span(span(8, "+")),
+                        op: BinaryOp::from_span(span(8, "+").into()),
                         rhs: Box::new(sp(10, "3", Expr::Literal(Literal::Number))),
                     }
                 )))
@@ -1259,7 +1259,7 @@ fn fn_definition_parsing() {
                         1,
                         "x",
                         Lvalue::Variable {
-                            ty: Some(create_span(span(4, "Sc"), ValueType::Scalar)),
+                            ty: Some(Spanned::new(span(4, "Sc"), ValueType::Scalar)),
                         }
                     ),
                     lsp(
@@ -1271,7 +1271,7 @@ fn fn_definition_parsing() {
                                 12,
                                 "_",
                                 Lvalue::Variable {
-                                    ty: Some(create_span(span(15, "Ge"), ValueType::Element)),
+                                    ty: Some(Spanned::new(span(15, "Ge"), ValueType::Element)),
                                 }
                             )
                         ])
@@ -1404,7 +1404,7 @@ fn type_hints_when_switched_off() {
                 Expr::Binary {
                     lhs: Box::new(sp(4, "1", Expr::Literal(Literal::Number))),
                     rhs: Box::new(sp(8, "y", Expr::Variable)),
-                    op: BinaryOp::from_span(span(6, "+")),
+                    op: BinaryOp::from_span(span(6, "+").into()),
                 }
             )),
         }

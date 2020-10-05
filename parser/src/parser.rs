@@ -47,34 +47,31 @@ impl GrammarType for Streaming {
 impl UnaryOp {
     fn from_span(span: Spanned<char>) -> Spanned<Self> {
         match span.extra {
-            '-' => create_span(span, UnaryOp::Neg),
-            '!' => create_span(span, UnaryOp::Not),
+            '-' => span.copy_with_extra(UnaryOp::Neg),
+            '!' => span.copy_with_extra(UnaryOp::Not),
             _ => unreachable!(),
         }
     }
 }
 
 impl BinaryOp {
-    fn from_span(span: Span<'_>) -> Spanned<'_, Self> {
-        create_span(
-            span,
-            match *span.fragment() {
-                "+" => Self::Add,
-                "-" => Self::Sub,
-                "*" => Self::Mul,
-                "/" => Self::Div,
-                "^" => Self::Power,
-                "==" => Self::Eq,
-                "!=" => Self::NotEq,
-                "&&" => Self::And,
-                "||" => Self::Or,
-                ">" => Self::Gt,
-                "<" => Self::Lt,
-                ">=" => Self::Ge,
-                "<=" => Self::Le,
-                _ => unreachable!(),
-            },
-        )
+    fn from_span(span: Spanned<'_, ()>) -> Spanned<'_, Self> {
+        span.copy_with_extra(match *span.fragment() {
+            "+" => Self::Add,
+            "-" => Self::Sub,
+            "*" => Self::Mul,
+            "/" => Self::Div,
+            "^" => Self::Power,
+            "==" => Self::Eq,
+            "!=" => Self::NotEq,
+            "&&" => Self::And,
+            "||" => Self::Or,
+            ">" => Self::Gt,
+            "<" => Self::Lt,
+            ">=" => Self::Ge,
+            "<=" => Self::Le,
+            _ => unreachable!(),
+        })
     }
 }
 
@@ -194,14 +191,14 @@ impl<'a> Error<'a> {
             Error::UnexpectedChar { context }
             | Error::UnexpectedTerm { context }
             | Error::Other { context, .. } => {
-                *context = Some(create_span(span, ctx));
+                *context = Some(Spanned::new(span, ctx));
             }
             _ => { /* do nothing */ }
         }
     }
 
     fn with_span<T>(self, span: Spanned<'a, T>) -> SpannedError<'a> {
-        SpannedError(create_span(span, self))
+        SpannedError(span.copy_with_extra(self))
     }
 }
 
@@ -216,7 +213,7 @@ impl<'a> nom::error::ParseError<Span<'a>> for SpannedError<'a> {
             input = input.slice(..1);
         }
 
-        SpannedError(create_span(
+        SpannedError(Spanned::new(
             input,
             if kind == ErrorKind::Char {
                 if input.fragment().is_empty() {
@@ -304,17 +301,17 @@ where
 {
     with_span(fn_args::<T, Ty>)(input).and_then(|(rest, parsed)| {
         let comma_terminated = parsed.extra.1;
-        let terms = map_span(parsed, |terms| terms.0);
+        let terms = parsed.map_extra(|terms| terms.0);
 
         match (terms.extra.len(), comma_terminated) {
             (1, false) => Ok((
                 rest,
-                map_span(terms, |mut terms| terms.pop().unwrap().extra),
+                terms.map_extra(|mut terms| terms.pop().unwrap().extra),
             )),
 
             _ => {
                 if T::FEATURES.tuples {
-                    Ok((rest, map_span(terms, Expr::Tuple)))
+                    Ok((rest, terms.map_extra(Expr::Tuple)))
                 } else {
                     Err(NomErr::Failure(
                         Error::UnexpectedTerm { context: None }.with_span(terms),
@@ -337,13 +334,13 @@ where
     let block_parser: Box<dyn Fn(Span<'a>) -> NomResult<'a, SpannedExpr<'a, T>>> =
         if T::FEATURES.blocks {
             let parser = map(with_span(block::<T, Ty>), |spanned| {
-                map_span(spanned, Expr::Block)
+                spanned.map_extra(Expr::Block)
             });
             Box::new(parser)
         } else {
             // Always fail.
             Box::new(|input| {
-                let e = Error::Leftovers.with_span(input);
+                let e = Error::Leftovers.with_span(input.into());
                 Err(NomErr::Error(e))
             })
         };
@@ -351,23 +348,23 @@ where
     let fn_def_parser: Box<dyn Fn(Span<'a>) -> NomResult<'a, SpannedExpr<'a, T>>> =
         if T::FEATURES.fn_definitions {
             let parser = map(with_span(fn_def::<T, Ty>), |span| {
-                map_span(span, Expr::FnDefinition)
+                span.map_extra(Expr::FnDefinition)
             });
             Box::new(parser)
         } else {
             // Always fail.
             Box::new(|input| {
-                let e = Error::Leftovers.with_span(input);
+                let e = Error::Leftovers.with_span(input.into());
                 Err(NomErr::Error(e))
             })
         };
 
     alt((
         map(with_span(T::parse_literal), |span| {
-            map_span(span, Expr::Literal)
+            span.map_extra(Expr::Literal)
         }),
         map(with_span(var_name), |span| {
-            create_span(span, Expr::Variable)
+            span.copy_with_extra(Expr::Variable)
         }),
         fn_def_parser,
         map(
@@ -376,7 +373,7 @@ where
                 simple_expr::<T, Ty>,
             ))),
             |spanned| {
-                map_span(spanned, |(op, inner)| Expr::Unary {
+                spanned.map_extra(|(op, inner)| Expr::Unary {
                     op: UnaryOp::from_span(op),
                     inner: Box::new(inner),
                 })
@@ -420,7 +417,7 @@ where
             let (maybe_fn_name, (args, _)) = spanned_args.extra;
             let expr = if let Some(fn_name) = maybe_fn_name {
                 Expr::Method {
-                    name: fn_name,
+                    name: fn_name.into(),
                     receiver: Box::new(name),
                     args,
                 }
@@ -430,7 +427,7 @@ where
                     args,
                 }
             };
-            create_span(united_span, expr)
+            Spanned::new(united_span, expr)
         })
     })(input)
 }
@@ -460,7 +457,7 @@ where
         if spanned_op.extra.is_order_comparison() && !T::FEATURES.order_comparisons {
             // Immediately drop parsing on an unsupported op, since there are no alternatives.
             let err = Error::UnsupportedOp(spanned_op.extra.into());
-            let spanned_err = SpannedError(create_span(span, err));
+            let spanned_err = SpannedError(span.copy_with_extra(err));
             Err(NomErr::Failure(spanned_err))
         } else {
             Ok((rest, spanned_op))
@@ -519,7 +516,7 @@ where
                 right_contour.clear();
                 right_contour.push(new_op.extra);
 
-                create_span(
+                Spanned::new(
                     united_span,
                     Expr::Binary {
                         lhs: Box::new(acc),
@@ -539,19 +536,19 @@ where
                     };
                 }
 
-                *parent = create_span(unite_spans(input, &parent, &expr), parent.extra.clone());
+                *parent = Spanned::new(unite_spans(input, &parent, &expr), parent.extra.clone());
                 if let Expr::Binary { ref mut rhs, .. } = parent.extra {
                     let rhs_span = unite_spans(input, rhs, &expr);
-                    let dummy = Box::new(create_span_ref(rhs, Expr::Variable));
+                    let dummy = Box::new(rhs.copy_with_extra(Expr::Variable));
                     let old_rhs = mem::replace(rhs, dummy);
                     let new_expr = Expr::Binary {
                         lhs: old_rhs,
                         op: new_op,
                         rhs: Box::new(expr),
                     };
-                    *rhs = Box::new(create_span(rhs_span, new_expr));
+                    *rhs = Box::new(Spanned::new(rhs_span, new_expr));
                 }
-                acc = create_span(united_span, acc.extra);
+                acc = Spanned::new(united_span, acc.extra);
                 acc
             }
         })
@@ -591,10 +588,10 @@ where
             cut(opt(var_name)),
         )),
         |spanned| {
-            map_span(spanned, |maybe_name| {
+            spanned.map_extra(|maybe_name| {
                 if let Some(name) = maybe_name {
                     DestructureRest::Named {
-                        variable: name,
+                        variable: name.into(),
                         ty: None,
                     }
                 } else {
@@ -671,12 +668,12 @@ where
                         cut(with_span(T::parse_type)),
                     )),
                 )),
-                |(name, ty)| create_span(name, Lvalue::Variable { ty }),
+                |(name, ty)| Spanned::new(name, Lvalue::Variable { ty }),
             );
             Box::new(parser)
         } else {
             let parser = map(var_name, |name| {
-                create_span(name, Lvalue::Variable { ty: None })
+                Spanned::new(name, Lvalue::Variable { ty: None })
             });
             Box::new(parser)
         };
@@ -730,9 +727,8 @@ where
     T: Grammar,
 {
     if !input_span.fragment().is_ascii() {
-        return Err(create_span(input_span, Error::NonAsciiInput));
+        return Err(Spanned::new(input_span, Error::NonAsciiInput));
     }
-
     statements_inner::<T, Complete>(input_span)
 }
 
@@ -744,7 +740,7 @@ where
     T: Grammar,
 {
     if !input_span.fragment().is_ascii() {
-        return Err(create_span(input_span, Error::NonAsciiInput));
+        return Err(Spanned::new(input_span, Error::NonAsciiInput));
     }
 
     statements_inner::<T, Complete>(input_span)
@@ -759,13 +755,13 @@ where
     delimited(ws::<Ty>, separated_statements::<T, Ty>, ws::<Ty>)(input_span)
         .map_err(|e| match e {
             NomErr::Failure(e) | NomErr::Error(e) => e.0,
-            NomErr::Incomplete(_) => Error::Incomplete.with_span(input_span).0,
+            NomErr::Incomplete(_) => Error::Incomplete.with_span(input_span.into()).0,
         })
         .and_then(|(remaining, statements)| {
             if remaining.fragment().is_empty() {
                 Ok(statements)
             } else {
-                Err(Error::Leftovers.with_span(remaining).0)
+                Err(Error::Leftovers.with_span(remaining.into()).0)
             }
         })
 }

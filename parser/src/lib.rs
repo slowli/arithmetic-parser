@@ -58,7 +58,7 @@ pub use crate::{
     traits::{Features, Grammar, GrammarExt},
 };
 
-use alloc::{boxed::Box, vec, vec::Vec};
+use alloc::{borrow::ToOwned, boxed::Box, format, string::String, vec, vec::Vec};
 use core::fmt;
 
 pub mod grammars;
@@ -91,19 +91,6 @@ impl<Span: PartialEq, T> PartialEq for LocatedSpan<Span, T> {
     }
 }
 
-impl<Span> LocatedSpan<Span> {
-    /// FIXME
-    pub fn at_start(span: Span) -> Self {
-        Self {
-            offset: 0,
-            line: 1,
-            column: 0,
-            fragment: span,
-            extra: (),
-        }
-    }
-}
-
 impl<Span, T> LocatedSpan<Span, T> {
     /// The offset represents the position of the fragment relatively to
     /// the input of the parser. It starts at offset 0.
@@ -133,6 +120,17 @@ impl<Span, T> LocatedSpan<Span, T> {
             column: self.column,
             fragment: self.fragment,
             extra: map_fn(self.extra),
+        }
+    }
+
+    /// FIXME
+    pub fn map_span<U>(self, map_fn: impl FnOnce(Span) -> U) -> LocatedSpan<U, T> {
+        LocatedSpan {
+            offset: self.offset,
+            line: self.line,
+            column: self.column,
+            fragment: map_fn(self.fragment),
+            extra: self.extra,
         }
     }
 }
@@ -168,8 +166,7 @@ impl<Span: Copy, T> LocatedSpan<Span, T> {
 }
 
 impl<Span: Copy, T: Clone> LocatedSpan<Span, T> {
-    /// FIXME
-    pub fn with_mapped_span<U>(&self, map_fn: impl FnOnce(Span) -> U) -> LocatedSpan<U, T> {
+    pub(crate) fn with_mapped_span<U>(&self, map_fn: impl FnOnce(Span) -> U) -> LocatedSpan<U, T> {
         LocatedSpan {
             offset: self.offset,
             line: self.line,
@@ -189,6 +186,67 @@ impl<'a, T> From<nom_locate::LocatedSpan<&'a str, T>> for LocatedSpan<&'a str, T
             fragment: *value.fragment(),
             extra: value.extra,
         }
+    }
+}
+
+/// FIXME
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Code<'a> {
+    /// FIXME
+    Str(&'a str),
+    /// FIXME
+    Stripped(usize),
+}
+
+impl Code<'_> {
+    /// FIXME
+    pub fn strip(self) -> Code<'static> {
+        match self {
+            Self::Str(string) => Code::Stripped(string.len()),
+            Self::Stripped(len) => Code::Stripped(len),
+        }
+    }
+}
+
+impl<'a> From<&'a str> for Code<'a> {
+    fn from(value: &'a str) -> Self {
+        Code::Str(value)
+    }
+}
+
+/// Value with an optional associated code span.
+pub type MaybeSpanned<'a, T = ()> = LocatedSpan<Code<'a>, T>;
+
+impl<T> MaybeSpanned<'_, T> {
+    /// FIXME
+    pub fn code_or_location(&self, default_name: &str) -> String {
+        match self.fragment {
+            Code::Str(code) => code.to_owned(),
+            Code::Stripped(_) => format!("{} at {}:{}", default_name, self.line, self.column),
+        }
+    }
+}
+
+impl<'a, T> From<Spanned<'a, T>> for MaybeSpanned<'a, T> {
+    fn from(value: Spanned<'a, T>) -> Self {
+        value.map_span(Code::from)
+    }
+}
+
+/// FIXME
+pub trait StripCode {
+    /// FIXME
+    type Stripped: 'static;
+
+    /// FIXME
+    fn strip_code(&self) -> Self::Stripped;
+}
+
+impl<T: Clone + 'static> StripCode for MaybeSpanned<'_, T> {
+    type Stripped = MaybeSpanned<'static, T>;
+
+    fn strip_code(&self) -> Self::Stripped {
+        self.with_mapped_span(|code| code.strip())
     }
 }
 

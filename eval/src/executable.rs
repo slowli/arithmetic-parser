@@ -10,7 +10,7 @@ use crate::{
     Backtrace, CallContext, ErrorWithBacktrace, EvalError, EvalResult, Function, InterpretedFn,
     Number, SpannedEvalError, SpannedValue, TupleLenMismatchContext, Value,
 };
-use arithmetic_parser::{BinaryOp, Grammar, LvalueLen, Spanned, UnaryOp};
+use arithmetic_parser::{BinaryOp, Code, Grammar, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
 use num_traits::{One, Zero};
 
 /// Pointer to a register or constant.
@@ -31,7 +31,7 @@ impl<T: Grammar> Clone for Atom<T> {
     }
 }
 
-pub type SpannedAtom<'a, T> = Spanned<'a, Atom<T>>;
+pub type SpannedAtom<'a, T> = MaybeSpanned<'a, Atom<T>>;
 
 /// Atomic operation on registers and/or constants.
 #[derive(Debug)]
@@ -91,6 +91,43 @@ impl<T: Grammar> Clone for CompiledExpr<'_, T> {
             Self::DefineFunction { ptr, captures } => Self::DefineFunction {
                 ptr: *ptr,
                 captures: captures.clone(),
+            },
+        }
+    }
+}
+
+impl<T: Grammar> StripCode for CompiledExpr<'_, T> {
+    type Stripped = CompiledExpr<'static, T>;
+
+    fn strip_code(&self) -> Self::Stripped {
+        match self {
+            Self::Atom(atom) => CompiledExpr::Atom(atom.clone()),
+            Self::Tuple(atoms) => CompiledExpr::Tuple(atoms.clone()),
+
+            Self::Unary { op, inner } => CompiledExpr::Unary {
+                op: *op,
+                inner: inner.strip_code(),
+            },
+
+            Self::Binary { op, lhs, rhs } => CompiledExpr::Binary {
+                op: *op,
+                lhs: lhs.strip_code(),
+                rhs: rhs.strip_code(),
+            },
+
+            Self::Compare { inner, op } => CompiledExpr::Compare {
+                inner: inner.strip_code(),
+                op: *op,
+            },
+
+            Self::Function { name, args } => CompiledExpr::Function {
+                name: name.strip_code(),
+                args: args.iter().map(StripCode::strip_code).collect(),
+            },
+
+            Self::DefineFunction { ptr, captures } => CompiledExpr::DefineFunction {
+                ptr: *ptr,
+                captures: captures.iter().map(StripCode::strip_code).collect(),
             },
         }
     }
@@ -211,12 +248,12 @@ impl<T: Grammar> Clone for Command<'_, T> {
     }
 }
 
-type SpannedCommand<'a, T> = Spanned<'a, Command<'a, T>>;
+type SpannedCommand<'a, T> = MaybeSpanned<'a, Command<'a, T>>;
 
 #[derive(Debug)]
 pub(super) struct ExecutableFn<'a, T: Grammar> {
     pub inner: Executable<'a, T>,
-    pub def_span: Spanned<'a>,
+    pub def_span: MaybeSpanned<'a>,
     pub arg_count: LvalueLen,
 }
 
@@ -247,8 +284,8 @@ impl<'a, T: Grammar> Executable<'a, T> {
         }
     }
 
-    pub fn push_command(&mut self, command: SpannedCommand<'a, T>) {
-        self.commands.push(command);
+    pub fn push_command(&mut self, command: impl Into<SpannedCommand<'a, T>>) {
+        self.commands.push(command.into());
     }
 
     pub fn push_child_fn(&mut self, child_fn: ExecutableFn<'a, T>) -> usize {
@@ -477,7 +514,7 @@ where
 
     fn execute_expr(
         &self,
-        span: Spanned<'a>,
+        span: MaybeSpanned<'a>,
         expr: &CompiledExpr<'a, T>,
         executable: &Executable<'a, T>,
         backtrace: Option<&mut Backtrace<'a>>,
@@ -529,7 +566,10 @@ where
 
             CompiledExpr::Function { name, args } => {
                 if let Value::Function(function) = self.resolve_atom(&name.extra) {
-                    let fn_name = name.with_no_extra();
+                    let fn_name = match name.fragment() {
+                        Code::Str(code) => *code,
+                        Code::Stripped(_) => "(stripped function)",
+                    };
                     let arg_values = args
                         .iter()
                         .map(|arg| arg.copy_with_extra(self.resolve_atom(&arg.extra)))
@@ -546,12 +586,12 @@ where
                     .iter()
                     .map(|capture| self.resolve_atom(&capture.extra))
                     .collect();
-                let capture_spans = captures
+                let capture_names = captures
                     .iter()
-                    .map(|capture| capture.with_no_extra())
+                    .map(|capture| capture.code_or_location("var"))
                     .collect();
 
-                let function = InterpretedFn::new(fn_executable, captured_values, capture_spans);
+                let function = InterpretedFn::new(fn_executable, captured_values, capture_names);
                 Ok(Value::interpreted_fn(function))
             }
         }
@@ -559,13 +599,13 @@ where
 
     fn eval_function(
         function: &Function<'a, T>,
-        fn_name: Spanned<'a>,
-        call_span: Spanned<'a>,
+        fn_name: &str,
+        call_span: MaybeSpanned<'a>,
         arg_values: Vec<SpannedValue<'a, T>>,
         mut backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
         if let Some(backtrace) = backtrace.as_deref_mut() {
-            backtrace.push_call(fn_name.fragment(), function.def_span(), call_span);
+            backtrace.push_call(fn_name, function.def_span(), call_span);
         }
         let mut context = CallContext::new(call_span, backtrace.as_deref_mut());
 

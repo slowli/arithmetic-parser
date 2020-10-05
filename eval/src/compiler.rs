@@ -13,8 +13,8 @@ use crate::{
     AuxErrorInfo, EvalError, RepeatedAssignmentContext, SpannedEvalError,
 };
 use arithmetic_parser::{
-    BinaryOp, Block, Destructure, Expr, FnDefinition, Grammar, InputSpan, Lvalue, Spanned,
-    SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
+    BinaryOp, Block, Destructure, Expr, FnDefinition, Grammar, InputSpan, Lvalue, MaybeSpanned,
+    Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
 };
 
 /// Name of the comparison function used in desugaring order comparisons.
@@ -114,12 +114,12 @@ impl Compiler {
                     let cmp_function = op.copy_with_extra(Atom::Register(cmp_function));
 
                     let cmp_invocation = CompiledExpr::Function {
-                        name: cmp_function,
+                        name: cmp_function.into(),
                         args: vec![lhs, rhs],
                     };
                     let cmp_register = self.push_assignment(executable, cmp_invocation, expr);
                     CompiledExpr::Compare {
-                        inner: expr.copy_with_extra(Atom::Register(cmp_register)),
+                        inner: expr.copy_with_extra(Atom::Register(cmp_register)).into(),
                         op: ComparisonOp::from(op.extra),
                     }
                 } else {
@@ -150,8 +150,9 @@ impl Compiler {
                 receiver,
                 args,
             } => {
-                let name =
-                    name.copy_with_extra(Atom::Register(self.vars_to_registers[*name.fragment()]));
+                let name: MaybeSpanned<_> = name
+                    .copy_with_extra(Atom::Register(self.vars_to_registers[*name.fragment()]))
+                    .into();
                 let args = iter::once(receiver.as_ref())
                     .chain(args)
                     .map(|arg| self.compile_expr(executable, arg))
@@ -172,7 +173,7 @@ impl Compiler {
 
                 let return_value = self
                     .compile_block_inner(executable, block)?
-                    .unwrap_or_else(|| expr.copy_with_extra(Atom::Void));
+                    .unwrap_or_else(|| expr.copy_with_extra(Atom::Void).into());
 
                 // Move the return value to the next register.
                 let new_register = if let Atom::Register(ret_register) = return_value.extra {
@@ -211,8 +212,9 @@ impl Compiler {
                 let mut captures = HashMap::new();
                 let mut extractor = CapturesExtractor::new(|var_name, var_span| {
                     if let Some(register) = self.get_var(var_name) {
-                        captures
-                            .insert(var_name, var_span.copy_with_extra(Atom::Register(register)));
+                        let capture: MaybeSpanned<_> =
+                            var_span.copy_with_extra(Atom::Register(register)).into();
+                        captures.insert(var_name, capture);
                         Ok(())
                     } else {
                         Err(EvalError::Undefined(var_name.to_owned()))
@@ -223,7 +225,7 @@ impl Compiler {
                 let fn_executable = Self::compile_function(def, &captures)?;
                 let fn_executable = ExecutableFn {
                     inner: fn_executable,
-                    def_span: expr.with_no_extra(),
+                    def_span: expr.with_no_extra().into(),
                     arg_count: def.args.extra.len(),
                 };
 
@@ -239,7 +241,7 @@ impl Compiler {
                 Atom::Register(register)
             }
         };
-        Ok(expr.copy_with_extra(atom))
+        Ok(expr.copy_with_extra(atom).into())
     }
 
     fn compile_function<'a, T: Grammar>(

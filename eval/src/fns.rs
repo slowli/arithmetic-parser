@@ -631,7 +631,7 @@ mod tests {
     use super::*;
     use crate::Interpreter;
 
-    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
+    use arithmetic_parser::{grammars::F32Grammar, Code, GrammarExt, InputSpan};
     use assert_matches::assert_matches;
 
     use core::f32;
@@ -677,9 +677,9 @@ mod tests {
             err.source(),
             EvalError::NativeCall(ref message) if message.contains("Compare requires")
         );
-        assert_eq!(*err.main_span().fragment(), "x > (1, 2)");
+        assert_eq!(*err.main_span().fragment(), Code::Str("x > (1, 2)"));
         assert_eq!(err.aux_spans().len(), 1);
-        assert_eq!(*err.aux_spans()[0].fragment(), "(1, 2)");
+        assert_eq!(*err.aux_spans()[0].fragment(), Code::Str("(1, 2)"));
     }
 
     #[test]

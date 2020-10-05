@@ -11,12 +11,14 @@ use crate::{
     AuxErrorInfo, Backtrace, EvalError, EvalResult, Number, SpannedEvalError,
     TupleLenMismatchContext,
 };
-use arithmetic_parser::{BinaryOp, Grammar, InputSpan, LvalueLen, Op, Spanned, UnaryOp};
+use arithmetic_parser::{
+    BinaryOp, Grammar, InputSpan, LvalueLen, MaybeSpanned, Op, Spanned, UnaryOp,
+};
 
 /// Opaque context for native calls.
 #[derive(Debug)]
 pub struct CallContext<'r, 'a> {
-    call_span: Spanned<'a>,
+    call_span: MaybeSpanned<'a>,
     backtrace: Option<&'r mut Backtrace<'a>>,
 }
 
@@ -24,12 +26,15 @@ impl<'r, 'a> CallContext<'r, 'a> {
     /// Creates a mock call context.
     pub fn mock() -> Self {
         Self {
-            call_span: InputSpan::new("").into(),
+            call_span: Spanned::from(InputSpan::new("")).into(),
             backtrace: None,
         }
     }
 
-    pub(super) fn new(call_span: Spanned<'a>, backtrace: Option<&'r mut Backtrace<'a>>) -> Self {
+    pub(super) fn new(
+        call_span: MaybeSpanned<'a>,
+        backtrace: Option<&'r mut Backtrace<'a>>,
+    ) -> Self {
         Self {
             call_span,
             backtrace,
@@ -41,7 +46,7 @@ impl<'r, 'a> CallContext<'r, 'a> {
     }
 
     /// Returns the call span.
-    pub fn apply_call_span<T>(&self, value: T) -> Spanned<'a, T> {
+    pub fn apply_call_span<T>(&self, value: T) -> MaybeSpanned<'a, T> {
         self.call_span.copy_with_extra(value)
     }
 
@@ -100,19 +105,19 @@ impl<'a, T: Grammar> dyn NativeFn<'a, T> + 'a {
 pub struct InterpretedFn<'a, T: Grammar> {
     definition: Rc<ExecutableFn<'a, T>>,
     captures: Vec<Value<'a, T>>,
-    capture_spans: Vec<Spanned<'a>>,
+    capture_names: Vec<String>,
 }
 
 impl<'a, T: Grammar> InterpretedFn<'a, T> {
     pub(super) fn new(
         definition: Rc<ExecutableFn<'a, T>>,
         captures: Vec<Value<'a, T>>,
-        capture_spans: Vec<Spanned<'a>>,
+        capture_names: Vec<String>,
     ) -> Self {
         Self {
             definition,
             captures,
-            capture_spans,
+            capture_names,
         }
     }
 
@@ -122,11 +127,11 @@ impl<'a, T: Grammar> InterpretedFn<'a, T> {
     }
 
     /// Returns values captured by this function.
-    pub fn captures(&self) -> HashMap<&'a str, &Value<'a, T>> {
-        self.capture_spans
+    pub fn captures(&self) -> HashMap<&str, &Value<'a, T>> {
+        self.capture_names
             .iter()
             .zip(&self.captures)
-            .map(|(span, val)| (*span.fragment(), val))
+            .map(|(name, val)| (name.as_str(), val))
             .collect()
     }
 }
@@ -212,7 +217,7 @@ where
         }
     }
 
-    pub(super) fn def_span(&self) -> Option<Spanned<'a>> {
+    pub(super) fn def_span(&self) -> Option<MaybeSpanned<'a>> {
         match self {
             Self::Native(_) => None,
             Self::Interpreted(function) => Some(function.definition.def_span),
@@ -272,7 +277,7 @@ where
 }
 
 /// Value together with a span that has produced it.
-pub type SpannedValue<'a, T> = Spanned<'a, Value<'a, T>>;
+pub type SpannedValue<'a, T> = MaybeSpanned<'a, Value<'a, T>>;
 
 impl<'a, T: Grammar> Value<'a, T> {
     /// Creates a value for a native function.
@@ -381,9 +386,9 @@ impl BinaryOpError {
 
     fn span<'a>(
         self,
-        total_span: Spanned<'a>,
-        lhs_span: Spanned<'a>,
-        rhs_span: Spanned<'a>,
+        total_span: MaybeSpanned<'a>,
+        lhs_span: MaybeSpanned<'a>,
+        rhs_span: MaybeSpanned<'a>,
     ) -> SpannedEvalError<'a> {
         let main_span = match self.side {
             Some(OpSide::Lhs) => lhs_span,
@@ -459,9 +464,9 @@ where
 
     #[inline]
     fn try_binary_op(
-        total_span: Spanned<'a>,
-        lhs: Spanned<'a, Self>,
-        rhs: Spanned<'a, Self>,
+        total_span: MaybeSpanned<'a>,
+        lhs: MaybeSpanned<'a, Self>,
+        rhs: MaybeSpanned<'a, Self>,
         op: BinaryOp,
         primitive_op: fn(T::Lit, T::Lit) -> T::Lit,
     ) -> Result<Self, SpannedEvalError<'a>> {
@@ -473,41 +478,41 @@ where
     }
 
     pub(super) fn try_add(
-        total_span: Spanned<'a>,
-        lhs: Spanned<'a, Self>,
-        rhs: Spanned<'a, Self>,
+        total_span: MaybeSpanned<'a>,
+        lhs: MaybeSpanned<'a, Self>,
+        rhs: MaybeSpanned<'a, Self>,
     ) -> Result<Self, SpannedEvalError<'a>> {
         Self::try_binary_op(total_span, lhs, rhs, BinaryOp::Add, |x, y| x + y)
     }
 
     pub(super) fn try_sub(
-        total_span: Spanned<'a>,
-        lhs: Spanned<'a, Self>,
-        rhs: Spanned<'a, Self>,
+        total_span: MaybeSpanned<'a>,
+        lhs: MaybeSpanned<'a, Self>,
+        rhs: MaybeSpanned<'a, Self>,
     ) -> Result<Self, SpannedEvalError<'a>> {
         Self::try_binary_op(total_span, lhs, rhs, BinaryOp::Sub, |x, y| x - y)
     }
 
     pub(super) fn try_mul(
-        total_span: Spanned<'a>,
-        lhs: Spanned<'a, Self>,
-        rhs: Spanned<'a, Self>,
+        total_span: MaybeSpanned<'a>,
+        lhs: MaybeSpanned<'a, Self>,
+        rhs: MaybeSpanned<'a, Self>,
     ) -> Result<Self, SpannedEvalError<'a>> {
         Self::try_binary_op(total_span, lhs, rhs, BinaryOp::Mul, |x, y| x * y)
     }
 
     pub(super) fn try_div(
-        total_span: Spanned<'a>,
-        lhs: Spanned<'a, Self>,
-        rhs: Spanned<'a, Self>,
+        total_span: MaybeSpanned<'a>,
+        lhs: MaybeSpanned<'a, Self>,
+        rhs: MaybeSpanned<'a, Self>,
     ) -> Result<Self, SpannedEvalError<'a>> {
         Self::try_binary_op(total_span, lhs, rhs, BinaryOp::Div, |x, y| x / y)
     }
 
     pub(super) fn try_pow(
-        total_span: Spanned<'a>,
-        lhs: Spanned<'a, Self>,
-        rhs: Spanned<'a, Self>,
+        total_span: MaybeSpanned<'a>,
+        lhs: MaybeSpanned<'a, Self>,
+        rhs: MaybeSpanned<'a, Self>,
     ) -> Result<Self, SpannedEvalError<'a>> {
         Self::try_binary_op(total_span, lhs, rhs, BinaryOp::Power, |x, y| x.pow(y))
     }
@@ -541,8 +546,8 @@ where
     }
 
     pub(super) fn try_and(
-        lhs: &Spanned<'a, Self>,
-        rhs: &Spanned<'a, Self>,
+        lhs: &MaybeSpanned<'a, Self>,
+        rhs: &MaybeSpanned<'a, Self>,
     ) -> Result<Self, SpannedEvalError<'a>> {
         match (&lhs.extra, &rhs.extra) {
             (Value::Bool(this), Value::Bool(other)) => Ok(Value::Bool(*this && *other)),
@@ -562,8 +567,8 @@ where
     }
 
     pub(super) fn try_or(
-        lhs: &Spanned<'a, Self>,
-        rhs: &Spanned<'a, Self>,
+        lhs: &MaybeSpanned<'a, Self>,
+        rhs: &MaybeSpanned<'a, Self>,
     ) -> Result<Self, SpannedEvalError<'a>> {
         match (&lhs.extra, &rhs.extra) {
             (Value::Bool(this), Value::Bool(other)) => Ok(Value::Bool(*this || *other)),

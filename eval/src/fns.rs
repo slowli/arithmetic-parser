@@ -94,8 +94,8 @@ fn extract_fn<'a, T: Grammar>(
 #[derive(Debug, Clone, Copy)]
 pub struct Assert;
 
-impl<'a, T: Grammar> NativeFn<'a, T> for Assert {
-    fn evaluate(
+impl<T: Grammar> NativeFn<T> for Assert {
+    fn evaluate<'a>(
         &self,
         args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -156,12 +156,12 @@ impl<'a, T: Grammar> NativeFn<'a, T> for Assert {
 #[derive(Debug, Clone, Copy)]
 pub struct If;
 
-impl<'a, T> NativeFn<'a, T> for If
+impl<T> NativeFn<T> for If
 where
     T: Grammar,
     T::Lit: Number,
 {
-    fn evaluate(
+    fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -223,12 +223,12 @@ impl Loop {
         "iteration function should return a 2-element tuple with first bool value";
 }
 
-impl<'a, T> NativeFn<'a, T> for Loop
+impl<T> NativeFn<T> for Loop
 where
     T: Grammar,
     T::Lit: Number,
 {
-    fn evaluate(
+    fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -307,12 +307,12 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Map;
 
-impl<'a, T> NativeFn<'a, T> for Map
+impl<T> NativeFn<T> for Map
 where
     T: Grammar,
     T::Lit: Number,
 {
-    fn evaluate(
+    fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -370,12 +370,12 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Filter;
 
-impl<'a, T> NativeFn<'a, T> for Filter
+impl<T> NativeFn<T> for Filter
 where
     T: Grammar,
     T::Lit: Number,
 {
-    fn evaluate(
+    fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -438,12 +438,12 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Fold;
 
-impl<'a, T> NativeFn<'a, T> for Fold
+impl<T> NativeFn<T> for Fold
 where
     T: Grammar,
     T::Lit: Number,
 {
-    fn evaluate(
+    fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -506,12 +506,12 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Push;
 
-impl<'a, T> NativeFn<'a, T> for Push
+impl<T> NativeFn<T> for Push
 where
     T: Grammar,
     T::Lit: Number,
 {
-    fn evaluate(
+    fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -559,12 +559,12 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Merge;
 
-impl<'a, T> NativeFn<'a, T> for Merge
+impl<T> NativeFn<T> for Merge
 where
     T: Grammar,
     T::Lit: Number,
 {
-    fn evaluate(
+    fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -599,12 +599,12 @@ pub struct Compare;
 
 const COMPARE_ERROR_MSG: &str = "Compare requires 2 number arguments";
 
-impl<'a, T> NativeFn<'a, T> for Compare
+impl<T> NativeFn<T> for Compare
 where
     T: Grammar,
     T::Lit: Number + PartialOrd,
 {
-    fn evaluate(
+    fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,

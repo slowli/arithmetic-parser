@@ -74,22 +74,22 @@ impl<'r, 'a> CallContext<'r, 'a> {
 }
 
 /// Function on zero or more `Value`s.
-pub trait NativeFn<'a, T: Grammar> {
+pub trait NativeFn<T: Grammar> {
     /// Executes the function on the specified arguments.
-    fn evaluate(
+    fn evaluate<'val>(
         &self,
-        args: Vec<SpannedValue<'a, T>>,
-        context: &mut CallContext<'_, 'a>,
-    ) -> EvalResult<'a, T>;
+        args: Vec<SpannedValue<'val, T>>,
+        context: &mut CallContext<'_, 'val>,
+    ) -> EvalResult<'val, T>;
 }
 
-impl<'a, T: Grammar> fmt::Debug for dyn NativeFn<'a, T> + 'a {
+impl<T: Grammar> fmt::Debug for dyn NativeFn<T> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.debug_tuple("NativeFn").finish()
     }
 }
 
-impl<'a, T: Grammar> dyn NativeFn<'a, T> + 'a {
+impl<T: Grammar> dyn NativeFn<T> {
     /// Extracts a data pointer from this trait object reference.
     pub(crate) fn data_ptr(&self) -> *const () {
         // `*const dyn Trait as *const ()` extracts the data pointer,
@@ -106,6 +106,18 @@ pub struct InterpretedFn<'a, T: Grammar> {
     definition: Rc<ExecutableFn<'a, T>>,
     captures: Vec<Value<'a, T>>,
     capture_names: Vec<String>,
+}
+
+impl<T: Grammar> StripCode for InterpretedFn<'_, T> {
+    type Stripped = InterpretedFn<'static, T>;
+
+    fn strip_code(&self) -> Self::Stripped {
+        InterpretedFn {
+            definition: Rc::new(self.definition.strip_code()),
+            captures: self.captures.iter().map(StripCode::strip_code).collect(),
+            capture_names: self.capture_names.clone(),
+        }
+    }
 }
 
 impl<'a, T: Grammar> InterpretedFn<'a, T> {
@@ -170,7 +182,7 @@ where
     T: Grammar,
 {
     /// Native function.
-    Native(Rc<dyn NativeFn<'a, T> + 'a>),
+    Native(Rc<dyn NativeFn<T>>),
     /// Interpreted function.
     Interpreted(Rc<InterpretedFn<'a, T>>),
 }
@@ -184,9 +196,20 @@ impl<T: Grammar> Clone for Function<'_, T> {
     }
 }
 
+impl<T: Grammar> StripCode for Function<'_, T> {
+    type Stripped = Function<'static, T>;
+
+    fn strip_code(&self) -> Self::Stripped {
+        match self {
+            Self::Native(function) => Function::Native(Rc::clone(function)),
+            Self::Interpreted(function) => Function::Interpreted(Rc::new(function.strip_code())),
+        }
+    }
+}
+
 impl<'a, T: Grammar> Function<'a, T> {
     /// Creates a native function.
-    pub fn native(function: impl NativeFn<'a, T> + 'a) -> Self {
+    pub fn native(function: impl NativeFn<T> + 'static) -> Self {
         Self::Native(Rc::new(function))
     }
 
@@ -278,7 +301,7 @@ pub type SpannedValue<'a, T> = MaybeSpanned<'a, Value<'a, T>>;
 
 impl<'a, T: Grammar> Value<'a, T> {
     /// Creates a value for a native function.
-    pub fn native_fn(function: impl NativeFn<'a, T> + 'a) -> Self {
+    pub fn native_fn(function: impl NativeFn<T> + 'static) -> Self {
         Self::Function(Function::Native(Rc::new(function)))
     }
 
@@ -334,7 +357,12 @@ impl<T: Grammar> StripCode for Value<'_, T> {
     type Stripped = Value<'static, T>;
 
     fn strip_code(&self) -> Self::Stripped {
-        unimplemented!()
+        match self {
+            Self::Number(lit) => Value::Number(lit.clone()),
+            Self::Bool(bool) => Value::Bool(*bool),
+            Self::Function(function) => Value::Function(function.strip_code()),
+            Self::Tuple(tuple) => Value::Tuple(tuple.iter().map(StripCode::strip_code).collect()),
+        }
     }
 }
 

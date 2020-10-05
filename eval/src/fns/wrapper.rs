@@ -3,7 +3,7 @@ use num_traits::{One, Zero};
 use core::{cmp, fmt, marker::PhantomData};
 
 use crate::{
-    AuxErrorInfo, CallContext, EvalError, EvalResult, Function, NativeFn, Number, SpannedEvalError,
+    AuxErrorInfo, CallContext, EvalError, EvalResult, NativeFn, Number, SpannedEvalError,
     SpannedValue, Value, ValueType,
 };
 use arithmetic_parser::Grammar;
@@ -282,13 +282,13 @@ pub enum FromValueErrorLocation {
 /// [`Number`]: ../trait.Number.html
 /// [`Function`]: ../enum.Function.html
 /// [`Value`]: ../enum.Value.html
-pub trait TryFromValue<'a, G: Grammar>: Sized {
+pub trait TryFromValue<G: Grammar>: Sized {
     /// Attempts to convert `value` to a type supported by the function.
-    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError>;
+    fn try_from_value(value: Value<'_, G>) -> Result<Self, FromValueError>;
 }
 
-impl<'a, T: Number, G: Grammar<Lit = T>> TryFromValue<'a, G> for T {
-    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
+impl<T: Number, G: Grammar<Lit = T>> TryFromValue<G> for T {
+    fn try_from_value(value: Value<'_, G>) -> Result<Self, FromValueError> {
         match value {
             Value::Number(number) => Ok(number),
             _ => Err(FromValueError::invalid_type(ValueType::Number, &value)),
@@ -296,8 +296,8 @@ impl<'a, T: Number, G: Grammar<Lit = T>> TryFromValue<'a, G> for T {
     }
 }
 
-impl<'a, G: Grammar> TryFromValue<'a, G> for bool {
-    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
+impl<G: Grammar> TryFromValue<G> for bool {
+    fn try_from_value(value: Value<'_, G>) -> Result<Self, FromValueError> {
         match value {
             Value::Bool(flag) => Ok(flag),
             _ => Err(FromValueError::invalid_type(ValueType::Bool, &value)),
@@ -305,11 +305,11 @@ impl<'a, G: Grammar> TryFromValue<'a, G> for bool {
     }
 }
 
-impl<'a, U, G: Grammar> TryFromValue<'a, G> for Vec<U>
+impl<U, G: Grammar> TryFromValue<G> for Vec<U>
 where
-    U: TryFromValue<'a, G>,
+    U: TryFromValue<G>,
 {
-    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
+    fn try_from_value(value: Value<'_, G>) -> Result<Self, FromValueError> {
         match value {
             Value::Tuple(values) => {
                 let tuple_len = values.len();
@@ -331,28 +331,13 @@ where
     }
 }
 
-impl<'a, G: Grammar> TryFromValue<'a, G> for Value<'a, G> {
-    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
-        Ok(value)
-    }
-}
-
-impl<'a, G: Grammar> TryFromValue<'a, G> for Function<'a, G> {
-    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
-        match value {
-            Value::Function(function) => Ok(function),
-            _ => Err(FromValueError::invalid_type(ValueType::Function, &value)),
-        }
-    }
-}
-
 macro_rules! try_from_value_for_tuple {
     ($size:expr => $($var:ident : $ty:ident),+) => {
-        impl<'a, G: Grammar, $($ty,)+> TryFromValue<'a, G> for ($($ty,)+)
+        impl<G: Grammar, $($ty,)+> TryFromValue<G> for ($($ty,)+)
         where
-            $($ty: TryFromValue<'a, G>,)+
+            $($ty: TryFromValue<G>,)+
         {
-            fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
+            fn try_from_value(value: Value<'_, G>) -> Result<Self, FromValueError> {
                 const EXPECTED_TYPE: ValueType = ValueType::Tuple($size);
 
                 match value {
@@ -391,19 +376,21 @@ try_from_value_for_tuple!(10 => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z,
 ///
 /// [wrapped functions]: struct.FnWrapper.html
 #[derive(Debug)]
-pub enum ErrorOutput<'a> {
-    /// Error together with the defined span(s).
-    Spanned(SpannedEvalError<'a>),
-    /// Error message. The error span will be defined as the call span of the native function.
-    Message(String),
+pub struct ErrorOutput {
+    message: String,
 }
 
-impl<'a> ErrorOutput<'a> {
-    fn into_spanned(self, context: &CallContext<'_, 'a>) -> SpannedEvalError<'a> {
-        match self {
-            Self::Spanned(error) => error,
-            Self::Message(message) => context.call_site_error(EvalError::NativeCall(message)),
+impl ErrorOutput {
+    fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
         }
+    }
+}
+
+impl ErrorOutput {
+    fn into_spanned<'a>(self, context: &CallContext<'_, 'a>) -> SpannedEvalError<'a> {
+        context.call_site_error(EvalError::NativeCall(self.message))
     }
 }
 
@@ -425,67 +412,44 @@ impl<'a> ErrorOutput<'a> {
 /// [wrapped functions]: struct.FnWrapper.html
 /// [`NativeFn`]: ../trait.NativeFn.html
 /// [`ErrorOutput`]: enum.ErrorOutput.html
-pub trait IntoEvalResult<'a, G: Grammar> {
+pub trait IntoEvalResult<G: Grammar> {
     /// Performs the conversion.
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>>;
+    fn into_eval_result<'a>(self) -> Result<Value<'a, G>, ErrorOutput>;
 }
 
-impl<'a, G: Grammar, U> IntoEvalResult<'a, G> for Result<U, String>
+impl<G: Grammar, U> IntoEvalResult<G> for Result<U, String>
 where
-    U: IntoEvalResult<'a, G>,
+    U: IntoEvalResult<G>,
 {
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
-        self.map_err(ErrorOutput::Message)
-            .and_then(U::into_eval_result)
+    fn into_eval_result<'a>(self) -> Result<Value<'a, G>, ErrorOutput> {
+        self.map_err(ErrorOutput::new).and_then(U::into_eval_result)
     }
 }
 
-impl<'a, G: Grammar, U> IntoEvalResult<'a, G> for Result<U, SpannedEvalError<'a>>
-where
-    U: IntoEvalResult<'a, G>,
-{
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
-        self.map_err(ErrorOutput::Spanned)
-            .and_then(U::into_eval_result)
-    }
-}
-
-impl<'a, G: Grammar> IntoEvalResult<'a, G> for Value<'a, G> {
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
-        Ok(self)
-    }
-}
-
-impl<'a, G: Grammar> IntoEvalResult<'a, G> for Function<'a, G> {
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
-        Ok(Value::Function(self))
-    }
-}
-
-impl<'a, T: Number, G: Grammar<Lit = T>> IntoEvalResult<'a, G> for T {
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+impl<T: Number, G: Grammar<Lit = T>> IntoEvalResult<G> for T {
+    fn into_eval_result<'a>(self) -> Result<Value<'a, G>, ErrorOutput> {
         Ok(Value::Number(self))
     }
 }
 
-impl<'a, G: Grammar> IntoEvalResult<'a, G> for () {
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+impl<G: Grammar> IntoEvalResult<G> for () {
+    fn into_eval_result<'a>(self) -> Result<Value<'a, G>, ErrorOutput> {
         Ok(Value::void())
     }
 }
 
-impl<'a, G: Grammar> IntoEvalResult<'a, G> for bool {
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+impl<G: Grammar> IntoEvalResult<G> for bool {
+    fn into_eval_result<'a>(self) -> Result<Value<'a, G>, ErrorOutput> {
         Ok(Value::Bool(self))
     }
 }
 
-impl<'a, G> IntoEvalResult<'a, G> for cmp::Ordering
+impl<G> IntoEvalResult<G> for cmp::Ordering
 where
     G: Grammar,
     G::Lit: Number,
 {
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+    fn into_eval_result<'a>(self) -> Result<Value<'a, G>, ErrorOutput> {
         Ok(Value::Number(match self {
             Self::Less => -<G::Lit as One>::one(),
             Self::Equal => <G::Lit as Zero>::zero(),
@@ -494,11 +458,11 @@ where
     }
 }
 
-impl<'a, U, G: Grammar> IntoEvalResult<'a, G> for Vec<U>
+impl<U, G: Grammar> IntoEvalResult<G> for Vec<U>
 where
-    U: IntoEvalResult<'a, G>,
+    U: IntoEvalResult<G>,
 {
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+    fn into_eval_result<'a>(self) -> Result<Value<'a, G>, ErrorOutput> {
         let values = self
             .into_iter()
             .map(U::into_eval_result)
@@ -509,11 +473,11 @@ where
 
 macro_rules! into_value_for_tuple {
     ($($i:tt : $ty:ident),+) => {
-        impl<'a, G: Grammar, $($ty,)+> IntoEvalResult<'a, G> for ($($ty,)+)
+        impl<G: Grammar, $($ty,)+> IntoEvalResult<G> for ($($ty,)+)
         where
-            $($ty: IntoEvalResult<'a, G>,)+
+            $($ty: IntoEvalResult<G>,)+
         {
-            fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+            fn into_eval_result<'a>(self) -> Result<Value<'a, G>, ErrorOutput> {
                 Ok(Value::Tuple(vec![$(self.$i.into_eval_result()?,)+]))
             }
         }
@@ -539,14 +503,14 @@ pub struct WithContext<T>(T);
 
 macro_rules! arity_fn {
     ($arity:tt => $($arg_name:ident : $t:ident),+) => {
-        impl<'a, G, F, Ret, $($t,)+> NativeFn<'a, G> for FnWrapper<(Ret, $($t,)+), F>
+        impl<G, F, Ret, $($t,)+> NativeFn<G> for FnWrapper<(Ret, $($t,)+), F>
         where
             G: Grammar,
             F: Fn($($t,)+) -> Ret,
-            $($t: TryFromValue<'a, G>,)+
-            Ret: IntoEvalResult<'a, G>,
+            $($t: TryFromValue<G>,)+
+            Ret: IntoEvalResult<G>,
         {
-            fn evaluate(
+            fn evaluate<'a>(
                 &self,
                 args: Vec<SpannedValue<'a, G>>,
                 context: &mut CallContext<'_, 'a>,
@@ -566,37 +530,6 @@ macro_rules! arity_fn {
                 )+
 
                 let output = (self.function)($($arg_name,)+);
-                output.into_eval_result().map_err(|err| err.into_spanned(context))
-            }
-        }
-
-        impl<'a, G, F, Ret, $($t,)+> NativeFn<'a, G> for FnWrapper<WithContext<(Ret, $($t,)+)>, F>
-        where
-            G: Grammar,
-            F: Fn(&mut CallContext<'_, 'a>, $($t,)+) -> Ret,
-            $($t: TryFromValue<'a, G>,)+
-            Ret: IntoEvalResult<'a, G>,
-        {
-            fn evaluate(
-                &self,
-                args: Vec<SpannedValue<'a, G>>,
-                context: &mut CallContext<'_, 'a>,
-            ) -> EvalResult<'a, G> {
-                context.check_args_count(&args, $arity)?;
-                let mut args_iter = args.into_iter().enumerate();
-
-                $(
-                    let (index, $arg_name) = args_iter.next().unwrap();
-                    let span = $arg_name.with_no_extra();
-                    let $arg_name = $t::try_from_value($arg_name.extra).map_err(|mut err| {
-                        err.set_arg_index(index);
-                        context
-                            .call_site_error(EvalError::Wrapper(err))
-                            .with_span(&span, AuxErrorInfo::InvalidArg)
-                    })?;
-                )+
-
-                let output = (self.function)(context, $($arg_name,)+);
                 output.into_eval_result().map_err(|err| err.into_spanned(context))
             }
         }

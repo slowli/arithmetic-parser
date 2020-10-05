@@ -184,7 +184,7 @@ where
     pub fn insert_native_fn(
         &mut self,
         name: &str,
-        native_fn: impl NativeFn<'a, T> + 'a,
+        native_fn: impl NativeFn<T> + 'static,
     ) -> &mut Self {
         self.insert_var(name, Value::native_fn(native_fn))
     }
@@ -199,9 +199,9 @@ where
     ///
     /// [wrapped function]: fns/struct.FnWrapper.html
     /// [`wrap`]: fns/fn.wrap.html
-    pub fn insert_wrapped_fn<Args: 'a, F: 'a>(&mut self, name: &str, fn_to_wrap: F) -> &mut Self
+    pub fn insert_wrapped_fn<Args, F>(&mut self, name: &str, fn_to_wrap: F) -> &mut Self
     where
-        fns::FnWrapper<Args, F>: NativeFn<'a, T>,
+        fns::FnWrapper<Args, F>: NativeFn<T> + 'static,
     {
         let wrapped = fns::wrap::<Args, _>(fn_to_wrap);
         self.insert_var(name, Value::native_fn(wrapped))

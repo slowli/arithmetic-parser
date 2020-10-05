@@ -3,21 +3,21 @@
 use arithmetic_eval::{
     fns, CallContext, EvalError, EvalResult, Function, Interpreter, NativeFn, Number, SpannedValue,
 };
-use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, InputSpan};
+use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, InputSpan, StripCode};
 
 /// Function that applies the `inner` function the specified amount of times to the result of
 /// the previous execution.
 #[derive(Debug, Clone)]
-struct Repeated<'a, G: Grammar> {
-    inner: Function<'a, G>,
+struct Repeated<G: Grammar> {
+    inner: Function<'static, G>,
     times: usize,
 }
 
-impl<'a, G: Grammar> NativeFn<'a, G> for Repeated<'a, G>
+impl<G: Grammar> NativeFn<G> for Repeated<G>
 where
     G::Lit: Number,
 {
-    fn evaluate(
+    fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, G>>,
         context: &mut CallContext<'_, 'a>,
@@ -43,7 +43,7 @@ fn repeat<G: Grammar<Lit = f32>>(
         Err("`times` should be positive".to_owned())
     } else {
         let function = Repeated {
-            inner: function,
+            inner: function.strip_code(),
             times: times as usize,
         };
         Ok(Function::native(function))

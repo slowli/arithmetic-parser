@@ -381,7 +381,7 @@ impl Compiler {
                     if self.scope_depth == 0 {
                         let command = Command::Annotate {
                             register: rhs_register,
-                            name: var_name,
+                            name: var_name.to_owned(),
                         };
                         executable.push_command(lhs.copy_with_extra(command));
                     }

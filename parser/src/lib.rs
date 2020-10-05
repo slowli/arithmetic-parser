@@ -113,7 +113,8 @@ impl<Span, T> LocatedSpan<Span, T> {
         &self.fragment
     }
 
-    pub(crate) fn map_extra<U>(self, map_fn: impl FnOnce(T) -> U) -> LocatedSpan<Span, U> {
+    /// FIXME
+    pub fn map_extra<U>(self, map_fn: impl FnOnce(T) -> U) -> LocatedSpan<Span, U> {
         LocatedSpan {
             offset: self.offset,
             line: self.line,

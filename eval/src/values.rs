@@ -12,7 +12,7 @@ use crate::{
     TupleLenMismatchContext,
 };
 use arithmetic_parser::{
-    BinaryOp, Grammar, InputSpan, LvalueLen, MaybeSpanned, Op, Spanned, UnaryOp,
+    BinaryOp, Grammar, InputSpan, LvalueLen, MaybeSpanned, Op, Spanned, StripCode, UnaryOp,
 };
 
 /// Opaque context for native calls.
@@ -262,10 +262,7 @@ impl fmt::Display for ValueType {
 
 /// Values produced by expressions during their interpretation.
 #[derive(Debug)]
-pub enum Value<'a, T>
-where
-    T: Grammar,
-{
+pub enum Value<'a, T: Grammar> {
     /// Primitive value: a single literal.
     Number(T::Lit),
     /// Boolean value.
@@ -330,6 +327,14 @@ impl<T: Grammar> Clone for Value<'_, T> {
             Self::Function(function) => Self::Function(function.clone()),
             Self::Tuple(tuple) => Self::Tuple(tuple.clone()),
         }
+    }
+}
+
+impl<T: Grammar> StripCode for Value<'_, T> {
+    type Stripped = Value<'static, T>;
+
+    fn strip_code(&self) -> Self::Stripped {
+        unimplemented!()
     }
 }
 

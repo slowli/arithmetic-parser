@@ -199,7 +199,7 @@ pub enum Command<'a, T: Grammar> {
     Copy { source: usize, destination: usize },
 
     /// Annotates a register as containing the specified variable.
-    Annotate { register: usize, name: &'a str },
+    Annotate { register: usize, name: String },
 
     /// Signals that the following commands are executed in the inner scope.
     StartInnerScope,
@@ -238,12 +238,53 @@ impl<T: Grammar> Clone for Command<'_, T> {
 
             Self::Annotate { register, name } => Self::Annotate {
                 register: *register,
-                name,
+                name: name.clone(),
             },
 
             Self::StartInnerScope => Self::StartInnerScope,
             Self::EndInnerScope => Self::EndInnerScope,
             Self::TruncateRegisters(size) => Self::TruncateRegisters(*size),
+        }
+    }
+}
+
+impl<T: Grammar> StripCode for Command<'_, T> {
+    type Stripped = Command<'static, T>;
+
+    fn strip_code(&self) -> Self::Stripped {
+        match self {
+            Self::Push(expr) => Command::Push(expr.strip_code()),
+
+            Self::Destructure {
+                source,
+                start_len,
+                end_len,
+                lvalue_len,
+                unchecked,
+            } => Command::Destructure {
+                source: *source,
+                start_len: *start_len,
+                end_len: *end_len,
+                lvalue_len: *lvalue_len,
+                unchecked: *unchecked,
+            },
+
+            Self::Copy {
+                source,
+                destination,
+            } => Command::Copy {
+                source: *source,
+                destination: *destination,
+            },
+
+            Self::Annotate { register, name } => Command::Annotate {
+                register: *register,
+                name: name.clone(),
+            },
+
+            Self::StartInnerScope => Command::StartInnerScope,
+            Self::EndInnerScope => Command::EndInnerScope,
+            Self::TruncateRegisters(size) => Command::TruncateRegisters(*size),
         }
     }
 }
@@ -255,6 +296,18 @@ pub(super) struct ExecutableFn<'a, T: Grammar> {
     pub inner: Executable<'a, T>,
     pub def_span: MaybeSpanned<'a>,
     pub arg_count: LvalueLen,
+}
+
+impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
+    type Stripped = ExecutableFn<'static, T>;
+
+    fn strip_code(&self) -> Self::Stripped {
+        ExecutableFn {
+            inner: self.inner.strip_code(),
+            def_span: self.def_span.strip_code(),
+            arg_count: self.arg_count,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -270,6 +323,30 @@ impl<'a, T: Grammar> Clone for Executable<'a, T> {
         Self {
             commands: self.commands.clone(),
             child_fns: self.child_fns.clone(),
+            register_capacity: self.register_capacity,
+        }
+    }
+}
+
+impl<T: Grammar> StripCode for Executable<'_, T> {
+    type Stripped = Executable<'static, T>;
+
+    fn strip_code(&self) -> Self::Stripped {
+        Executable {
+            commands: self
+                .commands
+                .iter()
+                .map(|command| {
+                    command
+                        .copy_with_extra(command.extra.strip_code())
+                        .strip_code()
+                })
+                .collect(),
+            child_fns: self
+                .child_fns
+                .iter()
+                .map(|function| Rc::new(function.strip_code()))
+                .collect(),
             register_capacity: self.register_capacity,
         }
     }
@@ -350,6 +427,18 @@ impl<T: Grammar> Clone for Env<'_, T> {
     fn clone(&self) -> Self {
         Self {
             registers: self.registers.clone(),
+            vars: self.vars.clone(),
+            inner_scope_start: self.inner_scope_start,
+        }
+    }
+}
+
+impl<T: Grammar> StripCode for Env<'_, T> {
+    type Stripped = Env<'static, T>;
+
+    fn strip_code(&self) -> Self::Stripped {
+        Env {
+            registers: self.registers.iter().map(StripCode::strip_code).collect(),
             vars: self.vars.clone(),
             inner_scope_start: self.inner_scope_start,
         }
@@ -700,6 +789,17 @@ impl<T: Grammar> Clone for ExecutableModule<'_, T> {
     }
 }
 
+impl<T: Grammar> StripCode for ExecutableModule<'_, T> {
+    type Stripped = ExecutableModule<'static, T>;
+
+    fn strip_code(&self) -> Self::Stripped {
+        ExecutableModule {
+            inner: self.inner.strip_code(),
+            imports: self.imports.strip_code(),
+        }
+    }
+}
+
 impl<'a, T: Grammar> ExecutableModule<'a, T> {
     pub(super) fn new(inner: Executable<'a, T>, imports: Env<'a, T>) -> Self {
         Self {
@@ -796,6 +896,16 @@ impl<T: Grammar> Clone for ModuleImports<'_, T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
+        }
+    }
+}
+
+impl<T: Grammar> StripCode for ModuleImports<'_, T> {
+    type Stripped = ModuleImports<'static, T>;
+
+    fn strip_code(&self) -> Self::Stripped {
+        ModuleImports {
+            inner: self.inner.strip_code(),
         }
     }
 }

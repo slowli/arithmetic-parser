@@ -296,11 +296,8 @@ impl<'a> SpannedEvalError<'a> {
         }
     }
 
-    pub(super) fn with_span<Span, T>(
-        mut self,
-        span: &LocatedSpan<Span, T>,
-        info: AuxErrorInfo,
-    ) -> Self
+    #[doc(hidden)] // used in `wrap_fn` macro
+    pub fn with_span<Span, T>(mut self, span: &LocatedSpan<Span, T>, info: AuxErrorInfo) -> Self
     where
         Span: Copy + Into<Code<'a>>,
     {

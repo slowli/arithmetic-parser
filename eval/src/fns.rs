@@ -1,8 +1,31 @@
 //! Standard functions for the interpreter, and the tools to define new native functions.
 //!
-//! See [`FnWrapper`] documentation for the details how to define native functions.
+//! # Defining native functions
+//!
+//! There are several ways to define new native functions:
+//!
+//! - Implement [`NativeFn`] manually. This is the most versatile approach, but it can be overly
+//!   verbose.
+//! - Use [`FnWrapper`] or the [`wrap`] function. This allows specifying arguments / output
+//!   with custom types (such as `bool` or a [`Number`]), but does not work for non-`'static`
+//!   types.
+//! - Use [`wrap_fn`] or [`wrap_fn_with_context`] macros. This supports the same eloquent interface
+//!   as `wrap`, and also does not have `'static` requirement for args. As a downside, debugging
+//!   compile-time errors when using macros can be rather painful.
+//!
+//! Why multiple ways to do the same thing? In the ideal world, `FnWrapper` would be used for
+//! all cases, since it does not involve macro magic. Unfortunately, stable Rust currently
+//! does not provide means to describe lifetime restrictions on args / return type
+//! of wrapped functions in the general case (this requires [generic associated types][GAT]).
+//! As such, the (implicit) `'static` requirement is a temporary measure, and macros fill the gaps
+//! in their usual clunky manner.
 //!
 //! [`FnWrapper`]: struct.FnWrapper.html
+//! [`wrap`]: fn.wrap.html
+//! [`Number`]: ../trait.Number.html
+//! [`wrap_fn`]: ../macro.wrap_fn.html
+//! [`wrap_fn_with_context`]: ../macro.wrap_fn_with_context.html
+//! [GAT]: https://github.com/rust-lang/rust/issues/44265
 
 use arithmetic_parser::Grammar;
 use num_traits::{One, Zero};
@@ -15,8 +38,8 @@ use crate::{
 
 mod wrapper;
 pub use self::wrapper::{
-    wrap, Binary, ErrorOutput, FnWrapper, FromValueError, FromValueErrorKind,
-    FromValueErrorLocation, IntoEvalResult, Quaternary, Ternary, TryFromValue, Unary, WithContext,
+    enforce_closure_type, wrap, Binary, ErrorOutput, FnWrapper, FromValueError, FromValueErrorKind,
+    FromValueErrorLocation, IntoEvalResult, Quaternary, Ternary, TryFromValue, Unary,
 };
 
 fn extract_number<'a, T: Grammar>(
@@ -73,7 +96,7 @@ fn extract_fn<'a, T: Grammar>(
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
+/// # use arithmetic_parser::{grammars::F32Grammar, Code, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns, EvalError, Interpreter};
 /// # use assert_matches::assert_matches;
 /// let program = r#"
@@ -85,7 +108,7 @@ fn extract_fn<'a, T: Grammar>(
 /// let mut interpreter = Interpreter::new();
 /// interpreter.insert_native_fn("assert", fns::Assert);
 /// let err = interpreter.evaluate(&block).unwrap_err();
-/// assert_eq!(*err.main_span().fragment(), "assert(3^2 == 10)");
+/// assert_eq!(*err.main_span().fragment(), Code::Str("assert(3^2 == 10)"));
 /// assert_matches!(
 ///     err.source(),
 ///     EvalError::NativeCall(ref msg) if msg == "Assertion failed"

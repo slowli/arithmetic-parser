@@ -76,11 +76,24 @@ impl<'r, 'a> CallContext<'r, 'a> {
 /// Function on zero or more `Value`s.
 pub trait NativeFn<T: Grammar> {
     /// Executes the function on the specified arguments.
-    fn evaluate<'val>(
+    fn evaluate<'a>(
         &self,
-        args: Vec<SpannedValue<'val, T>>,
-        context: &mut CallContext<'_, 'val>,
-    ) -> EvalResult<'val, T>;
+        args: Vec<SpannedValue<'a, T>>,
+        context: &mut CallContext<'_, 'a>,
+    ) -> EvalResult<'a, T>;
+}
+
+impl<T: Grammar, F: 'static> NativeFn<T> for F
+where
+    F: for<'a> Fn(Vec<SpannedValue<'a, T>>, &mut CallContext<'_, 'a>) -> EvalResult<'a, T>,
+{
+    fn evaluate<'a>(
+        &self,
+        args: Vec<SpannedValue<'a, T>>,
+        context: &mut CallContext<'_, 'a>,
+    ) -> EvalResult<'a, T> {
+        self(args, context)
+    }
 }
 
 impl<T: Grammar> fmt::Debug for dyn NativeFn<T> {

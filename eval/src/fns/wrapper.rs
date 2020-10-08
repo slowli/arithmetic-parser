@@ -3,7 +3,7 @@ use num_traits::{One, Zero};
 use core::{cmp, fmt, marker::PhantomData};
 
 use crate::{
-    AuxErrorInfo, CallContext, EvalError, EvalResult, NativeFn, Number, SpannedEvalError,
+    AuxErrorInfo, CallContext, EvalError, EvalResult, Function, NativeFn, Number, SpannedEvalError,
     SpannedValue, Value, ValueType,
 };
 use arithmetic_parser::Grammar;
@@ -21,17 +21,17 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// Using `FnWrapper` allows to define [native functions] with minimum boilerplate
 /// and with increased type safety.
 ///
-/// Arguments of a wrapped function should implement [`TryFromValue`] trait for the applicable
-/// grammar, and the output type should implement [`IntoEvalResult`]. If the [`CallContext`] is
-/// necessary for execution (for example, if one of args is a [`Function`], which is called
-/// during execution), then it can be specified as the first argument
-/// as shown [below](#usage-of-context).
+/// Arguments of a wrapped function must implement [`TryFromValue`] trait for the applicable
+/// grammar, and the output type must implement [`IntoEvalResult`]. If arguments and/or output
+/// have non-`'static` lifetime, use the [`wrap_fn`] macro. If you need [`CallContext`] (e.g.,
+/// to call functions provided as an argument), use the [`wrap_fn_with_context`] macro.
 ///
 /// [native functions]: ../trait.NativeFn.html
 /// [`TryFromValue`]: trait.TryFromValue.html
 /// [`IntoEvalResult`]: trait.IntoEvalResult.html
 /// [`CallContext`]: ../struct.CallContext.html
-/// [`Function`]: ../enum.Function.html
+/// [`wrap_fn`]: ../macro.wrap_fn.html
+/// [`wrap_fn_with_context`]: ../macro.wrap_fn_with_context.html
 ///
 /// # Examples
 ///
@@ -68,36 +68,6 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// interpreter.insert_native_fn("zip", FnWrapper::new(zip_arrays));
 ///
 /// let program = "(1, 2, 3).zip((4, 5, 6)) == ((1, 4), (2, 5), (3, 6))";
-/// let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
-/// let ret = interpreter.evaluate(&program).unwrap();
-/// assert_eq!(ret, Value::Bool(true));
-/// ```
-///
-/// ## Usage of context
-///
-/// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, InputSpan};
-/// # use arithmetic_eval::{
-/// #     fns::FnWrapper, CallContext, Function, Interpreter, Value, SpannedEvalError,
-/// # };
-/// fn map_array<'a, G: Grammar<Lit = f32>>(
-///     context: &mut CallContext<'_, 'a>,
-///     array: Vec<Value<'a, G>>,
-///     map_fn: Function<'a, G>,
-/// ) -> Result<Vec<Value<'a, G>>, SpannedEvalError<'a>> {
-///     array
-///         .into_iter()
-///         .map(|value| {
-///             let arg = context.apply_call_span(value);
-///             map_fn.evaluate(vec![arg], context)
-///         })
-///         .collect()
-/// }
-///
-/// let mut interpreter = Interpreter::new();
-/// interpreter.insert_native_fn("map", FnWrapper::new(map_array));
-///
-/// let program = "(1, 2, 3).map(|x| x + 3) == (4, 5, 6)";
 /// let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 /// let ret = interpreter.evaluate(&program).unwrap();
 /// assert_eq!(ret, Value::Bool(true));
@@ -180,7 +150,8 @@ impl FromValueError {
         self
     }
 
-    fn set_arg_index(&mut self, index: usize) {
+    #[doc(hidden)]
+    pub fn set_arg_index(&mut self, index: usize) {
         self.arg_index = index;
         self.location.reverse();
     }
@@ -282,13 +253,13 @@ pub enum FromValueErrorLocation {
 /// [`Number`]: ../trait.Number.html
 /// [`Function`]: ../enum.Function.html
 /// [`Value`]: ../enum.Value.html
-pub trait TryFromValue<G: Grammar>: Sized {
+pub trait TryFromValue<'a, G: Grammar>: Sized {
     /// Attempts to convert `value` to a type supported by the function.
-    fn try_from_value(value: Value<'_, G>) -> Result<Self, FromValueError>;
+    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError>;
 }
 
-impl<T: Number, G: Grammar<Lit = T>> TryFromValue<G> for T {
-    fn try_from_value(value: Value<'_, G>) -> Result<Self, FromValueError> {
+impl<'a, T: Number, G: Grammar<Lit = T>> TryFromValue<'a, G> for T {
+    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
         match value {
             Value::Number(number) => Ok(number),
             _ => Err(FromValueError::invalid_type(ValueType::Number, &value)),
@@ -296,8 +267,8 @@ impl<T: Number, G: Grammar<Lit = T>> TryFromValue<G> for T {
     }
 }
 
-impl<G: Grammar> TryFromValue<G> for bool {
-    fn try_from_value(value: Value<'_, G>) -> Result<Self, FromValueError> {
+impl<'a, G: Grammar> TryFromValue<'a, G> for bool {
+    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
         match value {
             Value::Bool(flag) => Ok(flag),
             _ => Err(FromValueError::invalid_type(ValueType::Bool, &value)),
@@ -305,11 +276,26 @@ impl<G: Grammar> TryFromValue<G> for bool {
     }
 }
 
-impl<U, G: Grammar> TryFromValue<G> for Vec<U>
+impl<'a, G: Grammar> TryFromValue<'a, G> for Value<'a, G> {
+    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
+        Ok(value)
+    }
+}
+
+impl<'a, G: Grammar> TryFromValue<'a, G> for Function<'a, G> {
+    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
+        match value {
+            Value::Function(function) => Ok(function),
+            _ => Err(FromValueError::invalid_type(ValueType::Function, &value)),
+        }
+    }
+}
+
+impl<'a, U, G: Grammar> TryFromValue<'a, G> for Vec<U>
 where
-    U: TryFromValue<G>,
+    U: TryFromValue<'a, G>,
 {
-    fn try_from_value(value: Value<'_, G>) -> Result<Self, FromValueError> {
+    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
         match value {
             Value::Tuple(values) => {
                 let tuple_len = values.len();
@@ -333,11 +319,11 @@ where
 
 macro_rules! try_from_value_for_tuple {
     ($size:expr => $($var:ident : $ty:ident),+) => {
-        impl<G: Grammar, $($ty,)+> TryFromValue<G> for ($($ty,)+)
+        impl<'a, G: Grammar, $($ty,)+> TryFromValue<'a, G> for ($($ty,)+)
         where
-            $($ty: TryFromValue<G>,)+
+            $($ty: TryFromValue<'a, G>,)+
         {
-            fn try_from_value(value: Value<'_, G>) -> Result<Self, FromValueError> {
+            fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
                 const EXPECTED_TYPE: ValueType = ValueType::Tuple($size);
 
                 match value {
@@ -376,21 +362,20 @@ try_from_value_for_tuple!(10 => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z,
 ///
 /// [wrapped functions]: struct.FnWrapper.html
 #[derive(Debug)]
-pub struct ErrorOutput {
-    message: String,
+pub enum ErrorOutput<'a> {
+    /// FIXME
+    Spanned(SpannedEvalError<'a>),
+    /// FIXME
+    Message(String),
 }
 
-impl ErrorOutput {
-    fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
+impl<'a> ErrorOutput<'a> {
+    #[doc(hidden)]
+    pub fn into_spanned(self, context: &CallContext<'_, 'a>) -> SpannedEvalError<'a> {
+        match self {
+            Self::Spanned(err) => err,
+            Self::Message(message) => context.call_site_error(EvalError::native(message)),
         }
-    }
-}
-
-impl ErrorOutput {
-    fn into_spanned<'a>(self, context: &CallContext<'_, 'a>) -> SpannedEvalError<'a> {
-        context.call_site_error(EvalError::NativeCall(self.message))
     }
 }
 
@@ -412,44 +397,55 @@ impl ErrorOutput {
 /// [wrapped functions]: struct.FnWrapper.html
 /// [`NativeFn`]: ../trait.NativeFn.html
 /// [`ErrorOutput`]: enum.ErrorOutput.html
-pub trait IntoEvalResult<G: Grammar> {
+pub trait IntoEvalResult<'a, G: Grammar> {
     /// Performs the conversion.
-    fn into_eval_result<'a>(self) -> Result<Value<'a, G>, ErrorOutput>;
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>>;
 }
 
-impl<G: Grammar, U> IntoEvalResult<G> for Result<U, String>
+impl<'a, G: Grammar, U> IntoEvalResult<'a, G> for Result<U, String>
 where
-    U: IntoEvalResult<G>,
+    U: IntoEvalResult<'a, G>,
 {
-    fn into_eval_result<'a>(self) -> Result<Value<'a, G>, ErrorOutput> {
-        self.map_err(ErrorOutput::new).and_then(U::into_eval_result)
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+        self.map_err(ErrorOutput::Message)
+            .and_then(U::into_eval_result)
     }
 }
 
-impl<T: Number, G: Grammar<Lit = T>> IntoEvalResult<G> for T {
-    fn into_eval_result<'a>(self) -> Result<Value<'a, G>, ErrorOutput> {
+impl<'a, G: Grammar, U> IntoEvalResult<'a, G> for Result<U, SpannedEvalError<'a>>
+where
+    U: IntoEvalResult<'a, G>,
+{
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+        self.map_err(ErrorOutput::Spanned)
+            .and_then(U::into_eval_result)
+    }
+}
+
+impl<'a, T: Number, G: Grammar<Lit = T>> IntoEvalResult<'a, G> for T {
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
         Ok(Value::Number(self))
     }
 }
 
-impl<G: Grammar> IntoEvalResult<G> for () {
-    fn into_eval_result<'a>(self) -> Result<Value<'a, G>, ErrorOutput> {
+impl<'a, G: Grammar> IntoEvalResult<'a, G> for () {
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
         Ok(Value::void())
     }
 }
 
-impl<G: Grammar> IntoEvalResult<G> for bool {
-    fn into_eval_result<'a>(self) -> Result<Value<'a, G>, ErrorOutput> {
+impl<'a, G: Grammar> IntoEvalResult<'a, G> for bool {
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
         Ok(Value::Bool(self))
     }
 }
 
-impl<G> IntoEvalResult<G> for cmp::Ordering
+impl<'a, G> IntoEvalResult<'a, G> for cmp::Ordering
 where
     G: Grammar,
     G::Lit: Number,
 {
-    fn into_eval_result<'a>(self) -> Result<Value<'a, G>, ErrorOutput> {
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
         Ok(Value::Number(match self {
             Self::Less => -<G::Lit as One>::one(),
             Self::Equal => <G::Lit as Zero>::zero(),
@@ -458,11 +454,23 @@ where
     }
 }
 
-impl<U, G: Grammar> IntoEvalResult<G> for Vec<U>
+impl<'a, G: Grammar> IntoEvalResult<'a, G> for Value<'a, G> {
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+        Ok(self)
+    }
+}
+
+impl<'a, G: Grammar> IntoEvalResult<'a, G> for Function<'a, G> {
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+        Ok(Value::Function(self))
+    }
+}
+
+impl<'a, U, G: Grammar> IntoEvalResult<'a, G> for Vec<U>
 where
-    U: IntoEvalResult<G>,
+    U: IntoEvalResult<'a, G>,
 {
-    fn into_eval_result<'a>(self) -> Result<Value<'a, G>, ErrorOutput> {
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
         let values = self
             .into_iter()
             .map(U::into_eval_result)
@@ -473,11 +481,11 @@ where
 
 macro_rules! into_value_for_tuple {
     ($($i:tt : $ty:ident),+) => {
-        impl<G: Grammar, $($ty,)+> IntoEvalResult<G> for ($($ty,)+)
+        impl<'a, G: Grammar, $($ty,)+> IntoEvalResult<'a, G> for ($($ty,)+)
         where
-            $($ty: IntoEvalResult<G>,)+
+            $($ty: IntoEvalResult<'a, G>,)+
         {
-            fn into_eval_result<'a>(self) -> Result<Value<'a, G>, ErrorOutput> {
+            fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
                 Ok(Value::Tuple(vec![$(self.$i.into_eval_result()?,)+]))
             }
         }
@@ -495,20 +503,14 @@ into_value_for_tuple!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A);
 into_value_for_tuple!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A, 8: B);
 into_value_for_tuple!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A, 8: B, 9: C);
 
-/// Marker for use with [wrapper functions] accepting context as the first argument.
-///
-/// [wrapper functions]: struct.FnWrapper.html
-#[derive(Debug)]
-pub struct WithContext<T>(T);
-
 macro_rules! arity_fn {
     ($arity:tt => $($arg_name:ident : $t:ident),+) => {
         impl<G, F, Ret, $($t,)+> NativeFn<G> for FnWrapper<(Ret, $($t,)+), F>
         where
             G: Grammar,
             F: Fn($($t,)+) -> Ret,
-            $($t: TryFromValue<G>,)+
-            Ret: IntoEvalResult<G>,
+            $($t: for<'val> TryFromValue<'val, G>,)+
+            Ret: for<'val> IntoEvalResult<'val, G>,
         {
             fn evaluate<'a>(
                 &self,
@@ -558,6 +560,185 @@ pub type Ternary<T> = FnWrapper<(T, T, T, T), fn(T, T, T) -> T>;
 
 /// Quaternary function wrapper.
 pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
+
+/// An alternative for [`wrap`] function which works for arguments / return results with
+/// non-`'static` lifetime.
+///
+/// The macro must be called with 2 arguments (in this order):
+///
+/// - Function arity (from 0 to 10 inclusive)
+/// - Function or closure with the specified number of arguments. Using a function is recommended;
+///   using a closure may lead to hard-to-debug type inference errors.
+///
+/// As with `wrap`, all function arguments must implement [`TryFromValue`] and the return result
+/// must implement [`IntoEvalResult`]. Unlike `wrap`, the arguments / return result do not
+/// need to have a `'static` lifetime; examples include [`Value`]s, [`Function`]s
+/// and [`EvalResult`]s. Lifetimes of all arguments and the return result must match.
+///
+/// [`wrap`]: fns/fn.wrap.html
+/// [`TryFromValue`]: fns/trait.TryFromValue.html
+/// [`IntoEvalResult`]: fns/trait.IntoEvalResult.html
+/// [`Value`]: enum.Value.html
+/// [`Function`]: enum.Function.html
+/// [`EvalResult`]: type.EvalResult.html
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, InputSpan};
+/// # use arithmetic_eval::{
+/// #     wrap_fn, fns::FnWrapper, CallContext, Function, Interpreter, Value,
+/// # };
+/// fn is_function<G: Grammar>(value: Value<'_, G>) -> bool {
+///     value.is_function()
+/// }
+///
+/// let mut interpreter = Interpreter::new();
+/// interpreter.insert_native_fn("is_function", wrap_fn!(1, is_function));
+///
+/// let program = "is_function(is_function) && !is_function(1)";
+/// let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
+/// let ret = interpreter.evaluate(&program).unwrap();
+/// assert_eq!(ret, Value::Bool(true));
+/// ```
+///
+/// Usage of lifetimes:
+///
+/// ```
+/// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, InputSpan};
+/// # use arithmetic_eval::{
+/// #     wrap_fn, fns::FnWrapper, CallContext, Function, Interpreter, Value,
+/// # };
+/// // Note that both `Value`s have the same lifetime due to elision.
+/// fn take_if<G: Grammar>(value: Value<'_, G>, condition: bool) -> Value<'_, G> {
+///     if condition { value } else { Value::void() }
+/// }
+///
+/// let mut interpreter = Interpreter::with_prelude();
+/// interpreter.insert_native_fn("take_if", wrap_fn!(2, take_if));
+///
+/// let program = "(1, 2).take_if(true) == (1, 2) && (3, 4).take_if(false) != (3, 4)";
+/// let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
+/// let ret = interpreter.evaluate(&program).unwrap();
+/// assert_eq!(ret, Value::Bool(true));
+/// ```
+#[macro_export]
+macro_rules! wrap_fn {
+    (0, $function:expr) => { $crate::wrap_fn!(@arg 0 =>; $function) };
+    (1, $function:expr) => { $crate::wrap_fn!(@arg 1 => x0; $function) };
+    (2, $function:expr) => { $crate::wrap_fn!(@arg 2 => x0, x1; $function) };
+    (3, $function:expr) => { $crate::wrap_fn!(@arg 3 => x0, x1, x2; $function) };
+    (4, $function:expr) => { $crate::wrap_fn!(@arg 4 => x0, x1, x2, x3; $function) };
+    (5, $function:expr) => { $crate::wrap_fn!(@arg 5 => x0, x1, x2, x3, x4; $function) };
+    (6, $function:expr) => { $crate::wrap_fn!(@arg 6 => x0, x1, x2, x3, x4, x5; $function) };
+    (7, $function:expr) => { $crate::wrap_fn!(@arg 7 => x0, x1, x2, x3, x4, x5, x6; $function) };
+    (8, $function:expr) => {
+        $crate::wrap_fn!(@arg 8 => x0, x1, x2, x3, x4, x5, x6, x7; $function)
+    };
+    (9, $function:expr) => {
+        $crate::wrap_fn!(@arg 9 => x0, x1, x2, x3, x4, x5, x6, x7, x8; $function)
+    };
+    (10, $function:expr) => {
+        $crate::wrap_fn!(@arg 10 => x0, x1, x2, x3, x4, x5, x6, x7, x8, x9; $function)
+    };
+
+    ($($ctx:ident,)? @arg $arity:expr => $($arg_name:ident),*; $function:expr) => {{
+        let function = $function;
+        $crate::fns::enforce_closure_type(move |args, context| {
+            context.check_args_count(&args, $arity)?;
+            let mut args_iter = args.into_iter().enumerate();
+
+            $(
+                let (index, $arg_name) = args_iter.next().unwrap();
+                let span = $arg_name.with_no_extra();
+                let $arg_name = $crate::fns::TryFromValue::try_from_value($arg_name.extra)
+                    .map_err(|mut err| {
+                        err.set_arg_index(index);
+                        context
+                            .call_site_error($crate::EvalError::Wrapper(err))
+                            .with_span(&span, $crate::AuxErrorInfo::InvalidArg)
+                    })?;
+            )+
+
+            // We need `$ctx` just as a marker that the function receives a context.
+            let output = function($({ let $ctx = (); context },)? $($arg_name,)+);
+            $crate::fns::IntoEvalResult::into_eval_result(output)
+                .map_err(|err| err.into_spanned(context))
+        })
+    }}
+}
+
+/// Analogue of [`wrap_fn`] macro that injects the [`CallContext`] as the first argument.
+/// This can be used to call functions within the implementation.
+///
+/// As with `wrap_fn`, this macro must be called with 2 args: the arity of the function
+/// (**excluding** `CallContext`), and then the function / closure itself.
+///
+/// [`wrap_fn`]: macro.wrap_fn.html
+/// [`CallContext`]: struct.CallContext.html
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, InputSpan};
+/// # use arithmetic_eval::{
+/// #     wrap_fn_with_context, fns::FnWrapper, CallContext, Function, Interpreter, Value,
+/// #     SpannedEvalError,
+/// # };
+/// fn map_array<'a, G: Grammar<Lit = f32>>(
+///     context: &mut CallContext<'_, 'a>,
+///     array: Vec<Value<'a, G>>,
+///     map_fn: Function<'a, G>,
+/// ) -> Result<Vec<Value<'a, G>>, SpannedEvalError<'a>> {
+///     array
+///         .into_iter()
+///         .map(|value| {
+///             let arg = context.apply_call_span(value);
+///             map_fn.evaluate(vec![arg], context)
+///         })
+///         .collect()
+/// }
+///
+/// let mut interpreter = Interpreter::new();
+/// interpreter.insert_native_fn("map", wrap_fn_with_context!(2, map_array));
+///
+/// let program = "(1, 2, 3).map(|x| x + 3) == (4, 5, 6)";
+/// let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
+/// let ret = interpreter.evaluate(&program).unwrap();
+/// assert_eq!(ret, Value::Bool(true));
+/// ```
+#[macro_export]
+macro_rules! wrap_fn_with_context {
+    (0, $function:expr) => { $crate::wrap_fn!(_ctx, @arg 0 =>; $function) };
+    (1, $function:expr) => { $crate::wrap_fn!(_ctx, @arg 1 => x0; $function) };
+    (2, $function:expr) => { $crate::wrap_fn!(_ctx, @arg 2 => x0, x1; $function) };
+    (3, $function:expr) => { $crate::wrap_fn!(_ctx, @arg 3 => x0, x1, x2; $function) };
+    (4, $function:expr) => { $crate::wrap_fn!(_ctx, @arg 4 => x0, x1, x2, x3; $function) };
+    (5, $function:expr) => { $crate::wrap_fn!(_ctx, @arg 5 => x0, x1, x2, x3, x4; $function) };
+    (6, $function:expr) => {
+        $crate::wrap_fn!(_ctx, @arg 6 => x0, x1, x2, x3, x4, x5; $function)
+    };
+    (7, $function:expr) => {
+        $crate::wrap_fn!(_ctx, @arg 7 => x0, x1, x2, x3, x4, x5, x6; $function)
+    };
+    (8, $function:expr) => {
+        $crate::wrap_fn!(_ctx, @arg 8 => x0, x1, x2, x3, x4, x5, x6, x7; $function)
+    };
+    (9, $function:expr) => {
+        $crate::wrap_fn!(_ctx, @arg 9 => x0, x1, x2, x3, x4, x5, x6, x7, x8; $function)
+    };
+    (10, $function:expr) => {
+        $crate::wrap_fn!(_ctx, @arg 10 => x0, x1, x2, x3, x4, x5, x6, x7, x8, x9; $function)
+    };
+}
+
+#[doc(hidden)]
+pub fn enforce_closure_type<G: Grammar, F>(function: F) -> F
+where
+    F: for<'a> Fn(Vec<SpannedValue<'a, G>>, &mut CallContext<'_, 'a>) -> EvalResult<'a, G>,
+{
+    function
+}
 
 #[cfg(test)]
 mod tests {

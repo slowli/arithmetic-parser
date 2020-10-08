@@ -1,7 +1,8 @@
 //! Demonstrates how to define high-order native functions.
 
 use arithmetic_eval::{
-    fns, CallContext, EvalError, EvalResult, Function, Interpreter, NativeFn, Number, SpannedValue,
+    fns, wrap_fn, wrap_fn_with_context, CallContext, EvalError, EvalResult, Function, Interpreter,
+    NativeFn, Number, SpannedValue, Value,
 };
 use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, InputSpan, StripCode};
 
@@ -50,11 +51,27 @@ fn repeat<G: Grammar<Lit = f32>>(
     }
 }
 
+fn eager_repeat<'a, G: Grammar<Lit = f32>>(
+    context: &mut CallContext<'_, 'a>,
+    function: Function<'a, G>,
+    times: f32,
+    mut arg: Value<'a, G>,
+) -> EvalResult<'a, G> {
+    if times <= 0.0 {
+        Err(context.call_site_error(EvalError::native("`times` should be positive")))
+    } else {
+        for _ in 0..times as usize {
+            arg = function.evaluate(vec![context.apply_call_span(arg)], context)?;
+        }
+        Ok(arg)
+    }
+}
+
 #[test]
 fn repeated_function() {
     let mut interpreter = Interpreter::new();
     interpreter
-        .insert_native_fn("repeat", fns::wrap(repeat))
+        .insert_native_fn("repeat", wrap_fn!(2, repeat))
         .insert_native_fn("assert", fns::Assert);
 
     let program = r#"
@@ -64,6 +81,24 @@ fn repeated_function() {
         assert(repeated(1) == 15);
         # -1 is the immovable point of the transform
         assert(repeated(-1) == -1);
+    "#;
+    let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
+    interpreter.evaluate(&program).unwrap();
+}
+
+#[test]
+fn eager_repeated_function() {
+    let mut interpreter = Interpreter::new();
+    interpreter
+        .insert_native_fn("repeat", wrap_fn_with_context!(3, eager_repeat))
+        .insert_native_fn("assert", fns::Assert);
+
+    let program = r#"
+        fn = |x| 2 * x + 1;
+        # 2 * 1 + 1 = 3 -> 2 * 3 + 1 = 7 -> 2 * 7 + 1 = 15
+        assert(fn.repeat(3, 1) == 15);
+        # -1 is the immovable point of the transform
+        assert(fn.repeat(3, -1) == -1);
     "#;
     let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
     interpreter.evaluate(&program).unwrap();

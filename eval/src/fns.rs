@@ -9,16 +9,17 @@
 //! - Use [`FnWrapper`] or the [`wrap`] function. This allows specifying arguments / output
 //!   with custom types (such as `bool` or a [`Number`]), but does not work for non-`'static`
 //!   types.
-//! - Use [`wrap_fn`] or [`wrap_fn_with_context`] macros. This supports the same eloquent interface
-//!   as `wrap`, and also does not have `'static` requirement for args. As a downside, debugging
-//!   compile-time errors when using macros can be rather painful.
+//! - Use [`wrap_fn`] or [`wrap_fn_with_context`] macros. These macros support
+//!   the same eloquent interface as `wrap`, and also do not have `'static` requirement for args.
+//!   As a downside, debugging compile-time errors when using macros can be rather painful.
 //!
-//! Why multiple ways to do the same thing? In the ideal world, `FnWrapper` would be used for
-//! all cases, since it does not involve macro magic. Unfortunately, stable Rust currently
-//! does not provide means to describe lifetime restrictions on args / return type
-//! of wrapped functions in the general case (this requires [generic associated types][GAT]).
-//! As such, the (implicit) `'static` requirement is a temporary measure, and macros fill the gaps
-//! in their usual clunky manner.
+//! ## Why multiple ways to do the same thing?
+//!
+//! In the ideal world, `FnWrapper` would be used for all cases, since it does not involve
+//! macro magic. Unfortunately, stable Rust currently does not provide means to describe
+//! lifetime restrictions on args / return type of wrapped functions in the general case
+//! (this requires [generic associated types][GAT]). As such, the (implicit) `'static` requirement
+//! is a temporary measure, and macros fill the gaps in their usual clunky manner.
 //!
 //! [`FnWrapper`]: struct.FnWrapper.html
 //! [`wrap`]: fn.wrap.html

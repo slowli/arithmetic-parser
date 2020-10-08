@@ -11,7 +11,10 @@ use arithmetic_parser::Grammar;
 /// Wraps a function enriching it with the information about its arguments.
 /// This is a slightly shorter way to create wrappers compared to calling [`FnWrapper::new()`].
 ///
+/// See [`FnWrapper`] for more details on function requirements.
+///
 /// [`FnWrapper::new()`]: struct.FnWrapper.html#method.new
+/// [`FnWrapper`]: struct.FnWrapper.html
 pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
     FnWrapper::new(function)
 }

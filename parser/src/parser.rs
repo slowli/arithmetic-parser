@@ -75,6 +75,7 @@ impl BinaryOp {
     }
 }
 
+// TODO: implement `Error`.
 /// Parsing error.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -203,6 +204,7 @@ impl<'a> Error<'a> {
 }
 
 /// Parsing error with the associated code span.
+// TODO: implement `Error` and return instead of `Spanned<Error>`.
 #[derive(Debug)]
 pub struct SpannedError<'a>(Spanned<'a, Error<'a>>);
 

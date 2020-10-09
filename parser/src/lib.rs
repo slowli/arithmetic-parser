@@ -60,6 +60,7 @@ pub use crate::{
 
 use alloc::{borrow::ToOwned, boxed::Box, format, string::String, vec, vec::Vec};
 use core::fmt;
+use nom::Slice;
 
 pub mod grammars;
 mod helpers;
@@ -73,6 +74,7 @@ pub type Spanned<'a, T = ()> = LocatedSpan<&'a str, T>;
 /// Parsing outcome generalized by the type returned on success.
 pub type NomResult<'a, T> = nom::IResult<InputSpan<'a>, T, SpannedError<'a>>;
 
+// FIXME: move to sep. module
 /// FIXME
 #[derive(Debug, Clone, Copy)]
 pub struct LocatedSpan<Span, T = ()> {
@@ -136,7 +138,7 @@ impl<Span, T> LocatedSpan<Span, T> {
     }
 }
 
-impl<'a, T> LocatedSpan<&'a str, T> {
+impl<'a, T> Spanned<'a, T> {
     pub(crate) fn new(span: InputSpan<'a>, extra: T) -> Self {
         Self {
             offset: span.location_offset(),
@@ -145,6 +147,27 @@ impl<'a, T> LocatedSpan<&'a str, T> {
             fragment: *span.fragment(),
             extra,
         }
+    }
+}
+
+impl<'a> Spanned<'a> {
+    /// FIXME
+    pub fn from_str<R>(code: &'a str, range: R) -> Self
+    where
+        InputSpan<'a>: Slice<R>,
+    {
+        let input = InputSpan::new(code);
+        Self::new(input.slice(range), ())
+    }
+}
+
+impl<'a> MaybeSpanned<'a> {
+    /// FIXME
+    pub fn from_str<R>(code: &'a str, range: R) -> Self
+    where
+        InputSpan<'a>: Slice<R>,
+    {
+        Spanned::from_str(code, range).into()
     }
 }
 

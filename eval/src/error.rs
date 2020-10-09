@@ -9,7 +9,9 @@ use crate::{
     fns::FromValueError,
     Value,
 };
-use arithmetic_parser::{BinaryOp, Code, LocatedSpan, LvalueLen, MaybeSpanned, Op, UnaryOp};
+use arithmetic_parser::{
+    BinaryOp, Code, LocatedSpan, LvalueLen, MaybeSpanned, Op, StripCode, UnaryOp,
+};
 
 /// Context for [`EvalError::TupleLenMismatch`].
 ///
@@ -52,7 +54,7 @@ impl fmt::Display for RepeatedAssignmentContext {
 }
 
 /// Errors that can occur during interpreting expressions and statements.
-#[derive(Debug, Display)]
+#[derive(Debug, Clone, Display)]
 #[non_exhaustive]
 pub enum EvalError {
     /// Mismatch between length of tuples in a binary operation or assignment.
@@ -239,7 +241,7 @@ impl std::error::Error for EvalError {
 }
 
 /// Auxiliary information about error.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AuxErrorInfo {
     /// Function arguments declaration for [`ArgsLenMismatch`].
     ///
@@ -328,6 +330,18 @@ impl fmt::Display for SpannedEvalError<'_> {
 impl std::error::Error for SpannedEvalError<'_> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(&self.error)
+    }
+}
+
+impl StripCode for SpannedEvalError<'_> {
+    type Stripped = SpannedEvalError<'static>;
+
+    fn strip_code(&self) -> Self::Stripped {
+        SpannedEvalError {
+            error: self.error.clone(),
+            main_span: self.main_span.strip_code(),
+            aux_spans: self.aux_spans.iter().map(StripCode::strip_code).collect(),
+        }
     }
 }
 
@@ -421,7 +435,22 @@ impl<'a> ErrorWithBacktrace<'a> {
 
 impl fmt::Display for ErrorWithBacktrace<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.inner, formatter)
+        fmt::Display::fmt(&self.inner, formatter)?;
+
+        if formatter.alternate() && !self.backtrace.calls.is_empty() {
+            writeln!(formatter, "\nBacktrace (most recent call last):")?;
+            for (index, call) in self.backtrace.calls.iter().enumerate() {
+                writeln!(
+                    formatter,
+                    "{:>4}: {} called at {}:{}",
+                    index + 1,
+                    call.fn_name,
+                    call.call_span.location_line(),
+                    call.call_span.get_column()
+                )?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -438,7 +467,7 @@ mod tests {
     use crate::alloc::ToString;
 
     #[test]
-    fn display_for_error() {
+    fn display_for_eval_error() {
         let err = EvalError::Undefined("test".to_owned());
         assert_eq!(err.to_string(), "Variable `test` is not defined");
 
@@ -449,5 +478,33 @@ mod tests {
         assert!(err
             .to_string()
             .ends_with("definition requires at least 2 arg(s), call has 1"));
+    }
+
+    #[test]
+    fn display_for_spanned_eval_error() {
+        let input = "(_, test) = (1, 2);";
+        let main_span = MaybeSpanned::from_str(input, 4..8);
+        let err = SpannedEvalError::new(&main_span, EvalError::Undefined("test".to_owned()));
+        let err_string = err.to_string();
+        assert_eq!(err_string, "1:5: Variable `test` is not defined");
+    }
+
+    #[test]
+    fn display_for_error_with_backtrace() {
+        let input = "(_, test) = (1, 2);";
+        let main_span = MaybeSpanned::from_str(input, 4..8).into();
+        let err = SpannedEvalError::new(&main_span, EvalError::Undefined("test".to_owned()));
+
+        let mut err = ErrorWithBacktrace::with_empty_trace(err);
+        err.backtrace
+            .push_call("test_fn", None, MaybeSpanned::from_str(input, ..));
+
+        let err_string = err.to_string();
+        assert_eq!(err_string, "1:5: Variable `test` is not defined");
+
+        let expanded_err_string = format!("{:#}", err);
+        assert!(expanded_err_string.starts_with("1:5: Variable `test` is not defined"));
+        assert!(expanded_err_string.contains("\nBacktrace"));
+        assert!(expanded_err_string.contains("\n   1: test_fn called at 1:1"));
     }
 }

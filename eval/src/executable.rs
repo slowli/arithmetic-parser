@@ -655,6 +655,7 @@ where
 
             CompiledExpr::Function { name, args } => {
                 if let Value::Function(function) = self.resolve_atom(&name.extra) {
+                    // FIXME: store original fn name.
                     let fn_name = match name.fragment() {
                         Code::Str(code) => *code,
                         Code::Stripped(_) => "(stripped function)",

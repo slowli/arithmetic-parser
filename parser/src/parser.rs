@@ -273,6 +273,18 @@ fn var_name(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
     )(input)
 }
 
+/// Checks if the provided string is a valid variable name.
+pub fn is_valid_variable_name(name: &str) -> bool {
+    if name.is_empty() || !name.is_ascii() {
+        return false;
+    }
+
+    match var_name(InputSpan::new(name)) {
+        Ok((rest, _)) => rest.fragment().is_empty(),
+        Err(_) => false,
+    }
+}
+
 /// Function arguments in the call position; e.g., `(a, B + 1)`.
 ///
 /// # Return value

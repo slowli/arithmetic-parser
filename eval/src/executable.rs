@@ -9,9 +9,7 @@ use crate::{
     Backtrace, CallContext, ErrorWithBacktrace, EvalError, EvalResult, Function, InterpretedFn,
     Number, SpannedEvalError, SpannedValue, TupleLenMismatchContext, Value,
 };
-use arithmetic_parser::{
-    BinaryOp, CodeFragment, Grammar, LvalueLen, MaybeSpanned, StripCode, UnaryOp,
-};
+use arithmetic_parser::{BinaryOp, Grammar, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
 use num_traits::{One, Zero};
 
 /// Pointer to a register or constant.
@@ -54,6 +52,8 @@ pub enum CompiledExpr<'a, T: Grammar> {
     },
     Function {
         name: SpannedAtom<'a, T>,
+        // Original function name if it is a proper variable name.
+        original_name: Option<String>,
         args: Vec<SpannedAtom<'a, T>>,
     },
     DefineFunction {
@@ -84,8 +84,13 @@ impl<T: Grammar> Clone for CompiledExpr<'_, T> {
                 op: *op,
             },
 
-            Self::Function { name, args } => Self::Function {
+            Self::Function {
+                name,
+                original_name,
+                args,
+            } => Self::Function {
                 name: name.clone(),
+                original_name: original_name.clone(),
                 args: args.clone(),
             },
 
@@ -121,8 +126,13 @@ impl<T: Grammar> StripCode for CompiledExpr<'_, T> {
                 op: *op,
             },
 
-            Self::Function { name, args } => CompiledExpr::Function {
+            Self::Function {
+                name,
+                original_name,
+                args,
+            } => CompiledExpr::Function {
                 name: name.strip_code(),
+                original_name: original_name.clone(),
                 args: args.iter().map(StripCode::strip_code).collect(),
             },
 
@@ -655,13 +665,13 @@ where
                     .ok_or_else(|| SpannedEvalError::new(&span, EvalError::InvalidCmpResult))
             }
 
-            CompiledExpr::Function { name, args } => {
+            CompiledExpr::Function {
+                name,
+                original_name,
+                args,
+            } => {
                 if let Value::Function(function) = self.resolve_atom(&name.extra) {
-                    // FIXME: store original fn name.
-                    let fn_name = match name.fragment() {
-                        CodeFragment::Str(code) => *code,
-                        CodeFragment::Stripped(_) => "(stripped function)",
-                    };
+                    let fn_name = original_name.as_deref().unwrap_or("(anonymous function)");
                     let arg_values = args
                         .iter()
                         .map(|arg| arg.copy_with_extra(self.resolve_atom(&arg.extra)))

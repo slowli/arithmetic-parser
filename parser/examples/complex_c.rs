@@ -211,7 +211,6 @@ impl<'a> Context<'a> {
     fn eval_function(fn_def: &FnDefinition<ComplexGrammar>, name: &str) -> String {
         let mut context = Self::new();
         let mut evaluated = format!("float2 {}(", name);
-        // FIXME: use checked access.
         let args = &fn_def.args.extra.start;
 
         for (i, arg) in args.iter().enumerate() {

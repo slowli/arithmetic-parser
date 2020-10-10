@@ -197,6 +197,34 @@ fn args<'a>(
 }
 
 #[test]
+fn is_valid_variable_name_works() {
+    for &valid_name in &[
+        "a",
+        "abc",
+        "abc_",
+        "camelCase",
+        "_dash_",
+        "_",
+        "a12",
+        "e1e3t_hax0r",
+    ] {
+        assert!(
+            is_valid_variable_name(valid_name),
+            "failed at valid name: {}",
+            valid_name
+        );
+    }
+
+    for &invalid_name in &["", "1abc", "нет", "xy+", "a-b"] {
+        assert!(
+            !is_valid_variable_name(invalid_name),
+            "failed at invalid name: {}",
+            invalid_name
+        );
+    }
+}
+
+#[test]
 fn whitespace_can_include_comments() {
     let input = InputSpan::new("ge(1)");
     assert_eq!(ws::<Complete>(input).unwrap().0, span(0, "ge(1)"));

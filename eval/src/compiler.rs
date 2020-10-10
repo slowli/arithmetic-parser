@@ -13,8 +13,8 @@ use crate::{
     AuxErrorInfo, EvalError, RepeatedAssignmentContext, SpannedEvalError,
 };
 use arithmetic_parser::{
-    BinaryOp, Block, Destructure, Expr, FnDefinition, Grammar, InputSpan, Lvalue, MaybeSpanned,
-    Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
+    is_valid_variable_name, BinaryOp, Block, Destructure, Expr, FnDefinition, Grammar, InputSpan,
+    Lvalue, MaybeSpanned, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
 };
 
 /// Name of the comparison function used in desugaring order comparisons.
@@ -114,6 +114,7 @@ impl Compiler {
                     let cmp_function = op.copy_with_extra(Atom::Register(cmp_function));
 
                     let cmp_invocation = CompiledExpr::Function {
+                        original_name: Some((*cmp_function.fragment()).to_owned()),
                         name: cmp_function.into(),
                         args: vec![lhs, rhs],
                     };
@@ -135,13 +136,25 @@ impl Compiler {
             }
 
             Expr::Function { name, args } => {
+                let original_name = *name.fragment();
+                let original_name = if is_valid_variable_name(original_name) {
+                    Some(original_name.to_owned())
+                } else {
+                    None
+                };
+
                 let name = self.compile_expr(executable, name)?;
+
                 let args = args
                     .iter()
                     .map(|arg| self.compile_expr(executable, arg))
                     .collect::<Result<Vec<_>, _>>()?;
-                let register =
-                    self.push_assignment(executable, CompiledExpr::Function { name, args }, expr);
+                let function = CompiledExpr::Function {
+                    name,
+                    original_name,
+                    args,
+                };
+                let register = self.push_assignment(executable, function, expr);
                 Atom::Register(register)
             }
 
@@ -150,6 +163,7 @@ impl Compiler {
                 receiver,
                 args,
             } => {
+                let original_name = Some((*name.fragment()).to_owned());
                 let name: MaybeSpanned<_> = name
                     .copy_with_extra(Atom::Register(self.vars_to_registers[*name.fragment()]))
                     .into();
@@ -158,8 +172,12 @@ impl Compiler {
                     .map(|arg| self.compile_expr(executable, arg))
                     .collect::<Result<Vec<_>, _>>()?;
 
-                let register =
-                    self.push_assignment(executable, CompiledExpr::Function { name, args }, expr);
+                let function = CompiledExpr::Function {
+                    name,
+                    original_name,
+                    args,
+                };
+                let register = self.push_assignment(executable, function, expr);
                 Atom::Register(register)
             }
 

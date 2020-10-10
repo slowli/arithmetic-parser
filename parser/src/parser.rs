@@ -400,6 +400,7 @@ where
 }
 
 /// Simple expression, which includes, besides `simplest_expr`s, function calls.
+#[allow(clippy::option_if_let_else)] // See explanation in the function code
 fn simple_expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T>>
 where
     T: Grammar,
@@ -432,7 +433,7 @@ where
             let united_span = unite_spans(input, &name, &spanned_args);
             let (maybe_fn_name, (args, _)) = spanned_args.extra;
 
-            #[allow(clippy::option_if_let_else)] // `name` cannot be moved into both branches
+            // Clippy lint is triggered here. `name` cannot be moved into both branches, so it's a false positive.
             let expr = if let Some(fn_name) = maybe_fn_name {
                 Expr::Method {
                     name: fn_name.into(),
@@ -712,6 +713,7 @@ where
     }
 }
 
+#[allow(clippy::option_if_let_else)]
 fn statement<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedStatement<'_, T>>
 where
     T: Grammar,
@@ -727,7 +729,7 @@ where
     ));
 
     with_span(map(assignment_parser, |(lvalue, rvalue)| {
-        #[allow(clippy::option_if_let_else)] // `rvalue` cannot be moved into both branches
+        // Clippy lint is triggered here. `rvalue` cannot be moved into both branches, so it's a false positive.
         if let Some(lvalue) = lvalue {
             Statement::Assignment {
                 lhs: lvalue,

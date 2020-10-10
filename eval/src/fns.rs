@@ -97,7 +97,7 @@ fn extract_fn<'a, T: Grammar>(
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, Code, GrammarExt, InputSpan};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns, EvalError, Interpreter};
 /// # use assert_matches::assert_matches;
 /// let program = r#"
@@ -109,7 +109,7 @@ fn extract_fn<'a, T: Grammar>(
 /// let mut interpreter = Interpreter::new();
 /// interpreter.insert_native_fn("assert", fns::Assert);
 /// let err = interpreter.evaluate(&block).unwrap_err();
-/// assert_eq!(*err.main_span().fragment(), Code::Str("assert(3^2 == 10)"));
+/// assert_eq!(*err.main_span().fragment(), "assert(3^2 == 10)");
 /// assert_matches!(
 ///     err.source(),
 ///     EvalError::NativeCall(ref msg) if msg == "Assertion failed"

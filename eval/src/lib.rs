@@ -233,6 +233,7 @@ where
             .insert_native_fn("assert", fns::Assert)
             .insert_native_fn("if", fns::If)
             .insert_native_fn("loop", fns::Loop)
+            .insert_native_fn("while", fns::While)
             .insert_native_fn("map", fns::Map)
             .insert_native_fn("filter", fns::Filter)
             .insert_native_fn("fold", fns::Fold)

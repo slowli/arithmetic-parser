@@ -223,7 +223,7 @@ where
 /// let program = r#"
 ///     factorial = |x| {
 ///         loop((x, 1), |(i, acc)| {
-///             continue = cmp(i, 1) != -1; # i >= 1
+///             continue = i >= 1;
 ///             (continue, if(continue, (i - 1, acc * i), acc))
 ///         })
 ///     };
@@ -301,6 +301,85 @@ where
     }
 }
 
+/// Loop function that evaluates the provided closure while a certain condition is true.
+/// Returns the loop state afterwards.
+///
+/// # Type
+///
+/// ```text
+/// fn<T>(T, fn(T) -> bool, fn(T) -> T) -> T
+/// ```
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
+/// # use arithmetic_eval::{fns, Interpreter, Value};
+/// let program = r#"
+///     factorial = |x| {
+///         (_, acc) = (x, 1).while(
+///             |(i, _)| i >= 1,
+///             |(i, acc)| (i - 1, acc * i),
+///         );
+///         acc
+///     };
+///     factorial(5) == 120 && factorial(10) == 3628800
+/// "#;
+/// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
+///
+/// let mut interpreter = Interpreter::new();
+/// interpreter
+///     .insert_native_fn("cmp", fns::Compare)
+///     .insert_native_fn("while", fns::While);
+/// let ret = interpreter.evaluate(&block).unwrap();
+/// assert_eq!(ret, Value::Bool(true));
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct While;
+
+impl<T> NativeFn<T> for While
+where
+    T: Grammar,
+    T::Lit: Number,
+{
+    fn evaluate<'a>(
+        &self,
+        mut args: Vec<SpannedValue<'a, T>>,
+        ctx: &mut CallContext<'_, 'a>,
+    ) -> EvalResult<'a, T> {
+        ctx.check_args_count(&args, 3)?;
+
+        let step_fn = extract_fn(
+            ctx,
+            args.pop().unwrap(),
+            "`while` requires third arg to be a step function",
+        )?;
+        let condition_fn = extract_fn(
+            ctx,
+            args.pop().unwrap(),
+            "`while` requires second arg to be a condition function",
+        )?;
+        let mut state = args.pop().unwrap();
+        let state_span = state.copy_with_extra(());
+
+        loop {
+            let condition_value = condition_fn.evaluate(vec![state.clone()], ctx)?;
+            match condition_value {
+                Value::Bool(true) => {
+                    let new_state = step_fn.evaluate(vec![state], ctx)?;
+                    state = state_span.copy_with_extra(new_state);
+                }
+                Value::Bool(false) => break Ok(state.extra),
+                _ => {
+                    let err =
+                        EvalError::native("`while` requires condition function to return booleans");
+                    return Err(ctx.call_site_error(err));
+                }
+            }
+        }
+    }
+}
+
 /// Map function that evaluates the provided function on each item of the tuple.
 ///
 /// # Type
@@ -316,7 +395,7 @@ where
 /// # use arithmetic_eval::{fns, Interpreter, Value};
 /// let program = r#"
 ///     xs = (1, -2, 3, -0.3);
-///     map(xs, |x| if(cmp(x, 0) == 1, x, 0)) == (1, 0, 3, 0)
+///     map(xs, |x| if(x > 0, x, 0)) == (1, 0, 3, 0)
 /// "#;
 /// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 ///
@@ -380,7 +459,7 @@ where
 /// # use arithmetic_eval::{fns, Interpreter, Value};
 /// let program = r#"
 ///     xs = (1, -2, 3, -7, -0.3);
-///     filter(xs, |x| cmp(x, -1) == 1) == (1, 3, -0.3)
+///     filter(xs, |x| x > -1) == (1, 3, -0.3)
 /// "#;
 /// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 ///
@@ -506,14 +585,13 @@ where
 /// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns, Interpreter, Value};
 /// let program = r#"
-///     repeat = |x, times| loop(
-///         (0, ()),
-///         |(i, acc)| {
-///             continue = cmp(i, times) == -1;
-///             ret = if(continue, (i + 1, push(acc, x)), acc);
-///             (continue, ret)
-///         },
-///     );
+///     repeat = |x, times| {
+///         (_, acc) = (0, ()).while(
+///             |(i, _)| i < times,
+///             |(i, acc)| (i + 1, push(acc, x)),
+///         );
+///         acc
+///     };
 ///     repeat(-2, 3) == (-2, -2, -2) && repeat((7,), 4) == ((7,), (7,), (7,), (7,))
 /// "#;
 /// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
@@ -521,8 +599,7 @@ where
 /// let mut interpreter = Interpreter::new();
 /// interpreter
 ///     .insert_native_fn("cmp", fns::Compare)
-///     .insert_native_fn("if", fns::If)
-///     .insert_native_fn("loop", fns::Loop)
+///     .insert_native_fn("while", fns::While)
 ///     .insert_native_fn("push", fns::Push);
 /// let ret = interpreter.evaluate(&block).unwrap();
 /// assert_eq!(ret, Value::Bool(true));
@@ -669,7 +746,7 @@ mod tests {
 
         let program = r#"
             x = 1.0;
-            if(cmp(x, 2) == -1, x + 5, 3 - x)
+            if(x < 2, x + 5, 3 - x)
         "#;
         let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
@@ -677,7 +754,7 @@ mod tests {
 
         let program = r#"
             x = 4.5;
-            if(cmp(x, 2) == -1, || x + 5, || 3 - x)()
+            if(x < 2, || x + 5, || 3 - x)()
         "#;
         let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
@@ -718,7 +795,7 @@ mod tests {
             # Finds the greatest power of 2 lesser or equal to the value.
             discrete_log2 = |x| {
                 loop(0, |i| {
-                    continue = cmp(2^i, x) != 1;
+                    continue = 2^i <= x;
                     (continue, if(continue, i + 1, i - 1))
                 })
             };
@@ -755,7 +832,7 @@ mod tests {
 
         let program = r#"
             max_value = |...xs| {
-                fold(xs, -Inf, |acc, x| if(cmp(x, acc) == 1, x, acc))
+                fold(xs, -Inf, |acc, x| if(x > acc, x, acc))
             };
             max_value(1, -2, 7, 2, 5) == 7 && max_value(3, -5, 9) == 9
         "#;

@@ -326,6 +326,7 @@ macro_rules! try_from_value_for_tuple {
         where
             $($ty: TryFromValue<'a, G>,)+
         {
+            #[allow(clippy::shadow_unrelated)] // makes it easier to write macro
             fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
                 const EXPECTED_TYPE: ValueType = ValueType::Tuple($size);
 
@@ -515,6 +516,7 @@ macro_rules! arity_fn {
             $($t: for<'val> TryFromValue<'val, G>,)+
             Ret: for<'val> IntoEvalResult<'val, G>,
         {
+            #[allow(clippy::shadow_unrelated)] // makes it easier to write macro
             fn evaluate<'a>(
                 &self,
                 args: Vec<SpannedValue<'a, G>>,
@@ -825,6 +827,12 @@ mod tests {
         let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
+    }
+
+    #[test]
+    fn fallible_function_with_bogus_program() {
+        let mut interpreter = Interpreter::new();
+        interpreter.insert_wrapped_fn("sum_arrays", sum_arrays);
 
         let program = "(1, 2, 3).sum_arrays((4, 5))";
         let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
@@ -868,9 +876,9 @@ mod tests {
         let ret = interpreter.evaluate(&block).unwrap();
         assert!(ret.is_void());
 
-        let program = "assert_eq(3, 1 - 2)";
-        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
-        let err = interpreter.evaluate(&block).unwrap_err();
+        let bogus_program = "assert_eq(3, 1 - 2)";
+        let bogus_block = F32Grammar::parse_statements(InputSpan::new(bogus_program)).unwrap();
+        let err = interpreter.evaluate(&bogus_block).unwrap_err();
         assert_matches!(
             err.source(),
             EvalError::NativeCall(ref msg) if msg.contains("Assertion failed")

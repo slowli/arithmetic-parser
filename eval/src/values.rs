@@ -340,18 +340,12 @@ impl<'a, T: Grammar> Value<'a, T> {
 
     /// Checks if the value is void.
     pub fn is_void(&self) -> bool {
-        match self {
-            Self::Tuple(tuple) if tuple.is_empty() => true,
-            _ => false,
-        }
+        matches!(self, Self::Tuple(tuple) if tuple.is_empty())
     }
 
     /// Checks if this value is a function.
     pub fn is_function(&self) -> bool {
-        match self {
-            Self::Function(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Function(_))
     }
 }
 
@@ -473,29 +467,29 @@ where
             }
 
             (this @ Self::Number(_), Self::Tuple(other)) => {
-                let res: Result<Vec<_>, _> = other
+                let output: Result<Vec<_>, _> = other
                     .into_iter()
                     .map(|y| this.clone().try_binary_op_inner(y, op, primitive_op))
                     .collect();
-                res.map(Self::Tuple)
+                output.map(Self::Tuple)
             }
 
             (Self::Tuple(this), other @ Self::Number(_)) => {
-                let res: Result<Vec<_>, _> = this
+                let output: Result<Vec<_>, _> = this
                     .into_iter()
                     .map(|x| x.try_binary_op_inner(other.clone(), op, primitive_op))
                     .collect();
-                res.map(Self::Tuple)
+                output.map(Self::Tuple)
             }
 
             (Self::Tuple(this), Self::Tuple(other)) => {
                 if this.len() == other.len() {
-                    let res: Result<Vec<_>, _> = this
+                    let output: Result<Vec<_>, _> = this
                         .into_iter()
                         .zip(other)
                         .map(|(x, y)| x.try_binary_op_inner(y, op, primitive_op))
                         .collect();
-                    res.map(Self::Tuple)
+                    output.map(Self::Tuple)
                 } else {
                     Err(BinaryOpError::tuple(op, this.len(), other.len()))
                 }
@@ -560,14 +554,14 @@ where
         lhs: MaybeSpanned<'a, Self>,
         rhs: MaybeSpanned<'a, Self>,
     ) -> Result<Self, SpannedEvalError<'a>> {
-        Self::try_binary_op(total_span, lhs, rhs, BinaryOp::Power, |x, y| x.pow(y))
+        Self::try_binary_op(total_span, lhs, rhs, BinaryOp::Power, Pow::pow)
     }
 
     pub(super) fn try_neg(self) -> Result<Self, EvalError> {
         match self {
             Self::Number(val) => Ok(Self::Number(-val)),
             Self::Tuple(tuple) => {
-                let res: Result<Vec<_>, _> = tuple.into_iter().map(|elem| elem.try_neg()).collect();
+                let res: Result<Vec<_>, _> = tuple.into_iter().map(Value::try_neg).collect();
                 res.map(Self::Tuple)
             }
 
@@ -581,7 +575,7 @@ where
         match self {
             Self::Bool(val) => Ok(Self::Bool(!val)),
             Self::Tuple(tuple) => {
-                let res: Result<Vec<_>, _> = tuple.into_iter().map(|elem| elem.try_not()).collect();
+                let res: Result<Vec<_>, _> = tuple.into_iter().map(Value::try_not).collect();
                 res.map(Self::Tuple)
             }
 

@@ -101,165 +101,225 @@ impl Compiler {
             }
 
             Expr::Binary { op, lhs, rhs } => {
-                let lhs = self.compile_expr(executable, lhs)?;
-                let rhs = self.compile_expr(executable, rhs)?;
-
-                let compiled = if op.extra.is_order_comparison() {
-                    let cmp_function = self.get_var(CMP_FUNCTION_NAME).ok_or_else(|| {
-                        let err = EvalError::MissingCmpFunction {
-                            name: CMP_FUNCTION_NAME.to_owned(),
-                        };
-                        SpannedEvalError::new(expr, err)
-                    })?;
-                    let cmp_function = op.copy_with_extra(Atom::Register(cmp_function));
-
-                    let cmp_invocation = CompiledExpr::Function {
-                        original_name: Some((*cmp_function.fragment()).to_owned()),
-                        name: cmp_function.into(),
-                        args: vec![lhs, rhs],
-                    };
-                    let cmp_register = self.push_assignment(executable, cmp_invocation, expr);
-                    CompiledExpr::Compare {
-                        inner: expr.copy_with_extra(Atom::Register(cmp_register)).into(),
-                        op: ComparisonOp::from(op.extra),
-                    }
-                } else {
-                    CompiledExpr::Binary {
-                        op: op.extra,
-                        lhs,
-                        rhs,
-                    }
-                };
-
-                let register = self.push_assignment(executable, compiled, expr);
-                Atom::Register(register)
+                self.compile_binary_expr(executable, expr, op, lhs, rhs)?
             }
-
-            Expr::Function { name, args } => {
-                let original_name = *name.fragment();
-                let original_name = if is_valid_variable_name(original_name) {
-                    Some(original_name.to_owned())
-                } else {
-                    None
-                };
-
-                let name = self.compile_expr(executable, name)?;
-
-                let args = args
-                    .iter()
-                    .map(|arg| self.compile_expr(executable, arg))
-                    .collect::<Result<Vec<_>, _>>()?;
-                let function = CompiledExpr::Function {
-                    name,
-                    original_name,
-                    args,
-                };
-                let register = self.push_assignment(executable, function, expr);
-                Atom::Register(register)
-            }
+            Expr::Function { name, args } => self.compile_fn_call(executable, expr, name, args)?,
 
             Expr::Method {
                 name,
                 receiver,
                 args,
-            } => {
-                let original_name = Some((*name.fragment()).to_owned());
-                let name: MaybeSpanned<_> = name
-                    .copy_with_extra(Atom::Register(self.vars_to_registers[*name.fragment()]))
-                    .into();
-                let args = iter::once(receiver.as_ref())
-                    .chain(args)
-                    .map(|arg| self.compile_expr(executable, arg))
-                    .collect::<Result<Vec<_>, _>>()?;
+            } => self.compile_method_call(executable, expr, name, receiver, args)?,
 
-                let function = CompiledExpr::Function {
-                    name,
-                    original_name,
-                    args,
-                };
-                let register = self.push_assignment(executable, function, expr);
-                Atom::Register(register)
-            }
-
-            Expr::Block(block) => {
-                let backup_state = self.clone();
-                if self.scope_depth == 0 {
-                    let command = Command::StartInnerScope;
-                    executable.push_command(expr.copy_with_extra(command));
-                }
-                self.scope_depth += 1;
-
-                let return_value = self
-                    .compile_block_inner(executable, block)?
-                    .unwrap_or_else(|| expr.copy_with_extra(Atom::Void).into());
-
-                // Move the return value to the next register.
-                let new_register = if let Atom::Register(ret_register) = return_value.extra {
-                    let command = Command::Copy {
-                        source: ret_register,
-                        destination: backup_state.register_count,
-                    };
-                    executable.push_command(expr.copy_with_extra(command));
-                    true
-                } else {
-                    false
-                };
-
-                // Return to the previous state. This will erase register mapping
-                // for the inner scope and set the `scope_depth`.
-                *self = backup_state;
-                if new_register {
-                    self.register_count += 1;
-                }
-                if self.scope_depth == 0 {
-                    let command = Command::EndInnerScope;
-                    executable.push_command(expr.copy_with_extra(command));
-                }
-                executable.push_command(
-                    expr.copy_with_extra(Command::TruncateRegisters(self.register_count)),
-                );
-
-                if new_register {
-                    Atom::Register(self.register_count - 1)
-                } else {
-                    Atom::Void
-                }
-            }
-
-            Expr::FnDefinition(def) => {
-                let mut captures = HashMap::new();
-                let mut extractor = CapturesExtractor::new(|var_name, var_span| {
-                    if let Some(register) = self.get_var(var_name) {
-                        let capture: MaybeSpanned<_> =
-                            var_span.copy_with_extra(Atom::Register(register)).into();
-                        captures.insert(var_name, capture);
-                        Ok(())
-                    } else {
-                        Err(EvalError::Undefined(var_name.to_owned()))
-                    }
-                });
-
-                extractor.eval_function(def)?;
-                let fn_executable = Self::compile_function(def, &captures)?;
-                let fn_executable = ExecutableFn {
-                    inner: fn_executable,
-                    def_span: expr.with_no_extra().into(),
-                    arg_count: def.args.extra.len(),
-                };
-
-                let ptr = executable.push_child_fn(fn_executable);
-                let register = self.push_assignment(
-                    executable,
-                    CompiledExpr::DefineFunction {
-                        ptr,
-                        captures: captures.into_iter().map(|(_, value)| value).collect(),
-                    },
-                    expr,
-                );
-                Atom::Register(register)
-            }
+            Expr::Block(block) => self.compile_block(executable, expr, block)?,
+            Expr::FnDefinition(def) => self.compile_fn_definition(executable, expr, def)?,
         };
         Ok(expr.copy_with_extra(atom).into())
+    }
+
+    fn compile_binary_expr<'a, T: Grammar>(
+        &mut self,
+        executable: &mut Executable<'a, T>,
+        binary_expr: &SpannedExpr<'a, T>,
+        op: &Spanned<'a, BinaryOp>,
+        lhs: &SpannedExpr<'a, T>,
+        rhs: &SpannedExpr<'a, T>,
+    ) -> Result<Atom<T>, SpannedEvalError<'a>> {
+        let lhs = self.compile_expr(executable, lhs)?;
+        let rhs = self.compile_expr(executable, rhs)?;
+
+        let compiled = if op.extra.is_order_comparison() {
+            let cmp_function = self.get_var(CMP_FUNCTION_NAME).ok_or_else(|| {
+                let err = EvalError::MissingCmpFunction {
+                    name: CMP_FUNCTION_NAME.to_owned(),
+                };
+                SpannedEvalError::new(binary_expr, err)
+            })?;
+            let cmp_function = op.copy_with_extra(Atom::Register(cmp_function));
+
+            let cmp_invocation = CompiledExpr::Function {
+                original_name: Some((*cmp_function.fragment()).to_owned()),
+                name: cmp_function.into(),
+                args: vec![lhs, rhs],
+            };
+            let cmp_register = self.push_assignment(executable, cmp_invocation, binary_expr);
+
+            CompiledExpr::Compare {
+                inner: binary_expr
+                    .copy_with_extra(Atom::Register(cmp_register))
+                    .into(),
+                op: ComparisonOp::from(op.extra),
+            }
+        } else {
+            CompiledExpr::Binary {
+                op: op.extra,
+                lhs,
+                rhs,
+            }
+        };
+
+        let register = self.push_assignment(executable, compiled, binary_expr);
+        Ok(Atom::Register(register))
+    }
+
+    fn compile_fn_call<'a, T: Grammar>(
+        &mut self,
+        executable: &mut Executable<'a, T>,
+        call_expr: &SpannedExpr<'a, T>,
+        name: &SpannedExpr<'a, T>,
+        args: &[SpannedExpr<'a, T>],
+    ) -> Result<Atom<T>, SpannedEvalError<'a>> {
+        let original_name = *name.fragment();
+        let original_name = if is_valid_variable_name(original_name) {
+            Some(original_name.to_owned())
+        } else {
+            None
+        };
+
+        let name = self.compile_expr(executable, name)?;
+
+        let args = args
+            .iter()
+            .map(|arg| self.compile_expr(executable, arg))
+            .collect::<Result<Vec<_>, _>>()?;
+        let function = CompiledExpr::Function {
+            name,
+            original_name,
+            args,
+        };
+        let register = self.push_assignment(executable, function, call_expr);
+        Ok(Atom::Register(register))
+    }
+
+    fn compile_method_call<'a, T: Grammar>(
+        &mut self,
+        executable: &mut Executable<'a, T>,
+        call_expr: &SpannedExpr<'a, T>,
+        name: &Spanned<'a>,
+        receiver: &SpannedExpr<'a, T>,
+        args: &[SpannedExpr<'a, T>],
+    ) -> Result<Atom<T>, SpannedEvalError<'a>> {
+        let original_name = Some((*name.fragment()).to_owned());
+        let name: MaybeSpanned<_> = name
+            .copy_with_extra(Atom::Register(self.vars_to_registers[*name.fragment()]))
+            .into();
+        let args = iter::once(receiver)
+            .chain(args)
+            .map(|arg| self.compile_expr(executable, arg))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let function = CompiledExpr::Function {
+            name,
+            original_name,
+            args,
+        };
+        let register = self.push_assignment(executable, function, call_expr);
+        Ok(Atom::Register(register))
+    }
+
+    fn compile_block<'a, T: Grammar>(
+        &mut self,
+        executable: &mut Executable<'a, T>,
+        block_expr: &SpannedExpr<'a, T>,
+        block: &Block<'a, T>,
+    ) -> Result<Atom<T>, SpannedEvalError<'a>> {
+        let backup_state = self.clone();
+        if self.scope_depth == 0 {
+            let command = Command::StartInnerScope;
+            executable.push_command(block_expr.copy_with_extra(command));
+        }
+        self.scope_depth += 1;
+
+        let return_value = self
+            .compile_block_inner(executable, block)?
+            .unwrap_or_else(|| block_expr.copy_with_extra(Atom::Void).into());
+
+        // Move the return value to the next register.
+        let new_register = if let Atom::Register(ret_register) = return_value.extra {
+            let command = Command::Copy {
+                source: ret_register,
+                destination: backup_state.register_count,
+            };
+            executable.push_command(block_expr.copy_with_extra(command));
+            true
+        } else {
+            false
+        };
+
+        // Return to the previous state. This will erase register mapping
+        // for the inner scope and set the `scope_depth`.
+        *self = backup_state;
+        if new_register {
+            self.register_count += 1;
+        }
+        if self.scope_depth == 0 {
+            let command = Command::EndInnerScope;
+            executable.push_command(block_expr.copy_with_extra(command));
+        }
+        executable.push_command(
+            block_expr.copy_with_extra(Command::TruncateRegisters(self.register_count)),
+        );
+
+        Ok(if new_register {
+            Atom::Register(self.register_count - 1)
+        } else {
+            Atom::Void
+        })
+    }
+
+    fn compile_block_inner<'a, T: Grammar>(
+        &mut self,
+        executable: &mut Executable<'a, T>,
+        block: &Block<'a, T>,
+    ) -> Result<Option<SpannedAtom<'a, T>>, SpannedEvalError<'a>> {
+        for statement in &block.statements {
+            self.compile_statement(executable, statement)?;
+        }
+
+        Ok(if let Some(ref return_value) = block.return_value {
+            Some(self.compile_expr(executable, return_value)?)
+        } else {
+            None
+        })
+    }
+
+    fn compile_fn_definition<'a, T: Grammar>(
+        &mut self,
+        executable: &mut Executable<'a, T>,
+        def_expr: &SpannedExpr<'a, T>,
+        def: &FnDefinition<'a, T>,
+    ) -> Result<Atom<T>, SpannedEvalError<'a>> {
+        let mut captures = HashMap::new();
+        let mut extractor = CapturesExtractor::new(|var_name, var_span| {
+            self.get_var(var_name).map_or_else(
+                || Err(EvalError::Undefined(var_name.to_owned())),
+                |register| {
+                    let capture: MaybeSpanned<_> =
+                        var_span.copy_with_extra(Atom::Register(register)).into();
+                    captures.insert(var_name, capture);
+                    Ok(())
+                },
+            )
+        });
+
+        extractor.eval_function(def)?;
+        let fn_executable = Self::compile_function(def, &captures)?;
+        let fn_executable = ExecutableFn {
+            inner: fn_executable,
+            def_span: def_expr.with_no_extra().into(),
+            arg_count: def.args.extra.len(),
+        };
+
+        let ptr = executable.push_child_fn(fn_executable);
+        let register = self.push_assignment(
+            executable,
+            CompiledExpr::DefineFunction {
+                ptr,
+                captures: captures.into_iter().map(|(_, value)| value).collect(),
+            },
+            def_expr,
+        );
+        Ok(Atom::Register(register))
     }
 
     fn compile_function<'a, T: Grammar>(
@@ -334,12 +394,13 @@ impl Compiler {
         } else {
             let mut captures = Env::new();
             let mut extractor = CapturesExtractor::new(|var_name, _| {
-                if let Some(value) = env.get_var(var_name) {
-                    captures.push_var(var_name, value.clone());
-                    Ok(())
-                } else {
-                    Err(EvalError::Undefined(var_name.to_owned()))
-                }
+                env.get_var(var_name).map_or_else(
+                    || Err(EvalError::Undefined(var_name.to_owned())),
+                    |value| {
+                        captures.push_var(var_name, value.clone());
+                        Ok(())
+                    },
+                )
             });
             extractor.local_vars.push(HashMap::new());
             extractor.eval_block(&block)?;
@@ -352,8 +413,7 @@ impl Compiler {
         let empty_span = InputSpan::new("");
         let last_atom = compiler
             .compile_block_inner(&mut executable, block)?
-            .map(|spanned| spanned.extra)
-            .unwrap_or(Atom::Void);
+            .map_or(Atom::Void, |spanned| spanned.extra);
         // Push the last variable to a register to be popped during execution.
         compiler.push_assignment(
             &mut executable,
@@ -363,22 +423,6 @@ impl Compiler {
 
         executable.finalize_block(compiler.register_count);
         Ok(ExecutableModule::new(executable, captures))
-    }
-
-    fn compile_block_inner<'a, T: Grammar>(
-        &mut self,
-        executable: &mut Executable<'a, T>,
-        block: &Block<'a, T>,
-    ) -> Result<Option<SpannedAtom<'a, T>>, SpannedEvalError<'a>> {
-        for statement in &block.statements {
-            self.compile_statement(executable, statement)?;
-        }
-
-        Ok(if let Some(ref return_value) = block.return_value {
-            Some(self.compile_expr(executable, return_value)?)
-        } else {
-            None
-        })
     }
 
     fn assign<'a, T: Grammar>(

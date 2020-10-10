@@ -194,15 +194,13 @@ where
         let else_val = args.pop().unwrap().extra;
         let then_val = args.pop().unwrap().extra;
 
-        match &args[0].extra {
-            Value::Bool(condition) => Ok(if *condition { then_val } else { else_val }),
-
-            _ => {
-                let err = EvalError::native("`if` requires first arg to be boolean");
-                Err(ctx
-                    .call_site_error(err)
-                    .with_span(&args[0], AuxErrorInfo::InvalidArg))
-            }
+        if let Value::Bool(condition) = &args[0].extra {
+            Ok(if *condition { then_val } else { else_val })
+        } else {
+            let err = EvalError::native("`if` requires first arg to be boolean");
+            Err(ctx
+                .call_site_error(err)
+                .with_span(&args[0], AuxErrorInfo::InvalidArg))
         }
     }
 }
@@ -259,43 +257,38 @@ where
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(&args, 2)?;
         let iter = args.pop().unwrap();
-        let iter = match iter.extra {
-            Value::Function(iter) => iter,
-            _ => {
-                let err =
-                    EvalError::native("Second argument of `loop` should be an iterator function");
-                return Err(ctx
-                    .call_site_error(err)
-                    .with_span(&iter, AuxErrorInfo::InvalidArg));
-            }
+        let iter = if let Value::Function(iter) = iter.extra {
+            iter
+        } else {
+            let err = EvalError::native("Second argument of `loop` should be an iterator function");
+            return Err(ctx
+                .call_site_error(err)
+                .with_span(&iter, AuxErrorInfo::InvalidArg));
         };
 
         let mut arg = args.pop().unwrap();
         loop {
-            match iter.evaluate(vec![arg], ctx)? {
-                Value::Tuple(mut tuple) => {
-                    let (ret_or_next_arg, flag) = if tuple.len() == 2 {
-                        (tuple.pop().unwrap(), tuple.pop().unwrap())
-                    } else {
-                        let err = EvalError::native(Self::ITER_ERROR);
-                        break Err(ctx.call_site_error(err));
-                    };
-
-                    match (flag, ret_or_next_arg) {
-                        (Value::Bool(false), ret) => break Ok(ret),
-                        (Value::Bool(true), next_arg) => {
-                            arg = ctx.apply_call_span(next_arg);
-                        }
-                        _ => {
-                            let err = EvalError::native(Self::ITER_ERROR);
-                            break Err(ctx.call_site_error(err));
-                        }
-                    }
-                }
-                _ => {
+            if let Value::Tuple(mut tuple) = iter.evaluate(vec![arg], ctx)? {
+                let (ret_or_next_arg, flag) = if tuple.len() == 2 {
+                    (tuple.pop().unwrap(), tuple.pop().unwrap())
+                } else {
                     let err = EvalError::native(Self::ITER_ERROR);
                     break Err(ctx.call_site_error(err));
+                };
+
+                match (flag, ret_or_next_arg) {
+                    (Value::Bool(false), ret) => break Ok(ret),
+                    (Value::Bool(true), next_arg) => {
+                        arg = ctx.apply_call_span(next_arg);
+                    }
+                    _ => {
+                        let err = EvalError::native(Self::ITER_ERROR);
+                        break Err(ctx.call_site_error(err));
+                    }
                 }
+            } else {
+                let err = EvalError::native(Self::ITER_ERROR);
+                break Err(ctx.call_site_error(err));
             }
         }
     }
@@ -752,13 +745,14 @@ mod tests {
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Number(6.0));
 
-        let program = r#"
+        let program_with_closures = r#"
             x = 4.5;
             if(x < 2, || x + 5, || 3 - x)()
         "#;
-        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
-        let ret = interpreter.evaluate(&block).unwrap();
-        assert_eq!(ret, Value::Number(-1.5));
+        let block_with_closures =
+            F32Grammar::parse_statements(InputSpan::new(program_with_closures)).unwrap();
+        let ret_with_closures = interpreter.evaluate(&block_with_closures).unwrap();
+        assert_eq!(ret_with_closures, Value::Number(-1.5));
     }
 
     #[test]
@@ -771,9 +765,9 @@ mod tests {
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
 
-        let program = "x = 1.0; x > (1, 2)";
-        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
-        let err = interpreter.evaluate(&block).unwrap_err();
+        let bogus_program = "x = 1.0; x > (1, 2)";
+        let bogus_block = F32Grammar::parse_statements(InputSpan::new(bogus_program)).unwrap();
+        let err = interpreter.evaluate(&bogus_block).unwrap_err();
         assert_matches!(
             err.source(),
             EvalError::NativeCall(ref message) if message.contains("Compare requires")
@@ -805,12 +799,12 @@ mod tests {
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Number(3.0));
 
-        let program = "(discrete_log2(1), discrete_log2(2), \
+        let test_program = "(discrete_log2(1), discrete_log2(2), \
             discrete_log2(4), discrete_log2(6.5), discrete_log2(1000))";
-        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
-        let ret = interpreter.evaluate(&block).unwrap();
+        let test_block = F32Grammar::parse_statements(InputSpan::new(test_program)).unwrap();
+        let test_ret = interpreter.evaluate(&test_block).unwrap();
         assert_eq!(
-            ret,
+            test_ret,
             Value::Tuple(vec![
                 Value::Number(0.0),
                 Value::Number(1.0),
@@ -843,6 +837,12 @@ mod tests {
 
     #[test]
     fn reverse_list_with_fold() {
+        const SAMPLES: &[(&[f32], &[f32])] = &[
+            (&[1.0, 2.0, 3.0], &[3.0, 2.0, 1.0]),
+            (&[], &[]),
+            (&[1.0], &[1.0]),
+        ];
+
         let mut interpreter = Interpreter::new();
         interpreter
             .insert_native_fn("merge", Merge)
@@ -859,15 +859,8 @@ mod tests {
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
 
-        let program = "xs.reverse()";
-        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
-        let mut module = interpreter.compile(&block).unwrap();
-
-        const SAMPLES: &[(&[f32], &[f32])] = &[
-            (&[1.0, 2.0, 3.0], &[3.0, 2.0, 1.0]),
-            (&[], &[]),
-            (&[1.0], &[1.0]),
-        ];
+        let module_block = F32Grammar::parse_statements(InputSpan::new("xs.reverse()")).unwrap();
+        let mut module = interpreter.compile(&module_block).unwrap();
 
         for &(input, expected) in SAMPLES {
             let input = input.iter().copied().map(Value::Number).collect();

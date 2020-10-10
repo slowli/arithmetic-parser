@@ -163,7 +163,7 @@ impl ComparisonOp {
         }
     }
 
-    fn compare<T>(self, cmp_value: Value<'_, T>) -> Option<bool>
+    fn compare<T>(self, cmp_value: &Value<'_, T>) -> Option<bool>
     where
         T: Grammar,
         T::Lit: Number,
@@ -171,7 +171,7 @@ impl ComparisonOp {
         let ordering = match cmp_value {
             Value::Number(num) if num.is_one() => Ordering::Greater,
             Value::Number(num) if num.is_zero() => Ordering::Equal,
-            Value::Number(num) if (-num).is_one() => Ordering::Less,
+            Value::Number(num) if (-*num).is_one() => Ordering::Less,
             _ => return None,
         };
         Some(match self {
@@ -660,7 +660,7 @@ where
 
             CompiledExpr::Compare { inner, op } => {
                 let inner_value = self.resolve_atom(&inner.extra);
-                op.compare(inner_value)
+                op.compare(&inner_value)
                     .map(Value::Bool)
                     .ok_or_else(|| SpannedEvalError::new(&span, EvalError::InvalidCmpResult))
             }

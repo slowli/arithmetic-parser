@@ -34,7 +34,7 @@ impl Compiler {
 
     fn from_env<T: Grammar>(env: &Env<'_, T>) -> Self {
         Self {
-            vars_to_registers: env.variables_map(),
+            vars_to_registers: env.variables_map().to_owned(),
             register_count: env.register_count(),
             scope_depth: 0,
         }

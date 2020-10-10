@@ -20,7 +20,7 @@ use arithmetic_eval::{
     fns, BacktraceElement, ErrorWithBacktrace, Function, Interpreter, Number, Value,
 };
 use arithmetic_parser::{
-    grammars::NumGrammar, Code, Error, Grammar, GrammarExt, InputSpan, LocatedSpan, Spanned,
+    grammars::NumGrammar, CodeFragment, Error, Grammar, GrammarExt, InputSpan, LocatedSpan, Spanned,
 };
 
 /// Exit code on parse or evaluation error.
@@ -47,7 +47,7 @@ impl<'a> CodeMap<'a> {
     fn locate<Span, T>(&self, span: &LocatedSpan<Span, T>) -> Option<(FileId, Range<usize>)>
     where
         Span: Copy,
-        Code<'a>: From<Span>,
+        CodeFragment<'a>: From<Span>,
     {
         if span.location_offset() > self.next_position {
             return None;
@@ -58,7 +58,7 @@ impl<'a> CodeMap<'a> {
             .rev()
             .next()?;
         let start = span.location_offset() - file_start;
-        let code = Code::from(*span.fragment());
+        let code = CodeFragment::from(*span.fragment());
         let range = start..(start + code.len());
         Some((file_id, range))
     }

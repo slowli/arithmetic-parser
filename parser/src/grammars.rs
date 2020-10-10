@@ -10,7 +10,7 @@ use num_traits::Num;
 
 use core::{f32, f64, fmt, marker::PhantomData};
 
-use crate::{Features, Grammar, InputSpan, NomResult};
+use crate::{spans::NomResult, Features, Grammar, InputSpan};
 
 // FIXME: `1.foo()` does not work because float parser consumes `1.`
 

@@ -18,9 +18,10 @@ use alloc::{borrow::ToOwned, boxed::Box, vec, vec::Vec};
 use core::{fmt, mem};
 
 use crate::{
-    helpers::*, BinaryOp, Block, Context, Destructure, DestructureRest, Expr, FnDefinition,
-    Grammar, InputSpan, Lvalue, NomResult, Op, Spanned, SpannedExpr, SpannedLvalue,
-    SpannedStatement, Statement, UnaryOp,
+    spans::{unite_spans, with_span},
+    BinaryOp, Block, Context, Destructure, DestructureRest, Expr, FnDefinition, Grammar, InputSpan,
+    Lvalue, NomResult, Op, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
+    UnaryOp,
 };
 
 #[cfg(test)]

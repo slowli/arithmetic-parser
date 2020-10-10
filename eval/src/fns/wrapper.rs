@@ -153,7 +153,7 @@ impl FromValueError {
         self
     }
 
-    #[doc(hidden)]
+    #[doc(hidden)] // necessary for `wrap_fn` macro
     pub fn set_arg_index(&mut self, index: usize) {
         self.arg_index = index;
         self.location.reverse();
@@ -366,14 +366,14 @@ try_from_value_for_tuple!(10 => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z,
 /// [wrapped functions]: struct.FnWrapper.html
 #[derive(Debug)]
 pub enum ErrorOutput<'a> {
-    /// FIXME
+    /// Error together with the defined span(s).
     Spanned(SpannedEvalError<'a>),
-    /// FIXME
+    /// Error message. The error span will be defined as the call span of the native function.
     Message(String),
 }
 
 impl<'a> ErrorOutput<'a> {
-    #[doc(hidden)]
+    #[doc(hidden)] // necessary for `wrap_fn` macro
     pub fn into_spanned(self, context: &CallContext<'_, 'a>) -> SpannedEvalError<'a> {
         match self {
             Self::Spanned(err) => err,
@@ -735,7 +735,7 @@ macro_rules! wrap_fn_with_context {
     };
 }
 
-#[doc(hidden)]
+#[doc(hidden)] // necessary for `wrap_fn` macro
 pub fn enforce_closure_type<G: Grammar, F>(function: F) -> F
 where
     F: for<'a> Fn(Vec<SpannedValue<'a, G>>, &mut CallContext<'_, 'a>) -> EvalResult<'a, G>,

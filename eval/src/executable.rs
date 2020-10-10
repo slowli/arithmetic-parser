@@ -9,7 +9,9 @@ use crate::{
     Backtrace, CallContext, ErrorWithBacktrace, EvalError, EvalResult, Function, InterpretedFn,
     Number, SpannedEvalError, SpannedValue, TupleLenMismatchContext, Value,
 };
-use arithmetic_parser::{BinaryOp, Code, Grammar, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
+use arithmetic_parser::{
+    BinaryOp, CodeFragment, Grammar, LvalueLen, MaybeSpanned, StripCode, UnaryOp,
+};
 use num_traits::{One, Zero};
 
 /// Pointer to a register or constant.
@@ -657,8 +659,8 @@ where
                 if let Value::Function(function) = self.resolve_atom(&name.extra) {
                     // FIXME: store original fn name.
                     let fn_name = match name.fragment() {
-                        Code::Str(code) => *code,
-                        Code::Stripped(_) => "(stripped function)",
+                        CodeFragment::Str(code) => *code,
+                        CodeFragment::Stripped(_) => "(stripped function)",
                     };
                     let arg_values = args
                         .iter()

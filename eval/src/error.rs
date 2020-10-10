@@ -10,7 +10,7 @@ use crate::{
     Value,
 };
 use arithmetic_parser::{
-    BinaryOp, Code, LocatedSpan, LvalueLen, MaybeSpanned, Op, StripCode, UnaryOp,
+    BinaryOp, CodeFragment, LocatedSpan, LvalueLen, MaybeSpanned, Op, StripCode, UnaryOp,
 };
 
 /// Context for [`EvalError::TupleLenMismatch`].
@@ -289,11 +289,11 @@ pub struct SpannedEvalError<'a> {
 impl<'a> SpannedEvalError<'a> {
     pub(super) fn new<Span, T>(main_span: &LocatedSpan<Span, T>, error: EvalError) -> Self
     where
-        Span: Copy + Into<Code<'a>>,
+        Span: Copy + Into<CodeFragment<'a>>,
     {
         Self {
             error,
-            main_span: main_span.with_no_extra().map_span(Into::into),
+            main_span: main_span.with_no_extra().map_fragment(Into::into),
             aux_spans: vec![],
         }
     }
@@ -301,10 +301,10 @@ impl<'a> SpannedEvalError<'a> {
     #[doc(hidden)] // used in `wrap_fn` macro
     pub fn with_span<Span, T>(mut self, span: &LocatedSpan<Span, T>, info: AuxErrorInfo) -> Self
     where
-        Span: Copy + Into<Code<'a>>,
+        Span: Copy + Into<CodeFragment<'a>>,
     {
         self.aux_spans
-            .push(span.copy_with_extra(info).map_span(Into::into));
+            .push(span.copy_with_extra(info).map_fragment(Into::into));
         self
     }
 

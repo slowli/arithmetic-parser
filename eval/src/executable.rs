@@ -1,7 +1,6 @@
 //! Executables output by a `Compiler` and related types.
 
 use hashbrown::HashMap;
-use smallvec::{smallvec, SmallVec};
 
 use core::{cmp::Ordering, ops};
 
@@ -399,7 +398,7 @@ where
         args: Vec<Value<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
     ) -> EvalResult<'a, T> {
-        let mut registers = SmallVec::from(captures);
+        let mut registers = captures;
         registers.push(Value::Tuple(args));
         let mut env = Env {
             registers,
@@ -409,7 +408,8 @@ where
     }
 }
 
-type Registers<'a, T> = SmallVec<[Value<'a, T>; 16]>;
+// TODO: restore `SmallVec` wrapped into a covariant wrapper.
+type Registers<'a, T> = Vec<Value<'a, T>>;
 
 #[derive(Debug)]
 pub(super) struct Env<'a, T: Grammar> {
@@ -448,7 +448,7 @@ impl<T: Grammar> StripCode for Env<'_, T> {
 impl<'a, T: Grammar> Env<'a, T> {
     pub fn new() -> Self {
         Self {
-            registers: smallvec![],
+            registers: vec![],
             vars: HashMap::new(),
             inner_scope_start: None,
         }
@@ -495,7 +495,7 @@ impl<'a, T: Grammar> Env<'a, T> {
 
     /// Retains only registers corresponding to named variables.
     pub fn compress(&mut self) {
-        let mut registers = SmallVec::with_capacity(self.vars.len());
+        let mut registers = Vec::with_capacity(self.vars.len());
         for (i, register) in self.vars.values_mut().enumerate() {
             registers.push(self.registers[*register].clone());
             *register = i;

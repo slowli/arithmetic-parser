@@ -251,7 +251,7 @@ impl<T: Clone + 'static> StripCode for MaybeSpanned<'_, T> {
     type Stripped = MaybeSpanned<'static, T>;
 
     fn strip_code(&self) -> Self::Stripped {
-        self.with_mapped_span(|code| code.strip())
+        self.with_mapped_span(CodeFragment::strip)
     }
 }
 

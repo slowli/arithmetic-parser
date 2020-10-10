@@ -8,6 +8,7 @@ use core::fmt;
 /// Parsing features for a `Grammar`.
 // TODO: make boolean expressions optional, too.
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)] // flags are independent
 pub struct Features {
     /// Parse tuple types?
     pub tuples: bool,

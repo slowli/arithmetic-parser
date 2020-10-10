@@ -199,7 +199,7 @@ impl<'a> Error<'a> {
         }
     }
 
-    fn with_span<T>(self, span: Spanned<'a, T>) -> SpannedError<'a> {
+    fn with_span<T>(self, span: &Spanned<'a, T>) -> SpannedError<'a> {
         SpannedError(span.copy_with_extra(self))
     }
 }
@@ -329,7 +329,7 @@ where
                     Ok((rest, terms.map_extra(Expr::Tuple)))
                 } else {
                     Err(NomErr::Failure(
-                        Error::UnexpectedTerm { context: None }.with_span(terms),
+                        Error::UnexpectedTerm { context: None }.with_span(&terms),
                     ))
                 }
             }
@@ -355,7 +355,7 @@ where
         } else {
             // Always fail.
             Box::new(|input| {
-                let e = Error::Leftovers.with_span(input.into());
+                let e = Error::Leftovers.with_span(&input.into());
                 Err(NomErr::Error(e))
             })
         };
@@ -369,7 +369,7 @@ where
         } else {
             // Always fail.
             Box::new(|input| {
-                let e = Error::Leftovers.with_span(input.into());
+                let e = Error::Leftovers.with_span(&input.into());
                 Err(NomErr::Error(e))
             })
         };
@@ -431,6 +431,8 @@ where
         args_vec.into_iter().fold(base, |name, spanned_args| {
             let united_span = unite_spans(input, &name, &spanned_args);
             let (maybe_fn_name, (args, _)) = spanned_args.extra;
+
+            #[allow(clippy::option_if_let_else)] // `name` cannot be moved into both branches
             let expr = if let Some(fn_name) = maybe_fn_name {
                 Expr::Method {
                     name: fn_name.into(),
@@ -467,7 +469,8 @@ where
         tag(">="), tag("<="), tag(">"), tag("<"), // order comparisons
     ));
     let binary_ops = with_span(map(binary_ops, drop));
-    let binary_ops = move |input| {
+
+    let full_binary_ops = move |input| {
         let (rest, span) = binary_ops(input)?;
         let spanned_op = BinaryOp::from_span(span);
         if spanned_op.extra.is_order_comparison() && !T::FEATURES.order_comparisons {
@@ -483,7 +486,7 @@ where
     let binary_parser = tuple((
         simple_expr::<T, Ty>,
         many0(tuple((
-            delimited(ws::<Ty>, binary_ops, ws::<Ty>),
+            delimited(ws::<Ty>, full_binary_ops, ws::<Ty>),
             cut(simple_expr::<T, Ty>),
         ))),
     ));
@@ -607,14 +610,10 @@ where
         )),
         |spanned| {
             spanned.map_extra(|maybe_name| {
-                if let Some(name) = maybe_name {
-                    DestructureRest::Named {
-                        variable: name.into(),
-                        ty: None,
-                    }
-                } else {
-                    DestructureRest::Unnamed
-                }
+                maybe_name.map_or(DestructureRest::Unnamed, |name| DestructureRest::Named {
+                    variable: name.into(),
+                    ty: None,
+                })
             })
         },
     )(input)
@@ -728,6 +727,7 @@ where
     ));
 
     with_span(map(assignment_parser, |(lvalue, rvalue)| {
+        #[allow(clippy::option_if_let_else)] // `rvalue` cannot be moved into both branches
         if let Some(lvalue) = lvalue {
             Statement::Assignment {
                 lhs: lvalue,
@@ -777,13 +777,13 @@ where
     delimited(ws::<Ty>, separated_statements::<T, Ty>, ws::<Ty>)(input_span)
         .map_err(|e| match e {
             NomErr::Failure(e) | NomErr::Error(e) => e.0,
-            NomErr::Incomplete(_) => Error::Incomplete.with_span(input_span.into()).0,
+            NomErr::Incomplete(_) => Error::Incomplete.with_span(&input_span.into()).0,
         })
         .and_then(|(remaining, statements)| {
             if remaining.fragment().is_empty() {
                 Ok(statements)
             } else {
-                Err(Error::Leftovers.with_span(remaining.into()).0)
+                Err(Error::Leftovers.with_span(&remaining.into()).0)
             }
         })
 }

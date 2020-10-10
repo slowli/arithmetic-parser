@@ -40,7 +40,7 @@ impl Literal {
         );
         map(
             preceded(tag_char('"'), cut(terminated(opt(parser), tag_char('"')))),
-            |maybe_string| maybe_string.unwrap_or_default(),
+            Option::unwrap_or_default,
         )(input)
     }
 
@@ -215,7 +215,7 @@ fn is_valid_variable_name_works() {
         );
     }
 
-    for &invalid_name in &["", "1abc", "нет", "xy+", "a-b"] {
+    for &invalid_name in &["", "1abc", "\u{43d}\u{435}\u{442}", "xy+", "a-b"] {
         assert!(
             !is_valid_variable_name(invalid_name),
             "failed at invalid name: {}",
@@ -261,11 +261,11 @@ fn whitespace_can_include_comments() {
 
 #[test]
 fn non_ascii_input() {
-    let input = InputSpan::new("фыва");
+    let input = InputSpan::new("\u{444}\u{44b}\u{432}\u{430}");
     let err = statements::<FieldGrammar>(input).unwrap_err();
     assert_matches!(err.extra, Error::NonAsciiInput);
 
-    let input = InputSpan::new("1 + фы");
+    let input = InputSpan::new("1 + \u{444}\u{44b}");
     let err = statements::<FieldGrammar>(input).unwrap_err();
     assert_matches!(err.extra, Error::NonAsciiInput);
 }
@@ -501,6 +501,20 @@ fn method_expr_works() {
 
 #[test]
 fn element_expr_works() {
+    fn simple_fn(offset: usize) -> Expr<'static, FieldGrammar> {
+        Expr::Function {
+            name: Box::new(sp(offset, "ge", Expr::Variable)),
+            args: vec![sp(
+                offset + 3,
+                "0x1234",
+                Expr::Literal(Literal::Bytes {
+                    value: vec![0x12, 0x34],
+                    ty: LiteralType::Bytes,
+                }),
+            )],
+        }
+    }
+
     let input = InputSpan::new("A;");
     assert_eq!(
         expr::<FieldGrammar, Complete>(input).unwrap().1,
@@ -510,66 +524,25 @@ fn element_expr_works() {
     let input = InputSpan::new("(ge(0x1234));");
     assert_eq!(
         expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
-        Expr::Function {
-            name: Box::new(sp(1, "ge", Expr::Variable)),
-            args: vec![sp(
-                4,
-                "0x1234",
-                Expr::Literal(Literal::Bytes {
-                    value: vec![0x12, 0x34],
-                    ty: LiteralType::Bytes,
-                })
-            )],
-        }
+        simple_fn(1)
     );
 
     let input = InputSpan::new("ge(0x1234) + A_b;");
+    let sum_expr = Expr::Binary {
+        lhs: Box::new(sp(0, "ge(0x1234)", simple_fn(0))),
+        op: Spanned::new(span(11, "+"), BinaryOp::Add),
+        rhs: Box::new(sp(13, "A_b", Expr::Variable)),
+    };
     assert_eq!(
         expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
-        Expr::Binary {
-            lhs: Box::new(sp(0, "ge(0x1234)", {
-                Expr::Function {
-                    name: Box::new(sp(0, "ge", Expr::Variable)),
-                    args: vec![sp(
-                        3,
-                        "0x1234",
-                        Expr::Literal(Literal::Bytes {
-                            value: vec![0x12, 0x34],
-                            ty: LiteralType::Bytes,
-                        }),
-                    )],
-                }
-            })),
-            op: Spanned::new(span(11, "+"), BinaryOp::Add),
-            rhs: Box::new(sp(13, "A_b", Expr::Variable)),
-        }
+        sum_expr
     );
 
     let input = InputSpan::new("ge(0x1234) + A_b - C;");
     assert_eq!(
         expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
         Expr::Binary {
-            lhs: Box::new(sp(0, "ge(0x1234) + A_b", {
-                Expr::Binary {
-                    lhs: Box::new(sp(
-                        0,
-                        "ge(0x1234)",
-                        Expr::Function {
-                            name: Box::new(sp(0, "ge", Expr::Variable)),
-                            args: vec![sp(
-                                3,
-                                "0x1234",
-                                Expr::Literal(Literal::Bytes {
-                                    value: vec![0x12, 0x34],
-                                    ty: LiteralType::Bytes,
-                                }),
-                            )],
-                        },
-                    )),
-                    op: Spanned::new(span(11, "+"), BinaryOp::Add),
-                    rhs: Box::new(sp(13, "A_b", Expr::Variable)),
-                }
-            })),
+            lhs: Box::new(sp(0, "ge(0x1234) + A_b", sum_expr)),
             op: Spanned::new(span(17, "-"), BinaryOp::Sub),
             rhs: Box::new(sp(19, "C", Expr::Variable)),
         }
@@ -581,21 +554,7 @@ fn element_expr_works() {
         Expr::Binary {
             lhs: Box::new(sp(0, "(ge(0x1234) + A_b)", {
                 Expr::Binary {
-                    lhs: Box::new(sp(
-                        1,
-                        "ge(0x1234)",
-                        Expr::Function {
-                            name: Box::new(sp(1, "ge", Expr::Variable)),
-                            args: vec![sp(
-                                4,
-                                "0x1234",
-                                Expr::Literal(Literal::Bytes {
-                                    value: vec![0x12, 0x34],
-                                    ty: LiteralType::Bytes,
-                                }),
-                            )],
-                        },
-                    )),
+                    lhs: Box::new(sp(1, "ge(0x1234)", simple_fn(1))),
                     op: BinaryOp::from_span(span(12, "+").into()),
                     rhs: Box::new(sp(14, "A_b", Expr::Variable)),
                 }
@@ -1174,7 +1133,10 @@ fn evaluation_order_with_bool_expressions() {
         scalar_expr.extra,
         Expr::Binary { op, .. } if op == BinaryOp::from_span(span(7, "+").into())
     );
+}
 
+#[test]
+fn evaluation_order_with_complex_bool_expressions() {
     let input = InputSpan::new("x == 2 * z + 3 * 4 && (y, z) == (G^x, 2);");
     let output = expr::<FieldGrammar, Complete>(input).unwrap().1.extra;
     assert_matches!(

@@ -50,6 +50,8 @@
 
 #![no_std]
 #![warn(missing_docs, missing_debug_implementations)]
+#![warn(clippy::all, clippy::pedantic)]
+#![allow(clippy::missing_errors_doc, clippy::must_use_candidate)]
 
 extern crate alloc;
 
@@ -91,21 +93,19 @@ impl fmt::Display for Context {
 
 impl Context {
     fn new(s: &str) -> Self {
-        use self::Context::*;
         match s {
-            "var" => Var,
-            "fn" => Fun,
-            "expr" => Expr,
+            "var" => Self::Var,
+            "fn" => Self::Fun,
+            "expr" => Self::Expr,
             _ => unreachable!(),
         }
     }
 
     fn to_str(self) -> &'static str {
-        use self::Context::*;
         match self {
-            Var => "var",
-            Fun => "fn",
-            Expr => "expr",
+            Self::Var => "var",
+            Self::Fun => "fn",
+            Self::Expr => "expr",
         }
     }
 }
@@ -228,30 +228,28 @@ where
     T::Type: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
-        use self::Expr::*;
-
         match (self, other) {
-            (Variable, Variable) => true,
-            (Literal(this), Literal(that)) => this == that,
-            (FnDefinition(this), FnDefinition(that)) => this == that,
-            (Tuple(this), Tuple(that)) => this == that,
-            (Block(this), Block(that)) => this == that,
+            (Self::Variable, Self::Variable) => true,
+            (Self::Literal(this), Self::Literal(that)) => this == that,
+            (Self::FnDefinition(this), Self::FnDefinition(that)) => this == that,
+            (Self::Tuple(this), Self::Tuple(that)) => this == that,
+            (Self::Block(this), Self::Block(that)) => this == that,
 
             (
-                Function { name, args },
-                Function {
+                Self::Function { name, args },
+                Self::Function {
                     name: that_name,
                     args: that_args,
                 },
             ) => name == that_name && args == that_args,
 
             (
-                Method {
+                Self::Method {
                     name,
                     receiver,
                     args,
                 },
-                Method {
+                Self::Method {
                     name: that_name,
                     receiver: that_receiver,
                     args: that_args,
@@ -259,16 +257,16 @@ where
             ) => name == that_name && receiver == that_receiver && args == that_args,
 
             (
-                Unary { op, inner },
-                Unary {
+                Self::Unary { op, inner },
+                Self::Unary {
                     op: that_op,
                     inner: that_inner,
                 },
             ) => op == that_op && inner == that_inner,
 
             (
-                Binary { lhs, op, rhs },
-                Binary {
+                Self::Binary { lhs, op, rhs },
+                Self::Binary {
                     lhs: that_lhs,
                     op: that_op,
                     rhs: that_rhs,
@@ -392,26 +390,23 @@ impl BinaryOp {
 
     /// Checks if this operation is arithmetic.
     pub fn is_arithmetic(self) -> bool {
-        match self {
-            Self::Add | Self::Sub | Self::Mul | Self::Div | Self::Power => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Self::Add | Self::Sub | Self::Mul | Self::Div | Self::Power
+        )
     }
 
     /// Checks if this operation is a comparison.
     pub fn is_comparison(self) -> bool {
-        match self {
-            Self::Eq | Self::NotEq | Self::Gt | Self::Lt | Self::Le | Self::Ge => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Self::Eq | Self::NotEq | Self::Gt | Self::Lt | Self::Le | Self::Ge
+        )
     }
 
     /// Checks if this operation is an order comparison.
     pub fn is_order_comparison(self) -> bool {
-        match self {
-            Self::Gt | Self::Lt | Self::Le | Self::Ge => true,
-            _ => false,
-        }
+        matches!(self, Self::Gt | Self::Lt | Self::Le | Self::Ge)
     }
 }
 
@@ -585,14 +580,12 @@ where
     T::Type: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
-        use self::Statement::*;
-
         match (self, other) {
-            (Expr(this), Expr(that)) => this == that,
+            (Self::Expr(this), Self::Expr(that)) => this == that,
 
             (
-                Assignment { lhs, rhs },
-                Assignment {
+                Self::Assignment { lhs, rhs },
+                Self::Assignment {
                     lhs: that_lhs,
                     rhs: that_rhs,
                 },

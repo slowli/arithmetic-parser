@@ -15,7 +15,7 @@ assert.equal(evaluated, 9)
 
 const evaluatedFlag = evaluate(`
   max_value = |...xs| {
-      fold(xs, -Inf, |acc, x| if(cmp(x, acc) == 1, x, acc))
+      fold(xs, -Inf, |acc, x| if(x > acc, x, acc))
   };
   max_value(1, -2, 7, 2, 5) == 7 && max_value(3, -5, 9) == 9
 `)

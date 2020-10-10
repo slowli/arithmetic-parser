@@ -230,6 +230,19 @@ impl Code<'_> {
             Self::Stripped(len) => Code::Stripped(len),
         }
     }
+
+    /// FIXME
+    pub fn len(self) -> usize {
+        match self {
+            Self::Str(string) => string.len(),
+            Self::Stripped(len) => len,
+        }
+    }
+
+    /// FIXME
+    pub fn is_empty(self) -> bool {
+        self.len() == 0
+    }
 }
 
 impl<'a> From<&'a str> for Code<'a> {

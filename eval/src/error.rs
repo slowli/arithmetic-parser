@@ -391,6 +391,28 @@ impl<'a> Backtrace<'a> {
     }
 }
 
+impl StripCode for Backtrace<'_> {
+    type Stripped = Backtrace<'static>;
+
+    fn strip_code(&self) -> Self::Stripped {
+        Backtrace {
+            calls: self.calls.iter().map(StripCode::strip_code).collect(),
+        }
+    }
+}
+
+impl StripCode for BacktraceElement<'_> {
+    type Stripped = BacktraceElement<'static>;
+
+    fn strip_code(&self) -> Self::Stripped {
+        BacktraceElement {
+            fn_name: self.fn_name.clone(),
+            def_span: self.def_span.as_ref().map(StripCode::strip_code),
+            call_span: self.call_span.strip_code(),
+        }
+    }
+}
+
 /// Error with the associated backtrace.
 #[derive(Debug)]
 pub struct ErrorWithBacktrace<'a> {
@@ -454,6 +476,17 @@ impl fmt::Display for ErrorWithBacktrace<'_> {
     }
 }
 
+impl StripCode for ErrorWithBacktrace<'_> {
+    type Stripped = ErrorWithBacktrace<'static>;
+
+    fn strip_code(&self) -> Self::Stripped {
+        ErrorWithBacktrace {
+            inner: self.inner.strip_code(),
+            backtrace: self.backtrace.strip_code(),
+        }
+    }
+}
+
 #[cfg(feature = "std")]
 impl std::error::Error for ErrorWithBacktrace<'_> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
@@ -492,7 +525,7 @@ mod tests {
     #[test]
     fn display_for_error_with_backtrace() {
         let input = "(_, test) = (1, 2);";
-        let main_span = MaybeSpanned::from_str(input, 4..8).into();
+        let main_span = MaybeSpanned::from_str(input, 4..8);
         let err = SpannedEvalError::new(&main_span, EvalError::Undefined("test".to_owned()));
 
         let mut err = ErrorWithBacktrace::with_empty_trace(err);

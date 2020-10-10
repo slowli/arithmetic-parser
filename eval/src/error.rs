@@ -287,7 +287,7 @@ pub struct SpannedEvalError<'a> {
 }
 
 impl<'a> SpannedEvalError<'a> {
-    pub(super) fn new<Span, T>(main_span: &LocatedSpan<Span, T>, error: EvalError) -> Self
+    pub(crate) fn new<Span, T>(main_span: &LocatedSpan<Span, T>, error: EvalError) -> Self
     where
         Span: Copy + Into<CodeFragment<'a>>,
     {
@@ -372,7 +372,7 @@ impl<'a> Backtrace<'a> {
     }
 
     /// Appends a function call into the backtrace.
-    pub(super) fn push_call(
+    pub(crate) fn push_call(
         &mut self,
         fn_name: &str,
         def_span: Option<MaybeSpanned<'a>>,
@@ -386,7 +386,7 @@ impl<'a> Backtrace<'a> {
     }
 
     /// Pops a function call.
-    pub(super) fn pop_call(&mut self) {
+    pub(crate) fn pop_call(&mut self) {
         self.calls.pop();
     }
 }
@@ -423,11 +423,11 @@ pub struct ErrorWithBacktrace<'a> {
 }
 
 impl<'a> ErrorWithBacktrace<'a> {
-    pub(super) fn new(inner: SpannedEvalError<'a>, backtrace: Backtrace<'a>) -> Self {
+    pub(crate) fn new(inner: SpannedEvalError<'a>, backtrace: Backtrace<'a>) -> Self {
         Self { inner, backtrace }
     }
 
-    pub(super) fn with_empty_trace(inner: SpannedEvalError<'a>) -> Self {
+    pub(crate) fn with_empty_trace(inner: SpannedEvalError<'a>) -> Self {
         Self {
             inner,
             backtrace: Backtrace::default(),

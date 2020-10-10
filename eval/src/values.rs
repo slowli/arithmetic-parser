@@ -31,7 +31,7 @@ impl<'r, 'a> CallContext<'r, 'a> {
         }
     }
 
-    pub(super) fn new(
+    pub(crate) fn new(
         call_span: MaybeSpanned<'a>,
         backtrace: Option<&'r mut Backtrace<'a>>,
     ) -> Self {
@@ -41,7 +41,7 @@ impl<'r, 'a> CallContext<'r, 'a> {
         }
     }
 
-    pub(super) fn backtrace(&mut self) -> Option<&mut Backtrace<'a>> {
+    pub(crate) fn backtrace(&mut self) -> Option<&mut Backtrace<'a>> {
         self.backtrace.as_deref_mut()
     }
 
@@ -134,7 +134,7 @@ impl<T: Grammar> StripCode for InterpretedFn<'_, T> {
 }
 
 impl<'a, T: Grammar> InterpretedFn<'a, T> {
-    pub(super) fn new(
+    pub(crate) fn new(
         definition: Rc<ExecutableFn<'a, T>>,
         captures: Vec<Value<'a, T>>,
         capture_names: Vec<String>,
@@ -253,7 +253,7 @@ where
         }
     }
 
-    pub(super) fn def_span(&self) -> Option<MaybeSpanned<'a>> {
+    pub(crate) fn def_span(&self) -> Option<MaybeSpanned<'a>> {
         match self {
             Self::Native(_) => None,
             Self::Interpreted(function) => Some(function.definition.def_span),
@@ -319,7 +319,7 @@ impl<'a, T: Grammar> Value<'a, T> {
     }
 
     /// Creates a value for an interpreted function.
-    pub(super) fn interpreted_fn(function: InterpretedFn<'a, T>) -> Self {
+    pub(crate) fn interpreted_fn(function: InterpretedFn<'a, T>) -> Self {
         Self::Function(Function::Interpreted(Rc::new(function)))
     }
 
@@ -517,7 +517,7 @@ where
             .map_err(|e| e.span(total_span, lhs_span, rhs_span))
     }
 
-    pub(super) fn try_add(
+    pub(crate) fn try_add(
         total_span: MaybeSpanned<'a>,
         lhs: MaybeSpanned<'a, Self>,
         rhs: MaybeSpanned<'a, Self>,
@@ -525,7 +525,7 @@ where
         Self::try_binary_op(total_span, lhs, rhs, BinaryOp::Add, |x, y| x + y)
     }
 
-    pub(super) fn try_sub(
+    pub(crate) fn try_sub(
         total_span: MaybeSpanned<'a>,
         lhs: MaybeSpanned<'a, Self>,
         rhs: MaybeSpanned<'a, Self>,
@@ -533,7 +533,7 @@ where
         Self::try_binary_op(total_span, lhs, rhs, BinaryOp::Sub, |x, y| x - y)
     }
 
-    pub(super) fn try_mul(
+    pub(crate) fn try_mul(
         total_span: MaybeSpanned<'a>,
         lhs: MaybeSpanned<'a, Self>,
         rhs: MaybeSpanned<'a, Self>,
@@ -541,7 +541,7 @@ where
         Self::try_binary_op(total_span, lhs, rhs, BinaryOp::Mul, |x, y| x * y)
     }
 
-    pub(super) fn try_div(
+    pub(crate) fn try_div(
         total_span: MaybeSpanned<'a>,
         lhs: MaybeSpanned<'a, Self>,
         rhs: MaybeSpanned<'a, Self>,
@@ -549,7 +549,7 @@ where
         Self::try_binary_op(total_span, lhs, rhs, BinaryOp::Div, |x, y| x / y)
     }
 
-    pub(super) fn try_pow(
+    pub(crate) fn try_pow(
         total_span: MaybeSpanned<'a>,
         lhs: MaybeSpanned<'a, Self>,
         rhs: MaybeSpanned<'a, Self>,
@@ -557,7 +557,7 @@ where
         Self::try_binary_op(total_span, lhs, rhs, BinaryOp::Power, Pow::pow)
     }
 
-    pub(super) fn try_neg(self) -> Result<Self, EvalError> {
+    pub(crate) fn try_neg(self) -> Result<Self, EvalError> {
         match self {
             Self::Number(val) => Ok(Self::Number(-val)),
             Self::Tuple(tuple) => {
@@ -571,7 +571,7 @@ where
         }
     }
 
-    pub(super) fn try_not(self) -> Result<Self, EvalError> {
+    pub(crate) fn try_not(self) -> Result<Self, EvalError> {
         match self {
             Self::Bool(val) => Ok(Self::Bool(!val)),
             Self::Tuple(tuple) => {
@@ -585,7 +585,7 @@ where
         }
     }
 
-    pub(super) fn try_and(
+    pub(crate) fn try_and(
         lhs: &MaybeSpanned<'a, Self>,
         rhs: &MaybeSpanned<'a, Self>,
     ) -> Result<Self, SpannedEvalError<'a>> {
@@ -606,7 +606,7 @@ where
         }
     }
 
-    pub(super) fn try_or(
+    pub(crate) fn try_or(
         lhs: &MaybeSpanned<'a, Self>,
         rhs: &MaybeSpanned<'a, Self>,
     ) -> Result<Self, SpannedEvalError<'a>> {

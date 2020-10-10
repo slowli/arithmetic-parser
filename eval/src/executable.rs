@@ -117,7 +117,7 @@ impl<T: Grammar> StripCode for ExecutableModule<'_, T> {
 }
 
 impl<'a, T: Grammar> ExecutableModule<'a, T> {
-    pub(super) fn new(inner: Executable<'a, T>, imports: Env<'a, T>) -> Self {
+    pub(crate) fn new(inner: Executable<'a, T>, imports: Env<'a, T>) -> Self {
         Self {
             inner,
             imports: ModuleImports { inner: imports },
@@ -143,7 +143,7 @@ impl<'a, T: Grammar> ExecutableModule<'a, T> {
         &self.imports
     }
 
-    pub(super) fn inner(&self) -> &Executable<'a, T> {
+    pub(crate) fn inner(&self) -> &Executable<'a, T> {
         &self.inner
     }
 }

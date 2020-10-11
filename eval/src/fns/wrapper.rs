@@ -366,6 +366,7 @@ try_from_value_for_tuple!(10 => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z,
 ///
 /// [wrapped functions]: struct.FnWrapper.html
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ErrorOutput<'a> {
     /// Error together with the defined span(s).
     Spanned(SpannedEvalError<'a>),

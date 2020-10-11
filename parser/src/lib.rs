@@ -72,6 +72,7 @@ mod traits;
 /// Parsing context.
 // TODO: Add more fine-grained contexts.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum Context {
     /// Variable name.
     Var,
@@ -112,6 +113,7 @@ impl Context {
 
 /// Arithmetic expression with an abstract types for type hints and literals.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Expr<'a, T>
 where
     T: Grammar,
@@ -183,6 +185,21 @@ impl<T: Grammar> Expr<'_, T> {
         match self {
             Expr::Binary { ref rhs, .. } => Some(rhs),
             _ => None,
+        }
+    }
+
+    /// Returns the type of this expression.
+    pub fn ty(&self) -> ExprType {
+        match self {
+            Self::Variable => ExprType::Variable,
+            Self::Literal(_) => ExprType::Literal,
+            Self::FnDefinition(_) => ExprType::FnDefinition,
+            Self::Tuple(_) => ExprType::Tuple,
+            Self::Block(_) => ExprType::Block,
+            Self::Function { .. } => ExprType::Function,
+            Self::Method { .. } => ExprType::Method,
+            Self::Unary { .. } => ExprType::Unary,
+            Self::Binary { .. } => ExprType::Binary,
         }
     }
 }
@@ -281,8 +298,49 @@ where
 /// `Expr` with the associated type and code span.
 pub type SpannedExpr<'a, T> = Spanned<'a, Expr<'a, T>>;
 
+/// Type of an `Expr`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum ExprType {
+    /// Variable use, e.g., `x`.
+    Variable,
+    /// Literal (semantic depends on the grammar).
+    Literal,
+    /// Function definition, e.g., `|x, y| { x + y }`.
+    FnDefinition,
+    /// Function call, e.g., `foo(x, y)` or `|x| { x + 5 }(3)`.
+    Function,
+    /// Method call, e.g., `foo.bar(x, 5)`.
+    Method,
+    /// Unary operation, e.g., `-x`.
+    Unary,
+    /// Binary operation, e.g., `x + 1`.
+    Binary,
+    /// Tuple expression, e.g., `(x, y + z)`.
+    Tuple,
+    /// Block expression, e.g., `{ x = 3; x + y }`.
+    Block,
+}
+
+impl fmt::Display for ExprType {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Variable => "variable",
+            Self::Literal => "literal",
+            Self::FnDefinition => "function definition",
+            Self::Function => "function call",
+            Self::Method => "method call",
+            Self::Unary => "unary operation",
+            Self::Binary => "binary operation",
+            Self::Tuple => "tuple",
+            Self::Block => "block",
+        })
+    }
+}
+
 /// Unary operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum UnaryOp {
     /// Negation (`-`).
     Neg,
@@ -307,6 +365,7 @@ impl UnaryOp {
 
 /// Binary arithmetic operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum BinaryOp {
     /// Addition (`+`).
     Add,
@@ -412,6 +471,7 @@ impl BinaryOp {
 
 /// Generic operation, either unary or binary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum Op {
     /// Unary operation.
     Unary(UnaryOp),
@@ -442,6 +502,7 @@ impl From<BinaryOp> for Op {
 
 /// Length of an assigned lvalue.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum LvalueLen {
     /// Exact length.
     Exact(usize),
@@ -530,6 +591,7 @@ impl<'a, T> DestructureRest<'a, T> {
 
 /// Assignable value.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum Lvalue<'a, T> {
     /// Simple variable, e.g., `x`.
     Variable {
@@ -540,11 +602,41 @@ pub enum Lvalue<'a, T> {
     Tuple(Destructure<'a, T>),
 }
 
+impl<T> Lvalue<'_, T> {
+    /// Returns type of this lvalue.
+    pub fn ty(&self) -> LvalueType {
+        match self {
+            Self::Variable { .. } => LvalueType::Variable,
+            Self::Tuple(_) => LvalueType::Tuple,
+        }
+    }
+}
+
 /// `Lvalue` with the associated code span.
 pub type SpannedLvalue<'a, T> = Spanned<'a, Lvalue<'a, T>>;
 
+/// Type of an `Lvalue`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum LvalueType {
+    /// Simple variable, e.g., `x`.
+    Variable,
+    /// Tuple destructuring, e.g., `(x, y)`.
+    Tuple,
+}
+
+impl fmt::Display for LvalueType {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Variable => "simple variable",
+            Self::Tuple => "tuple destructuring",
+        })
+    }
+}
+
 /// Statement: an expression or a variable assignment.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Statement<'a, T>
 where
     T: Grammar,
@@ -559,6 +651,16 @@ where
         /// RHS of the assignment.
         rhs: Box<SpannedExpr<'a, T>>,
     },
+}
+
+impl<T: Grammar> Statement<'_, T> {
+    /// Returns the type of this statement.
+    pub fn ty(&self) -> StatementType {
+        match self {
+            Self::Expr(_) => StatementType::Expr,
+            Self::Assignment { .. } => StatementType::Assignment,
+        }
+    }
 }
 
 impl<T: Grammar> Clone for Statement<'_, T> {
@@ -598,6 +700,25 @@ where
 
 /// Statement with the associated code span.
 pub type SpannedStatement<'a, T> = Spanned<'a, Statement<'a, T>>;
+
+/// Type of a `Statement`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum StatementType {
+    /// Expression, e.g., `x + (1, 2)`.
+    Expr,
+    /// Assigment, e.g., `(x, y) = (5, 8)`.
+    Assignment,
+}
+
+impl fmt::Display for StatementType {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Expr => "expression",
+            Self::Assignment => "variable assignment",
+        })
+    }
+}
 
 /// Block of statements.
 ///

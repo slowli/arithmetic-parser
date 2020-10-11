@@ -265,6 +265,7 @@ where
 ///
 /// [`Value`]: enum.Value.html
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum ValueType {
     /// Number.
     Number,
@@ -298,6 +299,7 @@ impl fmt::Display for ValueType {
 
 /// Values produced by expressions during their interpretation.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Value<'a, T: Grammar> {
     /// Primitive value: a single literal.
     Number(T::Lit),

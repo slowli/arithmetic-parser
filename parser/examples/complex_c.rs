@@ -239,6 +239,7 @@ impl<'a> Context<'a> {
                         evaluated += "\n";
                     }
                 }
+                _ => panic!("Unsupported statement type: {:?}", statement),
             }
         }
 
@@ -260,6 +261,7 @@ impl<'a> Context<'a> {
         let variable_name = match lhs.extra {
             Lvalue::Variable { .. } => *lhs.fragment(),
             Lvalue::Tuple(_) => unreachable!("Tuples are disabled in parser"),
+            _ => panic!("Unsupported lvalue type: {:?}", lhs),
         };
 
         if self.variables.contains_key(variable_name) {
@@ -295,6 +297,7 @@ impl<'a> Context<'a> {
             Expr::Unary { op, inner } => match op.extra {
                 UnaryOp::Neg => -self.eval_expr(inner),
                 UnaryOp::Not => panic!("Boolean operations are not supported: {}", expr.fragment()),
+                _ => panic!("Unsupported unary op: {:?}", op.extra),
             },
 
             Expr::Binary { lhs, op, rhs } => {
@@ -336,6 +339,7 @@ impl<'a> Context<'a> {
             Expr::Method { .. } => panic!("Methods are not supported"),
             Expr::FnDefinition(_) => panic!("Embedded function declarations are not supported"),
             Expr::Block(_) | Expr::Tuple(_) => unreachable!("Disabled in parser"),
+            _ => panic!("Unsupported expression: {:?}", expr.extra),
         }
     }
 }

@@ -10,7 +10,8 @@ use crate::{
     Value,
 };
 use arithmetic_parser::{
-    BinaryOp, CodeFragment, LocatedSpan, LvalueLen, MaybeSpanned, Op, StripCode, UnaryOp,
+    BinaryOp, CodeFragment, ExprType, LocatedSpan, LvalueLen, LvalueType, MaybeSpanned, Op,
+    StatementType, StripCode, UnaryOp,
 };
 
 /// Context for [`EvalError::TupleLenMismatch`].
@@ -140,12 +141,21 @@ pub enum EvalError {
             should only return -1, 0, or 1."
     )]
     InvalidCmpResult,
+
+    /// Construct not supported by the interpreter.
+    #[display(fmt = "Unsupported {}", _0)]
+    Unsupported(UnsupportedType),
 }
 
 impl EvalError {
     /// Creates a native error.
     pub fn native(message: impl Into<String>) -> Self {
         Self::NativeCall(message.into())
+    }
+
+    /// Creates an error for an lvalue type not supported by the interpreter.
+    pub fn unsupported<T: Into<UnsupportedType>>(ty: T) -> Self {
+        Self::Unsupported(ty.into())
     }
 
     /// Returned shortened error cause.
@@ -169,6 +179,7 @@ impl EvalError {
             Self::UnexpectedOperand { op } => format!("Unexpected operand type for {}", op),
             Self::MissingCmpFunction { .. } => "Missing comparison function".to_owned(),
             Self::InvalidCmpResult => "Invalid comparison result".to_owned(),
+            Self::Unsupported(_) => "Grammar construct not supported".to_owned(),
         }
     }
 
@@ -188,6 +199,7 @@ impl EvalError {
                 format!("Function with name {} should exist in the context", name)
             }
             Self::InvalidCmpResult => "Comparison function must return -1, 0 or 1".to_owned(),
+            Self::Unsupported(ty) => format!("Unsupported {}", ty),
         }
     }
 
@@ -240,8 +252,67 @@ impl std::error::Error for EvalError {
     }
 }
 
+/// Description of a construct not supported by the interpreter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum UnsupportedType {
+    /// Unary operation.
+    UnaryOp(UnaryOp),
+    /// Binary operation.
+    BinaryOp(BinaryOp),
+    /// Expression.
+    Expr(ExprType),
+    /// Statement.
+    Statement(StatementType),
+    /// Lvalue.
+    Lvalue(LvalueType),
+}
+
+impl fmt::Display for UnsupportedType {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnaryOp(op) => write!(formatter, "unary op: {}", op),
+            Self::BinaryOp(op) => write!(formatter, "binary op: {}", op),
+            Self::Expr(expr) => write!(formatter, "expression: {}", expr),
+            Self::Statement(statement) => write!(formatter, "statement: {}", statement),
+            Self::Lvalue(lvalue) => write!(formatter, "lvalue: {}", lvalue),
+        }
+    }
+}
+
+impl From<UnaryOp> for UnsupportedType {
+    fn from(value: UnaryOp) -> Self {
+        Self::UnaryOp(value)
+    }
+}
+
+impl From<BinaryOp> for UnsupportedType {
+    fn from(value: BinaryOp) -> Self {
+        Self::BinaryOp(value)
+    }
+}
+
+impl From<ExprType> for UnsupportedType {
+    fn from(value: ExprType) -> Self {
+        Self::Expr(value)
+    }
+}
+
+impl From<StatementType> for UnsupportedType {
+    fn from(value: StatementType) -> Self {
+        Self::Statement(value)
+    }
+}
+
+impl From<LvalueType> for UnsupportedType {
+    fn from(value: LvalueType) -> Self {
+        Self::Lvalue(value)
+    }
+}
+
 /// Auxiliary information about error.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum AuxErrorInfo {
     /// Function arguments declaration for [`ArgsLenMismatch`].
     ///

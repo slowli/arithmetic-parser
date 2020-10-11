@@ -95,11 +95,11 @@ fn main() -> anyhow::Result<()> {
 
     imports["fold"] = rfold_fn;
 
-    // Due to lifetime checks, we need to re-assign `module`, since the original one
-    // is inferred to have `'static` lifetime.
     let rfold_sum = sum_module
         .run_with_imports(imports)
         .map_err(|err| err.strip_code())?;
+    // Due to lifetime checks, we need to re-assign `test_module`, since the original one
+    // is inferred to have `'static` lifetime.
     let mut test_module = test_module;
     test_module.set_import("sum", rfold_sum);
     let sum_value = test_module.run().map_err(|err| err.strip_code())?;

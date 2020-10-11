@@ -324,6 +324,7 @@ where
                 match op {
                     UnaryOp::Neg => inner_value.try_neg(),
                     UnaryOp::Not => inner_value.try_not(),
+                    _ => unreachable!("Checked during compilation"),
                 }
                 .map_err(|err| SpannedEvalError::new(&span, err))
             }
@@ -347,6 +348,8 @@ where
                     BinaryOp::Gt | BinaryOp::Lt | BinaryOp::Ge | BinaryOp::Le => {
                         unreachable!("Must be desugared by the compiler")
                     }
+
+                    _ => unreachable!("Checked during compilation"),
                 }
             }
 

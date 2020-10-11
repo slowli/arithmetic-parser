@@ -15,6 +15,7 @@ use crate::{
 use arithmetic_parser::{
     is_valid_variable_name, BinaryOp, Block, Destructure, Expr, FnDefinition, Grammar, InputSpan,
     Lvalue, MaybeSpanned, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
+    UnaryOp,
 };
 
 mod captures;
@@ -41,6 +42,39 @@ impl Compiler {
             vars_to_registers: env.variables_map().to_owned(),
             register_count: env.register_count(),
             scope_depth: 0,
+        }
+    }
+
+    fn check_unary_op<'a>(op: &Spanned<'a, UnaryOp>) -> Result<UnaryOp, SpannedEvalError<'a>> {
+        match op.extra {
+            UnaryOp::Neg | UnaryOp::Not => Ok(op.extra),
+            _ => {
+                let err = EvalError::unsupported(op.extra);
+                Err(SpannedEvalError::new(op, err))
+            }
+        }
+    }
+
+    fn check_binary_op<'a>(op: &Spanned<'a, BinaryOp>) -> Result<BinaryOp, SpannedEvalError<'a>> {
+        match op.extra {
+            BinaryOp::Add
+            | BinaryOp::Sub
+            | BinaryOp::Mul
+            | BinaryOp::Div
+            | BinaryOp::Power
+            | BinaryOp::And
+            | BinaryOp::Or
+            | BinaryOp::Eq
+            | BinaryOp::NotEq
+            | BinaryOp::Gt
+            | BinaryOp::Ge
+            | BinaryOp::Lt
+            | BinaryOp::Le => Ok(op.extra),
+
+            _ => {
+                let err = EvalError::unsupported(op.extra);
+                Err(SpannedEvalError::new(op, err))
+            }
         }
     }
 
@@ -96,7 +130,7 @@ impl Compiler {
                 let register = self.push_assignment(
                     executable,
                     CompiledExpr::Unary {
-                        op: op.extra,
+                        op: Self::check_unary_op(op)?,
                         inner,
                     },
                     expr,
@@ -117,7 +151,13 @@ impl Compiler {
 
             Expr::Block(block) => self.compile_block(executable, expr, block)?,
             Expr::FnDefinition(def) => self.compile_fn_definition(executable, expr, def)?,
+
+            _ => {
+                let err = EvalError::unsupported(expr.extra.ty());
+                return Err(SpannedEvalError::new(expr, err));
+            }
         };
+
         Ok(expr.copy_with_extra(atom).into())
     }
 
@@ -156,7 +196,7 @@ impl Compiler {
             }
         } else {
             CompiledExpr::Binary {
-                op: op.extra,
+                op: Self::check_binary_op(op)?,
                 lhs,
                 rhs,
             }
@@ -341,7 +381,7 @@ impl Compiler {
 
         let mut executable = Executable::new();
         let args_span = def.args.with_no_extra();
-        this.destructure(&mut executable, &def.args.extra, args_span, captures.len());
+        this.destructure(&mut executable, &def.args.extra, args_span, captures.len())?;
 
         for statement in &def.body.statements {
             this.compile_statement(&mut executable, statement)?;
@@ -380,8 +420,13 @@ impl Compiler {
                     }
                     Atom::Register(register) => register,
                 };
-                self.assign(executable, lhs, rhs_register);
+                self.assign(executable, lhs, rhs_register)?;
                 None
+            }
+
+            _ => {
+                let err = EvalError::unsupported(statement.extra.ty());
+                return Err(SpannedEvalError::new(statement, err));
             }
         })
     }
@@ -433,7 +478,7 @@ impl Compiler {
         executable: &mut Executable<'a, T>,
         lhs: &SpannedLvalue<'a, T::Type>,
         rhs_register: usize,
-    ) {
+    ) -> Result<(), SpannedEvalError<'a>> {
         match &lhs.extra {
             Lvalue::Variable { .. } => {
                 let var_name = *lhs.fragment();
@@ -455,9 +500,16 @@ impl Compiler {
 
             Lvalue::Tuple(destructure) => {
                 let span = lhs.with_no_extra();
-                self.destructure(executable, destructure, span, rhs_register);
+                self.destructure(executable, destructure, span, rhs_register)?;
+            }
+
+            _ => {
+                let err = EvalError::unsupported(lhs.extra.ty());
+                return Err(SpannedEvalError::new(lhs, err));
             }
         }
+
+        Ok(())
     }
 
     fn destructure<'a, T: Grammar>(
@@ -466,7 +518,7 @@ impl Compiler {
         destructure: &Destructure<'a, T::Type>,
         span: Spanned<'a>,
         rhs_register: usize,
-    ) {
+    ) -> Result<(), SpannedEvalError<'a>> {
         let command = Command::Destructure {
             source: rhs_register,
             start_len: destructure.start.len(),
@@ -479,20 +531,22 @@ impl Compiler {
         self.register_count += destructure.start.len() + destructure.end.len() + 1;
 
         for (i, lvalue) in (start_register..).zip(&destructure.start) {
-            self.assign(executable, lvalue, i);
+            self.assign(executable, lvalue, i)?;
         }
 
         let start_register = start_register + destructure.start.len();
         if let Some(ref middle) = destructure.middle {
             if let Some(lvalue) = middle.extra.to_lvalue() {
-                self.assign(executable, &lvalue, start_register);
+                self.assign(executable, &lvalue, start_register)?;
             }
         }
 
         let start_register = start_register + 1;
         for (i, lvalue) in (start_register..).zip(&destructure.end) {
-            self.assign(executable, lvalue, i);
+            self.assign(executable, lvalue, i)?;
         }
+
+        Ok(())
     }
 }
 

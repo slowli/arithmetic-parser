@@ -127,7 +127,13 @@ where
             Expr::FnDefinition(def) => {
                 self.eval_function(def)?;
             }
+
+            _ => {
+                let err = EvalError::unsupported(expr.extra.ty());
+                return Err(SpannedEvalError::new(expr, err));
+            }
         }
+
         Ok(())
     }
 
@@ -138,6 +144,7 @@ where
     ) -> Result<(), SpannedEvalError<'a>> {
         match &statement.extra {
             Statement::Expr(expr) => self.eval(expr),
+
             Statement::Assignment { lhs, rhs } => {
                 self.eval(rhs)?;
                 let mut new_vars = HashMap::new();
@@ -148,6 +155,11 @@ where
                 )?;
                 self.local_vars.last_mut().unwrap().extend(&new_vars);
                 Ok(())
+            }
+
+            _ => {
+                let err = EvalError::unsupported(statement.extra.ty());
+                Err(SpannedEvalError::new(statement, err))
             }
         }
     }
@@ -214,6 +226,11 @@ pub(super) fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
 
             Lvalue::Tuple(fragments) => {
                 extract_vars(vars, fragments, context)?;
+            }
+
+            _ => {
+                let err = EvalError::unsupported(lvalue.extra.ty());
+                return Err(SpannedEvalError::new(lvalue, err));
             }
         }
     }

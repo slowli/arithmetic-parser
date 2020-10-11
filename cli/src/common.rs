@@ -296,6 +296,8 @@ impl<'a> Env<'a> {
                 }
                 write!(self.writer, "{})", " ".repeat(indent))
             }
+
+            _ => unreachable!(),
         }
     }
 

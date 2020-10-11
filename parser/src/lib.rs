@@ -41,7 +41,7 @@
 //! // This function has a single argument and a single statement in the body.
 //! assert_matches!(
 //!     some_function,
-//!     Expr::FnDefinition(FnDefinition { ref args, ref body })
+//!     Expr::FnDefinition(FnDefinition { ref args, ref body, .. })
 //!         if args.extra.len() == LvalueLen::Exact(2)
 //!             && body.statements.is_empty()
 //!             && body.return_value.is_some()

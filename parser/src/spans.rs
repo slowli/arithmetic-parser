@@ -299,3 +299,23 @@ pub(crate) fn unite_spans<'a, T, U>(
         )
     }
 }
+
+/// Helper trait for `Result`s with the error component that implements `StripCode`.
+pub trait StripResultExt {
+    /// Type wrapped by the `Result::Ok` variant.
+    type Ok;
+    /// Result of stripping code fragments from an error.
+    type StrippedErr: 'static;
+
+    /// Strips code fragments from the error variant.
+    fn strip_err(self) -> Result<Self::Ok, Self::StrippedErr>;
+}
+
+impl<T, E: StripCode> StripResultExt for Result<T, E> {
+    type Ok = T;
+    type StrippedErr = E::Stripped;
+
+    fn strip_err(self) -> Result<T, Self::StrippedErr> {
+        self.map_err(|err| err.strip_code())
+    }
+}

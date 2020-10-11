@@ -57,7 +57,10 @@ extern crate alloc;
 
 pub use crate::{
     parser::{is_valid_variable_name, Error, SpannedError},
-    spans::{CodeFragment, InputSpan, LocatedSpan, MaybeSpanned, NomResult, Spanned, StripCode},
+    spans::{
+        CodeFragment, InputSpan, LocatedSpan, MaybeSpanned, NomResult, Spanned, StripCode,
+        StripResultExt,
+    },
     traits::{Features, Grammar, GrammarExt},
 };
 

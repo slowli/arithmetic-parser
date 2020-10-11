@@ -4,7 +4,9 @@ use anyhow::anyhow;
 use assert_matches::assert_matches;
 
 use arithmetic_eval::{EvalError, ExecutableModule, Interpreter, Value};
-use arithmetic_parser::{grammars::F64Grammar, BinaryOp, GrammarExt, InputSpan, StripCode};
+use arithmetic_parser::{
+    grammars::F64Grammar, BinaryOp, GrammarExt, InputSpan, StripCode, StripResultExt,
+};
 
 fn create_module<'a>(
     program: &'a str,
@@ -21,9 +23,7 @@ fn create_module<'a>(
 
     let mut interpreter = Interpreter::with_prelude();
     interpreter.insert_var(import_name, Value::void());
-    interpreter
-        .compile(&block)
-        .map_err(|e| e.strip_code().into())
+    Ok(interpreter.compile(&block).strip_err()?)
 }
 
 fn create_static_module(
@@ -91,18 +91,16 @@ fn main() -> anyhow::Result<()> {
     "#;
     let fold_program = String::from(fold_program);
     let fold_module = create_module(&fold_program, "_")?;
-    let rfold_fn = fold_module.run().map_err(|err| err.strip_code())?;
+    let rfold_fn = fold_module.run().strip_err()?;
 
     imports["fold"] = rfold_fn;
 
-    let rfold_sum = sum_module
-        .run_with_imports(imports)
-        .map_err(|err| err.strip_code())?;
+    let rfold_sum = sum_module.run_with_imports(imports).strip_err()?;
     // Due to lifetime checks, we need to re-assign `test_module`, since the original one
     // is inferred to have `'static` lifetime.
     let mut test_module = test_module;
     test_module.set_import("sum", rfold_sum);
-    let sum_value = test_module.run().map_err(|err| err.strip_code())?;
+    let sum_value = test_module.run().strip_err()?;
     assert_eq!(sum_value, Value::Number(-2.0));
 
     Ok(())

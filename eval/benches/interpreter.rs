@@ -10,7 +10,7 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 use typed_arena::Arena;
 
 use arithmetic_eval::{fns, CallContext, Interpreter, NativeFn, Value};
-use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 
 const SEED: u64 = 123;
 const ELEMENTS: u64 = 100;
@@ -61,7 +61,7 @@ fn bench_mul(bencher: &mut Bencher<'_>) {
                 .map(|_| rng.gen_range(0.5_f32, 1.5).to_string())
                 .collect();
             let program = arena.alloc(values.join(" * "));
-            let program = F32Grammar::parse_statements(Span::new(program)).unwrap();
+            let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
             Interpreter::new().compile(&program).unwrap()
         },
         |block| block.run().unwrap(),
@@ -71,7 +71,7 @@ fn bench_mul(bencher: &mut Bencher<'_>) {
 
 fn bench_mul_fold(bencher: &mut Bencher<'_>) {
     let mut rng = StdRng::seed_from_u64(SEED);
-    let program = Span::new("xs.fold(1, |acc, x| acc * x)");
+    let program = InputSpan::new("xs.fold(1, |acc, x| acc * x)");
     let program = F32Grammar::parse_statements(program).unwrap();
 
     bencher.iter_batched(
@@ -122,7 +122,7 @@ fn bench_fold_fn(bencher: &mut Bencher<'_>) {
 
 fn bench_interpreted_fn(bencher: &mut Bencher<'_>) {
     let mut ctx = CallContext::mock();
-    let interpreted_fn = F32Grammar::parse_statements(Span::new("|x, y| x * y")).unwrap();
+    let interpreted_fn = F32Grammar::parse_statements(InputSpan::new("|x, y| x * y")).unwrap();
     let interpreted_fn = Interpreter::new().evaluate(&interpreted_fn).unwrap();
     let interpreted_fn = match interpreted_fn {
         Value::Function(function) => function,
@@ -177,9 +177,9 @@ fn bench_reverse(bencher: &mut Bencher<'_>) {
     let mut rng = StdRng::seed_from_u64(SEED);
 
     let rev_fn = "reverse = |xs| xs.fold((), |acc, x| (x,).merge(acc));";
-    let rev_fn = F32Grammar::parse_statements(Span::new(rev_fn)).unwrap();
+    let rev_fn = F32Grammar::parse_statements(InputSpan::new(rev_fn)).unwrap();
     let program = "xs.reverse()";
-    let program = F32Grammar::parse_statements(Span::new(program)).unwrap();
+    let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 
     let mut interpreter = Interpreter::new();
     interpreter

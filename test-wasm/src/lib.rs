@@ -6,7 +6,7 @@ use alloc::format;
 use core::f64;
 
 use arithmetic_eval::{fns, Interpreter, Value};
-use arithmetic_parser::{grammars::F64Grammar, GrammarExt, Span};
+use arithmetic_parser::{grammars::F64Grammar, GrammarExt, InputSpan};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -69,7 +69,7 @@ fn initialize_interpreter(interpreter: &mut Interpreter<'_, F64Grammar>) {
 
 #[wasm_bindgen]
 pub fn evaluate(program: &str) -> Result<JsValue, JsValue> {
-    let program = Span::new(program);
+    let program = InputSpan::new(program);
     let statements = F64Grammar::parse_statements(program).map_err(|spanned_err| {
         let message = format!(
             "{}:{}: {}",

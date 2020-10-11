@@ -1,8 +1,32 @@
 //! Standard functions for the interpreter, and the tools to define new native functions.
 //!
-//! See [`FnWrapper`] documentation for the details how to define native functions.
+//! # Defining native functions
+//!
+//! There are several ways to define new native functions:
+//!
+//! - Implement [`NativeFn`] manually. This is the most versatile approach, but it can be overly
+//!   verbose.
+//! - Use [`FnWrapper`] or the [`wrap`] function. This allows specifying arguments / output
+//!   with custom types (such as `bool` or a [`Number`]), but does not work for non-`'static`
+//!   types.
+//! - Use [`wrap_fn`] or [`wrap_fn_with_context`] macros. These macros support
+//!   the same eloquent interface as `wrap`, and also do not have `'static` requirement for args.
+//!   As a downside, debugging compile-time errors when using macros can be rather painful.
+//!
+//! ## Why multiple ways to do the same thing?
+//!
+//! In the ideal world, `FnWrapper` would be used for all cases, since it does not involve
+//! macro magic. Unfortunately, stable Rust currently does not provide means to describe
+//! lifetime restrictions on args / return type of wrapped functions in the general case
+//! (this requires [generic associated types][GAT]). As such, the (implicit) `'static` requirement
+//! is a temporary measure, and macros fill the gaps in their usual clunky manner.
 //!
 //! [`FnWrapper`]: struct.FnWrapper.html
+//! [`wrap`]: fn.wrap.html
+//! [`Number`]: ../trait.Number.html
+//! [`wrap_fn`]: ../macro.wrap_fn.html
+//! [`wrap_fn_with_context`]: ../macro.wrap_fn_with_context.html
+//! [GAT]: https://github.com/rust-lang/rust/issues/44265
 
 use arithmetic_parser::Grammar;
 use num_traits::{One, Zero};
@@ -15,8 +39,8 @@ use crate::{
 
 mod wrapper;
 pub use self::wrapper::{
-    wrap, Binary, ErrorOutput, FnWrapper, FromValueError, FromValueErrorKind,
-    FromValueErrorLocation, IntoEvalResult, Quaternary, Ternary, TryFromValue, Unary, WithContext,
+    enforce_closure_type, wrap, Binary, ErrorOutput, FnWrapper, FromValueError, FromValueErrorKind,
+    FromValueErrorLocation, IntoEvalResult, Quaternary, Ternary, TryFromValue, Unary,
 };
 
 fn extract_number<'a, T: Grammar>(
@@ -73,14 +97,14 @@ fn extract_fn<'a, T: Grammar>(
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns, EvalError, Interpreter};
 /// # use assert_matches::assert_matches;
 /// let program = r#"
 ///     assert(1 + 2 == 3); # this assertion is fine
 ///     assert(3^2 == 10); # this one will fail
 /// "#;
-/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter.insert_native_fn("assert", fns::Assert);
@@ -94,8 +118,8 @@ fn extract_fn<'a, T: Grammar>(
 #[derive(Debug, Clone, Copy)]
 pub struct Assert;
 
-impl<'a, T: Grammar> NativeFn<'a, T> for Assert {
-    fn evaluate(
+impl<T: Grammar> NativeFn<T> for Assert {
+    fn evaluate<'a>(
         &self,
         args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -128,10 +152,10 @@ impl<'a, T: Grammar> NativeFn<'a, T> for Assert {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns::If, Interpreter, Value};
 /// let program = "x = 3; if(x == 2, -1, x + 1)";
-/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter.insert_native_fn("if", If);
@@ -143,10 +167,10 @@ impl<'a, T: Grammar> NativeFn<'a, T> for Assert {
 /// afterwards:
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns::If, Interpreter, Value};
 /// let program = "x = 3; if(x == 2, || -1, || x + 1)()";
-/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter.insert_native_fn("if", If);
@@ -156,12 +180,12 @@ impl<'a, T: Grammar> NativeFn<'a, T> for Assert {
 #[derive(Debug, Clone, Copy)]
 pub struct If;
 
-impl<'a, T> NativeFn<'a, T> for If
+impl<T> NativeFn<T> for If
 where
     T: Grammar,
     T::Lit: Number,
 {
-    fn evaluate(
+    fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -170,15 +194,13 @@ where
         let else_val = args.pop().unwrap().extra;
         let then_val = args.pop().unwrap().extra;
 
-        match &args[0].extra {
-            Value::Bool(condition) => Ok(if *condition { then_val } else { else_val }),
-
-            _ => {
-                let err = EvalError::native("`if` requires first arg to be boolean");
-                Err(ctx
-                    .call_site_error(err)
-                    .with_span(&args[0], AuxErrorInfo::InvalidArg))
-            }
+        if let Value::Bool(condition) = &args[0].extra {
+            Ok(if *condition { then_val } else { else_val })
+        } else {
+            let err = EvalError::native("`if` requires first arg to be boolean");
+            Err(ctx
+                .call_site_error(err)
+                .with_span(&args[0], AuxErrorInfo::InvalidArg))
         }
     }
 }
@@ -194,18 +216,18 @@ where
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns, Interpreter, Value};
 /// let program = r#"
 ///     factorial = |x| {
 ///         loop((x, 1), |(i, acc)| {
-///             continue = cmp(i, 1) != -1; # i >= 1
+///             continue = i >= 1;
 ///             (continue, if(continue, (i - 1, acc * i), acc))
 ///         })
 ///     };
 ///     factorial(5) == 120 && factorial(10) == 3628800
 /// "#;
-/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
@@ -223,54 +245,128 @@ impl Loop {
         "iteration function should return a 2-element tuple with first bool value";
 }
 
-impl<'a, T> NativeFn<'a, T> for Loop
+impl<T> NativeFn<T> for Loop
 where
     T: Grammar,
     T::Lit: Number,
 {
-    fn evaluate(
+    fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(&args, 2)?;
         let iter = args.pop().unwrap();
-        let iter = match iter.extra {
-            Value::Function(iter) => iter,
-            _ => {
-                let err =
-                    EvalError::native("Second argument of `loop` should be an iterator function");
-                return Err(ctx
-                    .call_site_error(err)
-                    .with_span(&iter, AuxErrorInfo::InvalidArg));
-            }
+        let iter = if let Value::Function(iter) = iter.extra {
+            iter
+        } else {
+            let err = EvalError::native("Second argument of `loop` should be an iterator function");
+            return Err(ctx
+                .call_site_error(err)
+                .with_span(&iter, AuxErrorInfo::InvalidArg));
         };
 
         let mut arg = args.pop().unwrap();
         loop {
-            match iter.evaluate(vec![arg], ctx)? {
-                Value::Tuple(mut tuple) => {
-                    let (ret_or_next_arg, flag) = if tuple.len() == 2 {
-                        (tuple.pop().unwrap(), tuple.pop().unwrap())
-                    } else {
-                        let err = EvalError::native(Self::ITER_ERROR);
-                        break Err(ctx.call_site_error(err));
-                    };
-
-                    match (flag, ret_or_next_arg) {
-                        (Value::Bool(false), ret) => break Ok(ret),
-                        (Value::Bool(true), next_arg) => {
-                            arg = ctx.apply_call_span(next_arg);
-                        }
-                        _ => {
-                            let err = EvalError::native(Self::ITER_ERROR);
-                            break Err(ctx.call_site_error(err));
-                        }
-                    }
-                }
-                _ => {
+            if let Value::Tuple(mut tuple) = iter.evaluate(vec![arg], ctx)? {
+                let (ret_or_next_arg, flag) = if tuple.len() == 2 {
+                    (tuple.pop().unwrap(), tuple.pop().unwrap())
+                } else {
                     let err = EvalError::native(Self::ITER_ERROR);
                     break Err(ctx.call_site_error(err));
+                };
+
+                match (flag, ret_or_next_arg) {
+                    (Value::Bool(false), ret) => break Ok(ret),
+                    (Value::Bool(true), next_arg) => {
+                        arg = ctx.apply_call_span(next_arg);
+                    }
+                    _ => {
+                        let err = EvalError::native(Self::ITER_ERROR);
+                        break Err(ctx.call_site_error(err));
+                    }
+                }
+            } else {
+                let err = EvalError::native(Self::ITER_ERROR);
+                break Err(ctx.call_site_error(err));
+            }
+        }
+    }
+}
+
+/// Loop function that evaluates the provided closure while a certain condition is true.
+/// Returns the loop state afterwards.
+///
+/// # Type
+///
+/// ```text
+/// fn<T>(T, fn(T) -> bool, fn(T) -> T) -> T
+/// ```
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
+/// # use arithmetic_eval::{fns, Interpreter, Value};
+/// let program = r#"
+///     factorial = |x| {
+///         (_, acc) = (x, 1).while(
+///             |(i, _)| i >= 1,
+///             |(i, acc)| (i - 1, acc * i),
+///         );
+///         acc
+///     };
+///     factorial(5) == 120 && factorial(10) == 3628800
+/// "#;
+/// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
+///
+/// let mut interpreter = Interpreter::new();
+/// interpreter
+///     .insert_native_fn("cmp", fns::Compare)
+///     .insert_native_fn("while", fns::While);
+/// let ret = interpreter.evaluate(&block).unwrap();
+/// assert_eq!(ret, Value::Bool(true));
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct While;
+
+impl<T> NativeFn<T> for While
+where
+    T: Grammar,
+    T::Lit: Number,
+{
+    fn evaluate<'a>(
+        &self,
+        mut args: Vec<SpannedValue<'a, T>>,
+        ctx: &mut CallContext<'_, 'a>,
+    ) -> EvalResult<'a, T> {
+        ctx.check_args_count(&args, 3)?;
+
+        let step_fn = extract_fn(
+            ctx,
+            args.pop().unwrap(),
+            "`while` requires third arg to be a step function",
+        )?;
+        let condition_fn = extract_fn(
+            ctx,
+            args.pop().unwrap(),
+            "`while` requires second arg to be a condition function",
+        )?;
+        let mut state = args.pop().unwrap();
+        let state_span = state.copy_with_extra(());
+
+        loop {
+            let condition_value = condition_fn.evaluate(vec![state.clone()], ctx)?;
+            match condition_value {
+                Value::Bool(true) => {
+                    let new_state = step_fn.evaluate(vec![state], ctx)?;
+                    state = state_span.copy_with_extra(new_state);
+                }
+                Value::Bool(false) => break Ok(state.extra),
+                _ => {
+                    let err =
+                        EvalError::native("`while` requires condition function to return booleans");
+                    return Err(ctx.call_site_error(err));
                 }
             }
         }
@@ -288,13 +384,13 @@ where
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns, Interpreter, Value};
 /// let program = r#"
 ///     xs = (1, -2, 3, -0.3);
-///     map(xs, |x| if(cmp(x, 0) == 1, x, 0)) == (1, 0, 3, 0)
+///     map(xs, |x| if(x > 0, x, 0)) == (1, 0, 3, 0)
 /// "#;
-/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
@@ -307,12 +403,12 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Map;
 
-impl<'a, T> NativeFn<'a, T> for Map
+impl<T> NativeFn<T> for Map
 where
     T: Grammar,
     T::Lit: Number,
 {
-    fn evaluate(
+    fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -352,13 +448,13 @@ where
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns, Interpreter, Value};
 /// let program = r#"
 ///     xs = (1, -2, 3, -7, -0.3);
-///     filter(xs, |x| cmp(x, -1) == 1) == (1, 3, -0.3)
+///     filter(xs, |x| x > -1) == (1, 3, -0.3)
 /// "#;
-/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
@@ -370,12 +466,12 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Filter;
 
-impl<'a, T> NativeFn<'a, T> for Filter
+impl<T> NativeFn<T> for Filter
 where
     T: Grammar,
     T::Lit: Number,
 {
-    fn evaluate(
+    fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -421,13 +517,13 @@ where
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns, Interpreter, Value};
 /// let program = r#"
 ///     xs = (1, -2, 3, -7);
 ///     fold(xs, 1, |acc, x| acc * x) == 42
 /// "#;
-/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
@@ -438,12 +534,12 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Fold;
 
-impl<'a, T> NativeFn<'a, T> for Fold
+impl<T> NativeFn<T> for Fold
 where
     T: Grammar,
     T::Lit: Number,
 {
-    fn evaluate(
+    fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -479,26 +575,24 @@ where
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns, Interpreter, Value};
 /// let program = r#"
-///     repeat = |x, times| loop(
-///         (0, ()),
-///         |(i, acc)| {
-///             continue = cmp(i, times) == -1;
-///             ret = if(continue, (i + 1, push(acc, x)), acc);
-///             (continue, ret)
-///         },
-///     );
+///     repeat = |x, times| {
+///         (_, acc) = (0, ()).while(
+///             |(i, _)| i < times,
+///             |(i, acc)| (i + 1, push(acc, x)),
+///         );
+///         acc
+///     };
 ///     repeat(-2, 3) == (-2, -2, -2) && repeat((7,), 4) == ((7,), (7,), (7,), (7,))
 /// "#;
-/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
 ///     .insert_native_fn("cmp", fns::Compare)
-///     .insert_native_fn("if", fns::If)
-///     .insert_native_fn("loop", fns::Loop)
+///     .insert_native_fn("while", fns::While)
 ///     .insert_native_fn("push", fns::Push);
 /// let ret = interpreter.evaluate(&block).unwrap();
 /// assert_eq!(ret, Value::Bool(true));
@@ -506,12 +600,12 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Push;
 
-impl<'a, T> NativeFn<'a, T> for Push
+impl<T> NativeFn<T> for Push
 where
     T: Grammar,
     T::Lit: Number,
 {
-    fn evaluate(
+    fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -540,14 +634,14 @@ where
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns, Interpreter, Value};
 /// let program = r#"
 ///     ## Merges all arguments (which should be tuples) into a single tuple.
 ///     super_merge = |...xs| fold(xs, (), merge);
 ///     super_merge((1, 2), (3,), (), (4, 5, 6)) == (1, 2, 3, 4, 5, 6)
 /// "#;
-/// let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 ///
 /// let mut interpreter = Interpreter::new();
 /// interpreter
@@ -559,12 +653,12 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Merge;
 
-impl<'a, T> NativeFn<'a, T> for Merge
+impl<T> NativeFn<T> for Merge
 where
     T: Grammar,
     T::Lit: Number,
 {
-    fn evaluate(
+    fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -599,12 +693,12 @@ pub struct Compare;
 
 const COMPARE_ERROR_MSG: &str = "Compare requires 2 number arguments";
 
-impl<'a, T> NativeFn<'a, T> for Compare
+impl<T> NativeFn<T> for Compare
 where
     T: Grammar,
     T::Lit: Number + PartialOrd,
 {
-    fn evaluate(
+    fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a>,
@@ -631,7 +725,7 @@ mod tests {
     use super::*;
     use crate::Interpreter;
 
-    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
     use assert_matches::assert_matches;
 
     use core::f32;
@@ -645,19 +739,20 @@ mod tests {
 
         let program = r#"
             x = 1.0;
-            if(cmp(x, 2) == -1, x + 5, 3 - x)
+            if(x < 2, x + 5, 3 - x)
         "#;
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Number(6.0));
 
-        let program = r#"
+        let program_with_closures = r#"
             x = 4.5;
-            if(cmp(x, 2) == -1, || x + 5, || 3 - x)()
+            if(x < 2, || x + 5, || 3 - x)()
         "#;
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
-        let ret = interpreter.evaluate(&block).unwrap();
-        assert_eq!(ret, Value::Number(-1.5));
+        let block_with_closures =
+            F32Grammar::parse_statements(InputSpan::new(program_with_closures)).unwrap();
+        let ret_with_closures = interpreter.evaluate(&block_with_closures).unwrap();
+        assert_eq!(ret_with_closures, Value::Number(-1.5));
     }
 
     #[test]
@@ -666,13 +761,13 @@ mod tests {
         interpreter.insert_native_fn("cmp", Compare);
 
         let program = "x = 1.0; x > 0 && x <= 3";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
 
-        let program = "x = 1.0; x > (1, 2)";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
-        let err = interpreter.evaluate(&block).unwrap_err();
+        let bogus_program = "x = 1.0; x > (1, 2)";
+        let bogus_block = F32Grammar::parse_statements(InputSpan::new(bogus_program)).unwrap();
+        let err = interpreter.evaluate(&bogus_block).unwrap_err();
         assert_matches!(
             err.source(),
             EvalError::NativeCall(ref message) if message.contains("Compare requires")
@@ -694,22 +789,22 @@ mod tests {
             # Finds the greatest power of 2 lesser or equal to the value.
             discrete_log2 = |x| {
                 loop(0, |i| {
-                    continue = cmp(2^i, x) != 1;
+                    continue = 2^i <= x;
                     (continue, if(continue, i + 1, i - 1))
                 })
             };
             discrete_log2(9)
         "#;
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Number(3.0));
 
-        let program = "(discrete_log2(1), discrete_log2(2), \
+        let test_program = "(discrete_log2(1), discrete_log2(2), \
             discrete_log2(4), discrete_log2(6.5), discrete_log2(1000))";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
-        let ret = interpreter.evaluate(&block).unwrap();
+        let test_block = F32Grammar::parse_statements(InputSpan::new(test_program)).unwrap();
+        let test_ret = interpreter.evaluate(&test_block).unwrap();
         assert_eq!(
-            ret,
+            test_ret,
             Value::Tuple(vec![
                 Value::Number(0.0),
                 Value::Number(1.0),
@@ -731,17 +826,23 @@ mod tests {
 
         let program = r#"
             max_value = |...xs| {
-                fold(xs, -Inf, |acc, x| if(cmp(x, acc) == 1, x, acc))
+                fold(xs, -Inf, |acc, x| if(x > acc, x, acc))
             };
             max_value(1, -2, 7, 2, 5) == 7 && max_value(3, -5, 9) == 9
         "#;
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
     }
 
     #[test]
     fn reverse_list_with_fold() {
+        const SAMPLES: &[(&[f32], &[f32])] = &[
+            (&[1.0, 2.0, 3.0], &[3.0, 2.0, 1.0]),
+            (&[], &[]),
+            (&[1.0], &[1.0]),
+        ];
+
         let mut interpreter = Interpreter::new();
         interpreter
             .insert_native_fn("merge", Merge)
@@ -754,19 +855,12 @@ mod tests {
             xs = (-4, 3, 0, 1);
             xs.reverse() == (1, 0, 3, -4)
         "#;
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
 
-        let program = "xs.reverse()";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
-        let mut module = interpreter.compile(&block).unwrap();
-
-        const SAMPLES: &[(&[f32], &[f32])] = &[
-            (&[1.0, 2.0, 3.0], &[3.0, 2.0, 1.0]),
-            (&[], &[]),
-            (&[1.0], &[1.0]),
-        ];
+        let module_block = F32Grammar::parse_statements(InputSpan::new("xs.reverse()")).unwrap();
+        let mut module = interpreter.compile(&module_block).unwrap();
 
         for &(input, expected) in SAMPLES {
             let input = input.iter().copied().map(Value::Number).collect();

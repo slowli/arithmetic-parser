@@ -43,7 +43,7 @@
 //! # Examples
 //!
 //! ```
-//! use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, Span};
+//! use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, InputSpan};
 //! use arithmetic_eval::{fns, Interpreter, Value};
 //!
 //! const MIN: fns::Binary<f32> =
@@ -65,13 +65,19 @@
 //!     (_, M) = order(3^2, { x = 3; x + 5 });
 //!     M
 //! "#;
-//! let program = F32Grammar::parse_statements(Span::new(program)).unwrap();
+//! let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 //! let ret = context.evaluate(&program).unwrap();
 //! assert_eq!(ret, Value::Number(9.0));
 //! ```
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(missing_docs, missing_debug_implementations)]
+#![warn(clippy::all, clippy::pedantic)]
+#![allow(
+    clippy::missing_errors_doc,
+    clippy::must_use_candidate,
+    clippy::module_name_repetitions
+)]
 
 // Polyfill for `alloc` types.
 mod alloc {
@@ -184,7 +190,7 @@ where
     pub fn insert_native_fn(
         &mut self,
         name: &str,
-        native_fn: impl NativeFn<'a, T> + 'a,
+        native_fn: impl NativeFn<T> + 'static,
     ) -> &mut Self {
         self.insert_var(name, Value::native_fn(native_fn))
     }
@@ -199,9 +205,9 @@ where
     ///
     /// [wrapped function]: fns/struct.FnWrapper.html
     /// [`wrap`]: fns/fn.wrap.html
-    pub fn insert_wrapped_fn<Args: 'a, F: 'a>(&mut self, name: &str, fn_to_wrap: F) -> &mut Self
+    pub fn insert_wrapped_fn<Args, F>(&mut self, name: &str, fn_to_wrap: F) -> &mut Self
     where
-        fns::FnWrapper<Args, F>: NativeFn<'a, T>,
+        fns::FnWrapper<Args, F>: NativeFn<T> + 'static,
     {
         let wrapped = fns::wrap::<Args, _>(fn_to_wrap);
         self.insert_var(name, Value::native_fn(wrapped))
@@ -233,6 +239,7 @@ where
             .insert_native_fn("assert", fns::Assert)
             .insert_native_fn("if", fns::If)
             .insert_native_fn("loop", fns::Loop)
+            .insert_native_fn("while", fns::While)
             .insert_native_fn("map", fns::Map)
             .insert_native_fn("filter", fns::Filter)
             .insert_native_fn("fold", fns::Fold)
@@ -271,7 +278,9 @@ where
 mod tests {
     use super::*;
     use crate::{alloc::vec, fns::FromValueErrorKind};
-    use arithmetic_parser::{grammars::F32Grammar, BinaryOp, GrammarExt, LvalueLen, Span, UnaryOp};
+    use arithmetic_parser::{
+        grammars::F32Grammar, BinaryOp, GrammarExt, InputSpan, LvalueLen, UnaryOp,
+    };
 
     use assert_matches::assert_matches;
     use hashbrown::HashMap;
@@ -282,7 +291,7 @@ mod tests {
 
     #[test]
     fn basic_program() {
-        let program = Span::new("x = 1; y = 2; x + y");
+        let program = InputSpan::new("x = 1; y = 2; x + y");
         let block = F32Grammar::parse_statements(program).unwrap();
         let mut interpreter = Interpreter::new();
         let return_value = interpreter.evaluate(&block).unwrap();
@@ -293,7 +302,7 @@ mod tests {
 
     #[test]
     fn basic_program_with_tuples() {
-        let program = Span::new("tuple = (1 - 3, 2); (x, _) = tuple;");
+        let program = InputSpan::new("tuple = (1 - 3, 2); (x, _) = tuple;");
         let block = F32Grammar::parse_statements(program).unwrap();
         let mut interpreter = Interpreter::new();
         let return_value = interpreter.evaluate(&block).unwrap();
@@ -307,7 +316,7 @@ mod tests {
 
     #[test]
     fn arithmetic_ops_on_tuples() {
-        let program = Span::new(
+        let program = InputSpan::new(
             r#"x = (1, 2) + (3, 4);
             (y, z) = (0, 3) * (2, 0.5) - x;
             u = (1, 2) + 3 * (0.5, z);"#,
@@ -327,27 +336,26 @@ mod tests {
         );
 
         let program = "1 / (2, 4)";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
-        let return_value = interpreter.evaluate(&block).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         assert_eq!(
-            return_value,
+            interpreter.evaluate(&block).unwrap(),
             Value::Tuple(vec![Value::Number(0.5), Value::Number(0.25)])
         );
 
-        let program = "1 / (2, (4, 0.2))";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
-        let return_value = interpreter.evaluate(&block).unwrap();
+        let multi_level_program = "1 / (2, (4, 0.2))";
+        let multi_level_block =
+            F32Grammar::parse_statements(InputSpan::new(multi_level_program)).unwrap();
         assert_eq!(
-            return_value,
+            interpreter.evaluate(&multi_level_block).unwrap(),
             Value::Tuple(vec![
                 Value::Number(0.5),
                 Value::Tuple(vec![Value::Number(0.25), Value::Number(5.0)])
             ])
         );
 
-        let program = "(1, 2) / |x| { x + 1 }";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
-        let err = interpreter.evaluate(&block).unwrap_err();
+        let bogus_program = "(1, 2) / |x| { x + 1 }";
+        let bogus_block = F32Grammar::parse_statements(InputSpan::new(bogus_program)).unwrap();
+        let err = interpreter.evaluate(&bogus_block).unwrap_err();
         assert_matches!(
             err.source(),
             EvalError::UnexpectedOperand { ref op } if *op == BinaryOp::Div.into()
@@ -371,7 +379,7 @@ mod tests {
                 && foo == foo && foo == alias && foo != 1 && sin == sin && foo != sin
                 && (foo, (-1, 3)) == (alias, (-1, 3))
         "#;
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let return_value = interpreter.evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Bool(true));
     }
@@ -385,7 +393,7 @@ mod tests {
             ((_, a), ..., (b, ...)) = ((1, 2), (3, 4, 5));
             x == 1 && u == -2 && v == -1 && middle == (3, 4) && y == 5 && a == 2 && b == 3
         "#;
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let mut interpreter = Interpreter::new();
         let return_value = interpreter.evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Bool(true));
@@ -393,7 +401,7 @@ mod tests {
 
     #[test]
     fn program_with_blocks() {
-        let program = Span::new("z = { x = 1; x + 3 };");
+        let program = InputSpan::new("z = { x = 1; x + 3 };");
         let block = F32Grammar::parse_statements(program).unwrap();
         let mut interpreter = Interpreter::new();
         let return_value = interpreter.evaluate(&block).unwrap();
@@ -404,7 +412,7 @@ mod tests {
 
     #[test]
     fn program_with_interpreted_function() {
-        let program = Span::new("foo = |x| x + 5; foo(3.0)");
+        let program = InputSpan::new("foo = |x| x + 5; foo(3.0)");
         let block = F32Grammar::parse_statements(program).unwrap();
         let mut interpreter = Interpreter::new();
         let return_value = interpreter.evaluate(&block).unwrap();
@@ -418,7 +426,7 @@ mod tests {
             swap = |x, (y, z)| ((x, y), z);
             swap(1, (2, 3))
         "#;
-        let program = Span::new(program);
+        let program = InputSpan::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = Interpreter::new().evaluate(&block).unwrap();
         let inner_tuple = Value::Tuple(vec![Value::Number(1.0), Value::Number(2.0)]);
@@ -426,12 +434,15 @@ mod tests {
             return_value,
             Value::Tuple(vec![inner_tuple, Value::Number(3.0)])
         );
+    }
 
+    #[test]
+    fn destructuring_in_fn_args_with_wildcard() {
         let program = r#"
             add = |x, (_, z)| x + z;
             add(1, (2, 3))
         "#;
-        let program = Span::new(program);
+        let program = InputSpan::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = Interpreter::new().evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Number(4.0));
@@ -442,31 +453,40 @@ mod tests {
         let program = r#"
             x = 5;
             foo = |a| a + x;
-            foo(-3)"#;
-        let program = Span::new(program);
+            foo(-3)
+        "#;
+        let program = InputSpan::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = Interpreter::new().evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Number(2.0));
+    }
 
+    #[test]
+    fn captures_in_function_with_shadowing() {
         // All captures are by value, so that redefining the captured var does not influence
         // the result.
         let program = r#"
             x = 5;
             foo = |a| a + x;
             x = 10;
-            foo(-3)"#;
-        let program = Span::new(program);
+            foo(-3)
+        "#;
+        let program = InputSpan::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = Interpreter::new().evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Number(2.0));
+    }
 
+    #[test]
+    fn fn_captures_in_function() {
         // Functions may be captured as well.
         let program = r#"
             add = |x, y| x + y;
             foo = |a| add(a, 5);
             add = 0;
-            foo(-3)"#;
-        let program = Span::new(program);
+            foo(-3)
+        "#;
+        let program = InputSpan::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = Interpreter::new().evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Number(2.0));
@@ -479,7 +499,7 @@ mod tests {
             add = gen(|x, y| x + y);
             add((1, 2), (3, 4))
         "#;
-        let program = Span::new(program);
+        let program = InputSpan::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let mut interpreter = Interpreter::new();
         let return_value = interpreter.evaluate(&block).unwrap();
@@ -499,14 +519,14 @@ mod tests {
             assert_matches!(captures["op"], Value::Function(_));
         }
 
-        let program = r#"
+        let continued_program = r#"
             div = gen(|x, y| x / y);
             div(1, 2) == -1.5 # 1/2 - 2/1
         "#;
-        let program = Span::new(program);
-        let block = F32Grammar::parse_statements(program).unwrap();
-        let return_value = interpreter.evaluate(&block).unwrap();
-        assert_eq!(return_value, Value::Bool(true));
+        let continued_block =
+            F32Grammar::parse_statements(InputSpan::new(continued_program)).unwrap();
+        let return_flag = interpreter.evaluate(&continued_block).unwrap();
+        assert_eq!(return_flag, Value::Bool(true));
     }
 
     #[test]
@@ -515,7 +535,7 @@ mod tests {
             call = |fn, ...xs| fn(xs);
             (call(|x| -x, 1, 2, -3.5), call(|x| 1/x, 4, -0.125))
         "#;
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let mut interpreter = Interpreter::new();
         let return_value = interpreter.evaluate(&block).unwrap();
 
@@ -526,12 +546,15 @@ mod tests {
         ]);
         let second = Value::Tuple(vec![Value::Number(0.25), Value::Number(-8.0)]);
         assert_eq!(return_value, Value::Tuple(vec![first, second]));
+    }
 
+    #[test]
+    fn variadic_function_with_both_sides() {
         let program = r#"
             call = |fn, ...xs, y| fn(xs, y);
             call(|x, y| x + y, 1, 2, -3.5) == (-2.5, -1.5)
         "#;
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let mut interpreter = Interpreter::new();
         let return_value = interpreter.evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Bool(true));
@@ -547,7 +570,7 @@ mod tests {
             fn = gen(4);
             fn(1) == 3.75
         "#;
-        let program = Span::new(program);
+        let program = InputSpan::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let mut interpreter = Interpreter::new();
         let return_value = interpreter.evaluate(&block).unwrap();
@@ -580,7 +603,7 @@ mod tests {
             foo = gen(2);
             foo(1) == (1, 3) && foo(2) == (0, 0) && foo(3) == (-1, -5)
         "#;
-        let program = Span::new(program);
+        let program = InputSpan::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = Interpreter::new().evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Bool(true));
@@ -593,13 +616,13 @@ mod tests {
             add = gen_add(5.0);
             add(-3) + add(-5)
         "#;
-        let program = Span::new(program);
+        let program = InputSpan::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let mut interpreter = Interpreter::new();
         let return_value = interpreter.evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Number(2.0));
 
-        let program = Span::new("add = gen_add(-3); add(-1)");
+        let program = InputSpan::new("add = gen_add(-3); add(-1)");
         let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = interpreter.evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Number(-4.0));
@@ -616,19 +639,22 @@ mod tests {
     }
 
     #[test]
-    fn first_class_functions() {
+    fn first_class_functions_apply() {
         let program = r#"
             apply = |fn, x, y| (fn(x), fn(y));
-            apply(|x| x + 3, 1, -2)"#;
-        let program = Span::new(program);
+            apply(|x| x + 3, 1, -2)
+        "#;
+        let program = InputSpan::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
-        let mut interpreter = Interpreter::new();
-        let return_value = interpreter.evaluate(&block).unwrap();
+        let return_value = Interpreter::new().evaluate(&block).unwrap();
         assert_eq!(
             return_value,
             Value::Tuple(vec![Value::Number(4.0), Value::Number(1.0)])
         );
+    }
 
+    #[test]
+    fn first_class_functions_repeat() {
         let program = r#"
             repeat = |fn, x| fn(fn(fn(x)));
             a = repeat(|x| x * 2, 1);
@@ -636,10 +662,14 @@ mod tests {
                 lambda = |x| x / 2 - 1;
                 repeat(lambda, 2)
             };
-            (a, b)"#;
-        let program = Span::new(program);
+            (a, b)
+        "#;
+        let program = InputSpan::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
+        let mut interpreter = Interpreter::new();
+
         let return_value = interpreter.evaluate(&block).unwrap();
+
         assert_eq!(
             return_value,
             Value::Tuple(vec![Value::Number(8.0), Value::Number(-1.5)])
@@ -649,20 +679,25 @@ mod tests {
 
     #[test]
     fn immediately_executed_function() {
-        let mut interpreter = Interpreter::new();
         let program = "-|x| { x + 5 }(-3)";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
-        let return_value = interpreter.evaluate(&block).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
+        let return_value = Interpreter::new().evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Number(-2.0));
+    }
 
+    #[test]
+    fn immediately_executed_function_priority() {
         let program = "2 + |x| { x + 5 }(-3)";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
-        let return_value = interpreter.evaluate(&block).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
+        let return_value = Interpreter::new().evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Number(4.0));
+    }
 
+    #[test]
+    fn immediately_executed_function_in_other_call() {
         let program = "add = |x, y| x + y; add(10, |x| { x + 5 }(-3))";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
-        let return_value = interpreter.evaluate(&block).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
+        let return_value = Interpreter::new().evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Number(12.0));
     }
 
@@ -671,7 +706,7 @@ mod tests {
         let mut interpreter = Interpreter::new();
         interpreter.insert_native_fn("sin", SIN);
 
-        let program = Span::new("sin(1.0) - 3");
+        let program = InputSpan::new("sin(1.0) - 3");
         let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = interpreter.evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Number(1.0_f32.sin() - 3.0));
@@ -680,7 +715,7 @@ mod tests {
     #[test]
     fn function_aliasing() {
         let program = "alias = sin; alias(1.0)";
-        let program = Span::new(program);
+        let program = InputSpan::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let mut interpreter = Interpreter::new();
         interpreter.insert_native_fn("sin", SIN);
@@ -703,23 +738,25 @@ mod tests {
     #[test]
     fn method_call() {
         let program = "add = |x, y| x + y; 1.0.add(2)";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let return_value = Interpreter::new().evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Number(3.0));
+    }
 
+    #[test]
+    fn method_call_on_returned_fn() {
         let program = r#"
             gen = |x| { |y| x + y };
             (1, -2).gen()(3) == (4, 1)
         "#;
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let return_value = Interpreter::new().evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Bool(true));
     }
 
     #[test]
     fn undefined_var() {
-        let program = "x + 3";
-        let program = Span::new(program);
+        let program = InputSpan::new("x + 3");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         assert_eq!(*err.main_span().fragment(), "x");
@@ -729,7 +766,7 @@ mod tests {
     #[test]
     fn undefined_function() {
         let program = "1 + sin(-5.0)";
-        let program = Span::new(program);
+        let program = InputSpan::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         assert_eq!(*err.main_span().fragment(), "sin");
@@ -739,7 +776,7 @@ mod tests {
     #[test]
     fn arg_len_mismatch() {
         let mut interpreter = Interpreter::new();
-        let program = Span::new("foo = |x| x + 5; foo()");
+        let program = InputSpan::new("foo = |x| x + 5; foo()");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
         assert_eq!(*err.main_span().fragment(), "foo()");
@@ -751,7 +788,7 @@ mod tests {
             }
         );
 
-        let program = Span::new("foo(1, 2) * 3.0");
+        let program = InputSpan::new("foo(1, 2) * 3.0");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
         assert_eq!(*err.main_span().fragment(), "foo(1, 2)");
@@ -767,7 +804,7 @@ mod tests {
     #[test]
     fn arg_len_mismatch_with_variadic_function() {
         let mut interpreter = Interpreter::new();
-        let program = Span::new("foo = |fn, ...xs| fn(xs); foo()");
+        let program = InputSpan::new("foo = |fn, ...xs| fn(xs); foo()");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
         assert_eq!(*err.main_span().fragment(), "foo()");
@@ -784,7 +821,7 @@ mod tests {
     fn repeated_args_in_fn_definition() {
         let mut interpreter = Interpreter::new();
 
-        let program = Span::new("add = |x, x| x + 2;");
+        let program = InputSpan::new("add = |x, x| x + 2;");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
         assert_eq!(*err.main_span().fragment(), "x");
@@ -796,7 +833,7 @@ mod tests {
             }
         );
 
-        let program = Span::new("add = |x, (y, x)| x + y;");
+        let program = InputSpan::new("add = |x, (y, x)| x + y;");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
         assert_eq!(*err.main_span().fragment(), "x");
@@ -806,7 +843,7 @@ mod tests {
 
     #[test]
     fn repeated_var_in_lvalue() {
-        let program = Span::new("(x, x) = (1, 2);");
+        let program = InputSpan::new("(x, x) = (1, 2);");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         assert_eq!(*err.main_span().fragment(), "x");
@@ -818,7 +855,7 @@ mod tests {
             }
         );
 
-        let program = Span::new("(x, ...x) = (1, 2);");
+        let program = InputSpan::new("(x, ...x) = (1, 2);");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         assert_eq!(*err.main_span().fragment(), "x");
@@ -837,7 +874,7 @@ mod tests {
             add = |x, (_, z)| x + z;
             add(1, 2)
         "#;
-        let program = Span::new(program);
+        let program = InputSpan::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
 
         let err = Interpreter::new().evaluate(&block).unwrap_err();
@@ -847,13 +884,13 @@ mod tests {
 
     #[test]
     fn cannot_call_error() {
-        let program = Span::new("x = 5; x(1.0)");
+        let program = InputSpan::new("x = 5; x(1.0)");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         assert_eq!(err.main_span().location_offset(), 7);
         assert_matches!(err.source(), EvalError::CannotCall);
 
-        let program = Span::new("2 + 1.0(5)");
+        let program = InputSpan::new("2 + 1.0(5)");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         assert_eq!(*err.main_span().fragment(), "1.0(5)");
@@ -863,7 +900,7 @@ mod tests {
     #[test]
     fn tuple_len_mismatch_error() {
         let program = "x = (1, 2) + (3, 4, 5);";
-        let program = Span::new(program);
+        let program = InputSpan::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         assert_eq!(*err.main_span().fragment(), "(1, 2)");
@@ -876,7 +913,7 @@ mod tests {
     #[test]
     fn cannot_destructure_error() {
         let program = "(x, y) = 1.0;";
-        let program = Span::new(program);
+        let program = InputSpan::new(program);
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         assert_eq!(*err.main_span().fragment(), "(x, y)");
@@ -887,7 +924,7 @@ mod tests {
     fn unexpected_operand() {
         let mut interpreter = Interpreter::new();
 
-        let program = Span::new("1 / || 2");
+        let program = InputSpan::new("1 / || 2");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
         assert_eq!(*err.main_span().fragment(), "|| 2");
@@ -896,7 +933,7 @@ mod tests {
             EvalError::UnexpectedOperand { ref op } if *op == BinaryOp::Div.into()
         );
 
-        let program = Span::new("1 == 1 && !(2, 3)");
+        let program = InputSpan::new("1 == 1 && !(2, 3)");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
         assert_eq!(*err.main_span().fragment(), "!(2, 3)");
@@ -905,7 +942,7 @@ mod tests {
             EvalError::UnexpectedOperand { ref op } if *op == UnaryOp::Not.into()
         );
 
-        let program = Span::new("|x| { x + 5 } + 10");
+        let program = InputSpan::new("|x| { x + 5 } + 10");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
         assert_matches!(
@@ -919,7 +956,7 @@ mod tests {
         let mut interpreter = Interpreter::new();
         interpreter.insert_native_fn("sin", SIN);
 
-        let program = Span::new("1 + sin(-5.0, 2.0)");
+        let program = InputSpan::new("1 + sin(-5.0, 2.0)");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
         assert_eq!(*err.main_span().fragment(), "sin(-5.0, 2.0)");
@@ -931,7 +968,7 @@ mod tests {
             }
         );
 
-        let program = Span::new("1 + sin((-5, 2))");
+        let program = InputSpan::new("1 + sin((-5, 2))");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
         assert_eq!(*err.main_span().fragment(), "sin((-5, 2))");
@@ -948,7 +985,7 @@ mod tests {
 
     #[test]
     fn comparison_desugaring_with_no_cmp() {
-        let program = Span::new("2 > 5");
+        let program = InputSpan::new("2 > 5");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         assert_matches!(
@@ -960,7 +997,7 @@ mod tests {
 
     #[test]
     fn comparison_desugaring_with_invalid_cmp() {
-        let program = Span::new("cmp = |_, _| 2; 1 > 3");
+        let program = InputSpan::new("cmp = |_, _| 2; 1 > 3");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         assert_matches!(err.source(), EvalError::InvalidCmpResult);
@@ -969,12 +1006,12 @@ mod tests {
 
     #[test]
     fn single_statement_fn() {
-        let program = Span::new("(|| 5)()");
+        let program = InputSpan::new("(|| 5)()");
         let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = Interpreter::new().evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Number(5.0));
 
-        let program = Span::new("x = 3; (|| x)()");
+        let program = InputSpan::new("x = 3; (|| x)()");
         let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = Interpreter::new().evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Number(3.0));
@@ -982,7 +1019,7 @@ mod tests {
 
     #[test]
     fn function_with_non_linear_flow() {
-        let program = Span::new("(|x| { y = x - 3; x })(2)");
+        let program = InputSpan::new("(|x| { y = x - 3; x })(2)");
         let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = Interpreter::new().evaluate(&block).unwrap();
         assert_eq!(return_value, Value::Number(2.0));
@@ -990,7 +1027,7 @@ mod tests {
 
     #[test]
     fn comparison_desugaring_with_capture() {
-        let program = Span::new("ge = |x, y| x >= y; ge(2, 3)");
+        let program = InputSpan::new("ge = |x, y| x >= y; ge(2, 3)");
         let block = F32Grammar::parse_statements(program).unwrap();
         let return_value = Interpreter::new()
             .insert_native_fn("cmp", fns::Compare)
@@ -1001,7 +1038,7 @@ mod tests {
 
     #[test]
     fn comparison_desugaring_with_capture_and_no_cmp() {
-        let program = Span::new("ge = |x, y| x >= y; ge(2, 3)");
+        let program = InputSpan::new("ge = |x, y| x >= y; ge(2, 3)");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         assert_matches!(err.source(), EvalError::Undefined(ref name) if name == "cmp");

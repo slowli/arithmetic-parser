@@ -19,7 +19,9 @@ use std::{
 use arithmetic_eval::{
     fns, BacktraceElement, ErrorWithBacktrace, Function, Interpreter, Number, Value,
 };
-use arithmetic_parser::{grammars::NumGrammar, Error, Grammar, GrammarExt, Span, Spanned};
+use arithmetic_parser::{
+    grammars::NumGrammar, CodeFragment, Error, Grammar, GrammarExt, InputSpan, LocatedSpan, Spanned,
+};
 
 /// Exit code on parse or evaluation error.
 pub const ERROR_EXIT_CODE: i32 = 2;
@@ -42,7 +44,11 @@ impl<'a> CodeMap<'a> {
         (file_id, start_position)
     }
 
-    fn locate<T>(&self, span: &Spanned<'_, T>) -> Option<(FileId, Range<usize>)> {
+    fn locate<Span, T>(&self, span: &LocatedSpan<Span, T>) -> Option<(FileId, Range<usize>)>
+    where
+        Span: Copy,
+        CodeFragment<'a>: From<Span>,
+    {
         if span.location_offset() > self.next_position {
             return None;
         }
@@ -52,7 +58,8 @@ impl<'a> CodeMap<'a> {
             .rev()
             .next()?;
         let start = span.location_offset() - file_start;
-        let range = start..(start + span.fragment().len());
+        let code = CodeFragment::from(*span.fragment());
+        let range = start..(start + code.len());
         Some((file_id, range))
     }
 }
@@ -289,6 +296,8 @@ impl<'a> Env<'a> {
                 }
                 write!(self.writer, "{})", " ".repeat(indent))
             }
+
+            _ => unreachable!(),
         }
     }
 
@@ -361,7 +370,7 @@ impl<'a> Env<'a> {
             // SAFETY: We do not traverse the portion of the program preceding the `span`
             // (this could lead to UB since `line` is not necessarily sliced from a larger program).
             // Instead, the span offset is used for diagnostic messages only.
-            Span::new_from_raw_offset(start_position, 1, line, ())
+            InputSpan::new_from_raw_offset(start_position, 1, line, ())
         };
         let parse_result = T::parse_streaming_statements(span)
             .map(ParseAndEvalResult::Ok)

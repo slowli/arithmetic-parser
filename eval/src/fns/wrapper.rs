@@ -6,12 +6,15 @@ use crate::{
     AuxErrorInfo, CallContext, EvalError, EvalResult, Function, NativeFn, Number, SpannedEvalError,
     SpannedValue, Value, ValueType,
 };
-use arithmetic_parser::{create_span_ref, Grammar};
+use arithmetic_parser::Grammar;
 
 /// Wraps a function enriching it with the information about its arguments.
 /// This is a slightly shorter way to create wrappers compared to calling [`FnWrapper::new()`].
 ///
+/// See [`FnWrapper`] for more details on function requirements.
+///
 /// [`FnWrapper::new()`]: struct.FnWrapper.html#method.new
+/// [`FnWrapper`]: struct.FnWrapper.html
 pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
     FnWrapper::new(function)
 }
@@ -21,24 +24,24 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// Using `FnWrapper` allows to define [native functions] with minimum boilerplate
 /// and with increased type safety.
 ///
-/// Arguments of a wrapped function should implement [`TryFromValue`] trait for the applicable
-/// grammar, and the output type should implement [`IntoEvalResult`]. If the [`CallContext`] is
-/// necessary for execution (for example, if one of args is a [`Function`], which is called
-/// during execution), then it can be specified as the first argument
-/// as shown [below](#usage-of-context).
+/// Arguments of a wrapped function must implement [`TryFromValue`] trait for the applicable
+/// grammar, and the output type must implement [`IntoEvalResult`]. If arguments and/or output
+/// have non-`'static` lifetime, use the [`wrap_fn`] macro. If you need [`CallContext`] (e.g.,
+/// to call functions provided as an argument), use the [`wrap_fn_with_context`] macro.
 ///
 /// [native functions]: ../trait.NativeFn.html
 /// [`TryFromValue`]: trait.TryFromValue.html
 /// [`IntoEvalResult`]: trait.IntoEvalResult.html
 /// [`CallContext`]: ../struct.CallContext.html
-/// [`Function`]: ../enum.Function.html
+/// [`wrap_fn`]: ../macro.wrap_fn.html
+/// [`wrap_fn_with_context`]: ../macro.wrap_fn_with_context.html
 ///
 /// # Examples
 ///
 /// ## Basic function
 ///
 /// ```
-/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// use arithmetic_eval::{fns::FnWrapper, Interpreter, Value};
 ///
 /// let mut interpreter = Interpreter::new();
@@ -46,7 +49,7 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// interpreter.insert_native_fn("max", max);
 ///
 /// let program = "max(1, 3) == 3 && max(-1, -3) == -1";
-/// let program = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 /// let ret = interpreter.evaluate(&program).unwrap();
 /// assert_eq!(ret, Value::Bool(true));
 /// ```
@@ -54,7 +57,7 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// ## Fallible function with complex args
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{fns::FnWrapper, Interpreter, Value};
 /// fn zip_arrays(xs: Vec<f32>, ys: Vec<f32>) -> Result<Vec<(f32, f32)>, String> {
 ///     if xs.len() == ys.len() {
@@ -68,37 +71,7 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// interpreter.insert_native_fn("zip", FnWrapper::new(zip_arrays));
 ///
 /// let program = "(1, 2, 3).zip((4, 5, 6)) == ((1, 4), (2, 5), (3, 6))";
-/// let program = F32Grammar::parse_statements(Span::new(program)).unwrap();
-/// let ret = interpreter.evaluate(&program).unwrap();
-/// assert_eq!(ret, Value::Bool(true));
-/// ```
-///
-/// ## Usage of context
-///
-/// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, Span};
-/// # use arithmetic_eval::{
-/// #     fns::FnWrapper, CallContext, Function, Interpreter, Value, SpannedEvalError,
-/// # };
-/// fn map_array<'a, G: Grammar<Lit = f32>>(
-///     context: &mut CallContext<'_, 'a>,
-///     array: Vec<Value<'a, G>>,
-///     map_fn: Function<'a, G>,
-/// ) -> Result<Vec<Value<'a, G>>, SpannedEvalError<'a>> {
-///     array
-///         .into_iter()
-///         .map(|value| {
-///             let arg = context.apply_call_span(value);
-///             map_fn.evaluate(vec![arg], context)
-///         })
-///         .collect()
-/// }
-///
-/// let mut interpreter = Interpreter::new();
-/// interpreter.insert_native_fn("map", FnWrapper::new(map_array));
-///
-/// let program = "(1, 2, 3).map(|x| x + 3) == (4, 5, 6)";
-/// let program = F32Grammar::parse_statements(Span::new(program)).unwrap();
+/// let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
 /// let ret = interpreter.evaluate(&program).unwrap();
 /// assert_eq!(ret, Value::Bool(true));
 /// ```
@@ -180,7 +153,8 @@ impl FromValueError {
         self
     }
 
-    fn set_arg_index(&mut self, index: usize) {
+    #[doc(hidden)] // necessary for `wrap_fn` macro
+    pub fn set_arg_index(&mut self, index: usize) {
         self.arg_index = index;
         self.location.reverse();
     }
@@ -305,6 +279,21 @@ impl<'a, G: Grammar> TryFromValue<'a, G> for bool {
     }
 }
 
+impl<'a, G: Grammar> TryFromValue<'a, G> for Value<'a, G> {
+    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
+        Ok(value)
+    }
+}
+
+impl<'a, G: Grammar> TryFromValue<'a, G> for Function<'a, G> {
+    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
+        match value {
+            Value::Function(function) => Ok(function),
+            _ => Err(FromValueError::invalid_type(ValueType::Function, &value)),
+        }
+    }
+}
+
 impl<'a, U, G: Grammar> TryFromValue<'a, G> for Vec<U>
 where
     U: TryFromValue<'a, G>,
@@ -331,27 +320,13 @@ where
     }
 }
 
-impl<'a, G: Grammar> TryFromValue<'a, G> for Value<'a, G> {
-    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
-        Ok(value)
-    }
-}
-
-impl<'a, G: Grammar> TryFromValue<'a, G> for Function<'a, G> {
-    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
-        match value {
-            Value::Function(function) => Ok(function),
-            _ => Err(FromValueError::invalid_type(ValueType::Function, &value)),
-        }
-    }
-}
-
 macro_rules! try_from_value_for_tuple {
     ($size:expr => $($var:ident : $ty:ident),+) => {
         impl<'a, G: Grammar, $($ty,)+> TryFromValue<'a, G> for ($($ty,)+)
         where
             $($ty: TryFromValue<'a, G>,)+
         {
+            #[allow(clippy::shadow_unrelated)] // makes it easier to write macro
             fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
                 const EXPECTED_TYPE: ValueType = ValueType::Tuple($size);
 
@@ -391,6 +366,7 @@ try_from_value_for_tuple!(10 => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z,
 ///
 /// [wrapped functions]: struct.FnWrapper.html
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ErrorOutput<'a> {
     /// Error together with the defined span(s).
     Spanned(SpannedEvalError<'a>),
@@ -399,10 +375,11 @@ pub enum ErrorOutput<'a> {
 }
 
 impl<'a> ErrorOutput<'a> {
-    fn into_spanned(self, context: &CallContext<'_, 'a>) -> SpannedEvalError<'a> {
+    #[doc(hidden)] // necessary for `wrap_fn` macro
+    pub fn into_spanned(self, context: &CallContext<'_, 'a>) -> SpannedEvalError<'a> {
         match self {
-            Self::Spanned(error) => error,
-            Self::Message(message) => context.call_site_error(EvalError::NativeCall(message)),
+            Self::Spanned(err) => err,
+            Self::Message(message) => context.call_site_error(EvalError::native(message)),
         }
     }
 }
@@ -450,18 +427,6 @@ where
     }
 }
 
-impl<'a, G: Grammar> IntoEvalResult<'a, G> for Value<'a, G> {
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
-        Ok(self)
-    }
-}
-
-impl<'a, G: Grammar> IntoEvalResult<'a, G> for Function<'a, G> {
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
-        Ok(Value::Function(self))
-    }
-}
-
 impl<'a, T: Number, G: Grammar<Lit = T>> IntoEvalResult<'a, G> for T {
     fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
         Ok(Value::Number(self))
@@ -491,6 +456,18 @@ where
             Self::Equal => <G::Lit as Zero>::zero(),
             Self::Greater => <G::Lit as One>::one(),
         }))
+    }
+}
+
+impl<'a, G: Grammar> IntoEvalResult<'a, G> for Value<'a, G> {
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+        Ok(self)
+    }
+}
+
+impl<'a, G: Grammar> IntoEvalResult<'a, G> for Function<'a, G> {
+    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+        Ok(Value::Function(self))
     }
 }
 
@@ -531,22 +508,17 @@ into_value_for_tuple!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A);
 into_value_for_tuple!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A, 8: B);
 into_value_for_tuple!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A, 8: B, 9: C);
 
-/// Marker for use with [wrapper functions] accepting context as the first argument.
-///
-/// [wrapper functions]: struct.FnWrapper.html
-#[derive(Debug)]
-pub struct WithContext<T>(T);
-
 macro_rules! arity_fn {
     ($arity:tt => $($arg_name:ident : $t:ident),+) => {
-        impl<'a, G, F, Ret, $($t,)+> NativeFn<'a, G> for FnWrapper<(Ret, $($t,)+), F>
+        impl<G, F, Ret, $($t,)+> NativeFn<G> for FnWrapper<(Ret, $($t,)+), F>
         where
             G: Grammar,
             F: Fn($($t,)+) -> Ret,
-            $($t: TryFromValue<'a, G>,)+
-            Ret: IntoEvalResult<'a, G>,
+            $($t: for<'val> TryFromValue<'val, G>,)+
+            Ret: for<'val> IntoEvalResult<'val, G>,
         {
-            fn evaluate(
+            #[allow(clippy::shadow_unrelated)] // makes it easier to write macro
+            fn evaluate<'a>(
                 &self,
                 args: Vec<SpannedValue<'a, G>>,
                 context: &mut CallContext<'_, 'a>,
@@ -556,7 +528,7 @@ macro_rules! arity_fn {
 
                 $(
                     let (index, $arg_name) = args_iter.next().unwrap();
-                    let span = create_span_ref(&$arg_name, ());
+                    let span = $arg_name.with_no_extra();
                     let $arg_name = $t::try_from_value($arg_name.extra).map_err(|mut err| {
                         err.set_arg_index(index);
                         context
@@ -566,37 +538,6 @@ macro_rules! arity_fn {
                 )+
 
                 let output = (self.function)($($arg_name,)+);
-                output.into_eval_result().map_err(|err| err.into_spanned(context))
-            }
-        }
-
-        impl<'a, G, F, Ret, $($t,)+> NativeFn<'a, G> for FnWrapper<WithContext<(Ret, $($t,)+)>, F>
-        where
-            G: Grammar,
-            F: Fn(&mut CallContext<'_, 'a>, $($t,)+) -> Ret,
-            $($t: TryFromValue<'a, G>,)+
-            Ret: IntoEvalResult<'a, G>,
-        {
-            fn evaluate(
-                &self,
-                args: Vec<SpannedValue<'a, G>>,
-                context: &mut CallContext<'_, 'a>,
-            ) -> EvalResult<'a, G> {
-                context.check_args_count(&args, $arity)?;
-                let mut args_iter = args.into_iter().enumerate();
-
-                $(
-                    let (index, $arg_name) = args_iter.next().unwrap();
-                    let span = create_span_ref(&$arg_name, ());
-                    let $arg_name = $t::try_from_value($arg_name.extra).map_err(|mut err| {
-                        err.set_arg_index(index);
-                        context
-                            .call_site_error(EvalError::Wrapper(err))
-                            .with_span(&span, AuxErrorInfo::InvalidArg)
-                    })?;
-                )+
-
-                let output = (self.function)(context, $($arg_name,)+);
                 output.into_eval_result().map_err(|err| err.into_spanned(context))
             }
         }
@@ -626,12 +567,191 @@ pub type Ternary<T> = FnWrapper<(T, T, T, T), fn(T, T, T) -> T>;
 /// Quaternary function wrapper.
 pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 
+/// An alternative for [`wrap`] function which works for arguments / return results with
+/// non-`'static` lifetime.
+///
+/// The macro must be called with 2 arguments (in this order):
+///
+/// - Function arity (from 0 to 10 inclusive)
+/// - Function or closure with the specified number of arguments. Using a function is recommended;
+///   using a closure may lead to hard-to-debug type inference errors.
+///
+/// As with `wrap`, all function arguments must implement [`TryFromValue`] and the return result
+/// must implement [`IntoEvalResult`]. Unlike `wrap`, the arguments / return result do not
+/// need to have a `'static` lifetime; examples include [`Value`]s, [`Function`]s
+/// and [`EvalResult`]s. Lifetimes of all arguments and the return result must match.
+///
+/// [`wrap`]: fns/fn.wrap.html
+/// [`TryFromValue`]: fns/trait.TryFromValue.html
+/// [`IntoEvalResult`]: fns/trait.IntoEvalResult.html
+/// [`Value`]: enum.Value.html
+/// [`Function`]: enum.Function.html
+/// [`EvalResult`]: type.EvalResult.html
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, InputSpan};
+/// # use arithmetic_eval::{
+/// #     wrap_fn, fns::FnWrapper, CallContext, Function, Interpreter, Value,
+/// # };
+/// fn is_function<G: Grammar>(value: Value<'_, G>) -> bool {
+///     value.is_function()
+/// }
+///
+/// let mut interpreter = Interpreter::new();
+/// interpreter.insert_native_fn("is_function", wrap_fn!(1, is_function));
+///
+/// let program = "is_function(is_function) && !is_function(1)";
+/// let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
+/// let ret = interpreter.evaluate(&program).unwrap();
+/// assert_eq!(ret, Value::Bool(true));
+/// ```
+///
+/// Usage of lifetimes:
+///
+/// ```
+/// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, InputSpan};
+/// # use arithmetic_eval::{
+/// #     wrap_fn, fns::FnWrapper, CallContext, Function, Interpreter, Value,
+/// # };
+/// // Note that both `Value`s have the same lifetime due to elision.
+/// fn take_if<G: Grammar>(value: Value<'_, G>, condition: bool) -> Value<'_, G> {
+///     if condition { value } else { Value::void() }
+/// }
+///
+/// let mut interpreter = Interpreter::with_prelude();
+/// interpreter.insert_native_fn("take_if", wrap_fn!(2, take_if));
+///
+/// let program = "(1, 2).take_if(true) == (1, 2) && (3, 4).take_if(false) != (3, 4)";
+/// let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
+/// let ret = interpreter.evaluate(&program).unwrap();
+/// assert_eq!(ret, Value::Bool(true));
+/// ```
+#[macro_export]
+macro_rules! wrap_fn {
+    (0, $function:expr) => { $crate::wrap_fn!(@arg 0 =>; $function) };
+    (1, $function:expr) => { $crate::wrap_fn!(@arg 1 => x0; $function) };
+    (2, $function:expr) => { $crate::wrap_fn!(@arg 2 => x0, x1; $function) };
+    (3, $function:expr) => { $crate::wrap_fn!(@arg 3 => x0, x1, x2; $function) };
+    (4, $function:expr) => { $crate::wrap_fn!(@arg 4 => x0, x1, x2, x3; $function) };
+    (5, $function:expr) => { $crate::wrap_fn!(@arg 5 => x0, x1, x2, x3, x4; $function) };
+    (6, $function:expr) => { $crate::wrap_fn!(@arg 6 => x0, x1, x2, x3, x4, x5; $function) };
+    (7, $function:expr) => { $crate::wrap_fn!(@arg 7 => x0, x1, x2, x3, x4, x5, x6; $function) };
+    (8, $function:expr) => {
+        $crate::wrap_fn!(@arg 8 => x0, x1, x2, x3, x4, x5, x6, x7; $function)
+    };
+    (9, $function:expr) => {
+        $crate::wrap_fn!(@arg 9 => x0, x1, x2, x3, x4, x5, x6, x7, x8; $function)
+    };
+    (10, $function:expr) => {
+        $crate::wrap_fn!(@arg 10 => x0, x1, x2, x3, x4, x5, x6, x7, x8, x9; $function)
+    };
+
+    ($($ctx:ident,)? @arg $arity:expr => $($arg_name:ident),*; $function:expr) => {{
+        let function = $function;
+        $crate::fns::enforce_closure_type(move |args, context| {
+            context.check_args_count(&args, $arity)?;
+            let mut args_iter = args.into_iter().enumerate();
+
+            $(
+                let (index, $arg_name) = args_iter.next().unwrap();
+                let span = $arg_name.with_no_extra();
+                let $arg_name = $crate::fns::TryFromValue::try_from_value($arg_name.extra)
+                    .map_err(|mut err| {
+                        err.set_arg_index(index);
+                        context
+                            .call_site_error($crate::EvalError::Wrapper(err))
+                            .with_span(&span, $crate::AuxErrorInfo::InvalidArg)
+                    })?;
+            )+
+
+            // We need `$ctx` just as a marker that the function receives a context.
+            let output = function($({ let $ctx = (); context },)? $($arg_name,)+);
+            $crate::fns::IntoEvalResult::into_eval_result(output)
+                .map_err(|err| err.into_spanned(context))
+        })
+    }}
+}
+
+/// Analogue of [`wrap_fn`] macro that injects the [`CallContext`] as the first argument.
+/// This can be used to call functions within the implementation.
+///
+/// As with `wrap_fn`, this macro must be called with 2 args: the arity of the function
+/// (**excluding** `CallContext`), and then the function / closure itself.
+///
+/// [`wrap_fn`]: macro.wrap_fn.html
+/// [`CallContext`]: struct.CallContext.html
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, InputSpan};
+/// # use arithmetic_eval::{
+/// #     wrap_fn_with_context, fns::FnWrapper, CallContext, Function, Interpreter, Value,
+/// #     SpannedEvalError,
+/// # };
+/// fn map_array<'a, G: Grammar<Lit = f32>>(
+///     context: &mut CallContext<'_, 'a>,
+///     array: Vec<Value<'a, G>>,
+///     map_fn: Function<'a, G>,
+/// ) -> Result<Vec<Value<'a, G>>, SpannedEvalError<'a>> {
+///     array
+///         .into_iter()
+///         .map(|value| {
+///             let arg = context.apply_call_span(value);
+///             map_fn.evaluate(vec![arg], context)
+///         })
+///         .collect()
+/// }
+///
+/// let mut interpreter = Interpreter::new();
+/// interpreter.insert_native_fn("map", wrap_fn_with_context!(2, map_array));
+///
+/// let program = "(1, 2, 3).map(|x| x + 3) == (4, 5, 6)";
+/// let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
+/// let ret = interpreter.evaluate(&program).unwrap();
+/// assert_eq!(ret, Value::Bool(true));
+/// ```
+#[macro_export]
+macro_rules! wrap_fn_with_context {
+    (0, $function:expr) => { $crate::wrap_fn!(_ctx, @arg 0 =>; $function) };
+    (1, $function:expr) => { $crate::wrap_fn!(_ctx, @arg 1 => x0; $function) };
+    (2, $function:expr) => { $crate::wrap_fn!(_ctx, @arg 2 => x0, x1; $function) };
+    (3, $function:expr) => { $crate::wrap_fn!(_ctx, @arg 3 => x0, x1, x2; $function) };
+    (4, $function:expr) => { $crate::wrap_fn!(_ctx, @arg 4 => x0, x1, x2, x3; $function) };
+    (5, $function:expr) => { $crate::wrap_fn!(_ctx, @arg 5 => x0, x1, x2, x3, x4; $function) };
+    (6, $function:expr) => {
+        $crate::wrap_fn!(_ctx, @arg 6 => x0, x1, x2, x3, x4, x5; $function)
+    };
+    (7, $function:expr) => {
+        $crate::wrap_fn!(_ctx, @arg 7 => x0, x1, x2, x3, x4, x5, x6; $function)
+    };
+    (8, $function:expr) => {
+        $crate::wrap_fn!(_ctx, @arg 8 => x0, x1, x2, x3, x4, x5, x6, x7; $function)
+    };
+    (9, $function:expr) => {
+        $crate::wrap_fn!(_ctx, @arg 9 => x0, x1, x2, x3, x4, x5, x6, x7, x8; $function)
+    };
+    (10, $function:expr) => {
+        $crate::wrap_fn!(_ctx, @arg 10 => x0, x1, x2, x3, x4, x5, x6, x7, x8, x9; $function)
+    };
+}
+
+#[doc(hidden)] // necessary for `wrap_fn` macro
+pub fn enforce_closure_type<G: Grammar, F>(function: F) -> F
+where
+    F: for<'a> Fn(Vec<SpannedValue<'a, G>>, &mut CallContext<'_, 'a>) -> EvalResult<'a, G>,
+{
+    function
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::Interpreter;
 
-    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
     use assert_matches::assert_matches;
     use core::f32;
 
@@ -651,7 +771,7 @@ mod tests {
             unary_fn(2) == 5 && binary_fn(1, -3) == -3 &&
                 ternary_fn(1, 2, 3) == 2 && ternary_fn(-1, 2, 3) == 3
         "#;
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
     }
@@ -686,7 +806,7 @@ mod tests {
             (1, 5, -3, 2, 1).array_min_max() == (-3, 5) &&
                 total_sum(((1, 2), (3, 4)), ((5, 6, 7), 8)) == 36
         "#;
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
     }
@@ -705,12 +825,18 @@ mod tests {
         interpreter.insert_wrapped_fn("sum_arrays", sum_arrays);
 
         let program = "(1, 2, 3).sum_arrays((4, 5, 6)) == (5, 7, 9)";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
+    }
+
+    #[test]
+    fn fallible_function_with_bogus_program() {
+        let mut interpreter = Interpreter::new();
+        interpreter.insert_wrapped_fn("sum_arrays", sum_arrays);
 
         let program = "(1, 2, 3).sum_arrays((4, 5))";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let err = interpreter.evaluate(&block).unwrap_err();
         assert!(err
             .source()
@@ -727,7 +853,7 @@ mod tests {
         );
 
         let program = "(-1, 2).contains(0) && !(1, 3).contains(0)";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
     }
@@ -747,13 +873,13 @@ mod tests {
         });
 
         let program = "assert_eq(3, 1 + 2)";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert!(ret.is_void());
 
-        let program = "assert_eq(3, 1 - 2)";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
-        let err = interpreter.evaluate(&block).unwrap_err();
+        let bogus_program = "assert_eq(3, 1 - 2)";
+        let bogus_block = F32Grammar::parse_statements(InputSpan::new(bogus_program)).unwrap();
+        let err = interpreter.evaluate(&bogus_block).unwrap_err();
         assert_matches!(
             err.source(),
             EvalError::NativeCall(ref msg) if msg.contains("Assertion failed")
@@ -772,7 +898,7 @@ mod tests {
         );
 
         let program = "flip_sign(-1, true) == 1 && flip_sign(-1, false) == -1";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let ret = interpreter.evaluate(&block).unwrap();
         assert_eq!(ret, Value::Bool(true));
     }
@@ -791,7 +917,7 @@ mod tests {
         });
 
         let program = "((true, 1), (2, 3)).destructure()";
-        let block = F32Grammar::parse_statements(Span::new(program)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
         let err_message = interpreter
             .evaluate(&block)
             .unwrap_err()

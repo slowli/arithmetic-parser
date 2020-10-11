@@ -28,7 +28,7 @@ enum Literal {
 
 impl Literal {
     /// Parses an ASCII string like `"Hello, world!"`.
-    fn string(input: Span<'_>) -> NomResult<'_, String> {
+    fn string(input: InputSpan<'_>) -> NomResult<'_, String> {
         let parser = escaped_transform(
             is_not("\\\"\n"),
             '\\',
@@ -40,12 +40,12 @@ impl Literal {
         );
         map(
             preceded(tag_char('"'), cut(terminated(opt(parser), tag_char('"')))),
-            |maybe_string| maybe_string.unwrap_or_default(),
+            Option::unwrap_or_default,
         )(input)
     }
 
     /// Hex-encoded buffer like `0x09abcd`.
-    fn hex_buffer(input: Span<'_>) -> NomResult<'_, Self> {
+    fn hex_buffer(input: InputSpan<'_>) -> NomResult<'_, Self> {
         let hex_parser = preceded(
             tag("0x"),
             cut(tuple((
@@ -61,7 +61,9 @@ impl Literal {
                             opt(tag_char('_')),
                             take_while1(|c: char| c.is_ascii_hexdigit()),
                         ),
-                        |digits: Span| hex::decode(digits.fragment()).map_err(anyhow::Error::from),
+                        |digits: InputSpan| {
+                            hex::decode(digits.fragment()).map_err(anyhow::Error::from)
+                        },
                     ),
                     vec![],
                     |mut acc, digits| {
@@ -78,7 +80,7 @@ impl Literal {
         })(input)
     }
 
-    fn parse(input: Span<'_>) -> NomResult<'_, Self> {
+    fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
         alt((
             map(Self::string, |s| Literal::Bytes {
                 value: s.into_bytes(),
@@ -110,7 +112,7 @@ pub enum ValueType {
     Tuple(Vec<ValueType>),
 }
 
-fn type_info<Ty: GrammarType>(input: Span<'_>) -> NomResult<'_, ValueType> {
+fn type_info<Ty: GrammarType>(input: InputSpan<'_>) -> NomResult<'_, ValueType> {
     alt((
         map(tag_char('_'), |_| ValueType::Any),
         map(tag("Sc"), |_| ValueType::Scalar),
@@ -140,28 +142,28 @@ impl Grammar for FieldGrammar {
 
     const FEATURES: Features = Features::all();
 
-    fn parse_literal(span: Span<'_>) -> NomResult<'_, Self::Lit> {
+    fn parse_literal(span: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
         Literal::parse(span)
     }
 
-    fn parse_type(span: Span<'_>) -> NomResult<'_, Self::Type> {
+    fn parse_type(span: InputSpan<'_>) -> NomResult<'_, Self::Type> {
         type_info::<Streaming>(span)
     }
 }
 
-fn span(offset: usize, fragment: &str) -> Span<'_> {
+fn span(offset: usize, fragment: &str) -> InputSpan<'_> {
     span_on_line(offset, 1, fragment)
 }
 
-fn span_on_line(offset: usize, line: u32, fragment: &str) -> Span<'_> {
+fn span_on_line(offset: usize, line: u32, fragment: &str) -> InputSpan<'_> {
     unsafe {
         // SAFETY: `offset` is small (hand-picked).
-        Span::new_from_raw_offset(offset, line, fragment, ())
+        InputSpan::new_from_raw_offset(offset, line, fragment, ())
     }
 }
 
 fn sp<T>(offset: usize, fragment: &str, value: T) -> Spanned<'_, T> {
-    create_span(span(offset, fragment), value)
+    Spanned::new(span(offset, fragment), value)
 }
 
 fn lsp<'a>(
@@ -169,7 +171,7 @@ fn lsp<'a>(
     fragment: &'a str,
     lvalue: Lvalue<'a, ValueType>,
 ) -> SpannedLvalue<'a, ValueType> {
-    create_span(span(offset, fragment), lvalue)
+    Spanned::new(span(offset, fragment), lvalue)
 }
 
 fn lvalue_tuple(elements: Vec<SpannedLvalue<'_, ValueType>>) -> Lvalue<'_, ValueType> {
@@ -181,10 +183,10 @@ fn lvalue_tuple(elements: Vec<SpannedLvalue<'_, ValueType>>) -> Lvalue<'_, Value
 }
 
 fn args<'a>(
-    span: Span<'a>,
+    span: InputSpan<'a>,
     elements: Vec<SpannedLvalue<'a, ValueType>>,
 ) -> Spanned<'a, Destructure<'a, ValueType>> {
-    create_span(
+    Spanned::new(
         span,
         Destructure {
             start: elements,
@@ -195,30 +197,58 @@ fn args<'a>(
 }
 
 #[test]
+fn is_valid_variable_name_works() {
+    for &valid_name in &[
+        "a",
+        "abc",
+        "abc_",
+        "camelCase",
+        "_dash_",
+        "_",
+        "a12",
+        "e1e3t_hax0r",
+    ] {
+        assert!(
+            is_valid_variable_name(valid_name),
+            "failed at valid name: {}",
+            valid_name
+        );
+    }
+
+    for &invalid_name in &["", "1abc", "\u{43d}\u{435}\u{442}", "xy+", "a-b"] {
+        assert!(
+            !is_valid_variable_name(invalid_name),
+            "failed at invalid name: {}",
+            invalid_name
+        );
+    }
+}
+
+#[test]
 fn whitespace_can_include_comments() {
-    let input = Span::new("ge(1)");
+    let input = InputSpan::new("ge(1)");
     assert_eq!(ws::<Complete>(input).unwrap().0, span(0, "ge(1)"));
 
-    let input = Span::new("   ge(1)");
+    let input = InputSpan::new("   ge(1)");
     assert_eq!(ws::<Complete>(input).unwrap().0, span(3, "ge(1)"));
 
-    let input = Span::new("  \nge(1)");
+    let input = InputSpan::new("  \nge(1)");
     assert_eq!(
         ws::<Complete>(input).unwrap().0,
         span_on_line(3, 2, "ge(1)")
     );
-    let input = Span::new("# Comment\nge(1)");
+    let input = InputSpan::new("# Comment\nge(1)");
     assert_eq!(
         ws::<Complete>(input).unwrap().0,
         span_on_line(10, 2, "ge(1)")
     );
-    let input = Span::new("#!\nge(1)");
+    let input = InputSpan::new("#!\nge(1)");
     assert_eq!(
         ws::<Complete>(input).unwrap().0,
         span_on_line(3, 2, "ge(1)")
     );
 
-    let input = Span::new(
+    let input = InputSpan::new(
         "   # This is a comment.
              \t# This is a comment, too
              this_is_not # although this *is*",
@@ -231,18 +261,18 @@ fn whitespace_can_include_comments() {
 
 #[test]
 fn non_ascii_input() {
-    let input = Span::new("фыва");
+    let input = InputSpan::new("\u{444}\u{44b}\u{432}\u{430}");
     let err = statements::<FieldGrammar>(input).unwrap_err();
     assert_matches!(err.extra, Error::NonAsciiInput);
 
-    let input = Span::new("1 + фы");
+    let input = InputSpan::new("1 + \u{444}\u{44b}");
     let err = statements::<FieldGrammar>(input).unwrap_err();
     assert_matches!(err.extra, Error::NonAsciiInput);
 }
 
 #[test]
 fn hex_buffer_works() {
-    let input = Span::new("0xAbcd1234 + 5");
+    let input = InputSpan::new("0xAbcd1234 + 5");
     assert_eq!(
         Literal::hex_buffer(input).unwrap().1,
         Literal::Bytes {
@@ -251,7 +281,7 @@ fn hex_buffer_works() {
         }
     );
 
-    let input = Span::new("0xg_Abcd_1234 + 5");
+    let input = InputSpan::new("0xg_Abcd_1234 + 5");
     assert_eq!(
         Literal::hex_buffer(input).unwrap().1,
         Literal::Bytes {
@@ -262,43 +292,43 @@ fn hex_buffer_works() {
 
     let erroneous_inputs = ["0xAbcd1234a", "0x", "0xP12", "0x__12", "0x_s12", "0xsA_BCD"];
     for &input in &erroneous_inputs {
-        let input = Span::new(input);
+        let input = InputSpan::new(input);
         assert_matches!(Literal::hex_buffer(input).unwrap_err(), NomErr::Failure(_));
     }
 }
 
 #[test]
 fn string_literal_works() {
-    let input = Span::new(r#""abc";"#);
+    let input = InputSpan::new(r#""abc";"#);
     assert_eq!(Literal::string(input).unwrap().1, "abc");
-    let input = Span::new(r#""Hello, \"world\"!";"#);
+    let input = InputSpan::new(r#""Hello, \"world\"!";"#);
     assert_eq!(Literal::string(input).unwrap().1, r#"Hello, "world"!"#);
-    let input = Span::new(r#""Hello,\nworld!";"#);
+    let input = InputSpan::new(r#""Hello,\nworld!";"#);
     assert_eq!(Literal::string(input).unwrap().1, "Hello,\nworld!");
-    let input = Span::new(r#""";"#);
+    let input = InputSpan::new(r#""";"#);
     assert_eq!(Literal::string(input).unwrap().1, "");
 
     // Unfinished string literal.
-    let input = Span::new("\"Hello, world!\n");
+    let input = InputSpan::new("\"Hello, world!\n");
     assert_matches!(Literal::string(input).unwrap_err(), NomErr::Failure(_));
     // Unsupported escape sequence.
-    let input = Span::new(r#""Hello,\tworld!"#);
+    let input = InputSpan::new(r#""Hello,\tworld!"#);
     assert_matches!(Literal::string(input).unwrap_err(), NomErr::Failure(_));
 }
 
 #[test]
 fn var_name_works() {
-    let input = Span::new("A + B");
+    let input = InputSpan::new("A + B");
     assert_eq!(var_name(input).unwrap().1, span(0, "A"));
-    let input = Span::new("Abc_d + B");
+    let input = InputSpan::new("Abc_d + B");
     assert_eq!(var_name(input).unwrap().1, span(0, "Abc_d"));
-    let input = Span::new("_ + 3");
+    let input = InputSpan::new("_ + 3");
     assert_eq!(var_name(input).unwrap().1, span(0, "_"));
 }
 
 #[test]
 fn fun_works() {
-    let input = Span::new("ge(0x123456) + 1");
+    let input = InputSpan::new("ge(0x123456) + 1");
     assert_eq!(
         simple_expr::<FieldGrammar, Complete>(input).unwrap().1,
         sp(
@@ -318,7 +348,7 @@ fn fun_works() {
         )
     );
 
-    let input = Span::new("ge (  0x123456\t) + A");
+    let input = InputSpan::new("ge (  0x123456\t) + A");
     assert_eq!(
         simple_expr::<FieldGrammar, Complete>(input).unwrap().1,
         sp(
@@ -341,7 +371,7 @@ fn fun_works() {
 
 #[test]
 fn fun_call_with_terminating_comma() {
-    let input = Span::new("ge(1, 2 ,\n)");
+    let input = InputSpan::new("ge(1, 2 ,\n)");
     assert_eq!(
         simple_expr::<FieldGrammar, Complete>(input).unwrap().1,
         sp(
@@ -360,7 +390,7 @@ fn fun_call_with_terminating_comma() {
 
 #[test]
 fn fun_works_with_complex_called_values() {
-    let input = Span::new("ge(x, 3)(0x123456) + 5");
+    let input = InputSpan::new("ge(x, 3)(0x123456) + 5");
     let inner_fn = sp(
         0,
         "ge(x, 3)",
@@ -391,7 +421,7 @@ fn fun_works_with_complex_called_values() {
         )
     );
 
-    let input = Span::new("(|x| x + 1)(0xs_123456) + 5");
+    let input = InputSpan::new("(|x| x + 1)(0xs_123456) + 5");
     let (_, function) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
     let function_value = match function.extra {
         Expr::Function { name, .. } => name.extra,
@@ -399,7 +429,7 @@ fn fun_works_with_complex_called_values() {
     };
     assert_matches!(function_value, Expr::FnDefinition(_));
 
-    let input = Span::new("|x| { x + 1 }(0xs_123456) + 5");
+    let input = InputSpan::new("|x| { x + 1 }(0xs_123456) + 5");
     let (_, function) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
     let function_value = match function.extra {
         Expr::Function { name, .. } => name.extra,
@@ -410,7 +440,7 @@ fn fun_works_with_complex_called_values() {
 
 #[test]
 fn method_expr_works() {
-    let input = Span::new("x.sin();");
+    let input = InputSpan::new("x.sin();");
     let (_, call) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
     assert_eq!(
         call,
@@ -418,20 +448,20 @@ fn method_expr_works() {
             0,
             "x.sin()",
             Expr::Method {
-                name: span(2, "sin"),
+                name: span(2, "sin").into(),
                 receiver: Box::new(sp(0, "x", Expr::Variable)),
                 args: vec![],
             }
         )
     );
 
-    let input = Span::new("(1, x, 2).foo(y) + 3;");
+    let input = InputSpan::new("(1, x, 2).foo(y) + 3;");
     let (_, call) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
     let expected = sp(
         0,
         "(1, x, 2).foo(y)",
         Expr::Method {
-            name: span(10, "foo"),
+            name: span(10, "foo").into(),
             receiver: Box::new(sp(
                 0,
                 "(1, x, 2)",
@@ -446,7 +476,7 @@ fn method_expr_works() {
     );
     assert_eq!(call, expected);
 
-    let input = Span::new("(1, x, 2).foo(y)(7.bar());");
+    let input = InputSpan::new("(1, x, 2).foo(y)(7.bar());");
     let (_, call) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
     assert_eq!(
         call,
@@ -459,7 +489,7 @@ fn method_expr_works() {
                     17,
                     "7.bar()",
                     Expr::Method {
-                        name: span(19, "bar"),
+                        name: span(19, "bar").into(),
                         receiver: Box::new(sp(17, "7", Expr::Literal(Literal::Number))),
                         args: vec![],
                     }
@@ -471,106 +501,65 @@ fn method_expr_works() {
 
 #[test]
 fn element_expr_works() {
-    let input = Span::new("A;");
+    fn simple_fn(offset: usize) -> Expr<'static, FieldGrammar> {
+        Expr::Function {
+            name: Box::new(sp(offset, "ge", Expr::Variable)),
+            args: vec![sp(
+                offset + 3,
+                "0x1234",
+                Expr::Literal(Literal::Bytes {
+                    value: vec![0x12, 0x34],
+                    ty: LiteralType::Bytes,
+                }),
+            )],
+        }
+    }
+
+    let input = InputSpan::new("A;");
     assert_eq!(
         expr::<FieldGrammar, Complete>(input).unwrap().1,
         sp(0, "A", Expr::Variable)
     );
 
-    let input = Span::new("(ge(0x1234));");
+    let input = InputSpan::new("(ge(0x1234));");
     assert_eq!(
         expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
-        Expr::Function {
-            name: Box::new(sp(1, "ge", Expr::Variable)),
-            args: vec![sp(
-                4,
-                "0x1234",
-                Expr::Literal(Literal::Bytes {
-                    value: vec![0x12, 0x34],
-                    ty: LiteralType::Bytes,
-                })
-            )],
-        }
+        simple_fn(1)
     );
 
-    let input = Span::new("ge(0x1234) + A_b;");
+    let input = InputSpan::new("ge(0x1234) + A_b;");
+    let sum_expr = Expr::Binary {
+        lhs: Box::new(sp(0, "ge(0x1234)", simple_fn(0))),
+        op: Spanned::new(span(11, "+"), BinaryOp::Add),
+        rhs: Box::new(sp(13, "A_b", Expr::Variable)),
+    };
+    assert_eq!(
+        expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
+        sum_expr
+    );
+
+    let input = InputSpan::new("ge(0x1234) + A_b - C;");
     assert_eq!(
         expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
         Expr::Binary {
-            lhs: Box::new(sp(0, "ge(0x1234)", {
-                Expr::Function {
-                    name: Box::new(sp(0, "ge", Expr::Variable)),
-                    args: vec![sp(
-                        3,
-                        "0x1234",
-                        Expr::Literal(Literal::Bytes {
-                            value: vec![0x12, 0x34],
-                            ty: LiteralType::Bytes,
-                        }),
-                    )],
-                }
-            })),
-            op: create_span(span(11, "+"), BinaryOp::Add),
-            rhs: Box::new(sp(13, "A_b", Expr::Variable)),
-        }
-    );
-
-    let input = Span::new("ge(0x1234) + A_b - C;");
-    assert_eq!(
-        expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
-        Expr::Binary {
-            lhs: Box::new(sp(0, "ge(0x1234) + A_b", {
-                Expr::Binary {
-                    lhs: Box::new(sp(
-                        0,
-                        "ge(0x1234)",
-                        Expr::Function {
-                            name: Box::new(sp(0, "ge", Expr::Variable)),
-                            args: vec![sp(
-                                3,
-                                "0x1234",
-                                Expr::Literal(Literal::Bytes {
-                                    value: vec![0x12, 0x34],
-                                    ty: LiteralType::Bytes,
-                                }),
-                            )],
-                        },
-                    )),
-                    op: create_span(span(11, "+"), BinaryOp::Add),
-                    rhs: Box::new(sp(13, "A_b", Expr::Variable)),
-                }
-            })),
-            op: create_span(span(17, "-"), BinaryOp::Sub),
+            lhs: Box::new(sp(0, "ge(0x1234) + A_b", sum_expr)),
+            op: Spanned::new(span(17, "-"), BinaryOp::Sub),
             rhs: Box::new(sp(19, "C", Expr::Variable)),
         }
     );
 
-    let input = Span::new("(ge(0x1234) + A_b) - (C + ge(0x00) + D);");
+    let input = InputSpan::new("(ge(0x1234) + A_b) - (C + ge(0x00) + D);");
     assert_eq!(
         expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
         Expr::Binary {
             lhs: Box::new(sp(0, "(ge(0x1234) + A_b)", {
                 Expr::Binary {
-                    lhs: Box::new(sp(
-                        1,
-                        "ge(0x1234)",
-                        Expr::Function {
-                            name: Box::new(sp(1, "ge", Expr::Variable)),
-                            args: vec![sp(
-                                4,
-                                "0x1234",
-                                Expr::Literal(Literal::Bytes {
-                                    value: vec![0x12, 0x34],
-                                    ty: LiteralType::Bytes,
-                                }),
-                            )],
-                        },
-                    )),
-                    op: BinaryOp::from_span(span(12, "+")),
+                    lhs: Box::new(sp(1, "ge(0x1234)", simple_fn(1))),
+                    op: BinaryOp::from_span(span(12, "+").into()),
                     rhs: Box::new(sp(14, "A_b", Expr::Variable)),
                 }
             })),
-            op: BinaryOp::from_span(span(19, "-")),
+            op: BinaryOp::from_span(span(19, "-").into()),
             rhs: Box::new(sp(21, "(C + ge(0x00) + D)", {
                 Expr::Binary {
                     lhs: Box::new(sp(
@@ -578,7 +567,7 @@ fn element_expr_works() {
                         "C + ge(0x00)",
                         Expr::Binary {
                             lhs: Box::new(sp(22, "C", Expr::Variable)),
-                            op: BinaryOp::from_span(span(24, "+")),
+                            op: BinaryOp::from_span(span(24, "+").into()),
                             rhs: Box::new(sp(
                                 26,
                                 "ge(0x00)",
@@ -596,7 +585,7 @@ fn element_expr_works() {
                             )),
                         },
                     )),
-                    op: BinaryOp::from_span(span(35, "+")),
+                    op: BinaryOp::from_span(span(35, "+").into()),
                     rhs: Box::new(sp(37, "D", Expr::Variable)),
                 }
             }))
@@ -606,16 +595,16 @@ fn element_expr_works() {
 
 #[test]
 fn unary_expr_works() {
-    let input = Span::new("-3;");
+    let input = InputSpan::new("-3;");
     assert_eq!(
         expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
         Expr::Unary {
-            op: create_span(span(0, "-"), UnaryOp::Neg),
+            op: Spanned::new(span(0, "-"), UnaryOp::Neg),
             inner: Box::new(sp(1, "3", Expr::Literal(Literal::Number))),
         }
     );
 
-    let input = Span::new("-x + 5;");
+    let input = InputSpan::new("-x + 5;");
     assert_eq!(
         *expr::<FieldGrammar, Complete>(input)
             .unwrap()
@@ -627,47 +616,47 @@ fn unary_expr_works() {
             0,
             "-x",
             Expr::Unary {
-                op: create_span(span(0, "-"), UnaryOp::Neg),
+                op: Spanned::new(span(0, "-"), UnaryOp::Neg),
                 inner: Box::new(sp(1, "x", Expr::Variable)),
             }
         ),
     );
 
-    let input = Span::new("-(x + y);");
+    let input = InputSpan::new("-(x + y);");
     assert_eq!(
         expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
         Expr::Unary {
-            op: create_span(span(0, "-"), UnaryOp::Neg),
+            op: Spanned::new(span(0, "-"), UnaryOp::Neg),
             inner: Box::new(sp(
                 1,
                 "(x + y)",
                 Expr::Binary {
                     lhs: Box::new(sp(2, "x", Expr::Variable)),
-                    op: BinaryOp::from_span(span(4, "+")),
+                    op: BinaryOp::from_span(span(4, "+").into()),
                     rhs: Box::new(sp(6, "y", Expr::Variable)),
                 }
             ))
         }
     );
 
-    let input = Span::new("2 * -3;");
+    let input = InputSpan::new("2 * -3;");
     assert_eq!(
         expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
         Expr::Binary {
             lhs: Box::new(sp(0, "2", Expr::Literal(Literal::Number))),
-            op: BinaryOp::from_span(span(2, "*")),
+            op: BinaryOp::from_span(span(2, "*").into()),
             rhs: Box::new(sp(
                 4,
                 "-3",
                 Expr::Unary {
-                    op: create_span(span(4, "-"), UnaryOp::Neg),
+                    op: Spanned::new(span(4, "-"), UnaryOp::Neg),
                     inner: Box::new(sp(5, "3", Expr::Literal(Literal::Number))),
                 }
             )),
         }
     );
 
-    let input = Span::new("!f && x == 2;");
+    let input = InputSpan::new("!f && x == 2;");
     assert_eq!(
         *expr::<FieldGrammar, Complete>(input)
             .unwrap()
@@ -682,18 +671,18 @@ fn unary_expr_works() {
 
 #[test]
 fn expr_with_numbers_works() {
-    let input = Span::new("(2 + a) * b;");
+    let input = InputSpan::new("(2 + a) * b;");
     assert_eq!(
         expr::<FieldGrammar, Streaming>(input).unwrap().1.extra,
         Expr::Binary {
             lhs: Box::new(sp(0, "(2 + a)", {
                 Expr::Binary {
                     lhs: Box::new(sp(1, "2", Expr::Literal(Literal::Number))),
-                    op: BinaryOp::from_span(span(3, "+")),
+                    op: BinaryOp::from_span(span(3, "+").into()),
                     rhs: Box::new(sp(5, "a", Expr::Variable)),
                 }
             })),
-            op: BinaryOp::from_span(span(8, "*")),
+            op: BinaryOp::from_span(span(8, "*").into()),
             rhs: Box::new(sp(10, "b", Expr::Variable)),
         }
     );
@@ -701,22 +690,22 @@ fn expr_with_numbers_works() {
 
 #[test]
 fn comparison_expr_works() {
-    let input = Span::new("a == b && c > d;");
+    let input = InputSpan::new("a == b && c > d;");
     assert_eq!(
         expr::<FieldGrammar, Streaming>(input).unwrap().1.extra,
         Expr::Binary {
             lhs: Box::new(sp(0, "a == b", {
                 Expr::Binary {
                     lhs: Box::new(sp(0, "a", Expr::Variable)),
-                    op: BinaryOp::from_span(span(3, "==")),
+                    op: BinaryOp::from_span(span(3, "==").into()),
                     rhs: Box::new(sp(5, "b", Expr::Variable)),
                 }
             })),
-            op: BinaryOp::from_span(span(7, "&&")),
+            op: BinaryOp::from_span(span(7, "&&").into()),
             rhs: Box::new(sp(10, "c > d", {
                 Expr::Binary {
                     lhs: Box::new(sp(10, "c", Expr::Variable)),
-                    op: BinaryOp::from_span(span(12, ">")),
+                    op: BinaryOp::from_span(span(12, ">").into()),
                     rhs: Box::new(sp(14, "d", Expr::Variable)),
                 }
             })),
@@ -726,12 +715,12 @@ fn comparison_expr_works() {
 
 #[test]
 fn two_char_comparisons_are_parsed() {
-    let input = Span::new("a >= b;");
+    let input = InputSpan::new("a >= b;");
     assert_eq!(
         expr::<FieldGrammar, Streaming>(input).unwrap().1.extra,
         Expr::Binary {
             lhs: Box::new(sp(0, "a", Expr::Variable)),
-            op: BinaryOp::from_span(span(2, ">=")),
+            op: BinaryOp::from_span(span(2, ">=").into()),
             rhs: Box::new(sp(5, "b", Expr::Variable)),
         }
     );
@@ -739,7 +728,7 @@ fn two_char_comparisons_are_parsed() {
 
 #[test]
 fn assignment_works() {
-    let input = Span::new("x = sc(0x1234);");
+    let input = InputSpan::new("x = sc(0x1234);");
     assert_eq!(
         statement::<FieldGrammar, Complete>(input).unwrap().1.extra,
         Statement::Assignment {
@@ -762,7 +751,7 @@ fn assignment_works() {
         }
     );
 
-    let input = Span::new("yb = 7 * sc(0x0001) + k;");
+    let input = InputSpan::new("yb = 7 * sc(0x0001) + k;");
     assert_eq!(
         statement::<FieldGrammar, Complete>(input).unwrap().1.extra,
         Statement::Assignment {
@@ -774,7 +763,7 @@ fn assignment_works() {
                         "7 * sc(0x0001)",
                         Expr::Binary {
                             lhs: Box::new(sp(5, "7", Expr::Literal(Literal::Number))),
-                            op: BinaryOp::from_span(span(7, "*")),
+                            op: BinaryOp::from_span(span(7, "*").into()),
                             rhs: Box::new(sp(
                                 9,
                                 "sc(0x0001)",
@@ -792,7 +781,7 @@ fn assignment_works() {
                             )),
                         },
                     )),
-                    op: BinaryOp::from_span(span(20, "+")),
+                    op: BinaryOp::from_span(span(20, "+").into()),
                     rhs: Box::new(sp(22, "k", Expr::Variable)),
                 }
             }))
@@ -802,7 +791,7 @@ fn assignment_works() {
 
 #[test]
 fn comparison_works() {
-    let input = Span::new("x == 3;");
+    let input = InputSpan::new("x == 3;");
     assert_eq!(
         statement::<FieldGrammar, Complete>(input).unwrap().1.extra,
         Statement::Expr(sp(
@@ -811,12 +800,12 @@ fn comparison_works() {
             Expr::Binary {
                 lhs: Box::new(sp(0, "x", Expr::Variable)),
                 rhs: Box::new(sp(5, "3", Expr::Literal(Literal::Number))),
-                op: BinaryOp::from_span(span(2, "==")),
+                op: BinaryOp::from_span(span(2, "==").into()),
             }
         ))
     );
 
-    let input = Span::new("s*G == R + h*A;");
+    let input = InputSpan::new("s*G == R + h*A;");
     assert_eq!(
         statement::<FieldGrammar, Complete>(input).unwrap().1.extra,
         Statement::Expr(sp(
@@ -826,31 +815,31 @@ fn comparison_works() {
                 lhs: Box::new(sp(0, "s*G", {
                     Expr::Binary {
                         lhs: Box::new(sp(0, "s", Expr::Variable)),
-                        op: BinaryOp::from_span(span(1, "*")),
+                        op: BinaryOp::from_span(span(1, "*").into()),
                         rhs: Box::new(sp(2, "G", Expr::Variable)),
                     }
                 })),
                 rhs: Box::new(sp(7, "R + h*A", {
                     Expr::Binary {
                         lhs: Box::new(sp(7, "R", Expr::Variable)),
-                        op: BinaryOp::from_span(span(9, "+")),
+                        op: BinaryOp::from_span(span(9, "+").into()),
                         rhs: Box::new(sp(
                             11,
                             "h*A",
                             Expr::Binary {
                                 lhs: Box::new(sp(11, "h", Expr::Variable)),
-                                op: BinaryOp::from_span(span(12, "*")),
+                                op: BinaryOp::from_span(span(12, "*").into()),
                                 rhs: Box::new(sp(13, "A", Expr::Variable)),
                             },
                         )),
                     }
                 })),
-                op: BinaryOp::from_span(span(4, "==")),
+                op: BinaryOp::from_span(span(4, "==").into()),
             }
         ))
     );
 
-    let input = Span::new("G^s != R + A^h;");
+    let input = InputSpan::new("G^s != R + A^h;");
     assert_eq!(
         statement::<FieldGrammar, Complete>(input).unwrap().1.extra,
         Statement::Expr(sp(
@@ -862,7 +851,7 @@ fn comparison_works() {
                     "G^s",
                     Expr::Binary {
                         lhs: Box::new(sp(0, "G", Expr::Variable)),
-                        op: BinaryOp::from_span(span(1, "^")),
+                        op: BinaryOp::from_span(span(1, "^").into()),
                         rhs: Box::new(sp(2, "s", Expr::Variable)),
                     }
                 )),
@@ -871,19 +860,19 @@ fn comparison_works() {
                     "R + A^h",
                     Expr::Binary {
                         lhs: Box::new(sp(7, "R", Expr::Variable)),
-                        op: BinaryOp::from_span(span(9, "+")),
+                        op: BinaryOp::from_span(span(9, "+").into()),
                         rhs: Box::new(sp(
                             11,
                             "A^h",
                             Expr::Binary {
                                 lhs: Box::new(sp(11, "A", Expr::Variable)),
-                                op: BinaryOp::from_span(span(12, "^")),
+                                op: BinaryOp::from_span(span(12, "^").into()),
                                 rhs: Box::new(sp(13, "h", Expr::Variable)),
                             },
                         )),
                     }
                 )),
-                op: BinaryOp::from_span(span(4, "!=")),
+                op: BinaryOp::from_span(span(4, "!=").into()),
             }
         ))
     );
@@ -891,13 +880,13 @@ fn comparison_works() {
 
 #[test]
 fn tuples_are_parsed() {
-    let input = Span::new("(x, y)");
+    let input = InputSpan::new("(x, y)");
     assert_eq!(
         paren_expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
         Expr::Tuple(vec![sp(1, "x", Expr::Variable), sp(4, "y", Expr::Variable)])
     );
 
-    let input = Span::new("(x / 2, G^y, 1)");
+    let input = InputSpan::new("(x / 2, G^y, 1)");
     assert_eq!(
         paren_expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
         Expr::Tuple(vec![
@@ -906,7 +895,7 @@ fn tuples_are_parsed() {
                 "x / 2",
                 Expr::Binary {
                     lhs: Box::new(sp(1, "x", Expr::Variable)),
-                    op: BinaryOp::from_span(span(3, "/")),
+                    op: BinaryOp::from_span(span(3, "/").into()),
                     rhs: Box::new(sp(5, "2", Expr::Literal(Literal::Number))),
                 }
             ),
@@ -915,7 +904,7 @@ fn tuples_are_parsed() {
                 "G^y",
                 Expr::Binary {
                     lhs: Box::new(sp(8, "G", Expr::Variable)),
-                    op: BinaryOp::from_span(span(9, "^")),
+                    op: BinaryOp::from_span(span(9, "^").into()),
                     rhs: Box::new(sp(10, "y", Expr::Variable)),
                 }
             ),
@@ -926,14 +915,14 @@ fn tuples_are_parsed() {
 
 #[test]
 fn empty_tuple_is_parsed() {
-    let input = Span::new("();");
+    let input = InputSpan::new("();");
     let value = expr::<FieldGrammar, Complete>(input).unwrap().1;
     assert_eq!(value, sp(0, "()", Expr::Tuple(vec![])));
 }
 
 #[test]
 fn single_value_tuple_is_parsed() {
-    let input = Span::new("(1,);");
+    let input = InputSpan::new("(1,);");
     let value = expr::<FieldGrammar, Complete>(input).unwrap().1;
     assert_eq!(
         value,
@@ -947,7 +936,7 @@ fn single_value_tuple_is_parsed() {
 
 #[test]
 fn destructuring_is_parsed() {
-    let input = Span::new("x, y)");
+    let input = InputSpan::new("x, y)");
     let expected = Destructure {
         start: vec![
             lsp(0, "x", Lvalue::Variable { ty: None }),
@@ -961,30 +950,30 @@ fn destructuring_is_parsed() {
         expected
     );
 
-    let input = Span::new("x, y ,\n)");
+    let input = InputSpan::new("x, y ,\n)");
     let (rest, parsed) = destructure::<FieldGrammar, Complete>(input).unwrap();
     assert_eq!(parsed, expected);
     assert_eq!(*rest.fragment(), ")");
 
-    let input = Span::new("x, ..., y)");
+    let input = InputSpan::new("x, ..., y)");
     assert_eq!(
         destructure::<FieldGrammar, Complete>(input).unwrap().1,
         Destructure {
             start: vec![lsp(0, "x", Lvalue::Variable { ty: None })],
-            middle: Some(create_span(span(3, "..."), DestructureRest::Unnamed)),
+            middle: Some(Spanned::new(span(3, "..."), DestructureRest::Unnamed)),
             end: vec![lsp(8, "y", Lvalue::Variable { ty: None })],
         }
     );
 
-    let input = Span::new("x, ...rest, y: Ge, z)");
+    let input = InputSpan::new("x, ...rest, y: Ge, z)");
     assert_eq!(
         destructure::<FieldGrammar, Complete>(input).unwrap().1,
         Destructure {
             start: vec![lsp(0, "x", Lvalue::Variable { ty: None })],
-            middle: Some(create_span(
+            middle: Some(Spanned::new(
                 span(3, "...rest"),
                 DestructureRest::Named {
-                    variable: span(6, "rest"),
+                    variable: span(6, "rest").into(),
                     ty: None,
                 }
             )),
@@ -993,7 +982,7 @@ fn destructuring_is_parsed() {
                     12,
                     "y",
                     Lvalue::Variable {
-                        ty: Some(create_span(span(15, "Ge"), ValueType::Element))
+                        ty: Some(Spanned::new(span(15, "Ge"), ValueType::Element))
                     }
                 ),
                 lsp(19, "z", Lvalue::Variable { ty: None })
@@ -1001,12 +990,12 @@ fn destructuring_is_parsed() {
         }
     );
 
-    let input = Span::new("..., end)");
+    let input = InputSpan::new("..., end)");
     assert_eq!(
         destructure::<FieldGrammar, Complete>(input).unwrap().1,
         Destructure {
             start: vec![],
-            middle: Some(create_span(span(0, "..."), DestructureRest::Unnamed)),
+            middle: Some(Spanned::new(span(0, "..."), DestructureRest::Unnamed)),
             end: vec![lsp(5, "end", Lvalue::Variable { ty: None })],
         }
     );
@@ -1014,7 +1003,7 @@ fn destructuring_is_parsed() {
 
 #[test]
 fn nested_destructuring_is_parsed() {
-    let input = Span::new("(x, y), ..., (_, ...rest),\n|");
+    let input = InputSpan::new("(x, y), ..., (_, ...rest),\n|");
     let start = Destructure {
         start: vec![
             lsp(1, "x", Lvalue::Variable { ty: None }),
@@ -1025,10 +1014,10 @@ fn nested_destructuring_is_parsed() {
     };
     let end = Destructure {
         start: vec![lsp(14, "_", Lvalue::Variable { ty: None })],
-        middle: Some(create_span(
+        middle: Some(Spanned::new(
             span(17, "...rest"),
             DestructureRest::Named {
-                variable: span(20, "rest"),
+                variable: span(20, "rest").into(),
                 ty: None,
             },
         )),
@@ -1038,22 +1027,22 @@ fn nested_destructuring_is_parsed() {
     assert_eq!(
         destructure::<FieldGrammar, Complete>(input).unwrap().1,
         Destructure {
-            start: vec![create_span(span(0, "(x, y)"), Lvalue::Tuple(start))],
-            middle: Some(create_span(span(8, "..."), DestructureRest::Unnamed)),
-            end: vec![create_span(span(13, "(_, ...rest)"), Lvalue::Tuple(end))],
+            start: vec![Spanned::new(span(0, "(x, y)"), Lvalue::Tuple(start))],
+            middle: Some(Spanned::new(span(8, "..."), DestructureRest::Unnamed)),
+            end: vec![Spanned::new(span(13, "(_, ...rest)"), Lvalue::Tuple(end))],
         }
     );
 }
 
 #[test]
 fn lvalues_are_parsed() {
-    let input = Span::new("x =");
+    let input = InputSpan::new("x =");
     assert_eq!(
         lvalue::<FieldGrammar, Complete>(input).unwrap().1.extra,
         Lvalue::Variable { ty: None }
     );
 
-    let input = Span::new("(x, (y, z)) =");
+    let input = InputSpan::new("(x, (y, z)) =");
     assert_eq!(
         lvalue::<FieldGrammar, Complete>(input).unwrap().1.extra,
         lvalue_tuple(vec![
@@ -1069,7 +1058,7 @@ fn lvalues_are_parsed() {
         ])
     );
 
-    let input = Span::new("(x: (Sc, _), (y, z: Ge)) =");
+    let input = InputSpan::new("(x: (Sc, _), (y, z: Ge)) =");
     assert_eq!(
         lvalue::<FieldGrammar, Complete>(input).unwrap().1.extra,
         lvalue_tuple(vec![
@@ -1077,7 +1066,7 @@ fn lvalues_are_parsed() {
                 1,
                 "x",
                 Lvalue::Variable {
-                    ty: Some(create_span(
+                    ty: Some(Spanned::new(
                         span(4, "(Sc, _)"),
                         ValueType::Tuple(vec![ValueType::Scalar, ValueType::Any])
                     )),
@@ -1092,7 +1081,7 @@ fn lvalues_are_parsed() {
                         17,
                         "z",
                         Lvalue::Variable {
-                            ty: Some(create_span(span(20, "Ge"), ValueType::Element)),
+                            ty: Some(Spanned::new(span(20, "Ge"), ValueType::Element)),
                         }
                     ),
                 ])
@@ -1103,38 +1092,38 @@ fn lvalues_are_parsed() {
 
 #[test]
 fn expr_evaluation_order() {
-    let input = Span::new("1 - 2 + 3 - 4;");
+    let input = InputSpan::new("1 - 2 + 3 - 4;");
     assert_matches!(
         expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
-        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(10, "-"))
+        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(10, "-").into())
     );
 
-    let input = Span::new("1 / 2 * 3 / 4;");
+    let input = InputSpan::new("1 / 2 * 3 / 4;");
     assert_matches!(
         expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
-        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(10, "/"))
+        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(10, "/").into())
     );
 
-    let input = Span::new("1 - 2 * 3 - 4;");
+    let input = InputSpan::new("1 - 2 * 3 - 4;");
     assert_matches!(
         expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
-        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(10, "-"))
+        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(10, "-").into())
     );
 
-    let input = Span::new("X - G^2 + y * Z;");
+    let input = InputSpan::new("X - G^2 + y * Z;");
     assert_matches!(
         expr::<FieldGrammar, Complete>(input).unwrap().1.extra,
-        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(8, "+"))
+        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(8, "+").into())
     );
 }
 
 #[test]
 fn evaluation_order_with_bool_expressions() {
-    let input = Span::new("x == 2 + 3 * 4 && y == G^x;");
+    let input = InputSpan::new("x == 2 + 3 * 4 && y == G^x;");
     let output = expr::<FieldGrammar, Complete>(input).unwrap().1.extra;
     assert_matches!(
         output,
-        Expr::Binary { op, ref lhs, ref rhs } if op == BinaryOp::from_span(span(15, "&&")) &&
+        Expr::Binary { op, ref lhs, ref rhs } if op == BinaryOp::from_span(span(15, "&&").into()) &&
             *lhs.fragment() == "x == 2 + 3 * 4" &&
             *rhs.fragment() == "y == G^x"
     );
@@ -1142,14 +1131,17 @@ fn evaluation_order_with_bool_expressions() {
     assert_eq!(*scalar_expr.fragment(), "2 + 3 * 4");
     assert_matches!(
         scalar_expr.extra,
-        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(7, "+"))
+        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(7, "+").into())
     );
+}
 
-    let input = Span::new("x == 2 * z + 3 * 4 && (y, z) == (G^x, 2);");
+#[test]
+fn evaluation_order_with_complex_bool_expressions() {
+    let input = InputSpan::new("x == 2 * z + 3 * 4 && (y, z) == (G^x, 2);");
     let output = expr::<FieldGrammar, Complete>(input).unwrap().1.extra;
     assert_matches!(
         output,
-        Expr::Binary { op, ref lhs, ref rhs } if op == BinaryOp::from_span(span(19, "&&")) &&
+        Expr::Binary { op, ref lhs, ref rhs } if op == BinaryOp::from_span(span(19, "&&").into()) &&
             *lhs.fragment() == "x == 2 * z + 3 * 4" &&
             *rhs.fragment() == "(y, z) == (G^x, 2)"
     );
@@ -1157,13 +1149,13 @@ fn evaluation_order_with_bool_expressions() {
     assert_eq!(*scalar_expr.fragment(), "2 * z + 3 * 4");
     assert_matches!(
         scalar_expr.extra,
-        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(11, "+"))
+        Expr::Binary { op, .. } if op == BinaryOp::from_span(span(11, "+").into())
     );
 }
 
 #[test]
 fn block_parsing() {
-    let input = Span::new("{ x + y }");
+    let input = InputSpan::new("{ x + y }");
     assert_eq!(
         block::<FieldGrammar, Complete>(input).unwrap().1,
         Block {
@@ -1173,20 +1165,20 @@ fn block_parsing() {
                 "x + y",
                 Expr::Binary {
                     lhs: Box::new(sp(2, "x", Expr::Variable)),
-                    op: BinaryOp::from_span(span(4, "+")),
+                    op: BinaryOp::from_span(span(4, "+").into()),
                     rhs: Box::new(sp(6, "y", Expr::Variable)),
                 }
             ))),
         }
     );
 
-    let input = Span::new("{ x = 1 + 2; x * 3 }");
+    let input = InputSpan::new("{ x = 1 + 2; x * 3 }");
     let parsed = block::<FieldGrammar, Complete>(input).unwrap().1;
     assert_eq!(parsed.statements.len(), 1);
     let return_value = parsed.return_value.unwrap();
     assert_eq!(*return_value.fragment(), "x * 3");
 
-    let input = Span::new("{ x = 1 + 2; x * 3; }");
+    let input = InputSpan::new("{ x = 1 + 2; x * 3; }");
     let parsed = block::<FieldGrammar, Complete>(input).unwrap().1;
     assert_eq!(parsed.statements.len(), 2);
     assert!(parsed.return_value.is_none());
@@ -1194,7 +1186,7 @@ fn block_parsing() {
 
 #[test]
 fn fn_definition_parsing() {
-    let input = Span::new("|x| x + z;");
+    let input = InputSpan::new("|x| x + z;");
     assert_eq!(
         fn_def::<FieldGrammar, Complete>(input).unwrap().1,
         FnDefinition {
@@ -1209,7 +1201,7 @@ fn fn_definition_parsing() {
                     "x + z",
                     Expr::Binary {
                         lhs: Box::new(sp(4, "x", Expr::Variable)),
-                        op: BinaryOp::from_span(span(6, "+")),
+                        op: BinaryOp::from_span(span(6, "+").into()),
                         rhs: Box::new(sp(8, "z", Expr::Variable)),
                     }
                 ))),
@@ -1217,7 +1209,7 @@ fn fn_definition_parsing() {
         }
     );
 
-    let input = Span::new("|x| { x + 3 }");
+    let input = InputSpan::new("|x| { x + 3 }");
     assert_eq!(
         fn_def::<FieldGrammar, Complete>(input).unwrap().1,
         FnDefinition {
@@ -1232,7 +1224,7 @@ fn fn_definition_parsing() {
                     "x + 3",
                     Expr::Binary {
                         lhs: Box::new(sp(6, "x", Expr::Variable)),
-                        op: BinaryOp::from_span(span(8, "+")),
+                        op: BinaryOp::from_span(span(8, "+").into()),
                         rhs: Box::new(sp(10, "3", Expr::Literal(Literal::Number))),
                     }
                 )))
@@ -1240,7 +1232,7 @@ fn fn_definition_parsing() {
         }
     );
 
-    let input = Span::new("|x: Sc, (y, _: Ge)| { x + y }");
+    let input = InputSpan::new("|x: Sc, (y, _: Ge)| { x + y }");
     let mut def = fn_def::<FieldGrammar, Complete>(input).unwrap().1;
     assert!(def.body.statements.is_empty());
     assert!(def.body.return_value.is_some());
@@ -1259,7 +1251,7 @@ fn fn_definition_parsing() {
                         1,
                         "x",
                         Lvalue::Variable {
-                            ty: Some(create_span(span(4, "Sc"), ValueType::Scalar)),
+                            ty: Some(Spanned::new(span(4, "Sc"), ValueType::Scalar)),
                         }
                     ),
                     lsp(
@@ -1271,7 +1263,7 @@ fn fn_definition_parsing() {
                                 12,
                                 "_",
                                 Lvalue::Variable {
-                                    ty: Some(create_span(span(15, "Ge"), ValueType::Element)),
+                                    ty: Some(Spanned::new(span(15, "Ge"), ValueType::Element)),
                                 }
                             )
                         ])
@@ -1288,7 +1280,7 @@ fn fn_definition_parsing() {
 
 #[test]
 fn incomplete_fn() {
-    let input = Span::new("sc(1,");
+    let input = InputSpan::new("sc(1,");
     assert_matches!(
         simple_expr::<FieldGrammar, Streaming>(input).unwrap_err(),
         NomErr::Incomplete(_)
@@ -1308,7 +1300,7 @@ fn incomplete_expr() {
         "(x, 3) + ",
     ];
     for snippet in SNIPPETS {
-        let input = Span::new(snippet);
+        let input = InputSpan::new(snippet);
         assert_matches!(
             expr::<FieldGrammar, Streaming>(input).unwrap_err(),
             NomErr::Incomplete(_)
@@ -1329,7 +1321,7 @@ fn incomplete_statement() {
         "x == 2 +",
     ];
     for snippet in SNIPPETS {
-        let input = Span::new(snippet);
+        let input = InputSpan::new(snippet);
         assert_matches!(
             statement::<FieldGrammar, Streaming>(input).unwrap_err(),
             NomErr::Incomplete(_)
@@ -1339,28 +1331,28 @@ fn incomplete_statement() {
 
 #[test]
 fn separated_statements_parse() {
-    let input = Span::new("x = 1 + 2; x");
+    let input = InputSpan::new("x = 1 + 2; x");
     let block = separated_statements::<FieldGrammar, Complete>(input)
         .unwrap()
         .1;
     assert_eq!(block.statements.len(), 1);
     assert_eq!(*block.return_value.unwrap(), sp(11, "x", Expr::Variable));
 
-    let input = Span::new("foo = |x| { 2*x }; foo(3)");
+    let input = InputSpan::new("foo = |x| { 2*x }; foo(3)");
     let block = separated_statements::<FieldGrammar, Complete>(input)
         .unwrap()
         .1;
     assert_eq!(block.statements.len(), 1);
     assert_eq!(*block.return_value.unwrap().fragment(), "foo(3)");
 
-    let input = Span::new("{ x = 2; }; foo(3)");
+    let input = InputSpan::new("{ x = 2; }; foo(3)");
     let block = separated_statements::<FieldGrammar, Complete>(input)
         .unwrap()
         .1;
     assert_eq!(block.statements.len(), 1);
     assert_eq!(*block.return_value.unwrap().fragment(), "foo(3)");
 
-    let input = Span::new("y = { x = 2; x + 3 }; foo(y)");
+    let input = InputSpan::new("y = { x = 2; x + 3 }; foo(y)");
     let block = separated_statements::<FieldGrammar, Complete>(input)
         .unwrap()
         .1;
@@ -1382,17 +1374,17 @@ fn type_hints_when_switched_off() {
             ..Features::all()
         };
 
-        fn parse_literal(span: Span<'_>) -> NomResult<'_, Self::Lit> {
+        fn parse_literal(span: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
             Literal::parse(span)
         }
 
-        fn parse_type(span: Span<'_>) -> NomResult<'_, Self::Type> {
+        fn parse_type(span: InputSpan<'_>) -> NomResult<'_, Self::Type> {
             type_info::<Complete>(span)
         }
     }
 
     // Check that expressions without type hints are parsed fine.
-    let input = Span::new("x = 1 + y");
+    let input = InputSpan::new("x = 1 + y");
     let (_, stmt) = statement::<SimpleGrammar, Complete>(input).unwrap();
     assert_eq!(
         stmt.extra,
@@ -1404,29 +1396,29 @@ fn type_hints_when_switched_off() {
                 Expr::Binary {
                     lhs: Box::new(sp(4, "1", Expr::Literal(Literal::Number))),
                     rhs: Box::new(sp(8, "y", Expr::Variable)),
-                    op: BinaryOp::from_span(span(6, "+")),
+                    op: BinaryOp::from_span(span(6, "+").into()),
                 }
             )),
         }
     );
 
-    let input = Span::new("x: Sc = 1 + 2");
+    let input = InputSpan::new("x: Sc = 1 + 2");
     let (rem, _) = statement::<SimpleGrammar, Complete>(input).unwrap();
     assert!(rem.fragment().starts_with(": Sc"));
 
-    let input = Span::new("(x, y) = (1 + 2, 3 + 5)");
+    let input = InputSpan::new("(x, y) = (1 + 2, 3 + 5)");
     let (rem, _) = statement::<SimpleGrammar, Complete>(input).unwrap();
     assert_eq!(*rem.fragment(), "");
 
-    let input = Span::new("(x, y: Sc) = (1 + 2, 3 + 5)");
+    let input = InputSpan::new("(x, y: Sc) = (1 + 2, 3 + 5)");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
     assert_matches!(err, NomErr::Failure(ref spanned) if spanned.0.location_offset() == 5);
 
-    let input = Span::new("duplicate = |x| { x * (1, 2) }");
+    let input = InputSpan::new("duplicate = |x| { x * (1, 2) }");
     let (rem, _) = statement::<SimpleGrammar, Complete>(input).unwrap();
     assert_eq!(*rem.fragment(), "");
 
-    let input = Span::new("duplicate = |x: Sc| { x * (1, 2) }");
+    let input = InputSpan::new("duplicate = |x: Sc| { x * (1, 2) }");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
     assert_matches!(err, NomErr::Failure(ref spanned) if *spanned.0.fragment() == ":");
 }
@@ -1445,16 +1437,16 @@ fn fn_defs_when_switched_off() {
             ..Features::all()
         };
 
-        fn parse_literal(span: Span<'_>) -> NomResult<'_, Self::Lit> {
+        fn parse_literal(span: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
             Literal::parse(span)
         }
 
-        fn parse_type(span: Span<'_>) -> NomResult<'_, Self::Type> {
+        fn parse_type(span: InputSpan<'_>) -> NomResult<'_, Self::Type> {
             type_info::<Complete>(span)
         }
     }
 
-    let input = Span::new("foo = |x| { x + 3 }");
+    let input = InputSpan::new("foo = |x| { x + 3 }");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
     assert_matches!(err, NomErr::Error(ref spanned) if *spanned.0.fragment() == "|");
 }
@@ -1473,20 +1465,20 @@ fn tuples_when_switched_off() {
             ..Features::all()
         };
 
-        fn parse_literal(span: Span<'_>) -> NomResult<'_, Self::Lit> {
+        fn parse_literal(span: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
             Literal::parse(span)
         }
 
-        fn parse_type(span: Span<'_>) -> NomResult<'_, Self::Type> {
+        fn parse_type(span: InputSpan<'_>) -> NomResult<'_, Self::Type> {
             type_info::<Complete>(span)
         }
     }
 
-    let input = Span::new("tup = (1 + 2, 3 + 5)");
+    let input = InputSpan::new("tup = (1 + 2, 3 + 5)");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
     assert_matches!(err, NomErr::Failure(ref spanned) if spanned.0.location_offset() == 6);
 
-    let input = Span::new("(x, y) = (1 + 2, 3 + 5)");
+    let input = InputSpan::new("(x, y) = (1 + 2, 3 + 5)");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
     assert_matches!(err, NomErr::Failure(ref spanned) if spanned.0.location_offset() == 0);
 }
@@ -1505,20 +1497,20 @@ fn blocks_when_switched_off() {
             ..Features::all()
         };
 
-        fn parse_literal(span: Span<'_>) -> NomResult<'_, Self::Lit> {
+        fn parse_literal(span: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
             Literal::parse(span)
         }
 
-        fn parse_type(span: Span<'_>) -> NomResult<'_, Self::Type> {
+        fn parse_type(span: InputSpan<'_>) -> NomResult<'_, Self::Type> {
             type_info::<Complete>(span)
         }
     }
 
-    let input = Span::new("x = { y = 10; y * 2 }");
+    let input = InputSpan::new("x = { y = 10; y * 2 }");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
     assert_matches!(err, NomErr::Error(ref spanned) if spanned.0.location_offset() == 4);
 
-    let input = Span::new("foo({ y = 10; y * 2 }, z)");
+    let input = InputSpan::new("foo({ y = 10; y * 2 }, z)");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
     assert_matches!(err, NomErr::Failure(ref spanned) if spanned.0.location_offset() == 4);
 }
@@ -1537,20 +1529,20 @@ fn methods_when_switched_off() {
             ..Features::all()
         };
 
-        fn parse_literal(span: Span<'_>) -> NomResult<'_, Self::Lit> {
+        fn parse_literal(span: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
             Literal::parse(span)
         }
 
-        fn parse_type(span: Span<'_>) -> NomResult<'_, Self::Type> {
+        fn parse_type(span: InputSpan<'_>) -> NomResult<'_, Self::Type> {
             type_info::<Complete>(span)
         }
     }
 
-    let input = Span::new("foo.bar(1)");
+    let input = InputSpan::new("foo.bar(1)");
     let (rest, _) = statement::<SimpleGrammar, Complete>(input).unwrap();
     assert_eq!(*rest.fragment(), ".bar(1)");
 
-    let input = Span::new("(1, 2).bar(1)");
+    let input = InputSpan::new("(1, 2).bar(1)");
     let (rest, _) = statement::<SimpleGrammar, Complete>(input).unwrap();
     assert_eq!(*rest.fragment(), ".bar(1)");
 }
@@ -1569,16 +1561,16 @@ fn order_comparisons_when_switched_off() {
             ..Features::all()
         };
 
-        fn parse_literal(span: Span<'_>) -> NomResult<'_, Self::Lit> {
+        fn parse_literal(span: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
             Literal::parse(span)
         }
 
-        fn parse_type(span: Span<'_>) -> NomResult<'_, Self::Type> {
+        fn parse_type(span: InputSpan<'_>) -> NomResult<'_, Self::Type> {
             type_info::<Complete>(span)
         }
     }
 
-    let input = Span::new("x >= 1;");
+    let input = InputSpan::new("x >= 1;");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
     let SpannedError(spanned_err) = match err {
         NomErr::Failure(spanned) => spanned,

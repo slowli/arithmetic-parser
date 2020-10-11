@@ -13,7 +13,7 @@ use std::{
 };
 
 use arithmetic_parser::{
-    grammars::NumGrammar, BinaryOp, Block, Expr, FnDefinition, GrammarExt, Lvalue, Span,
+    grammars::NumGrammar, BinaryOp, Block, Expr, FnDefinition, GrammarExt, InputSpan, Lvalue,
     SpannedExpr, SpannedLvalue, Statement, UnaryOp,
 };
 
@@ -211,7 +211,6 @@ impl<'a> Context<'a> {
     fn eval_function(fn_def: &FnDefinition<ComplexGrammar>, name: &str) -> String {
         let mut context = Self::new();
         let mut evaluated = format!("float2 {}(", name);
-        // FIXME: use checked access.
         let args = &fn_def.args.extra.start;
 
         for (i, arg) in args.iter().enumerate() {
@@ -240,6 +239,7 @@ impl<'a> Context<'a> {
                         evaluated += "\n";
                     }
                 }
+                _ => panic!("Unsupported statement type: {:?}", statement),
             }
         }
 
@@ -261,6 +261,7 @@ impl<'a> Context<'a> {
         let variable_name = match lhs.extra {
             Lvalue::Variable { .. } => *lhs.fragment(),
             Lvalue::Tuple(_) => unreachable!("Tuples are disabled in parser"),
+            _ => panic!("Unsupported lvalue type: {:?}", lhs),
         };
 
         if self.variables.contains_key(variable_name) {
@@ -296,6 +297,7 @@ impl<'a> Context<'a> {
             Expr::Unary { op, inner } => match op.extra {
                 UnaryOp::Neg => -self.eval_expr(inner),
                 UnaryOp::Not => panic!("Boolean operations are not supported: {}", expr.fragment()),
+                _ => panic!("Unsupported unary op: {:?}", op.extra),
             },
 
             Expr::Binary { lhs, op, rhs } => {
@@ -337,6 +339,7 @@ impl<'a> Context<'a> {
             Expr::Method { .. } => panic!("Methods are not supported"),
             Expr::FnDefinition(_) => panic!("Embedded function declarations are not supported"),
             Expr::Block(_) | Expr::Tuple(_) => unreachable!("Disabled in parser"),
+            _ => panic!("Unsupported expression: {:?}", expr.extra),
         }
     }
 }
@@ -355,7 +358,7 @@ fn main() {
 
     other_computation = |a, b| sinh(a^2 + b^2) * tanh(a / b);";
 
-    let span = Span::new(EXPR);
+    let span = InputSpan::new(EXPR);
     let statements = ComplexGrammar::parse_statements(span).unwrap();
 
     let code = Context::generate_code(&statements);

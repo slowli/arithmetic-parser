@@ -5,6 +5,20 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ## [Unreleased]
 
+### Added
+
+- Add infrastructure for stripping code fragments (such as `Code` enum and
+  `StripCode` trait). This allows breaking lifetime dependency between code
+  and the outcome of its parsing. (#26) 
+
+### Changed
+
+- Use homegrown `LocatedSpan` instead of one from `nom_locate` crate.
+  See the type docs for reasoning. (#26)
+
+- Make most enums and structs with public fields non-exhaustive (e.g., `Expr`,
+  `Statement`, `Lvalue`). (#26)
+
 ## 0.2.0-beta.1 - 2020-10-04
 
 ### Added

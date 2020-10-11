@@ -5,23 +5,28 @@ use hashbrown::HashMap;
 use core::iter;
 
 use crate::{
-    alloc::{vec, ToOwned, Vec},
+    alloc::{vec, Vec},
     executable::{
         Atom, Command, ComparisonOp, CompiledExpr, Env, Executable, ExecutableFn, ExecutableModule,
         SpannedAtom,
     },
-    AuxErrorInfo, EvalError, RepeatedAssignmentContext, SpannedEvalError,
+    EvalError, RepeatedAssignmentContext, SpannedEvalError,
 };
 use arithmetic_parser::{
-    create_span_ref, BinaryOp, Block, Destructure, Expr, FnDefinition, Grammar, Lvalue, Span,
-    Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
+    is_valid_variable_name, BinaryOp, Block, Destructure, Expr, FnDefinition, Grammar, InputSpan,
+    Lvalue, MaybeSpanned, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
+    UnaryOp,
 };
+
+mod captures;
+
+use self::captures::{extract_vars_iter, CapturesExtractor, CompilerExtTarget};
 
 /// Name of the comparison function used in desugaring order comparisons.
 const CMP_FUNCTION_NAME: &str = "cmp";
 
 #[derive(Debug, Clone, Default)]
-pub struct Compiler {
+pub(crate) struct Compiler {
     vars_to_registers: HashMap<String, usize>,
     scope_depth: usize,
     register_count: usize,
@@ -34,9 +39,42 @@ impl Compiler {
 
     fn from_env<T: Grammar>(env: &Env<'_, T>) -> Self {
         Self {
-            vars_to_registers: env.variables_map(),
+            vars_to_registers: env.variables_map().to_owned(),
             register_count: env.register_count(),
             scope_depth: 0,
+        }
+    }
+
+    fn check_unary_op<'a>(op: &Spanned<'a, UnaryOp>) -> Result<UnaryOp, SpannedEvalError<'a>> {
+        match op.extra {
+            UnaryOp::Neg | UnaryOp::Not => Ok(op.extra),
+            _ => {
+                let err = EvalError::unsupported(op.extra);
+                Err(SpannedEvalError::new(op, err))
+            }
+        }
+    }
+
+    fn check_binary_op<'a>(op: &Spanned<'a, BinaryOp>) -> Result<BinaryOp, SpannedEvalError<'a>> {
+        match op.extra {
+            BinaryOp::Add
+            | BinaryOp::Sub
+            | BinaryOp::Mul
+            | BinaryOp::Div
+            | BinaryOp::Power
+            | BinaryOp::And
+            | BinaryOp::Or
+            | BinaryOp::Eq
+            | BinaryOp::NotEq
+            | BinaryOp::Gt
+            | BinaryOp::Ge
+            | BinaryOp::Lt
+            | BinaryOp::Le => Ok(op.extra),
+
+            _ => {
+                let err = EvalError::unsupported(op.extra);
+                Err(SpannedEvalError::new(op, err))
+            }
         }
     }
 
@@ -52,7 +90,7 @@ impl Compiler {
     ) -> usize {
         let register = self.register_count;
         let command = Command::Push(rhs);
-        executable.push_command(create_span_ref(rhs_span, command));
+        executable.push_command(rhs_span.copy_with_extra(command));
         self.register_count += 1;
         register
     }
@@ -92,7 +130,7 @@ impl Compiler {
                 let register = self.push_assignment(
                     executable,
                     CompiledExpr::Unary {
-                        op: op.extra,
+                        op: Self::check_unary_op(op)?,
                         inner,
                     },
                     expr,
@@ -101,150 +139,231 @@ impl Compiler {
             }
 
             Expr::Binary { op, lhs, rhs } => {
-                let lhs = self.compile_expr(executable, lhs)?;
-                let rhs = self.compile_expr(executable, rhs)?;
-
-                let compiled = if op.extra.is_order_comparison() {
-                    let cmp_function = self.get_var(CMP_FUNCTION_NAME).ok_or_else(|| {
-                        let err = EvalError::MissingCmpFunction {
-                            name: CMP_FUNCTION_NAME.to_owned(),
-                        };
-                        SpannedEvalError::new(expr, err)
-                    })?;
-                    let cmp_function = create_span_ref(op, Atom::Register(cmp_function));
-
-                    let cmp_invocation = CompiledExpr::Function {
-                        name: cmp_function,
-                        args: vec![lhs, rhs],
-                    };
-                    let cmp_register = self.push_assignment(executable, cmp_invocation, expr);
-                    CompiledExpr::Compare {
-                        inner: create_span_ref(expr, Atom::Register(cmp_register)),
-                        op: ComparisonOp::from(op.extra),
-                    }
-                } else {
-                    CompiledExpr::Binary {
-                        op: op.extra,
-                        lhs,
-                        rhs,
-                    }
-                };
-
-                let register = self.push_assignment(executable, compiled, expr);
-                Atom::Register(register)
+                self.compile_binary_expr(executable, expr, op, lhs, rhs)?
             }
-
-            Expr::Function { name, args } => {
-                let name = self.compile_expr(executable, name)?;
-                let args = args
-                    .iter()
-                    .map(|arg| self.compile_expr(executable, arg))
-                    .collect::<Result<Vec<_>, _>>()?;
-                let register =
-                    self.push_assignment(executable, CompiledExpr::Function { name, args }, expr);
-                Atom::Register(register)
-            }
+            Expr::Function { name, args } => self.compile_fn_call(executable, expr, name, args)?,
 
             Expr::Method {
                 name,
                 receiver,
                 args,
-            } => {
-                let name = create_span_ref(
-                    name,
-                    Atom::Register(self.vars_to_registers[*name.fragment()]),
-                );
-                let args = iter::once(receiver.as_ref())
-                    .chain(args)
-                    .map(|arg| self.compile_expr(executable, arg))
-                    .collect::<Result<Vec<_>, _>>()?;
+            } => self.compile_method_call(executable, expr, name, receiver, args)?,
 
-                let register =
-                    self.push_assignment(executable, CompiledExpr::Function { name, args }, expr);
-                Atom::Register(register)
-            }
+            Expr::Block(block) => self.compile_block(executable, expr, block)?,
+            Expr::FnDefinition(def) => self.compile_fn_definition(executable, expr, def)?,
 
-            Expr::Block(block) => {
-                let backup_state = self.clone();
-                if self.scope_depth == 0 {
-                    let command = Command::StartInnerScope;
-                    executable.push_command(create_span_ref(&expr, command));
-                }
-                self.scope_depth += 1;
-
-                let return_value = self
-                    .compile_block_inner(executable, block)?
-                    .unwrap_or_else(|| create_span_ref(&expr, Atom::Void));
-
-                // Move the return value to the next register.
-                let new_register = if let Atom::Register(ret_register) = return_value.extra {
-                    let command = Command::Copy {
-                        source: ret_register,
-                        destination: backup_state.register_count,
-                    };
-                    executable.push_command(create_span_ref(expr, command));
-                    true
-                } else {
-                    false
-                };
-
-                // Return to the previous state. This will erase register mapping
-                // for the inner scope and set the `scope_depth`.
-                *self = backup_state;
-                if new_register {
-                    self.register_count += 1;
-                }
-                if self.scope_depth == 0 {
-                    let command = Command::EndInnerScope;
-                    executable.push_command(create_span_ref(&expr, command));
-                }
-                executable.push_command(create_span_ref(
-                    expr,
-                    Command::TruncateRegisters(self.register_count),
-                ));
-
-                if new_register {
-                    Atom::Register(self.register_count - 1)
-                } else {
-                    Atom::Void
-                }
-            }
-
-            Expr::FnDefinition(def) => {
-                let mut captures = HashMap::new();
-                let mut extractor = CapturesExtractor::new(|var_name, var_span| {
-                    if let Some(register) = self.get_var(var_name) {
-                        captures.insert(
-                            var_name,
-                            create_span_ref(&var_span, Atom::Register(register)),
-                        );
-                        Ok(())
-                    } else {
-                        Err(EvalError::Undefined(var_name.to_owned()))
-                    }
-                });
-
-                extractor.eval_function(def)?;
-                let fn_executable = Self::compile_function(def, &captures)?;
-                let fn_executable = ExecutableFn {
-                    inner: fn_executable,
-                    def_span: create_span_ref(expr, ()),
-                    arg_count: def.args.extra.len(),
-                };
-
-                let ptr = executable.push_child_fn(fn_executable);
-                let register = self.push_assignment(
-                    executable,
-                    CompiledExpr::DefineFunction {
-                        ptr,
-                        captures: captures.into_iter().map(|(_, value)| value).collect(),
-                    },
-                    expr,
-                );
-                Atom::Register(register)
+            _ => {
+                let err = EvalError::unsupported(expr.extra.ty());
+                return Err(SpannedEvalError::new(expr, err));
             }
         };
-        Ok(create_span_ref(expr, atom))
+
+        Ok(expr.copy_with_extra(atom).into())
+    }
+
+    fn compile_binary_expr<'a, T: Grammar>(
+        &mut self,
+        executable: &mut Executable<'a, T>,
+        binary_expr: &SpannedExpr<'a, T>,
+        op: &Spanned<'a, BinaryOp>,
+        lhs: &SpannedExpr<'a, T>,
+        rhs: &SpannedExpr<'a, T>,
+    ) -> Result<Atom<T>, SpannedEvalError<'a>> {
+        let lhs = self.compile_expr(executable, lhs)?;
+        let rhs = self.compile_expr(executable, rhs)?;
+
+        let compiled = if op.extra.is_order_comparison() {
+            let cmp_function = self.get_var(CMP_FUNCTION_NAME).ok_or_else(|| {
+                let err = EvalError::MissingCmpFunction {
+                    name: CMP_FUNCTION_NAME.to_owned(),
+                };
+                SpannedEvalError::new(binary_expr, err)
+            })?;
+            let cmp_function = op.copy_with_extra(Atom::Register(cmp_function));
+
+            let cmp_invocation = CompiledExpr::Function {
+                original_name: Some((*cmp_function.fragment()).to_owned()),
+                name: cmp_function.into(),
+                args: vec![lhs, rhs],
+            };
+            let cmp_register = self.push_assignment(executable, cmp_invocation, binary_expr);
+
+            CompiledExpr::Compare {
+                inner: binary_expr
+                    .copy_with_extra(Atom::Register(cmp_register))
+                    .into(),
+                op: ComparisonOp::from(op.extra),
+            }
+        } else {
+            CompiledExpr::Binary {
+                op: Self::check_binary_op(op)?,
+                lhs,
+                rhs,
+            }
+        };
+
+        let register = self.push_assignment(executable, compiled, binary_expr);
+        Ok(Atom::Register(register))
+    }
+
+    fn compile_fn_call<'a, T: Grammar>(
+        &mut self,
+        executable: &mut Executable<'a, T>,
+        call_expr: &SpannedExpr<'a, T>,
+        name: &SpannedExpr<'a, T>,
+        args: &[SpannedExpr<'a, T>],
+    ) -> Result<Atom<T>, SpannedEvalError<'a>> {
+        let original_name = *name.fragment();
+        let original_name = if is_valid_variable_name(original_name) {
+            Some(original_name.to_owned())
+        } else {
+            None
+        };
+
+        let name = self.compile_expr(executable, name)?;
+
+        let args = args
+            .iter()
+            .map(|arg| self.compile_expr(executable, arg))
+            .collect::<Result<Vec<_>, _>>()?;
+        let function = CompiledExpr::Function {
+            name,
+            original_name,
+            args,
+        };
+        let register = self.push_assignment(executable, function, call_expr);
+        Ok(Atom::Register(register))
+    }
+
+    fn compile_method_call<'a, T: Grammar>(
+        &mut self,
+        executable: &mut Executable<'a, T>,
+        call_expr: &SpannedExpr<'a, T>,
+        name: &Spanned<'a>,
+        receiver: &SpannedExpr<'a, T>,
+        args: &[SpannedExpr<'a, T>],
+    ) -> Result<Atom<T>, SpannedEvalError<'a>> {
+        let original_name = Some((*name.fragment()).to_owned());
+        let name: MaybeSpanned<_> = name
+            .copy_with_extra(Atom::Register(self.vars_to_registers[*name.fragment()]))
+            .into();
+        let args = iter::once(receiver)
+            .chain(args)
+            .map(|arg| self.compile_expr(executable, arg))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let function = CompiledExpr::Function {
+            name,
+            original_name,
+            args,
+        };
+        let register = self.push_assignment(executable, function, call_expr);
+        Ok(Atom::Register(register))
+    }
+
+    fn compile_block<'a, T: Grammar>(
+        &mut self,
+        executable: &mut Executable<'a, T>,
+        block_expr: &SpannedExpr<'a, T>,
+        block: &Block<'a, T>,
+    ) -> Result<Atom<T>, SpannedEvalError<'a>> {
+        let backup_state = self.clone();
+        if self.scope_depth == 0 {
+            let command = Command::StartInnerScope;
+            executable.push_command(block_expr.copy_with_extra(command));
+        }
+        self.scope_depth += 1;
+
+        let return_value = self
+            .compile_block_inner(executable, block)?
+            .unwrap_or_else(|| block_expr.copy_with_extra(Atom::Void).into());
+
+        // Move the return value to the next register.
+        let new_register = if let Atom::Register(ret_register) = return_value.extra {
+            let command = Command::Copy {
+                source: ret_register,
+                destination: backup_state.register_count,
+            };
+            executable.push_command(block_expr.copy_with_extra(command));
+            true
+        } else {
+            false
+        };
+
+        // Return to the previous state. This will erase register mapping
+        // for the inner scope and set the `scope_depth`.
+        *self = backup_state;
+        if new_register {
+            self.register_count += 1;
+        }
+        if self.scope_depth == 0 {
+            let command = Command::EndInnerScope;
+            executable.push_command(block_expr.copy_with_extra(command));
+        }
+        executable.push_command(
+            block_expr.copy_with_extra(Command::TruncateRegisters(self.register_count)),
+        );
+
+        Ok(if new_register {
+            Atom::Register(self.register_count - 1)
+        } else {
+            Atom::Void
+        })
+    }
+
+    fn compile_block_inner<'a, T: Grammar>(
+        &mut self,
+        executable: &mut Executable<'a, T>,
+        block: &Block<'a, T>,
+    ) -> Result<Option<SpannedAtom<'a, T>>, SpannedEvalError<'a>> {
+        for statement in &block.statements {
+            self.compile_statement(executable, statement)?;
+        }
+
+        Ok(if let Some(ref return_value) = block.return_value {
+            Some(self.compile_expr(executable, return_value)?)
+        } else {
+            None
+        })
+    }
+
+    fn compile_fn_definition<'a, T: Grammar>(
+        &mut self,
+        executable: &mut Executable<'a, T>,
+        def_expr: &SpannedExpr<'a, T>,
+        def: &FnDefinition<'a, T>,
+    ) -> Result<Atom<T>, SpannedEvalError<'a>> {
+        let mut captures = HashMap::new();
+        let mut extractor = CapturesExtractor::new(|var_name, var_span| {
+            self.get_var(var_name).map_or_else(
+                || Err(EvalError::Undefined(var_name.to_owned())),
+                |register| {
+                    let capture: MaybeSpanned<_> =
+                        var_span.copy_with_extra(Atom::Register(register)).into();
+                    captures.insert(var_name, capture);
+                    Ok(())
+                },
+            )
+        });
+
+        extractor.eval_function(def)?;
+        let fn_executable = Self::compile_function(def, &captures)?;
+        let fn_executable = ExecutableFn {
+            inner: fn_executable,
+            def_span: def_expr.with_no_extra().into(),
+            arg_count: def.args.extra.len(),
+        };
+
+        let ptr = executable.push_child_fn(fn_executable);
+        let register = self.push_assignment(
+            executable,
+            CompiledExpr::DefineFunction {
+                ptr,
+                captures: captures.into_iter().map(|(_, value)| value).collect(),
+            },
+            def_expr,
+        );
+        Ok(Atom::Register(register))
     }
 
     fn compile_function<'a, T: Grammar>(
@@ -261,17 +380,17 @@ impl Compiler {
         this.register_count = captures.len() + 1; // one additional register for args
 
         let mut executable = Executable::new();
-        let args_span = create_span_ref(&def.args, ());
-        this.destructure(&mut executable, &def.args.extra, args_span, captures.len());
+        let args_span = def.args.with_no_extra();
+        this.destructure(&mut executable, &def.args.extra, args_span, captures.len())?;
 
         for statement in &def.body.statements {
             this.compile_statement(&mut executable, statement)?;
         }
         if let Some(ref return_value) = def.body.return_value {
             let return_atom = this.compile_expr(&mut executable, return_value)?;
-            let return_span = create_span_ref(&return_atom, ());
+            let return_span = return_atom.with_no_extra();
             let command = Command::Push(CompiledExpr::Atom(return_atom.extra));
-            executable.push_command(create_span_ref(&return_span, command));
+            executable.push_command(return_span.copy_with_extra(command));
         }
 
         executable.finalize_function(this.register_count);
@@ -301,13 +420,18 @@ impl Compiler {
                     }
                     Atom::Register(register) => register,
                 };
-                self.assign(executable, lhs, rhs_register);
+                self.assign(executable, lhs, rhs_register)?;
                 None
+            }
+
+            _ => {
+                let err = EvalError::unsupported(statement.extra.ty());
+                return Err(SpannedEvalError::new(statement, err));
             }
         })
     }
 
-    pub(super) fn compile_module<'a, T: Grammar>(
+    pub fn compile_module<'a, T: Grammar>(
         env: &Env<'a, T>,
         block: &Block<'a, T>,
         execute_in_env: bool,
@@ -319,14 +443,14 @@ impl Compiler {
         } else {
             let mut captures = Env::new();
             let mut extractor = CapturesExtractor::new(|var_name, _| {
-                if let Some(value) = env.get_var(var_name) {
-                    captures.push_var(var_name, value.clone());
-                    Ok(())
-                } else {
-                    Err(EvalError::Undefined(var_name.to_owned()))
-                }
+                env.get_var(var_name).map_or_else(
+                    || Err(EvalError::Undefined(var_name.to_owned())),
+                    |value| {
+                        captures.push_var(var_name, value.clone());
+                        Ok(())
+                    },
+                )
             });
-            extractor.local_vars.push(HashMap::new());
             extractor.eval_block(&block)?;
 
             compiler = Self::from_env(&captures);
@@ -334,32 +458,19 @@ impl Compiler {
         };
 
         let mut executable = Executable::new();
-        let empty_span = Span::new("");
+        let empty_span = InputSpan::new("");
         let last_atom = compiler
             .compile_block_inner(&mut executable, block)?
-            .map(|spanned| spanned.extra)
-            .unwrap_or(Atom::Void);
+            .map_or(Atom::Void, |spanned| spanned.extra);
         // Push the last variable to a register to be popped during execution.
-        compiler.push_assignment(&mut executable, CompiledExpr::Atom(last_atom), &empty_span);
+        compiler.push_assignment(
+            &mut executable,
+            CompiledExpr::Atom(last_atom),
+            &empty_span.into(),
+        );
 
         executable.finalize_block(compiler.register_count);
         Ok(ExecutableModule::new(executable, captures))
-    }
-
-    fn compile_block_inner<'a, T: Grammar>(
-        &mut self,
-        executable: &mut Executable<'a, T>,
-        block: &Block<'a, T>,
-    ) -> Result<Option<SpannedAtom<'a, T>>, SpannedEvalError<'a>> {
-        for statement in &block.statements {
-            self.compile_statement(executable, statement)?;
-        }
-
-        Ok(if let Some(ref return_value) = block.return_value {
-            Some(self.compile_expr(executable, return_value)?)
-        } else {
-            None
-        })
     }
 
     fn assign<'a, T: Grammar>(
@@ -367,7 +478,7 @@ impl Compiler {
         executable: &mut Executable<'a, T>,
         lhs: &SpannedLvalue<'a, T::Type>,
         rhs_register: usize,
-    ) {
+    ) -> Result<(), SpannedEvalError<'a>> {
         match &lhs.extra {
             Lvalue::Variable { .. } => {
                 let var_name = *lhs.fragment();
@@ -380,27 +491,34 @@ impl Compiler {
                     if self.scope_depth == 0 {
                         let command = Command::Annotate {
                             register: rhs_register,
-                            name: var_name,
+                            name: var_name.to_owned(),
                         };
-                        executable.push_command(create_span_ref(lhs, command));
+                        executable.push_command(lhs.copy_with_extra(command));
                     }
                 }
             }
 
             Lvalue::Tuple(destructure) => {
-                let span = create_span_ref(&lhs, ());
-                self.destructure(executable, destructure, span, rhs_register);
+                let span = lhs.with_no_extra();
+                self.destructure(executable, destructure, span, rhs_register)?;
+            }
+
+            _ => {
+                let err = EvalError::unsupported(lhs.extra.ty());
+                return Err(SpannedEvalError::new(lhs, err));
             }
         }
+
+        Ok(())
     }
 
     fn destructure<'a, T: Grammar>(
         &mut self,
         executable: &mut Executable<'a, T>,
         destructure: &Destructure<'a, T::Type>,
-        span: Span<'a>,
+        span: Spanned<'a>,
         rhs_register: usize,
-    ) {
+    ) -> Result<(), SpannedEvalError<'a>> {
         let command = Command::Destructure {
             source: rhs_register,
             start_len: destructure.start.len(),
@@ -408,221 +526,28 @@ impl Compiler {
             lvalue_len: destructure.len(),
             unchecked: false,
         };
-        executable.push_command(create_span_ref(&span, command));
+        executable.push_command(span.copy_with_extra(command));
         let start_register = self.register_count;
         self.register_count += destructure.start.len() + destructure.end.len() + 1;
 
         for (i, lvalue) in (start_register..).zip(&destructure.start) {
-            self.assign(executable, lvalue, i);
+            self.assign(executable, lvalue, i)?;
         }
 
         let start_register = start_register + destructure.start.len();
         if let Some(ref middle) = destructure.middle {
             if let Some(lvalue) = middle.extra.to_lvalue() {
-                self.assign(executable, &lvalue, start_register);
+                self.assign(executable, &lvalue, start_register)?;
             }
         }
 
         let start_register = start_register + 1;
         for (i, lvalue) in (start_register..).zip(&destructure.end) {
-            self.assign(executable, lvalue, i);
+            self.assign(executable, lvalue, i)?;
         }
-    }
-}
 
-/// Helper context for symbolic execution of a function body or a block in order to determine
-/// variables captured by it.
-#[derive(Debug)]
-struct CapturesExtractor<'a, F> {
-    local_vars: Vec<HashMap<&'a str, Span<'a>>>,
-    action: F,
-}
-
-impl<'a, F> CapturesExtractor<'a, F>
-where
-    F: FnMut(&'a str, Span<'a>) -> Result<(), EvalError>,
-{
-    fn new(action: F) -> Self {
-        Self {
-            local_vars: vec![],
-            action,
-        }
-    }
-
-    /// Collects variables captured by the function into a single `Scope`.
-    fn eval_function<T: Grammar>(
-        &mut self,
-        definition: &FnDefinition<'a, T>,
-    ) -> Result<(), SpannedEvalError<'a>> {
-        self.local_vars.push(HashMap::new());
-        extract_vars(
-            self.local_vars.last_mut().unwrap(),
-            &definition.args.extra,
-            RepeatedAssignmentContext::FnArgs,
-        )?;
-        self.eval_block(&definition.body)
-    }
-
-    fn has_var(&self, var_name: &str) -> bool {
-        self.local_vars.iter().any(|set| set.contains_key(var_name))
-    }
-
-    /// Processes a local variable in the rvalue position.
-    fn eval_local_var<T>(&mut self, var_span: &Spanned<'a, T>) -> Result<(), EvalError> {
-        if self.has_var(var_span.fragment()) {
-            // No action needs to be performed.
-            Ok(())
-        } else {
-            (self.action)(var_span.fragment(), create_span_ref(var_span, ()))
-        }
-    }
-
-    fn eval_cmp(&mut self, op_span: &Spanned<'a, BinaryOp>) -> Result<(), EvalError> {
-        if self.has_var(CMP_FUNCTION_NAME) {
-            Ok(())
-        } else {
-            (self.action)(CMP_FUNCTION_NAME, create_span_ref(op_span, ()))
-        }
-    }
-
-    /// Evaluates an expression with the function validation semantics, i.e., to determine
-    /// function captures.
-    fn eval<T: Grammar>(&mut self, expr: &SpannedExpr<'a, T>) -> Result<(), SpannedEvalError<'a>> {
-        match &expr.extra {
-            Expr::Variable => {
-                self.eval_local_var(expr)
-                    .map_err(|e| SpannedEvalError::new(expr, e))?;
-            }
-
-            Expr::Literal(_) => { /* no action */ }
-
-            Expr::Tuple(fragments) => {
-                for fragment in fragments {
-                    self.eval(fragment)?;
-                }
-            }
-            Expr::Unary { inner, .. } => {
-                self.eval(inner)?;
-            }
-            Expr::Binary { lhs, rhs, op } => {
-                self.eval(lhs)?;
-                self.eval(rhs)?;
-
-                if op.extra.is_order_comparison() {
-                    self.eval_cmp(op)
-                        .map_err(|e| SpannedEvalError::new(op, e))?;
-                }
-            }
-
-            Expr::Function { args, name } => {
-                for arg in args {
-                    self.eval(arg)?;
-                }
-                self.eval(name)?;
-            }
-
-            Expr::Method {
-                args,
-                receiver,
-                name,
-            } => {
-                self.eval(receiver)?;
-                for arg in args {
-                    self.eval(arg)?;
-                }
-
-                self.eval_local_var(name)
-                    .map_err(|e| SpannedEvalError::new(name, e))?;
-            }
-
-            Expr::Block(block) => {
-                self.local_vars.push(HashMap::new());
-                self.eval_block(block)?;
-            }
-
-            Expr::FnDefinition(def) => {
-                self.eval_function(def)?;
-            }
-        }
         Ok(())
     }
-
-    /// Evaluates a statement using the provided context.
-    fn eval_statement<T: Grammar>(
-        &mut self,
-        statement: &SpannedStatement<'a, T>,
-    ) -> Result<(), SpannedEvalError<'a>> {
-        match &statement.extra {
-            Statement::Expr(expr) => self.eval(expr),
-            Statement::Assignment { lhs, rhs } => {
-                self.eval(rhs)?;
-                let mut new_vars = HashMap::new();
-                extract_vars_iter(
-                    &mut new_vars,
-                    iter::once(lhs),
-                    RepeatedAssignmentContext::Assignment,
-                )?;
-                self.local_vars.last_mut().unwrap().extend(&new_vars);
-                Ok(())
-            }
-        }
-    }
-
-    fn eval_block<T: Grammar>(&mut self, block: &Block<'a, T>) -> Result<(), SpannedEvalError<'a>> {
-        self.local_vars.push(HashMap::new());
-        for statement in &block.statements {
-            self.eval_statement(statement)?;
-        }
-        if let Some(ref return_expr) = block.return_value {
-            self.eval(return_expr)?;
-        }
-        self.local_vars.pop();
-        Ok(())
-    }
-}
-
-fn extract_vars<'a, T>(
-    vars: &mut HashMap<&'a str, Span<'a>>,
-    lvalues: &Destructure<'a, T>,
-    context: RepeatedAssignmentContext,
-) -> Result<(), SpannedEvalError<'a>> {
-    let middle = lvalues
-        .middle
-        .as_ref()
-        .and_then(|rest| rest.extra.to_lvalue());
-    let all_lvalues = lvalues
-        .start
-        .iter()
-        .chain(middle.as_ref())
-        .chain(&lvalues.end);
-    extract_vars_iter(vars, all_lvalues, context)
-}
-
-fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
-    vars: &mut HashMap<&'a str, Span<'a>>,
-    lvalues: impl Iterator<Item = &'it SpannedLvalue<'a, T>>,
-    context: RepeatedAssignmentContext,
-) -> Result<(), SpannedEvalError<'a>> {
-    for lvalue in lvalues {
-        match &lvalue.extra {
-            Lvalue::Variable { .. } => {
-                let var_name = *lvalue.fragment();
-                if var_name != "_" {
-                    let var_span = create_span_ref(lvalue, ());
-                    if let Some(prev_span) = vars.insert(var_name, var_span) {
-                        let err = EvalError::RepeatedAssignment { context };
-                        return Err(SpannedEvalError::new(lvalue, err)
-                            .with_span(&prev_span, AuxErrorInfo::PrevAssignment));
-                    }
-                }
-            }
-
-            Lvalue::Tuple(fragments) => {
-                extract_vars(vars, fragments, context)?;
-            }
-        }
-    }
-    Ok(())
 }
 
 /// Compiler extensions defined for some AST nodes, most notably, `Block`.
@@ -630,12 +555,12 @@ fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
 /// # Examples
 ///
 /// ```
-/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 /// use arithmetic_eval::CompilerExt;
 /// # use hashbrown::HashSet;
 /// # use core::iter::FromIterator;
 ///
-/// let block = Span::new("x = sin(0.5) / PI; y = x * E; (x, y)");
+/// let block = InputSpan::new("x = sin(0.5) / PI; y = x * E; (x, y)");
 /// let block = F32Grammar::parse_statements(block).unwrap();
 /// let undefined_vars = block.undefined_variables().unwrap();
 /// assert_eq!(
@@ -656,44 +581,18 @@ pub trait CompilerExt<'a> {
     ///
     /// The fact that an error is *not* returned does not guarantee that the AST node will evaluate
     /// successfully if all variables are assigned.
-    fn undefined_variables(&self) -> Result<HashMap<&'a str, Span<'a>>, SpannedEvalError<'a>>;
+    fn undefined_variables(&self) -> Result<HashMap<&'a str, Spanned<'a>>, SpannedEvalError<'a>>;
 }
 
 impl<'a, T: Grammar> CompilerExt<'a> for Block<'a, T> {
-    fn undefined_variables(&self) -> Result<HashMap<&'a str, Span<'a>>, SpannedEvalError<'a>> {
+    fn undefined_variables(&self) -> Result<HashMap<&'a str, Spanned<'a>>, SpannedEvalError<'a>> {
         CompilerExtTarget::Block(self).get_undefined_variables()
     }
 }
 
 impl<'a, T: Grammar> CompilerExt<'a> for FnDefinition<'a, T> {
-    fn undefined_variables(&self) -> Result<HashMap<&'a str, Span<'a>>, SpannedEvalError<'a>> {
+    fn undefined_variables(&self) -> Result<HashMap<&'a str, Spanned<'a>>, SpannedEvalError<'a>> {
         CompilerExtTarget::FnDefinition(self).get_undefined_variables()
-    }
-}
-
-/// Helper enum for `CompilerExt` implementations that allows to reduce code duplication.
-#[derive(Debug)]
-enum CompilerExtTarget<'r, 'a, T: Grammar> {
-    Block(&'r Block<'a, T>),
-    FnDefinition(&'r FnDefinition<'a, T>),
-}
-
-impl<'a, T: Grammar> CompilerExtTarget<'_, 'a, T> {
-    fn get_undefined_variables(self) -> Result<HashMap<&'a str, Span<'a>>, SpannedEvalError<'a>> {
-        let mut undefined_vars = HashMap::new();
-        let mut extractor = CapturesExtractor::new(|var_name, var_span| {
-            if !undefined_vars.contains_key(var_name) {
-                undefined_vars.insert(var_name, var_span);
-            }
-            Ok(())
-        });
-
-        match self {
-            Self::Block(block) => extractor.eval_block(block)?,
-            Self::FnDefinition(definition) => extractor.eval_function(definition)?,
-        }
-
-        Ok(undefined_vars)
     }
 }
 
@@ -702,11 +601,11 @@ mod tests {
     use super::*;
     use crate::Value;
 
-    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Span};
+    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 
     #[test]
     fn compilation_basics() {
-        let block = Span::new("x = 3; 1 + { y = 2; y * x } == 7");
+        let block = InputSpan::new("x = 3; 1 + { y = 2; y * x } == 7");
         let block = F32Grammar::parse_statements(block).unwrap();
         let module = Compiler::compile_module(&Env::new(), &block, false).unwrap();
         let value = module.run().unwrap();
@@ -715,7 +614,7 @@ mod tests {
 
     #[test]
     fn compiled_function() {
-        let block = Span::new("add = |x, y| x + y; add(2, 3) == 5");
+        let block = InputSpan::new("add = |x, y| x + y; add(2, 3) == 5");
         let block = F32Grammar::parse_statements(block).unwrap();
         let value = Compiler::compile_module(&Env::new(), &block, false)
             .unwrap()
@@ -727,7 +626,7 @@ mod tests {
     #[test]
     fn compiled_function_with_capture() {
         let block = "A = 2; add = |x, y| x + y / A; add(2, 3) == 3.5";
-        let block = F32Grammar::parse_statements(Span::new(block)).unwrap();
+        let block = F32Grammar::parse_statements(InputSpan::new(block)).unwrap();
         let value = Compiler::compile_module(&Env::new(), &block, false)
             .unwrap()
             .run()
@@ -738,7 +637,7 @@ mod tests {
     #[test]
     fn variable_extraction() {
         let def = "|a, b| ({ x = a * b + y; x - 2 }, a / b)";
-        let def = F32Grammar::parse_statements(Span::new(def))
+        let def = F32Grammar::parse_statements(InputSpan::new(def))
             .unwrap()
             .return_value
             .unwrap();
@@ -755,7 +654,7 @@ mod tests {
     #[test]
     fn variable_extraction_with_scoping() {
         let def = "|a, b| ({ x = a * b + y; x - 2 }, a / x)";
-        let def = F32Grammar::parse_statements(Span::new(def))
+        let def = F32Grammar::parse_statements(InputSpan::new(def))
             .unwrap()
             .return_value
             .unwrap();
@@ -776,7 +675,7 @@ mod tests {
         env.push_var("y", Value::Number(-3.0));
 
         let module = "y = 5 * x; y - 3";
-        let module = F32Grammar::parse_statements(Span::new(module)).unwrap();
+        let module = F32Grammar::parse_statements(InputSpan::new(module)).unwrap();
         let mut module = Compiler::compile_module(&env, &module, false).unwrap();
 
         let imports = module.imports().iter().collect::<Vec<_>>();

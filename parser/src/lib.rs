@@ -9,7 +9,7 @@
 //! # use assert_matches::assert_matches;
 //! use arithmetic_parser::{
 //!     grammars::F32Grammar,
-//!     GrammarExt, NomResult, Span, Statement, Expr, FnDefinition, LvalueLen,
+//!     GrammarExt, NomResult, InputSpan, Statement, Expr, FnDefinition, LvalueLen,
 //! };
 //! use nom::number::complete::float;
 //!
@@ -27,7 +27,7 @@
 //!     other_function(y - z)
 //! "#;
 //!
-//! let block = F32Grammar::parse_statements(Span::new(PROGRAM)).unwrap();
+//! let block = F32Grammar::parse_statements(InputSpan::new(PROGRAM)).unwrap();
 //! // First statement is an assignment.
 //! assert_matches!(
 //!     block.statements[0].extra,
@@ -41,7 +41,7 @@
 //! // This function has a single argument and a single statement in the body.
 //! assert_matches!(
 //!     some_function,
-//!     Expr::FnDefinition(FnDefinition { ref args, ref body })
+//!     Expr::FnDefinition(FnDefinition { ref args, ref body, .. })
 //!         if args.extra.len() == LvalueLen::Exact(2)
 //!             && body.statements.is_empty()
 //!             && body.return_value.is_some()
@@ -50,36 +50,32 @@
 
 #![no_std]
 #![warn(missing_docs, missing_debug_implementations)]
+#![warn(clippy::all, clippy::pedantic)]
+#![allow(clippy::missing_errors_doc, clippy::must_use_candidate)]
 
 extern crate alloc;
 
-#[doc(hidden)] // used in the `eval` crate; logically not public
-pub use crate::helpers::create_span_ref;
 pub use crate::{
-    parser::{Error, SpannedError},
+    parser::{is_valid_variable_name, Error, SpannedError},
+    spans::{
+        CodeFragment, InputSpan, LocatedSpan, MaybeSpanned, NomResult, Spanned, StripCode,
+        StripResultExt,
+    },
     traits::{Features, Grammar, GrammarExt},
 };
-
-use nom_locate::LocatedSpan;
 
 use alloc::{boxed::Box, vec, vec::Vec};
 use core::fmt;
 
 pub mod grammars;
-mod helpers;
 mod parser;
+mod spans;
 mod traits;
-
-/// Code span.
-pub type Span<'a> = LocatedSpan<&'a str, ()>;
-/// Value with an associated code span.
-pub type Spanned<'a, T> = LocatedSpan<&'a str, T>;
-/// Parsing outcome generalized by the type returned on success.
-pub type NomResult<'a, T> = nom::IResult<Span<'a>, T, SpannedError<'a>>;
 
 /// Parsing context.
 // TODO: Add more fine-grained contexts.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum Context {
     /// Variable name.
     Var,
@@ -101,27 +97,26 @@ impl fmt::Display for Context {
 
 impl Context {
     fn new(s: &str) -> Self {
-        use self::Context::*;
         match s {
-            "var" => Var,
-            "fn" => Fun,
-            "expr" => Expr,
+            "var" => Self::Var,
+            "fn" => Self::Fun,
+            "expr" => Self::Expr,
             _ => unreachable!(),
         }
     }
 
     fn to_str(self) -> &'static str {
-        use self::Context::*;
         match self {
-            Var => "var",
-            Fun => "fn",
-            Expr => "expr",
+            Self::Var => "var",
+            Self::Fun => "fn",
+            Self::Expr => "expr",
         }
     }
 }
 
 /// Arithmetic expression with an abstract types for type hints and literals.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Expr<'a, T>
 where
     T: Grammar,
@@ -147,7 +142,7 @@ where
     /// Method call, e.g., `foo.bar(x, 5)`.
     Method {
         /// Name of the called method, e.g. `bar` in `foo.bar(x, 5)`.
-        name: Span<'a>,
+        name: Spanned<'a>,
         /// Receiver of the call, e.g., `foo` in `foo.bar(x, 5)`.
         receiver: Box<SpannedExpr<'a, T>>,
         /// Arguments; e.g., `x, 5` in `foo.bar(x, 5)`.
@@ -195,6 +190,21 @@ impl<T: Grammar> Expr<'_, T> {
             _ => None,
         }
     }
+
+    /// Returns the type of this expression.
+    pub fn ty(&self) -> ExprType {
+        match self {
+            Self::Variable => ExprType::Variable,
+            Self::Literal(_) => ExprType::Literal,
+            Self::FnDefinition(_) => ExprType::FnDefinition,
+            Self::Tuple(_) => ExprType::Tuple,
+            Self::Block(_) => ExprType::Block,
+            Self::Function { .. } => ExprType::Function,
+            Self::Method { .. } => ExprType::Method,
+            Self::Unary { .. } => ExprType::Unary,
+            Self::Binary { .. } => ExprType::Binary,
+        }
+    }
 }
 
 impl<T: Grammar> Clone for Expr<'_, T> {
@@ -238,30 +248,28 @@ where
     T::Type: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
-        use self::Expr::*;
-
         match (self, other) {
-            (Variable, Variable) => true,
-            (Literal(this), Literal(that)) => this == that,
-            (FnDefinition(this), FnDefinition(that)) => this == that,
-            (Tuple(this), Tuple(that)) => this == that,
-            (Block(this), Block(that)) => this == that,
+            (Self::Variable, Self::Variable) => true,
+            (Self::Literal(this), Self::Literal(that)) => this == that,
+            (Self::FnDefinition(this), Self::FnDefinition(that)) => this == that,
+            (Self::Tuple(this), Self::Tuple(that)) => this == that,
+            (Self::Block(this), Self::Block(that)) => this == that,
 
             (
-                Function { name, args },
-                Function {
+                Self::Function { name, args },
+                Self::Function {
                     name: that_name,
                     args: that_args,
                 },
             ) => name == that_name && args == that_args,
 
             (
-                Method {
+                Self::Method {
                     name,
                     receiver,
                     args,
                 },
-                Method {
+                Self::Method {
                     name: that_name,
                     receiver: that_receiver,
                     args: that_args,
@@ -269,16 +277,16 @@ where
             ) => name == that_name && receiver == that_receiver && args == that_args,
 
             (
-                Unary { op, inner },
-                Unary {
+                Self::Unary { op, inner },
+                Self::Unary {
                     op: that_op,
                     inner: that_inner,
                 },
             ) => op == that_op && inner == that_inner,
 
             (
-                Binary { lhs, op, rhs },
-                Binary {
+                Self::Binary { lhs, op, rhs },
+                Self::Binary {
                     lhs: that_lhs,
                     op: that_op,
                     rhs: that_rhs,
@@ -293,8 +301,49 @@ where
 /// `Expr` with the associated type and code span.
 pub type SpannedExpr<'a, T> = Spanned<'a, Expr<'a, T>>;
 
+/// Type of an `Expr`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum ExprType {
+    /// Variable use, e.g., `x`.
+    Variable,
+    /// Literal (semantic depends on the grammar).
+    Literal,
+    /// Function definition, e.g., `|x, y| { x + y }`.
+    FnDefinition,
+    /// Function call, e.g., `foo(x, y)` or `|x| { x + 5 }(3)`.
+    Function,
+    /// Method call, e.g., `foo.bar(x, 5)`.
+    Method,
+    /// Unary operation, e.g., `-x`.
+    Unary,
+    /// Binary operation, e.g., `x + 1`.
+    Binary,
+    /// Tuple expression, e.g., `(x, y + z)`.
+    Tuple,
+    /// Block expression, e.g., `{ x = 3; x + y }`.
+    Block,
+}
+
+impl fmt::Display for ExprType {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Variable => "variable",
+            Self::Literal => "literal",
+            Self::FnDefinition => "function definition",
+            Self::Function => "function call",
+            Self::Method => "method call",
+            Self::Unary => "unary operation",
+            Self::Binary => "binary operation",
+            Self::Tuple => "tuple",
+            Self::Block => "block",
+        })
+    }
+}
+
 /// Unary operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum UnaryOp {
     /// Negation (`-`).
     Neg,
@@ -319,6 +368,7 @@ impl UnaryOp {
 
 /// Binary arithmetic operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum BinaryOp {
     /// Addition (`+`).
     Add,
@@ -402,31 +452,29 @@ impl BinaryOp {
 
     /// Checks if this operation is arithmetic.
     pub fn is_arithmetic(self) -> bool {
-        match self {
-            Self::Add | Self::Sub | Self::Mul | Self::Div | Self::Power => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Self::Add | Self::Sub | Self::Mul | Self::Div | Self::Power
+        )
     }
 
     /// Checks if this operation is a comparison.
     pub fn is_comparison(self) -> bool {
-        match self {
-            Self::Eq | Self::NotEq | Self::Gt | Self::Lt | Self::Le | Self::Ge => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Self::Eq | Self::NotEq | Self::Gt | Self::Lt | Self::Le | Self::Ge
+        )
     }
 
     /// Checks if this operation is an order comparison.
     pub fn is_order_comparison(self) -> bool {
-        match self {
-            Self::Gt | Self::Lt | Self::Le | Self::Ge => true,
-            _ => false,
-        }
+        matches!(self, Self::Gt | Self::Lt | Self::Le | Self::Ge)
     }
 }
 
 /// Generic operation, either unary or binary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum Op {
     /// Unary operation.
     Unary(UnaryOp),
@@ -457,6 +505,7 @@ impl From<BinaryOp> for Op {
 
 /// Length of an assigned lvalue.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum LvalueLen {
     /// Exact length.
     Exact(usize),
@@ -524,7 +573,7 @@ pub enum DestructureRest<'a, T> {
     /// Named rest syntax, e.g., `...rest`.
     Named {
         /// Variable span, e.g., `rest`.
-        variable: Span<'a>,
+        variable: Spanned<'a>,
         /// Type annotation of the value.
         ty: Option<Spanned<'a, T>>,
     },
@@ -536,7 +585,7 @@ impl<'a, T> DestructureRest<'a, T> {
     pub fn to_lvalue(&self) -> Option<SpannedLvalue<'a, T>> {
         match self {
             Self::Named { variable, .. } => {
-                Some(create_span_ref(variable, Lvalue::Variable { ty: None }))
+                Some(variable.copy_with_extra(Lvalue::Variable { ty: None }))
             }
             _ => None,
         }
@@ -545,6 +594,7 @@ impl<'a, T> DestructureRest<'a, T> {
 
 /// Assignable value.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum Lvalue<'a, T> {
     /// Simple variable, e.g., `x`.
     Variable {
@@ -555,11 +605,41 @@ pub enum Lvalue<'a, T> {
     Tuple(Destructure<'a, T>),
 }
 
+impl<T> Lvalue<'_, T> {
+    /// Returns type of this lvalue.
+    pub fn ty(&self) -> LvalueType {
+        match self {
+            Self::Variable { .. } => LvalueType::Variable,
+            Self::Tuple(_) => LvalueType::Tuple,
+        }
+    }
+}
+
 /// `Lvalue` with the associated code span.
 pub type SpannedLvalue<'a, T> = Spanned<'a, Lvalue<'a, T>>;
 
+/// Type of an `Lvalue`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum LvalueType {
+    /// Simple variable, e.g., `x`.
+    Variable,
+    /// Tuple destructuring, e.g., `(x, y)`.
+    Tuple,
+}
+
+impl fmt::Display for LvalueType {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Variable => "simple variable",
+            Self::Tuple => "tuple destructuring",
+        })
+    }
+}
+
 /// Statement: an expression or a variable assignment.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Statement<'a, T>
 where
     T: Grammar,
@@ -574,6 +654,16 @@ where
         /// RHS of the assignment.
         rhs: Box<SpannedExpr<'a, T>>,
     },
+}
+
+impl<T: Grammar> Statement<'_, T> {
+    /// Returns the type of this statement.
+    pub fn ty(&self) -> StatementType {
+        match self {
+            Self::Expr(_) => StatementType::Expr,
+            Self::Assignment { .. } => StatementType::Assignment,
+        }
+    }
 }
 
 impl<T: Grammar> Clone for Statement<'_, T> {
@@ -595,14 +685,12 @@ where
     T::Type: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
-        use self::Statement::*;
-
         match (self, other) {
-            (Expr(this), Expr(that)) => this == that,
+            (Self::Expr(this), Self::Expr(that)) => this == that,
 
             (
-                Assignment { lhs, rhs },
-                Assignment {
+                Self::Assignment { lhs, rhs },
+                Self::Assignment {
                     lhs: that_lhs,
                     rhs: that_rhs,
                 },
@@ -616,14 +704,31 @@ where
 /// Statement with the associated code span.
 pub type SpannedStatement<'a, T> = Spanned<'a, Statement<'a, T>>;
 
+/// Type of a `Statement`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum StatementType {
+    /// Expression, e.g., `x + (1, 2)`.
+    Expr,
+    /// Assigment, e.g., `(x, y) = (5, 8)`.
+    Assignment,
+}
+
+impl fmt::Display for StatementType {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Expr => "expression",
+            Self::Assignment => "variable assignment",
+        })
+    }
+}
+
 /// Block of statements.
 ///
 /// A block may end with a return expression, e.g., `{ x = 1; x }`.
 #[derive(Debug)]
-pub struct Block<'a, T>
-where
-    T: Grammar,
-{
+#[non_exhaustive]
+pub struct Block<'a, T: Grammar> {
     /// Statements in the block.
     pub statements: Vec<SpannedStatement<'a, T>>,
     /// The last statement in the block which is returned from the block.
@@ -664,10 +769,8 @@ impl<T: Grammar> Block<'_, T> {
 ///
 /// A function definition consists of a list of arguments and the function body.
 #[derive(Debug)]
-pub struct FnDefinition<'a, T>
-where
-    T: Grammar,
-{
+#[non_exhaustive]
+pub struct FnDefinition<'a, T: Grammar> {
     /// Function arguments, e.g., `x, y`.
     pub args: Spanned<'a, Destructure<'a, T::Type>>,
     /// Function body, e.g., `x + y`.

@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/slowli/arithmetic-parser/workflows/Rust/badge.svg?branch=master)](https://github.com/slowli/arithmetic-parser/actions)
 [![License: Apache-2.0](https://img.shields.io/crates/l/arithmetic-eval)](https://github.com/slowli/arithmetic-parser/blob/master/LICENSE)
-![rust 1.41.0+ required](https://img.shields.io/badge/rust-1.41.0+-blue.svg) 
+![rust 1.42+ required](https://img.shields.io/badge/rust-1.42+-blue.svg) 
 
 **Links:** [![Docs on docs.rs](https://docs.rs/arithmetic-eval/badge.svg)](https://docs.rs/arithmetic-eval/)
 [![crate docs (master)](https://img.shields.io/badge/master-yellow.svg?label=docs)](https://slowli.github.io/arithmetic-parser/arithmetic_eval/) 

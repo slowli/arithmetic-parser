@@ -727,10 +727,8 @@ impl fmt::Display for StatementType {
 ///
 /// A block may end with a return expression, e.g., `{ x = 1; x }`.
 #[derive(Debug)]
-pub struct Block<'a, T>
-where
-    T: Grammar,
-{
+#[non_exhaustive]
+pub struct Block<'a, T: Grammar> {
     /// Statements in the block.
     pub statements: Vec<SpannedStatement<'a, T>>,
     /// The last statement in the block which is returned from the block.
@@ -771,10 +769,8 @@ impl<T: Grammar> Block<'_, T> {
 ///
 /// A function definition consists of a list of arguments and the function body.
 #[derive(Debug)]
-pub struct FnDefinition<'a, T>
-where
-    T: Grammar,
-{
+#[non_exhaustive]
+pub struct FnDefinition<'a, T: Grammar> {
     /// Function arguments, e.g., `x, y`.
     pub args: Spanned<'a, Destructure<'a, T::Type>>,
     /// Function body, e.g., `x + y`.

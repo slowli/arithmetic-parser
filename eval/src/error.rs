@@ -427,6 +427,7 @@ pub struct Backtrace<'a> {
 
 /// Function call.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct BacktraceElement<'a> {
     /// Function name.
     pub fn_name: String,
@@ -487,9 +488,7 @@ impl StripCode for BacktraceElement<'_> {
 /// Error with the associated backtrace.
 #[derive(Debug)]
 pub struct ErrorWithBacktrace<'a> {
-    /// Error.
     inner: SpannedEvalError<'a>,
-    /// Backtrace information.
     backtrace: Backtrace<'a>,
 }
 

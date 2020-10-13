@@ -8,8 +8,8 @@ use core::fmt;
 use crate::{
     alloc::{vec, Rc, Vec},
     executable::ExecutableFn,
-    AuxErrorInfo, Backtrace, EvalError, EvalResult, Number, SpannedEvalError,
-    TupleLenMismatchContext,
+    AuxErrorInfo, Backtrace, CodeInModule, EvalError, EvalResult, ModuleId, Number,
+    SpannedEvalError, TupleLenMismatchContext,
 };
 use arithmetic_parser::{
     BinaryOp, Grammar, InputSpan, LvalueLen, MaybeSpanned, Op, Spanned, StripCode, UnaryOp,
@@ -146,6 +146,11 @@ impl<'a, T: Grammar> InterpretedFn<'a, T> {
         }
     }
 
+    /// Returns ID of the module defining this function.
+    pub fn module_id(&self) -> &dyn ModuleId {
+        self.definition.inner.id()
+    }
+
     /// Returns the number of arguments for this function.
     pub fn arg_count(&self) -> LvalueLen {
         self.definition.arg_count
@@ -253,10 +258,13 @@ where
         }
     }
 
-    pub(crate) fn def_span(&self) -> Option<MaybeSpanned<'a>> {
+    pub(crate) fn def_span(&self) -> Option<CodeInModule<'a>> {
         match self {
             Self::Native(_) => None,
-            Self::Interpreted(function) => Some(function.definition.def_span),
+            Self::Interpreted(function) => Some(CodeInModule::new(
+                function.module_id(),
+                function.definition.def_span,
+            )),
         }
     }
 }

@@ -2,19 +2,21 @@
 
 use hashbrown::HashMap;
 
+use crate::error::CodeInModule;
 use crate::{
     alloc::{vec, Rc, Vec},
     executable::{
         command::{Atom, Command, CompiledExpr, SpannedCommand},
         ExecutableFn,
     },
-    Backtrace, CallContext, EvalError, EvalResult, Function, InterpretedFn, Number,
+    Backtrace, CallContext, EvalError, EvalResult, Function, InterpretedFn, ModuleId, Number,
     SpannedEvalError, SpannedValue, TupleLenMismatchContext, Value,
 };
 use arithmetic_parser::{BinaryOp, Grammar, MaybeSpanned, StripCode, UnaryOp};
 
 #[derive(Debug)]
 pub(crate) struct Executable<'a, T: Grammar> {
+    id: Box<dyn ModuleId>,
     commands: Vec<SpannedCommand<'a, T>>,
     child_fns: Vec<Rc<ExecutableFn<'a, T>>>,
     // Hint how many registers the executable requires.
@@ -24,6 +26,7 @@ pub(crate) struct Executable<'a, T: Grammar> {
 impl<'a, T: Grammar> Clone for Executable<'a, T> {
     fn clone(&self) -> Self {
         Self {
+            id: self.id.clone_boxed(),
             commands: self.commands.clone(),
             child_fns: self.child_fns.clone(),
             register_capacity: self.register_capacity,
@@ -36,6 +39,7 @@ impl<T: Grammar> StripCode for Executable<'_, T> {
 
     fn strip_code(&self) -> Self::Stripped {
         Executable {
+            id: self.id.clone_boxed(),
             commands: self
                 .commands
                 .iter()
@@ -56,12 +60,17 @@ impl<T: Grammar> StripCode for Executable<'_, T> {
 }
 
 impl<'a, T: Grammar> Executable<'a, T> {
-    pub fn new() -> Self {
+    pub fn new(id: Box<dyn ModuleId>) -> Self {
         Self {
+            id,
             commands: vec![],
             child_fns: vec![],
             register_capacity: 0,
         }
+    }
+
+    pub fn id(&self) -> &dyn ModuleId {
+        self.id.as_ref()
     }
 
     pub fn push_command(&mut self, command: impl Into<SpannedCommand<'a, T>>) {
@@ -371,7 +380,14 @@ where
                         .iter()
                         .map(|arg| arg.copy_with_extra(self.resolve_atom(&arg.extra)))
                         .collect();
-                    Self::eval_function(&function, fn_name, span, arg_values, backtrace)
+                    Self::eval_function(
+                        &function,
+                        fn_name,
+                        executable.id.as_ref(),
+                        span,
+                        arg_values,
+                        backtrace,
+                    )
                 } else {
                     Err(SpannedEvalError::new(&span, EvalError::CannotCall))
                 }
@@ -397,12 +413,14 @@ where
     fn eval_function(
         function: &Function<'a, T>,
         fn_name: &str,
+        module_id: &dyn ModuleId,
         call_span: MaybeSpanned<'a>,
         arg_values: Vec<SpannedValue<'a, T>>,
         mut backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
         if let Some(backtrace) = backtrace.as_deref_mut() {
-            backtrace.push_call(fn_name, function.def_span(), call_span);
+            let full_call_span = CodeInModule::new(module_id, call_span);
+            backtrace.push_call(fn_name, function.def_span(), full_call_span);
         }
         let mut context = CallContext::new(call_span, backtrace.as_deref_mut());
 
@@ -427,7 +445,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{compiler::Compiler, executable::ModuleImports};
+    use crate::{compiler::Compiler, executable::ModuleImports, WildcardId};
     use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 
     #[test]
@@ -437,7 +455,7 @@ mod tests {
 
         let block = "y = x + 2 * (x + 1) + 1; y";
         let block = F32Grammar::parse_statements(InputSpan::new(block)).unwrap();
-        let module = Compiler::compile_module(&env, &block, true).unwrap();
+        let module = Compiler::compile_module(WildcardId, &env, &block, true).unwrap();
         let value = env.execute(&module.inner, None).unwrap();
         assert_eq!(value, Value::Number(18.0));
 
@@ -455,7 +473,7 @@ mod tests {
         env.push_var("x", Value::<F32Grammar>::Number(5.0));
 
         let block = F32Grammar::parse_statements(InputSpan::new("x")).unwrap();
-        let mut module = Compiler::compile_module(&env, &block, true).unwrap();
+        let mut module = Compiler::compile_module(WildcardId, &env, &block, true).unwrap();
         assert_eq!(module.inner.register_capacity, 2);
         assert_eq!(module.inner.commands.len(), 1); // push `x` from r0 to r1
         module.imports = ModuleImports { inner: env };

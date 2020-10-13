@@ -10,7 +10,7 @@ use crate::{
         Atom, Command, ComparisonOp, CompiledExpr, Env, Executable, ExecutableFn, ExecutableModule,
         SpannedAtom,
     },
-    EvalError, RepeatedAssignmentContext, SpannedEvalError,
+    EvalError, ModuleId, RepeatedAssignmentContext, SpannedEvalError,
 };
 use arithmetic_parser::{
     is_valid_variable_name, BinaryOp, Block, Destructure, Expr, FnDefinition, Grammar, InputSpan,
@@ -25,23 +25,41 @@ use self::captures::{extract_vars_iter, CapturesExtractor, CompilerExtTarget};
 /// Name of the comparison function used in desugaring order comparisons.
 const CMP_FUNCTION_NAME: &str = "cmp";
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug)]
 pub(crate) struct Compiler {
     vars_to_registers: HashMap<String, usize>,
     scope_depth: usize,
     register_count: usize,
+    module_id: Box<dyn ModuleId>,
+}
+
+impl Clone for Compiler {
+    fn clone(&self) -> Self {
+        Self {
+            vars_to_registers: self.vars_to_registers.clone(),
+            scope_depth: self.scope_depth,
+            register_count: self.register_count,
+            module_id: self.module_id.clone_boxed(),
+        }
+    }
 }
 
 impl Compiler {
-    pub fn new() -> Self {
-        Self::default()
+    fn new(module_id: Box<dyn ModuleId>) -> Self {
+        Self {
+            vars_to_registers: HashMap::new(),
+            scope_depth: 0,
+            register_count: 0,
+            module_id,
+        }
     }
 
-    fn from_env<T: Grammar>(env: &Env<'_, T>) -> Self {
+    fn from_env<T: Grammar>(module_id: Box<dyn ModuleId>, env: &Env<'_, T>) -> Self {
         Self {
             vars_to_registers: env.variables_map().to_owned(),
             register_count: env.register_count(),
             scope_depth: 0,
+            module_id,
         }
     }
 
@@ -347,7 +365,7 @@ impl Compiler {
         });
 
         extractor.eval_function(def)?;
-        let fn_executable = Self::compile_function(def, &captures)?;
+        let fn_executable = self.compile_function(def, &captures)?;
         let fn_executable = ExecutableFn {
             inner: fn_executable,
             def_span: def_expr.with_no_extra().into(),
@@ -367,11 +385,12 @@ impl Compiler {
     }
 
     fn compile_function<'a, T: Grammar>(
+        &self,
         def: &FnDefinition<'a, T>,
         captures: &HashMap<&'a str, SpannedAtom<'a, T>>,
     ) -> Result<Executable<'a, T>, SpannedEvalError<'a>> {
         // Allocate registers for captures.
-        let mut this = Self::new();
+        let mut this = Self::new(self.module_id.clone_boxed());
         this.scope_depth = 1; // Disable generating variable annotations.
 
         for (i, &name) in captures.keys().enumerate() {
@@ -379,7 +398,7 @@ impl Compiler {
         }
         this.register_count = captures.len() + 1; // one additional register for args
 
-        let mut executable = Executable::new();
+        let mut executable = Executable::new(self.module_id.clone_boxed());
         let args_span = def.args.with_no_extra();
         this.destructure(&mut executable, &def.args.extra, args_span, captures.len())?;
 
@@ -431,12 +450,15 @@ impl Compiler {
         })
     }
 
-    pub fn compile_module<'a, T: Grammar>(
+    pub fn compile_module<'a, Id: ModuleId, T: Grammar>(
+        module_id: Id,
         env: &Env<'a, T>,
         block: &Block<'a, T>,
         execute_in_env: bool,
     ) -> Result<ExecutableModule<'a, T>, SpannedEvalError<'a>> {
-        let mut compiler = Self::from_env(env);
+        let module_id = Box::new(module_id) as Box<dyn ModuleId>;
+        let mut compiler = Self::from_env(module_id.clone_boxed(), env);
+
         let captures = if execute_in_env {
             // We don't care about captures since we won't execute the module with them anyway.
             Env::new()
@@ -453,11 +475,11 @@ impl Compiler {
             });
             extractor.eval_block(&block)?;
 
-            compiler = Self::from_env(&captures);
+            compiler = Self::from_env(module_id.clone_boxed(), &captures);
             captures
         };
 
-        let mut executable = Executable::new();
+        let mut executable = Executable::new(module_id);
         let empty_span = InputSpan::new("");
         let last_atom = compiler
             .compile_block_inner(&mut executable, block)?
@@ -599,7 +621,7 @@ impl<'a, T: Grammar> CompilerExt<'a> for FnDefinition<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Value;
+    use crate::{Value, WildcardId};
 
     use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 
@@ -607,7 +629,7 @@ mod tests {
     fn compilation_basics() {
         let block = InputSpan::new("x = 3; 1 + { y = 2; y * x } == 7");
         let block = F32Grammar::parse_statements(block).unwrap();
-        let module = Compiler::compile_module(&Env::new(), &block, false).unwrap();
+        let module = Compiler::compile_module(WildcardId, &Env::new(), &block, false).unwrap();
         let value = module.run().unwrap();
         assert_eq!(value, Value::Bool(true));
     }
@@ -616,7 +638,7 @@ mod tests {
     fn compiled_function() {
         let block = InputSpan::new("add = |x, y| x + y; add(2, 3) == 5");
         let block = F32Grammar::parse_statements(block).unwrap();
-        let value = Compiler::compile_module(&Env::new(), &block, false)
+        let value = Compiler::compile_module(WildcardId, &Env::new(), &block, false)
             .unwrap()
             .run()
             .unwrap();
@@ -627,7 +649,7 @@ mod tests {
     fn compiled_function_with_capture() {
         let block = "A = 2; add = |x, y| x + y / A; add(2, 3) == 3.5";
         let block = F32Grammar::parse_statements(InputSpan::new(block)).unwrap();
-        let value = Compiler::compile_module(&Env::new(), &block, false)
+        let value = Compiler::compile_module(WildcardId, &Env::new(), &block, false)
             .unwrap()
             .run()
             .unwrap();
@@ -676,7 +698,7 @@ mod tests {
 
         let module = "y = 5 * x; y - 3";
         let module = F32Grammar::parse_statements(InputSpan::new(module)).unwrap();
-        let mut module = Compiler::compile_module(&env, &module, false).unwrap();
+        let mut module = Compiler::compile_module(WildcardId, &env, &module, false).unwrap();
 
         let imports = module.imports().iter().collect::<Vec<_>>();
         assert_eq!(imports, &[("x", &Value::Number(1.0))]);

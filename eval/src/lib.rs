@@ -109,10 +109,11 @@ mod alloc {
 pub use self::{
     compiler::CompilerExt,
     error::{
-        AuxErrorInfo, Backtrace, BacktraceElement, ErrorWithBacktrace, EvalError, EvalResult,
-        RepeatedAssignmentContext, SpannedEvalError, TupleLenMismatchContext,
+        AuxErrorInfo, Backtrace, BacktraceElement, CodeInModule, ErrorWithBacktrace, EvalError,
+        EvalResult, RepeatedAssignmentContext, SpannedEvalError, TupleLenMismatchContext,
     },
     executable::{ExecutableModule, ModuleImports},
+    module_id::{ModuleId, WildcardId},
     values::{CallContext, Function, InterpretedFn, NativeFn, SpannedValue, Value, ValueType},
 };
 
@@ -128,6 +129,7 @@ mod compiler;
 mod error;
 mod executable;
 pub mod fns;
+mod module_id;
 mod values;
 
 /// Number with fully defined arithmetic operations.
@@ -249,11 +251,12 @@ where
     }
 
     /// Evaluates a list of statements.
-    pub fn evaluate(
+    pub fn evaluate_named<F: ModuleId>(
         &mut self,
+        id: F,
         block: &Block<'a, T>,
     ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
-        let executable = Compiler::compile_module(&self.env, block, true)
+        let executable = Compiler::compile_module(id, &self.env, block, true)
             .map_err(ErrorWithBacktrace::with_empty_trace)?;
         let mut backtrace = Backtrace::default();
         let result = self
@@ -264,13 +267,24 @@ where
         result
     }
 
+    /// Evaluates a list of statements using a [wildcard] block identifier.
+    ///
+    /// [wildcard]: struct.Wildcard.html
+    pub fn evaluate(
+        &mut self,
+        block: &Block<'a, T>,
+    ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
+        self.evaluate_named(WildcardId, block)
+    }
+
     /// Compiles the provided block, returning the compiled module and its imports.
     /// The imports can the be changed to run the module with different params.
-    pub fn compile(
+    pub fn compile<F: ModuleId>(
         &self,
+        id: F,
         program: &Block<'a, T>,
     ) -> Result<ExecutableModule<'a, T>, SpannedEvalError<'a>> {
-        Compiler::compile_module(&self.env, program, false)
+        Compiler::compile_module(id, &self.env, program, false)
     }
 }
 

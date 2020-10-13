@@ -195,7 +195,7 @@ impl<'a> Env<'a> {
             if let Some(def_span) = def_span {
                 let (file_id, def_range) = self
                     .code_map
-                    .locate(&def_span)
+                    .locate(&def_span.span())
                     .expect("Cannot locate span in previously recorded snippets");
                 let def_label = Label::secondary(file_id, def_range)
                     .with_message(format!("The error occurred in function `{}`", fn_name));
@@ -207,7 +207,7 @@ impl<'a> Env<'a> {
                 call_site = call.call_span;
                 let (file_id, call_range) = self
                     .code_map
-                    .locate(&call_site)
+                    .locate(&call_site.span())
                     .expect("Cannot locate span in previously recorded snippets");
                 let call_label = Label::secondary(file_id, call_range)
                     .with_message(format!("Call at depth {}", depth + 1));

@@ -2,7 +2,7 @@
 
 use core::ops;
 
-use crate::{Backtrace, ErrorWithBacktrace, Number, Value};
+use crate::{Backtrace, ErrorWithBacktrace, ModuleId, Number, Value};
 use arithmetic_parser::{Grammar, LvalueLen, MaybeSpanned, StripCode};
 
 mod command;
@@ -122,6 +122,11 @@ impl<'a, T: Grammar> ExecutableModule<'a, T> {
             inner,
             imports: ModuleImports { inner: imports },
         }
+    }
+
+    /// Gets the identifier of this module.
+    pub fn id(&self) -> &dyn ModuleId {
+        self.inner.id()
     }
 
     /// Sets the value of an imported variable.
@@ -287,7 +292,7 @@ impl<'a, T: Grammar> ops::IndexMut<&str> for ModuleImports<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compiler::Compiler;
+    use crate::{compiler::Compiler, WildcardId};
 
     use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 
@@ -298,7 +303,7 @@ mod tests {
 
         let block = "y = x + 2 * (x + 1) + 1; y";
         let block = F32Grammar::parse_statements(InputSpan::new(block)).unwrap();
-        let module = Compiler::compile_module(&env, &block, false).unwrap();
+        let module = Compiler::compile_module(WildcardId, &env, &block, false).unwrap();
 
         let mut module_copy = module.clone();
         module_copy.set_import("x", Value::Number(10.0));
@@ -316,7 +321,7 @@ mod tests {
 
         let block = "x + y";
         let block = F32Grammar::parse_statements(InputSpan::new(block)).unwrap();
-        let module = Compiler::compile_module(&env, &block, false).unwrap();
+        let module = Compiler::compile_module(WildcardId, &env, &block, false).unwrap();
 
         let mut imports = module.imports().to_owned();
         assert!(imports.is_compatible(&module));
@@ -337,7 +342,7 @@ mod tests {
 
         let block = "x + y";
         let block = F32Grammar::parse_statements(InputSpan::new(block)).unwrap();
-        let module = Compiler::compile_module(&env, &block, false).unwrap();
+        let module = Compiler::compile_module(WildcardId, &env, &block, false).unwrap();
 
         let mut other_env = Env::new();
         other_env.push_var("y", Value::<F32Grammar>::Number(1.0));

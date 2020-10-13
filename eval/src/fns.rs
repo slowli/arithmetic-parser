@@ -723,7 +723,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Interpreter;
+    use crate::{Interpreter, WildcardId};
 
     use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
     use assert_matches::assert_matches;
@@ -860,7 +860,7 @@ mod tests {
         assert_eq!(ret, Value::Bool(true));
 
         let module_block = F32Grammar::parse_statements(InputSpan::new("xs.reverse()")).unwrap();
-        let mut module = interpreter.compile(&module_block).unwrap();
+        let mut module = interpreter.compile(WildcardId, &module_block).unwrap();
 
         for &(input, expected) in SAMPLES {
             let input = input.iter().copied().map(Value::Number).collect();

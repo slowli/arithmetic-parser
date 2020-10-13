@@ -7,7 +7,7 @@ use core::fmt;
 use crate::{
     alloc::{format, vec, String, ToOwned, Vec},
     fns::FromValueError,
-    Value,
+    ModuleId, Value,
 };
 use arithmetic_parser::{
     BinaryOp, CodeFragment, ExprType, LocatedSpan, LvalueLen, LvalueType, MaybeSpanned, Op,
@@ -419,10 +419,60 @@ impl StripCode for SpannedEvalError<'_> {
 /// Result of an expression evaluation.
 pub type EvalResult<'a, T> = Result<Value<'a, T>, SpannedEvalError<'a>>;
 
-/// Call backtrace.
-#[derive(Debug, Default)]
-pub struct Backtrace<'a> {
-    calls: Vec<BacktraceElement<'a>>,
+/// FIXME
+#[derive(Debug)]
+pub struct CodeInModule<'a> {
+    module_id: Box<dyn ModuleId>,
+    span: MaybeSpanned<'a>,
+}
+
+impl Clone for CodeInModule<'_> {
+    fn clone(&self) -> Self {
+        Self {
+            module_id: self.module_id.clone_boxed(),
+            span: self.span,
+        }
+    }
+}
+
+impl<'a> CodeInModule<'a> {
+    pub(crate) fn new(module_id: &dyn ModuleId, span: MaybeSpanned<'a>) -> Self {
+        Self {
+            module_id: module_id.clone_boxed(),
+            span,
+        }
+    }
+
+    /// FIXME
+    pub fn module_id(&self) -> &dyn ModuleId {
+        self.module_id.as_ref()
+    }
+
+    /// FIXME
+    pub fn span(&self) -> MaybeSpanned<'a> {
+        self.span
+    }
+
+    fn fmt_location(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "{}:{}:{}",
+            self.module_id,
+            self.span.location_line(),
+            self.span.get_column()
+        )
+    }
+}
+
+impl StripCode for CodeInModule<'_> {
+    type Stripped = CodeInModule<'static>;
+
+    fn strip_code(&self) -> Self::Stripped {
+        CodeInModule {
+            module_id: self.module_id.clone_boxed(),
+            span: self.span.strip_code(),
+        }
+    }
 }
 
 /// Function call.
@@ -432,9 +482,27 @@ pub struct BacktraceElement<'a> {
     /// Function name.
     pub fn_name: String,
     /// Code span of the function definition.
-    pub def_span: Option<MaybeSpanned<'a>>,
+    pub def_span: Option<CodeInModule<'a>>,
     /// Code span of the function call.
-    pub call_span: MaybeSpanned<'a>,
+    pub call_span: CodeInModule<'a>,
+}
+
+impl StripCode for BacktraceElement<'_> {
+    type Stripped = BacktraceElement<'static>;
+
+    fn strip_code(&self) -> Self::Stripped {
+        BacktraceElement {
+            fn_name: self.fn_name.clone(),
+            def_span: self.def_span.as_ref().map(StripCode::strip_code),
+            call_span: self.call_span.strip_code(),
+        }
+    }
+}
+
+/// Call backtrace.
+#[derive(Debug, Default)]
+pub struct Backtrace<'a> {
+    calls: Vec<BacktraceElement<'a>>,
 }
 
 impl<'a> Backtrace<'a> {
@@ -447,8 +515,8 @@ impl<'a> Backtrace<'a> {
     pub(crate) fn push_call(
         &mut self,
         fn_name: &str,
-        def_span: Option<MaybeSpanned<'a>>,
-        call_span: MaybeSpanned<'a>,
+        def_span: Option<CodeInModule<'a>>,
+        call_span: CodeInModule<'a>,
     ) {
         self.calls.push(BacktraceElement {
             fn_name: fn_name.to_owned(),
@@ -469,18 +537,6 @@ impl StripCode for Backtrace<'_> {
     fn strip_code(&self) -> Self::Stripped {
         Backtrace {
             calls: self.calls.iter().map(StripCode::strip_code).collect(),
-        }
-    }
-}
-
-impl StripCode for BacktraceElement<'_> {
-    type Stripped = BacktraceElement<'static>;
-
-    fn strip_code(&self) -> Self::Stripped {
-        BacktraceElement {
-            fn_name: self.fn_name.clone(),
-            def_span: self.def_span.as_ref().map(StripCode::strip_code),
-            call_span: self.call_span.strip_code(),
         }
     }
 }
@@ -527,19 +583,31 @@ impl<'a> ErrorWithBacktrace<'a> {
 
 impl fmt::Display for ErrorWithBacktrace<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let last_call = self.backtrace.calls.last().expect("No calls");
+        // The main span is either within the definition of the function (if it's interpreted),
+        // or tied to the call span (if it's native).
+        let module_for_main_span = &last_call
+            .def_span
+            .as_ref()
+            .unwrap_or(&last_call.call_span)
+            .module_id;
+        write!(formatter, "{}:", module_for_main_span)?;
         fmt::Display::fmt(&self.inner, formatter)?;
 
         if formatter.alternate() && !self.backtrace.calls.is_empty() {
             writeln!(formatter, "\nBacktrace (most recent call last):")?;
             for (index, call) in self.backtrace.calls.iter().enumerate() {
-                writeln!(
-                    formatter,
-                    "{:>4}: {} called at {}:{}",
-                    index + 1,
-                    call.fn_name,
-                    call.call_span.location_line(),
-                    call.call_span.get_column()
-                )?;
+                write!(formatter, "{:>4}: {} ", index + 1, call.fn_name)?;
+
+                if let Some(ref def_span) = call.def_span {
+                    write!(formatter, "(module `{}`)", def_span.module_id)?;
+                } else {
+                    formatter.write_str("(native)")?;
+                }
+
+                write!(formatter, " called at ")?;
+                call.call_span.fmt_location(formatter)?;
+                writeln!(formatter)?;
             }
         }
         Ok(())
@@ -599,15 +667,15 @@ mod tests {
         let err = SpannedEvalError::new(&main_span, EvalError::Undefined("test".to_owned()));
 
         let mut err = ErrorWithBacktrace::with_empty_trace(err);
-        err.backtrace
-            .push_call("test_fn", None, MaybeSpanned::from_str(input, ..));
+        let call_span = CodeInModule::new(&"test", MaybeSpanned::from_str(input, ..));
+        err.backtrace.push_call("test_fn", None, call_span);
 
         let err_string = err.to_string();
-        assert_eq!(err_string, "1:5: Variable `test` is not defined");
+        assert_eq!(err_string, "test:1:5: Variable `test` is not defined");
 
         let expanded_err_string = format!("{:#}", err);
-        assert!(expanded_err_string.starts_with("1:5: Variable `test` is not defined"));
+        assert!(expanded_err_string.starts_with("test:1:5: Variable `test` is not defined"));
         assert!(expanded_err_string.contains("\nBacktrace"));
-        assert!(expanded_err_string.contains("\n   1: test_fn called at 1:1"));
+        assert!(expanded_err_string.contains("\n   1: test_fn (native) called at test:1:1"));
     }
 }

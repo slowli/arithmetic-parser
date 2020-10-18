@@ -399,18 +399,19 @@ where
                 }
             }
 
-            CompiledExpr::DefineFunction { ptr, captures } => {
+            CompiledExpr::DefineFunction {
+                ptr,
+                captures,
+                capture_names,
+            } => {
                 let fn_executable = executable.child_fns[*ptr].clone();
                 let captured_values = captures
                     .iter()
                     .map(|capture| self.resolve_atom(&capture.extra))
                     .collect();
-                let capture_names = captures
-                    .iter()
-                    .map(|capture| capture.code_or_location("var"))
-                    .collect();
 
-                let function = InterpretedFn::new(fn_executable, captured_values, capture_names);
+                let function =
+                    InterpretedFn::new(fn_executable, captured_values, capture_names.to_owned());
                 Ok(Value::interpreted_fn(function))
             }
         }

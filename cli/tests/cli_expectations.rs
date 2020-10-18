@@ -35,7 +35,7 @@ fn outputting_interpreted_function() {
     let assert = create_command(PROGRAM).assert();
     assert
         .success()
-        .stderr("fn(1 args)[\n  > = (native fn)\n]\n");
+        .stderr("fn(1 arg)[\n  cmp = (native fn)\n]\n");
 }
 
 #[test]

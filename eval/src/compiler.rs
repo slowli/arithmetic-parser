@@ -378,11 +378,16 @@ impl Compiler {
         };
 
         let ptr = executable.push_child_fn(fn_executable);
+        let (capture_names, captures) = captures
+            .into_iter()
+            .map(|(name, value)| (name.to_owned(), value))
+            .unzip();
         let register = self.push_assignment(
             executable,
             CompiledExpr::DefineFunction {
                 ptr,
-                captures: captures.into_iter().map(|(_, value)| value).collect(),
+                captures,
+                capture_names,
             },
             def_expr,
         );

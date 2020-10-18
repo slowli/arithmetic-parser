@@ -2,7 +2,7 @@
 
 extern crate alloc;
 
-use alloc::format;
+use alloc::{format, string::ToString};
 use core::f64;
 
 use arithmetic_eval::{fns, Interpreter, Value};
@@ -83,16 +83,9 @@ pub fn evaluate(program: &str) -> Result<JsValue, JsValue> {
     let mut interpreter = Interpreter::with_prelude();
     initialize_interpreter(&mut interpreter);
 
-    let value = interpreter.evaluate(&statements).map_err(|err| {
-        let main_span = err.main_span();
-        let message = format!(
-            "{}:{}: {}",
-            main_span.location_line(),
-            main_span.get_column(),
-            err.source()
-        );
-        Error::new(&message)
-    })?;
+    let value = interpreter
+        .evaluate(&statements)
+        .map_err(|err| Error::new(&err.to_string()))?;
 
     match value {
         Value::Number(number) => Ok(JsValue::from(number)),

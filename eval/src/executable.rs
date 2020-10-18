@@ -53,7 +53,7 @@ impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
 ///
 /// let module = "xs.fold(-INFINITY, max)";
 /// let module = F32Grammar::parse_statements(InputSpan::new(module)).unwrap();
-/// let mut module = interpreter.compile(&module).unwrap();
+/// let mut module = interpreter.compile("test", &module).unwrap();
 ///
 /// // With the original imports, the returned value is `-INFINITY`.
 /// assert_eq!(module.run().unwrap(), Value::Number(f32::NEG_INFINITY));
@@ -83,7 +83,7 @@ impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
 ///     .insert_var("y", Value::Number(5.0));
 /// let module = "x + y";
 /// let module = F32Grammar::parse_statements(InputSpan::new(module)).unwrap();
-/// let mut module = interpreter.compile(&module).unwrap();
+/// let mut module = interpreter.compile("test", &module).unwrap();
 /// assert_eq!(module.run().unwrap(), Value::Number(8.0));
 ///
 /// let mut imports = module.imports().to_owned();

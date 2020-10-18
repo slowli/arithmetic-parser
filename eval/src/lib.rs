@@ -113,7 +113,7 @@ pub use self::{
         EvalResult, RepeatedAssignmentContext, SpannedEvalError, TupleLenMismatchContext,
     },
     executable::{ExecutableModule, ModuleImports},
-    module_id::{ModuleId, WildcardId},
+    module_id::{IndexedId, ModuleId, WildcardId},
     values::{CallContext, Function, InterpretedFn, NativeFn, SpannedValue, Value, ValueType},
 };
 

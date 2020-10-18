@@ -109,9 +109,9 @@ fn extract_fn<'a, T: Grammar>(
 /// let mut interpreter = Interpreter::new();
 /// interpreter.insert_native_fn("assert", fns::Assert);
 /// let err = interpreter.evaluate(&block).unwrap_err();
-/// assert_eq!(*err.main_span().fragment(), "assert(3^2 == 10)");
+/// assert_eq!(*err.source().main_span().code().fragment(), "assert(3^2 == 10)");
 /// assert_matches!(
-///     err.source(),
+///     err.source().kind(),
 ///     EvalError::NativeCall(ref msg) if msg == "Assertion failed"
 /// );
 /// ```

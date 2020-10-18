@@ -393,8 +393,6 @@ impl<'a> SpannedEvalError<'a> {
         self
     }
 
-    // FIXME: remove?
-
     /// Returns the source of the error.
     pub fn kind(&self) -> &EvalError {
         &self.error
@@ -413,13 +411,8 @@ impl<'a> SpannedEvalError<'a> {
 
 impl fmt::Display for SpannedEvalError<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "{}:{}: {}",
-            self.main_span.code.location_line(),
-            self.main_span.code.get_column(),
-            self.error
-        )
+        self.main_span.fmt_location(formatter)?;
+        write!(formatter, ": {}", self.error)
     }
 }
 
@@ -445,7 +438,7 @@ impl StripCode for SpannedEvalError<'_> {
 /// Result of an expression evaluation.
 pub type EvalResult<'a, T> = Result<Value<'a, T>, SpannedEvalError<'a>>;
 
-/// FIXME
+/// Code fragment together with information about the module containing the fragment.
 #[derive(Debug)]
 pub struct CodeInModule<'a, T = ()> {
     module_id: Box<dyn ModuleId>,
@@ -471,12 +464,13 @@ impl<'a> CodeInModule<'a> {
 }
 
 impl<'a, T> CodeInModule<'a, T> {
-    /// FIXME
+    /// Returns the ID of the module containing this fragment.
     pub fn module_id(&self) -> &dyn ModuleId {
         self.module_id.as_ref()
     }
 
-    /// FIXME
+    /// Returns the code fragment within the module. The fragment may be stripped
+    /// (i.e., contain only location info, not the code string itself).
     pub fn code(&self) -> &MaybeSpanned<'a, T> {
         &self.code
     }
@@ -594,19 +588,6 @@ impl<'a> ErrorWithBacktrace<'a> {
         &self.inner
     }
 
-    /// Returns module for the main and auxiliary spans.
-    pub fn module(&self) -> &dyn ModuleId {
-        // The main span is either within the definition of the function (if it's interpreted),
-        // or tied to the call span (if it's native).
-        let last_call = self.backtrace.calls.last().expect("No calls");
-        last_call
-            .def_span
-            .as_ref()
-            .unwrap_or(&last_call.call_span)
-            .module_id
-            .as_ref()
-    }
-
     /// Returns error backtrace.
     pub fn backtrace(&self) -> &Backtrace<'a> {
         &self.backtrace
@@ -615,8 +596,6 @@ impl<'a> ErrorWithBacktrace<'a> {
 
 impl fmt::Display for ErrorWithBacktrace<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let module_for_main_span = self.module();
-        write!(formatter, "{}:", module_for_main_span)?;
         fmt::Display::fmt(&self.inner, formatter)?;
 
         if formatter.alternate() && !self.backtrace.calls.is_empty() {
@@ -660,7 +639,7 @@ impl std::error::Error for ErrorWithBacktrace<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{alloc::ToString, WildcardId};
+    use crate::alloc::ToString;
 
     #[test]
     fn display_for_eval_error() {
@@ -681,23 +660,23 @@ mod tests {
         let input = "(_, test) = (1, 2);";
         let main_span = MaybeSpanned::from_str(input, 4..8);
         let err = SpannedEvalError::new(
-            &WildcardId,
+            &"test_module",
             &main_span,
             EvalError::Undefined("test".to_owned()),
         );
         let err_string = err.to_string();
-        assert_eq!(err_string, "1:5: Variable `test` is not defined");
+        assert_eq!(
+            err_string,
+            "test_module:1:5: Variable `test` is not defined"
+        );
     }
 
     #[test]
     fn display_for_error_with_backtrace() {
         let input = "(_, test) = (1, 2);";
         let main_span = MaybeSpanned::from_str(input, 4..8);
-        let err = SpannedEvalError::new(
-            &WildcardId,
-            &main_span,
-            EvalError::Undefined("test".to_owned()),
-        );
+        let err =
+            SpannedEvalError::new(&"test", &main_span, EvalError::Undefined("test".to_owned()));
 
         let mut err = ErrorWithBacktrace::with_empty_trace(err);
         let call_span = CodeInModule::new(&"test", MaybeSpanned::from_str(input, ..));

@@ -16,7 +16,7 @@ use std::{
 };
 
 use arithmetic_eval::{
-    fns, BacktraceElement, ErrorWithBacktrace, Function, Interpreter, ModuleId, Number,
+    fns, BacktraceElement, ErrorWithBacktrace, Function, IndexedId, Interpreter, ModuleId, Number,
     SpannedEvalError, Value,
 };
 use arithmetic_parser::{
@@ -26,22 +26,6 @@ use arithmetic_parser::{
 
 /// Exit code on parse or evaluation error.
 pub const ERROR_EXIT_CODE: i32 = 2;
-
-/// Snippet ID.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Snippet(usize);
-
-impl fmt::Display for Snippet {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "Snippet #{}", self.0 + 1)
-    }
-}
-
-impl ModuleId for Snippet {
-    fn clone_boxed(&self) -> Box<dyn ModuleId> {
-        Box::new(*self)
-    }
-}
 
 /// Helper trait for possible `LocationSpan.fragment` types.
 trait SizedFragment {
@@ -68,8 +52,10 @@ pub struct CodeMap {
 }
 
 impl CodeMap {
+    const SNIPPET_PREFIX: &'static str = "Snippet";
+
     fn add(&mut self, source: String) -> FileId {
-        let file_name = Snippet(self.file_ids.len()).to_string();
+        let file_name = IndexedId::new(Self::SNIPPET_PREFIX, self.file_ids.len()).to_string();
         let file_id = self.files.add(file_name, source);
         self.file_ids.push(file_id);
         file_id
@@ -81,9 +67,9 @@ impl CodeMap {
         span: &LocatedSpan<Span, T>,
     ) -> (FileId, Range<usize>) {
         let snippet = module_id
-            .downcast_ref::<Snippet>()
-            .expect("Module ID is not a Snippet");
-        let file_id = self.file_ids[snippet.0];
+            .downcast_ref::<IndexedId>()
+            .expect("Module ID is not an IndexedId");
+        let file_id = self.file_ids[snippet.index];
 
         let start = span.location_offset();
         let range = start..(start + span.fragment().fragment_len());
@@ -100,8 +86,8 @@ impl CodeMap {
         (file_id, range)
     }
 
-    fn latest_module_id(&self) -> Snippet {
-        Snippet(self.file_ids.len() - 1)
+    fn latest_module_id(&self) -> IndexedId {
+        IndexedId::new(Self::SNIPPET_PREFIX, self.file_ids.len() - 1)
     }
 }
 
@@ -137,7 +123,7 @@ impl Env {
         }
     }
 
-    pub fn non_interactive(code: String) -> (Self, Snippet) {
+    pub fn non_interactive(code: String) -> (Self, IndexedId) {
         let mut this = Self::new();
         this.code_map.add(code);
         let snippet = this.code_map.latest_module_id();

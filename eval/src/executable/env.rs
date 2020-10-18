@@ -73,6 +73,10 @@ impl<'a, T: Grammar> Executable<'a, T> {
         self.id.as_ref()
     }
 
+    fn create_error<U>(&self, span: &MaybeSpanned<'a, U>, err: EvalError) -> SpannedEvalError<'a> {
+        SpannedEvalError::new(self.id.as_ref(), span, err)
+    }
+
     pub fn push_command(&mut self, command: impl Into<SpannedCommand<'a, T>>) {
         self.commands.push(command.into());
     }
@@ -282,7 +286,7 @@ where
                                 rhs: elements.len(),
                                 context: TupleLenMismatchContext::Assignment,
                             };
-                            return Err(SpannedEvalError::new(command, err));
+                            return Err(executable.create_error(command, err));
                         }
 
                         let mut tail = elements.split_off(*start_len);
@@ -292,7 +296,7 @@ where
                         self.registers.extend(end);
                     } else {
                         let err = EvalError::CannotDestructure;
-                        return Err(SpannedEvalError::new(command, err));
+                        return Err(executable.create_error(command, err));
                     }
                 }
 
@@ -335,24 +339,26 @@ where
                     UnaryOp::Not => inner_value.try_not(),
                     _ => unreachable!("Checked during compilation"),
                 }
-                .map_err(|err| SpannedEvalError::new(&span, err))
+                .map_err(|err| executable.create_error(&span, err))
             }
 
             CompiledExpr::Binary { op, lhs, rhs } => {
                 let lhs_value = lhs.copy_with_extra(self.resolve_atom(&lhs.extra));
                 let rhs_value = rhs.copy_with_extra(self.resolve_atom(&rhs.extra));
+                let module_id = executable.id();
+
                 match op {
-                    BinaryOp::Add => Value::try_add(span, lhs_value, rhs_value),
-                    BinaryOp::Sub => Value::try_sub(span, lhs_value, rhs_value),
-                    BinaryOp::Mul => Value::try_mul(span, lhs_value, rhs_value),
-                    BinaryOp::Div => Value::try_div(span, lhs_value, rhs_value),
-                    BinaryOp::Power => Value::try_pow(span, lhs_value, rhs_value),
+                    BinaryOp::Add => Value::try_add(module_id, span, lhs_value, rhs_value),
+                    BinaryOp::Sub => Value::try_sub(module_id, span, lhs_value, rhs_value),
+                    BinaryOp::Mul => Value::try_mul(module_id, span, lhs_value, rhs_value),
+                    BinaryOp::Div => Value::try_div(module_id, span, lhs_value, rhs_value),
+                    BinaryOp::Power => Value::try_pow(module_id, span, lhs_value, rhs_value),
 
                     BinaryOp::Eq => Ok(Value::Bool(lhs_value.extra == rhs_value.extra)),
                     BinaryOp::NotEq => Ok(Value::Bool(lhs_value.extra != rhs_value.extra)),
 
-                    BinaryOp::And => Value::try_and(&lhs_value, &rhs_value),
-                    BinaryOp::Or => Value::try_or(&lhs_value, &rhs_value),
+                    BinaryOp::And => Value::try_and(module_id, &lhs_value, &rhs_value),
+                    BinaryOp::Or => Value::try_or(module_id, &lhs_value, &rhs_value),
 
                     BinaryOp::Gt | BinaryOp::Lt | BinaryOp::Ge | BinaryOp::Le => {
                         unreachable!("Must be desugared by the compiler")
@@ -366,7 +372,7 @@ where
                 let inner_value = self.resolve_atom(&inner.extra);
                 op.compare(&inner_value)
                     .map(Value::Bool)
-                    .ok_or_else(|| SpannedEvalError::new(&span, EvalError::InvalidCmpResult))
+                    .ok_or_else(|| executable.create_error(&span, EvalError::InvalidCmpResult))
             }
 
             CompiledExpr::Function {
@@ -389,7 +395,7 @@ where
                         backtrace,
                     )
                 } else {
-                    Err(SpannedEvalError::new(&span, EvalError::CannotCall))
+                    Err(executable.create_error(&span, EvalError::CannotCall))
                 }
             }
 
@@ -418,11 +424,11 @@ where
         arg_values: Vec<SpannedValue<'a, T>>,
         mut backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
+        let full_call_span = CodeInModule::new(module_id, call_span);
         if let Some(backtrace) = backtrace.as_deref_mut() {
-            let full_call_span = CodeInModule::new(module_id, call_span);
-            backtrace.push_call(fn_name, function.def_span(), full_call_span);
+            backtrace.push_call(fn_name, function.def_span(), full_call_span.clone());
         }
-        let mut context = CallContext::new(call_span, backtrace.as_deref_mut());
+        let mut context = CallContext::new(full_call_span, backtrace.as_deref_mut());
 
         function.evaluate(arg_values, &mut context).map(|value| {
             if let Some(backtrace) = backtrace {

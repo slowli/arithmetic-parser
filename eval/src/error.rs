@@ -353,35 +353,61 @@ impl fmt::Display for AuxErrorInfo {
 #[derive(Debug)]
 pub struct SpannedEvalError<'a> {
     error: EvalError,
-    main_span: MaybeSpanned<'a>,
-    aux_spans: Vec<MaybeSpanned<'a, AuxErrorInfo>>,
+    main_span: CodeInModule<'a>,
+    aux_spans: Vec<CodeInModule<'a, AuxErrorInfo>>,
 }
 
 impl<'a> SpannedEvalError<'a> {
-    pub(crate) fn new<Span, T>(main_span: &LocatedSpan<Span, T>, error: EvalError) -> Self
+    pub(crate) fn new<Span, T>(
+        module_id: &dyn ModuleId,
+        main_span: &LocatedSpan<Span, T>,
+        error: EvalError,
+    ) -> Self
     where
         Span: Copy + Into<CodeFragment<'a>>,
     {
         Self {
             error,
-            main_span: main_span.with_no_extra().map_fragment(Into::into),
+            main_span: CodeInModule::new(
+                module_id,
+                main_span.with_no_extra().map_fragment(Into::into),
+            ),
+            aux_spans: vec![],
+        }
+    }
+
+    pub(crate) fn from_parts(main_span: CodeInModule<'a>, error: EvalError) -> Self {
+        Self {
+            error,
+            main_span,
             aux_spans: vec![],
         }
     }
 
     #[doc(hidden)] // used in `wrap_fn` macro
-    pub fn with_span<Span, T>(mut self, span: &LocatedSpan<Span, T>, info: AuxErrorInfo) -> Self
-    where
-        Span: Copy + Into<CodeFragment<'a>>,
-    {
-        self.aux_spans
-            .push(span.copy_with_extra(info).map_fragment(Into::into));
+    pub fn with_span(mut self, span: CodeInModule<'a>, info: AuxErrorInfo) -> Self {
+        self.aux_spans.push(CodeInModule {
+            module_id: span.module_id,
+            code: span.code.copy_with_extra(info),
+        });
         self
     }
 
+    // FIXME: remove?
+
     /// Returns the source of the error.
-    pub fn source(&self) -> &EvalError {
+    pub fn kind(&self) -> &EvalError {
         &self.error
+    }
+
+    /// Returns the main span for this error.
+    pub fn main_span(&self) -> &CodeInModule<'a> {
+        &self.main_span
+    }
+
+    /// Returns auxiliary spans for this error.
+    pub fn aux_spans(&self) -> &[CodeInModule<'a, AuxErrorInfo>] {
+        &self.aux_spans
     }
 }
 
@@ -390,8 +416,8 @@ impl fmt::Display for SpannedEvalError<'_> {
         write!(
             formatter,
             "{}:{}: {}",
-            self.main_span.location_line(),
-            self.main_span.get_column(),
+            self.main_span.code.location_line(),
+            self.main_span.code.get_column(),
             self.error
         )
     }
@@ -421,16 +447,16 @@ pub type EvalResult<'a, T> = Result<Value<'a, T>, SpannedEvalError<'a>>;
 
 /// FIXME
 #[derive(Debug)]
-pub struct CodeInModule<'a> {
+pub struct CodeInModule<'a, T = ()> {
     module_id: Box<dyn ModuleId>,
-    span: MaybeSpanned<'a>,
+    code: MaybeSpanned<'a, T>,
 }
 
-impl Clone for CodeInModule<'_> {
+impl<T: Clone> Clone for CodeInModule<'_, T> {
     fn clone(&self) -> Self {
         Self {
             module_id: self.module_id.clone_boxed(),
-            span: self.span,
+            code: self.code.clone(),
         }
     }
 }
@@ -439,18 +465,20 @@ impl<'a> CodeInModule<'a> {
     pub(crate) fn new(module_id: &dyn ModuleId, span: MaybeSpanned<'a>) -> Self {
         Self {
             module_id: module_id.clone_boxed(),
-            span,
+            code: span,
         }
     }
+}
 
+impl<'a, T> CodeInModule<'a, T> {
     /// FIXME
     pub fn module_id(&self) -> &dyn ModuleId {
         self.module_id.as_ref()
     }
 
     /// FIXME
-    pub fn span(&self) -> MaybeSpanned<'a> {
-        self.span
+    pub fn code(&self) -> &MaybeSpanned<'a, T> {
+        &self.code
     }
 
     fn fmt_location(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -458,19 +486,19 @@ impl<'a> CodeInModule<'a> {
             formatter,
             "{}:{}:{}",
             self.module_id,
-            self.span.location_line(),
-            self.span.get_column()
+            self.code.location_line(),
+            self.code.get_column()
         )
     }
 }
 
-impl StripCode for CodeInModule<'_> {
-    type Stripped = CodeInModule<'static>;
+impl<T: Clone + 'static> StripCode for CodeInModule<'_, T> {
+    type Stripped = CodeInModule<'static, T>;
 
     fn strip_code(&self) -> Self::Stripped {
         CodeInModule {
             module_id: self.module_id.clone_boxed(),
-            span: self.span.strip_code(),
+            code: self.code.strip_code(),
         }
     }
 }
@@ -553,6 +581,7 @@ impl<'a> ErrorWithBacktrace<'a> {
         Self { inner, backtrace }
     }
 
+    // FIXME: rework; backtrace must not be empty.
     pub(crate) fn with_empty_trace(inner: SpannedEvalError<'a>) -> Self {
         Self {
             inner,
@@ -561,18 +590,21 @@ impl<'a> ErrorWithBacktrace<'a> {
     }
 
     /// Returns the source of the error.
-    pub fn source(&self) -> &EvalError {
-        &self.inner.error
+    pub fn source(&self) -> &SpannedEvalError<'a> {
+        &self.inner
     }
 
-    /// Returns the main span for this error.
-    pub fn main_span(&self) -> MaybeSpanned<'a> {
-        self.inner.main_span
-    }
-
-    /// Returns auxiliary spans for this error.
-    pub fn aux_spans(&self) -> &[MaybeSpanned<'a, AuxErrorInfo>] {
-        &self.inner.aux_spans
+    /// Returns module for the main and auxiliary spans.
+    pub fn module(&self) -> &dyn ModuleId {
+        // The main span is either within the definition of the function (if it's interpreted),
+        // or tied to the call span (if it's native).
+        let last_call = self.backtrace.calls.last().expect("No calls");
+        last_call
+            .def_span
+            .as_ref()
+            .unwrap_or(&last_call.call_span)
+            .module_id
+            .as_ref()
     }
 
     /// Returns error backtrace.
@@ -583,14 +615,7 @@ impl<'a> ErrorWithBacktrace<'a> {
 
 impl fmt::Display for ErrorWithBacktrace<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let last_call = self.backtrace.calls.last().expect("No calls");
-        // The main span is either within the definition of the function (if it's interpreted),
-        // or tied to the call span (if it's native).
-        let module_for_main_span = &last_call
-            .def_span
-            .as_ref()
-            .unwrap_or(&last_call.call_span)
-            .module_id;
+        let module_for_main_span = self.module();
         write!(formatter, "{}:", module_for_main_span)?;
         fmt::Display::fmt(&self.inner, formatter)?;
 
@@ -635,7 +660,7 @@ impl std::error::Error for ErrorWithBacktrace<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::alloc::ToString;
+    use crate::{alloc::ToString, WildcardId};
 
     #[test]
     fn display_for_eval_error() {
@@ -655,7 +680,11 @@ mod tests {
     fn display_for_spanned_eval_error() {
         let input = "(_, test) = (1, 2);";
         let main_span = MaybeSpanned::from_str(input, 4..8);
-        let err = SpannedEvalError::new(&main_span, EvalError::Undefined("test".to_owned()));
+        let err = SpannedEvalError::new(
+            &WildcardId,
+            &main_span,
+            EvalError::Undefined("test".to_owned()),
+        );
         let err_string = err.to_string();
         assert_eq!(err_string, "1:5: Variable `test` is not defined");
     }
@@ -664,7 +693,11 @@ mod tests {
     fn display_for_error_with_backtrace() {
         let input = "(_, test) = (1, 2);";
         let main_span = MaybeSpanned::from_str(input, 4..8);
-        let err = SpannedEvalError::new(&main_span, EvalError::Undefined("test".to_owned()));
+        let err = SpannedEvalError::new(
+            &WildcardId,
+            &main_span,
+            EvalError::Undefined("test".to_owned()),
+        );
 
         let mut err = ErrorWithBacktrace::with_empty_trace(err);
         let call_span = CodeInModule::new(&"test", MaybeSpanned::from_str(input, ..));

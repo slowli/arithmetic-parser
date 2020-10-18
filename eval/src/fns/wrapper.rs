@@ -531,9 +531,10 @@ macro_rules! arity_fn {
                     let span = $arg_name.with_no_extra();
                     let $arg_name = $t::try_from_value($arg_name.extra).map_err(|mut err| {
                         err.set_arg_index(index);
+                        let enriched_span = context.enrich_call_site_span(&span);
                         context
                             .call_site_error(EvalError::Wrapper(err))
-                            .with_span(&span, AuxErrorInfo::InvalidArg)
+                            .with_span(enriched_span, AuxErrorInfo::InvalidArg)
                     })?;
                 )+
 
@@ -660,9 +661,10 @@ macro_rules! wrap_fn {
                 let $arg_name = $crate::fns::TryFromValue::try_from_value($arg_name.extra)
                     .map_err(|mut err| {
                         err.set_arg_index(index);
+                        let enriched_span = context.enrich_call_site_span(&span);
                         context
                             .call_site_error($crate::EvalError::Wrapper(err))
-                            .with_span(&span, $crate::AuxErrorInfo::InvalidArg)
+                            .with_span(enriched_span, $crate::AuxErrorInfo::InvalidArg)
                     })?;
             )+
 
@@ -840,6 +842,7 @@ mod tests {
         let err = interpreter.evaluate(&block).unwrap_err();
         assert!(err
             .source()
+            .kind()
             .to_short_string()
             .contains("Summed arrays must have the same size"));
     }
@@ -881,7 +884,7 @@ mod tests {
         let bogus_block = F32Grammar::parse_statements(InputSpan::new(bogus_program)).unwrap();
         let err = interpreter.evaluate(&bogus_block).unwrap_err();
         assert_matches!(
-            err.source(),
+            err.source().kind(),
             EvalError::NativeCall(ref msg) if msg.contains("Assertion failed")
         );
     }
@@ -922,6 +925,7 @@ mod tests {
             .evaluate(&block)
             .unwrap_err()
             .source()
+            .kind()
             .to_short_string();
         assert!(err_message.contains("Cannot convert number to bool"));
         assert!(err_message.contains("location: arg0[1].0"));

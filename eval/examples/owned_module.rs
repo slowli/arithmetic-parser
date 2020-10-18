@@ -63,13 +63,16 @@ fn main() -> anyhow::Result<()> {
     let err = bogus_module.run_with_imports(imports).unwrap_err();
     println!("Expected error:\n{:#}", err);
     assert_matches!(
-        err.source(),
+        err.source().kind(),
         EvalError::UnexpectedOperand { op } if *op == BinaryOp::Add.into()
     );
 
     // Naturally, spans in the stripped module do not retain refs to source code,
     // but rather contain info sufficient to be recoverable.
-    assert_eq!(err.main_span().code_or_location("call"), "call at 1:34");
+    assert_eq!(
+        err.source().main_span().code().code_or_location("call"),
+        "call at 1:34"
+    );
 
     // Importing into a stripped module also works. Let's redefine the `fold` import.
     let mut imports = sum_module.imports().to_owned();

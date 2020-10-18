@@ -52,7 +52,7 @@ fn extract_number<'a, T: Grammar>(
         Value::Number(value) => Ok(value),
         _ => Err(ctx
             .call_site_error(EvalError::native(error_msg))
-            .with_span(&value, AuxErrorInfo::InvalidArg)),
+            .with_span(ctx.enrich_call_site_span(&value), AuxErrorInfo::InvalidArg)),
     }
 }
 
@@ -67,7 +67,7 @@ fn extract_array<'a, T: Grammar>(
         let err = EvalError::native(error_msg);
         Err(ctx
             .call_site_error(err)
-            .with_span(&value, AuxErrorInfo::InvalidArg))
+            .with_span(ctx.enrich_call_site_span(&value), AuxErrorInfo::InvalidArg))
     }
 }
 
@@ -82,7 +82,7 @@ fn extract_fn<'a, T: Grammar>(
         let err = EvalError::native(error_msg);
         Err(ctx
             .call_site_error(err)
-            .with_span(&value, AuxErrorInfo::InvalidArg))
+            .with_span(ctx.enrich_call_site_span(&value), AuxErrorInfo::InvalidArg))
     }
 }
 
@@ -133,9 +133,10 @@ impl<T: Grammar> NativeFn<T> for Assert {
             }
             _ => {
                 let err = EvalError::native("`assert` requires a single boolean argument");
-                Err(ctx
-                    .call_site_error(err)
-                    .with_span(&args[0], AuxErrorInfo::InvalidArg))
+                Err(ctx.call_site_error(err).with_span(
+                    ctx.enrich_call_site_span(&args[0]),
+                    AuxErrorInfo::InvalidArg,
+                ))
             }
         }
     }
@@ -198,9 +199,10 @@ where
             Ok(if *condition { then_val } else { else_val })
         } else {
             let err = EvalError::native("`if` requires first arg to be boolean");
-            Err(ctx
-                .call_site_error(err)
-                .with_span(&args[0], AuxErrorInfo::InvalidArg))
+            Err(ctx.call_site_error(err).with_span(
+                ctx.enrich_call_site_span(&args[0]),
+                AuxErrorInfo::InvalidArg,
+            ))
         }
     }
 }
@@ -263,7 +265,7 @@ where
             let err = EvalError::native("Second argument of `loop` should be an iterator function");
             return Err(ctx
                 .call_site_error(err)
-                .with_span(&iter, AuxErrorInfo::InvalidArg));
+                .with_span(ctx.enrich_call_site_span(&iter), AuxErrorInfo::InvalidArg));
         };
 
         let mut arg = args.pop().unwrap();
@@ -768,13 +770,14 @@ mod tests {
         let bogus_program = "x = 1.0; x > (1, 2)";
         let bogus_block = F32Grammar::parse_statements(InputSpan::new(bogus_program)).unwrap();
         let err = interpreter.evaluate(&bogus_block).unwrap_err();
+        let err = err.source();
         assert_matches!(
-            err.source(),
+            err.kind(),
             EvalError::NativeCall(ref message) if message.contains("Compare requires")
         );
-        assert_eq!(*err.main_span().fragment(), "x > (1, 2)");
+        assert_eq!(*err.main_span().code().fragment(), "x > (1, 2)");
         assert_eq!(err.aux_spans().len(), 1);
-        assert_eq!(*err.aux_spans()[0].fragment(), "(1, 2)");
+        assert_eq!(*err.aux_spans()[0].code().fragment(), "(1, 2)");
     }
 
     #[test]

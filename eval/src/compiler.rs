@@ -63,17 +63,24 @@ impl Compiler {
         }
     }
 
-    fn check_unary_op<'a>(op: &Spanned<'a, UnaryOp>) -> Result<UnaryOp, SpannedEvalError<'a>> {
+    fn create_error<'a, T>(&self, span: &Spanned<'a, T>, err: EvalError) -> SpannedEvalError<'a> {
+        SpannedEvalError::new(self.module_id.as_ref(), span, err)
+    }
+
+    fn check_unary_op<'a>(
+        &self,
+        op: &Spanned<'a, UnaryOp>,
+    ) -> Result<UnaryOp, SpannedEvalError<'a>> {
         match op.extra {
             UnaryOp::Neg | UnaryOp::Not => Ok(op.extra),
-            _ => {
-                let err = EvalError::unsupported(op.extra);
-                Err(SpannedEvalError::new(op, err))
-            }
+            _ => Err(self.create_error(op, EvalError::unsupported(op.extra))),
         }
     }
 
-    fn check_binary_op<'a>(op: &Spanned<'a, BinaryOp>) -> Result<BinaryOp, SpannedEvalError<'a>> {
+    fn check_binary_op<'a>(
+        &self,
+        op: &Spanned<'a, BinaryOp>,
+    ) -> Result<BinaryOp, SpannedEvalError<'a>> {
         match op.extra {
             BinaryOp::Add
             | BinaryOp::Sub
@@ -89,10 +96,7 @@ impl Compiler {
             | BinaryOp::Lt
             | BinaryOp::Le => Ok(op.extra),
 
-            _ => {
-                let err = EvalError::unsupported(op.extra);
-                Err(SpannedEvalError::new(op, err))
-            }
+            _ => Err(self.create_error(op, EvalError::unsupported(op.extra))),
         }
     }
 
@@ -125,7 +129,7 @@ impl Compiler {
                 let var_name = *expr.fragment();
                 let register = self.vars_to_registers.get(var_name).ok_or_else(|| {
                     let err = EvalError::Undefined(var_name.to_owned());
-                    SpannedEvalError::new(expr, err)
+                    self.create_error(expr, err)
                 })?;
                 Atom::Register(*register)
             }
@@ -148,7 +152,7 @@ impl Compiler {
                 let register = self.push_assignment(
                     executable,
                     CompiledExpr::Unary {
-                        op: Self::check_unary_op(op)?,
+                        op: self.check_unary_op(op)?,
                         inner,
                     },
                     expr,
@@ -172,7 +176,7 @@ impl Compiler {
 
             _ => {
                 let err = EvalError::unsupported(expr.extra.ty());
-                return Err(SpannedEvalError::new(expr, err));
+                return Err(self.create_error(expr, err));
             }
         };
 
@@ -195,7 +199,7 @@ impl Compiler {
                 let err = EvalError::MissingCmpFunction {
                     name: CMP_FUNCTION_NAME.to_owned(),
                 };
-                SpannedEvalError::new(binary_expr, err)
+                self.create_error(binary_expr, err)
             })?;
             let cmp_function = op.copy_with_extra(Atom::Register(cmp_function));
 
@@ -214,7 +218,7 @@ impl Compiler {
             }
         } else {
             CompiledExpr::Binary {
-                op: Self::check_binary_op(op)?,
+                op: self.check_binary_op(op)?,
                 lhs,
                 rhs,
             }
@@ -351,8 +355,9 @@ impl Compiler {
         def_expr: &SpannedExpr<'a, T>,
         def: &FnDefinition<'a, T>,
     ) -> Result<Atom<T>, SpannedEvalError<'a>> {
+        let module_id = self.module_id.clone_boxed();
         let mut captures = HashMap::new();
-        let mut extractor = CapturesExtractor::new(|var_name, var_span| {
+        let mut extractor = CapturesExtractor::new(module_id, |var_name, var_span| {
             self.get_var(var_name).map_or_else(
                 || Err(EvalError::Undefined(var_name.to_owned())),
                 |register| {
@@ -426,6 +431,7 @@ impl Compiler {
 
             Statement::Assignment { lhs, rhs } => {
                 extract_vars_iter(
+                    self.module_id.as_ref(),
                     &mut HashMap::new(),
                     iter::once(lhs),
                     RepeatedAssignmentContext::Assignment,
@@ -445,7 +451,7 @@ impl Compiler {
 
             _ => {
                 let err = EvalError::unsupported(statement.extra.ty());
-                return Err(SpannedEvalError::new(statement, err));
+                return Err(self.create_error(statement, err));
             }
         })
     }
@@ -464,7 +470,7 @@ impl Compiler {
             Env::new()
         } else {
             let mut captures = Env::new();
-            let mut extractor = CapturesExtractor::new(|var_name, _| {
+            let mut extractor = CapturesExtractor::new(module_id.clone_boxed(), |var_name, _| {
                 env.get_var(var_name).map_or_else(
                     || Err(EvalError::Undefined(var_name.to_owned())),
                     |value| {
@@ -527,7 +533,7 @@ impl Compiler {
 
             _ => {
                 let err = EvalError::unsupported(lhs.extra.ty());
-                return Err(SpannedEvalError::new(lhs, err));
+                return Err(self.create_error(lhs, err));
             }
         }
 

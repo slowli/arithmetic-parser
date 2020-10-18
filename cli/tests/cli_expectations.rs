@@ -42,7 +42,7 @@ fn outputting_interpreted_function() {
 fn syntax_error() {
     const EXPECTED_ERR: &str = r#"
         error[PARSE]: Uninterpreted characters after parsing
-          ┌─ Snip #1:1:5
+          ┌─ Snippet #1:1:5
           │
         1 │ let x = 5
           │     ^^^^^ Error occurred here
@@ -59,7 +59,7 @@ fn syntax_error() {
 fn undefined_variable_error() {
     const EXPECTED_ERR: &str = r#"
         error[EVAL]: Variable `x` is not defined
-          ┌─ Snip #1:1:9
+          ┌─ Snippet #1:1:9
           │
         1 │ 1 + 2 * x
           │         ^ Undefined variable occurrence
@@ -76,7 +76,7 @@ fn undefined_variable_error() {
 fn incompatible_arg_count_error() {
     const EXPECTED_ERR: &str = r#"
         error[EVAL]: Mismatch between the number of arguments in the function definition and its call
-          ┌─ Snip #1:1:1
+          ┌─ Snippet #1:1:1
           │
         1 │ if(2 > 1, 3)
           │ ^^^^^^^^^^^^ Called with 2 arg(s) here
@@ -97,7 +97,7 @@ fn error_with_call_trace() {
     "#;
     const EXPECTED_ERR: &str = r#"
         error[EVAL]: Compare requires 2 number arguments
-          ┌─ Snip #1:1:19
+          ┌─ Snippet #1:1:19
           │
         1 │ is_positive = |x| x > 0;
           │                   ^^^^^
@@ -123,7 +123,7 @@ fn error_with_call_complex_call_trace() {
     "#;
     const EXPECTED_ERR: &str = r#"
         error[EVAL]: Compare requires 2 number arguments
-          ┌─ Snip #1:1:26
+          ┌─ Snippet #1:1:26
           │
         1 │ all = |array, predicate| array.fold(true, |acc, x| acc && predicate(x));
           │                          ----------------------------------------------

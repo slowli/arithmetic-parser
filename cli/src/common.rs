@@ -10,57 +10,98 @@ use num_complex::{Complex, Complex32, Complex64};
 use unindent::unindent;
 
 use std::{
-    collections::BTreeMap,
     fmt,
     io::{self, Write},
     ops::Range,
 };
 
 use arithmetic_eval::{
-    fns, BacktraceElement, ErrorWithBacktrace, Function, Interpreter, Number, Value,
+    fns, BacktraceElement, ErrorWithBacktrace, Function, Interpreter, ModuleId, Number,
+    SpannedEvalError, Value,
 };
 use arithmetic_parser::{
-    grammars::NumGrammar, CodeFragment, Error, Grammar, GrammarExt, InputSpan, LocatedSpan, Spanned,
+    grammars::NumGrammar, Block, CodeFragment, Error, Grammar, GrammarExt, InputSpan, LocatedSpan,
+    LvalueLen, Spanned,
 };
 
 /// Exit code on parse or evaluation error.
 pub const ERROR_EXIT_CODE: i32 = 2;
 
-/// Code map containing evaluated code snippets.
-#[derive(Debug, Default)]
-pub struct CodeMap<'a> {
-    files: Files<&'a str>,
-    code_positions: BTreeMap<usize, FileId>,
-    next_position: usize,
+/// Snippet ID.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Snippet(usize);
+
+impl fmt::Display for Snippet {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "Snippet #{}", self.0 + 1)
+    }
 }
 
-impl<'a> CodeMap<'a> {
-    fn add(&mut self, source: &'a str) -> (FileId, usize) {
-        let file_name = format!("Snip #{}", self.code_positions.len() + 1);
+impl ModuleId for Snippet {
+    fn clone_boxed(&self) -> Box<dyn ModuleId> {
+        Box::new(*self)
+    }
+}
+
+/// Helper trait for possible `LocationSpan.fragment` types.
+trait SizedFragment {
+    fn fragment_len(&self) -> usize;
+}
+
+impl SizedFragment for &str {
+    fn fragment_len(&self) -> usize {
+        self.len()
+    }
+}
+
+impl SizedFragment for CodeFragment<'_> {
+    fn fragment_len(&self) -> usize {
+        self.len()
+    }
+}
+
+/// Code map containing evaluated code snippets.
+#[derive(Debug, Default)]
+pub struct CodeMap {
+    files: Files<String>,
+    file_ids: Vec<FileId>, // necessary because `FileId` is opaque
+}
+
+impl CodeMap {
+    fn add(&mut self, source: String) -> FileId {
+        let file_name = Snippet(self.file_ids.len()).to_string();
         let file_id = self.files.add(file_name, source);
-        let start_position = self.next_position;
-        self.code_positions.insert(start_position, file_id);
-        self.next_position += source.len();
-        (file_id, start_position)
+        self.file_ids.push(file_id);
+        file_id
     }
 
-    fn locate<Span, T>(&self, span: &LocatedSpan<Span, T>) -> Option<(FileId, Range<usize>)>
-    where
-        Span: Copy,
-        CodeFragment<'a>: From<Span>,
-    {
-        if span.location_offset() > self.next_position {
-            return None;
-        }
-        let (&file_start, &file_id) = self
-            .code_positions
-            .range(..=span.location_offset())
-            .rev()
-            .next()?;
-        let start = span.location_offset() - file_start;
-        let code = CodeFragment::from(*span.fragment());
-        let range = start..(start + code.len());
-        Some((file_id, range))
+    fn locate<Span: SizedFragment, T>(
+        &self,
+        module_id: &dyn ModuleId,
+        span: &LocatedSpan<Span, T>,
+    ) -> (FileId, Range<usize>) {
+        let snippet = module_id
+            .downcast_ref::<Snippet>()
+            .expect("Module ID is not a Snippet");
+        let file_id = self.file_ids[snippet.0];
+
+        let start = span.location_offset();
+        let range = start..(start + span.fragment().fragment_len());
+        (file_id, range)
+    }
+
+    fn locate_in_most_recent_file<Span: SizedFragment, T>(
+        &self,
+        span: &LocatedSpan<Span, T>,
+    ) -> (FileId, Range<usize>) {
+        let file_id = *self.file_ids.last().expect("No files");
+        let start = span.location_offset();
+        let range = start..(start + span.fragment().fragment_len());
+        (file_id, range)
+    }
+
+    fn latest_module_id(&self) -> Snippet {
+        Snippet(self.file_ids.len() - 1)
     }
 }
 
@@ -81,13 +122,13 @@ impl<T> ParseAndEvalResult<T> {
     }
 }
 
-pub struct Env<'a> {
-    code_map: CodeMap<'a>,
+pub struct Env {
+    code_map: CodeMap,
     writer: StandardStream,
     config: ReportingConfig,
 }
 
-impl<'a> Env<'a> {
+impl Env {
     pub fn new() -> Self {
         Self {
             code_map: CodeMap::default(),
@@ -96,10 +137,11 @@ impl<'a> Env<'a> {
         }
     }
 
-    pub fn non_interactive(code: &'a str) -> Self {
+    pub fn non_interactive(code: String) -> (Self, Snippet) {
         let mut this = Self::new();
         this.code_map.add(code);
-        this
+        let snippet = this.code_map.latest_module_id();
+        (this, snippet)
     }
 
     pub fn print_greeting(&mut self) -> io::Result<()> {
@@ -150,10 +192,9 @@ impl<'a> Env<'a> {
 
     /// Reports a parsing error.
     pub fn report_parse_error(&self, err: Spanned<'_, Error<'_>>) -> io::Result<()> {
-        let (file, range) = self
-            .code_map
-            .locate(&err)
-            .expect("Cannot locate parse error span");
+        // Parsing errors are always reported for the most recently added snippet.
+        let (file, range) = self.code_map.locate_in_most_recent_file(&err);
+
         let label = Label::primary(file, range).with_message("Error occurred here");
         let diagnostic = Diagnostic::error()
             .with_message(err.extra.to_string())
@@ -168,60 +209,61 @@ impl<'a> Env<'a> {
         )
     }
 
-    pub fn report_eval_error(&self, e: ErrorWithBacktrace) -> io::Result<()> {
-        let severity = Severity::Error;
+    fn create_diagnostic(&self, e: &SpannedEvalError<'_>) -> Diagnostic<FileId> {
+        let main_span = e.main_span();
         let (file, range) = self
             .code_map
-            .locate(&e.main_span())
-            .expect("Cannot locate main error span");
+            .locate(main_span.module_id(), main_span.code());
         let main_label = Label::primary(file, range);
-        let message = e.source().main_span_info();
+        let message = e.kind().main_span_info();
 
         let mut labels = vec![main_label.with_message(message)];
         for aux_span in e.aux_spans() {
-            let (file, range) = self
-                .code_map
-                .locate(&aux_span)
-                .expect("Cannot locate aux error span");
-            let label = Label::primary(file, range).with_message(aux_span.extra.to_string());
+            let (file, range) = self.code_map.locate(aux_span.module_id(), aux_span.code());
+            let label = Label::primary(file, range).with_message(aux_span.code().extra.to_string());
             labels.push(label);
         }
 
-        let mut calls_iter = e.backtrace().calls();
-        if let Some(BacktraceElement {
-            fn_name, def_span, ..
-        }) = calls_iter.next()
-        {
-            if let Some(def_span) = def_span {
-                let (file_id, def_range) = self
-                    .code_map
-                    .locate(&def_span.span())
-                    .expect("Cannot locate span in previously recorded snippets");
-                let def_label = Label::secondary(file_id, def_range)
-                    .with_message(format!("The error occurred in function `{}`", fn_name));
-                labels.push(def_label);
-            }
-
-            let mut call_site;
-            for (depth, call) in calls_iter.enumerate() {
-                call_site = call.call_span;
-                let (file_id, call_range) = self
-                    .code_map
-                    .locate(&call_site.span())
-                    .expect("Cannot locate span in previously recorded snippets");
-                let call_label = Label::secondary(file_id, call_range)
-                    .with_message(format!("Call at depth {}", depth + 1));
-                labels.push(call_label);
-            }
-        }
-
-        let mut diagnostic = Diagnostic::new(severity)
-            .with_message(e.source().to_short_string())
+        let mut diagnostic = Diagnostic::new(Severity::Error)
+            .with_message(e.kind().to_short_string())
             .with_code("EVAL")
             .with_labels(labels);
 
-        if let Some(help) = e.source().help() {
+        if let Some(help) = e.kind().help() {
             diagnostic = diagnostic.with_notes(vec![help]);
+        }
+
+        diagnostic
+    }
+
+    pub fn report_eval_error(&self, e: ErrorWithBacktrace<'_>) -> io::Result<()> {
+        let mut diagnostic = self.create_diagnostic(e.source());
+
+        let mut calls_iter = e.backtrace().calls();
+        if let Some(BacktraceElement {
+            fn_name,
+            def_span,
+            mut call_span,
+            ..
+        }) = calls_iter.next()
+        {
+            if let Some(def_span) = def_span {
+                let (file_id, def_range) =
+                    self.code_map.locate(def_span.module_id(), &def_span.code());
+                let def_label = Label::secondary(file_id, def_range)
+                    .with_message(format!("The error occurred in function `{}`", fn_name));
+                diagnostic.labels.push(def_label);
+            }
+
+            for (depth, call) in calls_iter.enumerate() {
+                call_span = call.call_span;
+                let (file_id, call_range) = self
+                    .code_map
+                    .locate(call_span.module_id(), &call_span.code());
+                let call_label = Label::secondary(file_id, call_range)
+                    .with_message(format!("Call at depth {}", depth + 1));
+                diagnostic.labels.push(call_label);
+            }
         }
 
         emit(
@@ -259,7 +301,13 @@ impl<'a> Env<'a> {
             Value::Function(Function::Native(_)) => write!(self.writer, "(native fn)"),
 
             Value::Function(Function::Interpreted(function)) => {
-                write!(self.writer, "fn({} args)", function.arg_count())?;
+                let plurality = if function.arg_count() == LvalueLen::Exact(1) {
+                    ""
+                } else {
+                    "s"
+                };
+                write!(self.writer, "fn({} arg{})", function.arg_count(), plurality)?;
+
                 let captures = function.captures();
                 if !captures.is_empty() {
                     writeln!(self.writer, "[")?;
@@ -303,8 +351,8 @@ impl<'a> Env<'a> {
 
     fn dump_scope<T>(
         &mut self,
-        scope: &Interpreter<'a, T>,
-        original_scope: &Interpreter<'a, T>,
+        scope: &Interpreter<'_, T>,
+        original_scope: &Interpreter<'_, T>,
         dump_original_scope: bool,
     ) -> io::Result<()>
     where
@@ -326,9 +374,9 @@ impl<'a> Env<'a> {
         Ok(())
     }
 
-    pub fn parse_and_eval<T>(
+    pub fn parse_and_eval<'a, T>(
         &mut self,
-        line: &'a str,
+        line: &str,
         interpreter: &mut Interpreter<'a, T>,
         original_interpreter: &Interpreter<'a, T>,
     ) -> io::Result<ParseAndEvalResult>
@@ -336,42 +384,14 @@ impl<'a> Env<'a> {
         T: Grammar,
         T::Lit: fmt::Display + Number,
     {
-        let (file, start_position) = self.code_map.add(line);
-        let visible_span = 0..line.len();
+        self.code_map.add(line.to_owned());
 
         if line.starts_with('.') {
-            match line {
-                ".clear" => interpreter.clone_from(original_interpreter),
-                ".dump" => self.dump_scope(interpreter, original_interpreter, false)?,
-                ".dump all" => self.dump_scope(interpreter, original_interpreter, true)?,
-                ".help" => self.print_help()?,
-
-                _ => {
-                    let label = Label::primary(file, visible_span)
-                        .with_message("Use `.help commands` to find out commands");
-                    let diagnostic = Diagnostic::error()
-                        .with_message("Unknown command")
-                        .with_code("CMD")
-                        .with_labels(vec![label]);
-
-                    emit(
-                        &mut self.writer.lock(),
-                        &self.config,
-                        &self.code_map.files,
-                        &diagnostic,
-                    )?;
-                }
-            }
-
+            self.process_command(line, interpreter, original_interpreter)?;
             return Ok(ParseAndEvalResult::Ok(()));
         }
 
-        let span = unsafe {
-            // SAFETY: We do not traverse the portion of the program preceding the `span`
-            // (this could lead to UB since `line` is not necessarily sliced from a larger program).
-            // Instead, the span offset is used for diagnostic messages only.
-            InputSpan::new_from_raw_offset(start_position, 1, line, ())
-        };
+        let span = InputSpan::new(line);
         let parse_result = T::parse_streaming_statements(span)
             .map(ParseAndEvalResult::Ok)
             .or_else(|e| {
@@ -384,21 +404,72 @@ impl<'a> Env<'a> {
             })?;
 
         Ok(if let ParseAndEvalResult::Ok(statements) = parse_result {
-            match interpreter.evaluate(&statements) {
-                Ok(value) => {
-                    if !value.is_void() {
-                        self.dump_value(&value, 0)?;
-                    }
-                    ParseAndEvalResult::Ok(())
-                }
-                Err(err) => {
-                    self.report_eval_error(err)?;
-                    ParseAndEvalResult::Errored
-                }
-            }
+            self.compile_and_execute(&statements, interpreter)?
         } else {
             parse_result.map(drop)
         })
+    }
+
+    fn process_command<'a, T>(
+        &mut self,
+        line: &str,
+        interpreter: &mut Interpreter<'a, T>,
+        original_interpreter: &Interpreter<'a, T>,
+    ) -> io::Result<()>
+    where
+        T: Grammar,
+        T::Lit: fmt::Display + Number,
+    {
+        let file_id = *self.code_map.file_ids.last().expect("no files");
+
+        match line {
+            ".clear" => interpreter.clone_from(original_interpreter),
+            ".dump" => self.dump_scope(interpreter, original_interpreter, false)?,
+            ".dump all" => self.dump_scope(interpreter, original_interpreter, true)?,
+            ".help" => self.print_help()?,
+
+            _ => {
+                let label = Label::primary(file_id, 0..line.len())
+                    .with_message("Use `.help commands` to find out commands");
+                let diagnostic = Diagnostic::error()
+                    .with_message("Unknown command")
+                    .with_code("CMD")
+                    .with_labels(vec![label]);
+
+                emit(
+                    &mut self.writer.lock(),
+                    &self.config,
+                    &self.code_map.files,
+                    &diagnostic,
+                )?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn compile_and_execute<'a, T>(
+        &mut self,
+        statements: &Block<'_, T>,
+        interpreter: &mut Interpreter<'a, T>,
+    ) -> io::Result<ParseAndEvalResult>
+    where
+        T: Grammar,
+        T::Lit: fmt::Display + Number,
+    {
+        let module_id = self.code_map.latest_module_id();
+        let value = match interpreter.evaluate_named(module_id, statements) {
+            Ok(value) => value,
+            Err(err) => {
+                self.report_eval_error(err)?;
+                return Ok(ParseAndEvalResult::Errored);
+            }
+        };
+
+        if !value.is_void() {
+            self.dump_value(&value, 0)?;
+        }
+        Ok(ParseAndEvalResult::Ok(()))
     }
 }
 

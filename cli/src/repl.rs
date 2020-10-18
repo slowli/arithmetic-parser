@@ -1,7 +1,6 @@
 //! REPL for arithmetic expressions.
 
 use rustyline::{error::ReadlineError, Editor};
-use typed_arena::Arena;
 
 use std::io;
 
@@ -12,7 +11,6 @@ pub fn repl<T: ReplLiteral>() -> io::Result<()> {
     let mut env = Env::new();
     env.print_greeting()?;
 
-    let snippet_arena = Arena::new();
     let mut interpreter = T::create_interpreter();
     let original_interpreter = interpreter.clone();
     let mut snippet = String::new();
@@ -23,9 +21,7 @@ pub fn repl<T: ReplLiteral>() -> io::Result<()> {
         match line {
             Ok(line) => {
                 snippet.push_str(&line);
-                let arena_ref = &*snippet_arena.alloc(snippet.clone());
-                let result =
-                    env.parse_and_eval(arena_ref, &mut interpreter, &original_interpreter)?;
+                let result = env.parse_and_eval(&line, &mut interpreter, &original_interpreter)?;
                 match result {
                     ParseAndEvalResult::Ok(_) => {
                         prompt = ">>> ";

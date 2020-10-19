@@ -110,7 +110,8 @@ pub use self::{
     compiler::CompilerExt,
     error::{
         AuxErrorInfo, Backtrace, BacktraceElement, CodeInModule, ErrorWithBacktrace, EvalError,
-        EvalResult, RepeatedAssignmentContext, SpannedEvalError, TupleLenMismatchContext,
+        EvalResult, InterpreterError, RepeatedAssignmentContext, SpannedEvalError,
+        TupleLenMismatchContext,
     },
     executable::{ExecutableModule, ModuleImports},
     module_id::{IndexedId, ModuleId, WildcardId},
@@ -250,22 +251,6 @@ where
         this
     }
 
-    /// Evaluates a list of statements.
-    ///
-    /// FIXME: more details
-    pub fn evaluate_named<'bl, F: ModuleId>(
-        &mut self,
-        id: F,
-        block: &Block<'bl, T>,
-    ) -> Result<Value<'bl, T>, ErrorWithBacktrace<'bl>>
-    where
-        'a: 'bl,
-    {
-        let module = Compiler::compile_module(id, &self.env, block, true)
-            .map_err(ErrorWithBacktrace::with_empty_trace)?;
-        self.evaluate_module(&module.strip_code())
-    }
-
     fn evaluate_module(
         &mut self,
         module: &ExecutableModule<'a, T>,
@@ -280,15 +265,14 @@ where
     }
 
     /// Evaluates a list of statements.
-    ///
-    /// FIXME: more details
     pub fn evaluate(
         &mut self,
         block: &Block<'a, T>,
-    ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
+    ) -> Result<Value<'a, T>, InterpreterError<'a, 'a>> {
         let module = Compiler::compile_module(WildcardId, &self.env, block, true)
-            .map_err(ErrorWithBacktrace::with_empty_trace)?;
+            .map_err(InterpreterError::Compile)?;
         self.evaluate_module(&module)
+            .map_err(InterpreterError::Evaluate)
     }
 
     /// Compiles the provided block, returning the compiled module and its imports.
@@ -299,6 +283,31 @@ where
         program: &Block<'a, T>,
     ) -> Result<ExecutableModule<'a, T>, SpannedEvalError<'a>> {
         Compiler::compile_module(id, &self.env, program, false)
+    }
+}
+
+impl<T> Interpreter<'static, T>
+where
+    T: Grammar,
+    T::Lit: Number,
+{
+    /// Evaluates a named block of statements.
+    ///
+    /// Unlike [`evaluate`], this method strips code spans from the compiled statements right away.
+    /// This allows to operate an `Interpreter` with a static lifetime (i.e., not tied to
+    /// the lifetime of the code). As a downside, if code spans are required in certain situations
+    /// (e.g., for error reporting), they should be handled separately.
+    ///
+    /// [`evaluate`]: #method.evaluate
+    pub fn evaluate_named_block<'bl, F: ModuleId>(
+        &mut self,
+        id: F,
+        block: &Block<'bl, T>,
+    ) -> Result<Value<'static, T>, InterpreterError<'bl, 'static>> {
+        let module = Compiler::compile_module(id, &self.env, block, true)
+            .map_err(InterpreterError::Compile)?;
+        self.evaluate_module(&module.strip_code())
+            .map_err(InterpreterError::Evaluate)
     }
 }
 

@@ -101,10 +101,12 @@ impl Args {
             Ok(())
         } else {
             let mut interpreter = T::create_interpreter();
-            let value = interpreter.evaluate_named(snippet, &parsed).or_else(|e| {
-                env.report_eval_error(e)
-                    .map(|()| process::exit(ERROR_EXIT_CODE))
-            })?;
+            let value = interpreter
+                .evaluate_named_block(snippet, &parsed)
+                .or_else(|e| {
+                    env.report_eval_error(e)
+                        .map(|()| process::exit(ERROR_EXIT_CODE))
+                })?;
             env.writeln_value(&value)
         }
     }

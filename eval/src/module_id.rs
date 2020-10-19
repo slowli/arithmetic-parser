@@ -16,7 +16,7 @@ use core::{
 /// A `ModuleId` can be downcast to a specific type, similarly to [`Any`].
 ///
 /// [compiling]: struct.Interpreter.html#method.compile
-/// [evaluating]: struct.Interpreter.html#method.evaluate_named
+/// [evaluating]: struct.Interpreter.html#method.evaluate_named_block
 /// [`InterpretedFn`]: struct.InterpretedFn.html
 /// [`CodeInModule`]: struct.CodeInModule.html
 /// [`Any`]: https://doc.rust-lang.org/std/any/trait.Any.html

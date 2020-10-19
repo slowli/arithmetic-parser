@@ -16,7 +16,7 @@ use std::{
 };
 
 use arithmetic_eval::{
-    fns, BacktraceElement, ErrorWithBacktrace, Function, IndexedId, Interpreter, ModuleId, Number,
+    fns, BacktraceElement, Function, IndexedId, Interpreter, InterpreterError, ModuleId, Number,
     SpannedEvalError, Value,
 };
 use arithmetic_parser::{
@@ -222,33 +222,35 @@ impl Env {
         diagnostic
     }
 
-    pub fn report_eval_error(&self, e: ErrorWithBacktrace<'_>) -> io::Result<()> {
+    pub fn report_eval_error(&self, e: InterpreterError<'_, '_>) -> io::Result<()> {
         let mut diagnostic = self.create_diagnostic(e.source());
 
-        let mut calls_iter = e.backtrace().calls();
-        if let Some(BacktraceElement {
-            fn_name,
-            def_span,
-            mut call_span,
-            ..
-        }) = calls_iter.next()
-        {
-            if let Some(def_span) = def_span {
-                let (file_id, def_range) =
-                    self.code_map.locate(def_span.module_id(), &def_span.code());
-                let def_label = Label::secondary(file_id, def_range)
-                    .with_message(format!("The error occurred in function `{}`", fn_name));
-                diagnostic.labels.push(def_label);
-            }
+        if let InterpreterError::Evaluate(e) = e {
+            let mut calls_iter = e.backtrace().calls();
+            if let Some(BacktraceElement {
+                fn_name,
+                def_span,
+                mut call_span,
+                ..
+            }) = calls_iter.next()
+            {
+                if let Some(def_span) = def_span {
+                    let (file_id, def_range) =
+                        self.code_map.locate(def_span.module_id(), &def_span.code());
+                    let def_label = Label::secondary(file_id, def_range)
+                        .with_message(format!("The error occurred in function `{}`", fn_name));
+                    diagnostic.labels.push(def_label);
+                }
 
-            for (depth, call) in calls_iter.enumerate() {
-                call_span = call.call_span;
-                let (file_id, call_range) = self
-                    .code_map
-                    .locate(call_span.module_id(), &call_span.code());
-                let call_label = Label::secondary(file_id, call_range)
-                    .with_message(format!("Call at depth {}", depth + 1));
-                diagnostic.labels.push(call_label);
+                for (depth, call) in calls_iter.enumerate() {
+                    call_span = call.call_span;
+                    let (file_id, call_range) = self
+                        .code_map
+                        .locate(call_span.module_id(), &call_span.code());
+                    let call_label = Label::secondary(file_id, call_range)
+                        .with_message(format!("Call at depth {}", depth + 1));
+                    diagnostic.labels.push(call_label);
+                }
             }
         }
 
@@ -360,11 +362,11 @@ impl Env {
         Ok(())
     }
 
-    pub fn parse_and_eval<'a, T>(
+    pub fn parse_and_eval<T>(
         &mut self,
         line: &str,
-        interpreter: &mut Interpreter<'a, T>,
-        original_interpreter: &Interpreter<'a, T>,
+        interpreter: &mut Interpreter<'static, T>,
+        original_interpreter: &Interpreter<'static, T>,
     ) -> io::Result<ParseAndEvalResult>
     where
         T: Grammar,
@@ -434,17 +436,17 @@ impl Env {
         Ok(())
     }
 
-    fn compile_and_execute<'a, T>(
+    fn compile_and_execute<T>(
         &mut self,
         statements: &Block<'_, T>,
-        interpreter: &mut Interpreter<'a, T>,
+        interpreter: &mut Interpreter<'static, T>,
     ) -> io::Result<ParseAndEvalResult>
     where
         T: Grammar,
         T::Lit: fmt::Display + Number,
     {
         let module_id = self.code_map.latest_module_id();
-        let value = match interpreter.evaluate_named(module_id, statements) {
+        let value = match interpreter.evaluate_named_block(module_id, statements) {
             Ok(value) => value,
             Err(err) => {
                 self.report_eval_error(err)?;
@@ -459,12 +461,12 @@ impl Env {
     }
 }
 
-fn init_interpreter<'a, T: Number>() -> Interpreter<'a, NumGrammar<T>> {
+fn init_interpreter<T: Number>() -> Interpreter<'static, NumGrammar<T>> {
     Interpreter::<NumGrammar<T>>::with_prelude()
 }
 
 pub trait ReplLiteral: Number + fmt::Display {
-    fn create_interpreter<'a>() -> Interpreter<'a, NumGrammar<Self>>;
+    fn create_interpreter() -> Interpreter<'static, NumGrammar<Self>>;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -530,7 +532,7 @@ declare_real_functions!(F32_FUNCTIONS: f32);
 declare_real_functions!(F64_FUNCTIONS: f64);
 
 impl ReplLiteral for f32 {
-    fn create_interpreter<'a>() -> Interpreter<'a, NumGrammar<Self>> {
+    fn create_interpreter() -> Interpreter<'static, NumGrammar<Self>> {
         let mut interpreter = init_interpreter::<f32>();
         F32_FUNCTIONS.add_to_interpreter(&mut interpreter);
         interpreter.insert_native_fn("cmp", fns::Compare);
@@ -539,7 +541,7 @@ impl ReplLiteral for f32 {
 }
 
 impl ReplLiteral for f64 {
-    fn create_interpreter<'a>() -> Interpreter<'a, NumGrammar<Self>> {
+    fn create_interpreter() -> Interpreter<'static, NumGrammar<Self>> {
         let mut interpreter = init_interpreter::<f64>();
         F64_FUNCTIONS.add_to_interpreter(&mut interpreter);
         interpreter.insert_native_fn("cmp", fns::Compare);
@@ -585,7 +587,7 @@ declare_complex_functions!(COMPLEX32_FUNCTIONS: Complex32, f32);
 declare_complex_functions!(COMPLEX64_FUNCTIONS: Complex64, f64);
 
 impl ReplLiteral for Complex32 {
-    fn create_interpreter<'a>() -> Interpreter<'a, NumGrammar<Self>> {
+    fn create_interpreter() -> Interpreter<'static, NumGrammar<Self>> {
         let mut interpreter = init_interpreter::<Complex32>();
         COMPLEX32_FUNCTIONS.add_to_interpreter(&mut interpreter);
         interpreter
@@ -593,7 +595,7 @@ impl ReplLiteral for Complex32 {
 }
 
 impl ReplLiteral for Complex64 {
-    fn create_interpreter<'a>() -> Interpreter<'a, NumGrammar<Self>> {
+    fn create_interpreter() -> Interpreter<'static, NumGrammar<Self>> {
         let mut interpreter = init_interpreter::<Complex64>();
         COMPLEX64_FUNCTIONS.add_to_interpreter(&mut interpreter);
         interpreter

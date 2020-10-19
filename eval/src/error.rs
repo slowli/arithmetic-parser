@@ -14,9 +14,9 @@ use arithmetic_parser::{
     StatementType, StripCode, UnaryOp,
 };
 
-/// Context for [`EvalError::TupleLenMismatch`].
+/// Context for [`ErrorKind::TupleLenMismatch`].
 ///
-/// [`EvalError::TupleLenMismatch`]: enum.EvalError.html#variant.TupleLenMismatch
+/// [`ErrorKind::TupleLenMismatch`]: enum.ErrorKind.html#variant.TupleLenMismatch
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TupleLenMismatchContext {
     /// An error has occurred when evaluating a binary operation.
@@ -34,9 +34,9 @@ impl fmt::Display for TupleLenMismatchContext {
     }
 }
 
-/// Context for [`EvalError::RepeatedAssignment`].
+/// Context for [`ErrorKind::RepeatedAssignment`].
 ///
-/// [`EvalError::RepeatedAssignment`]: enum.EvalError.html#variant.RepeatedAssignment
+/// [`ErrorKind::RepeatedAssignment`]: enum.ErrorKind.html#variant.RepeatedAssignment
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RepeatedAssignmentContext {
     /// A duplicated variable is in function args.
@@ -316,18 +316,18 @@ impl From<LvalueType> for UnsupportedType {
 pub enum AuxErrorInfo {
     /// Function arguments declaration for [`ArgsLenMismatch`].
     ///
-    /// [`ArgsLenMismatch`]: enum.EvalError.html#variant.ArgsLenMismatch
+    /// [`ArgsLenMismatch`]: enum.ErrorKind.html#variant.ArgsLenMismatch
     FnArgs,
 
     /// Previous variable assignment for [`RepeatedAssignment`].
     ///
-    /// [`RepeatedAssignment`]: enum.EvalError.html#variant.RepeatedAssignment
+    /// [`RepeatedAssignment`]: enum.ErrorKind.html#variant.RepeatedAssignment
     PrevAssignment,
 
     /// Rvalue containing an invalid assignment for [`CannotDestructure`] or [`TupleLenMismatch`].
     ///
-    /// [`CannotDestructure`]: enum.EvalError.html#variant.CannotDestructure
-    /// [`TupleLenMismatch`]: enum.EvalError.html#variant.TupleLenMismatch
+    /// [`CannotDestructure`]: enum.ErrorKind.html#variant.CannotDestructure
+    /// [`TupleLenMismatch`]: enum.ErrorKind.html#variant.TupleLenMismatch
     Rvalue,
 
     /// RHS of a binary operation on differently sized tuples.
@@ -350,6 +350,26 @@ impl fmt::Display for AuxErrorInfo {
 }
 
 /// Evaluation error together with one or more relevant code spans.
+///
+/// Use the `StripCode` implementation to convert an `Error` to the `'static` lifetime, e.g.,
+/// before boxing it into `Box<dyn std::error::Error>` or `anyhow::Error`.
+/// If the error is wrapped into a `Result`, you can do this via `StripResultExt` trait defined
+/// in the `arithmetic-parser` crate:
+///
+/// ```
+/// # use arithmetic_parser::{grammars::F64Grammar, GrammarExt, InputSpan, StripResultExt};
+/// # use arithmetic_eval::{Error, ExecutableModule, Interpreter, WildcardId};
+/// fn compile_code(code: &str) -> anyhow::Result<ExecutableModule<'_, F64Grammar>> {
+///     // FIXME: change after improving errors in parser.
+///     let block = F64Grammar::parse_statements(InputSpan::new(code))
+///         .map_err(|e| anyhow::anyhow!("Parse error: {}", e.extra))?;
+///
+///     // Without `strip_err()` call, the code below won't compile:
+///     // `Error<'_>` in general cannot be boxed into `anyhow::Error`,
+///     // only `Error<'static>` can.
+///     Ok(Interpreter::new().compile(WildcardId, &block).strip_err()?)
+/// }
+/// ```
 #[derive(Debug)]
 pub struct Error<'a> {
     kind: ErrorKind,
@@ -521,7 +541,7 @@ impl StripCode for BacktraceElement<'_> {
     }
 }
 
-/// Call backtrace.
+/// Error backtrace.
 #[derive(Debug, Default)]
 pub struct Backtrace<'a> {
     calls: Vec<BacktraceElement<'a>>,
@@ -564,6 +584,9 @@ impl StripCode for Backtrace<'_> {
 }
 
 /// Error with the associated backtrace.
+///
+/// Use the `StripCode` implementation to convert an `Error` to the `'static` lifetime, e.g.,
+/// before boxing it into `Box<dyn std::error::Error>` or `anyhow::Error`.
 #[derive(Debug)]
 pub struct ErrorWithBacktrace<'a> {
     inner: Error<'a>,

@@ -6,11 +6,12 @@ use core::iter;
 
 use crate::{
     alloc::{vec, Vec},
+    error::RepeatedAssignmentContext,
     executable::{
         Atom, Command, ComparisonOp, CompiledExpr, Env, Executable, ExecutableFn, ExecutableModule,
         SpannedAtom,
     },
-    EvalError, ModuleId, RepeatedAssignmentContext, SpannedEvalError,
+    Error, ErrorKind, ModuleId,
 };
 use arithmetic_parser::{
     is_valid_variable_name, BinaryOp, Block, Destructure, Expr, FnDefinition, Grammar, InputSpan,
@@ -63,24 +64,18 @@ impl Compiler {
         }
     }
 
-    fn create_error<'a, T>(&self, span: &Spanned<'a, T>, err: EvalError) -> SpannedEvalError<'a> {
-        SpannedEvalError::new(self.module_id.as_ref(), span, err)
+    fn create_error<'a, T>(&self, span: &Spanned<'a, T>, err: ErrorKind) -> Error<'a> {
+        Error::new(self.module_id.as_ref(), span, err)
     }
 
-    fn check_unary_op<'a>(
-        &self,
-        op: &Spanned<'a, UnaryOp>,
-    ) -> Result<UnaryOp, SpannedEvalError<'a>> {
+    fn check_unary_op<'a>(&self, op: &Spanned<'a, UnaryOp>) -> Result<UnaryOp, Error<'a>> {
         match op.extra {
             UnaryOp::Neg | UnaryOp::Not => Ok(op.extra),
-            _ => Err(self.create_error(op, EvalError::unsupported(op.extra))),
+            _ => Err(self.create_error(op, ErrorKind::unsupported(op.extra))),
         }
     }
 
-    fn check_binary_op<'a>(
-        &self,
-        op: &Spanned<'a, BinaryOp>,
-    ) -> Result<BinaryOp, SpannedEvalError<'a>> {
+    fn check_binary_op<'a>(&self, op: &Spanned<'a, BinaryOp>) -> Result<BinaryOp, Error<'a>> {
         match op.extra {
             BinaryOp::Add
             | BinaryOp::Sub
@@ -96,7 +91,7 @@ impl Compiler {
             | BinaryOp::Lt
             | BinaryOp::Le => Ok(op.extra),
 
-            _ => Err(self.create_error(op, EvalError::unsupported(op.extra))),
+            _ => Err(self.create_error(op, ErrorKind::unsupported(op.extra))),
         }
     }
 
@@ -121,14 +116,14 @@ impl Compiler {
         &mut self,
         executable: &mut Executable<'a, T>,
         expr: &SpannedExpr<'a, T>,
-    ) -> Result<SpannedAtom<'a, T>, SpannedEvalError<'a>> {
+    ) -> Result<SpannedAtom<'a, T>, Error<'a>> {
         let atom = match &expr.extra {
             Expr::Literal(lit) => Atom::Constant(lit.clone()),
 
             Expr::Variable => {
                 let var_name = *expr.fragment();
                 let register = self.vars_to_registers.get(var_name).ok_or_else(|| {
-                    let err = EvalError::Undefined(var_name.to_owned());
+                    let err = ErrorKind::Undefined(var_name.to_owned());
                     self.create_error(expr, err)
                 })?;
                 Atom::Register(*register)
@@ -175,7 +170,7 @@ impl Compiler {
             Expr::FnDefinition(def) => self.compile_fn_definition(executable, expr, def)?,
 
             _ => {
-                let err = EvalError::unsupported(expr.extra.ty());
+                let err = ErrorKind::unsupported(expr.extra.ty());
                 return Err(self.create_error(expr, err));
             }
         };
@@ -190,13 +185,13 @@ impl Compiler {
         op: &Spanned<'a, BinaryOp>,
         lhs: &SpannedExpr<'a, T>,
         rhs: &SpannedExpr<'a, T>,
-    ) -> Result<Atom<T>, SpannedEvalError<'a>> {
+    ) -> Result<Atom<T>, Error<'a>> {
         let lhs = self.compile_expr(executable, lhs)?;
         let rhs = self.compile_expr(executable, rhs)?;
 
         let compiled = if op.extra.is_order_comparison() {
             let cmp_function = self.get_var(CMP_FUNCTION_NAME).ok_or_else(|| {
-                let err = EvalError::MissingCmpFunction {
+                let err = ErrorKind::MissingCmpFunction {
                     name: CMP_FUNCTION_NAME.to_owned(),
                 };
                 self.create_error(binary_expr, err)
@@ -234,7 +229,7 @@ impl Compiler {
         call_expr: &SpannedExpr<'a, T>,
         name: &SpannedExpr<'a, T>,
         args: &[SpannedExpr<'a, T>],
-    ) -> Result<Atom<T>, SpannedEvalError<'a>> {
+    ) -> Result<Atom<T>, Error<'a>> {
         let original_name = *name.fragment();
         let original_name = if is_valid_variable_name(original_name) {
             Some(original_name.to_owned())
@@ -264,7 +259,7 @@ impl Compiler {
         name: &Spanned<'a>,
         receiver: &SpannedExpr<'a, T>,
         args: &[SpannedExpr<'a, T>],
-    ) -> Result<Atom<T>, SpannedEvalError<'a>> {
+    ) -> Result<Atom<T>, Error<'a>> {
         let original_name = Some((*name.fragment()).to_owned());
         let name: MaybeSpanned<_> = name
             .copy_with_extra(Atom::Register(self.vars_to_registers[*name.fragment()]))
@@ -288,7 +283,7 @@ impl Compiler {
         executable: &mut Executable<'a, T>,
         block_expr: &SpannedExpr<'a, T>,
         block: &Block<'a, T>,
-    ) -> Result<Atom<T>, SpannedEvalError<'a>> {
+    ) -> Result<Atom<T>, Error<'a>> {
         let backup_state = self.clone();
         if self.scope_depth == 0 {
             let command = Command::StartInnerScope;
@@ -337,7 +332,7 @@ impl Compiler {
         &mut self,
         executable: &mut Executable<'a, T>,
         block: &Block<'a, T>,
-    ) -> Result<Option<SpannedAtom<'a, T>>, SpannedEvalError<'a>> {
+    ) -> Result<Option<SpannedAtom<'a, T>>, Error<'a>> {
         for statement in &block.statements {
             self.compile_statement(executable, statement)?;
         }
@@ -354,12 +349,12 @@ impl Compiler {
         executable: &mut Executable<'a, T>,
         def_expr: &SpannedExpr<'a, T>,
         def: &FnDefinition<'a, T>,
-    ) -> Result<Atom<T>, SpannedEvalError<'a>> {
+    ) -> Result<Atom<T>, Error<'a>> {
         let module_id = self.module_id.clone_boxed();
         let mut captures = HashMap::new();
         let mut extractor = CapturesExtractor::new(module_id, |var_name, var_span| {
             self.get_var(var_name).map_or_else(
-                || Err(EvalError::Undefined(var_name.to_owned())),
+                || Err(ErrorKind::Undefined(var_name.to_owned())),
                 |register| {
                     let capture: MaybeSpanned<_> =
                         var_span.copy_with_extra(Atom::Register(register)).into();
@@ -398,7 +393,7 @@ impl Compiler {
         &self,
         def: &FnDefinition<'a, T>,
         captures: &HashMap<&'a str, SpannedAtom<'a, T>>,
-    ) -> Result<Executable<'a, T>, SpannedEvalError<'a>> {
+    ) -> Result<Executable<'a, T>, Error<'a>> {
         // Allocate registers for captures.
         let mut this = Self::new(self.module_id.clone_boxed());
         this.scope_depth = 1; // Disable generating variable annotations.
@@ -430,7 +425,7 @@ impl Compiler {
         &mut self,
         executable: &mut Executable<'a, T>,
         statement: &SpannedStatement<'a, T>,
-    ) -> Result<Option<SpannedAtom<'a, T>>, SpannedEvalError<'a>> {
+    ) -> Result<Option<SpannedAtom<'a, T>>, Error<'a>> {
         Ok(match &statement.extra {
             Statement::Expr(expr) => Some(self.compile_expr(executable, expr)?),
 
@@ -455,7 +450,7 @@ impl Compiler {
             }
 
             _ => {
-                let err = EvalError::unsupported(statement.extra.ty());
+                let err = ErrorKind::unsupported(statement.extra.ty());
                 return Err(self.create_error(statement, err));
             }
         })
@@ -466,7 +461,7 @@ impl Compiler {
         env: &Env<'a, T>,
         block: &Block<'a, T>,
         execute_in_env: bool,
-    ) -> Result<ExecutableModule<'a, T>, SpannedEvalError<'a>> {
+    ) -> Result<ExecutableModule<'a, T>, Error<'a>> {
         let module_id = Box::new(module_id) as Box<dyn ModuleId>;
         let mut compiler = Self::from_env(module_id.clone_boxed(), env);
 
@@ -477,7 +472,7 @@ impl Compiler {
             let mut captures = Env::new();
             let mut extractor = CapturesExtractor::new(module_id.clone_boxed(), |var_name, _| {
                 env.get_var(var_name).map_or_else(
-                    || Err(EvalError::Undefined(var_name.to_owned())),
+                    || Err(ErrorKind::Undefined(var_name.to_owned())),
                     |value| {
                         captures.push_var(var_name, value.clone());
                         Ok(())
@@ -511,7 +506,7 @@ impl Compiler {
         executable: &mut Executable<'a, T>,
         lhs: &SpannedLvalue<'a, T::Type>,
         rhs_register: usize,
-    ) -> Result<(), SpannedEvalError<'a>> {
+    ) -> Result<(), Error<'a>> {
         match &lhs.extra {
             Lvalue::Variable { .. } => {
                 let var_name = *lhs.fragment();
@@ -537,7 +532,7 @@ impl Compiler {
             }
 
             _ => {
-                let err = EvalError::unsupported(lhs.extra.ty());
+                let err = ErrorKind::unsupported(lhs.extra.ty());
                 return Err(self.create_error(lhs, err));
             }
         }
@@ -551,7 +546,7 @@ impl Compiler {
         destructure: &Destructure<'a, T::Type>,
         span: Spanned<'a>,
         rhs_register: usize,
-    ) -> Result<(), SpannedEvalError<'a>> {
+    ) -> Result<(), Error<'a>> {
         let command = Command::Destructure {
             source: rhs_register,
             start_len: destructure.start.len(),
@@ -614,17 +609,17 @@ pub trait CompilerExt<'a> {
     ///
     /// The fact that an error is *not* returned does not guarantee that the AST node will evaluate
     /// successfully if all variables are assigned.
-    fn undefined_variables(&self) -> Result<HashMap<&'a str, Spanned<'a>>, SpannedEvalError<'a>>;
+    fn undefined_variables(&self) -> Result<HashMap<&'a str, Spanned<'a>>, Error<'a>>;
 }
 
 impl<'a, T: Grammar> CompilerExt<'a> for Block<'a, T> {
-    fn undefined_variables(&self) -> Result<HashMap<&'a str, Spanned<'a>>, SpannedEvalError<'a>> {
+    fn undefined_variables(&self) -> Result<HashMap<&'a str, Spanned<'a>>, Error<'a>> {
         CompilerExtTarget::Block(self).get_undefined_variables()
     }
 }
 
 impl<'a, T: Grammar> CompilerExt<'a> for FnDefinition<'a, T> {
-    fn undefined_variables(&self) -> Result<HashMap<&'a str, Spanned<'a>>, SpannedEvalError<'a>> {
+    fn undefined_variables(&self) -> Result<HashMap<&'a str, Spanned<'a>>, Error<'a>> {
         CompilerExtTarget::FnDefinition(self).get_undefined_variables()
     }
 }

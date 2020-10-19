@@ -33,8 +33,8 @@ use num_traits::{One, Zero};
 
 use crate::{
     alloc::{vec, Vec},
-    AuxErrorInfo, CallContext, EvalError, EvalResult, Function, NativeFn, Number, SpannedEvalError,
-    SpannedValue, Value,
+    error::AuxErrorInfo,
+    CallContext, Error, ErrorKind, EvalResult, Function, NativeFn, Number, SpannedValue, Value,
 };
 
 mod wrapper;
@@ -47,11 +47,11 @@ fn extract_number<'a, T: Grammar>(
     ctx: &CallContext<'_, 'a>,
     value: SpannedValue<'a, T>,
     error_msg: &str,
-) -> Result<T::Lit, SpannedEvalError<'a>> {
+) -> Result<T::Lit, Error<'a>> {
     match value.extra {
         Value::Number(value) => Ok(value),
         _ => Err(ctx
-            .call_site_error(EvalError::native(error_msg))
+            .call_site_error(ErrorKind::native(error_msg))
             .with_span(ctx.enrich_call_site_span(&value), AuxErrorInfo::InvalidArg)),
     }
 }
@@ -60,11 +60,11 @@ fn extract_array<'a, T: Grammar>(
     ctx: &CallContext<'_, 'a>,
     value: SpannedValue<'a, T>,
     error_msg: &str,
-) -> Result<Vec<Value<'a, T>>, SpannedEvalError<'a>> {
+) -> Result<Vec<Value<'a, T>>, Error<'a>> {
     if let Value::Tuple(array) = value.extra {
         Ok(array)
     } else {
-        let err = EvalError::native(error_msg);
+        let err = ErrorKind::native(error_msg);
         Err(ctx
             .call_site_error(err)
             .with_span(ctx.enrich_call_site_span(&value), AuxErrorInfo::InvalidArg))
@@ -75,11 +75,11 @@ fn extract_fn<'a, T: Grammar>(
     ctx: &CallContext<'_, 'a>,
     value: SpannedValue<'a, T>,
     error_msg: &str,
-) -> Result<Function<'a, T>, SpannedEvalError<'a>> {
+) -> Result<Function<'a, T>, Error<'a>> {
     if let Value::Function(function) = value.extra {
         Ok(function)
     } else {
-        let err = EvalError::native(error_msg);
+        let err = ErrorKind::native(error_msg);
         Err(ctx
             .call_site_error(err)
             .with_span(ctx.enrich_call_site_span(&value), AuxErrorInfo::InvalidArg))
@@ -98,7 +98,7 @@ fn extract_fn<'a, T: Grammar>(
 ///
 /// ```
 /// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
-/// # use arithmetic_eval::{fns, EvalError, Interpreter};
+/// # use arithmetic_eval::{fns, ErrorKind, Interpreter};
 /// # use assert_matches::assert_matches;
 /// let program = r#"
 ///     assert(1 + 2 == 3); # this assertion is fine
@@ -112,7 +112,7 @@ fn extract_fn<'a, T: Grammar>(
 /// assert_eq!(*err.source().main_span().code().fragment(), "assert(3^2 == 10)");
 /// assert_matches!(
 ///     err.source().kind(),
-///     EvalError::NativeCall(ref msg) if msg == "Assertion failed"
+///     ErrorKind::NativeCall(ref msg) if msg == "Assertion failed"
 /// );
 /// ```
 #[derive(Debug, Clone, Copy)]
@@ -128,11 +128,11 @@ impl<T: Grammar> NativeFn<T> for Assert {
         match args[0].extra {
             Value::Bool(true) => Ok(Value::void()),
             Value::Bool(false) => {
-                let err = EvalError::native("Assertion failed");
+                let err = ErrorKind::native("Assertion failed");
                 Err(ctx.call_site_error(err))
             }
             _ => {
-                let err = EvalError::native("`assert` requires a single boolean argument");
+                let err = ErrorKind::native("`assert` requires a single boolean argument");
                 Err(ctx.call_site_error(err).with_span(
                     ctx.enrich_call_site_span(&args[0]),
                     AuxErrorInfo::InvalidArg,
@@ -198,7 +198,7 @@ where
         if let Value::Bool(condition) = &args[0].extra {
             Ok(if *condition { then_val } else { else_val })
         } else {
-            let err = EvalError::native("`if` requires first arg to be boolean");
+            let err = ErrorKind::native("`if` requires first arg to be boolean");
             Err(ctx.call_site_error(err).with_span(
                 ctx.enrich_call_site_span(&args[0]),
                 AuxErrorInfo::InvalidArg,
@@ -262,7 +262,7 @@ where
         let iter = if let Value::Function(iter) = iter.extra {
             iter
         } else {
-            let err = EvalError::native("Second argument of `loop` should be an iterator function");
+            let err = ErrorKind::native("Second argument of `loop` should be an iterator function");
             return Err(ctx
                 .call_site_error(err)
                 .with_span(ctx.enrich_call_site_span(&iter), AuxErrorInfo::InvalidArg));
@@ -274,7 +274,7 @@ where
                 let (ret_or_next_arg, flag) = if tuple.len() == 2 {
                     (tuple.pop().unwrap(), tuple.pop().unwrap())
                 } else {
-                    let err = EvalError::native(Self::ITER_ERROR);
+                    let err = ErrorKind::native(Self::ITER_ERROR);
                     break Err(ctx.call_site_error(err));
                 };
 
@@ -284,12 +284,12 @@ where
                         arg = ctx.apply_call_span(next_arg);
                     }
                     _ => {
-                        let err = EvalError::native(Self::ITER_ERROR);
+                        let err = ErrorKind::native(Self::ITER_ERROR);
                         break Err(ctx.call_site_error(err));
                     }
                 }
             } else {
-                let err = EvalError::native(Self::ITER_ERROR);
+                let err = ErrorKind::native(Self::ITER_ERROR);
                 break Err(ctx.call_site_error(err));
             }
         }
@@ -367,7 +367,7 @@ where
                 Value::Bool(false) => break Ok(state.extra),
                 _ => {
                     let err =
-                        EvalError::native("`while` requires condition function to return booleans");
+                        ErrorKind::native("`while` requires condition function to return booleans");
                     return Err(ctx.call_site_error(err));
                 }
             }
@@ -497,7 +497,7 @@ where
                 Value::Bool(true) => filtered.push(value),
                 Value::Bool(false) => { /* do nothing */ }
                 _ => {
-                    let err = EvalError::native(
+                    let err = ErrorKind::native(
                         "`filter` requires filtering function to return booleans",
                     );
                     return Err(ctx.call_site_error(err));
@@ -773,7 +773,7 @@ mod tests {
         let err = err.source();
         assert_matches!(
             err.kind(),
-            EvalError::NativeCall(ref message) if message.contains("Compare requires")
+            ErrorKind::NativeCall(ref message) if message.contains("Compare requires")
         );
         assert_eq!(*err.main_span().code().fragment(), "x > (1, 2)");
         assert_eq!(err.aux_spans().len(), 1);

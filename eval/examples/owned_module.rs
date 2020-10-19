@@ -3,7 +3,7 @@
 use anyhow::anyhow;
 use assert_matches::assert_matches;
 
-use arithmetic_eval::{EvalError, ExecutableModule, Interpreter, Value};
+use arithmetic_eval::{ErrorKind, ExecutableModule, Interpreter, Value};
 use arithmetic_parser::{
     grammars::F64Grammar, BinaryOp, GrammarExt, InputSpan, StripCode, StripResultExt,
 };
@@ -64,7 +64,7 @@ fn main() -> anyhow::Result<()> {
     println!("Expected error:\n{:#}", err);
     assert_matches!(
         err.source().kind(),
-        EvalError::UnexpectedOperand { op } if *op == BinaryOp::Add.into()
+        ErrorKind::UnexpectedOperand { op } if *op == BinaryOp::Add.into()
     );
 
     // Naturally, spans in the stripped module do not retain refs to source code,

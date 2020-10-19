@@ -5,12 +5,12 @@ use hashbrown::HashMap;
 use crate::error::CodeInModule;
 use crate::{
     alloc::{vec, Rc, Vec},
+    error::{Backtrace, EvalResult, TupleLenMismatchContext},
     executable::{
         command::{Atom, Command, CompiledExpr, SpannedCommand},
         ExecutableFn,
     },
-    Backtrace, CallContext, EvalError, EvalResult, Function, InterpretedFn, ModuleId, Number,
-    SpannedEvalError, SpannedValue, TupleLenMismatchContext, Value,
+    CallContext, Error, ErrorKind, Function, InterpretedFn, ModuleId, Number, SpannedValue, Value,
 };
 use arithmetic_parser::{BinaryOp, Grammar, MaybeSpanned, StripCode, UnaryOp};
 
@@ -73,8 +73,8 @@ impl<'a, T: Grammar> Executable<'a, T> {
         self.id.as_ref()
     }
 
-    fn create_error<U>(&self, span: &MaybeSpanned<'a, U>, err: EvalError) -> SpannedEvalError<'a> {
-        SpannedEvalError::new(self.id.as_ref(), span, err)
+    fn create_error<U>(&self, span: &MaybeSpanned<'a, U>, err: ErrorKind) -> Error<'a> {
+        Error::new(self.id.as_ref(), span, err)
     }
 
     pub fn push_command(&mut self, command: impl Into<SpannedCommand<'a, T>>) {
@@ -281,7 +281,7 @@ where
                     let source = self.registers[*source].clone();
                     if let Value::Tuple(mut elements) = source {
                         if !*unchecked && !lvalue_len.matches(elements.len()) {
-                            let err = EvalError::TupleLenMismatch {
+                            let err = ErrorKind::TupleLenMismatch {
                                 lhs: *lvalue_len,
                                 rhs: elements.len(),
                                 context: TupleLenMismatchContext::Assignment,
@@ -295,7 +295,7 @@ where
                         self.registers.push(Value::Tuple(tail));
                         self.registers.extend(end);
                     } else {
-                        let err = EvalError::CannotDestructure;
+                        let err = ErrorKind::CannotDestructure;
                         return Err(executable.create_error(command, err));
                     }
                 }
@@ -372,7 +372,7 @@ where
                 let inner_value = self.resolve_atom(&inner.extra);
                 op.compare(&inner_value)
                     .map(Value::Bool)
-                    .ok_or_else(|| executable.create_error(&span, EvalError::InvalidCmpResult))
+                    .ok_or_else(|| executable.create_error(&span, ErrorKind::InvalidCmpResult))
             }
 
             CompiledExpr::Function {
@@ -395,7 +395,7 @@ where
                         backtrace,
                     )
                 } else {
-                    Err(executable.create_error(&span, EvalError::CannotCall))
+                    Err(executable.create_error(&span, ErrorKind::CannotCall))
                 }
             }
 

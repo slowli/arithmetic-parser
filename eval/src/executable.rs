@@ -2,7 +2,10 @@
 
 use core::ops;
 
-use crate::{Backtrace, ErrorWithBacktrace, ModuleId, Number, Value};
+use crate::{
+    error::{Backtrace, ErrorWithBacktrace},
+    ModuleId, Number, Value,
+};
 use arithmetic_parser::{Grammar, LvalueLen, MaybeSpanned, StripCode};
 
 mod command;

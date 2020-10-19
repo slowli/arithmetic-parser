@@ -16,12 +16,12 @@ use std::{
 };
 
 use arithmetic_eval::{
-    fns, BacktraceElement, Function, IndexedId, Interpreter, InterpreterError, ModuleId, Number,
-    SpannedEvalError, Value,
+    error::BacktraceElement, fns, Error as EvalError, Function, IndexedId, Interpreter,
+    InterpreterError, ModuleId, Number, Value,
 };
 use arithmetic_parser::{
-    grammars::NumGrammar, Block, CodeFragment, Error, Grammar, GrammarExt, InputSpan, LocatedSpan,
-    LvalueLen, Spanned,
+    grammars::NumGrammar, Block, CodeFragment, Error as ParseError, Grammar, GrammarExt, InputSpan,
+    LocatedSpan, LvalueLen, Spanned,
 };
 
 /// Exit code on parse or evaluation error.
@@ -177,7 +177,7 @@ impl Env {
     }
 
     /// Reports a parsing error.
-    pub fn report_parse_error(&self, err: Spanned<'_, Error<'_>>) -> io::Result<()> {
+    pub fn report_parse_error(&self, err: Spanned<'_, ParseError<'_>>) -> io::Result<()> {
         // Parsing errors are always reported for the most recently added snippet.
         let (file, range) = self.code_map.locate_in_most_recent_file(&err);
 
@@ -195,7 +195,7 @@ impl Env {
         )
     }
 
-    fn create_diagnostic(&self, e: &SpannedEvalError<'_>) -> Diagnostic<FileId> {
+    fn create_diagnostic(&self, e: &EvalError<'_>) -> Diagnostic<FileId> {
         let main_span = e.main_span();
         let (file, range) = self
             .code_map
@@ -383,7 +383,7 @@ impl Env {
         let parse_result = T::parse_streaming_statements(span)
             .map(ParseAndEvalResult::Ok)
             .or_else(|e| {
-                if let Error::Incomplete = e.extra {
+                if let ParseError::Incomplete = e.extra {
                     Ok(ParseAndEvalResult::Incomplete)
                 } else {
                     self.report_parse_error(e)

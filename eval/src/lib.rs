@@ -108,11 +108,7 @@ mod alloc {
 
 pub use self::{
     compiler::CompilerExt,
-    error::{
-        AuxErrorInfo, Backtrace, BacktraceElement, CodeInModule, ErrorWithBacktrace, EvalError,
-        EvalResult, InterpreterError, RepeatedAssignmentContext, SpannedEvalError,
-        TupleLenMismatchContext,
-    },
+    error::{Error, ErrorKind, EvalResult, InterpreterError},
     executable::{ExecutableModule, ModuleImports},
     module_id::{IndexedId, ModuleId, WildcardId},
     values::{CallContext, Function, InterpretedFn, NativeFn, SpannedValue, Value, ValueType},
@@ -123,11 +119,15 @@ use num_traits::Pow;
 
 use core::ops;
 
-use crate::{compiler::Compiler, executable::Env};
+use crate::{
+    compiler::Compiler,
+    error::{Backtrace, ErrorWithBacktrace},
+    executable::Env,
+};
 use arithmetic_parser::{grammars::NumLiteral, Block, Grammar, StripCode};
 
 mod compiler;
-mod error;
+pub mod error;
 mod executable;
 pub mod fns;
 mod module_id;
@@ -281,7 +281,7 @@ where
         &self,
         id: F,
         program: &Block<'a, T>,
-    ) -> Result<ExecutableModule<'a, T>, SpannedEvalError<'a>> {
+    ) -> Result<ExecutableModule<'a, T>, Error<'a>> {
         Compiler::compile_module(id, &self.env, program, false)
     }
 }
@@ -314,7 +314,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{alloc::vec, fns::FromValueErrorKind};
+    use crate::{alloc::vec, error::RepeatedAssignmentContext, fns::FromValueErrorKind};
     use arithmetic_parser::{
         grammars::F32Grammar, BinaryOp, GrammarExt, InputSpan, LvalueLen, UnaryOp,
     };
@@ -395,7 +395,7 @@ mod tests {
         let err = interpreter.evaluate(&bogus_block).unwrap_err();
         assert_matches!(
             err.source().kind(),
-            EvalError::UnexpectedOperand { ref op } if *op == BinaryOp::Div.into()
+            ErrorKind::UnexpectedOperand { ref op } if *op == BinaryOp::Div.into()
         );
     }
 
@@ -798,7 +798,7 @@ mod tests {
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         let err = err.source();
         assert_eq!(*err.main_span().code().fragment(), "x");
-        assert_matches!(err.kind(), EvalError::Undefined(ref var) if var == "x");
+        assert_matches!(err.kind(), ErrorKind::Undefined(ref var) if var == "x");
     }
 
     #[test]
@@ -809,7 +809,7 @@ mod tests {
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         let err = err.source();
         assert_eq!(*err.main_span().code().fragment(), "sin");
-        assert_matches!(err.kind(), EvalError::Undefined(ref var) if var == "sin");
+        assert_matches!(err.kind(), ErrorKind::Undefined(ref var) if var == "sin");
     }
 
     #[test]
@@ -822,7 +822,7 @@ mod tests {
         assert_eq!(*err.main_span().code().fragment(), "foo()");
         assert_matches!(
             err.kind(),
-            EvalError::ArgsLenMismatch {
+            ErrorKind::ArgsLenMismatch {
                 def: LvalueLen::Exact(1),
                 call: 0,
             }
@@ -835,7 +835,7 @@ mod tests {
         assert_eq!(*err.main_span().code().fragment(), "foo(1, 2)");
         assert_matches!(
             err.kind(),
-            EvalError::ArgsLenMismatch {
+            ErrorKind::ArgsLenMismatch {
                 def: LvalueLen::Exact(1),
                 call: 2,
             }
@@ -852,7 +852,7 @@ mod tests {
         assert_eq!(*err.main_span().code().fragment(), "foo()");
         assert_matches!(
             err.kind(),
-            EvalError::ArgsLenMismatch {
+            ErrorKind::ArgsLenMismatch {
                 def: LvalueLen::AtLeast(1),
                 call: 0,
             }
@@ -871,7 +871,7 @@ mod tests {
         assert_eq!(err.main_span().code().location_offset(), 10);
         assert_matches!(
             err.kind(),
-            EvalError::RepeatedAssignment {
+            ErrorKind::RepeatedAssignment {
                 context: RepeatedAssignmentContext::FnArgs
             }
         );
@@ -882,7 +882,7 @@ mod tests {
         let err = err.source();
         assert_eq!(*err.main_span().code().fragment(), "x");
         assert_eq!(err.main_span().code().location_offset(), 14);
-        assert_matches!(err.kind(), EvalError::RepeatedAssignment { .. });
+        assert_matches!(err.kind(), ErrorKind::RepeatedAssignment { .. });
     }
 
     #[test]
@@ -895,7 +895,7 @@ mod tests {
         assert_eq!(err.main_span().code().location_offset(), 4);
         assert_matches!(
             err.kind(),
-            EvalError::RepeatedAssignment {
+            ErrorKind::RepeatedAssignment {
                 context: RepeatedAssignmentContext::Assignment,
             }
         );
@@ -908,7 +908,7 @@ mod tests {
         assert_eq!(err.main_span().code().location_offset(), 7);
         assert_matches!(
             err.kind(),
-            EvalError::RepeatedAssignment {
+            ErrorKind::RepeatedAssignment {
                 context: RepeatedAssignmentContext::Assignment,
             }
         );
@@ -926,7 +926,7 @@ mod tests {
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         let err = err.source();
         assert_eq!(*err.main_span().code().fragment(), "(_, z)");
-        assert_matches!(err.kind(), EvalError::CannotDestructure);
+        assert_matches!(err.kind(), ErrorKind::CannotDestructure);
     }
 
     #[test]
@@ -936,14 +936,14 @@ mod tests {
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         let err = err.source();
         assert_eq!(err.main_span().code().location_offset(), 7);
-        assert_matches!(err.kind(), EvalError::CannotCall);
+        assert_matches!(err.kind(), ErrorKind::CannotCall);
 
         let program = InputSpan::new("2 + 1.0(5)");
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         let err = err.source();
         assert_eq!(*err.main_span().code().fragment(), "1.0(5)");
-        assert_matches!(err.kind(), EvalError::CannotCall);
+        assert_matches!(err.kind(), ErrorKind::CannotCall);
     }
 
     #[test]
@@ -956,7 +956,7 @@ mod tests {
         assert_eq!(*err.main_span().code().fragment(), "(1, 2)");
         assert_matches!(
             err.kind(),
-            EvalError::TupleLenMismatch { lhs: LvalueLen::Exact(2), rhs: 3, .. }
+            ErrorKind::TupleLenMismatch { lhs: LvalueLen::Exact(2), rhs: 3, .. }
         );
     }
 
@@ -968,7 +968,7 @@ mod tests {
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         let err = err.source();
         assert_eq!(*err.main_span().code().fragment(), "(x, y)");
-        assert_matches!(err.kind(), EvalError::CannotDestructure);
+        assert_matches!(err.kind(), ErrorKind::CannotDestructure);
     }
 
     #[test]
@@ -982,7 +982,7 @@ mod tests {
         assert_eq!(*err.main_span().code().fragment(), "|| 2");
         assert_matches!(
             err.kind(),
-            EvalError::UnexpectedOperand { ref op } if *op == BinaryOp::Div.into()
+            ErrorKind::UnexpectedOperand { ref op } if *op == BinaryOp::Div.into()
         );
 
         let program = InputSpan::new("1 == 1 && !(2, 3)");
@@ -992,7 +992,7 @@ mod tests {
         assert_eq!(*err.main_span().code().fragment(), "!(2, 3)");
         assert_matches!(
             err.kind(),
-            EvalError::UnexpectedOperand { ref op } if *op == UnaryOp::Not.into()
+            ErrorKind::UnexpectedOperand { ref op } if *op == UnaryOp::Not.into()
         );
 
         let program = InputSpan::new("|x| { x + 5 } + 10");
@@ -1000,7 +1000,7 @@ mod tests {
         let err = interpreter.evaluate(&block).unwrap_err();
         assert_matches!(
             err.source().kind(),
-            EvalError::UnexpectedOperand { ref op } if *op == BinaryOp::Add.into()
+            ErrorKind::UnexpectedOperand { ref op } if *op == BinaryOp::Add.into()
         );
     }
 
@@ -1016,7 +1016,7 @@ mod tests {
         assert_eq!(*err.main_span().code().fragment(), "sin(-5.0, 2.0)");
         assert_matches!(
             err.kind(),
-            EvalError::ArgsLenMismatch {
+            ErrorKind::ArgsLenMismatch {
                 def: LvalueLen::Exact(1),
                 call: 2
             }
@@ -1034,7 +1034,7 @@ mod tests {
         };
         assert_matches!(
             err.kind(),
-            EvalError::Wrapper(err) if *err.kind() == expected_err_kind && err.arg_index() == 0
+            ErrorKind::Wrapper(err) if *err.kind() == expected_err_kind && err.arg_index() == 0
         );
     }
 
@@ -1046,7 +1046,7 @@ mod tests {
         let err = err.source();
         assert_matches!(
             err.kind(),
-            EvalError::MissingCmpFunction { ref name } if name == "cmp"
+            ErrorKind::MissingCmpFunction { ref name } if name == "cmp"
         );
         assert_eq!(*err.main_span().code().fragment(), "2 > 5");
     }
@@ -1057,7 +1057,7 @@ mod tests {
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         let err = err.source();
-        assert_matches!(err.kind(), EvalError::InvalidCmpResult);
+        assert_matches!(err.kind(), ErrorKind::InvalidCmpResult);
         assert_eq!(*err.main_span().code().fragment(), "1 > 3");
     }
 
@@ -1099,7 +1099,7 @@ mod tests {
         let block = F32Grammar::parse_statements(program).unwrap();
         let err = Interpreter::new().evaluate(&block).unwrap_err();
         let err = err.source();
-        assert_matches!(err.kind(), EvalError::Undefined(ref name) if name == "cmp");
+        assert_matches!(err.kind(), ErrorKind::Undefined(ref name) if name == "cmp");
         assert_eq!(*err.main_span().code().fragment(), ">=");
     }
 }

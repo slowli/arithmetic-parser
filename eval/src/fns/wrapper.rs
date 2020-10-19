@@ -3,7 +3,7 @@ use num_traits::{One, Zero};
 use core::{cmp, fmt, marker::PhantomData};
 
 use crate::{
-    AuxErrorInfo, CallContext, EvalError, EvalResult, Function, NativeFn, Number, SpannedEvalError,
+    error::AuxErrorInfo, CallContext, Error, ErrorKind, EvalResult, Function, NativeFn, Number,
     SpannedValue, Value, ValueType,
 };
 use arithmetic_parser::Grammar;
@@ -369,17 +369,17 @@ try_from_value_for_tuple!(10 => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z,
 #[non_exhaustive]
 pub enum ErrorOutput<'a> {
     /// Error together with the defined span(s).
-    Spanned(SpannedEvalError<'a>),
+    Spanned(Error<'a>),
     /// Error message. The error span will be defined as the call span of the native function.
     Message(String),
 }
 
 impl<'a> ErrorOutput<'a> {
     #[doc(hidden)] // necessary for `wrap_fn` macro
-    pub fn into_spanned(self, context: &CallContext<'_, 'a>) -> SpannedEvalError<'a> {
+    pub fn into_spanned(self, context: &CallContext<'_, 'a>) -> Error<'a> {
         match self {
             Self::Spanned(err) => err,
-            Self::Message(message) => context.call_site_error(EvalError::native(message)),
+            Self::Message(message) => context.call_site_error(ErrorKind::native(message)),
         }
     }
 }
@@ -417,7 +417,7 @@ where
     }
 }
 
-impl<'a, G: Grammar, U> IntoEvalResult<'a, G> for Result<U, SpannedEvalError<'a>>
+impl<'a, G: Grammar, U> IntoEvalResult<'a, G> for Result<U, Error<'a>>
 where
     U: IntoEvalResult<'a, G>,
 {
@@ -533,7 +533,7 @@ macro_rules! arity_fn {
                         err.set_arg_index(index);
                         let enriched_span = context.enrich_call_site_span(&span);
                         context
-                            .call_site_error(EvalError::Wrapper(err))
+                            .call_site_error(ErrorKind::Wrapper(err))
                             .with_span(enriched_span, AuxErrorInfo::InvalidArg)
                     })?;
                 )+
@@ -663,8 +663,8 @@ macro_rules! wrap_fn {
                         err.set_arg_index(index);
                         let enriched_span = context.enrich_call_site_span(&span);
                         context
-                            .call_site_error($crate::EvalError::Wrapper(err))
-                            .with_span(enriched_span, $crate::AuxErrorInfo::InvalidArg)
+                            .call_site_error($crate::error::ErrorKind::Wrapper(err))
+                            .with_span(enriched_span, $crate::error::AuxErrorInfo::InvalidArg)
                     })?;
             )+
 
@@ -691,13 +691,13 @@ macro_rules! wrap_fn {
 /// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, InputSpan};
 /// # use arithmetic_eval::{
 /// #     wrap_fn_with_context, fns::FnWrapper, CallContext, Function, Interpreter, Value,
-/// #     SpannedEvalError,
+/// #     Error,
 /// # };
 /// fn map_array<'a, G: Grammar<Lit = f32>>(
 ///     context: &mut CallContext<'_, 'a>,
 ///     array: Vec<Value<'a, G>>,
 ///     map_fn: Function<'a, G>,
-/// ) -> Result<Vec<Value<'a, G>>, SpannedEvalError<'a>> {
+/// ) -> Result<Vec<Value<'a, G>>, Error<'a>> {
 ///     array
 ///         .into_iter()
 ///         .map(|value| {
@@ -885,7 +885,7 @@ mod tests {
         let err = interpreter.evaluate(&bogus_block).unwrap_err();
         assert_matches!(
             err.source().kind(),
-            EvalError::NativeCall(ref msg) if msg.contains("Assertion failed")
+            ErrorKind::NativeCall(ref msg) if msg.contains("Assertion failed")
         );
     }
 

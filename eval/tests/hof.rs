@@ -1,7 +1,7 @@
 //! Demonstrates how to define high-order native functions.
 
 use arithmetic_eval::{
-    fns, wrap_fn, wrap_fn_with_context, CallContext, EvalError, EvalResult, Function, Interpreter,
+    fns, wrap_fn, wrap_fn_with_context, CallContext, ErrorKind, EvalResult, Function, Interpreter,
     NativeFn, Number, SpannedValue, Value,
 };
 use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, InputSpan, StripCode};
@@ -24,7 +24,7 @@ where
         context: &mut CallContext<'_, 'a>,
     ) -> EvalResult<'a, G> {
         if args.len() != 1 {
-            let err = EvalError::native("Should be called with single argument");
+            let err = ErrorKind::native("Should be called with single argument");
             return Err(context.call_site_error(err));
         }
         let mut arg = args.pop().unwrap();
@@ -58,7 +58,7 @@ fn eager_repeat<'a, G: Grammar<Lit = f32>>(
     mut arg: Value<'a, G>,
 ) -> EvalResult<'a, G> {
     if times <= 0.0 {
-        Err(context.call_site_error(EvalError::native("`times` should be positive")))
+        Err(context.call_site_error(ErrorKind::native("`times` should be positive")))
     } else {
         for _ in 0..times as usize {
             arg = function.evaluate(vec![context.apply_call_span(arg)], context)?;

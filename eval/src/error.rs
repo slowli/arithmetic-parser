@@ -543,18 +543,13 @@ impl StripCode for BacktraceElement<'_> {
 
 /// Error backtrace.
 #[derive(Debug, Default)]
-pub struct Backtrace<'a> {
+pub(crate) struct Backtrace<'a> {
     calls: Vec<BacktraceElement<'a>>,
 }
 
 impl<'a> Backtrace<'a> {
-    /// Iterates over the backtrace, starting from the most recent call.
-    pub fn calls(&self) -> impl Iterator<Item = BacktraceElement<'a>> + '_ {
-        self.calls.iter().rev().cloned()
-    }
-
     /// Appends a function call into the backtrace.
-    pub(crate) fn push_call(
+    pub fn push_call(
         &mut self,
         fn_name: &str,
         def_span: Option<CodeInModule<'a>>,
@@ -568,7 +563,7 @@ impl<'a> Backtrace<'a> {
     }
 
     /// Pops a function call.
-    pub(crate) fn pop_call(&mut self) {
+    pub fn pop_call(&mut self) {
         self.calls.pop();
     }
 }
@@ -603,9 +598,9 @@ impl<'a> ErrorWithBacktrace<'a> {
         &self.inner
     }
 
-    /// Returns error backtrace.
-    pub fn backtrace(&self) -> &Backtrace<'a> {
-        &self.backtrace
+    /// Iterates over the error backtrace, starting from the most recent call.
+    pub fn backtrace(&self) -> impl Iterator<Item = &BacktraceElement<'a>> + '_ {
+        self.backtrace.calls.iter().rev()
     }
 }
 

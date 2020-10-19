@@ -105,7 +105,7 @@ fn error_with_call_trace() {
           │                   Failed call
           │                   Invalid argument
         2 │ is_positive(3) && !is_positive((1, 2))
-          │                    ------------------- Call at depth 1
+          │                    ------------------- Call at depth 2
     "#;
 
     let assert = create_command(&unindent(PROGRAM)).assert();
@@ -118,6 +118,37 @@ fn error_with_call_trace() {
 #[test]
 fn error_with_call_complex_call_trace() {
     const PROGRAM: &str = r#"
+        double = |x| x * 2;
+        quadruple = |x| double(double(x));
+        quadruple(true)
+    "#;
+    const EXPECTED_ERR: &str = r#"
+        error[EVAL]: Unexpected operand type for multiplication
+          ┌─ Snippet #1:1:10
+          │
+        1 │ double = |x| x * 2;
+          │          ----^----
+          │          │   │
+          │          │   Operand of wrong type
+          │          The error occurred in function `double`
+        2 │ quadruple = |x| double(double(x));
+          │                        --------- Call at depth 1
+        3 │ quadruple(true)
+          │ --------------- Call at depth 2
+          │
+          = Operands of binary arithmetic ops must be numbers or tuples containing numbers
+    "#;
+
+    let assert = create_command(&unindent(PROGRAM)).assert();
+    assert
+        .failure()
+        .code(ERROR_EXIT_CODE)
+        .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+}
+
+#[test]
+fn error_with_call_complex_call_trace_and_native_fns() {
+    const PROGRAM: &str = r#"
         all = |array, predicate| array.fold(true, |acc, x| acc && predicate(x));
         (1, 2, map).all(|x| 0 < x)
     "#;
@@ -128,14 +159,14 @@ fn error_with_call_complex_call_trace() {
         1 │ all = |array, predicate| array.fold(true, |acc, x| acc && predicate(x));
           │                          ----------------------------------------------
           │                          │                                │
-          │                          │                                Call at depth 1
-          │                          Call at depth 2
+          │                          │                                Call at depth 2
+          │                          Call at depth 3
         2 │ (1, 2, map).all(|x| 0 < x)
           │ --------------------^^^^^-
           │ │                   │   │
           │ │                   │   Invalid argument
           │ │                   Failed call
-          │ Call at depth 3
+          │ Call at depth 4
     "#;
 
     let assert = create_command(&unindent(PROGRAM)).assert();

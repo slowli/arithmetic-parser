@@ -15,6 +15,7 @@ use std::{
     ops::Range,
 };
 
+use arithmetic_eval::error::CodeInModule;
 use arithmetic_eval::{
     error::BacktraceElement, fns, Error as EvalError, Function, IndexedId, Interpreter,
     InterpreterError, ModuleId, Number, Value,
@@ -226,13 +227,10 @@ impl Env {
         let mut diagnostic = self.create_diagnostic(e.source());
 
         if let InterpreterError::Evaluate(e) = e {
-            let mut calls_iter = e.backtrace().calls();
+            let mut calls_iter = e.backtrace().peekable();
             if let Some(BacktraceElement {
-                fn_name,
-                def_span,
-                mut call_span,
-                ..
-            }) = calls_iter.next()
+                fn_name, def_span, ..
+            }) = calls_iter.peek()
             {
                 if let Some(def_span) = def_span {
                     let (file_id, def_range) =
@@ -243,7 +241,12 @@ impl Env {
                 }
 
                 for (depth, call) in calls_iter.enumerate() {
-                    call_span = call.call_span;
+                    let call_span = &call.call_span;
+                    if Self::spans_are_equal(call_span, e.source().main_span()) {
+                        // The span is already output.
+                        continue;
+                    }
+
                     let (file_id, call_range) = self
                         .code_map
                         .locate(call_span.module_id(), &call_span.code());
@@ -260,6 +263,12 @@ impl Env {
             &self.code_map.files,
             &diagnostic,
         )
+    }
+
+    fn spans_are_equal(span: &CodeInModule<'_>, other: &CodeInModule<'_>) -> bool {
+        span.code() == other.code()
+            && span.module_id().downcast_ref::<IndexedId>()
+                == other.module_id().downcast_ref::<IndexedId>()
     }
 
     pub fn writeln_value<T>(&mut self, value: &Value<T>) -> io::Result<()>

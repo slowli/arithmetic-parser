@@ -2,7 +2,7 @@
 
 extern crate alloc;
 
-use alloc::{format, string::ToString};
+use alloc::string::ToString;
 use core::f64;
 
 use arithmetic_eval::{fns, Interpreter, Value};
@@ -70,15 +70,8 @@ fn initialize_interpreter(interpreter: &mut Interpreter<'_, F64Grammar>) {
 #[wasm_bindgen]
 pub fn evaluate(program: &str) -> Result<JsValue, JsValue> {
     let program = InputSpan::new(program);
-    let statements = F64Grammar::parse_statements(program).map_err(|spanned_err| {
-        let message = format!(
-            "{}:{}: {}",
-            spanned_err.location_line(),
-            spanned_err.get_column(),
-            spanned_err.extra
-        );
-        Error::new(&message)
-    })?;
+    let statements =
+        F64Grammar::parse_statements(program).map_err(|err| Error::new(&err.to_string()))?;
 
     let mut interpreter = Interpreter::with_prelude();
     initialize_interpreter(&mut interpreter);

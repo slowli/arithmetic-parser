@@ -21,8 +21,8 @@ use arithmetic_eval::{
     InterpreterError, ModuleId, Number, Value,
 };
 use arithmetic_parser::{
-    grammars::NumGrammar, Block, CodeFragment, Error as ParseError, Grammar, GrammarExt, InputSpan,
-    LocatedSpan, LvalueLen, Spanned,
+    grammars::NumGrammar, Block, CodeFragment, Grammar, GrammarExt, InputSpan, LocatedSpan,
+    LvalueLen, SpannedError as ParseError,
 };
 
 /// Exit code on parse or evaluation error.
@@ -178,13 +178,13 @@ impl Env {
     }
 
     /// Reports a parsing error.
-    pub fn report_parse_error(&self, err: Spanned<'_, ParseError<'_>>) -> io::Result<()> {
+    pub fn report_parse_error(&self, err: ParseError<'_>) -> io::Result<()> {
         // Parsing errors are always reported for the most recently added snippet.
-        let (file, range) = self.code_map.locate_in_most_recent_file(&err);
+        let (file, range) = self.code_map.locate_in_most_recent_file(&err.span());
 
         let label = Label::primary(file, range).with_message("Error occurred here");
         let diagnostic = Diagnostic::error()
-            .with_message(err.extra.to_string())
+            .with_message(err.kind().to_string())
             .with_code("PARSE")
             .with_labels(vec![label]);
 
@@ -392,7 +392,7 @@ impl Env {
         let parse_result = T::parse_streaming_statements(span)
             .map(ParseAndEvalResult::Ok)
             .or_else(|e| {
-                if let ParseError::Incomplete = e.extra {
+                if e.kind().is_incomplete() {
                     Ok(ParseAndEvalResult::Incomplete)
                 } else {
                     self.report_parse_error(e)

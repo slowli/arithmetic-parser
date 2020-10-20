@@ -13,14 +13,8 @@ fn create_module<'a>(
     program: &'a str,
     import_name: &str,
 ) -> anyhow::Result<ExecutableModule<'a, F64Grammar>> {
-    let block = F64Grammar::parse_statements(InputSpan::new(program)).map_err(|e| {
-        anyhow!(
-            "Parse error: {} {}:{}",
-            e.extra,
-            e.location_line(),
-            e.get_column()
-        )
-    })?;
+    let block = F64Grammar::parse_statements(InputSpan::new(program))
+        .map_err(|e| anyhow!("Parse error: {}", e))?;
 
     let mut interpreter = Interpreter::with_prelude();
     interpreter.insert_var(import_name, Value::void());

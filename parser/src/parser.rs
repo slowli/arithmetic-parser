@@ -8,20 +8,20 @@ use nom::{
     },
     character::complete::{char as tag_char, one_of},
     combinator::{cut, map, not, opt, peek, recognize},
-    error::{context, ErrorKind},
+    error::context,
     multi::{many0, separated_list},
     sequence::{delimited, preceded, terminated, tuple},
-    Err as NomErr, Slice,
+    Err as NomErr,
 };
 
-use alloc::{borrow::ToOwned, boxed::Box, vec, vec::Vec};
-use core::{fmt, mem};
+use alloc::{boxed::Box, vec, vec::Vec};
+use core::mem;
 
 use crate::{
     spans::{unite_spans, with_span},
-    BinaryOp, Block, Context, Destructure, DestructureRest, Expr, FnDefinition, Grammar, InputSpan,
-    Lvalue, NomResult, Op, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
-    UnaryOp,
+    BinaryOp, Block, Context, Destructure, DestructureRest, Error, Expr, FnDefinition, Grammar,
+    InputSpan, Lvalue, NomResult, Spanned, SpannedError, SpannedExpr, SpannedLvalue,
+    SpannedStatement, Statement, UnaryOp,
 };
 
 #[cfg(test)]
@@ -73,175 +73,6 @@ impl BinaryOp {
             "<=" => Self::Le,
             _ => unreachable!(),
         })
-    }
-}
-
-// TODO: implement `Error`.
-/// Parsing error.
-#[derive(Debug)]
-#[non_exhaustive]
-pub enum Error<'a> {
-    /// Input is not in ASCII.
-    NonAsciiInput,
-
-    /// Error parsing literal.
-    Literal(anyhow::Error),
-
-    /// Error parsing type hint.
-    Type(anyhow::Error),
-
-    /// Unary or binary operation switched off in the parser features.
-    UnsupportedOp(Op),
-
-    /// No rules where expecting this character.
-    UnexpectedChar {
-        /// Parsing context.
-        context: Option<Spanned<'a, Context>>,
-    },
-
-    /// Unexpected expression end.
-    UnexpectedTerm {
-        /// Parsing context.
-        context: Option<Spanned<'a, Context>>,
-    },
-
-    /// Leftover symbols after parsing.
-    Leftovers,
-    /// Input is incomplete.
-    Incomplete,
-
-    /// Other parsing error.
-    Other {
-        /// `nom`-defined error kind.
-        kind: ErrorKind,
-        /// Parsing context.
-        context: Option<Spanned<'a, Context>>,
-    },
-}
-
-impl Error<'_> {
-    /// Removes the context from this error, thus extending its lifetime.
-    pub fn without_context(self) -> Error<'static> {
-        match self {
-            Self::NonAsciiInput => Error::NonAsciiInput,
-            Self::Leftovers => Error::Leftovers,
-            Self::Incomplete => Error::Incomplete,
-            Self::Literal(source) => Error::Literal(source),
-            Self::Type(source) => Error::Type(source),
-            Self::UnsupportedOp(op) => Error::UnsupportedOp(op),
-            Self::UnexpectedChar { .. } => Error::UnexpectedChar { context: None },
-            Self::UnexpectedTerm { .. } => Error::UnexpectedTerm { context: None },
-            Self::Other { kind, .. } => Error::Other {
-                kind,
-                context: None,
-            },
-        }
-    }
-}
-
-impl fmt::Display for Error<'_> {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Error::NonAsciiInput => formatter.write_str("Non-ASCII inputs are not supported"),
-            Error::Literal(e) => write!(formatter, "Invalid literal: {}", e),
-            Error::Type(e) => write!(formatter, "Invalid type hint: {}", e),
-
-            Error::UnsupportedOp(op) => write!(
-                formatter,
-                "Encountered operation switched off in the parser features: {}",
-                op
-            ),
-
-            Error::UnexpectedChar { context: Some(ctx) } => {
-                write!(formatter, "Unexpected character in {}", ctx.extra)
-            }
-            Error::UnexpectedChar { .. } => formatter.write_str("Unexpected character"),
-
-            Error::UnexpectedTerm { context: Some(ctx) } => {
-                write!(formatter, "Unfinished {}", ctx.extra)
-            }
-            Error::UnexpectedTerm { .. } => formatter.write_str("Unfinished expression"),
-            Error::Leftovers => formatter.write_str("Uninterpreted characters after parsing"),
-            Error::Incomplete => formatter.write_str("Incomplete input"),
-            Error::Other { .. } => write!(formatter, "Cannot parse sequence"),
-        }
-    }
-}
-
-impl<'a> Error<'a> {
-    fn accepts_context(&self) -> bool {
-        match self {
-            Error::UnexpectedChar { context }
-            | Error::UnexpectedTerm { context }
-            | Error::Other { context, .. } => context.is_none(),
-            _ => false,
-        }
-    }
-
-    /// Returns optional error context.
-    pub fn context(&self) -> Option<Spanned<Context>> {
-        match self {
-            Error::UnexpectedChar { context }
-            | Error::UnexpectedTerm { context }
-            | Error::Other { context, .. } => context.to_owned(),
-            _ => None,
-        }
-    }
-
-    fn set_context(&mut self, ctx: Context, span: InputSpan<'a>) {
-        match self {
-            Error::UnexpectedChar { context }
-            | Error::UnexpectedTerm { context }
-            | Error::Other { context, .. } => {
-                *context = Some(Spanned::new(span, ctx));
-            }
-            _ => { /* do nothing */ }
-        }
-    }
-
-    fn with_span<T>(self, span: &Spanned<'a, T>) -> SpannedError<'a> {
-        SpannedError(span.copy_with_extra(self))
-    }
-}
-
-/// Parsing error with the associated code span.
-// TODO: implement `Error` and return instead of `Spanned<Error>`.
-#[derive(Debug)]
-pub struct SpannedError<'a>(Spanned<'a, Error<'a>>);
-
-impl<'a> nom::error::ParseError<InputSpan<'a>> for SpannedError<'a> {
-    fn from_error_kind(mut input: InputSpan<'a>, kind: ErrorKind) -> Self {
-        if kind == ErrorKind::Char && !input.fragment().is_empty() {
-            // Truncate the error span to the first ineligible char.
-            input = input.slice(..1);
-        }
-
-        SpannedError(Spanned::new(
-            input,
-            if kind == ErrorKind::Char {
-                if input.fragment().is_empty() {
-                    Error::UnexpectedTerm { context: None }
-                } else {
-                    Error::UnexpectedChar { context: None }
-                }
-            } else {
-                Error::Other {
-                    kind,
-                    context: None,
-                }
-            },
-        ))
-    }
-
-    fn append(_: InputSpan<'a>, _: ErrorKind, other: Self) -> Self {
-        other
-    }
-
-    fn add_context(input: InputSpan<'a>, ctx: &'static str, mut other: Self) -> Self {
-        if other.0.extra.accepts_context() && input.location_offset() < other.0.location_offset() {
-            other.0.extra.set_context(Context::new(ctx), input);
-        }
-        other
     }
 }
 
@@ -477,7 +308,7 @@ where
         if spanned_op.extra.is_order_comparison() && !T::FEATURES.order_comparisons {
             // Immediately drop parsing on an unsupported op, since there are no alternatives.
             let err = Error::UnsupportedOp(spanned_op.extra.into());
-            let spanned_err = SpannedError(span.copy_with_extra(err));
+            let spanned_err = SpannedError::from_parts(span, err);
             Err(NomErr::Failure(spanned_err))
         } else {
             Ok((rest, spanned_op))
@@ -742,14 +573,12 @@ where
 }
 
 /// Parses a complete list of statements.
-pub(crate) fn statements<T>(
-    input_span: InputSpan<'_>,
-) -> Result<Block<'_, T>, Spanned<'_, Error<'_>>>
+pub(crate) fn statements<T>(input_span: InputSpan<'_>) -> Result<Block<'_, T>, SpannedError<'_>>
 where
     T: Grammar,
 {
     if !input_span.fragment().is_ascii() {
-        return Err(Spanned::new(input_span, Error::NonAsciiInput));
+        return Err(SpannedError::new(input_span, Error::NonAsciiInput));
     }
     statements_inner::<T, Complete>(input_span)
 }
@@ -757,35 +586,33 @@ where
 /// Parses a potentially incomplete list of statements.
 pub(crate) fn streaming_statements<T>(
     input_span: InputSpan<'_>,
-) -> Result<Block<'_, T>, Spanned<'_, Error<'_>>>
+) -> Result<Block<'_, T>, SpannedError<'_>>
 where
     T: Grammar,
 {
     if !input_span.fragment().is_ascii() {
-        return Err(Spanned::new(input_span, Error::NonAsciiInput));
+        return Err(SpannedError::new(input_span, Error::NonAsciiInput));
     }
 
     statements_inner::<T, Complete>(input_span)
         .or_else(|_| statements_inner::<T, Streaming>(input_span))
 }
 
-fn statements_inner<T, Ty>(
-    input_span: InputSpan<'_>,
-) -> Result<Block<'_, T>, Spanned<'_, Error<'_>>>
+fn statements_inner<T, Ty>(input_span: InputSpan<'_>) -> Result<Block<'_, T>, SpannedError<'_>>
 where
     T: Grammar,
     Ty: GrammarType,
 {
     delimited(ws::<Ty>, separated_statements::<T, Ty>, ws::<Ty>)(input_span)
         .map_err(|e| match e {
-            NomErr::Failure(e) | NomErr::Error(e) => e.0,
-            NomErr::Incomplete(_) => Error::Incomplete.with_span(&input_span.into()).0,
+            NomErr::Failure(e) | NomErr::Error(e) => e,
+            NomErr::Incomplete(_) => Error::Incomplete.with_span(&input_span.into()),
         })
         .and_then(|(remaining, statements)| {
             if remaining.fragment().is_empty() {
                 Ok(statements)
             } else {
-                Err(Error::Leftovers.with_span(&remaining.into()).0)
+                Err(Error::Leftovers.with_span(&remaining.into()))
             }
         })
 }

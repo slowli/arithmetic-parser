@@ -8,7 +8,7 @@ use nom::{
 use alloc::string::String;
 
 use super::*;
-use crate::Features;
+use crate::{Features, Op};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum LiteralType {
@@ -263,11 +263,11 @@ fn whitespace_can_include_comments() {
 fn non_ascii_input() {
     let input = InputSpan::new("\u{444}\u{44b}\u{432}\u{430}");
     let err = statements::<FieldGrammar>(input).unwrap_err();
-    assert_matches!(err.extra, Error::NonAsciiInput);
+    assert_matches!(err.kind(), Error::NonAsciiInput);
 
     let input = InputSpan::new("1 + \u{444}\u{44b}");
     let err = statements::<FieldGrammar>(input).unwrap_err();
-    assert_matches!(err.extra, Error::NonAsciiInput);
+    assert_matches!(err.kind(), Error::NonAsciiInput);
 }
 
 #[test]
@@ -1412,7 +1412,7 @@ fn type_hints_when_switched_off() {
 
     let input = InputSpan::new("(x, y: Sc) = (1 + 2, 3 + 5)");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(ref spanned) if spanned.0.location_offset() == 5);
+    assert_matches!(err, NomErr::Failure(ref spanned) if spanned.span().location_offset() == 5);
 
     let input = InputSpan::new("duplicate = |x| { x * (1, 2) }");
     let (rem, _) = statement::<SimpleGrammar, Complete>(input).unwrap();
@@ -1420,7 +1420,7 @@ fn type_hints_when_switched_off() {
 
     let input = InputSpan::new("duplicate = |x: Sc| { x * (1, 2) }");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(ref spanned) if *spanned.0.fragment() == ":");
+    assert_matches!(err, NomErr::Failure(ref spanned) if *spanned.span().fragment() == ":");
 }
 
 #[test]
@@ -1448,7 +1448,7 @@ fn fn_defs_when_switched_off() {
 
     let input = InputSpan::new("foo = |x| { x + 3 }");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Error(ref spanned) if *spanned.0.fragment() == "|");
+    assert_matches!(err, NomErr::Error(ref spanned) if *spanned.span().fragment() == "|");
 }
 
 #[test]
@@ -1476,11 +1476,11 @@ fn tuples_when_switched_off() {
 
     let input = InputSpan::new("tup = (1 + 2, 3 + 5)");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(ref spanned) if spanned.0.location_offset() == 6);
+    assert_matches!(err, NomErr::Failure(ref spanned) if spanned.span().location_offset() == 6);
 
     let input = InputSpan::new("(x, y) = (1 + 2, 3 + 5)");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(ref spanned) if spanned.0.location_offset() == 0);
+    assert_matches!(err, NomErr::Failure(ref spanned) if spanned.span().location_offset() == 0);
 }
 
 #[test]
@@ -1508,11 +1508,11 @@ fn blocks_when_switched_off() {
 
     let input = InputSpan::new("x = { y = 10; y * 2 }");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Error(ref spanned) if spanned.0.location_offset() == 4);
+    assert_matches!(err, NomErr::Error(ref spanned) if spanned.span().location_offset() == 4);
 
     let input = InputSpan::new("foo({ y = 10; y * 2 }, z)");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(ref spanned) if spanned.0.location_offset() == 4);
+    assert_matches!(err, NomErr::Failure(ref spanned) if spanned.span().location_offset() == 4);
 }
 
 #[test]
@@ -1572,14 +1572,14 @@ fn order_comparisons_when_switched_off() {
 
     let input = InputSpan::new("x >= 1;");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    let SpannedError(spanned_err) = match err {
+    let spanned_err = match err {
         NomErr::Failure(spanned) => spanned,
         _ => panic!("Unexpected error: {}", err),
     };
-    assert_eq!(spanned_err.location_offset(), 2);
-    assert_eq!(*spanned_err.fragment(), ">=");
+    assert_eq!(spanned_err.span().location_offset(), 2);
+    assert_eq!(*spanned_err.span().fragment(), ">=");
     assert_matches!(
-        spanned_err.extra,
+        *spanned_err.kind(),
         Error::UnsupportedOp(Op::Binary(BinaryOp::Ge))
     );
 }

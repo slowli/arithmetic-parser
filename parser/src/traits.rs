@@ -1,6 +1,6 @@
 use crate::{
     parser::{statements, streaming_statements},
-    Block, Error, InputSpan, NomResult, Spanned,
+    Block, InputSpan, NomResult, SpannedError,
 };
 
 use core::fmt;
@@ -84,29 +84,27 @@ pub trait Grammar: 'static {
 /// Extension trait for `Grammar` used by the client applications.
 pub trait GrammarExt: Grammar {
     /// Parses a list of statements.
-    fn parse_statements(input: InputSpan<'_>) -> Result<Block<'_, Self>, Spanned<'_, Error<'_>>>
+    fn parse_statements(input: InputSpan<'_>) -> Result<Block<'_, Self>, SpannedError<'_>>
     where
         Self: Sized;
 
     /// Parses a potentially incomplete list of statements.
     fn parse_streaming_statements(
         input: InputSpan<'_>,
-    ) -> Result<Block<'_, Self>, Spanned<'_, Error<'_>>>
+    ) -> Result<Block<'_, Self>, SpannedError<'_>>
     where
         Self: Sized;
 }
 
 impl<T: Grammar> GrammarExt for T {
-    fn parse_statements(input: InputSpan<'_>) -> Result<Block<'_, Self>, Spanned<'_, Error<'_>>>
+    fn parse_statements(input: InputSpan<'_>) -> Result<Block<'_, Self>, SpannedError<'_>>
     where
         Self: Sized,
     {
         statements(input)
     }
 
-    fn parse_streaming_statements(
-        input: InputSpan<'_>,
-    ) -> Result<Block<'_, Self>, Spanned<'_, Error<'_>>>
+    fn parse_streaming_statements(input: InputSpan<'_>) -> Result<Block<'_, Self>, SpannedError<'_>>
     where
         Self: Sized,
     {

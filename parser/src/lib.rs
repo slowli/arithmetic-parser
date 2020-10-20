@@ -51,12 +51,17 @@
 #![no_std]
 #![warn(missing_docs, missing_debug_implementations)]
 #![warn(clippy::all, clippy::pedantic)]
-#![allow(clippy::missing_errors_doc, clippy::must_use_candidate)]
+#![allow(
+    clippy::missing_errors_doc,
+    clippy::must_use_candidate,
+    clippy::module_name_repetitions
+)]
 
 extern crate alloc;
 
 pub use crate::{
-    parser::{is_valid_variable_name, Error, SpannedError},
+    error::{Error, SpannedError},
+    parser::is_valid_variable_name,
     spans::{
         CodeFragment, InputSpan, LocatedSpan, MaybeSpanned, NomResult, Spanned, StripCode,
         StripResultExt,
@@ -67,6 +72,7 @@ pub use crate::{
 use alloc::{boxed::Box, vec, vec::Vec};
 use core::fmt;
 
+mod error;
 pub mod grammars;
 mod parser;
 mod spans;

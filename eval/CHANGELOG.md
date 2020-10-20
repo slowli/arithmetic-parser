@@ -24,7 +24,9 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 - Make most enums and structs with public fields non-exhaustive (e.g., error types,
   `Value`). (#26)
 
-- Rename error types: `EvalError` to `ErrorKind`, `SpannedEvalError` to `Error`. (#31)
+- Rename error types: `EvalError` to `ErrorKind`, `SpannedEvalError` to `Error`.
+  Make the `error` module public and only re-export the most used types from it
+  to the crate root. (#31)
 
 - Move getters such as `main_span()` from `ErrorWithBacktrace` to `Error`, which
   can be accessed via `source()`. (#31)
@@ -34,7 +36,7 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Make the interpreter methods that both compile and run code return
   a new error type, `InterpreterError`. This allows distinguishing between
-  these error kinds and eliminates "fake" backtrace for compile-time errors. (#31)
+  these error kinds and eliminates a "fake" backtrace for compile-time errors. (#31)
 
 ## 0.2.0-beta.1 - 2020-10-04
 

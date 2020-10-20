@@ -21,7 +21,7 @@ use arithmetic_eval::{
     InterpreterError, ModuleId, Number, Value,
 };
 use arithmetic_parser::{
-    grammars::NumGrammar, Block, CodeFragment, Error as ParseError, Grammar, GrammarExt, InputSpan,
+    grammars::NumGrammar, Block, CodeFragment, Error as ParseError, Grammar, GrammarExt,
     LocatedSpan, LvalueLen,
 };
 
@@ -388,8 +388,7 @@ impl Env {
             return Ok(ParseAndEvalResult::Ok(()));
         }
 
-        let span = InputSpan::new(line);
-        let parse_result = T::parse_streaming_statements(span)
+        let parse_result = T::parse_streaming_statements(line)
             .map(ParseAndEvalResult::Ok)
             .or_else(|e| {
                 if e.kind().is_incomplete() {

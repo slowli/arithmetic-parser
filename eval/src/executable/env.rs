@@ -453,7 +453,7 @@ where
 mod tests {
     use super::*;
     use crate::{compiler::Compiler, executable::ModuleImports, WildcardId};
-    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
+    use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 
     #[test]
     fn env_compression() {
@@ -461,7 +461,7 @@ mod tests {
         env.push_var("x", Value::<F32Grammar>::Number(5.0));
 
         let block = "y = x + 2 * (x + 1) + 1; y";
-        let block = F32Grammar::parse_statements(InputSpan::new(block)).unwrap();
+        let block = F32Grammar::parse_statements(block).unwrap();
         let module = Compiler::compile_module(WildcardId, &env, &block, true).unwrap();
         let value = env.execute(&module.inner, None).unwrap();
         assert_eq!(value, Value::Number(18.0));
@@ -479,7 +479,7 @@ mod tests {
         let mut env = Env::new();
         env.push_var("x", Value::<F32Grammar>::Number(5.0));
 
-        let block = F32Grammar::parse_statements(InputSpan::new("x")).unwrap();
+        let block = F32Grammar::parse_statements("x").unwrap();
         let mut module = Compiler::compile_module(WildcardId, &env, &block, true).unwrap();
         assert_eq!(module.inner.register_capacity, 2);
         assert_eq!(module.inner.commands.len(), 1); // push `x` from r0 to r1

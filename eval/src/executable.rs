@@ -40,7 +40,7 @@ impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
 /// # Examples
 ///
 /// ```
-/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
+/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 /// use arithmetic_eval::{fns, Interpreter, Value, ValueType};
 /// # use std::{collections::HashSet, f32, iter::FromIterator};
 ///
@@ -55,7 +55,7 @@ impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
 ///     .insert_var("xs", Value::Tuple(vec![]));
 ///
 /// let module = "xs.fold(-INFINITY, max)";
-/// let module = F32Grammar::parse_statements(InputSpan::new(module)).unwrap();
+/// let module = F32Grammar::parse_statements(module).unwrap();
 /// let mut module = interpreter.compile("test", &module).unwrap();
 ///
 /// // With the original imports, the returned value is `-INFINITY`.
@@ -78,14 +78,14 @@ impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
 /// The same module can be run with multiple imports:
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 /// # use arithmetic_eval::{Interpreter, Value};
 /// let mut interpreter = Interpreter::new();
 /// interpreter
 ///     .insert_var("x", Value::Number(3.0))
 ///     .insert_var("y", Value::Number(5.0));
 /// let module = "x + y";
-/// let module = F32Grammar::parse_statements(InputSpan::new(module)).unwrap();
+/// let module = F32Grammar::parse_statements(module).unwrap();
 /// let mut module = interpreter.compile("test", &module).unwrap();
 /// assert_eq!(module.run().unwrap(), Value::Number(8.0));
 ///
@@ -297,7 +297,7 @@ mod tests {
     use super::*;
     use crate::{compiler::Compiler, WildcardId};
 
-    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
+    use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 
     #[test]
     fn cloning_module() {
@@ -305,7 +305,7 @@ mod tests {
         env.push_var("x", Value::<F32Grammar>::Number(5.0));
 
         let block = "y = x + 2 * (x + 1) + 1; y";
-        let block = F32Grammar::parse_statements(InputSpan::new(block)).unwrap();
+        let block = F32Grammar::parse_statements(block).unwrap();
         let module = Compiler::compile_module(WildcardId, &env, &block, false).unwrap();
 
         let mut module_copy = module.clone();
@@ -323,7 +323,7 @@ mod tests {
         env.push_var("y", Value::Bool(true));
 
         let block = "x + y";
-        let block = F32Grammar::parse_statements(InputSpan::new(block)).unwrap();
+        let block = F32Grammar::parse_statements(block).unwrap();
         let module = Compiler::compile_module(WildcardId, &env, &block, false).unwrap();
 
         let mut imports = module.imports().to_owned();
@@ -344,7 +344,7 @@ mod tests {
         env.push_var("y", Value::Number(1.0));
 
         let block = "x + y";
-        let block = F32Grammar::parse_statements(InputSpan::new(block)).unwrap();
+        let block = F32Grammar::parse_statements(block).unwrap();
         let module = Compiler::compile_module(WildcardId, &env, &block, false).unwrap();
 
         let mut other_env = Env::new();

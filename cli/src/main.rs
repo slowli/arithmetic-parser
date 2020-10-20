@@ -6,7 +6,7 @@ use structopt::StructOpt;
 
 use std::{io, process, str::FromStr};
 
-use arithmetic_parser::{grammars::NumGrammar, GrammarExt, InputSpan};
+use arithmetic_parser::{grammars::NumGrammar, GrammarExt};
 
 mod common;
 mod repl;
@@ -90,8 +90,7 @@ impl Args {
         let command = self.command.unwrap_or_default();
         let (mut env, snippet) = Env::non_interactive(command.clone());
 
-        let command = InputSpan::new(&command);
-        let parsed = NumGrammar::<T>::parse_statements(command).or_else(|e| {
+        let parsed = NumGrammar::<T>::parse_statements(&*command).or_else(|e| {
             env.report_parse_error(e)
                 .map(|()| process::exit(ERROR_EXIT_CODE))
         })?;

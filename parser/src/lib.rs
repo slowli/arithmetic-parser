@@ -9,7 +9,7 @@
 //! # use assert_matches::assert_matches;
 //! use arithmetic_parser::{
 //!     grammars::F32Grammar,
-//!     GrammarExt, NomResult, InputSpan, Statement, Expr, FnDefinition, LvalueLen,
+//!     GrammarExt, NomResult, Statement, Expr, FnDefinition, LvalueLen,
 //! };
 //! use nom::number::complete::float;
 //!
@@ -27,7 +27,7 @@
 //!     other_function(y - z)
 //! "#;
 //!
-//! let block = F32Grammar::parse_statements(InputSpan::new(PROGRAM)).unwrap();
+//! let block = F32Grammar::parse_statements(PROGRAM).unwrap();
 //! // First statement is an assignment.
 //! assert_matches!(
 //!     block.statements[0].extra,

@@ -130,27 +130,27 @@ mod tests {
 
     #[test]
     fn parsing_infinity() {
-        let parsed = F32Grammar::parse_statements(InputSpan::new("Inf")).unwrap();
+        let parsed = F32Grammar::parse_statements("Inf").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         assert_matches!(ret, Expr::Literal(lit) if lit == INFINITY);
 
-        let parsed = F32Grammar::parse_statements(InputSpan::new("-Inf")).unwrap();
+        let parsed = F32Grammar::parse_statements("-Inf").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         assert_matches!(ret, Expr::Literal(lit) if lit == -INFINITY);
 
-        let parsed = F32Grammar::parse_statements(InputSpan::new("Infty")).unwrap();
+        let parsed = F32Grammar::parse_statements("Infty").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         assert_matches!(ret, Expr::Variable);
 
-        let parsed = F32Grammar::parse_statements(InputSpan::new("Infer(1)")).unwrap();
+        let parsed = F32Grammar::parse_statements("Infer(1)").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         assert_matches!(ret, Expr::Function { .. });
 
-        let parsed = F32Grammar::parse_statements(InputSpan::new("-Infty")).unwrap();
+        let parsed = F32Grammar::parse_statements("-Infty").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         assert_matches!(ret, Expr::Unary { .. });
 
-        let parsed = F32Grammar::parse_statements(InputSpan::new("-Infer(2, 3)")).unwrap();
+        let parsed = F32Grammar::parse_statements("-Infer(2, 3)").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         assert_matches!(ret, Expr::Unary { .. });
     }
@@ -160,27 +160,27 @@ mod tests {
     fn parsing_i() {
         use num_complex::Complex32;
 
-        let parsed = NumGrammar::<Complex32>::parse_statements(InputSpan::new("i")).unwrap();
+        let parsed = NumGrammar::<Complex32>::parse_statements("i").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         assert_matches!(ret, Expr::Literal(lit) if lit == Complex32::i());
 
-        let parsed = NumGrammar::<Complex32>::parse_statements(InputSpan::new("i + 5")).unwrap();
+        let parsed = NumGrammar::<Complex32>::parse_statements("i + 5").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         let i_as_lhs = &ret.binary_lhs().unwrap().extra;
         assert_matches!(*i_as_lhs, Expr::Literal(lit) if lit == Complex32::i());
 
-        let parsed = NumGrammar::<Complex32>::parse_statements(InputSpan::new("5 - i")).unwrap();
+        let parsed = NumGrammar::<Complex32>::parse_statements("5 - i").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         let i_as_rhs = &ret.binary_rhs().unwrap().extra;
         assert_matches!(*i_as_rhs, Expr::Literal(lit) if lit == Complex32::i());
 
         // `i` should not be parsed as a literal if it's a part of larger expression.
-        let parsed = NumGrammar::<Complex32>::parse_statements(InputSpan::new("ix + 5")).unwrap();
+        let parsed = NumGrammar::<Complex32>::parse_statements("ix + 5").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         let variable = &ret.binary_lhs().unwrap().extra;
         assert_matches!(*variable, Expr::Variable);
 
-        let parsed = NumGrammar::<Complex32>::parse_statements(InputSpan::new("-i + 5")).unwrap();
+        let parsed = NumGrammar::<Complex32>::parse_statements("-i + 5").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         let negation_expr = &ret.binary_lhs().unwrap().extra;
         let inner_lhs = match negation_expr {
@@ -189,7 +189,7 @@ mod tests {
         };
         assert_matches!(inner_lhs, Expr::Literal(lit) if *lit == Complex32::i());
 
-        let parsed = NumGrammar::<Complex32>::parse_statements(InputSpan::new("-ix + 5")).unwrap();
+        let parsed = NumGrammar::<Complex32>::parse_statements("-ix + 5").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         let var_negation = &ret.binary_lhs().unwrap().extra;
         let negated_var = match var_negation {

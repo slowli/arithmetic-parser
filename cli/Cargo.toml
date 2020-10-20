@@ -15,7 +15,6 @@ codespan-reporting = "0.9.0"
 num-complex = "0.3.0"
 rustyline = "6.0.0"
 structopt = "0.3.13"
-typed-arena = "2.0.1"
 unindent = "0.1.6"
 
 [dependencies.arithmetic-parser]

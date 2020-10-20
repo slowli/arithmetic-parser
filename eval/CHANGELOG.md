@@ -12,12 +12,31 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Implement `while` as a native function. (#26)
 
+- Add IDs for executable modules. These IDs can be used to locate code spans for errors
+  and interpreted functions. (#31)
+
+- Allow evaluating blocks with any lifetime against the interpreter. (#31)
+
 ### Changed
 
 - Change APIs related to code spans according to the updates in the parser crate. (#26)
 
 - Make most enums and structs with public fields non-exhaustive (e.g., error types,
   `Value`). (#26)
+
+- Rename error types: `EvalError` to `ErrorKind`, `SpannedEvalError` to `Error`.
+  Make the `error` module public and only re-export the most used types from it
+  to the crate root. (#31)
+
+- Move getters such as `main_span()` from `ErrorWithBacktrace` to `Error`, which
+  can be accessed via `source()`. (#31)
+
+- Make `Backtrace` type crate-private; move backtrace call iterator
+  directly to `ErrorWithBacktrace`. (#31)
+
+- Make the interpreter methods that both compile and run code return
+  a new error type, `InterpreterError`. This allows distinguishing between
+  these error kinds and eliminates a "fake" backtrace for compile-time errors. (#31)
 
 ## 0.2.0-beta.1 - 2020-10-04
 

@@ -54,6 +54,8 @@ pub(crate) enum CompiledExpr<'a, T: Grammar> {
     DefineFunction {
         ptr: usize,
         captures: Vec<SpannedAtom<'a, T>>,
+        // Original capture names.
+        capture_names: Vec<String>,
     },
 }
 
@@ -89,9 +91,14 @@ impl<T: Grammar> Clone for CompiledExpr<'_, T> {
                 args: args.clone(),
             },
 
-            Self::DefineFunction { ptr, captures } => Self::DefineFunction {
+            Self::DefineFunction {
+                ptr,
+                captures,
+                capture_names,
+            } => Self::DefineFunction {
                 ptr: *ptr,
                 captures: captures.clone(),
+                capture_names: capture_names.clone(),
             },
         }
     }
@@ -131,9 +138,14 @@ impl<T: Grammar> StripCode for CompiledExpr<'_, T> {
                 args: args.iter().map(StripCode::strip_code).collect(),
             },
 
-            Self::DefineFunction { ptr, captures } => CompiledExpr::DefineFunction {
+            Self::DefineFunction {
+                ptr,
+                captures,
+                capture_names,
+            } => CompiledExpr::DefineFunction {
                 ptr: *ptr,
                 captures: captures.iter().map(StripCode::strip_code).collect(),
+                capture_names: capture_names.clone(),
             },
         }
     }

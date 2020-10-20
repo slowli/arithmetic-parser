@@ -7,7 +7,8 @@ use core::iter;
 use crate::{
     alloc::{vec, Vec},
     compiler::CMP_FUNCTION_NAME,
-    AuxErrorInfo, EvalError, RepeatedAssignmentContext, SpannedEvalError,
+    error::{AuxErrorInfo, CodeInModule, RepeatedAssignmentContext},
+    Error, ErrorKind, ModuleId, WildcardId,
 };
 use arithmetic_parser::{
     BinaryOp, Block, Destructure, Expr, FnDefinition, Grammar, Lvalue, Spanned, SpannedExpr,
@@ -18,16 +19,18 @@ use arithmetic_parser::{
 /// variables captured by it.
 #[derive(Debug)]
 pub(super) struct CapturesExtractor<'a, F> {
+    module_id: Box<dyn ModuleId>,
     local_vars: Vec<HashMap<&'a str, Spanned<'a>>>,
     action: F,
 }
 
 impl<'a, F> CapturesExtractor<'a, F>
 where
-    F: FnMut(&'a str, Spanned<'a>) -> Result<(), EvalError>,
+    F: FnMut(&'a str, Spanned<'a>) -> Result<(), ErrorKind>,
 {
-    pub fn new(action: F) -> Self {
+    pub fn new(module_id: Box<dyn ModuleId>, action: F) -> Self {
         Self {
+            module_id,
             local_vars: vec![],
             action,
         }
@@ -37,9 +40,10 @@ where
     pub fn eval_function<T: Grammar>(
         &mut self,
         definition: &FnDefinition<'a, T>,
-    ) -> Result<(), SpannedEvalError<'a>> {
+    ) -> Result<(), Error<'a>> {
         self.local_vars.push(HashMap::new());
         extract_vars(
+            self.module_id.as_ref(),
             self.local_vars.last_mut().unwrap(),
             &definition.args.extra,
             RepeatedAssignmentContext::FnArgs,
@@ -52,7 +56,7 @@ where
     }
 
     /// Processes a local variable in the rvalue position.
-    fn eval_local_var<T>(&mut self, var_span: &Spanned<'a, T>) -> Result<(), EvalError> {
+    fn eval_local_var<T>(&mut self, var_span: &Spanned<'a, T>) -> Result<(), ErrorKind> {
         if self.has_var(var_span.fragment()) {
             // No action needs to be performed.
             Ok(())
@@ -61,7 +65,7 @@ where
         }
     }
 
-    fn eval_cmp(&mut self, op_span: &Spanned<'a, BinaryOp>) -> Result<(), EvalError> {
+    fn eval_cmp(&mut self, op_span: &Spanned<'a, BinaryOp>) -> Result<(), ErrorKind> {
         if self.has_var(CMP_FUNCTION_NAME) {
             Ok(())
         } else {
@@ -69,13 +73,17 @@ where
         }
     }
 
+    fn create_error<T>(&self, span: &Spanned<'a, T>, err: ErrorKind) -> Error<'a> {
+        Error::new(self.module_id.as_ref(), span, err)
+    }
+
     /// Evaluates an expression with the function validation semantics, i.e., to determine
     /// function captures.
-    fn eval<T: Grammar>(&mut self, expr: &SpannedExpr<'a, T>) -> Result<(), SpannedEvalError<'a>> {
+    fn eval<T: Grammar>(&mut self, expr: &SpannedExpr<'a, T>) -> Result<(), Error<'a>> {
         match &expr.extra {
             Expr::Variable => {
                 self.eval_local_var(expr)
-                    .map_err(|e| SpannedEvalError::new(expr, e))?;
+                    .map_err(|e| self.create_error(expr, e))?;
             }
 
             Expr::Literal(_) => { /* no action */ }
@@ -93,8 +101,7 @@ where
                 self.eval(rhs)?;
 
                 if op.extra.is_order_comparison() {
-                    self.eval_cmp(op)
-                        .map_err(|e| SpannedEvalError::new(op, e))?;
+                    self.eval_cmp(op).map_err(|e| self.create_error(op, e))?;
                 }
             }
 
@@ -116,7 +123,7 @@ where
                 }
 
                 self.eval_local_var(name)
-                    .map_err(|e| SpannedEvalError::new(name, e))?;
+                    .map_err(|e| self.create_error(name, e))?;
             }
 
             Expr::Block(block) => {
@@ -129,8 +136,8 @@ where
             }
 
             _ => {
-                let err = EvalError::unsupported(expr.extra.ty());
-                return Err(SpannedEvalError::new(expr, err));
+                let err = ErrorKind::unsupported(expr.extra.ty());
+                return Err(self.create_error(expr, err));
             }
         }
 
@@ -141,7 +148,7 @@ where
     fn eval_statement<T: Grammar>(
         &mut self,
         statement: &SpannedStatement<'a, T>,
-    ) -> Result<(), SpannedEvalError<'a>> {
+    ) -> Result<(), Error<'a>> {
         match &statement.extra {
             Statement::Expr(expr) => self.eval(expr),
 
@@ -149,6 +156,7 @@ where
                 self.eval(rhs)?;
                 let mut new_vars = HashMap::new();
                 extract_vars_iter(
+                    self.module_id.as_ref(),
                     &mut new_vars,
                     iter::once(lhs),
                     RepeatedAssignmentContext::Assignment,
@@ -158,16 +166,13 @@ where
             }
 
             _ => {
-                let err = EvalError::unsupported(statement.extra.ty());
-                Err(SpannedEvalError::new(statement, err))
+                let err = ErrorKind::unsupported(statement.extra.ty());
+                Err(self.create_error(statement, err))
             }
         }
     }
 
-    fn eval_block_inner<T: Grammar>(
-        &mut self,
-        block: &Block<'a, T>,
-    ) -> Result<(), SpannedEvalError<'a>> {
+    fn eval_block_inner<T: Grammar>(&mut self, block: &Block<'a, T>) -> Result<(), Error<'a>> {
         self.local_vars.push(HashMap::new());
         for statement in &block.statements {
             self.eval_statement(statement)?;
@@ -179,20 +184,18 @@ where
         Ok(())
     }
 
-    pub fn eval_block<T: Grammar>(
-        &mut self,
-        block: &Block<'a, T>,
-    ) -> Result<(), SpannedEvalError<'a>> {
+    pub fn eval_block<T: Grammar>(&mut self, block: &Block<'a, T>) -> Result<(), Error<'a>> {
         self.local_vars.push(HashMap::new());
         self.eval_block_inner(block)
     }
 }
 
 fn extract_vars<'a, T>(
+    module_id: &dyn ModuleId,
     vars: &mut HashMap<&'a str, Spanned<'a>>,
     lvalues: &Destructure<'a, T>,
     context: RepeatedAssignmentContext,
-) -> Result<(), SpannedEvalError<'a>> {
+) -> Result<(), Error<'a>> {
     let middle = lvalues
         .middle
         .as_ref()
@@ -202,14 +205,15 @@ fn extract_vars<'a, T>(
         .iter()
         .chain(middle.as_ref())
         .chain(&lvalues.end);
-    extract_vars_iter(vars, all_lvalues, context)
+    extract_vars_iter(module_id, vars, all_lvalues, context)
 }
 
 pub(super) fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
+    module_id: &dyn ModuleId,
     vars: &mut HashMap<&'a str, Spanned<'a>>,
     lvalues: impl Iterator<Item = &'it SpannedLvalue<'a, T>>,
     context: RepeatedAssignmentContext,
-) -> Result<(), SpannedEvalError<'a>> {
+) -> Result<(), Error<'a>> {
     for lvalue in lvalues {
         match &lvalue.extra {
             Lvalue::Variable { .. } => {
@@ -217,20 +221,21 @@ pub(super) fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
                 if var_name != "_" {
                     let var_span = lvalue.with_no_extra();
                     if let Some(prev_span) = vars.insert(var_name, var_span) {
-                        let err = EvalError::RepeatedAssignment { context };
-                        return Err(SpannedEvalError::new(lvalue, err)
-                            .with_span(&prev_span, AuxErrorInfo::PrevAssignment));
+                        let err = ErrorKind::RepeatedAssignment { context };
+                        let prev_span = CodeInModule::new(module_id, prev_span.into());
+                        return Err(Error::new(module_id, lvalue, err)
+                            .with_span(prev_span, AuxErrorInfo::PrevAssignment));
                     }
                 }
             }
 
             Lvalue::Tuple(fragments) => {
-                extract_vars(vars, fragments, context)?;
+                extract_vars(module_id, vars, fragments, context)?;
             }
 
             _ => {
-                let err = EvalError::unsupported(lvalue.extra.ty());
-                return Err(SpannedEvalError::new(lvalue, err));
+                let err = ErrorKind::unsupported(lvalue.extra.ty());
+                return Err(Error::new(module_id, lvalue, err));
             }
         }
     }
@@ -245,11 +250,9 @@ pub(super) enum CompilerExtTarget<'r, 'a, T: Grammar> {
 }
 
 impl<'a, T: Grammar> CompilerExtTarget<'_, 'a, T> {
-    pub fn get_undefined_variables(
-        self,
-    ) -> Result<HashMap<&'a str, Spanned<'a>>, SpannedEvalError<'a>> {
+    pub fn get_undefined_variables(self) -> Result<HashMap<&'a str, Spanned<'a>>, Error<'a>> {
         let mut undefined_vars = HashMap::new();
-        let mut extractor = CapturesExtractor::new(|var_name, var_span| {
+        let mut extractor = CapturesExtractor::new(Box::new(WildcardId), |var_name, var_span| {
             if !undefined_vars.contains_key(var_name) {
                 undefined_vars.insert(var_name, var_span);
             }

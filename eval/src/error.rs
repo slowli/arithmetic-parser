@@ -7,16 +7,16 @@ use core::fmt;
 use crate::{
     alloc::{format, vec, String, ToOwned, Vec},
     fns::FromValueError,
-    Value,
+    ModuleId, Value,
 };
 use arithmetic_parser::{
     BinaryOp, CodeFragment, ExprType, LocatedSpan, LvalueLen, LvalueType, MaybeSpanned, Op,
     StatementType, StripCode, UnaryOp,
 };
 
-/// Context for [`EvalError::TupleLenMismatch`].
+/// Context for [`ErrorKind::TupleLenMismatch`].
 ///
-/// [`EvalError::TupleLenMismatch`]: enum.EvalError.html#variant.TupleLenMismatch
+/// [`ErrorKind::TupleLenMismatch`]: enum.ErrorKind.html#variant.TupleLenMismatch
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TupleLenMismatchContext {
     /// An error has occurred when evaluating a binary operation.
@@ -34,9 +34,9 @@ impl fmt::Display for TupleLenMismatchContext {
     }
 }
 
-/// Context for [`EvalError::RepeatedAssignment`].
+/// Context for [`ErrorKind::RepeatedAssignment`].
 ///
-/// [`EvalError::RepeatedAssignment`]: enum.EvalError.html#variant.RepeatedAssignment
+/// [`ErrorKind::RepeatedAssignment`]: enum.ErrorKind.html#variant.RepeatedAssignment
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RepeatedAssignmentContext {
     /// A duplicated variable is in function args.
@@ -54,10 +54,10 @@ impl fmt::Display for RepeatedAssignmentContext {
     }
 }
 
-/// Errors that can occur during interpreting expressions and statements.
+/// Kinds of errors that can occur when compiling or interpreting expressions and statements.
 #[derive(Debug, Clone, Display)]
 #[non_exhaustive]
-pub enum EvalError {
+pub enum ErrorKind {
     /// Mismatch between length of tuples in a binary operation or assignment.
     #[display(
         fmt = "Mismatch between length of tuples in {}: LHS has {} element(s), whereas RHS has {}",
@@ -113,7 +113,7 @@ pub enum EvalError {
 
     /// Error while converting arguments for [`FnWrapper`].
     ///
-    /// [`FnWrapper`]: fns/struct.FnWrapper.html
+    /// [`FnWrapper`]: ../fns/struct.FnWrapper.html
     #[display(
         fmt = "Failed converting arguments for native function wrapper: {}",
         _0
@@ -147,7 +147,7 @@ pub enum EvalError {
     Unsupported(UnsupportedType),
 }
 
-impl EvalError {
+impl ErrorKind {
     /// Creates a native error.
     pub fn native(message: impl Into<String>) -> Self {
         Self::NativeCall(message.into())
@@ -243,7 +243,7 @@ impl EvalError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for EvalError {
+impl std::error::Error for ErrorKind {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Wrapper(error) => Some(error),
@@ -316,18 +316,18 @@ impl From<LvalueType> for UnsupportedType {
 pub enum AuxErrorInfo {
     /// Function arguments declaration for [`ArgsLenMismatch`].
     ///
-    /// [`ArgsLenMismatch`]: enum.EvalError.html#variant.ArgsLenMismatch
+    /// [`ArgsLenMismatch`]: enum.ErrorKind.html#variant.ArgsLenMismatch
     FnArgs,
 
     /// Previous variable assignment for [`RepeatedAssignment`].
     ///
-    /// [`RepeatedAssignment`]: enum.EvalError.html#variant.RepeatedAssignment
+    /// [`RepeatedAssignment`]: enum.ErrorKind.html#variant.RepeatedAssignment
     PrevAssignment,
 
     /// Rvalue containing an invalid assignment for [`CannotDestructure`] or [`TupleLenMismatch`].
     ///
-    /// [`CannotDestructure`]: enum.EvalError.html#variant.CannotDestructure
-    /// [`TupleLenMismatch`]: enum.EvalError.html#variant.TupleLenMismatch
+    /// [`CannotDestructure`]: enum.ErrorKind.html#variant.CannotDestructure
+    /// [`TupleLenMismatch`]: enum.ErrorKind.html#variant.TupleLenMismatch
     Rvalue,
 
     /// RHS of a binary operation on differently sized tuples.
@@ -350,66 +350,105 @@ impl fmt::Display for AuxErrorInfo {
 }
 
 /// Evaluation error together with one or more relevant code spans.
+///
+/// Use the `StripCode` implementation to convert an `Error` to the `'static` lifetime, e.g.,
+/// before boxing it into `Box<dyn std::error::Error>` or `anyhow::Error`.
+/// If the error is wrapped into a `Result`, you can do this via `StripResultExt` trait defined
+/// in the `arithmetic-parser` crate:
+///
+/// ```
+/// # use arithmetic_parser::{grammars::F64Grammar, GrammarExt, InputSpan, StripResultExt};
+/// # use arithmetic_eval::{Error, ExecutableModule, Interpreter, WildcardId};
+/// fn compile_code(code: &str) -> anyhow::Result<ExecutableModule<'_, F64Grammar>> {
+///     // FIXME: change after improving errors in parser.
+///     let block = F64Grammar::parse_statements(InputSpan::new(code))
+///         .map_err(|e| anyhow::anyhow!("Parse error: {}", e.extra))?;
+///
+///     // Without `strip_err()` call, the code below won't compile:
+///     // `Error<'_>` in general cannot be boxed into `anyhow::Error`,
+///     // only `Error<'static>` can.
+///     Ok(Interpreter::new().compile(WildcardId, &block).strip_err()?)
+/// }
+/// ```
 #[derive(Debug)]
-pub struct SpannedEvalError<'a> {
-    error: EvalError,
-    main_span: MaybeSpanned<'a>,
-    aux_spans: Vec<MaybeSpanned<'a, AuxErrorInfo>>,
+pub struct Error<'a> {
+    kind: ErrorKind,
+    main_span: CodeInModule<'a>,
+    aux_spans: Vec<CodeInModule<'a, AuxErrorInfo>>,
 }
 
-impl<'a> SpannedEvalError<'a> {
-    pub(crate) fn new<Span, T>(main_span: &LocatedSpan<Span, T>, error: EvalError) -> Self
+impl<'a> Error<'a> {
+    pub(crate) fn new<Span, T>(
+        module_id: &dyn ModuleId,
+        main_span: &LocatedSpan<Span, T>,
+        kind: ErrorKind,
+    ) -> Self
     where
         Span: Copy + Into<CodeFragment<'a>>,
     {
         Self {
-            error,
-            main_span: main_span.with_no_extra().map_fragment(Into::into),
+            kind,
+            main_span: CodeInModule::new(
+                module_id,
+                main_span.with_no_extra().map_fragment(Into::into),
+            ),
+            aux_spans: vec![],
+        }
+    }
+
+    pub(crate) fn from_parts(main_span: CodeInModule<'a>, kind: ErrorKind) -> Self {
+        Self {
+            kind,
+            main_span,
             aux_spans: vec![],
         }
     }
 
     #[doc(hidden)] // used in `wrap_fn` macro
-    pub fn with_span<Span, T>(mut self, span: &LocatedSpan<Span, T>, info: AuxErrorInfo) -> Self
-    where
-        Span: Copy + Into<CodeFragment<'a>>,
-    {
-        self.aux_spans
-            .push(span.copy_with_extra(info).map_fragment(Into::into));
+    pub fn with_span(mut self, span: CodeInModule<'a>, info: AuxErrorInfo) -> Self {
+        self.aux_spans.push(CodeInModule {
+            module_id: span.module_id,
+            code: span.code.copy_with_extra(info),
+        });
         self
     }
 
     /// Returns the source of the error.
-    pub fn source(&self) -> &EvalError {
-        &self.error
+    pub fn kind(&self) -> &ErrorKind {
+        &self.kind
+    }
+
+    /// Returns the main span for this error.
+    pub fn main_span(&self) -> &CodeInModule<'a> {
+        &self.main_span
+    }
+
+    /// Returns auxiliary spans for this error.
+    pub fn aux_spans(&self) -> &[CodeInModule<'a, AuxErrorInfo>] {
+        &self.aux_spans
     }
 }
 
-impl fmt::Display for SpannedEvalError<'_> {
+impl fmt::Display for Error<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "{}:{}: {}",
-            self.main_span.location_line(),
-            self.main_span.get_column(),
-            self.error
-        )
+        self.main_span.fmt_location(formatter)?;
+        write!(formatter, ": {}", self.kind)
     }
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for SpannedEvalError<'_> {
+impl std::error::Error for Error<'_> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(&self.error)
+        Some(&self.kind)
     }
 }
 
-impl StripCode for SpannedEvalError<'_> {
-    type Stripped = SpannedEvalError<'static>;
+impl StripCode for Error<'_> {
+    type Stripped = Error<'static>;
 
     fn strip_code(&self) -> Self::Stripped {
-        SpannedEvalError {
-            error: self.error.clone(),
+        Error {
+            kind: self.kind.clone(),
             main_span: self.main_span.strip_code(),
             aux_spans: self.aux_spans.iter().map(StripCode::strip_code).collect(),
         }
@@ -417,12 +456,65 @@ impl StripCode for SpannedEvalError<'_> {
 }
 
 /// Result of an expression evaluation.
-pub type EvalResult<'a, T> = Result<Value<'a, T>, SpannedEvalError<'a>>;
+pub type EvalResult<'a, T> = Result<Value<'a, T>, Error<'a>>;
 
-/// Call backtrace.
-#[derive(Debug, Default)]
-pub struct Backtrace<'a> {
-    calls: Vec<BacktraceElement<'a>>,
+/// Code fragment together with information about the module containing the fragment.
+#[derive(Debug)]
+pub struct CodeInModule<'a, T = ()> {
+    module_id: Box<dyn ModuleId>,
+    code: MaybeSpanned<'a, T>,
+}
+
+impl<T: Clone> Clone for CodeInModule<'_, T> {
+    fn clone(&self) -> Self {
+        Self {
+            module_id: self.module_id.clone_boxed(),
+            code: self.code.clone(),
+        }
+    }
+}
+
+impl<'a> CodeInModule<'a> {
+    pub(crate) fn new(module_id: &dyn ModuleId, span: MaybeSpanned<'a>) -> Self {
+        Self {
+            module_id: module_id.clone_boxed(),
+            code: span,
+        }
+    }
+}
+
+impl<'a, T> CodeInModule<'a, T> {
+    /// Returns the ID of the module containing this fragment.
+    pub fn module_id(&self) -> &dyn ModuleId {
+        self.module_id.as_ref()
+    }
+
+    /// Returns the code fragment within the module. The fragment may be stripped
+    /// (i.e., contain only location info, not the code string itself).
+    pub fn code(&self) -> &MaybeSpanned<'a, T> {
+        &self.code
+    }
+
+    fn fmt_location(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "{}:{}:{}",
+            self.module_id,
+            self.code.location_line(),
+            self.code.get_column()
+        )
+    }
+}
+
+impl<T: Clone + 'static> StripCode for CodeInModule<'_, T> {
+    type Stripped = CodeInModule<'static, T>;
+
+    fn strip_code(&self) -> Self::Stripped {
+        CodeInModule {
+            module_id: self.module_id.clone_boxed(),
+            code: self.code.strip_code(),
+        }
+    }
 }
 
 /// Function call.
@@ -432,45 +524,9 @@ pub struct BacktraceElement<'a> {
     /// Function name.
     pub fn_name: String,
     /// Code span of the function definition.
-    pub def_span: Option<MaybeSpanned<'a>>,
+    pub def_span: Option<CodeInModule<'a>>,
     /// Code span of the function call.
-    pub call_span: MaybeSpanned<'a>,
-}
-
-impl<'a> Backtrace<'a> {
-    /// Iterates over the backtrace, starting from the most recent call.
-    pub fn calls(&self) -> impl Iterator<Item = BacktraceElement<'a>> + '_ {
-        self.calls.iter().rev().cloned()
-    }
-
-    /// Appends a function call into the backtrace.
-    pub(crate) fn push_call(
-        &mut self,
-        fn_name: &str,
-        def_span: Option<MaybeSpanned<'a>>,
-        call_span: MaybeSpanned<'a>,
-    ) {
-        self.calls.push(BacktraceElement {
-            fn_name: fn_name.to_owned(),
-            def_span,
-            call_span,
-        });
-    }
-
-    /// Pops a function call.
-    pub(crate) fn pop_call(&mut self) {
-        self.calls.pop();
-    }
-}
-
-impl StripCode for Backtrace<'_> {
-    type Stripped = Backtrace<'static>;
-
-    fn strip_code(&self) -> Self::Stripped {
-        Backtrace {
-            calls: self.calls.iter().map(StripCode::strip_code).collect(),
-        }
-    }
+    pub call_span: CodeInModule<'a>,
 }
 
 impl StripCode for BacktraceElement<'_> {
@@ -485,43 +541,66 @@ impl StripCode for BacktraceElement<'_> {
     }
 }
 
+/// Error backtrace.
+#[derive(Debug, Default)]
+pub(crate) struct Backtrace<'a> {
+    calls: Vec<BacktraceElement<'a>>,
+}
+
+impl<'a> Backtrace<'a> {
+    /// Appends a function call into the backtrace.
+    pub fn push_call(
+        &mut self,
+        fn_name: &str,
+        def_span: Option<CodeInModule<'a>>,
+        call_span: CodeInModule<'a>,
+    ) {
+        self.calls.push(BacktraceElement {
+            fn_name: fn_name.to_owned(),
+            def_span,
+            call_span,
+        });
+    }
+
+    /// Pops a function call.
+    pub fn pop_call(&mut self) {
+        self.calls.pop();
+    }
+}
+
+impl StripCode for Backtrace<'_> {
+    type Stripped = Backtrace<'static>;
+
+    fn strip_code(&self) -> Self::Stripped {
+        Backtrace {
+            calls: self.calls.iter().map(StripCode::strip_code).collect(),
+        }
+    }
+}
+
 /// Error with the associated backtrace.
+///
+/// Use the `StripCode` implementation to convert an `Error` to the `'static` lifetime, e.g.,
+/// before boxing it into `Box<dyn std::error::Error>` or `anyhow::Error`.
 #[derive(Debug)]
 pub struct ErrorWithBacktrace<'a> {
-    inner: SpannedEvalError<'a>,
+    inner: Error<'a>,
     backtrace: Backtrace<'a>,
 }
 
 impl<'a> ErrorWithBacktrace<'a> {
-    pub(crate) fn new(inner: SpannedEvalError<'a>, backtrace: Backtrace<'a>) -> Self {
+    pub(crate) fn new(inner: Error<'a>, backtrace: Backtrace<'a>) -> Self {
         Self { inner, backtrace }
     }
 
-    pub(crate) fn with_empty_trace(inner: SpannedEvalError<'a>) -> Self {
-        Self {
-            inner,
-            backtrace: Backtrace::default(),
-        }
-    }
-
     /// Returns the source of the error.
-    pub fn source(&self) -> &EvalError {
-        &self.inner.error
+    pub fn source(&self) -> &Error<'a> {
+        &self.inner
     }
 
-    /// Returns the main span for this error.
-    pub fn main_span(&self) -> MaybeSpanned<'a> {
-        self.inner.main_span
-    }
-
-    /// Returns auxiliary spans for this error.
-    pub fn aux_spans(&self) -> &[MaybeSpanned<'a, AuxErrorInfo>] {
-        &self.inner.aux_spans
-    }
-
-    /// Returns error backtrace.
-    pub fn backtrace(&self) -> &Backtrace<'a> {
-        &self.backtrace
+    /// Iterates over the error backtrace, starting from the most recent call.
+    pub fn backtrace(&self) -> impl Iterator<Item = &BacktraceElement<'a>> + '_ {
+        self.backtrace.calls.iter().rev()
     }
 }
 
@@ -532,14 +611,17 @@ impl fmt::Display for ErrorWithBacktrace<'_> {
         if formatter.alternate() && !self.backtrace.calls.is_empty() {
             writeln!(formatter, "\nBacktrace (most recent call last):")?;
             for (index, call) in self.backtrace.calls.iter().enumerate() {
-                writeln!(
-                    formatter,
-                    "{:>4}: {} called at {}:{}",
-                    index + 1,
-                    call.fn_name,
-                    call.call_span.location_line(),
-                    call.call_span.get_column()
-                )?;
+                write!(formatter, "{:>4}: {} ", index + 1, call.fn_name)?;
+
+                if let Some(ref def_span) = call.def_span {
+                    write!(formatter, "(module `{}`)", def_span.module_id)?;
+                } else {
+                    formatter.write_str("(native)")?;
+                }
+
+                write!(formatter, " called at ")?;
+                call.call_span.fmt_location(formatter)?;
+                writeln!(formatter)?;
             }
         }
         Ok(())
@@ -564,6 +646,56 @@ impl std::error::Error for ErrorWithBacktrace<'_> {
     }
 }
 
+/// Type encompassing all possible errors arising when compiling and immediately executing
+/// a module.
+#[derive(Debug)]
+pub enum InterpreterError<'comp, 'eval: 'comp> {
+    /// Error during compilation.
+    Compile(Error<'comp>),
+    /// Error during statement evaluation. This type of errors contains a backtrace.
+    Evaluate(ErrorWithBacktrace<'eval>),
+}
+
+impl<'comp> InterpreterError<'comp, '_> {
+    /// Gets the source of this error.
+    pub fn source(&self) -> &Error<'comp> {
+        match self {
+            Self::Compile(err) => err,
+            Self::Evaluate(err) => err.source(),
+        }
+    }
+}
+
+impl fmt::Display for InterpreterError<'_, '_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Compile(err) => fmt::Display::fmt(err, formatter),
+            Self::Evaluate(err) => fmt::Display::fmt(err, formatter),
+        }
+    }
+}
+
+impl StripCode for InterpreterError<'_, '_> {
+    type Stripped = InterpreterError<'static, 'static>;
+
+    fn strip_code(&self) -> Self::Stripped {
+        match self {
+            Self::Compile(err) => InterpreterError::Compile(err.strip_code()),
+            Self::Evaluate(err) => InterpreterError::Evaluate(err.strip_code()),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for InterpreterError<'_, '_> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Compile(err) => std::error::Error::source(err),
+            Self::Evaluate(err) => std::error::Error::source(err),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -571,10 +703,10 @@ mod tests {
 
     #[test]
     fn display_for_eval_error() {
-        let err = EvalError::Undefined("test".to_owned());
+        let err = ErrorKind::Undefined("test".to_owned());
         assert_eq!(err.to_string(), "Variable `test` is not defined");
 
-        let err = EvalError::ArgsLenMismatch {
+        let err = ErrorKind::ArgsLenMismatch {
             def: LvalueLen::AtLeast(2),
             call: 1,
         };
@@ -587,27 +719,34 @@ mod tests {
     fn display_for_spanned_eval_error() {
         let input = "(_, test) = (1, 2);";
         let main_span = MaybeSpanned::from_str(input, 4..8);
-        let err = SpannedEvalError::new(&main_span, EvalError::Undefined("test".to_owned()));
+        let err = Error::new(
+            &"test_module",
+            &main_span,
+            ErrorKind::Undefined("test".to_owned()),
+        );
         let err_string = err.to_string();
-        assert_eq!(err_string, "1:5: Variable `test` is not defined");
+        assert_eq!(
+            err_string,
+            "test_module:1:5: Variable `test` is not defined"
+        );
     }
 
     #[test]
     fn display_for_error_with_backtrace() {
         let input = "(_, test) = (1, 2);";
         let main_span = MaybeSpanned::from_str(input, 4..8);
-        let err = SpannedEvalError::new(&main_span, EvalError::Undefined("test".to_owned()));
+        let err = Error::new(&"test", &main_span, ErrorKind::Undefined("test".to_owned()));
 
-        let mut err = ErrorWithBacktrace::with_empty_trace(err);
-        err.backtrace
-            .push_call("test_fn", None, MaybeSpanned::from_str(input, ..));
+        let mut err = ErrorWithBacktrace::new(err, Backtrace::default());
+        let call_span = CodeInModule::new(&"test", MaybeSpanned::from_str(input, ..));
+        err.backtrace.push_call("test_fn", None, call_span);
 
         let err_string = err.to_string();
-        assert_eq!(err_string, "1:5: Variable `test` is not defined");
+        assert_eq!(err_string, "test:1:5: Variable `test` is not defined");
 
         let expanded_err_string = format!("{:#}", err);
-        assert!(expanded_err_string.starts_with("1:5: Variable `test` is not defined"));
+        assert!(expanded_err_string.starts_with("test:1:5: Variable `test` is not defined"));
         assert!(expanded_err_string.contains("\nBacktrace"));
-        assert!(expanded_err_string.contains("\n   1: test_fn called at 1:1"));
+        assert!(expanded_err_string.contains("\n   1: test_fn (native) called at test:1:1"));
     }
 }

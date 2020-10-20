@@ -2,19 +2,21 @@
 
 use hashbrown::HashMap;
 
+use crate::error::CodeInModule;
 use crate::{
     alloc::{vec, Rc, Vec},
+    error::{Backtrace, EvalResult, TupleLenMismatchContext},
     executable::{
         command::{Atom, Command, CompiledExpr, SpannedCommand},
         ExecutableFn,
     },
-    Backtrace, CallContext, EvalError, EvalResult, Function, InterpretedFn, Number,
-    SpannedEvalError, SpannedValue, TupleLenMismatchContext, Value,
+    CallContext, Error, ErrorKind, Function, InterpretedFn, ModuleId, Number, SpannedValue, Value,
 };
 use arithmetic_parser::{BinaryOp, Grammar, MaybeSpanned, StripCode, UnaryOp};
 
 #[derive(Debug)]
 pub(crate) struct Executable<'a, T: Grammar> {
+    id: Box<dyn ModuleId>,
     commands: Vec<SpannedCommand<'a, T>>,
     child_fns: Vec<Rc<ExecutableFn<'a, T>>>,
     // Hint how many registers the executable requires.
@@ -24,6 +26,7 @@ pub(crate) struct Executable<'a, T: Grammar> {
 impl<'a, T: Grammar> Clone for Executable<'a, T> {
     fn clone(&self) -> Self {
         Self {
+            id: self.id.clone_boxed(),
             commands: self.commands.clone(),
             child_fns: self.child_fns.clone(),
             register_capacity: self.register_capacity,
@@ -36,6 +39,7 @@ impl<T: Grammar> StripCode for Executable<'_, T> {
 
     fn strip_code(&self) -> Self::Stripped {
         Executable {
+            id: self.id.clone_boxed(),
             commands: self
                 .commands
                 .iter()
@@ -56,12 +60,21 @@ impl<T: Grammar> StripCode for Executable<'_, T> {
 }
 
 impl<'a, T: Grammar> Executable<'a, T> {
-    pub fn new() -> Self {
+    pub fn new(id: Box<dyn ModuleId>) -> Self {
         Self {
+            id,
             commands: vec![],
             child_fns: vec![],
             register_capacity: 0,
         }
+    }
+
+    pub fn id(&self) -> &dyn ModuleId {
+        self.id.as_ref()
+    }
+
+    fn create_error<U>(&self, span: &MaybeSpanned<'a, U>, err: ErrorKind) -> Error<'a> {
+        Error::new(self.id.as_ref(), span, err)
     }
 
     pub fn push_command(&mut self, command: impl Into<SpannedCommand<'a, T>>) {
@@ -268,12 +281,12 @@ where
                     let source = self.registers[*source].clone();
                     if let Value::Tuple(mut elements) = source {
                         if !*unchecked && !lvalue_len.matches(elements.len()) {
-                            let err = EvalError::TupleLenMismatch {
+                            let err = ErrorKind::TupleLenMismatch {
                                 lhs: *lvalue_len,
                                 rhs: elements.len(),
                                 context: TupleLenMismatchContext::Assignment,
                             };
-                            return Err(SpannedEvalError::new(command, err));
+                            return Err(executable.create_error(command, err));
                         }
 
                         let mut tail = elements.split_off(*start_len);
@@ -282,8 +295,8 @@ where
                         self.registers.push(Value::Tuple(tail));
                         self.registers.extend(end);
                     } else {
-                        let err = EvalError::CannotDestructure;
-                        return Err(SpannedEvalError::new(command, err));
+                        let err = ErrorKind::CannotDestructure;
+                        return Err(executable.create_error(command, err));
                     }
                 }
 
@@ -326,24 +339,26 @@ where
                     UnaryOp::Not => inner_value.try_not(),
                     _ => unreachable!("Checked during compilation"),
                 }
-                .map_err(|err| SpannedEvalError::new(&span, err))
+                .map_err(|err| executable.create_error(&span, err))
             }
 
             CompiledExpr::Binary { op, lhs, rhs } => {
                 let lhs_value = lhs.copy_with_extra(self.resolve_atom(&lhs.extra));
                 let rhs_value = rhs.copy_with_extra(self.resolve_atom(&rhs.extra));
+                let module_id = executable.id();
+
                 match op {
-                    BinaryOp::Add => Value::try_add(span, lhs_value, rhs_value),
-                    BinaryOp::Sub => Value::try_sub(span, lhs_value, rhs_value),
-                    BinaryOp::Mul => Value::try_mul(span, lhs_value, rhs_value),
-                    BinaryOp::Div => Value::try_div(span, lhs_value, rhs_value),
-                    BinaryOp::Power => Value::try_pow(span, lhs_value, rhs_value),
+                    BinaryOp::Add => Value::try_add(module_id, span, lhs_value, rhs_value),
+                    BinaryOp::Sub => Value::try_sub(module_id, span, lhs_value, rhs_value),
+                    BinaryOp::Mul => Value::try_mul(module_id, span, lhs_value, rhs_value),
+                    BinaryOp::Div => Value::try_div(module_id, span, lhs_value, rhs_value),
+                    BinaryOp::Power => Value::try_pow(module_id, span, lhs_value, rhs_value),
 
                     BinaryOp::Eq => Ok(Value::Bool(lhs_value.extra == rhs_value.extra)),
                     BinaryOp::NotEq => Ok(Value::Bool(lhs_value.extra != rhs_value.extra)),
 
-                    BinaryOp::And => Value::try_and(&lhs_value, &rhs_value),
-                    BinaryOp::Or => Value::try_or(&lhs_value, &rhs_value),
+                    BinaryOp::And => Value::try_and(module_id, &lhs_value, &rhs_value),
+                    BinaryOp::Or => Value::try_or(module_id, &lhs_value, &rhs_value),
 
                     BinaryOp::Gt | BinaryOp::Lt | BinaryOp::Ge | BinaryOp::Le => {
                         unreachable!("Must be desugared by the compiler")
@@ -357,7 +372,7 @@ where
                 let inner_value = self.resolve_atom(&inner.extra);
                 op.compare(&inner_value)
                     .map(Value::Bool)
-                    .ok_or_else(|| SpannedEvalError::new(&span, EvalError::InvalidCmpResult))
+                    .ok_or_else(|| executable.create_error(&span, ErrorKind::InvalidCmpResult))
             }
 
             CompiledExpr::Function {
@@ -371,24 +386,32 @@ where
                         .iter()
                         .map(|arg| arg.copy_with_extra(self.resolve_atom(&arg.extra)))
                         .collect();
-                    Self::eval_function(&function, fn_name, span, arg_values, backtrace)
+                    Self::eval_function(
+                        &function,
+                        fn_name,
+                        executable.id.as_ref(),
+                        span,
+                        arg_values,
+                        backtrace,
+                    )
                 } else {
-                    Err(SpannedEvalError::new(&span, EvalError::CannotCall))
+                    Err(executable.create_error(&span, ErrorKind::CannotCall))
                 }
             }
 
-            CompiledExpr::DefineFunction { ptr, captures } => {
+            CompiledExpr::DefineFunction {
+                ptr,
+                captures,
+                capture_names,
+            } => {
                 let fn_executable = executable.child_fns[*ptr].clone();
                 let captured_values = captures
                     .iter()
                     .map(|capture| self.resolve_atom(&capture.extra))
                     .collect();
-                let capture_names = captures
-                    .iter()
-                    .map(|capture| capture.code_or_location("var"))
-                    .collect();
 
-                let function = InterpretedFn::new(fn_executable, captured_values, capture_names);
+                let function =
+                    InterpretedFn::new(fn_executable, captured_values, capture_names.to_owned());
                 Ok(Value::interpreted_fn(function))
             }
         }
@@ -397,14 +420,16 @@ where
     fn eval_function(
         function: &Function<'a, T>,
         fn_name: &str,
+        module_id: &dyn ModuleId,
         call_span: MaybeSpanned<'a>,
         arg_values: Vec<SpannedValue<'a, T>>,
         mut backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
+        let full_call_span = CodeInModule::new(module_id, call_span);
         if let Some(backtrace) = backtrace.as_deref_mut() {
-            backtrace.push_call(fn_name, function.def_span(), call_span);
+            backtrace.push_call(fn_name, function.def_span(), full_call_span.clone());
         }
-        let mut context = CallContext::new(call_span, backtrace.as_deref_mut());
+        let mut context = CallContext::new(full_call_span, backtrace.as_deref_mut());
 
         function.evaluate(arg_values, &mut context).map(|value| {
             if let Some(backtrace) = backtrace {
@@ -427,7 +452,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{compiler::Compiler, executable::ModuleImports};
+    use crate::{compiler::Compiler, executable::ModuleImports, WildcardId};
     use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 
     #[test]
@@ -437,7 +462,7 @@ mod tests {
 
         let block = "y = x + 2 * (x + 1) + 1; y";
         let block = F32Grammar::parse_statements(InputSpan::new(block)).unwrap();
-        let module = Compiler::compile_module(&env, &block, true).unwrap();
+        let module = Compiler::compile_module(WildcardId, &env, &block, true).unwrap();
         let value = env.execute(&module.inner, None).unwrap();
         assert_eq!(value, Value::Number(18.0));
 
@@ -455,7 +480,7 @@ mod tests {
         env.push_var("x", Value::<F32Grammar>::Number(5.0));
 
         let block = F32Grammar::parse_statements(InputSpan::new("x")).unwrap();
-        let mut module = Compiler::compile_module(&env, &block, true).unwrap();
+        let mut module = Compiler::compile_module(WildcardId, &env, &block, true).unwrap();
         assert_eq!(module.inner.register_capacity, 2);
         assert_eq!(module.inner.commands.len(), 1); // push `x` from r0 to r1
         module.imports = ModuleImports { inner: env };

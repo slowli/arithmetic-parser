@@ -35,14 +35,14 @@ fn outputting_interpreted_function() {
     let assert = create_command(PROGRAM).assert();
     assert
         .success()
-        .stderr("fn(1 args)[\n  > = (native fn)\n]\n");
+        .stderr("fn(1 arg)[\n  cmp = (native fn)\n]\n");
 }
 
 #[test]
 fn syntax_error() {
     const EXPECTED_ERR: &str = r#"
         error[PARSE]: Uninterpreted characters after parsing
-          ┌─ Snip #1:1:5
+          ┌─ Snippet #1:1:5
           │
         1 │ let x = 5
           │     ^^^^^ Error occurred here
@@ -59,7 +59,7 @@ fn syntax_error() {
 fn undefined_variable_error() {
     const EXPECTED_ERR: &str = r#"
         error[EVAL]: Variable `x` is not defined
-          ┌─ Snip #1:1:9
+          ┌─ Snippet #1:1:9
           │
         1 │ 1 + 2 * x
           │         ^ Undefined variable occurrence
@@ -76,7 +76,7 @@ fn undefined_variable_error() {
 fn incompatible_arg_count_error() {
     const EXPECTED_ERR: &str = r#"
         error[EVAL]: Mismatch between the number of arguments in the function definition and its call
-          ┌─ Snip #1:1:1
+          ┌─ Snippet #1:1:1
           │
         1 │ if(2 > 1, 3)
           │ ^^^^^^^^^^^^ Called with 2 arg(s) here
@@ -97,7 +97,7 @@ fn error_with_call_trace() {
     "#;
     const EXPECTED_ERR: &str = r#"
         error[EVAL]: Compare requires 2 number arguments
-          ┌─ Snip #1:1:19
+          ┌─ Snippet #1:1:19
           │
         1 │ is_positive = |x| x > 0;
           │                   ^^^^^
@@ -105,7 +105,7 @@ fn error_with_call_trace() {
           │                   Failed call
           │                   Invalid argument
         2 │ is_positive(3) && !is_positive((1, 2))
-          │                    ------------------- Call at depth 1
+          │                    ------------------- Call at depth 2
     "#;
 
     let assert = create_command(&unindent(PROGRAM)).assert();
@@ -118,24 +118,55 @@ fn error_with_call_trace() {
 #[test]
 fn error_with_call_complex_call_trace() {
     const PROGRAM: &str = r#"
+        double = |x| x * 2;
+        quadruple = |x| double(double(x));
+        quadruple(true)
+    "#;
+    const EXPECTED_ERR: &str = r#"
+        error[EVAL]: Unexpected operand type for multiplication
+          ┌─ Snippet #1:1:10
+          │
+        1 │ double = |x| x * 2;
+          │          ----^----
+          │          │   │
+          │          │   Operand of wrong type
+          │          The error occurred in function `double`
+        2 │ quadruple = |x| double(double(x));
+          │                        --------- Call at depth 1
+        3 │ quadruple(true)
+          │ --------------- Call at depth 2
+          │
+          = Operands of binary arithmetic ops must be numbers or tuples containing numbers
+    "#;
+
+    let assert = create_command(&unindent(PROGRAM)).assert();
+    assert
+        .failure()
+        .code(ERROR_EXIT_CODE)
+        .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+}
+
+#[test]
+fn error_with_call_complex_call_trace_and_native_fns() {
+    const PROGRAM: &str = r#"
         all = |array, predicate| array.fold(true, |acc, x| acc && predicate(x));
         (1, 2, map).all(|x| 0 < x)
     "#;
     const EXPECTED_ERR: &str = r#"
         error[EVAL]: Compare requires 2 number arguments
-          ┌─ Snip #1:1:26
+          ┌─ Snippet #1:1:26
           │
         1 │ all = |array, predicate| array.fold(true, |acc, x| acc && predicate(x));
           │                          ----------------------------------------------
           │                          │                                │
-          │                          │                                Call at depth 1
-          │                          Call at depth 2
+          │                          │                                Call at depth 2
+          │                          Call at depth 3
         2 │ (1, 2, map).all(|x| 0 < x)
           │ --------------------^^^^^-
           │ │                   │   │
           │ │                   │   Invalid argument
           │ │                   Failed call
-          │ Call at depth 3
+          │ Call at depth 4
     "#;
 
     let assert = create_command(&unindent(PROGRAM)).assert();

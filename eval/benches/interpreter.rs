@@ -9,7 +9,7 @@ use criterion::{criterion_group, criterion_main, BatchSize, Bencher, Criterion, 
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use typed_arena::Arena;
 
-use arithmetic_eval::{fns, CallContext, Interpreter, NativeFn, Value};
+use arithmetic_eval::{fns, CallContext, Interpreter, NativeFn, Value, WildcardId};
 use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
 
 const SEED: u64 = 123;
@@ -62,7 +62,7 @@ fn bench_mul(bencher: &mut Bencher<'_>) {
                 .collect();
             let program = arena.alloc(values.join(" * "));
             let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
-            Interpreter::new().compile(&program).unwrap()
+            Interpreter::new().compile(WildcardId, &program).unwrap()
         },
         |block| block.run().unwrap(),
         BatchSize::SmallInput,
@@ -80,7 +80,7 @@ fn bench_mul_fold(bencher: &mut Bencher<'_>) {
             let mut module = interpreter
                 .insert_native_fn("fold", fns::Fold)
                 .insert_var("xs", Value::Tuple(vec![]))
-                .compile(&program)
+                .compile(WildcardId, &program)
                 .unwrap();
 
             let values: Vec<_> = (0..ELEMENTS)

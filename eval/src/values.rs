@@ -7,9 +7,9 @@ use core::fmt;
 
 use crate::{
     alloc::{vec, Rc, Vec},
+    error::{AuxErrorInfo, Backtrace, CodeInModule, TupleLenMismatchContext},
     executable::ExecutableFn,
-    AuxErrorInfo, Backtrace, EvalError, EvalResult, Number, SpannedEvalError,
-    TupleLenMismatchContext,
+    Error, ErrorKind, EvalResult, ModuleId, Number, WildcardId,
 };
 use arithmetic_parser::{
     BinaryOp, Grammar, InputSpan, LvalueLen, MaybeSpanned, Op, Spanned, StripCode, UnaryOp,
@@ -18,7 +18,7 @@ use arithmetic_parser::{
 /// Opaque context for native calls.
 #[derive(Debug)]
 pub struct CallContext<'r, 'a> {
-    call_span: MaybeSpanned<'a>,
+    call_span: CodeInModule<'a>,
     backtrace: Option<&'r mut Backtrace<'a>>,
 }
 
@@ -26,13 +26,13 @@ impl<'r, 'a> CallContext<'r, 'a> {
     /// Creates a mock call context.
     pub fn mock() -> Self {
         Self {
-            call_span: Spanned::from(InputSpan::new("")).into(),
+            call_span: CodeInModule::new(&WildcardId, Spanned::from(InputSpan::new("")).into()),
             backtrace: None,
         }
     }
 
     pub(crate) fn new(
-        call_span: MaybeSpanned<'a>,
+        call_span: CodeInModule<'a>,
         backtrace: Option<&'r mut Backtrace<'a>>,
     ) -> Self {
         Self {
@@ -47,12 +47,17 @@ impl<'r, 'a> CallContext<'r, 'a> {
 
     /// Returns the call span.
     pub fn apply_call_span<T>(&self, value: T) -> MaybeSpanned<'a, T> {
-        self.call_span.copy_with_extra(value)
+        self.call_span.code().copy_with_extra(value)
+    }
+
+    #[doc(hidden)] // used in `wrap_fn` macro
+    pub fn enrich_call_site_span<T>(&self, span: &MaybeSpanned<'a, T>) -> CodeInModule<'a> {
+        CodeInModule::new(self.call_span.module_id(), span.with_no_extra())
     }
 
     /// Creates the error spanning the call site.
-    pub fn call_site_error(&self, error: EvalError) -> SpannedEvalError<'a> {
-        SpannedEvalError::new(&self.call_span, error)
+    pub fn call_site_error(&self, error: ErrorKind) -> Error<'a> {
+        Error::from_parts(self.call_span.clone(), error)
     }
 
     /// Checks argument count and returns an error if it doesn't match.
@@ -60,12 +65,12 @@ impl<'r, 'a> CallContext<'r, 'a> {
         &self,
         args: &[SpannedValue<'a, T>],
         expected_count: impl Into<LvalueLen>,
-    ) -> Result<(), SpannedEvalError<'a>> {
+    ) -> Result<(), Error<'a>> {
         let expected_count = expected_count.into();
         if expected_count.matches(args.len()) {
             Ok(())
         } else {
-            Err(self.call_site_error(EvalError::ArgsLenMismatch {
+            Err(self.call_site_error(ErrorKind::ArgsLenMismatch {
                 def: expected_count,
                 call: args.len(),
             }))
@@ -146,6 +151,11 @@ impl<'a, T: Grammar> InterpretedFn<'a, T> {
         }
     }
 
+    /// Returns ID of the module defining this function.
+    pub fn module_id(&self) -> &dyn ModuleId {
+        self.definition.inner.id()
+    }
+
     /// Returns the number of arguments for this function.
     pub fn arg_count(&self) -> LvalueLen {
         self.definition.arg_count
@@ -173,11 +183,11 @@ where
         ctx: &mut CallContext<'_, 'a>,
     ) -> EvalResult<'a, T> {
         if !self.arg_count().matches(args.len()) {
-            let err = EvalError::ArgsLenMismatch {
+            let err = ErrorKind::ArgsLenMismatch {
                 def: self.arg_count(),
                 call: args.len(),
             };
-            return Err(SpannedEvalError::new(&ctx.call_span, err));
+            return Err(ctx.call_site_error(err));
         }
 
         let args = args.into_iter().map(|arg| arg.extra).collect();
@@ -253,10 +263,13 @@ where
         }
     }
 
-    pub(crate) fn def_span(&self) -> Option<MaybeSpanned<'a>> {
+    pub(crate) fn def_span(&self) -> Option<CodeInModule<'a>> {
         match self {
             Self::Native(_) => None,
-            Self::Interpreted(function) => Some(function.definition.def_span),
+            Self::Interpreted(function) => Some(CodeInModule::new(
+                function.module_id(),
+                function.definition.def_span,
+            )),
         }
     }
 }
@@ -398,21 +411,21 @@ enum OpSide {
 
 #[derive(Debug)]
 struct BinaryOpError {
-    inner: EvalError,
+    inner: ErrorKind,
     side: Option<OpSide>,
 }
 
 impl BinaryOpError {
     fn new(op: BinaryOp) -> Self {
         Self {
-            inner: EvalError::UnexpectedOperand { op: Op::Binary(op) },
+            inner: ErrorKind::UnexpectedOperand { op: Op::Binary(op) },
             side: None,
         }
     }
 
     fn tuple(op: BinaryOp, lhs: usize, rhs: usize) -> Self {
         Self {
-            inner: EvalError::TupleLenMismatch {
+            inner: ErrorKind::TupleLenMismatch {
                 lhs: lhs.into(),
                 rhs,
                 context: TupleLenMismatchContext::BinaryOp(op),
@@ -428,25 +441,27 @@ impl BinaryOpError {
 
     fn span<'a>(
         self,
+        module_id: &dyn ModuleId,
         total_span: MaybeSpanned<'a>,
         lhs_span: MaybeSpanned<'a>,
         rhs_span: MaybeSpanned<'a>,
-    ) -> SpannedEvalError<'a> {
+    ) -> Error<'a> {
         let main_span = match self.side {
             Some(OpSide::Lhs) => lhs_span,
             Some(OpSide::Rhs) => rhs_span,
             None => total_span,
         };
 
-        let aux_info = if let EvalError::TupleLenMismatch { rhs, .. } = self.inner {
+        let aux_info = if let ErrorKind::TupleLenMismatch { rhs, .. } = self.inner {
             Some(AuxErrorInfo::UnbalancedRhs(rhs))
         } else {
             None
         };
 
-        let mut err = SpannedEvalError::new(&main_span, self.inner);
+        let mut err = Error::new(module_id, &main_span, self.inner);
         if let Some(aux_info) = aux_info {
-            err = err.with_span(&rhs_span, aux_info);
+            let rhs_span = CodeInModule::new(module_id, rhs_span);
+            err = err.with_span(rhs_span, aux_info);
         }
         err
     }
@@ -506,60 +521,66 @@ where
 
     #[inline]
     fn try_binary_op(
+        module_id: &dyn ModuleId,
         total_span: MaybeSpanned<'a>,
         lhs: MaybeSpanned<'a, Self>,
         rhs: MaybeSpanned<'a, Self>,
         op: BinaryOp,
         primitive_op: fn(T::Lit, T::Lit) -> T::Lit,
-    ) -> Result<Self, SpannedEvalError<'a>> {
+    ) -> Result<Self, Error<'a>> {
         let lhs_span = lhs.with_no_extra();
         let rhs_span = rhs.with_no_extra();
         lhs.extra
             .try_binary_op_inner(rhs.extra, op, primitive_op)
-            .map_err(|e| e.span(total_span, lhs_span, rhs_span))
+            .map_err(|e| e.span(module_id, total_span, lhs_span, rhs_span))
     }
 
     pub(crate) fn try_add(
+        module_id: &dyn ModuleId,
         total_span: MaybeSpanned<'a>,
         lhs: MaybeSpanned<'a, Self>,
         rhs: MaybeSpanned<'a, Self>,
-    ) -> Result<Self, SpannedEvalError<'a>> {
-        Self::try_binary_op(total_span, lhs, rhs, BinaryOp::Add, |x, y| x + y)
+    ) -> Result<Self, Error<'a>> {
+        Self::try_binary_op(module_id, total_span, lhs, rhs, BinaryOp::Add, |x, y| x + y)
     }
 
     pub(crate) fn try_sub(
+        module_id: &dyn ModuleId,
         total_span: MaybeSpanned<'a>,
         lhs: MaybeSpanned<'a, Self>,
         rhs: MaybeSpanned<'a, Self>,
-    ) -> Result<Self, SpannedEvalError<'a>> {
-        Self::try_binary_op(total_span, lhs, rhs, BinaryOp::Sub, |x, y| x - y)
+    ) -> Result<Self, Error<'a>> {
+        Self::try_binary_op(module_id, total_span, lhs, rhs, BinaryOp::Sub, |x, y| x - y)
     }
 
     pub(crate) fn try_mul(
+        module_id: &dyn ModuleId,
         total_span: MaybeSpanned<'a>,
         lhs: MaybeSpanned<'a, Self>,
         rhs: MaybeSpanned<'a, Self>,
-    ) -> Result<Self, SpannedEvalError<'a>> {
-        Self::try_binary_op(total_span, lhs, rhs, BinaryOp::Mul, |x, y| x * y)
+    ) -> Result<Self, Error<'a>> {
+        Self::try_binary_op(module_id, total_span, lhs, rhs, BinaryOp::Mul, |x, y| x * y)
     }
 
     pub(crate) fn try_div(
+        module_id: &dyn ModuleId,
         total_span: MaybeSpanned<'a>,
         lhs: MaybeSpanned<'a, Self>,
         rhs: MaybeSpanned<'a, Self>,
-    ) -> Result<Self, SpannedEvalError<'a>> {
-        Self::try_binary_op(total_span, lhs, rhs, BinaryOp::Div, |x, y| x / y)
+    ) -> Result<Self, Error<'a>> {
+        Self::try_binary_op(module_id, total_span, lhs, rhs, BinaryOp::Div, |x, y| x / y)
     }
 
     pub(crate) fn try_pow(
+        module_id: &dyn ModuleId,
         total_span: MaybeSpanned<'a>,
         lhs: MaybeSpanned<'a, Self>,
         rhs: MaybeSpanned<'a, Self>,
-    ) -> Result<Self, SpannedEvalError<'a>> {
-        Self::try_binary_op(total_span, lhs, rhs, BinaryOp::Power, Pow::pow)
+    ) -> Result<Self, Error<'a>> {
+        Self::try_binary_op(module_id, total_span, lhs, rhs, BinaryOp::Power, Pow::pow)
     }
 
-    pub(crate) fn try_neg(self) -> Result<Self, EvalError> {
+    pub(crate) fn try_neg(self) -> Result<Self, ErrorKind> {
         match self {
             Self::Number(val) => Ok(Self::Number(-val)),
             Self::Tuple(tuple) => {
@@ -567,13 +588,13 @@ where
                 res.map(Self::Tuple)
             }
 
-            _ => Err(EvalError::UnexpectedOperand {
+            _ => Err(ErrorKind::UnexpectedOperand {
                 op: UnaryOp::Neg.into(),
             }),
         }
     }
 
-    pub(crate) fn try_not(self) -> Result<Self, EvalError> {
+    pub(crate) fn try_not(self) -> Result<Self, ErrorKind> {
         match self {
             Self::Bool(val) => Ok(Self::Bool(!val)),
             Self::Tuple(tuple) => {
@@ -581,50 +602,52 @@ where
                 res.map(Self::Tuple)
             }
 
-            _ => Err(EvalError::UnexpectedOperand {
+            _ => Err(ErrorKind::UnexpectedOperand {
                 op: UnaryOp::Not.into(),
             }),
         }
     }
 
     pub(crate) fn try_and(
+        module_id: &dyn ModuleId,
         lhs: &MaybeSpanned<'a, Self>,
         rhs: &MaybeSpanned<'a, Self>,
-    ) -> Result<Self, SpannedEvalError<'a>> {
+    ) -> Result<Self, Error<'a>> {
         match (&lhs.extra, &rhs.extra) {
             (Value::Bool(this), Value::Bool(other)) => Ok(Value::Bool(*this && *other)),
             (Value::Bool(_), _) => {
-                let err = EvalError::UnexpectedOperand {
+                let err = ErrorKind::UnexpectedOperand {
                     op: BinaryOp::And.into(),
                 };
-                Err(SpannedEvalError::new(&rhs, err))
+                Err(Error::new(module_id, &rhs, err))
             }
             _ => {
-                let err = EvalError::UnexpectedOperand {
+                let err = ErrorKind::UnexpectedOperand {
                     op: BinaryOp::And.into(),
                 };
-                Err(SpannedEvalError::new(&lhs, err))
+                Err(Error::new(module_id, &lhs, err))
             }
         }
     }
 
     pub(crate) fn try_or(
+        module_id: &dyn ModuleId,
         lhs: &MaybeSpanned<'a, Self>,
         rhs: &MaybeSpanned<'a, Self>,
-    ) -> Result<Self, SpannedEvalError<'a>> {
+    ) -> Result<Self, Error<'a>> {
         match (&lhs.extra, &rhs.extra) {
             (Value::Bool(this), Value::Bool(other)) => Ok(Value::Bool(*this || *other)),
             (Value::Bool(_), _) => {
-                let err = EvalError::UnexpectedOperand {
+                let err = ErrorKind::UnexpectedOperand {
                     op: BinaryOp::Or.into(),
                 };
-                Err(SpannedEvalError::new(&rhs, err))
+                Err(Error::new(module_id, &rhs, err))
             }
             _ => {
-                let err = EvalError::UnexpectedOperand {
+                let err = ErrorKind::UnexpectedOperand {
                     op: BinaryOp::Or.into(),
                 };
-                Err(SpannedEvalError::new(&lhs, err))
+                Err(Error::new(module_id, &lhs, err))
             }
         }
     }

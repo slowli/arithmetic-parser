@@ -88,7 +88,7 @@ impl Args {
 
     fn run_command<T: ReplLiteral>(self) -> io::Result<()> {
         let command = self.command.unwrap_or_default();
-        let mut env = Env::non_interactive(&command);
+        let (mut env, snippet) = Env::non_interactive(command.clone());
 
         let command = InputSpan::new(&command);
         let parsed = NumGrammar::<T>::parse_statements(command).or_else(|e| {
@@ -101,10 +101,12 @@ impl Args {
             Ok(())
         } else {
             let mut interpreter = T::create_interpreter();
-            let value = interpreter.evaluate(&parsed).or_else(|e| {
-                env.report_eval_error(e)
-                    .map(|()| process::exit(ERROR_EXIT_CODE))
-            })?;
+            let value = interpreter
+                .evaluate_named_block(snippet, &parsed)
+                .or_else(|e| {
+                    env.report_eval_error(e)
+                        .map(|()| process::exit(ERROR_EXIT_CODE))
+                })?;
             env.writeln_value(&value)
         }
     }

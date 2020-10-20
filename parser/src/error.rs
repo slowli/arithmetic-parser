@@ -5,10 +5,9 @@ use nom::{
     Slice,
 };
 
-use alloc::borrow::ToOwned;
 use core::fmt;
 
-use crate::{Context, InputSpan, Op, Spanned};
+use crate::{alloc::ToOwned, Context, InputSpan, LocatedSpan, Op, Spanned};
 
 /// Parsing error kind.
 #[derive(Debug)]
@@ -108,17 +107,23 @@ impl ErrorKind {
 impl std::error::Error for ErrorKind {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Literal(err) | Self::Type(err) => Some(err),
+            Self::Literal(err) | Self::Type(err) => Some(err.as_ref()),
             _ => None,
         }
     }
 }
 
-/// Parsing error with the associated code span.
+/// Parsing error with a generic code span.
+///
+/// Two primary cases of the `Span` type param are `&str` (for original errors produced by
+/// the parser) and `usize` (for *stripped* errors that have a static lifetime).
 #[derive(Debug)]
-pub struct Error<'a> {
-    inner: Spanned<'a, ErrorKind>,
+pub struct SpannedError<Span> {
+    inner: LocatedSpan<Span, ErrorKind>,
 }
+
+/// Error with code span available as a string reference.
+pub type Error<'a> = SpannedError<&'a str>;
 
 impl<'a> Error<'a> {
     pub(crate) fn new(span: InputSpan<'a>, kind: ErrorKind) -> Self {
@@ -133,18 +138,29 @@ impl<'a> Error<'a> {
         }
     }
 
+    /// Strips code reference from this error, making its lifetime independent of the code.
+    pub fn strip_code(self) -> SpannedError<usize> {
+        SpannedError {
+            inner: self.inner.map_fragment(str::len),
+        }
+    }
+}
+
+impl<Span> SpannedError<Span> {
     /// Returns the kind of this error.
     pub fn kind(&self) -> &ErrorKind {
         &self.inner.extra
     }
+}
 
+impl<Span: Copy> SpannedError<Span> {
     /// Returns the span of this error.
-    pub fn span(&self) -> Spanned<'a> {
+    pub fn span(&self) -> LocatedSpan<Span> {
         self.inner.with_no_extra()
     }
 }
 
-impl fmt::Display for Error<'_> {
+impl<Span> fmt::Display for SpannedError<Span> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
@@ -157,9 +173,9 @@ impl fmt::Display for Error<'_> {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for Error<'_> {
+impl<Span: fmt::Debug> std::error::Error for SpannedError<Span> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        std::error::Error::source(&self.inner)
+        std::error::Error::source(&self.inner.extra)
     }
 }
 

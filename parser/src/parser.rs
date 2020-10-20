@@ -14,10 +14,10 @@ use nom::{
     Err as NomErr,
 };
 
-use alloc::{boxed::Box, vec, vec::Vec};
 use core::mem;
 
 use crate::{
+    alloc::{vec, Box, Vec},
     spans::{unite_spans, with_span},
     BinaryOp, Block, Context, Destructure, DestructureRest, Error, ErrorKind, Expr, FnDefinition,
     Grammar, InputSpan, Lvalue, NomResult, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement,

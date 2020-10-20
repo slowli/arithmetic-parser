@@ -48,7 +48,7 @@
 //! );
 //! ```
 
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![warn(missing_docs, missing_debug_implementations)]
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(
@@ -57,10 +57,19 @@
     clippy::module_name_repetitions
 )]
 
-extern crate alloc;
+// Polyfill for `alloc` types.
+mod alloc {
+    #[cfg(not(feature = "std"))]
+    extern crate alloc;
+
+    #[cfg(not(feature = "std"))]
+    pub use alloc::{borrow::ToOwned, boxed::Box, format, string::String, vec, vec::Vec};
+    #[cfg(feature = "std")]
+    pub use std::{borrow::ToOwned, boxed::Box, format, string::String, vec, vec::Vec};
+}
 
 pub use crate::{
-    error::{Error, ErrorKind},
+    error::{Error, ErrorKind, SpannedError},
     parser::is_valid_variable_name,
     spans::{
         CodeFragment, InputSpan, LocatedSpan, MaybeSpanned, NomResult, Spanned, StripCode,
@@ -69,8 +78,9 @@ pub use crate::{
     traits::{Features, Grammar, GrammarExt},
 };
 
-use alloc::{boxed::Box, vec, vec::Vec};
 use core::fmt;
+
+use crate::alloc::{vec, Box, Vec};
 
 mod error;
 pub mod grammars;

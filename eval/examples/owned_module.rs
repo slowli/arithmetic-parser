@@ -1,6 +1,5 @@
 //! Shows how to use owned modules.
 
-use anyhow::anyhow;
 use assert_matches::assert_matches;
 
 use arithmetic_eval::{ErrorKind, ExecutableModule, Interpreter, Value};
@@ -13,8 +12,7 @@ fn create_module<'a>(
     program: &'a str,
     import_name: &str,
 ) -> anyhow::Result<ExecutableModule<'a, F64Grammar>> {
-    let block = F64Grammar::parse_statements(InputSpan::new(program))
-        .map_err(|e| anyhow!("Parse error: {}", e))?;
+    let block = F64Grammar::parse_statements(InputSpan::new(program)).strip_err()?;
 
     let mut interpreter = Interpreter::with_prelude();
     interpreter.insert_var(import_name, Value::void());

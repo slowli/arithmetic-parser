@@ -5,10 +5,8 @@ use nom::{
     multi::fold_many1,
 };
 
-use alloc::string::String;
-
 use super::*;
-use crate::{Features, Op};
+use crate::{alloc::String, Features, Op};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum LiteralType {

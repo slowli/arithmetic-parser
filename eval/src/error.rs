@@ -360,9 +360,7 @@ impl fmt::Display for AuxErrorInfo {
 /// # use arithmetic_parser::{grammars::F64Grammar, GrammarExt, InputSpan, StripResultExt};
 /// # use arithmetic_eval::{Error, ExecutableModule, Interpreter, WildcardId};
 /// fn compile_code(code: &str) -> anyhow::Result<ExecutableModule<'_, F64Grammar>> {
-///     // FIXME: change after improving errors in parser.
-///     let block = F64Grammar::parse_statements(InputSpan::new(code))
-///         .map_err(|e| anyhow::anyhow!("Parse error: {}", e.extra))?;
+///     let block = F64Grammar::parse_statements(InputSpan::new(code)).strip_err()?;
 ///
 ///     // Without `strip_err()` call, the code below won't compile:
 ///     // `Error<'_>` in general cannot be boxed into `anyhow::Error`,

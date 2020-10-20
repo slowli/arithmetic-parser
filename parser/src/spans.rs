@@ -2,9 +2,10 @@
 
 use nom::Slice;
 
-use alloc::{borrow::ToOwned, format, string::String};
-
-use crate::Error;
+use crate::{
+    alloc::{format, String, ToOwned},
+    Error, SpannedError,
+};
 
 /// Code span.
 pub type InputSpan<'a> = nom_locate::LocatedSpan<&'a str, ()>;
@@ -317,5 +318,16 @@ impl<T, E: StripCode> StripResultExt for Result<T, E> {
 
     fn strip_err(self) -> Result<T, Self::StrippedErr> {
         self.map_err(|err| err.strip_code())
+    }
+}
+
+// Since `ErrorKind` does not implement `Clone`, we cannot implement `StripCode` for `Error`.
+// Still, we can use it with `StripResultExt`.
+impl<T> StripResultExt for Result<T, Error<'_>> {
+    type Ok = T;
+    type StrippedErr = SpannedError<usize>;
+
+    fn strip_err(self) -> Result<T, Self::StrippedErr> {
+        self.map_err(Error::strip_code)
     }
 }

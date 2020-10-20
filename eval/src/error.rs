@@ -113,7 +113,7 @@ pub enum ErrorKind {
 
     /// Error while converting arguments for [`FnWrapper`].
     ///
-    /// [`FnWrapper`]: fns/struct.FnWrapper.html
+    /// [`FnWrapper`]: ../fns/struct.FnWrapper.html
     #[display(
         fmt = "Failed converting arguments for native function wrapper: {}",
         _0

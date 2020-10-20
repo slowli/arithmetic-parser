@@ -587,15 +587,13 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 /// [`IntoEvalResult`]: fns/trait.IntoEvalResult.html
 /// [`Value`]: enum.Value.html
 /// [`Function`]: enum.Function.html
-/// [`EvalResult`]: type.EvalResult.html
+/// [`EvalResult`]: error/type.EvalResult.html
 ///
 /// # Examples
 ///
 /// ```
 /// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, InputSpan};
-/// # use arithmetic_eval::{
-/// #     wrap_fn, fns::FnWrapper, CallContext, Function, Interpreter, Value,
-/// # };
+/// # use arithmetic_eval::{wrap_fn, fns::FnWrapper, CallContext, Function, Interpreter, Value};
 /// fn is_function<G: Grammar>(value: Value<'_, G>) -> bool {
 ///     value.is_function()
 /// }
@@ -613,9 +611,7 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 ///
 /// ```
 /// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, InputSpan};
-/// # use arithmetic_eval::{
-/// #     wrap_fn, fns::FnWrapper, CallContext, Function, Interpreter, Value,
-/// # };
+/// # use arithmetic_eval::{wrap_fn, fns::FnWrapper, CallContext, Function, Interpreter, Value};
 /// // Note that both `Value`s have the same lifetime due to elision.
 /// fn take_if<G: Grammar>(value: Value<'_, G>, condition: bool) -> Value<'_, G> {
 ///     if condition { value } else { Value::void() }

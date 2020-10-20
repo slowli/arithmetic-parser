@@ -60,7 +60,7 @@
 extern crate alloc;
 
 pub use crate::{
-    error::{Error, SpannedError},
+    error::{Error, ErrorKind},
     parser::is_valid_variable_name,
     spans::{
         CodeFragment, InputSpan, LocatedSpan, MaybeSpanned, NomResult, Spanned, StripCode,

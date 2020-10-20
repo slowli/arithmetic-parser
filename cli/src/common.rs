@@ -21,8 +21,8 @@ use arithmetic_eval::{
     InterpreterError, ModuleId, Number, Value,
 };
 use arithmetic_parser::{
-    grammars::NumGrammar, Block, CodeFragment, Grammar, GrammarExt, InputSpan, LocatedSpan,
-    LvalueLen, SpannedError as ParseError,
+    grammars::NumGrammar, Block, CodeFragment, Error as ParseError, Grammar, GrammarExt, InputSpan,
+    LocatedSpan, LvalueLen,
 };
 
 /// Exit code on parse or evaluation error.

@@ -4,12 +4,12 @@ use nom::Slice;
 
 use alloc::{borrow::ToOwned, format, string::String};
 
-use crate::SpannedError;
+use crate::Error;
 
 /// Code span.
 pub type InputSpan<'a> = nom_locate::LocatedSpan<&'a str, ()>;
 /// Parsing outcome generalized by the type returned on success.
-pub type NomResult<'a, T> = nom::IResult<InputSpan<'a>, T, SpannedError<'a>>;
+pub type NomResult<'a, T> = nom::IResult<InputSpan<'a>, T, Error<'a>>;
 
 /// Code span together with information related to where it is located in the code.
 ///

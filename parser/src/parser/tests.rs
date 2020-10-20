@@ -263,11 +263,11 @@ fn whitespace_can_include_comments() {
 fn non_ascii_input() {
     let input = InputSpan::new("\u{444}\u{44b}\u{432}\u{430}");
     let err = statements::<FieldGrammar>(input).unwrap_err();
-    assert_matches!(err.kind(), Error::NonAsciiInput);
+    assert_matches!(err.kind(), ErrorKind::NonAsciiInput);
 
     let input = InputSpan::new("1 + \u{444}\u{44b}");
     let err = statements::<FieldGrammar>(input).unwrap_err();
-    assert_matches!(err.kind(), Error::NonAsciiInput);
+    assert_matches!(err.kind(), ErrorKind::NonAsciiInput);
 }
 
 #[test]
@@ -1580,6 +1580,6 @@ fn order_comparisons_when_switched_off() {
     assert_eq!(*spanned_err.span().fragment(), ">=");
     assert_matches!(
         *spanned_err.kind(),
-        Error::UnsupportedOp(Op::Binary(BinaryOp::Ge))
+        ErrorKind::UnsupportedOp(Op::Binary(BinaryOp::Ge))
     );
 }

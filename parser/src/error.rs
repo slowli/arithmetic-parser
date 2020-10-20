@@ -13,36 +13,29 @@ use crate::{Context, InputSpan, Op, Spanned};
 /// Parsing error kind.
 #[derive(Debug)]
 #[non_exhaustive]
-pub enum Error {
+pub enum ErrorKind {
     /// Input is not in ASCII.
     NonAsciiInput,
-
     /// Error parsing literal.
     Literal(anyhow::Error),
-
     /// Error parsing type hint.
     Type(anyhow::Error),
-
     /// Unary or binary operation switched off in the parser features.
     UnsupportedOp(Op),
-
     /// No rules where expecting this character.
     UnexpectedChar {
         /// Parsing context.
         context: Option<Context>,
     },
-
     /// Unexpected expression end.
     UnexpectedTerm {
         /// Parsing context.
         context: Option<Context>,
     },
-
     /// Leftover symbols after parsing.
     Leftovers,
     /// Input is incomplete.
     Incomplete,
-
     /// Other parsing error.
     Other {
         /// `nom`-defined error kind.
@@ -52,7 +45,7 @@ pub enum Error {
     },
 }
 
-impl fmt::Display for Error {
+impl fmt::Display for ErrorKind {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NonAsciiInput => formatter.write_str("Non-ASCII inputs are not supported"),
@@ -79,7 +72,7 @@ impl fmt::Display for Error {
     }
 }
 
-impl Error {
+impl ErrorKind {
     fn context_mut(&mut self) -> Option<&mut Option<Context>> {
         match self {
             Self::UnexpectedChar { context }
@@ -104,15 +97,15 @@ impl Error {
         matches!(self, Self::Incomplete)
     }
 
-    pub(crate) fn with_span<'a, T>(self, span: &Spanned<'a, T>) -> SpannedError<'a> {
-        SpannedError {
+    pub(crate) fn with_span<'a, T>(self, span: &Spanned<'a, T>) -> Error<'a> {
+        Error {
             inner: span.copy_with_extra(self),
         }
     }
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for Error {
+impl std::error::Error for ErrorKind {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Literal(err) | Self::Type(err) => Some(err),
@@ -123,25 +116,25 @@ impl std::error::Error for Error {
 
 /// Parsing error with the associated code span.
 #[derive(Debug)]
-pub struct SpannedError<'a> {
-    inner: Spanned<'a, Error>,
+pub struct Error<'a> {
+    inner: Spanned<'a, ErrorKind>,
 }
 
-impl<'a> SpannedError<'a> {
-    pub(crate) fn new(span: InputSpan<'a>, kind: Error) -> Self {
+impl<'a> Error<'a> {
+    pub(crate) fn new(span: InputSpan<'a>, kind: ErrorKind) -> Self {
         Self {
             inner: Spanned::new(span, kind),
         }
     }
 
-    pub(crate) fn from_parts(span: Spanned<'a>, kind: Error) -> Self {
+    pub(crate) fn from_parts(span: Spanned<'a>, kind: ErrorKind) -> Self {
         Self {
             inner: span.copy_with_extra(kind),
         }
     }
 
     /// Returns the kind of this error.
-    pub fn kind(&self) -> &Error {
+    pub fn kind(&self) -> &ErrorKind {
         &self.inner.extra
     }
 
@@ -151,7 +144,7 @@ impl<'a> SpannedError<'a> {
     }
 }
 
-impl fmt::Display for SpannedError<'_> {
+impl fmt::Display for Error<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
@@ -164,13 +157,13 @@ impl fmt::Display for SpannedError<'_> {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for SpannedError<'_> {
+impl std::error::Error for Error<'_> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         std::error::Error::source(&self.inner)
     }
 }
 
-impl<'a> ParseError<InputSpan<'a>> for SpannedError<'a> {
+impl<'a> ParseError<InputSpan<'a>> for Error<'a> {
     fn from_error_kind(mut input: InputSpan<'a>, kind: NomErrorKind) -> Self {
         if kind == NomErrorKind::Char && !input.fragment().is_empty() {
             // Truncate the error span to the first ineligible char.
@@ -179,18 +172,18 @@ impl<'a> ParseError<InputSpan<'a>> for SpannedError<'a> {
 
         let error_kind = if kind == NomErrorKind::Char {
             if input.fragment().is_empty() {
-                Error::UnexpectedTerm { context: None }
+                ErrorKind::UnexpectedTerm { context: None }
             } else {
-                Error::UnexpectedChar { context: None }
+                ErrorKind::UnexpectedChar { context: None }
             }
         } else {
-            Error::Other {
+            ErrorKind::Other {
                 kind,
                 context: None,
             }
         };
 
-        SpannedError::new(input, error_kind)
+        Error::new(input, error_kind)
     }
 
     fn append(_: InputSpan<'a>, _: NomErrorKind, other: Self) -> Self {

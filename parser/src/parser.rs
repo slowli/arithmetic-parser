@@ -19,9 +19,9 @@ use core::mem;
 
 use crate::{
     spans::{unite_spans, with_span},
-    BinaryOp, Block, Context, Destructure, DestructureRest, Error, Expr, FnDefinition, Grammar,
-    InputSpan, Lvalue, NomResult, Spanned, SpannedError, SpannedExpr, SpannedLvalue,
-    SpannedStatement, Statement, UnaryOp,
+    BinaryOp, Block, Context, Destructure, DestructureRest, Error, ErrorKind, Expr, FnDefinition,
+    Grammar, InputSpan, Lvalue, NomResult, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement,
+    Statement, UnaryOp,
 };
 
 #[cfg(test)]
@@ -160,7 +160,7 @@ where
                     Ok((rest, terms.map_extra(Expr::Tuple)))
                 } else {
                     Err(NomErr::Failure(
-                        Error::UnexpectedTerm { context: None }.with_span(&terms),
+                        ErrorKind::UnexpectedTerm { context: None }.with_span(&terms),
                     ))
                 }
             }
@@ -186,7 +186,7 @@ where
         } else {
             // Always fail.
             Box::new(|input| {
-                let e = Error::Leftovers.with_span(&input.into());
+                let e = ErrorKind::Leftovers.with_span(&input.into());
                 Err(NomErr::Error(e))
             })
         };
@@ -200,7 +200,7 @@ where
         } else {
             // Always fail.
             Box::new(|input| {
-                let e = Error::Leftovers.with_span(&input.into());
+                let e = ErrorKind::Leftovers.with_span(&input.into());
                 Err(NomErr::Error(e))
             })
         };
@@ -307,8 +307,8 @@ where
         let spanned_op = BinaryOp::from_span(span);
         if spanned_op.extra.is_order_comparison() && !T::FEATURES.order_comparisons {
             // Immediately drop parsing on an unsupported op, since there are no alternatives.
-            let err = Error::UnsupportedOp(spanned_op.extra.into());
-            let spanned_err = SpannedError::from_parts(span, err);
+            let err = ErrorKind::UnsupportedOp(spanned_op.extra.into());
+            let spanned_err = Error::from_parts(span, err);
             Err(NomErr::Failure(spanned_err))
         } else {
             Ok((rest, spanned_op))
@@ -573,32 +573,30 @@ where
 }
 
 /// Parses a complete list of statements.
-pub(crate) fn statements<T>(input_span: InputSpan<'_>) -> Result<Block<'_, T>, SpannedError<'_>>
+pub(crate) fn statements<T>(input_span: InputSpan<'_>) -> Result<Block<'_, T>, Error<'_>>
 where
     T: Grammar,
 {
     if !input_span.fragment().is_ascii() {
-        return Err(SpannedError::new(input_span, Error::NonAsciiInput));
+        return Err(Error::new(input_span, ErrorKind::NonAsciiInput));
     }
     statements_inner::<T, Complete>(input_span)
 }
 
 /// Parses a potentially incomplete list of statements.
-pub(crate) fn streaming_statements<T>(
-    input_span: InputSpan<'_>,
-) -> Result<Block<'_, T>, SpannedError<'_>>
+pub(crate) fn streaming_statements<T>(input_span: InputSpan<'_>) -> Result<Block<'_, T>, Error<'_>>
 where
     T: Grammar,
 {
     if !input_span.fragment().is_ascii() {
-        return Err(SpannedError::new(input_span, Error::NonAsciiInput));
+        return Err(Error::new(input_span, ErrorKind::NonAsciiInput));
     }
 
     statements_inner::<T, Complete>(input_span)
         .or_else(|_| statements_inner::<T, Streaming>(input_span))
 }
 
-fn statements_inner<T, Ty>(input_span: InputSpan<'_>) -> Result<Block<'_, T>, SpannedError<'_>>
+fn statements_inner<T, Ty>(input_span: InputSpan<'_>) -> Result<Block<'_, T>, Error<'_>>
 where
     T: Grammar,
     Ty: GrammarType,
@@ -606,13 +604,13 @@ where
     delimited(ws::<Ty>, separated_statements::<T, Ty>, ws::<Ty>)(input_span)
         .map_err(|e| match e {
             NomErr::Failure(e) | NomErr::Error(e) => e,
-            NomErr::Incomplete(_) => Error::Incomplete.with_span(&input_span.into()),
+            NomErr::Incomplete(_) => ErrorKind::Incomplete.with_span(&input_span.into()),
         })
         .and_then(|(remaining, statements)| {
             if remaining.fragment().is_empty() {
                 Ok(statements)
             } else {
-                Err(Error::Leftovers.with_span(&remaining.into()))
+                Err(ErrorKind::Leftovers.with_span(&remaining.into()))
             }
         })
 }

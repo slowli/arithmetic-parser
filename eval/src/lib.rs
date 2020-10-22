@@ -120,7 +120,7 @@ use num_traits::Pow;
 use core::ops;
 
 use crate::{
-    compiler::Compiler,
+    compiler::{CompilationOptions, Compiler},
     error::{Backtrace, ErrorWithBacktrace},
     executable::Env,
 };
@@ -269,8 +269,9 @@ where
         &mut self,
         block: &Block<'a, T>,
     ) -> Result<Value<'a, T>, InterpreterError<'a, 'a>> {
-        let module = Compiler::compile_module(WildcardId, &self.env, block, true)
-            .map_err(InterpreterError::Compile)?;
+        let module =
+            Compiler::compile_module(WildcardId, &self.env, block, CompilationOptions::Embedded)
+                .map_err(InterpreterError::Compile)?;
         self.evaluate_module(&module)
             .map_err(InterpreterError::Evaluate)
     }
@@ -282,7 +283,10 @@ where
         id: F,
         program: &Block<'a, T>,
     ) -> Result<ExecutableModule<'a, T>, Error<'a>> {
-        Compiler::compile_module(id, &self.env, program, false)
+        let options = CompilationOptions::Standalone {
+            create_imports: false,
+        };
+        Compiler::compile_module(id, &self.env, program, options)
     }
 }
 
@@ -304,7 +308,7 @@ where
         id: F,
         block: &Block<'bl, T>,
     ) -> Result<Value<'static, T>, InterpreterError<'bl, 'static>> {
-        let module = Compiler::compile_module(id, &self.env, block, true)
+        let module = Compiler::compile_module(id, &self.env, block, CompilationOptions::Embedded)
             .map_err(InterpreterError::Compile)?;
         self.evaluate_module(&module.strip_code())
             .map_err(InterpreterError::Evaluate)

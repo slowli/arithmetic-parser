@@ -3,10 +3,11 @@
 use core::ops;
 
 use crate::{
-    error::{Backtrace, ErrorWithBacktrace},
+    compiler::Compiler,
+    error::{Backtrace, CompilerError, ErrorWithBacktrace},
     ModuleId, Number, Value,
 };
-use arithmetic_parser::{Grammar, LvalueLen, MaybeSpanned, StripCode};
+use arithmetic_parser::{Grammar, GrammarExt, IntoInputSpan, LvalueLen, MaybeSpanned, StripCode};
 
 mod command;
 mod env;
@@ -15,6 +16,7 @@ pub(crate) use self::{
     command::{Atom, Command, ComparisonOp, CompiledExpr, SpannedAtom},
     env::{Env, Executable},
 };
+use crate::compiler::CompilationOptions;
 
 #[derive(Debug)]
 pub(crate) struct ExecutableFn<'a, T: Grammar> {
@@ -120,11 +122,24 @@ impl<T: Grammar> StripCode for ExecutableModule<'_, T> {
 }
 
 impl<'a, T: Grammar> ExecutableModule<'a, T> {
-    pub(crate) fn new(inner: Executable<'a, T>, imports: Env<'a, T>) -> Self {
+    pub(crate) fn from_parts(inner: Executable<'a, T>, imports: Env<'a, T>) -> Self {
         Self {
             inner,
             imports: ModuleImports { inner: imports },
         }
+    }
+
+    /// Creates a new module. All imports are set to `Value::void()`.
+    pub fn new<Id, P>(id: Id, program: P) -> Result<Self, CompilerError<'a>>
+    where
+        Id: ModuleId,
+        P: IntoInputSpan<'a>,
+    {
+        let block = T::parse_statements(program.into_input_span()).map_err(CompilerError::Parse)?;
+        let options = CompilationOptions::Standalone {
+            create_imports: true,
+        };
+        Compiler::compile_module(id, &Env::new(), &block, options).map_err(CompilerError::Compile)
     }
 
     /// Gets the identifier of this module.
@@ -299,6 +314,10 @@ mod tests {
 
     use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 
+    const MODULE_TYPE: CompilationOptions = CompilationOptions::Standalone {
+        create_imports: false,
+    };
+
     #[test]
     fn cloning_module() {
         let mut env = Env::new();
@@ -306,7 +325,7 @@ mod tests {
 
         let block = "y = x + 2 * (x + 1) + 1; y";
         let block = F32Grammar::parse_statements(block).unwrap();
-        let module = Compiler::compile_module(WildcardId, &env, &block, false).unwrap();
+        let module = Compiler::compile_module(WildcardId, &env, &block, MODULE_TYPE).unwrap();
 
         let mut module_copy = module.clone();
         module_copy.set_import("x", Value::Number(10.0));
@@ -324,7 +343,7 @@ mod tests {
 
         let block = "x + y";
         let block = F32Grammar::parse_statements(block).unwrap();
-        let module = Compiler::compile_module(WildcardId, &env, &block, false).unwrap();
+        let module = Compiler::compile_module(WildcardId, &env, &block, MODULE_TYPE).unwrap();
 
         let mut imports = module.imports().to_owned();
         assert!(imports.is_compatible(&module));
@@ -345,7 +364,7 @@ mod tests {
 
         let block = "x + y";
         let block = F32Grammar::parse_statements(block).unwrap();
-        let module = Compiler::compile_module(WildcardId, &env, &block, false).unwrap();
+        let module = Compiler::compile_module(WildcardId, &env, &block, MODULE_TYPE).unwrap();
 
         let mut other_env = Env::new();
         other_env.push_var("y", Value::<F32Grammar>::Number(1.0));

@@ -75,7 +75,7 @@ pub use crate::{
         CodeFragment, InputSpan, LocatedSpan, MaybeSpanned, NomResult, Spanned, StripCode,
         StripResultExt,
     },
-    traits::{Features, Grammar, GrammarExt},
+    traits::{Features, Grammar, GrammarExt, IntoInputSpan},
 };
 
 use core::fmt;

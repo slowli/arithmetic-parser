@@ -126,14 +126,28 @@ pub struct InterpretedFn<'a, T: Grammar> {
     capture_names: Vec<String>,
 }
 
+impl<T: Grammar> Clone for InterpretedFn<'_, T> {
+    fn clone(&self) -> Self {
+        Self {
+            definition: Rc::clone(&self.definition),
+            captures: self.captures.clone(),
+            capture_names: self.capture_names.clone(),
+        }
+    }
+}
+
 impl<T: Grammar> StripCode for InterpretedFn<'_, T> {
     type Stripped = InterpretedFn<'static, T>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         InterpretedFn {
-            definition: Rc::new(self.definition.strip_code()),
-            captures: self.captures.iter().map(StripCode::strip_code).collect(),
-            capture_names: self.capture_names.clone(),
+            definition: Rc::new(self.definition.to_stripped_code()),
+            captures: self
+                .captures
+                .into_iter()
+                .map(StripCode::strip_code)
+                .collect(),
+            capture_names: self.capture_names,
         }
     }
 }
@@ -149,6 +163,10 @@ impl<'a, T: Grammar> InterpretedFn<'a, T> {
             captures,
             capture_names,
         }
+    }
+
+    fn to_stripped_code(&self) -> InterpretedFn<'static, T> {
+        self.clone().strip_code()
     }
 
     /// Returns ID of the module defining this function.
@@ -222,10 +240,12 @@ impl<T: Grammar> Clone for Function<'_, T> {
 impl<T: Grammar> StripCode for Function<'_, T> {
     type Stripped = Function<'static, T>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         match self {
-            Self::Native(function) => Function::Native(Rc::clone(function)),
-            Self::Interpreted(function) => Function::Interpreted(Rc::new(function.strip_code())),
+            Self::Native(function) => Function::Native(function),
+            Self::Interpreted(function) => {
+                Function::Interpreted(Rc::new(function.to_stripped_code()))
+            }
         }
     }
 }
@@ -378,12 +398,14 @@ impl<T: Grammar> Clone for Value<'_, T> {
 impl<T: Grammar> StripCode for Value<'_, T> {
     type Stripped = Value<'static, T>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         match self {
-            Self::Number(lit) => Value::Number(lit.clone()),
-            Self::Bool(bool) => Value::Bool(*bool),
+            Self::Number(lit) => Value::Number(lit),
+            Self::Bool(bool) => Value::Bool(bool),
             Self::Function(function) => Value::Function(function.strip_code()),
-            Self::Tuple(tuple) => Value::Tuple(tuple.iter().map(StripCode::strip_code).collect()),
+            Self::Tuple(tuple) => {
+                Value::Tuple(tuple.into_iter().map(StripCode::strip_code).collect())
+            }
         }
     }
 }

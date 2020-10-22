@@ -25,10 +25,20 @@ pub(crate) struct ExecutableFn<'a, T: Grammar> {
     pub arg_count: LvalueLen,
 }
 
+impl<T: Grammar> ExecutableFn<'_, T> {
+    pub fn to_stripped_code(&self) -> ExecutableFn<'static, T> {
+        ExecutableFn {
+            inner: self.inner.clone().strip_code(),
+            def_span: self.def_span.strip_code(),
+            arg_count: self.arg_count,
+        }
+    }
+}
+
 impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
     type Stripped = ExecutableFn<'static, T>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         ExecutableFn {
             inner: self.inner.strip_code(),
             def_span: self.def_span.strip_code(),
@@ -113,7 +123,7 @@ impl<T: Grammar> Clone for ExecutableModule<'_, T> {
 impl<T: Grammar> StripCode for ExecutableModule<'_, T> {
     type Stripped = ExecutableModule<'static, T>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         ExecutableModule {
             inner: self.inner.strip_code(),
             imports: self.imports.strip_code(),
@@ -242,7 +252,7 @@ impl<T: Grammar> Clone for ModuleImports<'_, T> {
 impl<T: Grammar> StripCode for ModuleImports<'_, T> {
     type Stripped = ModuleImports<'static, T>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         ModuleImports {
             inner: self.inner.strip_code(),
         }

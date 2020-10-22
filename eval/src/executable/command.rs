@@ -107,25 +107,25 @@ impl<T: Grammar> Clone for CompiledExpr<'_, T> {
 impl<T: Grammar> StripCode for CompiledExpr<'_, T> {
     type Stripped = CompiledExpr<'static, T>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         match self {
-            Self::Atom(atom) => CompiledExpr::Atom(atom.clone()),
-            Self::Tuple(atoms) => CompiledExpr::Tuple(atoms.clone()),
+            Self::Atom(atom) => CompiledExpr::Atom(atom),
+            Self::Tuple(atoms) => CompiledExpr::Tuple(atoms),
 
             Self::Unary { op, inner } => CompiledExpr::Unary {
-                op: *op,
+                op,
                 inner: inner.strip_code(),
             },
 
             Self::Binary { op, lhs, rhs } => CompiledExpr::Binary {
-                op: *op,
+                op,
                 lhs: lhs.strip_code(),
                 rhs: rhs.strip_code(),
             },
 
             Self::Compare { inner, op } => CompiledExpr::Compare {
                 inner: inner.strip_code(),
-                op: *op,
+                op,
             },
 
             Self::Function {
@@ -134,8 +134,8 @@ impl<T: Grammar> StripCode for CompiledExpr<'_, T> {
                 args,
             } => CompiledExpr::Function {
                 name: name.strip_code(),
-                original_name: original_name.clone(),
-                args: args.iter().map(StripCode::strip_code).collect(),
+                original_name,
+                args: args.into_iter().map(StripCode::strip_code).collect(),
             },
 
             Self::DefineFunction {
@@ -143,9 +143,9 @@ impl<T: Grammar> StripCode for CompiledExpr<'_, T> {
                 captures,
                 capture_names,
             } => CompiledExpr::DefineFunction {
-                ptr: *ptr,
-                captures: captures.iter().map(StripCode::strip_code).collect(),
-                capture_names: capture_names.clone(),
+                ptr,
+                captures: captures.into_iter().map(StripCode::strip_code).collect(),
+                capture_names,
             },
         }
     }
@@ -269,7 +269,7 @@ impl<T: Grammar> Clone for Command<'_, T> {
 impl<T: Grammar> StripCode for Command<'_, T> {
     type Stripped = Command<'static, T>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         match self {
             Self::Push(expr) => Command::Push(expr.strip_code()),
 
@@ -280,29 +280,26 @@ impl<T: Grammar> StripCode for Command<'_, T> {
                 lvalue_len,
                 unchecked,
             } => Command::Destructure {
-                source: *source,
-                start_len: *start_len,
-                end_len: *end_len,
-                lvalue_len: *lvalue_len,
-                unchecked: *unchecked,
+                source,
+                start_len,
+                end_len,
+                lvalue_len,
+                unchecked,
             },
 
             Self::Copy {
                 source,
                 destination,
             } => Command::Copy {
-                source: *source,
-                destination: *destination,
+                source,
+                destination,
             },
 
-            Self::Annotate { register, name } => Command::Annotate {
-                register: *register,
-                name: name.clone(),
-            },
+            Self::Annotate { register, name } => Command::Annotate { register, name },
 
             Self::StartInnerScope => Command::StartInnerScope,
             Self::EndInnerScope => Command::EndInnerScope,
-            Self::TruncateRegisters(size) => Command::TruncateRegisters(*size),
+            Self::TruncateRegisters(size) => Command::TruncateRegisters(size),
         }
     }
 }

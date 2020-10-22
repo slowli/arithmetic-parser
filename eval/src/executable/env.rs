@@ -37,22 +37,18 @@ impl<'a, T: Grammar> Clone for Executable<'a, T> {
 impl<T: Grammar> StripCode for Executable<'_, T> {
     type Stripped = Executable<'static, T>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         Executable {
-            id: self.id.clone_boxed(),
+            id: self.id,
             commands: self
                 .commands
-                .iter()
-                .map(|command| {
-                    command
-                        .copy_with_extra(command.extra.strip_code())
-                        .strip_code()
-                })
+                .into_iter()
+                .map(|command| command.map_extra(StripCode::strip_code).strip_code())
                 .collect(),
             child_fns: self
                 .child_fns
-                .iter()
-                .map(|function| Rc::new(function.strip_code()))
+                .into_iter()
+                .map(|function| Rc::new(function.to_stripped_code()))
                 .collect(),
             register_capacity: self.register_capacity,
         }
@@ -153,10 +149,14 @@ impl<T: Grammar> Clone for Env<'_, T> {
 impl<T: Grammar> StripCode for Env<'_, T> {
     type Stripped = Env<'static, T>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         Env {
-            registers: self.registers.iter().map(StripCode::strip_code).collect(),
-            vars: self.vars.clone(),
+            registers: self
+                .registers
+                .into_iter()
+                .map(StripCode::strip_code)
+                .collect(),
+            vars: self.vars,
             inner_scope_start: self.inner_scope_start,
         }
     }

@@ -444,11 +444,15 @@ impl std::error::Error for Error<'_> {
 impl StripCode for Error<'_> {
     type Stripped = Error<'static>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         Error {
-            kind: self.kind.clone(),
+            kind: self.kind,
             main_span: self.main_span.strip_code(),
-            aux_spans: self.aux_spans.iter().map(StripCode::strip_code).collect(),
+            aux_spans: self
+                .aux_spans
+                .into_iter()
+                .map(StripCode::strip_code)
+                .collect(),
         }
     }
 }
@@ -507,9 +511,9 @@ impl<'a, T> CodeInModule<'a, T> {
 impl<T: Clone + 'static> StripCode for CodeInModule<'_, T> {
     type Stripped = CodeInModule<'static, T>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         CodeInModule {
-            module_id: self.module_id.clone_boxed(),
+            module_id: self.module_id,
             code: self.code.strip_code(),
         }
     }
@@ -530,10 +534,10 @@ pub struct BacktraceElement<'a> {
 impl StripCode for BacktraceElement<'_> {
     type Stripped = BacktraceElement<'static>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         BacktraceElement {
-            fn_name: self.fn_name.clone(),
-            def_span: self.def_span.as_ref().map(StripCode::strip_code),
+            fn_name: self.fn_name,
+            def_span: self.def_span.map(StripCode::strip_code),
             call_span: self.call_span.strip_code(),
         }
     }
@@ -569,9 +573,9 @@ impl<'a> Backtrace<'a> {
 impl StripCode for Backtrace<'_> {
     type Stripped = Backtrace<'static>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         Backtrace {
-            calls: self.calls.iter().map(StripCode::strip_code).collect(),
+            calls: self.calls.into_iter().map(StripCode::strip_code).collect(),
         }
     }
 }
@@ -629,7 +633,7 @@ impl fmt::Display for ErrorWithBacktrace<'_> {
 impl StripCode for ErrorWithBacktrace<'_> {
     type Stripped = ErrorWithBacktrace<'static>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         ErrorWithBacktrace {
             inner: self.inner.strip_code(),
             backtrace: self.backtrace.strip_code(),
@@ -651,6 +655,15 @@ pub enum CompilerError<'a> {
     Parse(arithmetic_parser::Error<'a>),
     /// Compilation error.
     Compile(Error<'a>),
+}
+
+impl fmt::Display for CompilerError<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Parse(err) => fmt::Display::fmt(err, formatter),
+            Self::Compile(err) => fmt::Display::fmt(err, formatter),
+        }
+    }
 }
 
 /// Type encompassing all possible errors arising when compiling and immediately executing
@@ -685,7 +698,7 @@ impl fmt::Display for InterpreterError<'_, '_> {
 impl StripCode for InterpreterError<'_, '_> {
     type Stripped = InterpreterError<'static, 'static>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         match self {
             Self::Compile(err) => InterpreterError::Compile(err.strip_code()),
             Self::Evaluate(err) => InterpreterError::Evaluate(err.strip_code()),

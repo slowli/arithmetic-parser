@@ -7,7 +7,7 @@ use nom::{
 
 use core::fmt;
 
-use crate::{alloc::ToOwned, Context, InputSpan, LocatedSpan, Op, Spanned};
+use crate::{alloc::ToOwned, Context, InputSpan, LocatedSpan, Op, Spanned, StripCode};
 
 /// Parsing error kind.
 #[derive(Debug)]
@@ -137,13 +137,6 @@ impl<'a> Error<'a> {
             inner: span.copy_with_extra(kind),
         }
     }
-
-    /// Strips code reference from this error, making its lifetime independent of the code.
-    pub fn strip_code(self) -> SpannedError<usize> {
-        SpannedError {
-            inner: self.inner.map_fragment(str::len),
-        }
-    }
 }
 
 impl<Span> SpannedError<Span> {
@@ -176,6 +169,16 @@ impl<Span> fmt::Display for SpannedError<Span> {
 impl<Span: fmt::Debug> std::error::Error for SpannedError<Span> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         std::error::Error::source(&self.inner.extra)
+    }
+}
+
+impl StripCode for Error<'_> {
+    type Stripped = SpannedError<usize>;
+
+    fn strip_code(self) -> Self::Stripped {
+        SpannedError {
+            inner: self.inner.map_fragment(str::len),
+        }
     }
 }
 

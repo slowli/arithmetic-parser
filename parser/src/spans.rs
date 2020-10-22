@@ -4,7 +4,7 @@ use nom::Slice;
 
 use crate::{
     alloc::{format, String, ToOwned},
-    Error, SpannedError,
+    Error,
 };
 
 /// Code span.
@@ -102,13 +102,13 @@ impl<Span: Copy, T> LocatedSpan<Span, T> {
 }
 
 impl<Span: Copy, T: Clone> LocatedSpan<Span, T> {
-    pub(crate) fn with_mapped_span<U>(&self, map_fn: impl FnOnce(Span) -> U) -> LocatedSpan<U, T> {
+    pub(crate) fn with_mapped_span<U>(self, map_fn: impl FnOnce(Span) -> U) -> LocatedSpan<U, T> {
         LocatedSpan {
             offset: self.offset,
             line: self.line,
             column: self.column,
             fragment: map_fn(self.fragment),
-            extra: self.extra.clone(),
+            extra: self.extra,
         }
     }
 }
@@ -245,13 +245,13 @@ pub trait StripCode {
     type Stripped: 'static;
 
     /// Strips references to code fragments in this type.
-    fn strip_code(&self) -> Self::Stripped;
+    fn strip_code(self) -> Self::Stripped;
 }
 
 impl<T: Clone + 'static> StripCode for MaybeSpanned<'_, T> {
     type Stripped = MaybeSpanned<'static, T>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         self.with_mapped_span(CodeFragment::strip)
     }
 }
@@ -317,17 +317,6 @@ impl<T, E: StripCode> StripResultExt for Result<T, E> {
     type StrippedErr = E::Stripped;
 
     fn strip_err(self) -> Result<T, Self::StrippedErr> {
-        self.map_err(|err| err.strip_code())
-    }
-}
-
-// Since `ErrorKind` does not implement `Clone`, we cannot implement `StripCode` for `Error`.
-// Still, we can use it with `StripResultExt`.
-impl<T> StripResultExt for Result<T, Error<'_>> {
-    type Ok = T;
-    type StrippedErr = SpannedError<usize>;
-
-    fn strip_err(self) -> Result<T, Self::StrippedErr> {
-        self.map_err(Error::strip_code)
+        self.map_err(StripCode::strip_code)
     }
 }

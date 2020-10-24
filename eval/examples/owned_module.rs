@@ -2,7 +2,7 @@
 
 use assert_matches::assert_matches;
 
-use arithmetic_eval::{ErrorKind, ExecutableModule, Prelude, Value};
+use arithmetic_eval::{Environment, ErrorKind, ExecutableModule, Prelude, Value};
 use arithmetic_parser::{grammars::F64Grammar, BinaryOp, GrammarExt, StripCode, StripResultExt};
 
 fn create_module<'a>(
@@ -44,11 +44,11 @@ fn main() -> anyhow::Result<()> {
 
     // Errors are handled as well.
     let bogus_module = create_module("bogus", "(1, true, -5).sum()")?;
-    let mut imports = bogus_module.imports().to_owned();
-    assert!(imports.contains("sum"));
-    imports["sum"] = sum_fn;
+    let mut env = Environment::new();
+    env.extend(bogus_module.imports());
+    env["sum"] = sum_fn;
 
-    let err = bogus_module.run_with_imports(imports).unwrap_err();
+    let err = bogus_module.run_in_env(&mut env).unwrap_err();
     println!("Expected error:\n{:#}", err);
     assert_matches!(
         err.source().kind(),
@@ -63,9 +63,6 @@ fn main() -> anyhow::Result<()> {
     );
 
     // Importing into a stripped module also works. Let's redefine the `fold` import.
-    let mut imports = sum_module.imports().to_owned();
-    assert!(imports.contains("fold"));
-
     let fold_program = r#"
         # Implement right fold instead of standard left one.
         rfold = |xs, acc, fn| {
@@ -86,9 +83,11 @@ fn main() -> anyhow::Result<()> {
     let fold_module = create_module("rfold", &fold_program)?;
     let rfold_fn = fold_module.run().strip_err()?;
 
-    imports["fold"] = rfold_fn;
+    let mut env = Environment::new();
+    env.extend(sum_module.imports());
+    env["fold"] = rfold_fn;
 
-    let rfold_sum = sum_module.run_with_imports(imports).strip_err()?;
+    let rfold_sum = sum_module.run_in_env(&mut env).strip_err()?;
     // Due to lifetime checks, we need to re-assign `test_module`, since the original one
     // is inferred to have `'static` lifetime.
     let mut test_module = test_module;

@@ -9,11 +9,11 @@ use criterion::{criterion_group, criterion_main, BatchSize, Bencher, Criterion, 
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use typed_arena::Arena;
 
-use arithmetic_eval::{fns, CallContext, Interpreter, NativeFn, Value, WildcardId};
+use arithmetic_eval::{fns, CallContext, ExecutableModule, NativeFn, Value, WildcardId};
 use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 
 const SEED: u64 = 123;
-const ELEMENTS: u64 = 100;
+const ELEMENTS: u64 = 50;
 
 fn bench_mul_native(bencher: &mut Bencher<'_>) {
     let mut rng = StdRng::seed_from_u64(SEED);
@@ -62,9 +62,12 @@ fn bench_mul(bencher: &mut Bencher<'_>) {
                 .collect();
             let program = arena.alloc(values.join(" * "));
             let program = F32Grammar::parse_statements(program.as_str()).unwrap();
-            Interpreter::new().compile(WildcardId, &program).unwrap()
+
+            ExecutableModule::builder(WildcardId, &program)
+                .unwrap()
+                .build()
         },
-        |block| block.run().unwrap(),
+        |module| module.run().unwrap(),
         BatchSize::SmallInput,
     );
 }
@@ -76,12 +79,11 @@ fn bench_mul_fold(bencher: &mut Bencher<'_>) {
 
     bencher.iter_batched(
         || {
-            let mut interpreter = Interpreter::new();
-            let mut module = interpreter
-                .insert_native_fn("fold", fns::Fold)
-                .insert_var("xs", Value::Tuple(vec![]))
-                .compile(WildcardId, &program)
-                .unwrap();
+            let mut module = ExecutableModule::builder(WildcardId, &program)
+                .unwrap()
+                .with_import("fold", Value::native_fn(fns::Fold))
+                .with_import("xs", Value::void())
+                .build();
 
             let values: Vec<_> = (0..ELEMENTS)
                 .map(|_| rng.gen_range(0.5_f32, 1.5))
@@ -123,7 +125,11 @@ fn bench_fold_fn(bencher: &mut Bencher<'_>) {
 fn bench_interpreted_fn(bencher: &mut Bencher<'_>) {
     let mut ctx = CallContext::mock();
     let interpreted_fn = F32Grammar::parse_statements("|x, y| x * y").unwrap();
-    let interpreted_fn = Interpreter::new().evaluate(&interpreted_fn).unwrap();
+    let interpreted_fn = ExecutableModule::builder(WildcardId, &interpreted_fn)
+        .unwrap()
+        .build()
+        .run()
+        .unwrap();
     let interpreted_fn = match interpreted_fn {
         Value::Function(function) => function,
         _ => unreachable!("Wrong function type"),
@@ -176,16 +182,22 @@ fn bench_reverse_native(bencher: &mut Bencher<'_>) {
 fn bench_reverse(bencher: &mut Bencher<'_>) {
     let mut rng = StdRng::seed_from_u64(SEED);
 
-    let rev_fn = "reverse = |xs| xs.fold((), |acc, x| (x,).merge(acc));";
+    let rev_fn = "|xs| xs.fold((), |acc, x| (x,).merge(acc))";
     let rev_fn = F32Grammar::parse_statements(rev_fn).unwrap();
+    let rev_fn = ExecutableModule::builder("rev_fn", &rev_fn)
+        .unwrap()
+        .with_import("fold", Value::native_fn(fns::Fold))
+        .with_import("merge", Value::native_fn(fns::Merge))
+        .build();
+    let rev_fn = rev_fn.run().unwrap();
+    assert!(rev_fn.is_function());
+
     let program = "xs.reverse()";
     let program = F32Grammar::parse_statements(program).unwrap();
-
-    let mut interpreter = Interpreter::new();
-    interpreter
-        .insert_native_fn("fold", fns::Fold)
-        .insert_native_fn("merge", fns::Merge);
-    interpreter.evaluate(&rev_fn).unwrap();
+    let mut program = ExecutableModule::builder("rev_fn", &program)
+        .unwrap()
+        .with_import("reverse", rev_fn)
+        .set_imports(|_| Value::void());
 
     bencher.iter_batched(
         || {
@@ -195,8 +207,8 @@ fn bench_reverse(bencher: &mut Bencher<'_>) {
                 .collect::<Vec<_>>()
         },
         |values| {
-            interpreter.insert_var("xs", Value::Tuple(values));
-            interpreter.evaluate(&program).unwrap()
+            program.set_import("xs", Value::Tuple(values));
+            program.run().unwrap()
         },
         BatchSize::SmallInput,
     );

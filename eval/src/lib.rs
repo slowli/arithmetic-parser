@@ -115,17 +115,13 @@ pub use self::{
     variable_map::{Comparisons, Prelude, VariableMap},
 };
 
+use hashbrown::HashMap;
 use num_complex::{Complex32, Complex64};
 use num_traits::Pow;
 
 use core::ops;
 
-use crate::{
-    compiler::{CompilationOptions, Compiler},
-    error::{Backtrace, ErrorWithBacktrace},
-    executable::Env,
-};
-use arithmetic_parser::{grammars::NumLiteral, Block, Grammar, StripCode};
+use arithmetic_parser::{grammars::NumLiteral, Grammar};
 
 mod compiler;
 pub mod error;
@@ -143,40 +139,45 @@ impl Number for f64 {}
 impl Number for Complex32 {}
 impl Number for Complex64 {}
 
-/// Simple interpreter for arithmetic expressions.
+/// Environment containing named variables.
 #[derive(Debug)]
-pub struct Interpreter<'a, T: Grammar> {
-    env: Env<'a, T>,
+pub struct Environment<'a, T: Grammar> {
+    variables: HashMap<String, Value<'a, T>>,
 }
 
-impl<T: Grammar> Default for Interpreter<'_, T>
-where
-    T::Lit: Number,
-{
+impl<T: Grammar> Default for Environment<'_, T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: Grammar> Clone for Interpreter<'_, T> {
+impl<T: Grammar> Clone for Environment<'_, T> {
     fn clone(&self) -> Self {
         Self {
-            env: self.env.clone(),
+            variables: self.variables.clone(),
         }
     }
 }
 
-impl<'a, T> Interpreter<'a, T>
+impl<T: Grammar> PartialEq for Environment<'_, T>
 where
-    T: Grammar,
+    T::Lit: PartialEq,
 {
-    /// Creates a new interpreter.
+    fn eq(&self, other: &Self) -> bool {
+        self.variables == other.variables
+    }
+}
+
+impl<'a, T: Grammar> Environment<'a, T> {
+    /// Creates a new environment.
     pub fn new() -> Self {
-        Self { env: Env::new() }
+        Self {
+            variables: HashMap::new(),
+        }
     }
 
     /// Adds all values from the specified container into the interpreter.
-    pub fn with<V>(mut self, source: &V) -> Self
+    pub fn extend<V>(&mut self, source: &V) -> &mut Self
     where
         V: VariableMap<'a, T> + ?Sized,
     {
@@ -188,17 +189,19 @@ where
 
     /// Gets a variable by name.
     pub fn get_var(&self, name: &str) -> Option<&Value<'a, T>> {
-        self.env.get_var(name)
+        self.variables.get(name)
     }
 
     /// Iterates over variables.
     pub fn variables(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
-        self.env.variables()
+        self.variables
+            .iter()
+            .map(|(name, value)| (name.as_str(), value))
     }
 
     /// Inserts a variable with the specified name.
     pub fn insert_var(&mut self, name: &str, value: Value<'a, T>) -> &mut Self {
-        self.env.push_var(name, value);
+        self.variables.insert(name.to_owned(), value);
         self
     }
 
@@ -227,79 +230,5 @@ where
     {
         let wrapped = fns::wrap::<Args, _>(fn_to_wrap);
         self.insert_var(name, Value::native_fn(wrapped))
-    }
-}
-
-impl<'a, T> Interpreter<'a, T>
-where
-    T: Grammar,
-    T::Lit: Number,
-{
-    /// Shortcut for `new().with(&Prelude)`.
-    pub fn with_prelude() -> Self {
-        Self::new().with(&Prelude)
-    }
-
-    fn evaluate_module(
-        &mut self,
-        module: &ExecutableModule<'a, T>,
-    ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
-        let mut backtrace = Backtrace::default();
-        let result = self
-            .env
-            .execute(module.inner(), Some(&mut backtrace))
-            .map_err(|err| ErrorWithBacktrace::new(err, backtrace));
-        self.env.compress();
-        result
-    }
-
-    /// Evaluates a list of statements.
-    pub fn evaluate(
-        &mut self,
-        block: &Block<'a, T>,
-    ) -> Result<Value<'a, T>, InterpreterError<'a, 'a>> {
-        let module =
-            Compiler::compile_module(WildcardId, &self.env, block, CompilationOptions::Embedded)
-                .map_err(InterpreterError::Compile)?;
-        self.evaluate_module(&module)
-            .map_err(InterpreterError::Evaluate)
-    }
-
-    /// Compiles the provided block, returning the compiled module and its imports.
-    /// The imports can the be changed to run the module with different params.
-    pub fn compile<F: ModuleId>(
-        &self,
-        id: F,
-        program: &Block<'a, T>,
-    ) -> Result<ExecutableModule<'a, T>, Error<'a>> {
-        let options = CompilationOptions::Standalone {
-            create_imports: false,
-        };
-        Compiler::compile_module(id, &self.env, program, options)
-    }
-}
-
-impl<T> Interpreter<'static, T>
-where
-    T: Grammar,
-    T::Lit: Number,
-{
-    /// Evaluates a named block of statements.
-    ///
-    /// Unlike [`evaluate`], this method strips code spans from the compiled statements right away.
-    /// This allows to operate an `Interpreter` with a static lifetime (i.e., not tied to
-    /// the lifetime of the code). As a downside, if code spans are required in certain situations
-    /// (e.g., for error reporting), they should be handled separately.
-    ///
-    /// [`evaluate`]: #method.evaluate
-    pub fn evaluate_named_block<'bl, F: ModuleId>(
-        &mut self,
-        id: F,
-        block: &Block<'bl, T>,
-    ) -> Result<Value<'static, T>, InterpreterError<'bl, 'static>> {
-        let module = Compiler::compile_module(id, &self.env, block, CompilationOptions::Embedded)
-            .map_err(InterpreterError::Compile)?;
-        self.evaluate_module(&module.strip_code())
-            .map_err(InterpreterError::Evaluate)
     }
 }

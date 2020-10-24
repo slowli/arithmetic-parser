@@ -725,7 +725,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Interpreter, WildcardId};
+    use crate::{ExecutableModule, WildcardId};
 
     use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
     use assert_matches::assert_matches;
@@ -734,41 +734,54 @@ mod tests {
 
     #[test]
     fn if_basic() {
-        let mut interpreter = Interpreter::new();
-        interpreter
-            .insert_native_fn("if", If)
-            .insert_native_fn("cmp", Compare);
-
-        let program = r#"
+        let block = r#"
             x = 1.0;
             if(x < 2, x + 5, 3 - x)
         "#;
-        let block = F32Grammar::parse_statements(program).unwrap();
-        let ret = interpreter.evaluate(&block).unwrap();
-        assert_eq!(ret, Value::Number(6.0));
+        let block = F32Grammar::parse_statements(block).unwrap();
+        let module = ExecutableModule::builder(WildcardId, &block)
+            .unwrap()
+            .with_import("if", Value::native_fn(If))
+            .with_import("cmp", Value::native_fn(Compare))
+            .build();
+        assert_eq!(module.run().unwrap(), Value::Number(6.0));
+    }
 
-        let program_with_closures = r#"
+    #[test]
+    fn if_with_closures() {
+        let block = r#"
             x = 4.5;
             if(x < 2, || x + 5, || 3 - x)()
         "#;
-        let block_with_closures = F32Grammar::parse_statements(program_with_closures).unwrap();
-        let ret_with_closures = interpreter.evaluate(&block_with_closures).unwrap();
-        assert_eq!(ret_with_closures, Value::Number(-1.5));
+        let block = F32Grammar::parse_statements(block).unwrap();
+        let module = ExecutableModule::builder(WildcardId, &block)
+            .unwrap()
+            .with_import("if", Value::native_fn(If))
+            .with_import("cmp", Value::native_fn(Compare))
+            .build();
+        assert_eq!(module.run().unwrap(), Value::Number(-1.5));
     }
 
     #[test]
     fn cmp_sugar() {
-        let mut interpreter = Interpreter::new();
-        interpreter.insert_native_fn("cmp", Compare);
+        let compare_fn = Value::native_fn(Compare);
 
         let program = "x = 1.0; x > 0 && x <= 3";
         let block = F32Grammar::parse_statements(program).unwrap();
-        let ret = interpreter.evaluate(&block).unwrap();
-        assert_eq!(ret, Value::Bool(true));
+        let module = ExecutableModule::builder(WildcardId, &block)
+            .unwrap()
+            .with_import("cmp", compare_fn.clone())
+            .build();
+        assert_eq!(module.run().unwrap(), Value::Bool(true));
 
         let bogus_program = "x = 1.0; x > (1, 2)";
         let bogus_block = F32Grammar::parse_statements(bogus_program).unwrap();
-        let err = interpreter.evaluate(&bogus_block).unwrap_err();
+        let bogus_module = ExecutableModule::builder(WildcardId, &bogus_block)
+            .unwrap()
+            .with_import("cmp", compare_fn)
+            .build();
+
+        let err = bogus_module.run().unwrap_err();
         let err = err.source();
         assert_matches!(
             err.kind(),
@@ -781,12 +794,6 @@ mod tests {
 
     #[test]
     fn loop_basic() {
-        let mut interpreter = Interpreter::new();
-        interpreter
-            .insert_native_fn("loop", Loop)
-            .insert_native_fn("if", If)
-            .insert_native_fn("cmp", Compare);
-
         let program = r#"
             # Finds the greatest power of 2 lesser or equal to the value.
             discrete_log2 = |x| {
@@ -795,18 +802,21 @@ mod tests {
                     (continue, if(continue, i + 1, i - 1))
                 })
             };
-            discrete_log2(9)
+
+            (discrete_log2(1), discrete_log2(2),
+                discrete_log2(4), discrete_log2(6.5), discrete_log2(1000))
         "#;
         let block = F32Grammar::parse_statements(program).unwrap();
-        let ret = interpreter.evaluate(&block).unwrap();
-        assert_eq!(ret, Value::Number(3.0));
 
-        let test_program = "(discrete_log2(1), discrete_log2(2), \
-            discrete_log2(4), discrete_log2(6.5), discrete_log2(1000))";
-        let test_block = F32Grammar::parse_statements(test_program).unwrap();
-        let test_ret = interpreter.evaluate(&test_block).unwrap();
+        let module = ExecutableModule::builder(WildcardId, &block)
+            .unwrap()
+            .with_import("loop", Value::native_fn(Loop))
+            .with_import("if", Value::native_fn(If))
+            .with_import("cmp", Value::native_fn(Compare))
+            .build();
+
         assert_eq!(
-            test_ret,
+            module.run().unwrap(),
             Value::Tuple(vec![
                 Value::Number(0.0),
                 Value::Number(1.0),
@@ -819,13 +829,6 @@ mod tests {
 
     #[test]
     fn max_value_with_fold() {
-        let mut interpreter = Interpreter::new();
-        interpreter
-            .insert_var("Inf", Value::Number(f32::INFINITY))
-            .insert_native_fn("cmp", Compare)
-            .insert_native_fn("if", If)
-            .insert_native_fn("fold", Fold);
-
         let program = r#"
             max_value = |...xs| {
                 fold(xs, -Inf, |acc, x| if(x > acc, x, acc))
@@ -833,8 +836,16 @@ mod tests {
             max_value(1, -2, 7, 2, 5) == 7 && max_value(3, -5, 9) == 9
         "#;
         let block = F32Grammar::parse_statements(program).unwrap();
-        let ret = interpreter.evaluate(&block).unwrap();
-        assert_eq!(ret, Value::Bool(true));
+
+        let module = ExecutableModule::builder(WildcardId, &block)
+            .unwrap()
+            .with_import("Inf", Value::Number(f32::INFINITY))
+            .with_import("loop", Value::native_fn(Loop))
+            .with_import("if", Value::native_fn(If))
+            .with_import("cmp", Value::native_fn(Compare))
+            .build();
+
+        assert_eq!(module.run().unwrap(), Value::Bool(true));
     }
 
     #[test]
@@ -845,11 +856,6 @@ mod tests {
             (&[1.0], &[1.0]),
         ];
 
-        let mut interpreter = Interpreter::new();
-        interpreter
-            .insert_native_fn("merge", Merge)
-            .insert_native_fn("fold", Fold);
-
         let program = r#"
             reverse = |xs| {
                 fold(xs, (), |acc, x| merge((x,), acc))
@@ -858,16 +864,29 @@ mod tests {
             xs.reverse() == (1, 0, 3, -4)
         "#;
         let block = F32Grammar::parse_statements(program).unwrap();
-        let ret = interpreter.evaluate(&block).unwrap();
-        assert_eq!(ret, Value::Bool(true));
 
-        let module_block = F32Grammar::parse_statements("xs.reverse()").unwrap();
-        let mut module = interpreter.compile(WildcardId, &module_block).unwrap();
+        let module = ExecutableModule::builder(WildcardId, &block)
+            .unwrap()
+            .with_import("merge", Value::native_fn(Merge))
+            .with_import("fold", Value::native_fn(Fold))
+            .build();
+
+        let mut imports = module.imports().to_owned();
+        assert_eq!(
+            module.run_with_imports(&mut imports).unwrap(),
+            Value::Bool(true)
+        );
+
+        let test_block = F32Grammar::parse_statements("xs.reverse()").unwrap();
+        let mut test_module = ExecutableModule::builder("test", &test_block)
+            .unwrap()
+            .with_import("reverse", imports["reverse"].to_owned())
+            .set_imports(|_| Value::void());
 
         for &(input, expected) in SAMPLES {
             let input = input.iter().copied().map(Value::Number).collect();
             let expected = expected.iter().copied().map(Value::Number).collect();
-            module.set_import("xs", Value::Tuple(input));
+            test_module.set_import("xs", Value::Tuple(input));
             assert_eq!(module.run().unwrap(), Value::Tuple(expected));
         }
     }

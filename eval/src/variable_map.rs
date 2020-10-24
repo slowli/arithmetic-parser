@@ -2,7 +2,7 @@
 
 use arithmetic_parser::Grammar;
 
-use crate::{fns, Interpreter, ModuleImports, Number, Value};
+use crate::{fns, Environment, ModuleImports, Number, Value};
 
 /// Encapsulates read access to named variables.
 pub trait VariableMap<'a, T: Grammar> {
@@ -16,7 +16,7 @@ pub trait VariableMap<'a, T: Grammar> {
     fn variables(&self) -> Box<dyn Iterator<Item = (&str, Value<'a, T>)> + '_>;
 }
 
-impl<'a, T: Grammar> VariableMap<'a, T> for Interpreter<'a, T> {
+impl<'a, T: Grammar> VariableMap<'a, T> for Environment<'a, T> {
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
         self.get_var(name).cloned()
     }

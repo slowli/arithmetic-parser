@@ -9,7 +9,7 @@ use crate::{
     alloc::{vec, Rc, Vec},
     error::{AuxErrorInfo, Backtrace, CodeInModule, TupleLenMismatchContext},
     executable::ExecutableFn,
-    Error, ErrorKind, EvalResult, ModuleId, Number, WildcardId,
+    fns, Error, ErrorKind, EvalResult, ModuleId, Number, WildcardId,
 };
 use arithmetic_parser::{
     BinaryOp, Grammar, InputSpan, LvalueLen, MaybeSpanned, Op, Spanned, StripCode, UnaryOp,
@@ -351,6 +351,24 @@ impl<'a, T: Grammar> Value<'a, T> {
     /// Creates a value for a native function.
     pub fn native_fn(function: impl NativeFn<T> + 'static) -> Self {
         Self::Function(Function::Native(Rc::new(function)))
+    }
+
+    /// Inserts a [wrapped function] with the specified name.
+    ///
+    /// Calling this method is equivalent to [`wrap`]ping a function and calling
+    /// [`insert_native_fn()`](#method.insert_native_fn) on it. Thanks to type inference magic,
+    /// the Rust compiler will usually be able to extract the `Args` type param
+    /// from the function definition, provided that type of function arguments and its return type
+    /// are defined explicitly or can be unequivocally inferred from the declaration.
+    ///
+    /// [wrapped function]: fns/struct.FnWrapper.html
+    /// [`wrap`]: fns/fn.wrap.html
+    pub fn wrapped_fn<Args, F>(fn_to_wrap: F) -> Self
+    where
+        fns::FnWrapper<Args, F>: NativeFn<T> + 'static,
+    {
+        let wrapped = fns::wrap::<Args, _>(fn_to_wrap);
+        Self::native_fn(wrapped)
     }
 
     /// Creates a value for an interpreted function.

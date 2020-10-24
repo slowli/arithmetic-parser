@@ -452,11 +452,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        compiler::{CompilationOptions, Compiler},
-        executable::ModuleImports,
-        WildcardId,
-    };
+    use crate::{compiler::Compiler, executable::ModuleImports, WildcardId};
     use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 
     #[test]
@@ -466,8 +462,7 @@ mod tests {
 
         let block = "y = x + 2 * (x + 1) + 1; y";
         let block = F32Grammar::parse_statements(block).unwrap();
-        let options = CompilationOptions::Embedded;
-        let module = Compiler::compile_module(WildcardId, &env, &block, options).unwrap();
+        let (module, _) = Compiler::compile_module(WildcardId, &env, &block).unwrap();
         let value = env.execute(&module.inner, None).unwrap();
         assert_eq!(value, Value::Number(18.0));
 
@@ -485,8 +480,7 @@ mod tests {
         env.push_var("x", Value::<F32Grammar>::Number(5.0));
 
         let block = F32Grammar::parse_statements("x").unwrap();
-        let options = CompilationOptions::Embedded;
-        let mut module = Compiler::compile_module(WildcardId, &env, &block, options).unwrap();
+        let (mut module, _) = Compiler::compile_module(WildcardId, &env, &block).unwrap();
         assert_eq!(module.inner.register_capacity, 2);
         assert_eq!(module.inner.commands.len(), 1); // push `x` from r0 to r1
         module.imports = ModuleImports { inner: env };

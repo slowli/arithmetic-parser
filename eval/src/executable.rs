@@ -3,7 +3,7 @@
 use core::ops;
 
 use crate::{
-    compiler::{CompilationOptions, Compiler, ImportSpans},
+    compiler::{Compiler, ImportSpans},
     error::{Backtrace, ErrorWithBacktrace},
     Error, ErrorKind, ModuleId, Number, Value, VariableMap,
 };
@@ -95,7 +95,10 @@ impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
 ///
 /// let mut imports = module.imports().to_owned();
 /// imports["x"] = Value::Number(-1.0);
-/// assert_eq!(module.run_with_imports(imports).unwrap(), Value::Number(4.0));
+/// assert_eq!(
+///     module.run_with_imports(&mut imports).unwrap(),
+///     Value::Number(4.0)
+/// );
 /// ```
 #[derive(Debug)]
 pub struct ExecutableModule<'a, T: Grammar> {
@@ -139,11 +142,7 @@ impl<'a, T: Grammar> ExecutableModule<'a, T> {
     where
         Id: ModuleId,
     {
-        let options = CompilationOptions::Standalone {
-            create_imports: true,
-        };
-        let (module, import_spans) =
-            Compiler::compile_module_with_imports(id, &Env::new(), block, options)?;
+        let (module, import_spans) = Compiler::compile_module(id, &Env::new(), block)?;
         Ok(ExecutableModuleBuilder::new(module, import_spans))
     }
 
@@ -170,29 +169,26 @@ impl<'a, T: Grammar> ExecutableModule<'a, T> {
     pub fn imports(&self) -> &ModuleImports<'a, T> {
         &self.imports
     }
-
-    pub(crate) fn inner(&self) -> &Executable<'a, T> {
-        &self.inner
-    }
 }
 
 impl<'a, T: Grammar> ExecutableModule<'a, T>
 where
     T::Lit: Number,
 {
-    /// Runs the module with the current values of imports.
+    /// Runs the module with the current values of imports. The imports are not modified.
     pub fn run(&self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
-        self.run_with_imports_unchecked(self.imports.clone())
+        self.run_with_imports_unchecked(&mut self.imports.clone())
     }
 
-    /// Runs the module with the specified imports.
+    /// Runs the module with the specified imports. The imports are modified to reflect assignments
+    /// in the topmost scope of the module; thus, they may become incompatible with this module.
     ///
     /// # Panics
     ///
     /// - Panics if the imports are not compatible with the module.
     pub fn run_with_imports(
         &self,
-        imports: ModuleImports<'a, T>,
+        imports: &mut ModuleImports<'a, T>,
     ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
         assert!(
             imports.is_compatible(self),
@@ -213,13 +209,15 @@ where
     /// [`run_with_imports`]: #method.run_with_imports
     pub fn run_with_imports_unchecked(
         &self,
-        mut imports: ModuleImports<'a, T>,
+        imports: &mut ModuleImports<'a, T>,
     ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
         let mut backtrace = Backtrace::default();
-        imports
+        let result = imports
             .inner
             .execute(&self.inner, Some(&mut backtrace))
-            .map_err(|err| ErrorWithBacktrace::new(err, backtrace))
+            .map_err(|err| ErrorWithBacktrace::new(err, backtrace));
+        imports.inner.compress();
+        result
     }
 }
 
@@ -291,8 +289,11 @@ impl<'a, T: Grammar> ModuleImports<'a, T> {
     /// it guarantees that the execution will not lead to a panic or unpredictable results.
     pub fn is_compatible(&self, module: &ExecutableModule<'a, T>) -> bool {
         self.inner.variables_map() == module.imports.inner.variables_map()
+            && self.inner.register_count() == module.imports.inner.register_count()
     }
 }
+
+// FIXME: implement IntoIterator for &ModuleImports.
 
 impl<'a, T: Grammar> ops::Index<&str> for ModuleImports<'a, T> {
     type Output = Value<'a, T>;
@@ -399,10 +400,6 @@ mod tests {
 
     use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 
-    const MODULE_TYPE: CompilationOptions = CompilationOptions::Standalone {
-        create_imports: false,
-    };
-
     #[test]
     fn cloning_module() {
         let mut env = Env::new();
@@ -410,7 +407,7 @@ mod tests {
 
         let block = "y = x + 2 * (x + 1) + 1; y";
         let block = F32Grammar::parse_statements(block).unwrap();
-        let module = Compiler::compile_module(WildcardId, &env, &block, MODULE_TYPE).unwrap();
+        let (module, _) = Compiler::compile_module(WildcardId, &env, &block).unwrap();
 
         let mut module_copy = module.clone();
         module_copy.set_import("x", Value::Number(10.0));
@@ -428,7 +425,7 @@ mod tests {
 
         let block = "x + y";
         let block = F32Grammar::parse_statements(block).unwrap();
-        let module = Compiler::compile_module(WildcardId, &env, &block, MODULE_TYPE).unwrap();
+        let (module, _) = Compiler::compile_module(WildcardId, &env, &block).unwrap();
 
         let mut imports = module.imports().to_owned();
         assert!(imports.is_compatible(&module));
@@ -449,12 +446,12 @@ mod tests {
 
         let block = "x + y";
         let block = F32Grammar::parse_statements(block).unwrap();
-        let module = Compiler::compile_module(WildcardId, &env, &block, MODULE_TYPE).unwrap();
+        let (module, _) = Compiler::compile_module(WildcardId, &env, &block).unwrap();
 
         let mut other_env = Env::new();
         other_env.push_var("y", Value::<F32Grammar>::Number(1.0));
         module
-            .run_with_imports(ModuleImports { inner: other_env })
+            .run_with_imports(&mut ModuleImports { inner: other_env })
             .ok();
     }
 }

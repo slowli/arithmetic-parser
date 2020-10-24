@@ -26,17 +26,6 @@ use self::captures::{extract_vars_iter, CapturesExtractor, CompilerExtTarget};
 /// Name of the comparison function used in desugaring order comparisons.
 const CMP_FUNCTION_NAME: &str = "cmp";
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum CompilationOptions {
-    /// Module for standalone execution.
-    Standalone {
-        /// Create missing imports?
-        create_imports: bool,
-    },
-    /// Module for execution within a specific `Env`.
-    Embedded,
-}
-
 pub(crate) type ImportSpans<'a> = HashMap<String, Spanned<'a>>;
 
 #[derive(Debug)]
@@ -469,28 +458,14 @@ impl Compiler {
         })
     }
 
-    pub fn compile_module_with_imports<'a, Id: ModuleId, T: Grammar>(
+    pub fn compile_module<'a, Id: ModuleId, T: Grammar>(
         module_id: Id,
         env: &Env<'a, T>,
         block: &Block<'a, T>,
-        compilation_options: CompilationOptions,
     ) -> Result<(ExecutableModule<'a, T>, ImportSpans<'a>), Error<'a>> {
         let module_id = Box::new(module_id) as Box<dyn ModuleId>;
-        let mut compiler = Self::from_env(module_id.clone_boxed(), env);
-
-        let (captures, import_spans) = match compilation_options {
-            CompilationOptions::Embedded => {
-                // We don't care about captures since we won't execute the module with them anyway.
-                (Env::new(), ImportSpans::new())
-            }
-
-            CompilationOptions::Standalone { create_imports } => {
-                let (captures, import_spans) =
-                    Self::extract_captures(module_id.clone_boxed(), env, block, create_imports)?;
-                compiler = Self::from_env(module_id.clone_boxed(), &captures);
-                (captures, import_spans)
-            }
-        };
+        let (captures, import_spans) = Self::extract_captures(module_id.clone_boxed(), env, block)?;
+        let mut compiler = Self::from_env(module_id.clone_boxed(), &captures);
 
         let mut executable = Executable::new(module_id);
         let empty_span = InputSpan::new("");
@@ -509,38 +484,19 @@ impl Compiler {
         Ok((module, import_spans))
     }
 
-    pub fn compile_module<'a, Id: ModuleId, T: Grammar>(
-        module_id: Id,
-        env: &Env<'a, T>,
-        block: &Block<'a, T>,
-        compilation_options: CompilationOptions,
-    ) -> Result<ExecutableModule<'a, T>, Error<'a>> {
-        Self::compile_module_with_imports(module_id, env, block, compilation_options)
-            .map(|(module, _)| module)
-    }
-
     fn extract_captures<'a, T: Grammar>(
         module_id: Box<dyn ModuleId>,
         env: &Env<'a, T>,
         block: &Block<'a, T>,
-        create_imports: bool,
     ) -> Result<(Env<'a, T>, ImportSpans<'a>), Error<'a>> {
         let mut captures = Env::new();
         let mut import_spans = HashMap::new();
 
         let mut extractor = CapturesExtractor::new(module_id, |var_name, var_span| {
-            let mut var = env.get_var(var_name).cloned();
-            if create_imports {
-                var = var.or_else(|| Some(Value::void()));
-            }
-            var.map_or_else(
-                || Err(ErrorKind::Undefined(var_name.to_owned())),
-                |value| {
-                    captures.push_var(var_name, value);
-                    import_spans.insert(var_name.to_owned(), var_span);
-                    Ok(())
-                },
-            )
+            let value = env.get_var(var_name).cloned().unwrap_or_else(Value::void);
+            captures.push_var(var_name, value);
+            import_spans.insert(var_name.to_owned(), var_span);
+            Ok(())
         });
         extractor.eval_block(&block)?;
 
@@ -677,16 +633,11 @@ mod tests {
 
     use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 
-    const MODULE_TYPE: CompilationOptions = CompilationOptions::Standalone {
-        create_imports: false,
-    };
-
     #[test]
     fn compilation_basics() {
         let block = "x = 3; 1 + { y = 2; y * x } == 7";
         let block = F32Grammar::parse_statements(block).unwrap();
-        let module =
-            Compiler::compile_module(WildcardId, &Env::new(), &block, MODULE_TYPE).unwrap();
+        let (module, _) = Compiler::compile_module(WildcardId, &Env::new(), &block).unwrap();
         let value = module.run().unwrap();
         assert_eq!(value, Value::Bool(true));
     }
@@ -695,22 +646,16 @@ mod tests {
     fn compiled_function() {
         let block = "add = |x, y| x + y; add(2, 3) == 5";
         let block = F32Grammar::parse_statements(block).unwrap();
-        let value = Compiler::compile_module(WildcardId, &Env::new(), &block, MODULE_TYPE)
-            .unwrap()
-            .run()
-            .unwrap();
-        assert_eq!(value, Value::Bool(true));
+        let (module, _) = Compiler::compile_module(WildcardId, &Env::new(), &block).unwrap();
+        assert_eq!(module.run().unwrap(), Value::Bool(true));
     }
 
     #[test]
     fn compiled_function_with_capture() {
         let block = "A = 2; add = |x, y| x + y / A; add(2, 3) == 3.5";
         let block = F32Grammar::parse_statements(block).unwrap();
-        let value = Compiler::compile_module(WildcardId, &Env::new(), &block, MODULE_TYPE)
-            .unwrap()
-            .run()
-            .unwrap();
-        assert_eq!(value, Value::Bool(true));
+        let (module, _) = Compiler::compile_module(WildcardId, &Env::new(), &block).unwrap();
+        assert_eq!(module.run().unwrap(), Value::Bool(true));
     }
 
     #[test]
@@ -755,7 +700,7 @@ mod tests {
 
         let module = "y = 5 * x; y - 3";
         let module = F32Grammar::parse_statements(module).unwrap();
-        let mut module = Compiler::compile_module(WildcardId, &env, &module, MODULE_TYPE).unwrap();
+        let (mut module, _) = Compiler::compile_module(WildcardId, &env, &module).unwrap();
 
         let imports = module.imports().iter().collect::<Vec<_>>();
         assert_eq!(imports, &[("x", &Value::Number(1.0))]);

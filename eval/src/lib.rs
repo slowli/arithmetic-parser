@@ -44,18 +44,7 @@
 //!
 //! ```
 //! use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt};
-//! use arithmetic_eval::{fns, Interpreter, Value};
-//!
-//! const MIN: fns::Binary<f32> =
-//!     fns::Binary::new(|x, y| if x < y { x } else { y });
-//! const MAX: fns::Binary<f32> =
-//!     fns::Binary::new(|x, y| if x > y { x } else { y });
-//!
-//! let mut context = Interpreter::with_prelude();
-//! // Add some native functions to the interpreter.
-//! context
-//!     .insert_native_fn("min", MIN)
-//!     .insert_native_fn("max", MAX);
+//! use arithmetic_eval::{fns, Comparisons, Environment, Prelude, Value, VariableMap};
 //!
 //! let program = r#"
 //!     ## The interpreter supports all parser features, including
@@ -66,8 +55,15 @@
 //!     M
 //! "#;
 //! let program = F32Grammar::parse_statements(program).unwrap();
-//! let ret = context.evaluate(&program).unwrap();
-//! assert_eq!(ret, Value::Number(9.0));
+//!
+//! let mut env = Environment::new();
+//! // Add some native functions to the environment.
+//! env.extend(&Prelude).extend(&Comparisons);
+//!
+//! // To execute statements, we first compile them into a module.
+//! let module = env.compile_module("test", &program).unwrap();
+//! // Then, the module can be run.
+//! assert_eq!(module.run().unwrap(), Value::Number(9.0));
 //! ```
 
 #![cfg_attr(not(feature = "std"), no_std)]
@@ -140,6 +136,12 @@ impl Number for Complex32 {}
 impl Number for Complex64 {}
 
 /// Environment containing named variables.
+///
+/// Note that the environment implements [`Index`] / [`IndexMut`] traits, which allows to eloquently
+/// access or modify environment.
+///
+/// [`Index`]: https://doc.rust-lang.org/std/ops/trait.Index.html
+/// [`IndexMut`]: https://doc.rust-lang.org/std/ops/trait.IndexMut.html
 #[derive(Debug)]
 pub struct Environment<'a, T: Grammar> {
     variables: HashMap<String, Value<'a, T>>,

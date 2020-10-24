@@ -22,7 +22,8 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// Wrapper of a function containing information about its arguments.
 ///
 /// Using `FnWrapper` allows to define [native functions] with minimum boilerplate
-/// and with increased type safety.
+/// and with increased type safety. `FnWrapper`s can be constructed explcitly or indirectly
+/// via [`Environment::insert_wrapped_fn()`], [`Value::wrapped_fn()`], or [`wrap()`].
 ///
 /// Arguments of a wrapped function must implement [`TryFromValue`] trait for the applicable
 /// grammar, and the output type must implement [`IntoEvalResult`]. If arguments and/or output
@@ -30,6 +31,9 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// to call functions provided as an argument), use the [`wrap_fn_with_context`] macro.
 ///
 /// [native functions]: ../trait.NativeFn.html
+/// [`Environment::insert_wrapped_fn()`]: ../struct.Environment.html#method.insert_wrapped_fn
+/// [`Value::wrapped_fn()`]: ../enum.Value.html#method.wrapped_fn
+/// [`wrap()`]: function.wrap.html
 /// [`TryFromValue`]: trait.TryFromValue.html
 /// [`IntoEvalResult`]: trait.IntoEvalResult.html
 /// [`CallContext`]: ../struct.CallContext.html
@@ -42,23 +46,24 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 ///
 /// ```
 /// use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
-/// use arithmetic_eval::{fns::FnWrapper, Interpreter, Value};
+/// use arithmetic_eval::{fns, Environment, Value, VariableMap};
 ///
-/// let mut interpreter = Interpreter::new();
-/// let max = FnWrapper::new(|x: f32, y: f32| if x > y { x } else { y });
-/// interpreter.insert_native_fn("max", max);
+/// let max = fns::wrap(|x: f32, y: f32| if x > y { x } else { y });
 ///
 /// let program = "max(1, 3) == 3 && max(-1, -3) == -1";
 /// let program = F32Grammar::parse_statements(program).unwrap();
-/// let ret = interpreter.evaluate(&program).unwrap();
-/// assert_eq!(ret, Value::Bool(true));
+/// let module = Environment::new()
+///     .insert_native_fn("max", max)
+///     .compile_module("test_max", &program)
+///     .unwrap();
+/// assert_eq!(module.run().unwrap(), Value::Bool(true));
 /// ```
 ///
 /// ## Fallible function with complex args
 ///
 /// ```
 /// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
-/// # use arithmetic_eval::{fns::FnWrapper, Interpreter, Value};
+/// # use arithmetic_eval::{fns::FnWrapper, Environment, Value, VariableMap};
 /// fn zip_arrays(xs: Vec<f32>, ys: Vec<f32>) -> Result<Vec<(f32, f32)>, String> {
 ///     if xs.len() == ys.len() {
 ///         Ok(xs.into_iter().zip(ys).map(|(x, y)| (x, y)).collect())
@@ -67,13 +72,14 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 ///     }
 /// }
 ///
-/// let mut interpreter = Interpreter::new();
-/// interpreter.insert_native_fn("zip", FnWrapper::new(zip_arrays));
-///
 /// let program = "(1, 2, 3).zip((4, 5, 6)) == ((1, 4), (2, 5), (3, 6))";
 /// let program = F32Grammar::parse_statements(program).unwrap();
-/// let ret = interpreter.evaluate(&program).unwrap();
-/// assert_eq!(ret, Value::Bool(true));
+///
+/// let module = Environment::new()
+///     .insert_wrapped_fn("zip", zip_arrays)
+///     .compile_module("test_zip", &program)
+///     .unwrap();
+/// assert_eq!(module.run().unwrap(), Value::Bool(true));
 /// ```
 pub struct FnWrapper<T, F> {
     function: F,
@@ -593,37 +599,42 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 ///
 /// ```
 /// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt};
-/// # use arithmetic_eval::{wrap_fn, fns::FnWrapper, CallContext, Function, Interpreter, Value};
+/// # use arithmetic_eval::{wrap_fn, Function, Environment, Value, VariableMap};
 /// fn is_function<G: Grammar>(value: Value<'_, G>) -> bool {
 ///     value.is_function()
 /// }
 ///
-/// let mut interpreter = Interpreter::new();
-/// interpreter.insert_native_fn("is_function", wrap_fn!(1, is_function));
-///
 /// let program = "is_function(is_function) && !is_function(1)";
 /// let program = F32Grammar::parse_statements(program).unwrap();
-/// let ret = interpreter.evaluate(&program).unwrap();
-/// assert_eq!(ret, Value::Bool(true));
+///
+/// let module = Environment::new()
+///     .insert_native_fn("is_function", wrap_fn!(1, is_function))
+///     .compile_module("test", &program)
+///     .unwrap();
+/// assert_eq!(module.run().unwrap(), Value::Bool(true));
 /// ```
 ///
 /// Usage of lifetimes:
 ///
 /// ```
 /// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt};
-/// # use arithmetic_eval::{wrap_fn, fns::FnWrapper, CallContext, Function, Interpreter, Value};
+/// # use arithmetic_eval::{
+/// #     wrap_fn, CallContext, Function, Environment, Prelude, Value, VariableMap,
+/// # };
 /// // Note that both `Value`s have the same lifetime due to elision.
 /// fn take_if<G: Grammar>(value: Value<'_, G>, condition: bool) -> Value<'_, G> {
 ///     if condition { value } else { Value::void() }
 /// }
 ///
-/// let mut interpreter = Interpreter::with_prelude();
-/// interpreter.insert_native_fn("take_if", wrap_fn!(2, take_if));
-///
 /// let program = "(1, 2).take_if(true) == (1, 2) && (3, 4).take_if(false) != (3, 4)";
 /// let program = F32Grammar::parse_statements(program).unwrap();
-/// let ret = interpreter.evaluate(&program).unwrap();
-/// assert_eq!(ret, Value::Bool(true));
+///
+/// let module = Environment::new()
+///     .extend(&Prelude)
+///     .insert_native_fn("take_if", wrap_fn!(2, take_if))
+///     .compile_module("test_take_if", &program)
+///     .unwrap();
+/// assert_eq!(module.run().unwrap(), Value::Bool(true));
 /// ```
 #[macro_export]
 macro_rules! wrap_fn {
@@ -686,8 +697,7 @@ macro_rules! wrap_fn {
 /// ```
 /// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt};
 /// # use arithmetic_eval::{
-/// #     wrap_fn_with_context, fns::FnWrapper, CallContext, Function, Interpreter, Value,
-/// #     Error,
+/// #     wrap_fn_with_context, CallContext, Function, Environment, Value, Error, VariableMap,
 /// # };
 /// fn map_array<'a, G: Grammar<Lit = f32>>(
 ///     context: &mut CallContext<'_, 'a>,
@@ -703,13 +713,14 @@ macro_rules! wrap_fn {
 ///         .collect()
 /// }
 ///
-/// let mut interpreter = Interpreter::new();
-/// interpreter.insert_native_fn("map", wrap_fn_with_context!(2, map_array));
-///
 /// let program = "(1, 2, 3).map(|x| x + 3) == (4, 5, 6)";
 /// let program = F32Grammar::parse_statements(program).unwrap();
-/// let ret = interpreter.evaluate(&program).unwrap();
-/// assert_eq!(ret, Value::Bool(true));
+///
+/// let module = Environment::new()
+///     .insert_native_fn("map", wrap_fn_with_context!(2, map_array))
+///     .compile_module("test_map", &program)
+///     .unwrap();
+/// assert_eq!(module.run().unwrap(), Value::Bool(true));
 /// ```
 #[macro_export]
 macro_rules! wrap_fn_with_context {

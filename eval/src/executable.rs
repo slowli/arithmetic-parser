@@ -61,6 +61,7 @@ impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
 ///     .with_imports_from(&Prelude)
 ///     .with_imports_from(&Comparisons)
 ///     .with_import("INFINITY", Value::Number(f32::INFINITY))
+///     // Set remaining imports to a fixed value.
 ///     .set_imports(|_| Value::void());
 ///
 /// // With the original imports, the returned value is `-INFINITY`.
@@ -84,7 +85,7 @@ impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
 ///
 /// ```
 /// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
-/// # use arithmetic_eval::{Interpreter, Value, ExecutableModule};
+/// # use arithmetic_eval::{Environment, ExecutableModule, Value};
 /// let block = F32Grammar::parse_statements("x + y").unwrap();
 /// let mut module = ExecutableModule::builder("test", &block)
 ///     .unwrap()
@@ -93,10 +94,11 @@ impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
 ///     .build();
 /// assert_eq!(module.run().unwrap(), Value::Number(8.0));
 ///
-/// let mut imports = module.imports().to_owned();
-/// imports["x"] = Value::Number(-1.0);
+/// let mut env = Environment::new();
+/// env.extend(module.imports());
+/// env["x"] = Value::Number(-1.0);
 /// assert_eq!(
-///     module.run_with_imports(&mut imports).unwrap(),
+///     module.run_in_env(&mut env).unwrap(),
 ///     Value::Number(4.0)
 /// );
 /// ```
@@ -134,7 +136,7 @@ impl<'a, T: Grammar> ExecutableModule<'a, T> {
         }
     }
 
-    /// Creates a new module. All imports are set to `Value::void()`.
+    /// Starts building a new module.
     pub fn builder<Id>(
         id: Id,
         block: &Block<'a, T>,
@@ -210,12 +212,10 @@ where
 
 /// Imports of an [`ExecutableModule`].
 ///
-/// Note that imports implement [`Index`] / [`IndexMut`] traits, which allows to eloquently
-/// access or modify imports.
+/// Note that imports implement [`Index`] trait, which allows to eloquently get imports by name.
 ///
 /// [`ExecutableModule`]: struct.ExecutableModule.html
 /// [`Index`]: https://doc.rust-lang.org/std/ops/trait.Index.html
-/// [`IndexMut`]: https://doc.rust-lang.org/std/ops/trait.IndexMut.html
 #[derive(Debug)]
 pub struct ModuleImports<'a, T: Grammar> {
     inner: Registers<'a, T>,
@@ -330,12 +330,16 @@ impl<'a, T: Grammar> ExecutableModuleBuilder<'a, T> {
         }
     }
 
-    /// A version [`try_build()`] that panics if there are undefined imports.
+    /// A version of [`try_build()`] that panics if there are undefined imports.
+    ///
+    /// [`try_build()`]: #method.try_build
     pub fn build(self) -> ExecutableModule<'a, T> {
         self.try_build().unwrap()
     }
 
     /// Sets the undefined imports using the provided closure and returns the resulting module.
+    /// The closure is called with the name of each undefined import and should return
+    /// the corresponding `Value`.
     pub fn set_imports<F>(mut self, mut setter: F) -> ExecutableModule<'a, T>
     where
         F: FnMut(&str) -> Value<'a, T>,

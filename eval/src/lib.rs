@@ -192,6 +192,11 @@ impl<'a, T: Grammar> Environment<'a, T> {
         self.variables.get(name)
     }
 
+    /// Gets a mutable reference to the variable by name.
+    pub fn get_var_mut(&mut self, name: &str) -> Option<&mut Value<'a, T>> {
+        self.variables.get_mut(name)
+    }
+
     /// Iterates over variables.
     pub fn variables(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
         self.variables
@@ -230,5 +235,21 @@ impl<'a, T: Grammar> Environment<'a, T> {
     {
         let wrapped = fns::wrap::<Args, _>(fn_to_wrap);
         self.insert_var(name, Value::native_fn(wrapped))
+    }
+}
+
+impl<'a, T: Grammar> ops::Index<&str> for Environment<'a, T> {
+    type Output = Value<'a, T>;
+
+    fn index(&self, index: &str) -> &Self::Output {
+        self.get_var(index)
+            .unwrap_or_else(|| panic!("Variable `{}` is not defined", index))
+    }
+}
+
+impl<'a, T: Grammar> ops::IndexMut<&str> for Environment<'a, T> {
+    fn index_mut(&mut self, index: &str) -> &mut Self::Output {
+        self.get_var_mut(index)
+            .unwrap_or_else(|| panic!("Variable `{}` is not defined", index))
     }
 }

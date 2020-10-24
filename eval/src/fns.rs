@@ -725,7 +725,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ExecutableModule, WildcardId};
+    use crate::{Environment, ExecutableModule, WildcardId};
 
     use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
     use assert_matches::assert_matches;
@@ -840,7 +840,7 @@ mod tests {
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
             .with_import("Inf", Value::Number(f32::INFINITY))
-            .with_import("loop", Value::native_fn(Loop))
+            .with_import("fold", Value::native_fn(Fold))
             .with_import("if", Value::native_fn(If))
             .with_import("cmp", Value::native_fn(Compare))
             .build();
@@ -871,23 +871,21 @@ mod tests {
             .with_import("fold", Value::native_fn(Fold))
             .build();
 
-        let mut imports = module.imports().to_owned();
-        assert_eq!(
-            module.run_with_imports(&mut imports).unwrap(),
-            Value::Bool(true)
-        );
+        let mut env = Environment::new();
+        env.extend(module.imports());
+        assert_eq!(module.run_in_env(&mut env).unwrap(), Value::Bool(true));
 
         let test_block = F32Grammar::parse_statements("xs.reverse()").unwrap();
         let mut test_module = ExecutableModule::builder("test", &test_block)
             .unwrap()
-            .with_import("reverse", imports["reverse"].to_owned())
+            .with_import("reverse", env["reverse"].to_owned())
             .set_imports(|_| Value::void());
 
         for &(input, expected) in SAMPLES {
             let input = input.iter().copied().map(Value::Number).collect();
             let expected = expected.iter().copied().map(Value::Number).collect();
             test_module.set_import("xs", Value::Tuple(input));
-            assert_eq!(module.run().unwrap(), Value::Tuple(expected));
+            assert_eq!(test_module.run().unwrap(), Value::Tuple(expected));
         }
     }
 }

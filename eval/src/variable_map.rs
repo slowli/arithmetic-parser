@@ -1,8 +1,8 @@
 //! `VariableMap` trait and implementations.
 
-use arithmetic_parser::Grammar;
+use arithmetic_parser::{Block, Grammar};
 
-use crate::{fns, Environment, ModuleImports, Number, Value};
+use crate::{fns, Environment, Error, ExecutableModule, ModuleId, ModuleImports, Number, Value};
 
 /// Encapsulates read access to named variables.
 pub trait VariableMap<'a, T: Grammar> {
@@ -14,6 +14,19 @@ pub trait VariableMap<'a, T: Grammar> {
     // thus, an ordinary associated type won't do. (A type generic by the lifetime would
     // be necessary, but the corresponding feature, GAT, is not stable.)
     fn variables(&self) -> Box<dyn Iterator<Item = (&str, Value<'a, T>)> + '_>;
+
+    /// Creates a module based on imports solely from this map.
+    ///
+    /// The default implementation is reasonable for most cases.
+    fn compile_module<Id: ModuleId>(
+        &self,
+        id: Id,
+        block: &Block<'a, T>,
+    ) -> Result<ExecutableModule<'a, T>, Error<'a>> {
+        ExecutableModule::builder(id, block)?
+            .with_imports_from(self)
+            .try_build()
+    }
 }
 
 impl<'a, T: Grammar> VariableMap<'a, T> for Environment<'a, T> {

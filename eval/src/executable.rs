@@ -5,7 +5,7 @@ use core::ops;
 use crate::{
     compiler::{Compiler, ImportSpans},
     error::{Backtrace, ErrorWithBacktrace},
-    Error, ErrorKind, ModuleId, Number, Value, VariableMap,
+    Environment, Error, ErrorKind, ModuleId, Number, Value, VariableMap,
 };
 use arithmetic_parser::{Block, Grammar, LvalueLen, MaybeSpanned, StripCode};
 
@@ -14,7 +14,7 @@ mod env;
 
 pub(crate) use self::{
     command::{Atom, Command, ComparisonOp, CompiledExpr, SpannedAtom},
-    env::{Env, Executable},
+    env::{Executable, Registers},
 };
 
 #[derive(Debug)]
@@ -127,7 +127,7 @@ impl<T: Grammar> StripCode for ExecutableModule<'_, T> {
 }
 
 impl<'a, T: Grammar> ExecutableModule<'a, T> {
-    pub(crate) fn from_parts(inner: Executable<'a, T>, imports: Env<'a, T>) -> Self {
+    pub(crate) fn from_parts(inner: Executable<'a, T>, imports: Registers<'a, T>) -> Self {
         Self {
             inner,
             imports: ModuleImports { inner: imports },
@@ -142,7 +142,7 @@ impl<'a, T: Grammar> ExecutableModule<'a, T> {
     where
         Id: ModuleId,
     {
-        let (module, import_spans) = Compiler::compile_module(id, &Env::new(), block)?;
+        let (module, import_spans) = Compiler::compile_module(id, &Registers::new(), block)?;
         Ok(ExecutableModuleBuilder::new(module, import_spans))
     }
 
@@ -177,47 +177,34 @@ where
 {
     /// Runs the module with the current values of imports. The imports are not modified.
     pub fn run(&self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
-        self.run_with_imports_unchecked(&mut self.imports.clone())
+        let mut registers = self.imports.inner.clone();
+        self.run_with_registers(&mut registers)
     }
 
-    /// Runs the module with the specified imports. The imports are modified to reflect assignments
-    /// in the topmost scope of the module; thus, they may become incompatible with this module.
-    ///
-    /// # Panics
-    ///
-    /// - Panics if the imports are not compatible with the module.
-    pub fn run_with_imports(
+    /// Runs the module with the specified `Environment`. The environment may contain some of
+    /// module imports; they will be used to override imports defined in the module.
+    /// On execution, the environment is modified to reflect assignments in the topmost scope
+    /// of the module.
+    pub fn run_in_env(
         &self,
-        imports: &mut ModuleImports<'a, T>,
+        env: &mut Environment<'a, T>,
     ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
-        assert!(
-            imports.is_compatible(self),
-            "Cannot run module with incompatible imports"
-        );
-        self.run_with_imports_unchecked(imports)
+        let mut registers = self.imports.inner.clone();
+        registers.update_from_env(env);
+
+        let result = self.run_with_registers(&mut registers);
+        registers.update_env(env);
+        result
     }
 
-    /// Runs the module with the specified imports. Unlike [`run_with_imports`], this method
-    /// does not check if the imports are compatible with the module; it is the caller's
-    /// responsibility to ensure this.
-    ///
-    /// # Safety
-    ///
-    /// If the module and imports are incompatible, the module execution may lead to panics
-    /// or unpredictable results.
-    ///
-    /// [`run_with_imports`]: #method.run_with_imports
-    pub fn run_with_imports_unchecked(
+    fn run_with_registers(
         &self,
-        imports: &mut ModuleImports<'a, T>,
+        registers: &mut Registers<'a, T>,
     ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
         let mut backtrace = Backtrace::default();
-        let result = imports
-            .inner
+        registers
             .execute(&self.inner, Some(&mut backtrace))
-            .map_err(|err| ErrorWithBacktrace::new(err, backtrace));
-        imports.inner.compress();
-        result
+            .map_err(|err| ErrorWithBacktrace::new(err, backtrace))
     }
 }
 
@@ -231,7 +218,7 @@ where
 /// [`IndexMut`]: https://doc.rust-lang.org/std/ops/trait.IndexMut.html
 #[derive(Debug)]
 pub struct ModuleImports<'a, T: Grammar> {
-    inner: Env<'a, T>,
+    inner: Registers<'a, T>,
 }
 
 impl<T: Grammar> Clone for ModuleImports<'_, T> {
@@ -287,6 +274,7 @@ impl<'a, T: Grammar> ModuleImports<'a, T> {
     ///
     /// The compatibility does not guarantee that the module execution will succeed; instead,
     /// it guarantees that the execution will not lead to a panic or unpredictable results.
+    // FIXME: remove?
     pub fn is_compatible(&self, module: &ExecutableModule<'a, T>) -> bool {
         self.inner.variables_map() == module.imports.inner.variables_map()
             && self.inner.register_count() == module.imports.inner.register_count()
@@ -402,7 +390,7 @@ mod tests {
 
     #[test]
     fn cloning_module() {
-        let mut env = Env::new();
+        let mut env = Registers::new();
         env.push_var("x", Value::<F32Grammar>::Number(5.0));
 
         let block = "y = x + 2 * (x + 1) + 1; y";
@@ -419,7 +407,7 @@ mod tests {
 
     #[test]
     fn checking_import_compatibility() {
-        let mut env = Env::new();
+        let mut env = Registers::new();
         env.push_var("x", Value::<F32Grammar>::Number(5.0));
         env.push_var("y", Value::Bool(true));
 
@@ -432,26 +420,8 @@ mod tests {
         imports.set("x", Value::Number(-1.0));
         assert!(imports.is_compatible(&module));
 
-        let mut other_env = Env::new();
+        let mut other_env = Registers::new();
         other_env.push_var("y", Value::<F32Grammar>::Number(1.0));
         assert!(!ModuleImports { inner: other_env }.is_compatible(&module));
-    }
-
-    #[test]
-    #[should_panic(expected = "Cannot run module with incompatible imports")]
-    fn running_module_with_incompatible_imports() {
-        let mut env = Env::new();
-        env.push_var("x", Value::<F32Grammar>::Number(5.0));
-        env.push_var("y", Value::Number(1.0));
-
-        let block = "x + y";
-        let block = F32Grammar::parse_statements(block).unwrap();
-        let (module, _) = Compiler::compile_module(WildcardId, &env, &block).unwrap();
-
-        let mut other_env = Env::new();
-        other_env.push_var("y", Value::<F32Grammar>::Number(1.0));
-        module
-            .run_with_imports(&mut ModuleImports { inner: other_env })
-            .ok();
     }
 }

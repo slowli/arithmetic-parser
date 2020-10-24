@@ -8,8 +8,8 @@ use crate::{
     alloc::{vec, Vec},
     error::RepeatedAssignmentContext,
     executable::{
-        Atom, Command, ComparisonOp, CompiledExpr, Env, Executable, ExecutableFn, ExecutableModule,
-        SpannedAtom,
+        Atom, Command, ComparisonOp, CompiledExpr, Executable, ExecutableFn, ExecutableModule,
+        Registers, SpannedAtom,
     },
     Error, ErrorKind, ModuleId, Value,
 };
@@ -57,7 +57,7 @@ impl Compiler {
         }
     }
 
-    fn from_env<T: Grammar>(module_id: Box<dyn ModuleId>, env: &Env<'_, T>) -> Self {
+    fn from_env<T: Grammar>(module_id: Box<dyn ModuleId>, env: &Registers<'_, T>) -> Self {
         Self {
             vars_to_registers: env.variables_map().to_owned(),
             register_count: env.register_count(),
@@ -460,7 +460,7 @@ impl Compiler {
 
     pub fn compile_module<'a, Id: ModuleId, T: Grammar>(
         module_id: Id,
-        env: &Env<'a, T>,
+        env: &Registers<'a, T>,
         block: &Block<'a, T>,
     ) -> Result<(ExecutableModule<'a, T>, ImportSpans<'a>), Error<'a>> {
         let module_id = Box::new(module_id) as Box<dyn ModuleId>;
@@ -486,10 +486,10 @@ impl Compiler {
 
     fn extract_captures<'a, T: Grammar>(
         module_id: Box<dyn ModuleId>,
-        env: &Env<'a, T>,
+        env: &Registers<'a, T>,
         block: &Block<'a, T>,
-    ) -> Result<(Env<'a, T>, ImportSpans<'a>), Error<'a>> {
-        let mut captures = Env::new();
+    ) -> Result<(Registers<'a, T>, ImportSpans<'a>), Error<'a>> {
+        let mut captures = Registers::new();
         let mut import_spans = HashMap::new();
 
         let mut extractor = CapturesExtractor::new(module_id, |var_name, var_span| {
@@ -637,7 +637,7 @@ mod tests {
     fn compilation_basics() {
         let block = "x = 3; 1 + { y = 2; y * x } == 7";
         let block = F32Grammar::parse_statements(block).unwrap();
-        let (module, _) = Compiler::compile_module(WildcardId, &Env::new(), &block).unwrap();
+        let (module, _) = Compiler::compile_module(WildcardId, &Registers::new(), &block).unwrap();
         let value = module.run().unwrap();
         assert_eq!(value, Value::Bool(true));
     }
@@ -646,7 +646,7 @@ mod tests {
     fn compiled_function() {
         let block = "add = |x, y| x + y; add(2, 3) == 5";
         let block = F32Grammar::parse_statements(block).unwrap();
-        let (module, _) = Compiler::compile_module(WildcardId, &Env::new(), &block).unwrap();
+        let (module, _) = Compiler::compile_module(WildcardId, &Registers::new(), &block).unwrap();
         assert_eq!(module.run().unwrap(), Value::Bool(true));
     }
 
@@ -654,7 +654,7 @@ mod tests {
     fn compiled_function_with_capture() {
         let block = "A = 2; add = |x, y| x + y / A; add(2, 3) == 3.5";
         let block = F32Grammar::parse_statements(block).unwrap();
-        let (module, _) = Compiler::compile_module(WildcardId, &Env::new(), &block).unwrap();
+        let (module, _) = Compiler::compile_module(WildcardId, &Registers::new(), &block).unwrap();
         assert_eq!(module.run().unwrap(), Value::Bool(true));
     }
 
@@ -694,7 +694,7 @@ mod tests {
 
     #[test]
     fn module_imports() {
-        let mut env = Env::new();
+        let mut env = Registers::new();
         env.push_var("x", Value::<F32Grammar>::Number(1.0));
         env.push_var("y", Value::Number(-3.0));
 

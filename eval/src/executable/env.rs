@@ -2,15 +2,15 @@
 
 use hashbrown::HashMap;
 
-use crate::error::CodeInModule;
 use crate::{
     alloc::{vec, Rc, Vec},
-    error::{Backtrace, EvalResult, TupleLenMismatchContext},
+    error::{Backtrace, CodeInModule, EvalResult, TupleLenMismatchContext},
     executable::{
         command::{Atom, Command, CompiledExpr, SpannedCommand},
         ExecutableFn,
     },
-    CallContext, Error, ErrorKind, Function, InterpretedFn, ModuleId, Number, SpannedValue, Value,
+    CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, ModuleId, Number,
+    SpannedValue, Value,
 };
 use arithmetic_parser::{BinaryOp, Grammar, MaybeSpanned, StripCode, UnaryOp};
 
@@ -113,20 +113,18 @@ where
     ) -> EvalResult<'a, T> {
         let mut registers = captures;
         registers.push(Value::Tuple(args));
-        let mut env = Env {
+        let mut env = Registers {
             registers,
-            ..Env::new()
+            ..Registers::new()
         };
         env.execute(self, ctx.backtrace())
     }
 }
 
-// TODO: restore `SmallVec` wrapped into a covariant wrapper.
-type Registers<'a, T> = Vec<Value<'a, T>>;
-
 #[derive(Debug)]
-pub(crate) struct Env<'a, T: Grammar> {
-    registers: Registers<'a, T>,
+pub(crate) struct Registers<'a, T: Grammar> {
+    // TODO: restore `SmallVec` wrapped into a covariant wrapper.
+    registers: Vec<Value<'a, T>>,
     // Maps variables to registers. Variables are mapped only from the global scope;
     // thus, we don't need to remove them on error in an inner scope.
     // TODO: investigate using stack-hosted small strings for keys.
@@ -136,7 +134,7 @@ pub(crate) struct Env<'a, T: Grammar> {
     inner_scope_start: Option<usize>,
 }
 
-impl<T: Grammar> Clone for Env<'_, T> {
+impl<T: Grammar> Clone for Registers<'_, T> {
     fn clone(&self) -> Self {
         Self {
             registers: self.registers.clone(),
@@ -146,11 +144,11 @@ impl<T: Grammar> Clone for Env<'_, T> {
     }
 }
 
-impl<T: Grammar> StripCode for Env<'_, T> {
-    type Stripped = Env<'static, T>;
+impl<T: Grammar> StripCode for Registers<'_, T> {
+    type Stripped = Registers<'static, T>;
 
     fn strip_code(self) -> Self::Stripped {
-        Env {
+        Registers {
             registers: self
                 .registers
                 .into_iter()
@@ -162,7 +160,7 @@ impl<T: Grammar> StripCode for Env<'_, T> {
     }
 }
 
-impl<'a, T: Grammar> Env<'a, T> {
+impl<'a, T: Grammar> Registers<'a, T> {
     pub fn new() -> Self {
         Self {
             registers: vec![],
@@ -210,18 +208,28 @@ impl<'a, T: Grammar> Env<'a, T> {
         self.vars.insert(name.to_owned(), register);
     }
 
-    /// Retains only registers corresponding to named variables.
-    pub fn compress(&mut self) {
-        let mut registers = Vec::with_capacity(self.vars.len());
-        for (i, register) in self.vars.values_mut().enumerate() {
-            registers.push(self.registers[*register].clone());
-            *register = i;
+    /// Updates from the specified environment. Updates are performed in place.
+    pub fn update_from_env(&mut self, env: &Environment<'a, T>) {
+        for (var_name, register) in &self.vars {
+            if let Some(value) = env.get_var(var_name) {
+                self.registers[*register] = value.to_owned();
+            }
         }
-        self.registers = registers;
+    }
+
+    /// Updates environment from this instance.
+    pub fn update_env(&self, env: &mut Environment<'a, T>) {
+        for (var_name, register) in &self.vars {
+            let value = self.registers[*register].clone();
+            // ^-- We cannot move `value` from `registers` because multiple names may be pointing
+            // to the same register.
+
+            env.insert_var(var_name, value);
+        }
     }
 }
 
-impl<'a, T> Env<'a, T>
+impl<'a, T> Registers<'a, T>
 where
     T: Grammar,
     T::Lit: Number,
@@ -456,27 +464,8 @@ mod tests {
     use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 
     #[test]
-    fn env_compression() {
-        let mut env = Env::new();
-        env.push_var("x", Value::<F32Grammar>::Number(5.0));
-
-        let block = "y = x + 2 * (x + 1) + 1; y";
-        let block = F32Grammar::parse_statements(block).unwrap();
-        let (module, _) = Compiler::compile_module(WildcardId, &env, &block).unwrap();
-        let value = env.execute(&module.inner, None).unwrap();
-        assert_eq!(value, Value::Number(18.0));
-
-        assert!(env.registers.len() > 2);
-        env.compress();
-        assert_eq!(env.registers.len(), 2);
-        assert_eq!(env.vars.len(), 2);
-        assert!(env.vars.contains_key("x"));
-        assert!(env.vars.contains_key("y"));
-    }
-
-    #[test]
     fn iterative_evaluation() {
-        let mut env = Env::new();
+        let mut env = Registers::new();
         env.push_var("x", Value::<F32Grammar>::Number(5.0));
 
         let block = F32Grammar::parse_statements("x").unwrap();

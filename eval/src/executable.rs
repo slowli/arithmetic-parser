@@ -55,9 +55,9 @@ impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
 /// use arithmetic_eval::{fns, Comparisons, ExecutableModule, Prelude, Value, ValueType};
 /// # use std::{collections::HashSet, f32, iter::FromIterator};
 ///
-/// let module = F32Grammar::parse_statements("xs.fold(-INFINITY, max)").unwrap();
-/// let mut module = ExecutableModule::builder("test", &module)
-///     .unwrap()
+/// # fn main() -> anyhow::Result<()> {
+/// let module = F32Grammar::parse_statements("xs.fold(-INFINITY, max)")?;
+/// let mut module = ExecutableModule::builder("test", &module)?
 ///     .with_imports_from(&Prelude)
 ///     .with_imports_from(&Comparisons)
 ///     .with_import("INFINITY", Value::Number(f32::INFINITY))
@@ -65,7 +65,7 @@ impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
 ///     .set_imports(|_| Value::void());
 ///
 /// // With the original imports, the returned value is `-INFINITY`.
-/// assert_eq!(module.run().unwrap(), Value::Number(f32::NEG_INFINITY));
+/// assert_eq!(module.run()?, Value::Number(f32::NEG_INFINITY));
 ///
 /// // Imports can be changed. Let's check that `xs` is indeed an import.
 /// assert!(module.imports().contains("xs"));
@@ -78,7 +78,9 @@ impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
 /// // Change the `xs` import and run the module again.
 /// let array = [1.0, -3.0, 2.0, 0.5].iter().copied().map(Value::Number).collect();
 /// module.set_import("xs", Value::Tuple(array));
-/// assert_eq!(module.run().unwrap(), Value::Number(2.0));
+/// assert_eq!(module.run()?, Value::Number(2.0));
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// The same module can be run with multiple imports:
@@ -86,21 +88,20 @@ impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
 /// ```
 /// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 /// # use arithmetic_eval::{Environment, ExecutableModule, Value};
-/// let block = F32Grammar::parse_statements("x + y").unwrap();
-/// let mut module = ExecutableModule::builder("test", &block)
-///     .unwrap()
+/// # fn main() -> anyhow::Result<()> {
+/// let block = F32Grammar::parse_statements("x + y")?;
+/// let mut module = ExecutableModule::builder("test", &block)?
 ///     .with_import("x", Value::Number(3.0))
 ///     .with_import("y", Value::Number(5.0))
 ///     .build();
-/// assert_eq!(module.run().unwrap(), Value::Number(8.0));
+/// assert_eq!(module.run()?, Value::Number(8.0));
 ///
 /// let mut env = Environment::new();
 /// env.extend(module.imports());
 /// env["x"] = Value::Number(-1.0);
-/// assert_eq!(
-///     module.run_in_env(&mut env).unwrap(),
-///     Value::Number(4.0)
-/// );
+/// assert_eq!(module.run_in_env(&mut env)?, Value::Number(4.0));
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct ExecutableModule<'a, T: Grammar> {

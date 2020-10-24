@@ -48,15 +48,17 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 /// use arithmetic_eval::{fns, Environment, Value, VariableMap};
 ///
+/// # fn main() -> anyhow::Result<()> {
 /// let max = fns::wrap(|x: f32, y: f32| if x > y { x } else { y });
 ///
 /// let program = "max(1, 3) == 3 && max(-1, -3) == -1";
-/// let program = F32Grammar::parse_statements(program).unwrap();
+/// let program = F32Grammar::parse_statements(program)?;
 /// let module = Environment::new()
 ///     .insert_native_fn("max", max)
-///     .compile_module("test_max", &program)
-///     .unwrap();
-/// assert_eq!(module.run().unwrap(), Value::Bool(true));
+///     .compile_module("test_max", &program)?;
+/// assert_eq!(module.run()?, Value::Bool(true));
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// ## Fallible function with complex args
@@ -72,14 +74,16 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 ///     }
 /// }
 ///
+/// # fn main() -> anyhow::Result<()> {
 /// let program = "(1, 2, 3).zip((4, 5, 6)) == ((1, 4), (2, 5), (3, 6))";
-/// let program = F32Grammar::parse_statements(program).unwrap();
+/// let program = F32Grammar::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_wrapped_fn("zip", zip_arrays)
-///     .compile_module("test_zip", &program)
-///     .unwrap();
-/// assert_eq!(module.run().unwrap(), Value::Bool(true));
+///     .compile_module("test_zip", &program)?;
+/// assert_eq!(module.run()?, Value::Bool(true));
+/// # Ok(())
+/// # }
 /// ```
 pub struct FnWrapper<T, F> {
     function: F,
@@ -604,14 +608,16 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 ///     value.is_function()
 /// }
 ///
+/// # fn main() -> anyhow::Result<()> {
 /// let program = "is_function(is_function) && !is_function(1)";
-/// let program = F32Grammar::parse_statements(program).unwrap();
+/// let program = F32Grammar::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("is_function", wrap_fn!(1, is_function))
-///     .compile_module("test", &program)
-///     .unwrap();
-/// assert_eq!(module.run().unwrap(), Value::Bool(true));
+///     .compile_module("test", &program)?;
+/// assert_eq!(module.run()?, Value::Bool(true));
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// Usage of lifetimes:
@@ -626,15 +632,17 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 ///     if condition { value } else { Value::void() }
 /// }
 ///
+/// # fn main() -> anyhow::Result<()> {
 /// let program = "(1, 2).take_if(true) == (1, 2) && (3, 4).take_if(false) != (3, 4)";
-/// let program = F32Grammar::parse_statements(program).unwrap();
+/// let program = F32Grammar::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .extend(&Prelude)
 ///     .insert_native_fn("take_if", wrap_fn!(2, take_if))
-///     .compile_module("test_take_if", &program)
-///     .unwrap();
-/// assert_eq!(module.run().unwrap(), Value::Bool(true));
+///     .compile_module("test_take_if", &program)?;
+/// assert_eq!(module.run()?, Value::Bool(true));
+/// # Ok(())
+/// # }
 /// ```
 #[macro_export]
 macro_rules! wrap_fn {
@@ -713,14 +721,16 @@ macro_rules! wrap_fn {
 ///         .collect()
 /// }
 ///
+/// # fn main() -> anyhow::Result<()> {
 /// let program = "(1, 2, 3).map(|x| x + 3) == (4, 5, 6)";
-/// let program = F32Grammar::parse_statements(program).unwrap();
+/// let program = F32Grammar::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("map", wrap_fn_with_context!(2, map_array))
-///     .compile_module("test_map", &program)
-///     .unwrap();
-/// assert_eq!(module.run().unwrap(), Value::Bool(true));
+///     .compile_module("test_map", &program)?;
+/// assert_eq!(module.run()?, Value::Bool(true));
+/// # Ok(())
+/// # }
 /// ```
 #[macro_export]
 macro_rules! wrap_fn_with_context {

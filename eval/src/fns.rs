@@ -100,15 +100,15 @@ fn extract_fn<'a, T: Grammar>(
 /// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 /// # use arithmetic_eval::{fns, Environment, ErrorKind, VariableMap};
 /// # use assert_matches::assert_matches;
+/// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     assert(1 + 2 == 3); # this assertion is fine
 ///     assert(3^2 == 10); # this one will fail
 /// "#;
-/// let program = F32Grammar::parse_statements(program).unwrap();
+/// let program = F32Grammar::parse_statements(program)?;
 /// let module = Environment::new()
 ///     .insert_native_fn("assert", fns::Assert)
-///     .compile_module("test_assert", &program)
-///     .unwrap();
+///     .compile_module("test_assert", &program)?;
 ///
 /// let err = module.run().unwrap_err();
 /// assert_eq!(*err.source().main_span().code().fragment(), "assert(3^2 == 10)");
@@ -116,6 +116,8 @@ fn extract_fn<'a, T: Grammar>(
 ///     err.source().kind(),
 ///     ErrorKind::NativeCall(ref msg) if msg == "Assertion failed"
 /// );
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct Assert;
@@ -157,14 +159,16 @@ impl<T: Grammar> NativeFn<T> for Assert {
 /// ```
 /// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 /// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # fn main() -> anyhow::Result<()> {
 /// let program = "x = 3; if(x == 2, -1, x + 1)";
-/// let program = F32Grammar::parse_statements(program).unwrap();
+/// let program = F32Grammar::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("if", fns::If)
-///     .compile_module("if_test", &program)
-///     .unwrap();
-/// assert_eq!(module.run().unwrap(), Value::Number(4.0));
+///     .compile_module("if_test", &program)?;
+/// assert_eq!(module.run()?, Value::Number(4.0));
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// You can also use the lazy evaluation by returning a function and evaluating it
@@ -173,14 +177,16 @@ impl<T: Grammar> NativeFn<T> for Assert {
 /// ```
 /// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 /// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # fn main() -> anyhow::Result<()> {
 /// let program = "x = 3; if(x == 2, || -1, || x + 1)()";
-/// let program = F32Grammar::parse_statements(program).unwrap();
+/// let program = F32Grammar::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("if", fns::If)
-///     .compile_module("if_test", &program)
-///     .unwrap();
-/// assert_eq!(module.run().unwrap(), Value::Number(4.0));
+///     .compile_module("if_test", &program)?;
+/// assert_eq!(module.run()?, Value::Number(4.0));
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct If;
@@ -224,6 +230,7 @@ where
 /// ```
 /// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 /// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     factorial = |x| {
 ///         loop((x, 1), |(i, acc)| {
@@ -233,15 +240,16 @@ where
 ///     };
 ///     factorial(5) == 120 && factorial(10) == 3628800
 /// "#;
-/// let program = F32Grammar::parse_statements(program).unwrap();
+/// let program = F32Grammar::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("if", fns::If)
 ///     .insert_native_fn("loop", fns::Loop)
-///     .compile_module("test_loop", &program)
-///     .unwrap();
-/// assert_eq!(module.run().unwrap(), Value::Bool(true));
+///     .compile_module("test_loop", &program)?;
+/// assert_eq!(module.run()?, Value::Bool(true));
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct Loop;
@@ -314,6 +322,7 @@ where
 /// ```
 /// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 /// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     factorial = |x| {
 ///         (_, acc) = (x, 1).while(
@@ -324,14 +333,15 @@ where
 ///     };
 ///     factorial(5) == 120 && factorial(10) == 3628800
 /// "#;
-/// let program = F32Grammar::parse_statements(program).unwrap();
+/// let program = F32Grammar::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("while", fns::While)
-///     .compile_module("test_while", &program)
-///     .unwrap();
-/// assert_eq!(module.run().unwrap(), Value::Bool(true));
+///     .compile_module("test_while", &program)?;
+/// assert_eq!(module.run()?, Value::Bool(true));
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct While;
@@ -392,19 +402,21 @@ where
 /// ```
 /// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 /// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     xs = (1, -2, 3, -0.3);
 ///     map(xs, |x| if(x > 0, x, 0)) == (1, 0, 3, 0)
 /// "#;
-/// let program = F32Grammar::parse_statements(program).unwrap();
+/// let program = F32Grammar::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("if", fns::If)
 ///     .insert_native_fn("map", fns::Map)
-///     .compile_module("test_map", &program)
-///     .unwrap();
-/// assert_eq!(module.run().unwrap(), Value::Bool(true));
+///     .compile_module("test_map", &program)?;
+/// assert_eq!(module.run()?, Value::Bool(true));
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct Map;
@@ -456,18 +468,20 @@ where
 /// ```
 /// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 /// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     xs = (1, -2, 3, -7, -0.3);
 ///     filter(xs, |x| x > -1) == (1, 3, -0.3)
 /// "#;
-/// let program = F32Grammar::parse_statements(program).unwrap();
+/// let program = F32Grammar::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("filter", fns::Filter)
-///     .compile_module("test_filter", &program)
-///     .unwrap();
-/// assert_eq!(module.run().unwrap(), Value::Bool(true));
+///     .compile_module("test_filter", &program)?;
+/// assert_eq!(module.run()?, Value::Bool(true));
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct Filter;
@@ -525,17 +539,19 @@ where
 /// ```
 /// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 /// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     xs = (1, -2, 3, -7);
 ///     fold(xs, 1, |acc, x| acc * x) == 42
 /// "#;
-/// let program = F32Grammar::parse_statements(program).unwrap();
+/// let program = F32Grammar::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("fold", fns::Fold)
-///     .compile_module("test_fold", &program)
-///     .unwrap();
-/// assert_eq!(module.run().unwrap(), Value::Bool(true));
+///     .compile_module("test_fold", &program)?;
+/// assert_eq!(module.run()?, Value::Bool(true));
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct Fold;
@@ -583,6 +599,7 @@ where
 /// ```
 /// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 /// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     repeat = |x, times| {
 ///         (_, acc) = (0, ()).while(
@@ -591,17 +608,19 @@ where
 ///         );
 ///         acc
 ///     };
-///     repeat(-2, 3) == (-2, -2, -2) && repeat((7,), 4) == ((7,), (7,), (7,), (7,))
+///     repeat(-2, 3) == (-2, -2, -2) &&
+///         repeat((7,), 4) == ((7,), (7,), (7,), (7,))
 /// "#;
-/// let program = F32Grammar::parse_statements(program).unwrap();
+/// let program = F32Grammar::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("while", fns::While)
 ///     .insert_native_fn("push", fns::Push)
-///     .compile_module("test_push", &program)
-///     .unwrap();
-/// assert_eq!(module.run().unwrap(), Value::Bool(true));
+///     .compile_module("test_push", &program)?;
+/// assert_eq!(module.run()?, Value::Bool(true));
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct Push;
@@ -642,19 +661,21 @@ where
 /// ```
 /// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 /// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     ## Merges all arguments (which should be tuples) into a single tuple.
 ///     super_merge = |...xs| fold(xs, (), merge);
 ///     super_merge((1, 2), (3,), (), (4, 5, 6)) == (1, 2, 3, 4, 5, 6)
 /// "#;
-/// let program = F32Grammar::parse_statements(program).unwrap();
+/// let program = F32Grammar::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("fold", fns::Fold)
 ///     .insert_native_fn("merge", fns::Merge)
-///     .compile_module("test_merge", &program)
-///     .unwrap();
-/// assert_eq!(module.run().unwrap(), Value::Bool(true));
+///     .compile_module("test_merge", &program)?;
+/// assert_eq!(module.run()?, Value::Bool(true));
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct Merge;

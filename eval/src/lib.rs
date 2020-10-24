@@ -46,6 +46,7 @@
 //! use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt};
 //! use arithmetic_eval::{fns, Comparisons, Environment, Prelude, Value, VariableMap};
 //!
+//! # fn main() -> anyhow::Result<()> {
 //! let program = r#"
 //!     ## The interpreter supports all parser features, including
 //!     ## function definitions, tuples and blocks.
@@ -54,16 +55,18 @@
 //!     (_, M) = order(3^2, { x = 3; x + 5 });
 //!     M
 //! "#;
-//! let program = F32Grammar::parse_statements(program).unwrap();
+//! let program = F32Grammar::parse_statements(program)?;
 //!
 //! let mut env = Environment::new();
 //! // Add some native functions to the environment.
 //! env.extend(&Prelude).extend(&Comparisons);
 //!
 //! // To execute statements, we first compile them into a module.
-//! let module = env.compile_module("test", &program).unwrap();
+//! let module = env.compile_module("test", &program)?;
 //! // Then, the module can be run.
-//! assert_eq!(module.run().unwrap(), Value::Number(9.0));
+//! assert_eq!(module.run()?, Value::Number(9.0));
+//! # Ok(())
+//! # }
 //! ```
 
 #![cfg_attr(not(feature = "std"), no_std)]

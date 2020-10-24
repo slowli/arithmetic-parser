@@ -11,7 +11,7 @@ pub fn repl<T: ReplLiteral>() -> io::Result<()> {
     let mut env = Env::new();
     env.print_greeting()?;
 
-    let mut interpreter = T::create_interpreter();
+    let mut interpreter = T::create_env();
     let original_interpreter = interpreter.clone();
     let mut snippet = String::new();
     let mut prompt = ">>> ";

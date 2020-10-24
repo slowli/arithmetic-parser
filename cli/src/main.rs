@@ -6,14 +6,14 @@ use structopt::StructOpt;
 
 use std::{io, process, str::FromStr};
 
-use arithmetic_parser::{grammars::NumGrammar, GrammarExt};
-
 mod common;
 mod repl;
+
 use crate::{
-    common::{Env, ReplLiteral, ERROR_EXIT_CODE},
+    common::{Env, ParseAndEvalResult, ReplLiteral, ERROR_EXIT_CODE},
     repl::repl,
 };
+use arithmetic_parser::grammars::NumGrammar;
 
 const ABOUT: &str = "CLI and REPL for parsing and evaluating arithmetic expressions.";
 
@@ -88,25 +88,20 @@ impl Args {
 
     fn run_command<T: ReplLiteral>(self) -> io::Result<()> {
         let command = self.command.unwrap_or_default();
-        let (mut env, snippet) = Env::non_interactive(command.clone());
+        let mut env = Env::new();
 
-        let parsed = NumGrammar::<T>::parse_statements(&*command).or_else(|e| {
-            env.report_parse_error(e)
-                .map(|()| process::exit(ERROR_EXIT_CODE))
-        })?;
-
-        if self.ast {
-            println!("{:#?}", parsed);
-            Ok(())
+        let res = if self.ast {
+            env.parse::<NumGrammar<T>>(&command)?
+                .map(|parsed| println!("{:#?}", parsed))
         } else {
-            let mut interpreter = T::create_interpreter();
-            let value = interpreter
-                .evaluate_named_block(snippet, &parsed)
-                .or_else(|e| {
-                    env.report_eval_error(e)
-                        .map(|()| process::exit(ERROR_EXIT_CODE))
-                })?;
-            env.writeln_value(&value)
+            env.parse_and_eval(&command, &mut T::create_env(), &T::create_env())?
+        };
+
+        match res {
+            ParseAndEvalResult::Ok(()) => env.newline(),
+            ParseAndEvalResult::Incomplete | ParseAndEvalResult::Errored => {
+                process::exit(ERROR_EXIT_CODE);
+            }
         }
     }
 }

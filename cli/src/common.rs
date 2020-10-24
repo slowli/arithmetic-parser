@@ -15,14 +15,14 @@ use std::{
     ops::Range,
 };
 
-use arithmetic_eval::error::CodeInModule;
 use arithmetic_eval::{
-    error::BacktraceElement, fns, Error as EvalError, Function, IndexedId, Interpreter,
-    InterpreterError, ModuleId, Number, Value,
+    error::{BacktraceElement, CodeInModule},
+    fns, Comparisons, Environment, Error as EvalError, Function, IndexedId, InterpreterError,
+    ModuleId, Number, Prelude, Value, VariableMap,
 };
 use arithmetic_parser::{
     grammars::NumGrammar, Block, CodeFragment, Error as ParseError, Grammar, GrammarExt,
-    LocatedSpan, LvalueLen,
+    LocatedSpan, LvalueLen, StripCode,
 };
 
 /// Exit code on parse or evaluation error.
@@ -100,7 +100,7 @@ pub enum ParseAndEvalResult<T = ()> {
 }
 
 impl<T> ParseAndEvalResult<T> {
-    fn map<U>(self, map_fn: impl FnOnce(T) -> U) -> ParseAndEvalResult<U> {
+    pub fn map<U>(self, map_fn: impl FnOnce(T) -> U) -> ParseAndEvalResult<U> {
         match self {
             Self::Ok(value) => ParseAndEvalResult::Ok(map_fn(value)),
             Self::Incomplete => ParseAndEvalResult::Incomplete,
@@ -122,13 +122,6 @@ impl Env {
             writer: StandardStream::stderr(ColorChoice::Auto),
             config: ReportingConfig::default(),
         }
-    }
-
-    pub fn non_interactive(code: String) -> (Self, IndexedId) {
-        let mut this = Self::new();
-        this.code_map.add(code);
-        let snippet = this.code_map.latest_module_id();
-        (this, snippet)
     }
 
     pub fn print_greeting(&mut self) -> io::Result<()> {
@@ -271,12 +264,7 @@ impl Env {
                 == other.module_id().downcast_ref::<IndexedId>()
     }
 
-    pub fn writeln_value<T>(&mut self, value: &Value<T>) -> io::Result<()>
-    where
-        T: Grammar,
-        T::Lit: fmt::Display,
-    {
-        self.dump_value(value, 0)?;
+    pub fn newline(&mut self) -> io::Result<()> {
         writeln!(self.writer)
     }
 
@@ -348,8 +336,8 @@ impl Env {
 
     fn dump_scope<T>(
         &mut self,
-        scope: &Interpreter<'_, T>,
-        original_scope: &Interpreter<'_, T>,
+        scope: &Environment<'_, T>,
+        original_scope: &Environment<'_, T>,
         dump_original_scope: bool,
     ) -> io::Result<()>
     where
@@ -371,24 +359,13 @@ impl Env {
         Ok(())
     }
 
-    pub fn parse_and_eval<T>(
+    pub fn parse<'a, T: Grammar>(
         &mut self,
-        line: &str,
-        interpreter: &mut Interpreter<'static, T>,
-        original_interpreter: &Interpreter<'static, T>,
-    ) -> io::Result<ParseAndEvalResult>
-    where
-        T: Grammar,
-        T::Lit: fmt::Display + Number,
-    {
+        line: &'a str,
+    ) -> io::Result<ParseAndEvalResult<Block<'a, T>>> {
         self.code_map.add(line.to_owned());
 
-        if line.starts_with('.') {
-            self.process_command(line, interpreter, original_interpreter)?;
-            return Ok(ParseAndEvalResult::Ok(()));
-        }
-
-        let parse_result = T::parse_streaming_statements(line)
+        T::parse_streaming_statements(line)
             .map(ParseAndEvalResult::Ok)
             .or_else(|e| {
                 if e.kind().is_incomplete() {
@@ -397,10 +374,27 @@ impl Env {
                     self.report_parse_error(e)
                         .map(|()| ParseAndEvalResult::Errored)
                 }
-            })?;
+            })
+    }
 
+    pub fn parse_and_eval<T>(
+        &mut self,
+        line: &str,
+        env: &mut Environment<'static, T>,
+        original_env: &Environment<'static, T>,
+    ) -> io::Result<ParseAndEvalResult>
+    where
+        T: Grammar,
+        T::Lit: fmt::Display + Number,
+    {
+        if line.starts_with('.') {
+            self.process_command(line, env, original_env)?;
+            return Ok(ParseAndEvalResult::Ok(()));
+        }
+
+        let parse_result = self.parse(line)?;
         Ok(if let ParseAndEvalResult::Ok(statements) = parse_result {
-            self.compile_and_execute(&statements, interpreter)?
+            self.compile_and_execute(&statements, env)?
         } else {
             parse_result.map(drop)
         })
@@ -409,8 +403,8 @@ impl Env {
     fn process_command<'a, T>(
         &mut self,
         line: &str,
-        interpreter: &mut Interpreter<'a, T>,
-        original_interpreter: &Interpreter<'a, T>,
+        env: &mut Environment<'a, T>,
+        original_env: &Environment<'a, T>,
     ) -> io::Result<()>
     where
         T: Grammar,
@@ -419,9 +413,9 @@ impl Env {
         let file_id = *self.code_map.file_ids.last().expect("no files");
 
         match line {
-            ".clear" => interpreter.clone_from(original_interpreter),
-            ".dump" => self.dump_scope(interpreter, original_interpreter, false)?,
-            ".dump all" => self.dump_scope(interpreter, original_interpreter, true)?,
+            ".clear" => env.clone_from(original_env),
+            ".dump" => self.dump_scope(env, original_env, false)?,
+            ".dump all" => self.dump_scope(env, original_env, true)?,
             ".help" => self.print_help()?,
 
             _ => {
@@ -447,17 +441,25 @@ impl Env {
     fn compile_and_execute<T>(
         &mut self,
         statements: &Block<'_, T>,
-        interpreter: &mut Interpreter<'static, T>,
+        env: &mut Environment<'static, T>,
     ) -> io::Result<ParseAndEvalResult>
     where
         T: Grammar,
         T::Lit: fmt::Display + Number,
     {
         let module_id = self.code_map.latest_module_id();
-        let value = match interpreter.evaluate_named_block(module_id, statements) {
+        let module = match env.compile_module(module_id, statements) {
+            Ok(builder) => builder,
+            Err(e) => {
+                self.report_eval_error(InterpreterError::Compile(e))?;
+                return Ok(ParseAndEvalResult::Errored);
+            }
+        };
+
+        let value = match module.strip_code().run_in_env(env) {
             Ok(value) => value,
             Err(err) => {
-                self.report_eval_error(err)?;
+                self.report_eval_error(InterpreterError::Evaluate(err))?;
                 return Ok(ParseAndEvalResult::Errored);
             }
         };
@@ -469,12 +471,14 @@ impl Env {
     }
 }
 
-fn init_interpreter<T: Number>() -> Interpreter<'static, NumGrammar<T>> {
-    Interpreter::<NumGrammar<T>>::with_prelude()
+fn init_environment<T: Number>() -> Environment<'static, NumGrammar<T>> {
+    let mut env = Environment::<NumGrammar<T>>::new();
+    env.extend(&Prelude);
+    env
 }
 
 pub trait ReplLiteral: Number + fmt::Display {
-    fn create_interpreter() -> Interpreter<'static, NumGrammar<Self>>;
+    fn create_env() -> Environment<'static, NumGrammar<Self>>;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -485,17 +489,28 @@ pub struct StdLibrary<T: 'static> {
     binary: &'static [(&'static str, fn(T, T) -> T)],
 }
 
-impl<T: Number> StdLibrary<T> {
-    fn add_to_interpreter(self, interpreter: &mut Interpreter<NumGrammar<T>>) {
-        for (name, c) in self.constants {
-            interpreter.insert_var(name, Value::Number(*c));
-        }
-        for (name, unary_fn) in self.unary {
-            interpreter.insert_native_fn(name, fns::Unary::new(*unary_fn));
-        }
-        for (name, binary_fn) in self.binary {
-            interpreter.insert_native_fn(name, fns::Binary::new(*binary_fn));
-        }
+impl<'a, T: Number> VariableMap<'a, NumGrammar<T>> for StdLibrary<T> {
+    fn get_variable(&self, name: &str) -> Option<Value<'a, NumGrammar<T>>> {
+        self.variables()
+            .find_map(|(var_name, value)| if var_name == name { Some(value) } else { None })
+    }
+
+    fn variables(&self) -> Box<dyn Iterator<Item = (&str, Value<'a, NumGrammar<T>>)>> {
+        let constants = self
+            .constants
+            .iter()
+            .map(|(name, constant)| (*name, Value::Number(*constant)));
+        let unary_fns = self
+            .unary
+            .iter()
+            .copied()
+            .map(|(name, function)| (name, Value::native_fn(fns::Unary::new(function))));
+        let binary_fns = self
+            .binary
+            .iter()
+            .copied()
+            .map(|(name, function)| (name, Value::native_fn(fns::Binary::new(function))));
+        Box::new(constants.chain(unary_fns).chain(binary_fns))
     }
 }
 
@@ -540,20 +555,18 @@ declare_real_functions!(F32_FUNCTIONS: f32);
 declare_real_functions!(F64_FUNCTIONS: f64);
 
 impl ReplLiteral for f32 {
-    fn create_interpreter() -> Interpreter<'static, NumGrammar<Self>> {
-        let mut interpreter = init_interpreter::<f32>();
-        F32_FUNCTIONS.add_to_interpreter(&mut interpreter);
-        interpreter.insert_native_fn("cmp", fns::Compare);
-        interpreter
+    fn create_env() -> Environment<'static, NumGrammar<Self>> {
+        let mut env = init_environment::<f32>();
+        env.extend(&Comparisons).extend(&F32_FUNCTIONS);
+        env
     }
 }
 
 impl ReplLiteral for f64 {
-    fn create_interpreter() -> Interpreter<'static, NumGrammar<Self>> {
-        let mut interpreter = init_interpreter::<f64>();
-        F64_FUNCTIONS.add_to_interpreter(&mut interpreter);
-        interpreter.insert_native_fn("cmp", fns::Compare);
-        interpreter
+    fn create_env() -> Environment<'static, NumGrammar<Self>> {
+        let mut env = init_environment::<f64>();
+        env.extend(&Comparisons).extend(&F64_FUNCTIONS);
+        env
     }
 }
 
@@ -595,17 +608,17 @@ declare_complex_functions!(COMPLEX32_FUNCTIONS: Complex32, f32);
 declare_complex_functions!(COMPLEX64_FUNCTIONS: Complex64, f64);
 
 impl ReplLiteral for Complex32 {
-    fn create_interpreter() -> Interpreter<'static, NumGrammar<Self>> {
-        let mut interpreter = init_interpreter::<Complex32>();
-        COMPLEX32_FUNCTIONS.add_to_interpreter(&mut interpreter);
-        interpreter
+    fn create_env() -> Environment<'static, NumGrammar<Self>> {
+        let mut env = init_environment::<Complex32>();
+        env.extend(&COMPLEX32_FUNCTIONS);
+        env
     }
 }
 
 impl ReplLiteral for Complex64 {
-    fn create_interpreter() -> Interpreter<'static, NumGrammar<Self>> {
-        let mut interpreter = init_interpreter::<Complex64>();
-        COMPLEX64_FUNCTIONS.add_to_interpreter(&mut interpreter);
-        interpreter
+    fn create_env() -> Environment<'static, NumGrammar<Self>> {
+        let mut env = init_environment::<Complex64>();
+        env.extend(&COMPLEX64_FUNCTIONS);
+        env
     }
 }

@@ -648,24 +648,6 @@ impl std::error::Error for ErrorWithBacktrace<'_> {
     }
 }
 
-/// Type encompassing all possible errors arising when parsing a program and compiling it.
-#[derive(Debug)]
-pub enum CompilerError<'a> {
-    /// Parsing error.
-    Parse(arithmetic_parser::Error<'a>),
-    /// Compilation error.
-    Compile(Error<'a>),
-}
-
-impl fmt::Display for CompilerError<'_> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Parse(err) => fmt::Display::fmt(err, formatter),
-            Self::Compile(err) => fmt::Display::fmt(err, formatter),
-        }
-    }
-}
-
 /// Type encompassing all possible errors arising when compiling and immediately executing
 /// a module.
 #[derive(Debug)]

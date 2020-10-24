@@ -3,11 +3,11 @@
 use core::ops;
 
 use crate::{
-    compiler::Compiler,
-    error::{Backtrace, CompilerError, ErrorWithBacktrace},
-    ModuleId, Number, Value,
+    compiler::{CompilationOptions, Compiler, ImportSpans},
+    error::{Backtrace, ErrorWithBacktrace},
+    Error, ErrorKind, ModuleId, Number, Value, VariableMap,
 };
-use arithmetic_parser::{Grammar, GrammarExt, IntoInputSpan, LvalueLen, MaybeSpanned, StripCode};
+use arithmetic_parser::{Block, Grammar, LvalueLen, MaybeSpanned, StripCode};
 
 mod command;
 mod env;
@@ -16,7 +16,6 @@ pub(crate) use self::{
     command::{Atom, Command, ComparisonOp, CompiledExpr, SpannedAtom},
     env::{Env, Executable},
 };
-use crate::compiler::CompilationOptions;
 
 #[derive(Debug)]
 pub(crate) struct ExecutableFn<'a, T: Grammar> {
@@ -53,22 +52,16 @@ impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
 ///
 /// ```
 /// use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
-/// use arithmetic_eval::{fns, Interpreter, Value, ValueType};
+/// use arithmetic_eval::{fns, Comparisons, ExecutableModule, Prelude, Value, ValueType};
 /// # use std::{collections::HashSet, f32, iter::FromIterator};
 ///
-/// let mut interpreter = Interpreter::new();
-/// interpreter
-///     .insert_native_fn(
-///         "max",
-///         fns::Binary::new(|x: f32, y: f32| if x > y { x } else { y }),
-///     )
-///     .insert_native_fn("fold", fns::Fold)
-///     .insert_var("INFINITY", Value::Number(f32::INFINITY))
-///     .insert_var("xs", Value::Tuple(vec![]));
-///
-/// let module = "xs.fold(-INFINITY, max)";
-/// let module = F32Grammar::parse_statements(module).unwrap();
-/// let mut module = interpreter.compile("test", &module).unwrap();
+/// let module = F32Grammar::parse_statements("xs.fold(-INFINITY, max)").unwrap();
+/// let mut module = ExecutableModule::builder("test", &module)
+///     .unwrap()
+///     .with_imports_from(&Prelude)
+///     .with_imports_from(&Comparisons)
+///     .with_import("INFINITY", Value::Number(f32::INFINITY))
+///     .set_imports(|_| Value::void());
 ///
 /// // With the original imports, the returned value is `-INFINITY`.
 /// assert_eq!(module.run().unwrap(), Value::Number(f32::NEG_INFINITY));
@@ -91,14 +84,13 @@ impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
 ///
 /// ```
 /// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
-/// # use arithmetic_eval::{Interpreter, Value};
-/// let mut interpreter = Interpreter::new();
-/// interpreter
-///     .insert_var("x", Value::Number(3.0))
-///     .insert_var("y", Value::Number(5.0));
-/// let module = "x + y";
-/// let module = F32Grammar::parse_statements(module).unwrap();
-/// let mut module = interpreter.compile("test", &module).unwrap();
+/// # use arithmetic_eval::{Interpreter, Value, ExecutableModule};
+/// let block = F32Grammar::parse_statements("x + y").unwrap();
+/// let mut module = ExecutableModule::builder("test", &block)
+///     .unwrap()
+///     .with_import("x", Value::Number(3.0))
+///     .with_import("y", Value::Number(5.0))
+///     .build();
 /// assert_eq!(module.run().unwrap(), Value::Number(8.0));
 ///
 /// let mut imports = module.imports().to_owned();
@@ -140,16 +132,19 @@ impl<'a, T: Grammar> ExecutableModule<'a, T> {
     }
 
     /// Creates a new module. All imports are set to `Value::void()`.
-    pub fn new<Id, P>(id: Id, program: P) -> Result<Self, CompilerError<'a>>
+    pub fn builder<Id>(
+        id: Id,
+        block: &Block<'a, T>,
+    ) -> Result<ExecutableModuleBuilder<'a, T>, Error<'a>>
     where
         Id: ModuleId,
-        P: IntoInputSpan<'a>,
     {
-        let block = T::parse_statements(program.into_input_span()).map_err(CompilerError::Parse)?;
         let options = CompilationOptions::Standalone {
             create_imports: true,
         };
-        Compiler::compile_module(id, &Env::new(), &block, options).map_err(CompilerError::Compile)
+        let (module, import_spans) =
+            Compiler::compile_module_with_imports(id, &Env::new(), block, options)?;
+        Ok(ExecutableModuleBuilder::new(module, import_spans))
     }
 
     /// Gets the identifier of this module.
@@ -314,6 +309,86 @@ impl<'a, T: Grammar> ops::IndexMut<&str> for ModuleImports<'a, T> {
         self.inner
             .get_var_mut(index)
             .unwrap_or_else(|| panic!("Import `{}` is not defined", index))
+    }
+}
+
+/// Builder for an `ExecutableModule`.
+#[derive(Debug)]
+pub struct ExecutableModuleBuilder<'a, T: Grammar> {
+    module: ExecutableModule<'a, T>,
+    undefined_imports: ImportSpans<'a>,
+}
+
+impl<'a, T: Grammar> ExecutableModuleBuilder<'a, T> {
+    fn new(module: ExecutableModule<'a, T>, undefined_imports: ImportSpans<'a>) -> Self {
+        Self {
+            module,
+            undefined_imports,
+        }
+    }
+
+    /// Checks if all necessary imports are defined for this module.
+    pub fn has_undefined_imports(&self) -> bool {
+        self.undefined_imports.is_empty()
+    }
+
+    /// Adds a single import. If the specified variable is not an import, does nothing.
+    pub fn with_import<V>(mut self, name: &str, value: V) -> Self
+    where
+        V: Into<Value<'a, T>>,
+    {
+        if self.module.imports.contains(name) {
+            self.module.set_import(name, value.into());
+        }
+        self.undefined_imports.remove(name);
+        self
+    }
+
+    /// Sets undefined imports from the specified source. Imports defined previously and present
+    /// in the source are **not** overridden.
+    pub fn with_imports_from<V>(mut self, source: &V) -> Self
+    where
+        V: VariableMap<'a, T> + ?Sized,
+    {
+        let module = &mut self.module;
+        self.undefined_imports.retain(|var_name, _| {
+            source.get_variable(var_name).map_or(true, |value| {
+                module.set_import(var_name, value);
+                false
+            })
+        });
+        self
+    }
+
+    /// Tries to build this module.
+    ///
+    /// # Errors
+    ///
+    /// Fails if this module has at least one undefined import. In this case, the returned error
+    /// highlights one of such imports.
+    pub fn try_build(self) -> Result<ExecutableModule<'a, T>, Error<'a>> {
+        if let Some((var_name, span)) = self.undefined_imports.iter().next() {
+            let err = ErrorKind::Undefined(var_name.to_owned());
+            Err(Error::new(self.module.id(), span, err))
+        } else {
+            Ok(self.module)
+        }
+    }
+
+    /// A version [`try_build()`] that panics if there are undefined imports.
+    pub fn build(self) -> ExecutableModule<'a, T> {
+        self.try_build().unwrap()
+    }
+
+    /// Sets the undefined imports using the provided closure and returns the resulting module.
+    pub fn set_imports<F>(mut self, mut setter: F) -> ExecutableModule<'a, T>
+    where
+        F: FnMut(&str) -> Value<'a, T>,
+    {
+        for var_name in self.undefined_imports.keys() {
+            self.module.set_import(var_name, setter(var_name));
+        }
+        self.module
     }
 }
 

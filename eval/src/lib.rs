@@ -109,9 +109,10 @@ mod alloc {
 pub use self::{
     compiler::CompilerExt,
     error::{Error, ErrorKind, EvalResult, InterpreterError},
-    executable::{ExecutableModule, ModuleImports},
+    executable::{ExecutableModule, ExecutableModuleBuilder, ModuleImports},
     module_id::{IndexedId, ModuleId, WildcardId},
     values::{CallContext, Function, InterpretedFn, NativeFn, SpannedValue, Value, ValueType},
+    variable_map::{Comparisons, Prelude, VariableMap},
 };
 
 use num_complex::{Complex32, Complex64};
@@ -132,6 +133,7 @@ mod executable;
 pub mod fns;
 mod module_id;
 mod values;
+mod variable_map;
 
 /// Number with fully defined arithmetic operations.
 pub trait Number: NumLiteral + ops::Neg<Output = Self> + Pow<Self, Output = Self> {}
@@ -171,6 +173,17 @@ where
     /// Creates a new interpreter.
     pub fn new() -> Self {
         Self { env: Env::new() }
+    }
+
+    /// Adds all values from the specified container into the interpreter.
+    pub fn with<V>(mut self, source: &V) -> Self
+    where
+        V: VariableMap<'a, T> + ?Sized,
+    {
+        for (name, value) in source.variables() {
+            self.insert_var(name, value);
+        }
+        self
     }
 
     /// Gets a variable by name.
@@ -222,33 +235,9 @@ where
     T: Grammar,
     T::Lit: Number,
 {
-    /// Returns an interpreter with most of functions from the [`fns` module] imported in.
-    ///
-    /// # Return value
-    ///
-    /// The returned interpreter contains the following variables:
-    ///
-    /// - All functions from the `fns` module, except for [`Compare`] (since it requires
-    ///   `PartialOrd` implementation for numbers). All functions are named in lowercase,
-    ///   e.g., `if`, `map`.
-    /// - `true` and `false` Boolean constants.
-    ///
-    /// [`fns` module]: fns/index.html
-    /// [`Compare`]: fns/struct.Compare.html
+    /// Shortcut for `new().with(&Prelude)`.
     pub fn with_prelude() -> Self {
-        let mut this = Self::new();
-        this.insert_var("false", Value::Bool(false))
-            .insert_var("true", Value::Bool(true))
-            .insert_native_fn("assert", fns::Assert)
-            .insert_native_fn("if", fns::If)
-            .insert_native_fn("loop", fns::Loop)
-            .insert_native_fn("while", fns::While)
-            .insert_native_fn("map", fns::Map)
-            .insert_native_fn("filter", fns::Filter)
-            .insert_native_fn("fold", fns::Fold)
-            .insert_native_fn("push", fns::Push)
-            .insert_native_fn("merge", fns::Merge);
-        this
+        Self::new().with(&Prelude)
     }
 
     fn evaluate_module(

@@ -37,6 +37,8 @@ pub(crate) enum CompilationOptions {
     Embedded,
 }
 
+pub(crate) type ImportSpans<'a> = HashMap<String, Spanned<'a>>;
+
 #[derive(Debug)]
 pub(crate) struct Compiler {
     vars_to_registers: HashMap<String, usize>,
@@ -467,41 +469,26 @@ impl Compiler {
         })
     }
 
-    pub fn compile_module<'a, Id: ModuleId, T: Grammar>(
+    pub fn compile_module_with_imports<'a, Id: ModuleId, T: Grammar>(
         module_id: Id,
         env: &Env<'a, T>,
         block: &Block<'a, T>,
         compilation_options: CompilationOptions,
-    ) -> Result<ExecutableModule<'a, T>, Error<'a>> {
+    ) -> Result<(ExecutableModule<'a, T>, ImportSpans<'a>), Error<'a>> {
         let module_id = Box::new(module_id) as Box<dyn ModuleId>;
         let mut compiler = Self::from_env(module_id.clone_boxed(), env);
 
-        let captures = match compilation_options {
+        let (captures, import_spans) = match compilation_options {
             CompilationOptions::Embedded => {
                 // We don't care about captures since we won't execute the module with them anyway.
-                Env::new()
+                (Env::new(), ImportSpans::new())
             }
 
             CompilationOptions::Standalone { create_imports } => {
-                let mut captures = Env::new();
-                let mut extractor =
-                    CapturesExtractor::new(module_id.clone_boxed(), |var_name, _| {
-                        let mut var = env.get_var(var_name).cloned();
-                        if create_imports {
-                            var = var.or_else(|| Some(Value::void()));
-                        }
-                        var.map_or_else(
-                            || Err(ErrorKind::Undefined(var_name.to_owned())),
-                            |value| {
-                                captures.push_var(var_name, value);
-                                Ok(())
-                            },
-                        )
-                    });
-                extractor.eval_block(&block)?;
-
+                let (captures, import_spans) =
+                    Self::extract_captures(module_id.clone_boxed(), env, block, create_imports)?;
                 compiler = Self::from_env(module_id.clone_boxed(), &captures);
-                captures
+                (captures, import_spans)
             }
         };
 
@@ -518,7 +505,46 @@ impl Compiler {
         );
 
         executable.finalize_block(compiler.register_count);
-        Ok(ExecutableModule::from_parts(executable, captures))
+        let module = ExecutableModule::from_parts(executable, captures);
+        Ok((module, import_spans))
+    }
+
+    pub fn compile_module<'a, Id: ModuleId, T: Grammar>(
+        module_id: Id,
+        env: &Env<'a, T>,
+        block: &Block<'a, T>,
+        compilation_options: CompilationOptions,
+    ) -> Result<ExecutableModule<'a, T>, Error<'a>> {
+        Self::compile_module_with_imports(module_id, env, block, compilation_options)
+            .map(|(module, _)| module)
+    }
+
+    fn extract_captures<'a, T: Grammar>(
+        module_id: Box<dyn ModuleId>,
+        env: &Env<'a, T>,
+        block: &Block<'a, T>,
+        create_imports: bool,
+    ) -> Result<(Env<'a, T>, ImportSpans<'a>), Error<'a>> {
+        let mut captures = Env::new();
+        let mut import_spans = HashMap::new();
+
+        let mut extractor = CapturesExtractor::new(module_id, |var_name, var_span| {
+            let mut var = env.get_var(var_name).cloned();
+            if create_imports {
+                var = var.or_else(|| Some(Value::void()));
+            }
+            var.map_or_else(
+                || Err(ErrorKind::Undefined(var_name.to_owned())),
+                |value| {
+                    captures.push_var(var_name, value);
+                    import_spans.insert(var_name.to_owned(), var_span);
+                    Ok(())
+                },
+            )
+        });
+        extractor.eval_block(&block)?;
+
+        Ok((captures, import_spans))
     }
 
     fn assign<'a, T: Grammar>(

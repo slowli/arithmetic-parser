@@ -174,11 +174,6 @@ impl<'a, T: Grammar> Registers<'a, T> {
         Some(&self.registers[register])
     }
 
-    pub fn get_var_mut(&mut self, name: &str) -> Option<&mut Value<'a, T>> {
-        let register = *self.vars.get(name)?;
-        Some(&mut self.registers[register])
-    }
-
     pub fn variables(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
         self.vars
             .iter()

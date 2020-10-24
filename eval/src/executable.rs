@@ -161,7 +161,7 @@ impl<'a, T: Grammar> ExecutableModule<'a, T> {
     ///
     /// [`imports().contains()`]: struct.ModuleImports.html#method.contains
     pub fn set_import(&mut self, name: &str, value: Value<'a, T>) -> &mut Self {
-        self.imports.set(name, value);
+        self.imports.inner.set_var(name, value);
         self
     }
 
@@ -251,37 +251,11 @@ impl<'a, T: Grammar> ModuleImports<'a, T> {
         self.inner.get_var(name)
     }
 
-    /// Sets the value of an imported variable.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the variable with the specified name is not an import.
-    pub fn set(&mut self, name: &str, value: Value<'a, T>) -> &mut Self {
-        self.inner.set_var(name, value);
-        self
-    }
-
     /// Iterates over imported variables.
     pub fn iter(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
         self.inner.variables()
     }
-
-    /// Checks if these imports could be compatible with the provided module.
-    ///
-    /// Imports produced by cloning imports of a module and then changing variables
-    /// via [`set`](#method.set) are guaranteed to remain compatible with the module.
-    /// Imports taken from another module are almost always incompatible with the module.
-    ///
-    /// The compatibility does not guarantee that the module execution will succeed; instead,
-    /// it guarantees that the execution will not lead to a panic or unpredictable results.
-    // FIXME: remove?
-    pub fn is_compatible(&self, module: &ExecutableModule<'a, T>) -> bool {
-        self.inner.variables_map() == module.imports.inner.variables_map()
-            && self.inner.register_count() == module.imports.inner.register_count()
-    }
 }
-
-// FIXME: implement IntoIterator for &ModuleImports.
 
 impl<'a, T: Grammar> ops::Index<&str> for ModuleImports<'a, T> {
     type Output = Value<'a, T>;
@@ -289,14 +263,6 @@ impl<'a, T: Grammar> ops::Index<&str> for ModuleImports<'a, T> {
     fn index(&self, index: &str) -> &Self::Output {
         self.inner
             .get_var(index)
-            .unwrap_or_else(|| panic!("Import `{}` is not defined", index))
-    }
-}
-
-impl<'a, T: Grammar> ops::IndexMut<&str> for ModuleImports<'a, T> {
-    fn index_mut(&mut self, index: &str) -> &mut Self::Output {
-        self.inner
-            .get_var_mut(index)
             .unwrap_or_else(|| panic!("Import `{}` is not defined", index))
     }
 }
@@ -403,25 +369,5 @@ mod tests {
         assert_eq!(value, Value::Number(33.0));
         let value = module.run().unwrap();
         assert_eq!(value, Value::Number(18.0));
-    }
-
-    #[test]
-    fn checking_import_compatibility() {
-        let mut env = Registers::new();
-        env.push_var("x", Value::<F32Grammar>::Number(5.0));
-        env.push_var("y", Value::Bool(true));
-
-        let block = "x + y";
-        let block = F32Grammar::parse_statements(block).unwrap();
-        let (module, _) = Compiler::compile_module(WildcardId, &env, &block).unwrap();
-
-        let mut imports = module.imports().to_owned();
-        assert!(imports.is_compatible(&module));
-        imports.set("x", Value::Number(-1.0));
-        assert!(imports.is_compatible(&module));
-
-        let mut other_env = Registers::new();
-        other_env.push_var("y", Value::<F32Grammar>::Number(1.0));
-        assert!(!ModuleImports { inner: other_env }.is_compatible(&module));
     }
 }

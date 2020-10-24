@@ -648,56 +648,6 @@ impl std::error::Error for ErrorWithBacktrace<'_> {
     }
 }
 
-/// Type encompassing all possible errors arising when compiling and immediately executing
-/// a module.
-#[derive(Debug)]
-pub enum InterpreterError<'comp, 'eval: 'comp> {
-    /// Error during compilation.
-    Compile(Error<'comp>),
-    /// Error during statement evaluation. This type of errors contains a backtrace.
-    Evaluate(ErrorWithBacktrace<'eval>),
-}
-
-impl<'comp> InterpreterError<'comp, '_> {
-    /// Gets the source of this error.
-    pub fn source(&self) -> &Error<'comp> {
-        match self {
-            Self::Compile(err) => err,
-            Self::Evaluate(err) => err.source(),
-        }
-    }
-}
-
-impl fmt::Display for InterpreterError<'_, '_> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Compile(err) => fmt::Display::fmt(err, formatter),
-            Self::Evaluate(err) => fmt::Display::fmt(err, formatter),
-        }
-    }
-}
-
-impl StripCode for InterpreterError<'_, '_> {
-    type Stripped = InterpreterError<'static, 'static>;
-
-    fn strip_code(self) -> Self::Stripped {
-        match self {
-            Self::Compile(err) => InterpreterError::Compile(err.strip_code()),
-            Self::Evaluate(err) => InterpreterError::Evaluate(err.strip_code()),
-        }
-    }
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for InterpreterError<'_, '_> {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Compile(err) => std::error::Error::source(err),
-            Self::Evaluate(err) => std::error::Error::source(err),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

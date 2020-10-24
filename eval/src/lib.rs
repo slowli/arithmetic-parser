@@ -108,7 +108,7 @@ mod alloc {
 
 pub use self::{
     compiler::CompilerExt,
-    error::{Error, ErrorKind, EvalResult, InterpreterError},
+    error::{Error, ErrorKind, EvalResult},
     executable::{ExecutableModule, ExecutableModuleBuilder, ModuleImports},
     module_id::{IndexedId, ModuleId, WildcardId},
     values::{CallContext, Function, InterpretedFn, NativeFn, SpannedValue, Value, ValueType},

@@ -15,10 +15,11 @@ use std::{
     ops::Range,
 };
 
+use arithmetic_eval::error::ErrorWithBacktrace;
 use arithmetic_eval::{
     error::{BacktraceElement, CodeInModule},
-    fns, Comparisons, Environment, Error as EvalError, Function, IndexedId, InterpreterError,
-    ModuleId, Number, Prelude, Value, VariableMap,
+    fns, Comparisons, Environment, Error as EvalError, Function, IndexedId, ModuleId, Number,
+    Prelude, Value, VariableMap,
 };
 use arithmetic_parser::{
     grammars::NumGrammar, Block, CodeFragment, Error as ParseError, Grammar, GrammarExt,
@@ -216,37 +217,44 @@ impl Env {
         diagnostic
     }
 
-    pub fn report_eval_error(&self, e: InterpreterError<'_, '_>) -> io::Result<()> {
+    pub fn report_compile_error(&self, e: &EvalError<'_>) -> io::Result<()> {
+        emit(
+            &mut self.writer.lock(),
+            &self.config,
+            &self.code_map.files,
+            &self.create_diagnostic(e),
+        )
+    }
+
+    pub fn report_eval_error(&self, e: &ErrorWithBacktrace<'_>) -> io::Result<()> {
         let mut diagnostic = self.create_diagnostic(e.source());
 
-        if let InterpreterError::Evaluate(e) = e {
-            let mut calls_iter = e.backtrace().peekable();
-            if let Some(BacktraceElement {
-                fn_name, def_span, ..
-            }) = calls_iter.peek()
-            {
-                if let Some(def_span) = def_span {
-                    let (file_id, def_range) =
-                        self.code_map.locate(def_span.module_id(), &def_span.code());
-                    let def_label = Label::secondary(file_id, def_range)
-                        .with_message(format!("The error occurred in function `{}`", fn_name));
-                    diagnostic.labels.push(def_label);
+        let mut calls_iter = e.backtrace().peekable();
+        if let Some(BacktraceElement {
+            fn_name, def_span, ..
+        }) = calls_iter.peek()
+        {
+            if let Some(def_span) = def_span {
+                let (file_id, def_range) =
+                    self.code_map.locate(def_span.module_id(), &def_span.code());
+                let def_label = Label::secondary(file_id, def_range)
+                    .with_message(format!("The error occurred in function `{}`", fn_name));
+                diagnostic.labels.push(def_label);
+            }
+
+            for (depth, call) in calls_iter.enumerate() {
+                let call_span = &call.call_span;
+                if Self::spans_are_equal(call_span, e.source().main_span()) {
+                    // The span is already output.
+                    continue;
                 }
 
-                for (depth, call) in calls_iter.enumerate() {
-                    let call_span = &call.call_span;
-                    if Self::spans_are_equal(call_span, e.source().main_span()) {
-                        // The span is already output.
-                        continue;
-                    }
-
-                    let (file_id, call_range) = self
-                        .code_map
-                        .locate(call_span.module_id(), &call_span.code());
-                    let call_label = Label::secondary(file_id, call_range)
-                        .with_message(format!("Call at depth {}", depth + 1));
-                    diagnostic.labels.push(call_label);
-                }
+                let (file_id, call_range) = self
+                    .code_map
+                    .locate(call_span.module_id(), &call_span.code());
+                let call_label = Label::secondary(file_id, call_range)
+                    .with_message(format!("Call at depth {}", depth + 1));
+                diagnostic.labels.push(call_label);
             }
         }
 
@@ -450,8 +458,8 @@ impl Env {
         let module_id = self.code_map.latest_module_id();
         let module = match env.compile_module(module_id, statements) {
             Ok(builder) => builder,
-            Err(e) => {
-                self.report_eval_error(InterpreterError::Compile(e))?;
+            Err(err) => {
+                self.report_compile_error(&err)?;
                 return Ok(ParseAndEvalResult::Errored);
             }
         };
@@ -459,7 +467,7 @@ impl Env {
         let value = match module.strip_code().run_in_env(env) {
             Ok(value) => value,
             Err(err) => {
-                self.report_eval_error(InterpreterError::Evaluate(err))?;
+                self.report_eval_error(&err)?;
                 return Ok(ParseAndEvalResult::Errored);
             }
         };

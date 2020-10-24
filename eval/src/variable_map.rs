@@ -31,7 +31,7 @@ pub trait VariableMap<'a, T: Grammar> {
 
 impl<'a, T: Grammar> VariableMap<'a, T> for Environment<'a, T> {
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
-        self.get_var(name).cloned()
+        self.get(name).cloned()
     }
 
     fn variables(&self) -> Box<dyn Iterator<Item = (&str, Value<'a, T>)> + '_> {

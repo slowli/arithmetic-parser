@@ -39,8 +39,8 @@ fn basic_program() {
     let mut env = Environment::new();
     let return_value = evaluate(&mut env, "x = 1; y = 2; x + y");
     assert_eq!(return_value, Value::Number(3.0));
-    assert_eq!(*env.get_var("x").unwrap(), Value::Number(1.0));
-    assert_eq!(*env.get_var("y").unwrap(), Value::Number(2.0));
+    assert_eq!(*env.get("x").unwrap(), Value::Number(1.0));
+    assert_eq!(*env.get("y").unwrap(), Value::Number(2.0));
 }
 
 #[test]
@@ -98,8 +98,8 @@ fn arithmetic_ops_on_tuples() {
 #[test]
 fn comparisons() {
     let mut env = Environment::new();
-    env.insert_var("true", Value::Bool(true))
-        .insert_var("false", Value::Bool(false))
+    env.insert("true", Value::Bool(true))
+        .insert("false", Value::Bool(false))
         .insert_native_fn("sin", SIN);
 
     let program = r#"
@@ -135,7 +135,7 @@ fn program_with_blocks() {
     let return_value = evaluate(&mut env, "z = { x = 1; x + 3 };");
     assert_eq!(return_value, Value::void());
     assert_eq!(env["z"], Value::Number(4.0));
-    assert!(env.get_var("x").is_none());
+    assert!(env.get("x").is_none());
 }
 
 #[test]
@@ -371,7 +371,7 @@ fn first_class_functions_repeat() {
         return_value,
         Value::Tuple(vec![Value::Number(8.0), Value::Number(-1.5)])
     );
-    assert!(env.get_var("lambda").is_none());
+    assert!(env.get("lambda").is_none());
 }
 
 #[test]

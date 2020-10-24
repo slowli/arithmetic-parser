@@ -57,7 +57,7 @@ fn initialize_env(env: &mut Environment<'_, F64Grammar>) {
     env.insert_native_fn("cmp", fns::Compare);
 
     for (name, c) in CONSTANTS {
-        env.insert_var(name, Value::Number(*c));
+        env.insert(name, Value::Number(*c));
     }
     for (name, unary_fn) in UNARY_FNS {
         env.insert_native_fn(name, fns::Unary::new(*unary_fn));

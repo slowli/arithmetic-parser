@@ -206,7 +206,7 @@ impl<'a, T: Grammar> Registers<'a, T> {
     /// Updates from the specified environment. Updates are performed in place.
     pub fn update_from_env(&mut self, env: &Environment<'a, T>) {
         for (var_name, register) in &self.vars {
-            if let Some(value) = env.get_var(var_name) {
+            if let Some(value) = env.get(var_name) {
                 self.registers[*register] = value.to_owned();
             }
         }
@@ -219,7 +219,7 @@ impl<'a, T: Grammar> Registers<'a, T> {
             // ^-- We cannot move `value` from `registers` because multiple names may be pointing
             // to the same register.
 
-            env.insert_var(var_name, value);
+            env.insert(var_name, value);
         }
     }
 }

@@ -187,18 +187,18 @@ impl<'a, T: Grammar> Environment<'a, T> {
         V: VariableMap<'a, T> + ?Sized,
     {
         for (name, value) in source.variables() {
-            self.insert_var(name, value);
+            self.insert(name, value);
         }
         self
     }
 
     /// Gets a variable by name.
-    pub fn get_var(&self, name: &str) -> Option<&Value<'a, T>> {
+    pub fn get(&self, name: &str) -> Option<&Value<'a, T>> {
         self.variables.get(name)
     }
 
     /// Gets a mutable reference to the variable by name.
-    pub fn get_var_mut(&mut self, name: &str) -> Option<&mut Value<'a, T>> {
+    pub fn get_mut(&mut self, name: &str) -> Option<&mut Value<'a, T>> {
         self.variables.get_mut(name)
     }
 
@@ -210,7 +210,7 @@ impl<'a, T: Grammar> Environment<'a, T> {
     }
 
     /// Inserts a variable with the specified name.
-    pub fn insert_var(&mut self, name: &str, value: Value<'a, T>) -> &mut Self {
+    pub fn insert(&mut self, name: &str, value: Value<'a, T>) -> &mut Self {
         self.variables.insert(name.to_owned(), value);
         self
     }
@@ -221,7 +221,7 @@ impl<'a, T: Grammar> Environment<'a, T> {
         name: &str,
         native_fn: impl NativeFn<T> + 'static,
     ) -> &mut Self {
-        self.insert_var(name, Value::native_fn(native_fn))
+        self.insert(name, Value::native_fn(native_fn))
     }
 
     /// Inserts a [wrapped function] with the specified name.
@@ -239,7 +239,7 @@ impl<'a, T: Grammar> Environment<'a, T> {
         fns::FnWrapper<Args, F>: NativeFn<T> + 'static,
     {
         let wrapped = fns::wrap::<Args, _>(fn_to_wrap);
-        self.insert_var(name, Value::native_fn(wrapped))
+        self.insert(name, Value::native_fn(wrapped))
     }
 }
 
@@ -247,14 +247,14 @@ impl<'a, T: Grammar> ops::Index<&str> for Environment<'a, T> {
     type Output = Value<'a, T>;
 
     fn index(&self, index: &str) -> &Self::Output {
-        self.get_var(index)
+        self.get(index)
             .unwrap_or_else(|| panic!("Variable `{}` is not defined", index))
     }
 }
 
 impl<'a, T: Grammar> ops::IndexMut<&str> for Environment<'a, T> {
     fn index_mut(&mut self, index: &str) -> &mut Self::Output {
-        self.get_var_mut(index)
+        self.get_mut(index)
             .unwrap_or_else(|| panic!("Variable `{}` is not defined", index))
     }
 }

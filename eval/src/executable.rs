@@ -88,6 +88,7 @@ impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
 /// ```
 /// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 /// # use arithmetic_eval::{Environment, ExecutableModule, Value};
+/// # use core::iter::FromIterator;
 /// # fn main() -> anyhow::Result<()> {
 /// let block = F32Grammar::parse_statements("x + y")?;
 /// let mut module = ExecutableModule::builder("test", &block)?
@@ -96,9 +97,8 @@ impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
 ///     .build();
 /// assert_eq!(module.run()?, Value::Number(8.0));
 ///
-/// let mut env = Environment::new();
-/// env.extend(module.imports());
-/// env["x"] = Value::Number(-1.0);
+/// let mut env = Environment::from_iter(module.imports());
+/// env.insert("x", Value::Number(-1.0));
 /// assert_eq!(module.run_in_env(&mut env)?, Value::Number(4.0));
 /// # Ok(())
 /// # }
@@ -265,6 +265,26 @@ impl<'a, T: Grammar> ops::Index<&str> for ModuleImports<'a, T> {
         self.inner
             .get_var(index)
             .unwrap_or_else(|| panic!("Import `{}` is not defined", index))
+    }
+}
+
+impl<'a, T: Grammar> IntoIterator for ModuleImports<'a, T> {
+    type Item = (String, Value<'a, T>);
+    // FIXME: use a more specific type.
+    type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Box::new(self.inner.into_variables())
+    }
+}
+
+impl<'a, 'r, T: Grammar> IntoIterator for &'r ModuleImports<'a, T> {
+    type Item = (&'r str, &'r Value<'a, T>);
+    // FIXME: use a more specific type.
+    type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'r>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Box::new(self.iter())
     }
 }
 

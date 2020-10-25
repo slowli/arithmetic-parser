@@ -755,7 +755,7 @@ mod tests {
     use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
     use assert_matches::assert_matches;
 
-    use core::f32;
+    use core::{f32, iter::FromIterator};
 
     #[test]
     fn if_basic() {
@@ -896,8 +896,7 @@ mod tests {
             .with_import("fold", Value::native_fn(Fold))
             .build();
 
-        let mut env = Environment::new();
-        env.extend(module.imports());
+        let mut env = Environment::from_iter(module.imports());
         assert_eq!(module.run_in_env(&mut env).unwrap(), Value::Bool(true));
 
         let test_block = F32Grammar::parse_statements("xs.reverse()").unwrap();

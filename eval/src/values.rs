@@ -428,6 +428,12 @@ impl<T: Grammar> StripCode for Value<'_, T> {
     }
 }
 
+impl<'a, T: Grammar> From<&Value<'a, T>> for Value<'a, T> {
+    fn from(reference: &Value<'a, T>) -> Self {
+        reference.to_owned()
+    }
+}
+
 impl<T: Grammar> PartialEq for Value<'_, T>
 where
     T::Lit: PartialEq,

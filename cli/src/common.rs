@@ -479,12 +479,6 @@ impl Env {
     }
 }
 
-fn init_environment<T: Number>() -> Environment<'static, NumGrammar<T>> {
-    let mut env = Environment::<NumGrammar<T>>::new();
-    env.extend(&Prelude);
-    env
-}
-
 pub trait ReplLiteral: Number + fmt::Display {
     fn create_env() -> Environment<'static, NumGrammar<Self>>;
 }
@@ -502,8 +496,10 @@ impl<'a, T: Number> VariableMap<'a, NumGrammar<T>> for StdLibrary<T> {
         self.variables()
             .find_map(|(var_name, value)| if var_name == name { Some(value) } else { None })
     }
+}
 
-    fn variables(&self) -> Box<dyn Iterator<Item = (&str, Value<'a, NumGrammar<T>>)>> {
+impl<T: Number> StdLibrary<T> {
+    fn variables(self) -> impl Iterator<Item = (&'static str, Value<'static, NumGrammar<T>>)> {
         let constants = self
             .constants
             .iter()
@@ -518,7 +514,8 @@ impl<'a, T: Number> VariableMap<'a, NumGrammar<T>> for StdLibrary<T> {
             .iter()
             .copied()
             .map(|(name, function)| (name, Value::native_fn(fns::Binary::new(function))));
-        Box::new(constants.chain(unary_fns).chain(binary_fns))
+
+        constants.chain(unary_fns).chain(binary_fns)
     }
 }
 
@@ -564,17 +561,21 @@ declare_real_functions!(F64_FUNCTIONS: f64);
 
 impl ReplLiteral for f32 {
     fn create_env() -> Environment<'static, NumGrammar<Self>> {
-        let mut env = init_environment::<f32>();
-        env.extend(&Comparisons).extend(&F32_FUNCTIONS);
-        env
+        Prelude
+            .iter()
+            .chain(Comparisons.iter())
+            .chain(F32_FUNCTIONS.variables())
+            .collect()
     }
 }
 
 impl ReplLiteral for f64 {
     fn create_env() -> Environment<'static, NumGrammar<Self>> {
-        let mut env = init_environment::<f64>();
-        env.extend(&Comparisons).extend(&F64_FUNCTIONS);
-        env
+        Prelude
+            .iter()
+            .chain(Comparisons.iter())
+            .chain(F64_FUNCTIONS.variables())
+            .collect()
     }
 }
 
@@ -617,16 +618,18 @@ declare_complex_functions!(COMPLEX64_FUNCTIONS: Complex64, f64);
 
 impl ReplLiteral for Complex32 {
     fn create_env() -> Environment<'static, NumGrammar<Self>> {
-        let mut env = init_environment::<Complex32>();
-        env.extend(&COMPLEX32_FUNCTIONS);
-        env
+        Prelude
+            .iter()
+            .chain(COMPLEX32_FUNCTIONS.variables())
+            .collect()
     }
 }
 
 impl ReplLiteral for Complex64 {
     fn create_env() -> Environment<'static, NumGrammar<Self>> {
-        let mut env = init_environment::<Complex64>();
-        env.extend(&COMPLEX64_FUNCTIONS);
-        env
+        Prelude
+            .iter()
+            .chain(COMPLEX64_FUNCTIONS.variables())
+            .collect()
     }
 }

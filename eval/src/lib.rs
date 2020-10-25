@@ -3,7 +3,7 @@
 //! # Assumptions
 //!
 //! - There is only one numeric type, which is complete w.r.t. all arithmetic operations.
-//!   This is expressed via type constraints, in [`Interpreter`].
+//!   This is expressed via type constraints on relevant types via the [`Number`] trait.
 //! - Arithmetic operations are assumed to be infallible; panics during their execution
 //!   are **not** caught by the interpreter.
 //! - Grammar literals are directly parsed to the aforementioned numeric type.
@@ -36,7 +36,7 @@
 //!   return `false`.
 //!
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
-//! [`Interpreter`]: struct.Interpreter.html
+//! [`Number`]: trait.Number.html
 //! [`Value`]: enum.Value.html
 //! [`Ordering`]: https://doc.rust-lang.org/std/cmp/enum.Ordering.html
 //!
@@ -59,7 +59,8 @@
 //!
 //! let mut env = Environment::new();
 //! // Add some native functions to the environment.
-//! env.extend(&Prelude).extend(&Comparisons);
+//! env.extend(Prelude.iter());
+//! env.extend(Comparisons.iter());
 //!
 //! // To execute statements, we first compile them into a module.
 //! let module = env.compile_module("test", &program)?;
@@ -93,6 +94,7 @@ mod alloc {
         vec,
         vec::Vec,
     };
+
     #[cfg(feature = "std")]
     pub use std::{
         borrow::ToOwned,
@@ -118,7 +120,7 @@ use hashbrown::HashMap;
 use num_complex::{Complex32, Complex64};
 use num_traits::Pow;
 
-use core::ops;
+use core::{iter::FromIterator, ops};
 
 use arithmetic_parser::{grammars::NumLiteral, Grammar};
 
@@ -141,10 +143,40 @@ impl Number for Complex64 {}
 /// Environment containing named variables.
 ///
 /// Note that the environment implements [`Index`] / [`IndexMut`] traits, which allows to eloquently
-/// access or modify environment.
+/// access or modify environment. Similarly, [`IntoIterator`] / [`FromIterator`] / [`Extend`] traits
+/// allow to construct environments.
 ///
 /// [`Index`]: https://doc.rust-lang.org/std/ops/trait.Index.html
 /// [`IndexMut`]: https://doc.rust-lang.org/std/ops/trait.IndexMut.html
+/// [`IntoIterator`]: https://doc.rust-lang.org/std/iter/trait.IntoIterator.html
+/// [`FromIterator`]: https://doc.rust-lang.org/std/iter/trait.FromIterator.html
+/// [`Extend`]: https://doc.rust-lang.org/std/iter/trait.Extend.html
+///
+/// # Examples
+///
+/// ```
+/// use arithmetic_eval::{Environment, Comparisons, Prelude, Value};
+/// use arithmetic_parser::grammars::F64Grammar;
+///
+/// // Load environment from the standard containers.
+/// let mut env: Environment<'_, F64Grammar> = Prelude.iter()
+///     .chain(Comparisons.iter())
+///     // Add a custom variable for a good measure.
+///     .chain(vec![("x", Value::Number(1.0))])
+///     .collect();
+///
+/// assert_eq!(env["true"], Value::Bool(true));
+/// assert_eq!(env["x"], Value::Number(1.0));
+/// for (name, value) in &env {
+///     println!("{} -> {:?}", name, value);
+/// }
+///
+/// // It's possible to base an environment on other env, as well.
+/// let other_env: Environment<'_, _> = env.into_iter()
+///     .filter(|(_, val)| val.is_function())
+///     .collect();
+/// assert!(other_env.get("x").is_none());
+/// ```
 #[derive(Debug)]
 pub struct Environment<'a, T: Grammar> {
     variables: HashMap<String, Value<'a, T>>,
@@ -179,17 +211,6 @@ impl<'a, T: Grammar> Environment<'a, T> {
         Self {
             variables: HashMap::new(),
         }
-    }
-
-    /// Adds all values from the specified container into the interpreter.
-    pub fn extend<V>(&mut self, source: &V) -> &mut Self
-    where
-        V: VariableMap<'a, T> + ?Sized,
-    {
-        for (name, value) in source.variables() {
-            self.insert(name, value);
-        }
-        self
     }
 
     /// Gets a variable by name.
@@ -252,9 +273,52 @@ impl<'a, T: Grammar> ops::Index<&str> for Environment<'a, T> {
     }
 }
 
-impl<'a, T: Grammar> ops::IndexMut<&str> for Environment<'a, T> {
-    fn index_mut(&mut self, index: &str) -> &mut Self::Output {
-        self.get_mut(index)
-            .unwrap_or_else(|| panic!("Variable `{}` is not defined", index))
+impl<'a, T: Grammar> IntoIterator for Environment<'a, T> {
+    type Item = (String, Value<'a, T>);
+    // FIXME: use a more specific iterator type.
+    type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Box::new(self.variables.into_iter())
+    }
+}
+
+impl<'r, 'a, T: Grammar> IntoIterator for &'r Environment<'a, T> {
+    type Item = (&'r str, &'r Value<'a, T>);
+    // FIXME: use a more specific iterator type.
+    type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'r>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Box::new(self.variables())
+    }
+}
+
+impl<'a, T, S, V> FromIterator<(S, V)> for Environment<'a, T>
+where
+    T: Grammar,
+    S: Into<String>,
+    V: Into<Value<'a, T>>,
+{
+    fn from_iter<I: IntoIterator<Item = (S, V)>>(iter: I) -> Self {
+        let variables = iter
+            .into_iter()
+            .map(|(var_name, value)| (var_name.into(), value.into()));
+        Self {
+            variables: HashMap::from_iter(variables),
+        }
+    }
+}
+
+impl<'a, T, S, V> Extend<(S, V)> for Environment<'a, T>
+where
+    T: Grammar,
+    S: Into<String>,
+    V: Into<Value<'a, T>>,
+{
+    fn extend<I: IntoIterator<Item = (S, V)>>(&mut self, iter: I) {
+        let variables = iter
+            .into_iter()
+            .map(|(var_name, value)| (var_name.into(), value.into()));
+        self.variables.extend(variables);
     }
 }

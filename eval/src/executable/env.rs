@@ -180,6 +180,14 @@ impl<'a, T: Grammar> Registers<'a, T> {
             .map(move |(name, register)| (name.as_str(), &self.registers[*register]))
     }
 
+    pub fn into_variables(self) -> impl Iterator<Item = (String, Value<'a, T>)> {
+        let registers = self.registers;
+        // Moving out of `registers` is not sound because of possible aliasing.
+        self.vars
+            .into_iter()
+            .map(move |(name, register)| (name, registers[register].clone()))
+    }
+
     pub fn variables_map(&self) -> &HashMap<String, usize> {
         &self.vars
     }

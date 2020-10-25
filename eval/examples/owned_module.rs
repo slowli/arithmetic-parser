@@ -2,6 +2,8 @@
 
 use assert_matches::assert_matches;
 
+use core::iter::FromIterator;
+
 use arithmetic_eval::{Environment, ErrorKind, ExecutableModule, Prelude, Value};
 use arithmetic_parser::{grammars::F64Grammar, BinaryOp, GrammarExt, StripCode, StripResultExt};
 
@@ -44,9 +46,8 @@ fn main() -> anyhow::Result<()> {
 
     // Errors are handled as well.
     let bogus_module = create_module("bogus", "(1, true, -5).sum()")?;
-    let mut env = Environment::new();
-    env.extend(bogus_module.imports());
-    env["sum"] = sum_fn;
+    let mut env = Environment::from_iter(bogus_module.imports());
+    env.insert("sum", sum_fn);
 
     let err = bogus_module.run_in_env(&mut env).unwrap_err();
     println!("Expected error:\n{:#}", err);
@@ -83,9 +84,8 @@ fn main() -> anyhow::Result<()> {
     let fold_module = create_module("rfold", &fold_program)?;
     let rfold_fn = fold_module.run().strip_err()?;
 
-    let mut env = Environment::new();
-    env.extend(sum_module.imports());
-    env["fold"] = rfold_fn;
+    let mut env = Environment::from_iter(sum_module.imports());
+    env.insert("fold", rfold_fn);
 
     let rfold_sum = sum_module.run_in_env(&mut env).strip_err()?;
     // Due to lifetime checks, we need to re-assign `test_module`, since the original one

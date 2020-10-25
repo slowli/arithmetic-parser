@@ -9,12 +9,6 @@ pub trait VariableMap<'a, T: Grammar> {
     /// Returns value of the named variable, or `None` if it is not defined.
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>>;
 
-    /// Lists all variables in this container.
-    // Boxing is required because the lifetime of the returned iterator depends on `&self`;
-    // thus, an ordinary associated type won't do. (A type generic by the lifetime would
-    // be necessary, but the corresponding feature, GAT, is not stable.)
-    fn variables(&self) -> Box<dyn Iterator<Item = (&str, Value<'a, T>)> + '_>;
-
     /// Creates a module based on imports solely from this map.
     ///
     /// The default implementation is reasonable for most cases.
@@ -33,23 +27,11 @@ impl<'a, T: Grammar> VariableMap<'a, T> for Environment<'a, T> {
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
         self.get(name).cloned()
     }
-
-    fn variables(&self) -> Box<dyn Iterator<Item = (&str, Value<'a, T>)> + '_> {
-        let iter = self
-            .variables()
-            .map(|(name, value)| (name, value.to_owned()));
-        Box::new(iter)
-    }
 }
 
 impl<'a, T: Grammar> VariableMap<'a, T> for ModuleImports<'a, T> {
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
         self.get(name).cloned()
-    }
-
-    fn variables(&self) -> Box<dyn Iterator<Item = (&str, Value<'a, T>)> + '_> {
-        let iter = self.iter().map(|(name, value)| (name, value.to_owned()));
-        Box::new(iter)
     }
 }
 
@@ -66,6 +48,24 @@ impl<'a, T: Grammar> VariableMap<'a, T> for ModuleImports<'a, T> {
 /// [`Compare`]: fns/struct.Compare.html
 #[derive(Debug, Clone, Copy)]
 pub struct Prelude;
+
+impl Prelude {
+    /// Creates an iterator over contained values and the corresponding names.
+    pub fn iter<T>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)>
+    where
+        T: Grammar,
+        T::Lit: Number,
+    {
+        const VAR_NAMES: &[&str] = &[
+            "false", "true", "assert", "if", "loop", "while", "map", "filter", "fold", "push",
+            "merge",
+        ];
+
+        VAR_NAMES
+            .iter()
+            .map(move |&var_name| (var_name, self.get_variable(var_name).unwrap()))
+    }
+}
 
 impl<'a, T> VariableMap<'a, T> for Prelude
 where
@@ -87,18 +87,6 @@ where
             "merge" => Value::native_fn(fns::Merge),
             _ => return None,
         })
-    }
-
-    fn variables(&self) -> Box<dyn Iterator<Item = (&str, Value<'a, T>)> + '_> {
-        const ALL_NAMES: &[&str] = &[
-            "false", "true", "assert", "if", "loop", "while", "map", "filter", "fold", "push",
-            "merge",
-        ];
-
-        let iter = ALL_NAMES
-            .iter()
-            .map(move |&name| (name, self.get_variable(name).unwrap()));
-        Box::new(iter)
     }
 }
 
@@ -137,13 +125,19 @@ where
             _ => return None,
         })
     }
+}
 
-    fn variables(&self) -> Box<dyn Iterator<Item = (&str, Value<'a, T>)> + '_> {
-        const ALL_NAMES: &[&str] = &["cmp", "min", "max"];
+impl Comparisons {
+    /// Creates an iterator over contained values and the corresponding names.
+    pub fn iter<T>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)>
+    where
+        T: Grammar,
+        T::Lit: Number + PartialOrd,
+    {
+        const VAR_NAMES: &[&str] = &["cmp", "min", "max"];
 
-        let iter = ALL_NAMES
+        VAR_NAMES
             .iter()
-            .map(move |&name| (name, self.get_variable(name).unwrap()));
-        Box::new(iter)
+            .map(move |&var_name| (var_name, self.get_variable(var_name).unwrap()))
     }
 }

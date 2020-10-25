@@ -627,6 +627,7 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 /// # use arithmetic_eval::{
 /// #     wrap_fn, CallContext, Function, Environment, Prelude, Value, VariableMap,
 /// # };
+/// # use core::iter::FromIterator;
 /// // Note that both `Value`s have the same lifetime due to elision.
 /// fn take_if<G: Grammar>(value: Value<'_, G>, condition: bool) -> Value<'_, G> {
 ///     if condition { value } else { Value::void() }
@@ -636,8 +637,7 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 /// let program = "(1, 2).take_if(true) == (1, 2) && (3, 4).take_if(false) != (3, 4)";
 /// let program = F32Grammar::parse_statements(program)?;
 ///
-/// let module = Environment::new()
-///     .extend(&Prelude)
+/// let module = Environment::from_iter(Prelude.iter())
 ///     .insert_native_fn("take_if", wrap_fn!(2, take_if))
 ///     .compile_module("test_take_if", &program)?;
 /// assert_eq!(module.run()?, Value::Bool(true));

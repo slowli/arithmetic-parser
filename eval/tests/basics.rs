@@ -1,12 +1,12 @@
 use assert_matches::assert_matches;
 use hashbrown::HashMap;
 
-use std::{iter::FromIterator, rc::Rc};
+use std::iter::FromIterator;
 
 use arithmetic_eval::{
     error::{ErrorWithBacktrace, RepeatedAssignmentContext},
     fns::{self, FromValueErrorKind},
-    Environment, Error, ErrorKind, Function, Value, ValueType, VariableMap, WildcardId,
+    Environment, Error, ErrorKind, Function, NativeFn, Value, ValueType, VariableMap, WildcardId,
 };
 use arithmetic_parser::{grammars::F32Grammar, BinaryOp, GrammarExt, LvalueLen, UnaryOp};
 
@@ -424,7 +424,13 @@ fn function_aliasing() {
         Value::Function(Function::Native(function)) => function,
         _ => panic!("Unexpected `alias` value: {:?}", alias),
     };
-    assert_eq!(Rc::as_ptr(sin) as *const (), Rc::as_ptr(alias) as *const ());
+
+    // Compare pointers to data instead of pointers to `dyn NativeFn<_>` (which is unsound,
+    // see https://rust-lang.github.io/rust-clippy/master/index.html#vtable_address_comparisons).
+    assert_eq!(
+        sin.as_ref() as *const dyn NativeFn<_> as *const (),
+        alias.as_ref() as *const dyn NativeFn<_> as *const ()
+    );
 }
 
 #[test]

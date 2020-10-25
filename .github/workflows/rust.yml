@@ -36,11 +36,16 @@ jobs:
         with:
           command: test
           args: --all --all-features --doc
-      - name: Run example
+      - name: Run parser example
         uses: actions-rs/cargo@v1
         with:
           command: run
           args: -p arithmetic-parser --all-features --example complex_c
+      - name: Run eval example
+        uses: actions-rs/cargo@v1
+        with:
+          command: run
+          args: -p arithmetic-eval --example owned_module
 
   build:
     runs-on: ubuntu-latest
@@ -100,11 +105,16 @@ jobs:
           command: test
           args: --all --all-features --doc
 
-      - name: Run example
+      - name: Run parser example
         uses: actions-rs/cargo@v1
         with:
           command: run
           args: -p arithmetic-parser --all-features --example complex_c
+      - name: Run eval example
+        uses: actions-rs/cargo@v1
+        with:
+          command: run
+          args: -p arithmetic-eval --example owned_module
 
       - name: Compile WASM
         run: (cd test-wasm; wasm-pack build --target nodejs)

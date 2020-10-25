@@ -352,7 +352,7 @@ impl Env {
         T: Grammar,
         T::Lit: PartialEq + fmt::Display,
     {
-        for (name, var) in scope.variables() {
+        for (name, var) in scope {
             if let Some(original_var) = original_scope.get(name) {
                 if !dump_original_scope && original_var == var {
                     // The variable is present in the original scope, no need to output it.

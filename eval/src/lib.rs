@@ -218,13 +218,8 @@ impl<'a, T: Grammar> Environment<'a, T> {
         self.variables.get(name)
     }
 
-    /// Gets a mutable reference to the variable by name.
-    pub fn get_mut(&mut self, name: &str) -> Option<&mut Value<'a, T>> {
-        self.variables.get_mut(name)
-    }
-
     /// Iterates over variables.
-    pub fn variables(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
         self.variables
             .iter()
             .map(|(name, value)| (name.as_str(), value))
@@ -289,7 +284,7 @@ impl<'r, 'a, T: Grammar> IntoIterator for &'r Environment<'a, T> {
     type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'r>;
 
     fn into_iter(self) -> Self::IntoIter {
-        Box::new(self.variables())
+        Box::new(self.iter())
     }
 }
 

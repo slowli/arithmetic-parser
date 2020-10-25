@@ -5,7 +5,7 @@ use hashbrown::HashMap;
 use core::iter;
 
 use crate::{
-    alloc::{vec, Vec},
+    alloc::{vec, Box, String, ToOwned, Vec},
     error::RepeatedAssignmentContext,
     executable::{
         Atom, Command, ComparisonOp, CompiledExpr, Executable, ExecutableFn, ExecutableModule,

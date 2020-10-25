@@ -5,7 +5,7 @@ use derive_more::Display;
 use core::fmt;
 
 use crate::{
-    alloc::{format, vec, String, ToOwned, Vec},
+    alloc::{format, vec, Box, String, ToOwned, ToString, Vec},
     fns::FromValueError,
     ModuleId, Value,
 };

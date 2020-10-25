@@ -5,6 +5,8 @@ use core::{
     fmt,
 };
 
+use crate::alloc::Box;
+
 /// Identifier of an `ExecutableModule`. This is usually a "small" type, such as an integer
 /// or a string.
 ///

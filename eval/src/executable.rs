@@ -3,6 +3,7 @@
 use core::ops;
 
 use crate::{
+    alloc::{Box, String, ToOwned},
     compiler::{Compiler, ImportSpans},
     error::{Backtrace, ErrorWithBacktrace},
     Environment, Error, ErrorKind, ModuleId, Number, Value, VariableMap,

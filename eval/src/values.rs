@@ -6,7 +6,7 @@ use num_traits::Pow;
 use core::fmt;
 
 use crate::{
-    alloc::{vec, Rc, Vec},
+    alloc::{vec, Rc, String, ToOwned, Vec},
     error::{AuxErrorInfo, Backtrace, CodeInModule, TupleLenMismatchContext},
     executable::ExecutableFn,
     fns, Error, ErrorKind, EvalResult, ModuleId, Number, WildcardId,

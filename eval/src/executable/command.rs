@@ -2,9 +2,12 @@
 
 use num_traits::{One, Zero};
 
-use std::cmp::Ordering;
+use core::cmp::Ordering;
 
-use crate::{Number, Value};
+use crate::{
+    alloc::{String, Vec},
+    Number, Value,
+};
 use arithmetic_parser::{BinaryOp, Grammar, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
 
 /// Pointer to a register or constant.

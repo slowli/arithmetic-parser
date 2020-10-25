@@ -5,7 +5,7 @@ use hashbrown::HashMap;
 use core::iter;
 
 use crate::{
-    alloc::{vec, Vec},
+    alloc::{vec, Box, Vec},
     compiler::CMP_FUNCTION_NAME,
     error::{AuxErrorInfo, CodeInModule, RepeatedAssignmentContext},
     Error, ErrorKind, ModuleId, WildcardId,

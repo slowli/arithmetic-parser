@@ -7,7 +7,10 @@ use core::{
     ops,
 };
 
-use crate::{fns, NativeFn, Value};
+use crate::{
+    alloc::{String, ToOwned},
+    fns, NativeFn, Value,
+};
 use arithmetic_parser::Grammar;
 
 /// Environment containing named `Value`s.

@@ -3,8 +3,10 @@ use num_traits::{One, Zero};
 use core::{cmp, fmt, marker::PhantomData};
 
 use crate::{
-    error::AuxErrorInfo, CallContext, Error, ErrorKind, EvalResult, Function, NativeFn, Number,
-    SpannedValue, Value, ValueType,
+    alloc::{vec, String, Vec},
+    error::AuxErrorInfo,
+    CallContext, Error, ErrorKind, EvalResult, Function, NativeFn, Number, SpannedValue, Value,
+    ValueType,
 };
 use arithmetic_parser::Grammar;
 

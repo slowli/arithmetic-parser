@@ -3,7 +3,7 @@
 use hashbrown::HashMap;
 
 use crate::{
-    alloc::{vec, Rc, Vec},
+    alloc::{vec, Box, Rc, String, ToOwned, Vec},
     error::{Backtrace, CodeInModule, EvalResult, TupleLenMismatchContext},
     executable::{
         command::{Atom, Command, CompiledExpr, SpannedCommand},

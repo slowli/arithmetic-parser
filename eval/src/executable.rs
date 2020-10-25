@@ -270,7 +270,6 @@ impl<'a, T: Grammar> ops::Index<&str> for ModuleImports<'a, T> {
 
 impl<'a, T: Grammar> IntoIterator for ModuleImports<'a, T> {
     type Item = (String, Value<'a, T>);
-    // FIXME: use a more specific type.
     type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'a>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -280,7 +279,6 @@ impl<'a, T: Grammar> IntoIterator for ModuleImports<'a, T> {
 
 impl<'a, 'r, T: Grammar> IntoIterator for &'r ModuleImports<'a, T> {
     type Item = (&'r str, &'r Value<'a, T>);
-    // FIXME: use a more specific type.
     type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'r>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -306,6 +304,11 @@ impl<'a, T: Grammar> ExecutableModuleBuilder<'a, T> {
     /// Checks if all necessary imports are defined for this module.
     pub fn has_undefined_imports(&self) -> bool {
         self.undefined_imports.is_empty()
+    }
+
+    /// Iterates over the names of undefined imports.
+    pub fn undefined_imports(&self) -> impl Iterator<Item = &str> + '_ {
+        self.undefined_imports.keys().map(String::as_str)
     }
 
     /// Adds a single import. If the specified variable is not an import, does nothing.

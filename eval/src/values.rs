@@ -45,7 +45,7 @@ impl<'r, 'a> CallContext<'r, 'a> {
         self.backtrace.as_deref_mut()
     }
 
-    /// Returns the call span.
+    /// Applies the call span to the specified `value`.
     pub fn apply_call_span<T>(&self, value: T) -> MaybeSpanned<'a, T> {
         self.call_span.code().copy_with_extra(value)
     }
@@ -55,7 +55,7 @@ impl<'r, 'a> CallContext<'r, 'a> {
         CodeInModule::new(self.call_span.module_id(), span.with_no_extra())
     }
 
-    /// Creates the error spanning the call site.
+    /// Creates an error spanning the call site.
     pub fn call_site_error(&self, error: ErrorKind) -> Error<'a> {
         Error::from_parts(self.call_span.clone(), error)
     }
@@ -353,16 +353,17 @@ impl<'a, T: Grammar> Value<'a, T> {
         Self::Function(Function::Native(Rc::new(function)))
     }
 
-    /// Inserts a [wrapped function] with the specified name.
+    /// Creates a [wrapped function].
     ///
-    /// Calling this method is equivalent to [`wrap`]ping a function and calling
-    /// [`insert_native_fn()`](#method.insert_native_fn) on it. Thanks to type inference magic,
-    /// the Rust compiler will usually be able to extract the `Args` type param
-    /// from the function definition, provided that type of function arguments and its return type
-    /// are defined explicitly or can be unequivocally inferred from the declaration.
+    /// Calling this method is equivalent to [`wrap`]ping a function and calling [`native_fn()`]
+    /// on it. Thanks to type inference magic, the Rust compiler will usually be able to extract
+    /// the `Args` type param from the function definition, provided that type of
+    /// function arguments and its return type are defined explicitly or can be
+    /// unequivocally inferred from the declaration.
     ///
     /// [wrapped function]: fns/struct.FnWrapper.html
     /// [`wrap`]: fns/fn.wrap.html
+    /// [`native_fn()`]: #method.native_fn
     pub fn wrapped_fn<Args, F>(fn_to_wrap: F) -> Self
     where
         fns::FnWrapper<Args, F>: NativeFn<T> + 'static,
@@ -391,7 +392,7 @@ impl<'a, T: Grammar> Value<'a, T> {
         }
     }
 
-    /// Checks if the value is void.
+    /// Checks if this value is void (an empty tuple).
     pub fn is_void(&self) -> bool {
         matches!(self, Self::Tuple(tuple) if tuple.is_empty())
     }

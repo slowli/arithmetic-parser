@@ -109,6 +109,7 @@ mod alloc {
 
 pub use self::{
     compiler::CompilerExt,
+    env::Environment,
     error::{Error, ErrorKind, EvalResult},
     executable::{ExecutableModule, ExecutableModuleBuilder, ModuleImports},
     module_id::{IndexedId, ModuleId, WildcardId},
@@ -116,15 +117,15 @@ pub use self::{
     variable_map::{Comparisons, Prelude, VariableMap},
 };
 
-use hashbrown::HashMap;
 use num_complex::{Complex32, Complex64};
 use num_traits::Pow;
 
-use core::{iter::FromIterator, ops};
+use core::ops;
 
-use arithmetic_parser::{grammars::NumLiteral, Grammar};
+use arithmetic_parser::grammars::NumLiteral;
 
 mod compiler;
+mod env;
 pub mod error;
 mod executable;
 pub mod fns;
@@ -139,181 +140,3 @@ impl Number for f32 {}
 impl Number for f64 {}
 impl Number for Complex32 {}
 impl Number for Complex64 {}
-
-/// Environment containing named variables.
-///
-/// Note that the environment implements [`Index`] / [`IndexMut`] traits, which allows to eloquently
-/// access or modify environment. Similarly, [`IntoIterator`] / [`FromIterator`] / [`Extend`] traits
-/// allow to construct environments.
-///
-/// [`Index`]: https://doc.rust-lang.org/std/ops/trait.Index.html
-/// [`IndexMut`]: https://doc.rust-lang.org/std/ops/trait.IndexMut.html
-/// [`IntoIterator`]: https://doc.rust-lang.org/std/iter/trait.IntoIterator.html
-/// [`FromIterator`]: https://doc.rust-lang.org/std/iter/trait.FromIterator.html
-/// [`Extend`]: https://doc.rust-lang.org/std/iter/trait.Extend.html
-///
-/// # Examples
-///
-/// ```
-/// use arithmetic_eval::{Environment, Comparisons, Prelude, Value};
-/// use arithmetic_parser::grammars::F64Grammar;
-///
-/// // Load environment from the standard containers.
-/// let mut env: Environment<'_, F64Grammar> = Prelude.iter()
-///     .chain(Comparisons.iter())
-///     // Add a custom variable for a good measure.
-///     .chain(vec![("x", Value::Number(1.0))])
-///     .collect();
-///
-/// assert_eq!(env["true"], Value::Bool(true));
-/// assert_eq!(env["x"], Value::Number(1.0));
-/// for (name, value) in &env {
-///     println!("{} -> {:?}", name, value);
-/// }
-///
-/// // It's possible to base an environment on other env, as well.
-/// let other_env: Environment<'_, _> = env.into_iter()
-///     .filter(|(_, val)| val.is_function())
-///     .collect();
-/// assert!(other_env.get("x").is_none());
-/// ```
-#[derive(Debug)]
-pub struct Environment<'a, T: Grammar> {
-    variables: HashMap<String, Value<'a, T>>,
-}
-
-impl<T: Grammar> Default for Environment<'_, T> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<T: Grammar> Clone for Environment<'_, T> {
-    fn clone(&self) -> Self {
-        Self {
-            variables: self.variables.clone(),
-        }
-    }
-}
-
-impl<T: Grammar> PartialEq for Environment<'_, T>
-where
-    T::Lit: PartialEq,
-{
-    fn eq(&self, other: &Self) -> bool {
-        self.variables == other.variables
-    }
-}
-
-impl<'a, T: Grammar> Environment<'a, T> {
-    /// Creates a new environment.
-    pub fn new() -> Self {
-        Self {
-            variables: HashMap::new(),
-        }
-    }
-
-    /// Gets a variable by name.
-    pub fn get(&self, name: &str) -> Option<&Value<'a, T>> {
-        self.variables.get(name)
-    }
-
-    /// Iterates over variables.
-    pub fn iter(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
-        self.variables
-            .iter()
-            .map(|(name, value)| (name.as_str(), value))
-    }
-
-    /// Inserts a variable with the specified name.
-    pub fn insert(&mut self, name: &str, value: Value<'a, T>) -> &mut Self {
-        self.variables.insert(name.to_owned(), value);
-        self
-    }
-
-    /// Inserts a native function with the specified name.
-    pub fn insert_native_fn(
-        &mut self,
-        name: &str,
-        native_fn: impl NativeFn<T> + 'static,
-    ) -> &mut Self {
-        self.insert(name, Value::native_fn(native_fn))
-    }
-
-    /// Inserts a [wrapped function] with the specified name.
-    ///
-    /// Calling this method is equivalent to [`wrap`]ping a function and calling
-    /// [`insert_native_fn()`](#method.insert_native_fn) on it. Thanks to type inference magic,
-    /// the Rust compiler will usually be able to extract the `Args` type param
-    /// from the function definition, provided that type of function arguments and its return type
-    /// are defined explicitly or can be unequivocally inferred from the declaration.
-    ///
-    /// [wrapped function]: fns/struct.FnWrapper.html
-    /// [`wrap`]: fns/fn.wrap.html
-    pub fn insert_wrapped_fn<Args, F>(&mut self, name: &str, fn_to_wrap: F) -> &mut Self
-    where
-        fns::FnWrapper<Args, F>: NativeFn<T> + 'static,
-    {
-        let wrapped = fns::wrap::<Args, _>(fn_to_wrap);
-        self.insert(name, Value::native_fn(wrapped))
-    }
-}
-
-impl<'a, T: Grammar> ops::Index<&str> for Environment<'a, T> {
-    type Output = Value<'a, T>;
-
-    fn index(&self, index: &str) -> &Self::Output {
-        self.get(index)
-            .unwrap_or_else(|| panic!("Variable `{}` is not defined", index))
-    }
-}
-
-impl<'a, T: Grammar> IntoIterator for Environment<'a, T> {
-    type Item = (String, Value<'a, T>);
-    // FIXME: use a more specific iterator type.
-    type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'a>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        Box::new(self.variables.into_iter())
-    }
-}
-
-impl<'r, 'a, T: Grammar> IntoIterator for &'r Environment<'a, T> {
-    type Item = (&'r str, &'r Value<'a, T>);
-    // FIXME: use a more specific iterator type.
-    type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'r>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        Box::new(self.iter())
-    }
-}
-
-impl<'a, T, S, V> FromIterator<(S, V)> for Environment<'a, T>
-where
-    T: Grammar,
-    S: Into<String>,
-    V: Into<Value<'a, T>>,
-{
-    fn from_iter<I: IntoIterator<Item = (S, V)>>(iter: I) -> Self {
-        let variables = iter
-            .into_iter()
-            .map(|(var_name, value)| (var_name.into(), value.into()));
-        Self {
-            variables: HashMap::from_iter(variables),
-        }
-    }
-}
-
-impl<'a, T, S, V> Extend<(S, V)> for Environment<'a, T>
-where
-    T: Grammar,
-    S: Into<String>,
-    V: Into<Value<'a, T>>,
-{
-    fn extend<I: IntoIterator<Item = (S, V)>>(&mut self, iter: I) {
-        let variables = iter
-            .into_iter()
-            .map(|(var_name, value)| (var_name.into(), value.into()));
-        self.variables.extend(variables);
-    }
-}

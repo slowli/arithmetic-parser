@@ -203,12 +203,17 @@ impl<'a, T: Grammar> Registers<'a, T> {
         self.registers[register] = value;
     }
 
-    /// Allocates a new register with the specified name. If the name was previously assigned,
-    /// the name association is updated, but the old register itself remains intact.
-    pub fn push_var(&mut self, name: &str, value: Value<'a, T>) {
-        let register = self.registers.len();
-        self.registers.push(value);
-        self.vars.insert(name.to_owned(), register);
+    /// Allocates a new register with the specified name if the name was not allocated previously.
+    pub fn insert_var(&mut self, name: &str, value: Value<'a, T>) -> bool {
+        if self.vars.contains_key(name) {
+            false
+        } else {
+            let register = self.registers.len();
+            self.registers.push(value);
+            self.vars.insert(name.to_owned(), register);
+
+            true
+        }
     }
 
     /// Updates from the specified environment. Updates are performed in place.
@@ -468,13 +473,13 @@ mod tests {
 
     #[test]
     fn iterative_evaluation() {
-        let mut env = Registers::new();
-        env.push_var("x", Value::<F32Grammar>::Number(5.0));
-
         let block = F32Grammar::parse_statements("x").unwrap();
-        let (mut module, _) = Compiler::compile_module(WildcardId, &env, &block).unwrap();
+        let (mut module, _) = Compiler::compile_module(WildcardId, &block).unwrap();
         assert_eq!(module.inner.register_capacity, 2);
         assert_eq!(module.inner.commands.len(), 1); // push `x` from r0 to r1
+
+        let mut env = Registers::new();
+        env.insert_var("x", Value::<F32Grammar>::Number(5.0));
         module.imports = ModuleImports { inner: env };
         let value = module.run().unwrap();
         assert_eq!(value, Value::Number(5.0));

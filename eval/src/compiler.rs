@@ -460,11 +460,10 @@ impl Compiler {
 
     pub fn compile_module<'a, Id: ModuleId, T: Grammar>(
         module_id: Id,
-        env: &Registers<'a, T>,
         block: &Block<'a, T>,
     ) -> Result<(ExecutableModule<'a, T>, ImportSpans<'a>), Error<'a>> {
         let module_id = Box::new(module_id) as Box<dyn ModuleId>;
-        let (captures, import_spans) = Self::extract_captures(module_id.clone_boxed(), env, block)?;
+        let (captures, import_spans) = Self::extract_captures(module_id.clone_boxed(), block)?;
         let mut compiler = Self::from_env(module_id.clone_boxed(), &captures);
 
         let mut executable = Executable::new(module_id);
@@ -486,16 +485,15 @@ impl Compiler {
 
     fn extract_captures<'a, T: Grammar>(
         module_id: Box<dyn ModuleId>,
-        env: &Registers<'a, T>,
         block: &Block<'a, T>,
     ) -> Result<(Registers<'a, T>, ImportSpans<'a>), Error<'a>> {
         let mut captures = Registers::new();
         let mut import_spans = HashMap::new();
 
         let mut extractor = CapturesExtractor::new(module_id, |var_name, var_span| {
-            let value = env.get_var(var_name).cloned().unwrap_or_else(Value::void);
-            captures.push_var(var_name, value);
-            import_spans.insert(var_name.to_owned(), var_span);
+            if captures.insert_var(var_name, Value::void()) {
+                import_spans.insert(var_name.to_owned(), var_span);
+            }
             Ok(())
         });
         extractor.eval_block(&block)?;
@@ -637,7 +635,7 @@ mod tests {
     fn compilation_basics() {
         let block = "x = 3; 1 + { y = 2; y * x } == 7";
         let block = F32Grammar::parse_statements(block).unwrap();
-        let (module, _) = Compiler::compile_module(WildcardId, &Registers::new(), &block).unwrap();
+        let (module, _) = Compiler::compile_module(WildcardId, &block).unwrap();
         let value = module.run().unwrap();
         assert_eq!(value, Value::Bool(true));
     }
@@ -646,7 +644,7 @@ mod tests {
     fn compiled_function() {
         let block = "add = |x, y| x + y; add(2, 3) == 5";
         let block = F32Grammar::parse_statements(block).unwrap();
-        let (module, _) = Compiler::compile_module(WildcardId, &Registers::new(), &block).unwrap();
+        let (module, _) = Compiler::compile_module(WildcardId, &block).unwrap();
         assert_eq!(module.run().unwrap(), Value::Bool(true));
     }
 
@@ -654,7 +652,7 @@ mod tests {
     fn compiled_function_with_capture() {
         let block = "A = 2; add = |x, y| x + y / A; add(2, 3) == 3.5";
         let block = F32Grammar::parse_statements(block).unwrap();
-        let (module, _) = Compiler::compile_module(WildcardId, &Registers::new(), &block).unwrap();
+        let (module, _) = Compiler::compile_module(WildcardId, &block).unwrap();
         assert_eq!(module.run().unwrap(), Value::Bool(true));
     }
 
@@ -693,21 +691,15 @@ mod tests {
     }
 
     #[test]
-    fn module_imports() {
-        let mut env = Registers::new();
-        env.push_var("x", Value::<F32Grammar>::Number(1.0));
-        env.push_var("y", Value::Number(-3.0));
+    fn extracting_captures() {
+        let program = "y = 5 * x; y - 3 + x";
+        let module = F32Grammar::parse_statements(program).unwrap();
+        let (registers, import_spans) =
+            Compiler::extract_captures(Box::new(WildcardId), &module).unwrap();
 
-        let module = "y = 5 * x; y - 3";
-        let module = F32Grammar::parse_statements(module).unwrap();
-        let (mut module, _) = Compiler::compile_module(WildcardId, &env, &module).unwrap();
-
-        let imports = module.imports().iter().collect::<Vec<_>>();
-        assert_eq!(imports, &[("x", &Value::Number(1.0))]);
-        let value = module.run().unwrap();
-        assert_eq!(value, Value::Number(2.0));
-        module.set_import("x", Value::Number(2.0));
-        let value = module.run().unwrap();
-        assert_eq!(value, Value::Number(7.0));
+        assert_eq!(registers.register_count(), 1);
+        assert_eq!(*registers.get_var("x").unwrap(), Value::void());
+        assert_eq!(import_spans.len(), 1);
+        assert_eq!(import_spans["x"], Spanned::from_str(program, 8..9));
     }
 }

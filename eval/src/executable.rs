@@ -145,7 +145,7 @@ impl<'a, T: Grammar> ExecutableModule<'a, T> {
     where
         Id: ModuleId,
     {
-        let (module, import_spans) = Compiler::compile_module(id, &Registers::new(), block)?;
+        let (module, import_spans) = Compiler::compile_module(id, block)?;
         Ok(ExecutableModuleBuilder::new(module, import_spans))
     }
 
@@ -384,17 +384,16 @@ mod tests {
 
     #[test]
     fn cloning_module() {
-        let mut env = Registers::new();
-        env.push_var("x", Value::<F32Grammar>::Number(5.0));
-
         let block = "y = x + 2 * (x + 1) + 1; y";
         let block = F32Grammar::parse_statements(block).unwrap();
-        let (module, _) = Compiler::compile_module(WildcardId, &env, &block).unwrap();
+        let (mut module, _) = Compiler::compile_module(WildcardId, &block).unwrap();
 
         let mut module_copy = module.clone();
         module_copy.set_import("x", Value::Number(10.0));
         let value = module_copy.run().unwrap();
         assert_eq!(value, Value::Number(33.0));
+
+        module.set_import("x", Value::Number(5.0));
         let value = module.run().unwrap();
         assert_eq!(value, Value::Number(18.0));
     }

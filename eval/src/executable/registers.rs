@@ -5,15 +5,13 @@ use hashbrown::HashMap;
 use crate::{
     alloc::{vec, Box, Rc, String, ToOwned, Vec},
     error::{Backtrace, CodeInModule, EvalResult, TupleLenMismatchContext},
-    executable::{
-        command::{Atom, Command, CompiledExpr, SpannedCommand},
-        ExecutableFn,
-    },
+    executable::command::{Atom, Command, CompiledExpr, SpannedCommand},
     CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, ModuleId, Number,
     SpannedValue, Value,
 };
-use arithmetic_parser::{BinaryOp, Grammar, MaybeSpanned, StripCode, UnaryOp};
+use arithmetic_parser::{BinaryOp, Grammar, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
 
+/// Sequence of instructions that can be executed with the `Registers`.
 #[derive(Debug)]
 pub(crate) struct Executable<'a, T: Grammar> {
     id: Box<dyn ModuleId>,
@@ -118,6 +116,36 @@ where
             ..Registers::new()
         };
         env.execute(self, ctx.backtrace())
+    }
+}
+
+/// `Executable` together with function-specific info.
+#[derive(Debug)]
+pub(crate) struct ExecutableFn<'a, T: Grammar> {
+    pub inner: Executable<'a, T>,
+    pub def_span: MaybeSpanned<'a>,
+    pub arg_count: LvalueLen,
+}
+
+impl<T: Grammar> ExecutableFn<'_, T> {
+    pub fn to_stripped_code(&self) -> ExecutableFn<'static, T> {
+        ExecutableFn {
+            inner: self.inner.clone().strip_code(),
+            def_span: self.def_span.strip_code(),
+            arg_count: self.arg_count,
+        }
+    }
+}
+
+impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
+    type Stripped = ExecutableFn<'static, T>;
+
+    fn strip_code(self) -> Self::Stripped {
+        ExecutableFn {
+            inner: self.inner.strip_code(),
+            def_span: self.def_span.strip_code(),
+            arg_count: self.arg_count,
+        }
     }
 }
 
@@ -420,7 +448,7 @@ where
                 captures,
                 capture_names,
             } => {
-                let fn_executable = executable.child_fns[*ptr].clone();
+                let fn_executable = Rc::clone(&executable.child_fns[*ptr]);
                 let captured_values = captures
                     .iter()
                     .map(|capture| self.resolve_atom(&capture.extra))

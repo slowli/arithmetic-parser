@@ -8,44 +8,15 @@ use crate::{
     error::{Backtrace, ErrorWithBacktrace},
     Environment, Error, ErrorKind, ModuleId, Number, Value, VariableMap,
 };
-use arithmetic_parser::{Block, Grammar, LvalueLen, MaybeSpanned, StripCode};
+use arithmetic_parser::{Block, Grammar, StripCode};
 
 mod command;
-mod env;
+mod registers;
 
 pub(crate) use self::{
     command::{Atom, Command, ComparisonOp, CompiledExpr, SpannedAtom},
-    env::{Executable, Registers},
+    registers::{Executable, ExecutableFn, Registers},
 };
-
-#[derive(Debug)]
-pub(crate) struct ExecutableFn<'a, T: Grammar> {
-    pub inner: Executable<'a, T>,
-    pub def_span: MaybeSpanned<'a>,
-    pub arg_count: LvalueLen,
-}
-
-impl<T: Grammar> ExecutableFn<'_, T> {
-    pub fn to_stripped_code(&self) -> ExecutableFn<'static, T> {
-        ExecutableFn {
-            inner: self.inner.clone().strip_code(),
-            def_span: self.def_span.strip_code(),
-            arg_count: self.arg_count,
-        }
-    }
-}
-
-impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
-    type Stripped = ExecutableFn<'static, T>;
-
-    fn strip_code(self) -> Self::Stripped {
-        ExecutableFn {
-            inner: self.inner.strip_code(),
-            def_span: self.def_span.strip_code(),
-            arg_count: self.arg_count,
-        }
-    }
-}
 
 /// Executable module together with its imports.
 ///

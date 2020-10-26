@@ -353,20 +353,11 @@ impl Compiler {
         def: &FnDefinition<'a, T>,
     ) -> Result<Atom<T>, Error<'a>> {
         let module_id = self.module_id.clone_boxed();
-        let mut captures = HashMap::new();
-        let mut extractor = CapturesExtractor::new(module_id, |var_name, var_span| {
-            self.get_var(var_name).map_or_else(
-                || Err(ErrorKind::Undefined(var_name.to_owned())),
-                |register| {
-                    let capture: MaybeSpanned<_> =
-                        var_span.copy_with_extra(Atom::Register(register)).into();
-                    captures.insert(var_name, capture);
-                    Ok(())
-                },
-            )
-        });
 
+        let mut extractor = CapturesExtractor::new(module_id);
         extractor.eval_function(def)?;
+        let captures = self.get_captures(extractor);
+
         let fn_executable = self.compile_function(def, &captures)?;
         let fn_executable = ExecutableFn {
             inner: fn_executable,
@@ -389,6 +380,23 @@ impl Compiler {
             def_expr,
         );
         Ok(Atom::Register(register))
+    }
+
+    fn get_captures<'a, T: Grammar>(
+        &self,
+        extractor: CapturesExtractor<'a>,
+    ) -> HashMap<&'a str, SpannedAtom<'a, T>> {
+        extractor
+            .captures
+            .into_iter()
+            .map(|(var_name, var_span)| {
+                let register = self
+                    .get_var(var_name)
+                    .expect("Captures must created during module compilation");
+                let capture = var_span.copy_with_extra(Atom::Register(register));
+                (var_name, capture.into())
+            })
+            .collect()
     }
 
     fn compile_function<'a, T: Grammar>(
@@ -487,16 +495,19 @@ impl Compiler {
         module_id: Box<dyn ModuleId>,
         block: &Block<'a, T>,
     ) -> Result<(Registers<'a, T>, ImportSpans<'a>), Error<'a>> {
-        let mut captures = Registers::new();
-        let mut import_spans = HashMap::new();
-
-        let mut extractor = CapturesExtractor::new(module_id, |var_name, var_span| {
-            if captures.insert_var(var_name, Value::void()) {
-                import_spans.insert(var_name.to_owned(), var_span);
-            }
-            Ok(())
-        });
+        let mut extractor = CapturesExtractor::new(module_id);
         extractor.eval_block(&block)?;
+
+        let mut captures = Registers::new();
+        for &var_name in extractor.captures.keys() {
+            captures.insert_var(var_name, Value::void());
+        }
+
+        let import_spans = extractor
+            .captures
+            .into_iter()
+            .map(|(var_name, var_span)| (var_name.to_owned(), var_span))
+            .collect();
 
         Ok((captures, import_spans))
     }
@@ -701,5 +712,23 @@ mod tests {
         assert_eq!(*registers.get_var("x").unwrap(), Value::void());
         assert_eq!(import_spans.len(), 1);
         assert_eq!(import_spans["x"], Spanned::from_str(program, 8..9));
+    }
+
+    #[test]
+    fn extracting_captures_with_inner_fns() {
+        let program = r#"
+            y = 5 * x;          # x is a capture
+            fun = |z| {         # z is not a capture
+                z * x + y * PI  # y is not a capture for the entire module, PI is
+            };
+        "#;
+        let module = F32Grammar::parse_statements(program).unwrap();
+
+        let (registers, import_spans) =
+            Compiler::extract_captures(Box::new(WildcardId), &module).unwrap();
+        assert_eq!(registers.register_count(), 2);
+        assert!(registers.variables_map().contains_key("x"));
+        assert!(registers.variables_map().contains_key("PI"));
+        assert_eq!(import_spans["x"].location_line(), 2); // should be the first mention
     }
 }

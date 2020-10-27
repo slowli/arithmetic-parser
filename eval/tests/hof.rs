@@ -1,10 +1,10 @@
 //! Demonstrates how to define high-order native functions.
 
 use arithmetic_eval::{
-    fns, wrap_fn, wrap_fn_with_context, CallContext, ErrorKind, EvalResult, Function, Interpreter,
-    NativeFn, Number, SpannedValue, Value,
+    fns, wrap_fn, wrap_fn_with_context, CallContext, ErrorKind, EvalResult, ExecutableModule,
+    Function, NativeFn, Number, SpannedValue, Value,
 };
-use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, InputSpan, StripCode};
+use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, StripCode};
 
 /// Function that applies the `inner` function the specified amount of times to the result of
 /// the previous execution.
@@ -69,11 +69,6 @@ fn eager_repeat<'a, G: Grammar<Lit = f32>>(
 
 #[test]
 fn repeated_function() {
-    let mut interpreter = Interpreter::new();
-    interpreter
-        .insert_native_fn("repeat", wrap_fn!(2, repeat))
-        .insert_native_fn("assert", fns::Assert);
-
     let program = r#"
         fn = |x| 2 * x + 1;
         repeated = fn.repeat(3);
@@ -82,17 +77,18 @@ fn repeated_function() {
         # -1 is the immovable point of the transform
         assert(repeated(-1) == -1);
     "#;
-    let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
-    interpreter.evaluate(&program).unwrap();
+    let program = F32Grammar::parse_statements(program).unwrap();
+
+    let program = ExecutableModule::builder("repeat", &program)
+        .unwrap()
+        .with_import("repeat", Value::native_fn(wrap_fn!(2, repeat)))
+        .with_import("assert", Value::native_fn(fns::Assert))
+        .build();
+    program.run().unwrap();
 }
 
 #[test]
 fn eager_repeated_function() {
-    let mut interpreter = Interpreter::new();
-    interpreter
-        .insert_native_fn("repeat", wrap_fn_with_context!(3, eager_repeat))
-        .insert_native_fn("assert", fns::Assert);
-
     let program = r#"
         fn = |x| 2 * x + 1;
         # 2 * 1 + 1 = 3 -> 2 * 3 + 1 = 7 -> 2 * 7 + 1 = 15
@@ -100,6 +96,15 @@ fn eager_repeated_function() {
         # -1 is the immovable point of the transform
         assert(fn.repeat(3, -1) == -1);
     "#;
-    let program = F32Grammar::parse_statements(InputSpan::new(program)).unwrap();
-    interpreter.evaluate(&program).unwrap();
+    let program = F32Grammar::parse_statements(program).unwrap();
+
+    let program = ExecutableModule::builder("repeat", &program)
+        .unwrap()
+        .with_import(
+            "repeat",
+            Value::native_fn(wrap_fn_with_context!(3, eager_repeat)),
+        )
+        .with_import("assert", Value::native_fn(fns::Assert))
+        .build();
+    program.run().unwrap();
 }

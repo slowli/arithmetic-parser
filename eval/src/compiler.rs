@@ -5,13 +5,13 @@ use hashbrown::HashMap;
 use core::iter;
 
 use crate::{
-    alloc::{vec, Vec},
+    alloc::{vec, Box, String, ToOwned, Vec},
     error::RepeatedAssignmentContext,
     executable::{
-        Atom, Command, ComparisonOp, CompiledExpr, Env, Executable, ExecutableFn, ExecutableModule,
-        SpannedAtom,
+        Atom, Command, ComparisonOp, CompiledExpr, Executable, ExecutableFn, ExecutableModule,
+        Registers, SpannedAtom,
     },
-    Error, ErrorKind, ModuleId,
+    Error, ErrorKind, ModuleId, Value,
 };
 use arithmetic_parser::{
     is_valid_variable_name, BinaryOp, Block, Destructure, Expr, FnDefinition, Grammar, InputSpan,
@@ -24,7 +24,9 @@ mod captures;
 use self::captures::{extract_vars_iter, CapturesExtractor, CompilerExtTarget};
 
 /// Name of the comparison function used in desugaring order comparisons.
-const CMP_FUNCTION_NAME: &str = "cmp";
+pub(crate) const CMP_FUNCTION_NAME: &str = "cmp";
+
+pub(crate) type ImportSpans<'a> = HashMap<String, Spanned<'a>>;
 
 #[derive(Debug)]
 pub(crate) struct Compiler {
@@ -55,7 +57,7 @@ impl Compiler {
         }
     }
 
-    fn from_env<T: Grammar>(module_id: Box<dyn ModuleId>, env: &Env<'_, T>) -> Self {
+    fn from_env<T: Grammar>(module_id: Box<dyn ModuleId>, env: &Registers<'_, T>) -> Self {
         Self {
             vars_to_registers: env.variables_map().to_owned(),
             register_count: env.register_count(),
@@ -95,8 +97,11 @@ impl Compiler {
         }
     }
 
-    fn get_var(&self, name: &str) -> Option<usize> {
-        self.vars_to_registers.get(name).copied()
+    fn get_var(&self, name: &str) -> usize {
+        *self
+            .vars_to_registers
+            .get(name)
+            .expect("Captures must created during module compilation")
     }
 
     fn push_assignment<'a, T: Grammar, U>(
@@ -190,12 +195,7 @@ impl Compiler {
         let rhs = self.compile_expr(executable, rhs)?;
 
         let compiled = if op.extra.is_order_comparison() {
-            let cmp_function = self.get_var(CMP_FUNCTION_NAME).ok_or_else(|| {
-                let err = ErrorKind::MissingCmpFunction {
-                    name: CMP_FUNCTION_NAME.to_owned(),
-                };
-                self.create_error(binary_expr, err)
-            })?;
+            let cmp_function = self.get_var(CMP_FUNCTION_NAME);
             let cmp_function = op.copy_with_extra(Atom::Register(cmp_function));
 
             let cmp_invocation = CompiledExpr::Function {
@@ -351,20 +351,11 @@ impl Compiler {
         def: &FnDefinition<'a, T>,
     ) -> Result<Atom<T>, Error<'a>> {
         let module_id = self.module_id.clone_boxed();
-        let mut captures = HashMap::new();
-        let mut extractor = CapturesExtractor::new(module_id, |var_name, var_span| {
-            self.get_var(var_name).map_or_else(
-                || Err(ErrorKind::Undefined(var_name.to_owned())),
-                |register| {
-                    let capture: MaybeSpanned<_> =
-                        var_span.copy_with_extra(Atom::Register(register)).into();
-                    captures.insert(var_name, capture);
-                    Ok(())
-                },
-            )
-        });
 
+        let mut extractor = CapturesExtractor::new(module_id);
         extractor.eval_function(def)?;
+        let captures = self.get_captures(extractor);
+
         let fn_executable = self.compile_function(def, &captures)?;
         let fn_executable = ExecutableFn {
             inner: fn_executable,
@@ -387,6 +378,21 @@ impl Compiler {
             def_expr,
         );
         Ok(Atom::Register(register))
+    }
+
+    fn get_captures<'a, T: Grammar>(
+        &self,
+        extractor: CapturesExtractor<'a>,
+    ) -> HashMap<&'a str, SpannedAtom<'a, T>> {
+        extractor
+            .captures
+            .into_iter()
+            .map(|(var_name, var_span)| {
+                let register = self.get_var(var_name);
+                let capture = var_span.copy_with_extra(Atom::Register(register));
+                (var_name, capture.into())
+            })
+            .collect()
     }
 
     fn compile_function<'a, T: Grammar>(
@@ -458,32 +464,11 @@ impl Compiler {
 
     pub fn compile_module<'a, Id: ModuleId, T: Grammar>(
         module_id: Id,
-        env: &Env<'a, T>,
         block: &Block<'a, T>,
-        execute_in_env: bool,
-    ) -> Result<ExecutableModule<'a, T>, Error<'a>> {
+    ) -> Result<(ExecutableModule<'a, T>, ImportSpans<'a>), Error<'a>> {
         let module_id = Box::new(module_id) as Box<dyn ModuleId>;
-        let mut compiler = Self::from_env(module_id.clone_boxed(), env);
-
-        let captures = if execute_in_env {
-            // We don't care about captures since we won't execute the module with them anyway.
-            Env::new()
-        } else {
-            let mut captures = Env::new();
-            let mut extractor = CapturesExtractor::new(module_id.clone_boxed(), |var_name, _| {
-                env.get_var(var_name).map_or_else(
-                    || Err(ErrorKind::Undefined(var_name.to_owned())),
-                    |value| {
-                        captures.push_var(var_name, value.clone());
-                        Ok(())
-                    },
-                )
-            });
-            extractor.eval_block(&block)?;
-
-            compiler = Self::from_env(module_id.clone_boxed(), &captures);
-            captures
-        };
+        let (captures, import_spans) = Self::extract_captures(module_id.clone_boxed(), block)?;
+        let mut compiler = Self::from_env(module_id.clone_boxed(), &captures);
 
         let mut executable = Executable::new(module_id);
         let empty_span = InputSpan::new("");
@@ -498,7 +483,29 @@ impl Compiler {
         );
 
         executable.finalize_block(compiler.register_count);
-        Ok(ExecutableModule::new(executable, captures))
+        let module = ExecutableModule::from_parts(executable, captures);
+        Ok((module, import_spans))
+    }
+
+    fn extract_captures<'a, T: Grammar>(
+        module_id: Box<dyn ModuleId>,
+        block: &Block<'a, T>,
+    ) -> Result<(Registers<'a, T>, ImportSpans<'a>), Error<'a>> {
+        let mut extractor = CapturesExtractor::new(module_id);
+        extractor.eval_block(&block)?;
+
+        let mut captures = Registers::new();
+        for &var_name in extractor.captures.keys() {
+            captures.insert_var(var_name, Value::void());
+        }
+
+        let import_spans = extractor
+            .captures
+            .into_iter()
+            .map(|(var_name, var_span)| (var_name.to_owned(), var_span))
+            .collect();
+
+        Ok((captures, import_spans))
     }
 
     fn assign<'a, T: Grammar>(
@@ -583,12 +590,12 @@ impl Compiler {
 /// # Examples
 ///
 /// ```
-/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
+/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 /// use arithmetic_eval::CompilerExt;
 /// # use hashbrown::HashSet;
 /// # use core::iter::FromIterator;
 ///
-/// let block = InputSpan::new("x = sin(0.5) / PI; y = x * E; (x, y)");
+/// let block = "x = sin(0.5) / PI; y = x * E; (x, y)";
 /// let block = F32Grammar::parse_statements(block).unwrap();
 /// let undefined_vars = block.undefined_variables().unwrap();
 /// assert_eq!(
@@ -629,43 +636,37 @@ mod tests {
     use super::*;
     use crate::{Value, WildcardId};
 
-    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
+    use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 
     #[test]
     fn compilation_basics() {
-        let block = InputSpan::new("x = 3; 1 + { y = 2; y * x } == 7");
+        let block = "x = 3; 1 + { y = 2; y * x } == 7";
         let block = F32Grammar::parse_statements(block).unwrap();
-        let module = Compiler::compile_module(WildcardId, &Env::new(), &block, false).unwrap();
+        let (module, _) = Compiler::compile_module(WildcardId, &block).unwrap();
         let value = module.run().unwrap();
         assert_eq!(value, Value::Bool(true));
     }
 
     #[test]
     fn compiled_function() {
-        let block = InputSpan::new("add = |x, y| x + y; add(2, 3) == 5");
+        let block = "add = |x, y| x + y; add(2, 3) == 5";
         let block = F32Grammar::parse_statements(block).unwrap();
-        let value = Compiler::compile_module(WildcardId, &Env::new(), &block, false)
-            .unwrap()
-            .run()
-            .unwrap();
-        assert_eq!(value, Value::Bool(true));
+        let (module, _) = Compiler::compile_module(WildcardId, &block).unwrap();
+        assert_eq!(module.run().unwrap(), Value::Bool(true));
     }
 
     #[test]
     fn compiled_function_with_capture() {
         let block = "A = 2; add = |x, y| x + y / A; add(2, 3) == 3.5";
-        let block = F32Grammar::parse_statements(InputSpan::new(block)).unwrap();
-        let value = Compiler::compile_module(WildcardId, &Env::new(), &block, false)
-            .unwrap()
-            .run()
-            .unwrap();
-        assert_eq!(value, Value::Bool(true));
+        let block = F32Grammar::parse_statements(block).unwrap();
+        let (module, _) = Compiler::compile_module(WildcardId, &block).unwrap();
+        assert_eq!(module.run().unwrap(), Value::Bool(true));
     }
 
     #[test]
     fn variable_extraction() {
         let def = "|a, b| ({ x = a * b + y; x - 2 }, a / b)";
-        let def = F32Grammar::parse_statements(InputSpan::new(def))
+        let def = F32Grammar::parse_statements(def)
             .unwrap()
             .return_value
             .unwrap();
@@ -682,7 +683,7 @@ mod tests {
     #[test]
     fn variable_extraction_with_scoping() {
         let def = "|a, b| ({ x = a * b + y; x - 2 }, a / x)";
-        let def = F32Grammar::parse_statements(InputSpan::new(def))
+        let def = F32Grammar::parse_statements(def)
             .unwrap()
             .return_value
             .unwrap();
@@ -697,21 +698,33 @@ mod tests {
     }
 
     #[test]
-    fn module_imports() {
-        let mut env = Env::new();
-        env.push_var("x", Value::<F32Grammar>::Number(1.0));
-        env.push_var("y", Value::Number(-3.0));
+    fn extracting_captures() {
+        let program = "y = 5 * x; y - 3 + x";
+        let module = F32Grammar::parse_statements(program).unwrap();
+        let (registers, import_spans) =
+            Compiler::extract_captures(Box::new(WildcardId), &module).unwrap();
 
-        let module = "y = 5 * x; y - 3";
-        let module = F32Grammar::parse_statements(InputSpan::new(module)).unwrap();
-        let mut module = Compiler::compile_module(WildcardId, &env, &module, false).unwrap();
+        assert_eq!(registers.register_count(), 1);
+        assert_eq!(*registers.get_var("x").unwrap(), Value::void());
+        assert_eq!(import_spans.len(), 1);
+        assert_eq!(import_spans["x"], Spanned::from_str(program, 8..9));
+    }
 
-        let imports = module.imports().iter().collect::<Vec<_>>();
-        assert_eq!(imports, &[("x", &Value::Number(1.0))]);
-        let value = module.run().unwrap();
-        assert_eq!(value, Value::Number(2.0));
-        module.set_import("x", Value::Number(2.0));
-        let value = module.run().unwrap();
-        assert_eq!(value, Value::Number(7.0));
+    #[test]
+    fn extracting_captures_with_inner_fns() {
+        let program = r#"
+            y = 5 * x;          # x is a capture
+            fun = |z| {         # z is not a capture
+                z * x + y * PI  # y is not a capture for the entire module, PI is
+            };
+        "#;
+        let module = F32Grammar::parse_statements(program).unwrap();
+
+        let (registers, import_spans) =
+            Compiler::extract_captures(Box::new(WildcardId), &module).unwrap();
+        assert_eq!(registers.register_count(), 2);
+        assert!(registers.variables_map().contains_key("x"));
+        assert!(registers.variables_map().contains_key("PI"));
+        assert_eq!(import_spans["x"].location_line(), 2); // should be the first mention
     }
 }

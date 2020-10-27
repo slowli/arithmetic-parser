@@ -2,11 +2,11 @@
 
 extern crate alloc;
 
-use alloc::{format, string::ToString};
-use core::f64;
+use alloc::string::ToString;
+use core::{f64, iter::FromIterator};
 
-use arithmetic_eval::{fns, Interpreter, Value};
-use arithmetic_parser::{grammars::F64Grammar, GrammarExt, InputSpan};
+use arithmetic_eval::{fns, Environment, Prelude, Value, VariableMap, WildcardId};
+use arithmetic_parser::{grammars::F64Grammar, GrammarExt};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -18,7 +18,7 @@ extern "C" {
 }
 
 #[allow(clippy::type_complexity)]
-fn initialize_interpreter(interpreter: &mut Interpreter<'_, F64Grammar>) {
+fn initialize_env(env: &mut Environment<'_, F64Grammar>) {
     const CONSTANTS: &[(&str, f64)] = &[
         ("E", f64::consts::E),
         ("PI", f64::consts::PI),
@@ -54,37 +54,31 @@ fn initialize_interpreter(interpreter: &mut Interpreter<'_, F64Grammar>) {
         ("max", |x, y| if x > y { x } else { y }),
     ];
 
-    interpreter.insert_native_fn("cmp", fns::Compare);
+    env.insert_native_fn("cmp", fns::Compare);
 
     for (name, c) in CONSTANTS {
-        interpreter.insert_var(name, Value::Number(*c));
+        env.insert(name, Value::Number(*c));
     }
     for (name, unary_fn) in UNARY_FNS {
-        interpreter.insert_native_fn(name, fns::Unary::new(*unary_fn));
+        env.insert_native_fn(name, fns::Unary::new(*unary_fn));
     }
     for (name, binary_fn) in BINARY_FNS {
-        interpreter.insert_native_fn(name, fns::Binary::new(*binary_fn));
+        env.insert_native_fn(name, fns::Binary::new(*binary_fn));
     }
 }
 
 #[wasm_bindgen]
 pub fn evaluate(program: &str) -> Result<JsValue, JsValue> {
-    let program = InputSpan::new(program);
-    let statements = F64Grammar::parse_statements(program).map_err(|spanned_err| {
-        let message = format!(
-            "{}:{}: {}",
-            spanned_err.location_line(),
-            spanned_err.get_column(),
-            spanned_err.extra
-        );
-        Error::new(&message)
-    })?;
+    let block =
+        F64Grammar::parse_statements(program).map_err(|err| Error::new(&err.to_string()))?;
 
-    let mut interpreter = Interpreter::with_prelude();
-    initialize_interpreter(&mut interpreter);
+    let mut env = Environment::from_iter(Prelude.iter());
+    initialize_env(&mut env);
 
-    let value = interpreter
-        .evaluate(&statements)
+    let value = env
+        .compile_module(WildcardId, &block)
+        .map_err(|err| Error::new(&err.to_string()))?
+        .run()
         .map_err(|err| Error::new(&err.to_string()))?;
 
     match value {

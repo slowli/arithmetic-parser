@@ -1,19 +1,17 @@
-//! Execution `Env` and closely related types.
+//! `Registers` for executing commands and closely related types.
 
 use hashbrown::HashMap;
 
-use crate::error::CodeInModule;
 use crate::{
-    alloc::{vec, Rc, Vec},
-    error::{Backtrace, EvalResult, TupleLenMismatchContext},
-    executable::{
-        command::{Atom, Command, CompiledExpr, SpannedCommand},
-        ExecutableFn,
-    },
-    CallContext, Error, ErrorKind, Function, InterpretedFn, ModuleId, Number, SpannedValue, Value,
+    alloc::{vec, Box, Rc, String, ToOwned, Vec},
+    error::{Backtrace, CodeInModule, EvalResult, TupleLenMismatchContext},
+    executable::command::{Atom, Command, CompiledExpr, SpannedCommand},
+    CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, ModuleId, Number,
+    SpannedValue, Value,
 };
-use arithmetic_parser::{BinaryOp, Grammar, MaybeSpanned, StripCode, UnaryOp};
+use arithmetic_parser::{BinaryOp, Grammar, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
 
+/// Sequence of instructions that can be executed with the `Registers`.
 #[derive(Debug)]
 pub(crate) struct Executable<'a, T: Grammar> {
     id: Box<dyn ModuleId>,
@@ -37,22 +35,18 @@ impl<'a, T: Grammar> Clone for Executable<'a, T> {
 impl<T: Grammar> StripCode for Executable<'_, T> {
     type Stripped = Executable<'static, T>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         Executable {
-            id: self.id.clone_boxed(),
+            id: self.id,
             commands: self
                 .commands
-                .iter()
-                .map(|command| {
-                    command
-                        .copy_with_extra(command.extra.strip_code())
-                        .strip_code()
-                })
+                .into_iter()
+                .map(|command| command.map_extra(StripCode::strip_code).strip_code())
                 .collect(),
             child_fns: self
                 .child_fns
-                .iter()
-                .map(|function| Rc::new(function.strip_code()))
+                .into_iter()
+                .map(|function| Rc::new(function.to_stripped_code()))
                 .collect(),
             register_capacity: self.register_capacity,
         }
@@ -117,20 +111,48 @@ where
     ) -> EvalResult<'a, T> {
         let mut registers = captures;
         registers.push(Value::Tuple(args));
-        let mut env = Env {
+        let mut env = Registers {
             registers,
-            ..Env::new()
+            ..Registers::new()
         };
         env.execute(self, ctx.backtrace())
     }
 }
 
-// TODO: restore `SmallVec` wrapped into a covariant wrapper.
-type Registers<'a, T> = Vec<Value<'a, T>>;
+/// `Executable` together with function-specific info.
+#[derive(Debug)]
+pub(crate) struct ExecutableFn<'a, T: Grammar> {
+    pub inner: Executable<'a, T>,
+    pub def_span: MaybeSpanned<'a>,
+    pub arg_count: LvalueLen,
+}
+
+impl<T: Grammar> ExecutableFn<'_, T> {
+    pub fn to_stripped_code(&self) -> ExecutableFn<'static, T> {
+        ExecutableFn {
+            inner: self.inner.clone().strip_code(),
+            def_span: self.def_span.strip_code(),
+            arg_count: self.arg_count,
+        }
+    }
+}
+
+impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
+    type Stripped = ExecutableFn<'static, T>;
+
+    fn strip_code(self) -> Self::Stripped {
+        ExecutableFn {
+            inner: self.inner.strip_code(),
+            def_span: self.def_span.strip_code(),
+            arg_count: self.arg_count,
+        }
+    }
+}
 
 #[derive(Debug)]
-pub(crate) struct Env<'a, T: Grammar> {
-    registers: Registers<'a, T>,
+pub(crate) struct Registers<'a, T: Grammar> {
+    // TODO: restore `SmallVec` wrapped into a covariant wrapper.
+    registers: Vec<Value<'a, T>>,
     // Maps variables to registers. Variables are mapped only from the global scope;
     // thus, we don't need to remove them on error in an inner scope.
     // TODO: investigate using stack-hosted small strings for keys.
@@ -140,7 +162,7 @@ pub(crate) struct Env<'a, T: Grammar> {
     inner_scope_start: Option<usize>,
 }
 
-impl<T: Grammar> Clone for Env<'_, T> {
+impl<T: Grammar> Clone for Registers<'_, T> {
     fn clone(&self) -> Self {
         Self {
             registers: self.registers.clone(),
@@ -150,19 +172,23 @@ impl<T: Grammar> Clone for Env<'_, T> {
     }
 }
 
-impl<T: Grammar> StripCode for Env<'_, T> {
-    type Stripped = Env<'static, T>;
+impl<T: Grammar> StripCode for Registers<'_, T> {
+    type Stripped = Registers<'static, T>;
 
-    fn strip_code(&self) -> Self::Stripped {
-        Env {
-            registers: self.registers.iter().map(StripCode::strip_code).collect(),
-            vars: self.vars.clone(),
+    fn strip_code(self) -> Self::Stripped {
+        Registers {
+            registers: self
+                .registers
+                .into_iter()
+                .map(StripCode::strip_code)
+                .collect(),
+            vars: self.vars,
             inner_scope_start: self.inner_scope_start,
         }
     }
 }
 
-impl<'a, T: Grammar> Env<'a, T> {
+impl<'a, T: Grammar> Registers<'a, T> {
     pub fn new() -> Self {
         Self {
             registers: vec![],
@@ -176,15 +202,18 @@ impl<'a, T: Grammar> Env<'a, T> {
         Some(&self.registers[register])
     }
 
-    pub fn get_var_mut(&mut self, name: &str) -> Option<&mut Value<'a, T>> {
-        let register = *self.vars.get(name)?;
-        Some(&mut self.registers[register])
-    }
-
     pub fn variables(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
         self.vars
             .iter()
             .map(move |(name, register)| (name.as_str(), &self.registers[*register]))
+    }
+
+    pub fn into_variables(self) -> impl Iterator<Item = (String, Value<'a, T>)> {
+        let registers = self.registers;
+        // Moving out of `registers` is not sound because of possible aliasing.
+        self.vars
+            .into_iter()
+            .map(move |(name, register)| (name, registers[register].clone()))
     }
 
     pub fn variables_map(&self) -> &HashMap<String, usize> {
@@ -202,26 +231,41 @@ impl<'a, T: Grammar> Env<'a, T> {
         self.registers[register] = value;
     }
 
-    /// Allocates a new register with the specified name. If the name was previously assigned,
-    /// the name association is updated, but the old register itself remains intact.
-    pub fn push_var(&mut self, name: &str, value: Value<'a, T>) {
-        let register = self.registers.len();
-        self.registers.push(value);
-        self.vars.insert(name.to_owned(), register);
+    /// Allocates a new register with the specified name if the name was not allocated previously.
+    pub fn insert_var(&mut self, name: &str, value: Value<'a, T>) -> bool {
+        if self.vars.contains_key(name) {
+            false
+        } else {
+            let register = self.registers.len();
+            self.registers.push(value);
+            self.vars.insert(name.to_owned(), register);
+
+            true
+        }
     }
 
-    /// Retains only registers corresponding to named variables.
-    pub fn compress(&mut self) {
-        let mut registers = Vec::with_capacity(self.vars.len());
-        for (i, register) in self.vars.values_mut().enumerate() {
-            registers.push(self.registers[*register].clone());
-            *register = i;
+    /// Updates from the specified environment. Updates are performed in place.
+    pub fn update_from_env(&mut self, env: &Environment<'a, T>) {
+        for (var_name, register) in &self.vars {
+            if let Some(value) = env.get(var_name) {
+                self.registers[*register] = value.to_owned();
+            }
         }
-        self.registers = registers;
+    }
+
+    /// Updates environment from this instance.
+    pub fn update_env(&self, env: &mut Environment<'a, T>) {
+        for (var_name, register) in &self.vars {
+            let value = self.registers[*register].clone();
+            // ^-- We cannot move `value` from `registers` because multiple names may be pointing
+            // to the same register.
+
+            env.insert(var_name, value);
+        }
     }
 }
 
-impl<'a, T> Env<'a, T>
+impl<'a, T> Registers<'a, T>
 where
     T: Grammar,
     T::Lit: Number,
@@ -404,7 +448,7 @@ where
                 captures,
                 capture_names,
             } => {
-                let fn_executable = executable.child_fns[*ptr].clone();
+                let fn_executable = Rc::clone(&executable.child_fns[*ptr]);
                 let captured_values = captures
                     .iter()
                     .map(|capture| self.resolve_atom(&capture.extra))
@@ -453,36 +497,17 @@ where
 mod tests {
     use super::*;
     use crate::{compiler::Compiler, executable::ModuleImports, WildcardId};
-    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
-
-    #[test]
-    fn env_compression() {
-        let mut env = Env::new();
-        env.push_var("x", Value::<F32Grammar>::Number(5.0));
-
-        let block = "y = x + 2 * (x + 1) + 1; y";
-        let block = F32Grammar::parse_statements(InputSpan::new(block)).unwrap();
-        let module = Compiler::compile_module(WildcardId, &env, &block, true).unwrap();
-        let value = env.execute(&module.inner, None).unwrap();
-        assert_eq!(value, Value::Number(18.0));
-
-        assert!(env.registers.len() > 2);
-        env.compress();
-        assert_eq!(env.registers.len(), 2);
-        assert_eq!(env.vars.len(), 2);
-        assert!(env.vars.contains_key("x"));
-        assert!(env.vars.contains_key("y"));
-    }
+    use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 
     #[test]
     fn iterative_evaluation() {
-        let mut env = Env::new();
-        env.push_var("x", Value::<F32Grammar>::Number(5.0));
-
-        let block = F32Grammar::parse_statements(InputSpan::new("x")).unwrap();
-        let mut module = Compiler::compile_module(WildcardId, &env, &block, true).unwrap();
+        let block = F32Grammar::parse_statements("x").unwrap();
+        let (mut module, _) = Compiler::compile_module(WildcardId, &block).unwrap();
         assert_eq!(module.inner.register_capacity, 2);
         assert_eq!(module.inner.commands.len(), 1); // push `x` from r0 to r1
+
+        let mut env = Registers::new();
+        env.insert_var("x", Value::<F32Grammar>::Number(5.0));
         module.imports = ModuleImports { inner: env };
         let value = module.run().unwrap();
         assert_eq!(value, Value::Number(5.0));

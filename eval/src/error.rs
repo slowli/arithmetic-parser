@@ -5,7 +5,7 @@ use derive_more::Display;
 use core::fmt;
 
 use crate::{
-    alloc::{format, vec, String, ToOwned, Vec},
+    alloc::{format, vec, Box, String, ToOwned, ToString, Vec},
     fns::FromValueError,
     ModuleId, Value,
 };
@@ -357,17 +357,15 @@ impl fmt::Display for AuxErrorInfo {
 /// in the `arithmetic-parser` crate:
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F64Grammar, GrammarExt, InputSpan, StripResultExt};
-/// # use arithmetic_eval::{Error, ExecutableModule, Interpreter, WildcardId};
+/// # use arithmetic_parser::{grammars::F64Grammar, GrammarExt, StripResultExt};
+/// # use arithmetic_eval::{Environment, Error, ExecutableModule, VariableMap, WildcardId};
 /// fn compile_code(code: &str) -> anyhow::Result<ExecutableModule<'_, F64Grammar>> {
-///     // FIXME: change after improving errors in parser.
-///     let block = F64Grammar::parse_statements(InputSpan::new(code))
-///         .map_err(|e| anyhow::anyhow!("Parse error: {}", e.extra))?;
+///     let block = F64Grammar::parse_statements(code).strip_err()?;
 ///
 ///     // Without `strip_err()` call, the code below won't compile:
 ///     // `Error<'_>` in general cannot be boxed into `anyhow::Error`,
 ///     // only `Error<'static>` can.
-///     Ok(Interpreter::new().compile(WildcardId, &block).strip_err()?)
+///     Ok(Environment::new().compile_module(WildcardId, &block).strip_err()?)
 /// }
 /// ```
 #[derive(Debug)]
@@ -404,11 +402,12 @@ impl<'a> Error<'a> {
         }
     }
 
-    #[doc(hidden)] // used in `wrap_fn` macro
-    pub fn with_span(mut self, span: CodeInModule<'a>, info: AuxErrorInfo) -> Self {
+    /// Adds an auxiliary span to this error. The `span` must be in the same module
+    /// as the main span.
+    pub fn with_span<T>(mut self, span: &MaybeSpanned<'a, T>, info: AuxErrorInfo) -> Self {
         self.aux_spans.push(CodeInModule {
-            module_id: span.module_id,
-            code: span.code.copy_with_extra(info),
+            module_id: self.main_span.module_id.clone_boxed(),
+            code: span.copy_with_extra(info),
         });
         self
     }
@@ -446,11 +445,15 @@ impl std::error::Error for Error<'_> {
 impl StripCode for Error<'_> {
     type Stripped = Error<'static>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         Error {
-            kind: self.kind.clone(),
+            kind: self.kind,
             main_span: self.main_span.strip_code(),
-            aux_spans: self.aux_spans.iter().map(StripCode::strip_code).collect(),
+            aux_spans: self
+                .aux_spans
+                .into_iter()
+                .map(StripCode::strip_code)
+                .collect(),
         }
     }
 }
@@ -509,9 +512,9 @@ impl<'a, T> CodeInModule<'a, T> {
 impl<T: Clone + 'static> StripCode for CodeInModule<'_, T> {
     type Stripped = CodeInModule<'static, T>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         CodeInModule {
-            module_id: self.module_id.clone_boxed(),
+            module_id: self.module_id,
             code: self.code.strip_code(),
         }
     }
@@ -532,10 +535,10 @@ pub struct BacktraceElement<'a> {
 impl StripCode for BacktraceElement<'_> {
     type Stripped = BacktraceElement<'static>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         BacktraceElement {
-            fn_name: self.fn_name.clone(),
-            def_span: self.def_span.as_ref().map(StripCode::strip_code),
+            fn_name: self.fn_name,
+            def_span: self.def_span.map(StripCode::strip_code),
             call_span: self.call_span.strip_code(),
         }
     }
@@ -571,9 +574,9 @@ impl<'a> Backtrace<'a> {
 impl StripCode for Backtrace<'_> {
     type Stripped = Backtrace<'static>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         Backtrace {
-            calls: self.calls.iter().map(StripCode::strip_code).collect(),
+            calls: self.calls.into_iter().map(StripCode::strip_code).collect(),
         }
     }
 }
@@ -631,7 +634,7 @@ impl fmt::Display for ErrorWithBacktrace<'_> {
 impl StripCode for ErrorWithBacktrace<'_> {
     type Stripped = ErrorWithBacktrace<'static>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         ErrorWithBacktrace {
             inner: self.inner.strip_code(),
             backtrace: self.backtrace.strip_code(),
@@ -643,56 +646,6 @@ impl StripCode for ErrorWithBacktrace<'_> {
 impl std::error::Error for ErrorWithBacktrace<'_> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         std::error::Error::source(&self.inner)
-    }
-}
-
-/// Type encompassing all possible errors arising when compiling and immediately executing
-/// a module.
-#[derive(Debug)]
-pub enum InterpreterError<'comp, 'eval: 'comp> {
-    /// Error during compilation.
-    Compile(Error<'comp>),
-    /// Error during statement evaluation. This type of errors contains a backtrace.
-    Evaluate(ErrorWithBacktrace<'eval>),
-}
-
-impl<'comp> InterpreterError<'comp, '_> {
-    /// Gets the source of this error.
-    pub fn source(&self) -> &Error<'comp> {
-        match self {
-            Self::Compile(err) => err,
-            Self::Evaluate(err) => err.source(),
-        }
-    }
-}
-
-impl fmt::Display for InterpreterError<'_, '_> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Compile(err) => fmt::Display::fmt(err, formatter),
-            Self::Evaluate(err) => fmt::Display::fmt(err, formatter),
-        }
-    }
-}
-
-impl StripCode for InterpreterError<'_, '_> {
-    type Stripped = InterpreterError<'static, 'static>;
-
-    fn strip_code(&self) -> Self::Stripped {
-        match self {
-            Self::Compile(err) => InterpreterError::Compile(err.strip_code()),
-            Self::Evaluate(err) => InterpreterError::Evaluate(err.strip_code()),
-        }
-    }
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for InterpreterError<'_, '_> {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Compile(err) => std::error::Error::source(err),
-            Self::Evaluate(err) => std::error::Error::source(err),
-        }
     }
 }
 

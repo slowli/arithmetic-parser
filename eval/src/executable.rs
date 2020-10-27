@@ -3,95 +3,126 @@
 use core::ops;
 
 use crate::{
+    alloc::{Box, String, ToOwned},
+    compiler::{Compiler, ImportSpans, CMP_FUNCTION_NAME},
     error::{Backtrace, ErrorWithBacktrace},
-    ModuleId, Number, Value,
+    Environment, Error, ErrorKind, ModuleId, Number, Value, VariableMap,
 };
-use arithmetic_parser::{Grammar, LvalueLen, MaybeSpanned, StripCode};
+use arithmetic_parser::{Block, Grammar, StripCode};
 
 mod command;
-mod env;
+mod registers;
 
 pub(crate) use self::{
     command::{Atom, Command, ComparisonOp, CompiledExpr, SpannedAtom},
-    env::{Env, Executable},
+    registers::{Executable, ExecutableFn, Registers},
 };
-
-#[derive(Debug)]
-pub(crate) struct ExecutableFn<'a, T: Grammar> {
-    pub inner: Executable<'a, T>,
-    pub def_span: MaybeSpanned<'a>,
-    pub arg_count: LvalueLen,
-}
-
-impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
-    type Stripped = ExecutableFn<'static, T>;
-
-    fn strip_code(&self) -> Self::Stripped {
-        ExecutableFn {
-            inner: self.inner.strip_code(),
-            def_span: self.def_span.strip_code(),
-            arg_count: self.arg_count,
-        }
-    }
-}
 
 /// Executable module together with its imports.
 ///
+/// An `ExecutableModule` is a result of compiling a `Block` of statements. A module can *import*
+/// [`Value`]s, such as [commonly used functions]. Importing is performed when building the module.
+///
+/// After the module is created, it can be [`run`].  If the last statement of the block
+/// is an expression (that is, not terminated with a `;`), it is the result of the execution;
+/// otherwise, the result is `Value::void()`. It is possible to run a module multiple times
+/// and to change imports by using [`set_import`].
+///
+/// In some cases (e.g., when building a REPL) it is useful to get not only the outcome
+/// of the module execution, but the intermediate results as well. Use [`run_in_env`]
+/// for such cases.
+///
+/// [`Value`]: enum.Value.html
+/// [commonly used functions]: fns/index.html
+/// [`run`]: #method.run
+/// [`set_import`]: #method.set_import
+/// [`run_in_env`]: #method.run_in_env
+///
 /// # Examples
 ///
+/// ## Basic usage
+///
 /// ```
-/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
-/// use arithmetic_eval::{fns, Interpreter, Value, ValueType};
-/// # use std::{collections::HashSet, f32, iter::FromIterator};
+/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// use arithmetic_eval::{fns, Comparisons, ExecutableModule, Prelude, Value};
+/// # use core::{f32, iter::FromIterator};
+/// # use hashbrown::HashSet;
 ///
-/// let mut interpreter = Interpreter::new();
-/// interpreter
-///     .insert_native_fn(
-///         "max",
-///         fns::Binary::new(|x: f32, y: f32| if x > y { x } else { y }),
-///     )
-///     .insert_native_fn("fold", fns::Fold)
-///     .insert_var("INFINITY", Value::Number(f32::INFINITY))
-///     .insert_var("xs", Value::Tuple(vec![]));
-///
-/// let module = "xs.fold(-INFINITY, max)";
-/// let module = F32Grammar::parse_statements(InputSpan::new(module)).unwrap();
-/// let mut module = interpreter.compile("test", &module).unwrap();
+/// # fn main() -> anyhow::Result<()> {
+/// let module = F32Grammar::parse_statements("xs.fold(-INFINITY, max)")?;
+/// let mut module = ExecutableModule::builder("test", &module)?
+///     .with_imports_from(&Prelude)
+///     .with_imports_from(&Comparisons)
+///     .with_import("INFINITY", Value::Number(f32::INFINITY))
+///     // Set remaining imports to a fixed value.
+///     .set_imports(|_| Value::void());
 ///
 /// // With the original imports, the returned value is `-INFINITY`.
-/// assert_eq!(module.run().unwrap(), Value::Number(f32::NEG_INFINITY));
+/// assert_eq!(module.run()?, Value::Number(f32::NEG_INFINITY));
 ///
 /// // Imports can be changed. Let's check that `xs` is indeed an import.
 /// assert!(module.imports().contains("xs"));
 /// // ...or even
 /// assert!(module.imports()["fold"].is_function());
 /// // It's possible to iterate over imports, too.
-/// let imports: HashSet<_> = module.imports().iter().map(|(name, _)| name).collect();
-/// assert!(imports.is_superset(&HashSet::from_iter(vec!["max", "fold", "xs"])));
+/// let imports = module.imports().iter()
+///     .map(|(name, _)| name)
+///     .collect::<HashSet<_>>();
+/// assert!(imports.is_superset(&HashSet::from_iter(vec!["max", "fold"])));
+/// # drop(imports); // necessary to please the borrow checker
 ///
 /// // Change the `xs` import and run the module again.
-/// let array = [1.0, -3.0, 2.0, 0.5].iter().copied().map(Value::Number).collect();
+/// let array = [1.0, -3.0, 2.0, 0.5].iter().copied()
+///     .map(Value::Number)
+///     .collect();
 /// module.set_import("xs", Value::Tuple(array));
-/// assert_eq!(module.run().unwrap(), Value::Number(2.0));
+/// assert_eq!(module.run()?, Value::Number(2.0));
+/// # Ok(())
+/// # }
 /// ```
+///
+/// ## Reusing a module
 ///
 /// The same module can be run with multiple imports:
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
-/// # use arithmetic_eval::{Interpreter, Value};
-/// let mut interpreter = Interpreter::new();
-/// interpreter
-///     .insert_var("x", Value::Number(3.0))
-///     .insert_var("y", Value::Number(5.0));
-/// let module = "x + y";
-/// let module = F32Grammar::parse_statements(InputSpan::new(module)).unwrap();
-/// let mut module = interpreter.compile("test", &module).unwrap();
-/// assert_eq!(module.run().unwrap(), Value::Number(8.0));
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// # use arithmetic_eval::{Environment, ExecutableModule, Value};
+/// # use core::iter::FromIterator;
+/// # fn main() -> anyhow::Result<()> {
+/// let block = F32Grammar::parse_statements("x + y")?;
+/// let mut module = ExecutableModule::builder("test", &block)?
+///     .with_import("x", Value::Number(3.0))
+///     .with_import("y", Value::Number(5.0))
+///     .build();
+/// assert_eq!(module.run()?, Value::Number(8.0));
 ///
-/// let mut imports = module.imports().to_owned();
-/// imports["x"] = Value::Number(-1.0);
-/// assert_eq!(module.run_with_imports(imports).unwrap(), Value::Number(4.0));
+/// let mut env = Environment::from_iter(module.imports());
+/// env.insert("x", Value::Number(-1.0));
+/// assert_eq!(module.run_in_env(&mut env)?, Value::Number(4.0));
+/// # Ok(())
+/// # }
+/// ```
+///
+/// ## Behavior on errors
+///
+/// `run_in_env` modifies the environment even if an error occurs during execution:
+///
+/// ```
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// # use arithmetic_eval::{Environment, ExecutableModule, Prelude, Value};
+/// # use core::iter::FromIterator;
+/// # fn main() -> anyhow::Result<()> {
+/// let module = F32Grammar::parse_statements("x = 5; assert(x == 4);")?;
+/// let module = ExecutableModule::builder("test", &module)?
+///     .with_imports_from(&Prelude)
+///     .build();
+///
+/// let mut env = Environment::from_iter(module.imports());
+/// assert!(module.run_in_env(&mut env).is_err());
+/// assert_eq!(env["x"], Value::Number(5.0));
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct ExecutableModule<'a, T: Grammar> {
@@ -111,7 +142,7 @@ impl<T: Grammar> Clone for ExecutableModule<'_, T> {
 impl<T: Grammar> StripCode for ExecutableModule<'_, T> {
     type Stripped = ExecutableModule<'static, T>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         ExecutableModule {
             inner: self.inner.strip_code(),
             imports: self.imports.strip_code(),
@@ -120,11 +151,23 @@ impl<T: Grammar> StripCode for ExecutableModule<'_, T> {
 }
 
 impl<'a, T: Grammar> ExecutableModule<'a, T> {
-    pub(crate) fn new(inner: Executable<'a, T>, imports: Env<'a, T>) -> Self {
+    pub(crate) fn from_parts(inner: Executable<'a, T>, imports: Registers<'a, T>) -> Self {
         Self {
             inner,
             imports: ModuleImports { inner: imports },
         }
+    }
+
+    /// Starts building a new module.
+    pub fn builder<Id>(
+        id: Id,
+        block: &Block<'a, T>,
+    ) -> Result<ExecutableModuleBuilder<'a, T>, Error<'a>>
+    where
+        Id: ModuleId,
+    {
+        let (module, import_spans) = Compiler::compile_module(id, block)?;
+        Ok(ExecutableModuleBuilder::new(module, import_spans))
     }
 
     /// Gets the identifier of this module.
@@ -142,7 +185,7 @@ impl<'a, T: Grammar> ExecutableModule<'a, T> {
     ///
     /// [`imports().contains()`]: struct.ModuleImports.html#method.contains
     pub fn set_import(&mut self, name: &str, value: Value<'a, T>) -> &mut Self {
-        self.imports.set(name, value);
+        self.imports.inner.set_var(name, value);
         self
     }
 
@@ -150,54 +193,44 @@ impl<'a, T: Grammar> ExecutableModule<'a, T> {
     pub fn imports(&self) -> &ModuleImports<'a, T> {
         &self.imports
     }
-
-    pub(crate) fn inner(&self) -> &Executable<'a, T> {
-        &self.inner
-    }
 }
 
 impl<'a, T: Grammar> ExecutableModule<'a, T>
 where
     T::Lit: Number,
 {
-    /// Runs the module with the current values of imports.
+    /// Runs the module with the current values of imports. This is a read-only operation;
+    /// neither the imports, nor other module state are modified by it.
     pub fn run(&self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
-        self.run_with_imports_unchecked(self.imports.clone())
+        let mut registers = self.imports.inner.clone();
+        self.run_with_registers(&mut registers)
     }
 
-    /// Runs the module with the specified imports.
+    /// Runs the module with the specified `Environment`. The environment may contain some of
+    /// module imports; they will be used to override imports defined in the module.
     ///
-    /// # Panics
-    ///
-    /// - Panics if the imports are not compatible with the module.
-    pub fn run_with_imports(
+    /// On execution, the environment is modified to reflect assignments in the topmost scope
+    /// of the module. The modification takes place regardless of whether or not the execution
+    /// succeeds. That is, if an error occurs, all preceding assignments in the topmost scope
+    /// still take place. See [the relevant example](#behavior-on-errors).
+    pub fn run_in_env(
         &self,
-        imports: ModuleImports<'a, T>,
+        env: &mut Environment<'a, T>,
     ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
-        assert!(
-            imports.is_compatible(self),
-            "Cannot run module with incompatible imports"
-        );
-        self.run_with_imports_unchecked(imports)
+        let mut registers = self.imports.inner.clone();
+        registers.update_from_env(env);
+
+        let result = self.run_with_registers(&mut registers);
+        registers.update_env(env);
+        result
     }
 
-    /// Runs the module with the specified imports. Unlike [`run_with_imports`], this method
-    /// does not check if the imports are compatible with the module; it is the caller's
-    /// responsibility to ensure this.
-    ///
-    /// # Safety
-    ///
-    /// If the module and imports are incompatible, the module execution may lead to panics
-    /// or unpredictable results.
-    ///
-    /// [`run_with_imports`]: #method.run_with_imports
-    pub fn run_with_imports_unchecked(
+    fn run_with_registers(
         &self,
-        mut imports: ModuleImports<'a, T>,
+        registers: &mut Registers<'a, T>,
     ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
         let mut backtrace = Backtrace::default();
-        imports
-            .inner
+        registers
             .execute(&self.inner, Some(&mut backtrace))
             .map_err(|err| ErrorWithBacktrace::new(err, backtrace))
     }
@@ -205,15 +238,13 @@ where
 
 /// Imports of an [`ExecutableModule`].
 ///
-/// Note that imports implement [`Index`] / [`IndexMut`] traits, which allows to eloquently
-/// access or modify imports.
+/// Note that imports implement [`Index`] trait, which allows to eloquently get imports by name.
 ///
 /// [`ExecutableModule`]: struct.ExecutableModule.html
 /// [`Index`]: https://doc.rust-lang.org/std/ops/trait.Index.html
-/// [`IndexMut`]: https://doc.rust-lang.org/std/ops/trait.IndexMut.html
 #[derive(Debug)]
 pub struct ModuleImports<'a, T: Grammar> {
-    inner: Env<'a, T>,
+    inner: Registers<'a, T>,
 }
 
 impl<T: Grammar> Clone for ModuleImports<'_, T> {
@@ -227,7 +258,7 @@ impl<T: Grammar> Clone for ModuleImports<'_, T> {
 impl<T: Grammar> StripCode for ModuleImports<'_, T> {
     type Stripped = ModuleImports<'static, T>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         ModuleImports {
             inner: self.inner.strip_code(),
         }
@@ -246,31 +277,9 @@ impl<'a, T: Grammar> ModuleImports<'a, T> {
         self.inner.get_var(name)
     }
 
-    /// Sets the value of an imported variable.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the variable with the specified name is not an import.
-    pub fn set(&mut self, name: &str, value: Value<'a, T>) -> &mut Self {
-        self.inner.set_var(name, value);
-        self
-    }
-
     /// Iterates over imported variables.
     pub fn iter(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
         self.inner.variables()
-    }
-
-    /// Checks if these imports could be compatible with the provided module.
-    ///
-    /// Imports produced by cloning imports of a module and then changing variables
-    /// via [`set`](#method.set) are guaranteed to remain compatible with the module.
-    /// Imports taken from another module are almost always incompatible with the module.
-    ///
-    /// The compatibility does not guarantee that the module execution will succeed; instead,
-    /// it guarantees that the execution will not lead to a panic or unpredictable results.
-    pub fn is_compatible(&self, module: &ExecutableModule<'a, T>) -> bool {
-        self.inner.variables_map() == module.imports.inner.variables_map()
     }
 }
 
@@ -284,11 +293,118 @@ impl<'a, T: Grammar> ops::Index<&str> for ModuleImports<'a, T> {
     }
 }
 
-impl<'a, T: Grammar> ops::IndexMut<&str> for ModuleImports<'a, T> {
-    fn index_mut(&mut self, index: &str) -> &mut Self::Output {
-        self.inner
-            .get_var_mut(index)
-            .unwrap_or_else(|| panic!("Import `{}` is not defined", index))
+impl<'a, T: Grammar> IntoIterator for ModuleImports<'a, T> {
+    type Item = (String, Value<'a, T>);
+    type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Box::new(self.inner.into_variables())
+    }
+}
+
+impl<'a, 'r, T: Grammar> IntoIterator for &'r ModuleImports<'a, T> {
+    type Item = (&'r str, &'r Value<'a, T>);
+    type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'r>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Box::new(self.iter())
+    }
+}
+
+/// Builder for an `ExecutableModule`.
+///
+/// The builder can be created via [`ExecutableModule::builder()`]. See `ExecutableModule` docs
+/// for the examples of usage.
+///
+/// [`ExecutableModule::builder()`]: struct.ExecutableModule.html#method.builder
+#[derive(Debug)]
+pub struct ExecutableModuleBuilder<'a, T: Grammar> {
+    module: ExecutableModule<'a, T>,
+    undefined_imports: ImportSpans<'a>,
+}
+
+impl<'a, T: Grammar> ExecutableModuleBuilder<'a, T> {
+    fn new(module: ExecutableModule<'a, T>, undefined_imports: ImportSpans<'a>) -> Self {
+        Self {
+            module,
+            undefined_imports,
+        }
+    }
+
+    /// Checks if all necessary imports are defined for this module.
+    pub fn has_undefined_imports(&self) -> bool {
+        self.undefined_imports.is_empty()
+    }
+
+    /// Iterates over the names of undefined imports.
+    pub fn undefined_imports(&self) -> impl Iterator<Item = &str> + '_ {
+        self.undefined_imports.keys().map(String::as_str)
+    }
+
+    /// Adds a single import. If the specified variable is not an import, does nothing.
+    pub fn with_import(mut self, name: &str, value: Value<'a, T>) -> Self {
+        if self.module.imports.contains(name) {
+            self.module.set_import(name, value);
+        }
+        self.undefined_imports.remove(name);
+        self
+    }
+
+    /// Sets undefined imports from the specified source. Imports defined previously and present
+    /// in the source are **not** overridden.
+    pub fn with_imports_from<V>(mut self, source: &V) -> Self
+    where
+        V: VariableMap<'a, T> + ?Sized,
+    {
+        let module = &mut self.module;
+        self.undefined_imports.retain(|var_name, _| {
+            source.get_variable(var_name).map_or(true, |value| {
+                module.set_import(var_name, value);
+                false
+            })
+        });
+        self
+    }
+
+    /// Tries to build this module.
+    ///
+    /// # Errors
+    ///
+    /// Fails if this module has at least one undefined import. In this case, the returned error
+    /// highlights one of such imports.
+    pub fn try_build(self) -> Result<ExecutableModule<'a, T>, Error<'a>> {
+        if let Some((var_name, span)) = self.undefined_imports.iter().next() {
+            let err = if var_name == CMP_FUNCTION_NAME {
+                ErrorKind::MissingCmpFunction {
+                    name: var_name.to_owned(),
+                }
+            } else {
+                ErrorKind::Undefined(var_name.to_owned())
+            };
+            Err(Error::new(self.module.id(), span, err))
+        } else {
+            Ok(self.module)
+        }
+    }
+
+    /// A version of [`try_build()`] that panics if there are undefined imports.
+    ///
+    /// [`try_build()`]: #method.try_build
+    pub fn build(self) -> ExecutableModule<'a, T> {
+        self.try_build().unwrap()
+    }
+
+    /// Sets the undefined imports using the provided closure and returns the resulting module.
+    /// The closure is called with the name of each undefined import and should return
+    /// the corresponding `Value`.
+    pub fn set_imports<F>(mut self, mut setter: F) -> ExecutableModule<'a, T>
+    where
+        F: FnMut(&str) -> Value<'a, T>,
+    {
+        for var_name in self.undefined_imports.keys() {
+            self.module.set_import(var_name, setter(var_name));
+        }
+        self.module
     }
 }
 
@@ -297,60 +413,21 @@ mod tests {
     use super::*;
     use crate::{compiler::Compiler, WildcardId};
 
-    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, InputSpan};
+    use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
 
     #[test]
     fn cloning_module() {
-        let mut env = Env::new();
-        env.push_var("x", Value::<F32Grammar>::Number(5.0));
-
         let block = "y = x + 2 * (x + 1) + 1; y";
-        let block = F32Grammar::parse_statements(InputSpan::new(block)).unwrap();
-        let module = Compiler::compile_module(WildcardId, &env, &block, false).unwrap();
+        let block = F32Grammar::parse_statements(block).unwrap();
+        let (mut module, _) = Compiler::compile_module(WildcardId, &block).unwrap();
 
         let mut module_copy = module.clone();
         module_copy.set_import("x", Value::Number(10.0));
         let value = module_copy.run().unwrap();
         assert_eq!(value, Value::Number(33.0));
+
+        module.set_import("x", Value::Number(5.0));
         let value = module.run().unwrap();
         assert_eq!(value, Value::Number(18.0));
-    }
-
-    #[test]
-    fn checking_import_compatibility() {
-        let mut env = Env::new();
-        env.push_var("x", Value::<F32Grammar>::Number(5.0));
-        env.push_var("y", Value::Bool(true));
-
-        let block = "x + y";
-        let block = F32Grammar::parse_statements(InputSpan::new(block)).unwrap();
-        let module = Compiler::compile_module(WildcardId, &env, &block, false).unwrap();
-
-        let mut imports = module.imports().to_owned();
-        assert!(imports.is_compatible(&module));
-        imports.set("x", Value::Number(-1.0));
-        assert!(imports.is_compatible(&module));
-
-        let mut other_env = Env::new();
-        other_env.push_var("y", Value::<F32Grammar>::Number(1.0));
-        assert!(!ModuleImports { inner: other_env }.is_compatible(&module));
-    }
-
-    #[test]
-    #[should_panic(expected = "Cannot run module with incompatible imports")]
-    fn running_module_with_incompatible_imports() {
-        let mut env = Env::new();
-        env.push_var("x", Value::<F32Grammar>::Number(5.0));
-        env.push_var("y", Value::Number(1.0));
-
-        let block = "x + y";
-        let block = F32Grammar::parse_statements(InputSpan::new(block)).unwrap();
-        let module = Compiler::compile_module(WildcardId, &env, &block, false).unwrap();
-
-        let mut other_env = Env::new();
-        other_env.push_var("y", Value::<F32Grammar>::Number(1.0));
-        module
-            .run_with_imports(ModuleImports { inner: other_env })
-            .ok();
     }
 }

@@ -5,18 +5,19 @@ use core::{
     fmt,
 };
 
+use crate::alloc::Box;
+
 /// Identifier of an `ExecutableModule`. This is usually a "small" type, such as an integer
 /// or a string.
 ///
-/// The ID is provided when [compiling] or [evaluating] a module. It is displayed in error messages
+/// The ID is provided when [creating] a module. It is displayed in error messages
 /// (using `Display::fmt`). `ModuleId` is also associated with some types (e.g., [`InterpretedFn`]
 /// and [`CodeInModule`]), which allows to obtain module info. This can be particularly useful
 /// for outputting rich error information.
 ///
 /// A `ModuleId` can be downcast to a specific type, similarly to [`Any`].
 ///
-/// [compiling]: struct.Interpreter.html#method.compile
-/// [evaluating]: struct.Interpreter.html#method.evaluate_named_block
+/// [creating]: struct.ExecutableModule.html#method.builder
 /// [`InterpretedFn`]: struct.InterpretedFn.html
 /// [`CodeInModule`]: error/struct.CodeInModule.html
 /// [`Any`]: https://doc.rust-lang.org/std/any/trait.Any.html

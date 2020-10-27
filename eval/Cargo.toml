@@ -32,7 +32,7 @@ typed-arena = "2.0.1"
 [features]
 default = ["std"]
 # Enables support of types from `std`, such as the `Error` trait.
-std = []
+std = ["arithmetic-parser/std"]
 
 [[bench]]
 name = "interpreter"

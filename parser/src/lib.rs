@@ -9,7 +9,7 @@
 //! # use assert_matches::assert_matches;
 //! use arithmetic_parser::{
 //!     grammars::F32Grammar,
-//!     GrammarExt, NomResult, InputSpan, Statement, Expr, FnDefinition, LvalueLen,
+//!     GrammarExt, NomResult, Statement, Expr, FnDefinition, LvalueLen,
 //! };
 //! use nom::number::complete::float;
 //!
@@ -27,7 +27,7 @@
 //!     other_function(y - z)
 //! "#;
 //!
-//! let block = F32Grammar::parse_statements(InputSpan::new(PROGRAM)).unwrap();
+//! let block = F32Grammar::parse_statements(PROGRAM).unwrap();
 //! // First statement is an assignment.
 //! assert_matches!(
 //!     block.statements[0].extra,
@@ -48,25 +48,41 @@
 //! );
 //! ```
 
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![warn(missing_docs, missing_debug_implementations)]
 #![warn(clippy::all, clippy::pedantic)]
-#![allow(clippy::missing_errors_doc, clippy::must_use_candidate)]
+#![allow(
+    clippy::missing_errors_doc,
+    clippy::must_use_candidate,
+    clippy::module_name_repetitions
+)]
 
-extern crate alloc;
+// Polyfill for `alloc` types.
+mod alloc {
+    #[cfg(not(feature = "std"))]
+    extern crate alloc;
+
+    #[cfg(not(feature = "std"))]
+    pub use alloc::{borrow::ToOwned, boxed::Box, format, string::String, vec, vec::Vec};
+    #[cfg(feature = "std")]
+    pub use std::{borrow::ToOwned, boxed::Box, format, string::String, vec, vec::Vec};
+}
 
 pub use crate::{
-    parser::{is_valid_variable_name, Error, SpannedError},
+    error::{Error, ErrorKind, SpannedError},
+    parser::is_valid_variable_name,
     spans::{
         CodeFragment, InputSpan, LocatedSpan, MaybeSpanned, NomResult, Spanned, StripCode,
         StripResultExt,
     },
-    traits::{Features, Grammar, GrammarExt},
+    traits::{Features, Grammar, GrammarExt, IntoInputSpan},
 };
 
-use alloc::{boxed::Box, vec, vec::Vec};
 use core::fmt;
 
+use crate::alloc::{vec, Box, Vec};
+
+mod error;
 pub mod grammars;
 mod parser;
 mod spans;

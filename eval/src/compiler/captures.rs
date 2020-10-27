@@ -5,9 +5,9 @@ use hashbrown::HashMap;
 use core::iter;
 
 use crate::{
-    alloc::{vec, Vec},
+    alloc::{vec, Box, Vec},
     compiler::CMP_FUNCTION_NAME,
-    error::{AuxErrorInfo, CodeInModule, RepeatedAssignmentContext},
+    error::{AuxErrorInfo, RepeatedAssignmentContext},
     Error, ErrorKind, ModuleId, WildcardId,
 };
 use arithmetic_parser::{
@@ -18,21 +18,18 @@ use arithmetic_parser::{
 /// Helper context for symbolic execution of a function body or a block in order to determine
 /// variables captured by it.
 #[derive(Debug)]
-pub(super) struct CapturesExtractor<'a, F> {
+pub(super) struct CapturesExtractor<'a> {
     module_id: Box<dyn ModuleId>,
     local_vars: Vec<HashMap<&'a str, Spanned<'a>>>,
-    action: F,
+    pub captures: HashMap<&'a str, Spanned<'a>>,
 }
 
-impl<'a, F> CapturesExtractor<'a, F>
-where
-    F: FnMut(&'a str, Spanned<'a>) -> Result<(), ErrorKind>,
-{
-    pub fn new(module_id: Box<dyn ModuleId>, action: F) -> Self {
+impl<'a> CapturesExtractor<'a> {
+    pub fn new(module_id: Box<dyn ModuleId>) -> Self {
         Self {
             module_id,
             local_vars: vec![],
-            action,
+            captures: HashMap::new(),
         }
     }
 
@@ -41,14 +38,14 @@ where
         &mut self,
         definition: &FnDefinition<'a, T>,
     ) -> Result<(), Error<'a>> {
-        self.local_vars.push(HashMap::new());
+        let mut fn_local_vars = HashMap::new();
         extract_vars(
             self.module_id.as_ref(),
-            self.local_vars.last_mut().unwrap(),
+            &mut fn_local_vars,
             &definition.args.extra,
             RepeatedAssignmentContext::FnArgs,
         )?;
-        self.eval_block_inner(&definition.body)
+        self.eval_block_inner(&definition.body, fn_local_vars)
     }
 
     fn has_var(&self, var_name: &str) -> bool {
@@ -56,20 +53,17 @@ where
     }
 
     /// Processes a local variable in the rvalue position.
-    fn eval_local_var<T>(&mut self, var_span: &Spanned<'a, T>) -> Result<(), ErrorKind> {
-        if self.has_var(var_span.fragment()) {
-            // No action needs to be performed.
-            Ok(())
-        } else {
-            (self.action)(var_span.fragment(), var_span.with_no_extra())
+    fn eval_local_var<T>(&mut self, var_span: &Spanned<'a, T>) {
+        let var_name = *var_span.fragment();
+        if !self.has_var(var_name) && !self.captures.contains_key(var_name) {
+            self.captures.insert(var_name, var_span.with_no_extra());
         }
     }
 
-    fn eval_cmp(&mut self, op_span: &Spanned<'a, BinaryOp>) -> Result<(), ErrorKind> {
-        if self.has_var(CMP_FUNCTION_NAME) {
-            Ok(())
-        } else {
-            (self.action)(CMP_FUNCTION_NAME, op_span.with_no_extra())
+    fn eval_cmp(&mut self, op_span: &Spanned<'a, BinaryOp>) {
+        if !self.has_var(CMP_FUNCTION_NAME) && !self.captures.contains_key(CMP_FUNCTION_NAME) {
+            self.captures
+                .insert(CMP_FUNCTION_NAME, op_span.with_no_extra());
         }
     }
 
@@ -82,8 +76,7 @@ where
     fn eval<T: Grammar>(&mut self, expr: &SpannedExpr<'a, T>) -> Result<(), Error<'a>> {
         match &expr.extra {
             Expr::Variable => {
-                self.eval_local_var(expr)
-                    .map_err(|e| self.create_error(expr, e))?;
+                self.eval_local_var(expr);
             }
 
             Expr::Literal(_) => { /* no action */ }
@@ -101,7 +94,7 @@ where
                 self.eval(rhs)?;
 
                 if op.extra.is_order_comparison() {
-                    self.eval_cmp(op).map_err(|e| self.create_error(op, e))?;
+                    self.eval_cmp(op);
                 }
             }
 
@@ -122,13 +115,11 @@ where
                     self.eval(arg)?;
                 }
 
-                self.eval_local_var(name)
-                    .map_err(|e| self.create_error(name, e))?;
+                self.eval_local_var(name);
             }
 
             Expr::Block(block) => {
-                self.local_vars.push(HashMap::new());
-                self.eval_block_inner(block)?;
+                self.eval_block_inner(block, HashMap::new())?;
             }
 
             Expr::FnDefinition(def) => {
@@ -172,8 +163,12 @@ where
         }
     }
 
-    fn eval_block_inner<T: Grammar>(&mut self, block: &Block<'a, T>) -> Result<(), Error<'a>> {
-        self.local_vars.push(HashMap::new());
+    fn eval_block_inner<T: Grammar>(
+        &mut self,
+        block: &Block<'a, T>,
+        local_vars: HashMap<&'a str, Spanned<'a>>,
+    ) -> Result<(), Error<'a>> {
+        self.local_vars.push(local_vars);
         for statement in &block.statements {
             self.eval_statement(statement)?;
         }
@@ -185,8 +180,7 @@ where
     }
 
     pub fn eval_block<T: Grammar>(&mut self, block: &Block<'a, T>) -> Result<(), Error<'a>> {
-        self.local_vars.push(HashMap::new());
-        self.eval_block_inner(block)
+        self.eval_block_inner(block, HashMap::new())
     }
 }
 
@@ -222,9 +216,8 @@ pub(super) fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
                     let var_span = lvalue.with_no_extra();
                     if let Some(prev_span) = vars.insert(var_name, var_span) {
                         let err = ErrorKind::RepeatedAssignment { context };
-                        let prev_span = CodeInModule::new(module_id, prev_span.into());
                         return Err(Error::new(module_id, lvalue, err)
-                            .with_span(prev_span, AuxErrorInfo::PrevAssignment));
+                            .with_span(&prev_span.into(), AuxErrorInfo::PrevAssignment));
                     }
                 }
             }
@@ -251,19 +244,13 @@ pub(super) enum CompilerExtTarget<'r, 'a, T: Grammar> {
 
 impl<'a, T: Grammar> CompilerExtTarget<'_, 'a, T> {
     pub fn get_undefined_variables(self) -> Result<HashMap<&'a str, Spanned<'a>>, Error<'a>> {
-        let mut undefined_vars = HashMap::new();
-        let mut extractor = CapturesExtractor::new(Box::new(WildcardId), |var_name, var_span| {
-            if !undefined_vars.contains_key(var_name) {
-                undefined_vars.insert(var_name, var_span);
-            }
-            Ok(())
-        });
+        let mut extractor = CapturesExtractor::new(Box::new(WildcardId));
 
         match self {
-            Self::Block(block) => extractor.eval_block_inner(block)?,
+            Self::Block(block) => extractor.eval_block_inner(block, HashMap::new())?,
             Self::FnDefinition(definition) => extractor.eval_function(definition)?,
         }
 
-        Ok(undefined_vars)
+        Ok(extractor.captures)
     }
 }

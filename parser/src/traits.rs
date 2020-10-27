@@ -1,6 +1,6 @@
 use crate::{
     parser::{statements, streaming_statements},
-    Block, Error, InputSpan, NomResult, Spanned,
+    Block, Error, InputSpan, NomResult,
 };
 
 use core::fmt;
@@ -81,35 +81,53 @@ pub trait Grammar: 'static {
     fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type>;
 }
 
+/// Helper trait allowing `GrammarExt` to accept multiple types as inputs.
+pub trait IntoInputSpan<'a> {
+    /// Converts input into a span.
+    fn into_input_span(self) -> InputSpan<'a>;
+}
+
+impl<'a> IntoInputSpan<'a> for InputSpan<'a> {
+    fn into_input_span(self) -> InputSpan<'a> {
+        self
+    }
+}
+
+impl<'a> IntoInputSpan<'a> for &'a str {
+    fn into_input_span(self) -> InputSpan<'a> {
+        InputSpan::new(self)
+    }
+}
+
 /// Extension trait for `Grammar` used by the client applications.
 pub trait GrammarExt: Grammar {
     /// Parses a list of statements.
-    fn parse_statements(input: InputSpan<'_>) -> Result<Block<'_, Self>, Spanned<'_, Error<'_>>>
+    fn parse_statements<'a, I>(input: I) -> Result<Block<'a, Self>, Error<'a>>
     where
+        I: IntoInputSpan<'a>,
         Self: Sized;
 
     /// Parses a potentially incomplete list of statements.
-    fn parse_streaming_statements(
-        input: InputSpan<'_>,
-    ) -> Result<Block<'_, Self>, Spanned<'_, Error<'_>>>
+    fn parse_streaming_statements<'a, I>(input: I) -> Result<Block<'a, Self>, Error<'a>>
     where
+        I: IntoInputSpan<'a>,
         Self: Sized;
 }
 
 impl<T: Grammar> GrammarExt for T {
-    fn parse_statements(input: InputSpan<'_>) -> Result<Block<'_, Self>, Spanned<'_, Error<'_>>>
+    fn parse_statements<'a, I>(input: I) -> Result<Block<'a, Self>, Error<'a>>
     where
+        I: IntoInputSpan<'a>,
         Self: Sized,
     {
-        statements(input)
+        statements(input.into_input_span())
     }
 
-    fn parse_streaming_statements(
-        input: InputSpan<'_>,
-    ) -> Result<Block<'_, Self>, Spanned<'_, Error<'_>>>
+    fn parse_streaming_statements<'a, I>(input: I) -> Result<Block<'a, Self>, Error<'a>>
     where
+        I: IntoInputSpan<'a>,
         Self: Sized,
     {
-        streaming_statements(input)
+        streaming_statements(input.into_input_span())
     }
 }

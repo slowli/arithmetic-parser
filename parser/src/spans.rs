@@ -2,14 +2,15 @@
 
 use nom::Slice;
 
-use alloc::{borrow::ToOwned, format, string::String};
-
-use crate::SpannedError;
+use crate::{
+    alloc::{format, String, ToOwned},
+    Error,
+};
 
 /// Code span.
 pub type InputSpan<'a> = nom_locate::LocatedSpan<&'a str, ()>;
 /// Parsing outcome generalized by the type returned on success.
-pub type NomResult<'a, T> = nom::IResult<InputSpan<'a>, T, SpannedError<'a>>;
+pub type NomResult<'a, T> = nom::IResult<InputSpan<'a>, T, Error<'a>>;
 
 /// Code span together with information related to where it is located in the code.
 ///
@@ -101,13 +102,13 @@ impl<Span: Copy, T> LocatedSpan<Span, T> {
 }
 
 impl<Span: Copy, T: Clone> LocatedSpan<Span, T> {
-    pub(crate) fn with_mapped_span<U>(&self, map_fn: impl FnOnce(Span) -> U) -> LocatedSpan<U, T> {
+    pub(crate) fn with_mapped_span<U>(self, map_fn: impl FnOnce(Span) -> U) -> LocatedSpan<U, T> {
         LocatedSpan {
             offset: self.offset,
             line: self.line,
             column: self.column,
             fragment: map_fn(self.fragment),
-            extra: self.extra.clone(),
+            extra: self.extra,
         }
     }
 }
@@ -244,13 +245,13 @@ pub trait StripCode {
     type Stripped: 'static;
 
     /// Strips references to code fragments in this type.
-    fn strip_code(&self) -> Self::Stripped;
+    fn strip_code(self) -> Self::Stripped;
 }
 
 impl<T: Clone + 'static> StripCode for MaybeSpanned<'_, T> {
     type Stripped = MaybeSpanned<'static, T>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         self.with_mapped_span(CodeFragment::strip)
     }
 }
@@ -316,6 +317,6 @@ impl<T, E: StripCode> StripResultExt for Result<T, E> {
     type StrippedErr = E::Stripped;
 
     fn strip_err(self) -> Result<T, Self::StrippedErr> {
-        self.map_err(|err| err.strip_code())
+        self.map_err(StripCode::strip_code)
     }
 }

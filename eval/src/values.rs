@@ -6,14 +6,12 @@ use num_traits::Pow;
 use core::fmt;
 
 use crate::{
-    alloc::{vec, Rc, Vec},
+    alloc::{vec, Rc, String, ToOwned, Vec},
     error::{AuxErrorInfo, Backtrace, CodeInModule, TupleLenMismatchContext},
     executable::ExecutableFn,
-    Error, ErrorKind, EvalResult, ModuleId, Number, WildcardId,
+    fns, Error, ErrorKind, EvalResult, ModuleId, Number,
 };
-use arithmetic_parser::{
-    BinaryOp, Grammar, InputSpan, LvalueLen, MaybeSpanned, Op, Spanned, StripCode, UnaryOp,
-};
+use arithmetic_parser::{BinaryOp, Grammar, LvalueLen, MaybeSpanned, Op, StripCode, UnaryOp};
 
 /// Opaque context for native calls.
 #[derive(Debug)]
@@ -23,10 +21,10 @@ pub struct CallContext<'r, 'a> {
 }
 
 impl<'r, 'a> CallContext<'r, 'a> {
-    /// Creates a mock call context.
-    pub fn mock() -> Self {
+    /// Creates a mock call context with the specified module ID and call span.
+    pub fn mock(module_id: &dyn ModuleId, call_span: MaybeSpanned<'a>) -> Self {
         Self {
-            call_span: CodeInModule::new(&WildcardId, Spanned::from(InputSpan::new("")).into()),
+            call_span: CodeInModule::new(module_id, call_span),
             backtrace: None,
         }
     }
@@ -45,17 +43,12 @@ impl<'r, 'a> CallContext<'r, 'a> {
         self.backtrace.as_deref_mut()
     }
 
-    /// Returns the call span.
+    /// Applies the call span to the specified `value`.
     pub fn apply_call_span<T>(&self, value: T) -> MaybeSpanned<'a, T> {
         self.call_span.code().copy_with_extra(value)
     }
 
-    #[doc(hidden)] // used in `wrap_fn` macro
-    pub fn enrich_call_site_span<T>(&self, span: &MaybeSpanned<'a, T>) -> CodeInModule<'a> {
-        CodeInModule::new(self.call_span.module_id(), span.with_no_extra())
-    }
-
-    /// Creates the error spanning the call site.
+    /// Creates an error spanning the call site.
     pub fn call_site_error(&self, error: ErrorKind) -> Error<'a> {
         Error::from_parts(self.call_span.clone(), error)
     }
@@ -126,14 +119,28 @@ pub struct InterpretedFn<'a, T: Grammar> {
     capture_names: Vec<String>,
 }
 
+impl<T: Grammar> Clone for InterpretedFn<'_, T> {
+    fn clone(&self) -> Self {
+        Self {
+            definition: Rc::clone(&self.definition),
+            captures: self.captures.clone(),
+            capture_names: self.capture_names.clone(),
+        }
+    }
+}
+
 impl<T: Grammar> StripCode for InterpretedFn<'_, T> {
     type Stripped = InterpretedFn<'static, T>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         InterpretedFn {
-            definition: Rc::new(self.definition.strip_code()),
-            captures: self.captures.iter().map(StripCode::strip_code).collect(),
-            capture_names: self.capture_names.clone(),
+            definition: Rc::new(self.definition.to_stripped_code()),
+            captures: self
+                .captures
+                .into_iter()
+                .map(StripCode::strip_code)
+                .collect(),
+            capture_names: self.capture_names,
         }
     }
 }
@@ -149,6 +156,10 @@ impl<'a, T: Grammar> InterpretedFn<'a, T> {
             captures,
             capture_names,
         }
+    }
+
+    fn to_stripped_code(&self) -> InterpretedFn<'static, T> {
+        self.clone().strip_code()
     }
 
     /// Returns ID of the module defining this function.
@@ -222,10 +233,12 @@ impl<T: Grammar> Clone for Function<'_, T> {
 impl<T: Grammar> StripCode for Function<'_, T> {
     type Stripped = Function<'static, T>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         match self {
-            Self::Native(function) => Function::Native(Rc::clone(function)),
-            Self::Interpreted(function) => Function::Interpreted(Rc::new(function.strip_code())),
+            Self::Native(function) => Function::Native(function),
+            Self::Interpreted(function) => {
+                Function::Interpreted(Rc::new(function.to_stripped_code()))
+            }
         }
     }
 }
@@ -333,6 +346,25 @@ impl<'a, T: Grammar> Value<'a, T> {
         Self::Function(Function::Native(Rc::new(function)))
     }
 
+    /// Creates a [wrapped function].
+    ///
+    /// Calling this method is equivalent to [`wrap`]ping a function and calling [`native_fn()`]
+    /// on it. Thanks to type inference magic, the Rust compiler will usually be able to extract
+    /// the `Args` type param from the function definition, provided that type of
+    /// function arguments and its return type are defined explicitly or can be
+    /// unequivocally inferred from the declaration.
+    ///
+    /// [wrapped function]: fns/struct.FnWrapper.html
+    /// [`wrap`]: fns/fn.wrap.html
+    /// [`native_fn()`]: #method.native_fn
+    pub fn wrapped_fn<Args, F>(fn_to_wrap: F) -> Self
+    where
+        fns::FnWrapper<Args, F>: NativeFn<T> + 'static,
+    {
+        let wrapped = fns::wrap::<Args, _>(fn_to_wrap);
+        Self::native_fn(wrapped)
+    }
+
     /// Creates a value for an interpreted function.
     pub(crate) fn interpreted_fn(function: InterpretedFn<'a, T>) -> Self {
         Self::Function(Function::Interpreted(Rc::new(function)))
@@ -353,7 +385,7 @@ impl<'a, T: Grammar> Value<'a, T> {
         }
     }
 
-    /// Checks if the value is void.
+    /// Checks if this value is void (an empty tuple).
     pub fn is_void(&self) -> bool {
         matches!(self, Self::Tuple(tuple) if tuple.is_empty())
     }
@@ -378,13 +410,21 @@ impl<T: Grammar> Clone for Value<'_, T> {
 impl<T: Grammar> StripCode for Value<'_, T> {
     type Stripped = Value<'static, T>;
 
-    fn strip_code(&self) -> Self::Stripped {
+    fn strip_code(self) -> Self::Stripped {
         match self {
-            Self::Number(lit) => Value::Number(lit.clone()),
-            Self::Bool(bool) => Value::Bool(*bool),
+            Self::Number(lit) => Value::Number(lit),
+            Self::Bool(bool) => Value::Bool(bool),
             Self::Function(function) => Value::Function(function.strip_code()),
-            Self::Tuple(tuple) => Value::Tuple(tuple.iter().map(StripCode::strip_code).collect()),
+            Self::Tuple(tuple) => {
+                Value::Tuple(tuple.into_iter().map(StripCode::strip_code).collect())
+            }
         }
+    }
+}
+
+impl<'a, T: Grammar> From<&Value<'a, T>> for Value<'a, T> {
+    fn from(reference: &Value<'a, T>) -> Self {
+        reference.to_owned()
     }
 }
 
@@ -460,8 +500,7 @@ impl BinaryOpError {
 
         let mut err = Error::new(module_id, &main_span, self.inner);
         if let Some(aux_info) = aux_info {
-            let rhs_span = CodeInModule::new(module_id, rhs_span);
-            err = err.with_span(rhs_span, aux_info);
+            err = err.with_span(&rhs_span, aux_info);
         }
         err
     }

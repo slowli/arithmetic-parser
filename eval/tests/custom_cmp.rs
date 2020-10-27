@@ -4,8 +4,8 @@ use num_complex::Complex64;
 
 use core::cmp::Ordering;
 
-use arithmetic_eval::Interpreter;
-use arithmetic_parser::{grammars::NumGrammar, GrammarExt, InputSpan};
+use arithmetic_eval::{ExecutableModule, Prelude, Value};
+use arithmetic_parser::{grammars::NumGrammar, GrammarExt};
 
 const PROGRAM: &str = r#"
     # The original comparison function compares numbers by their real part.
@@ -32,13 +32,19 @@ type ComplexGrammar = NumGrammar<Complex64>;
 
 #[test]
 fn custom_cmp_function() {
-    let mut interpreter = Interpreter::<ComplexGrammar>::with_prelude();
-    // There is no "natural" comparison function on complex numbers. Here, we'll define one
-    // using comparison of real parts.
-    interpreter.insert_wrapped_fn("cmp", |x: Complex64, y: Complex64| {
-        x.re.partial_cmp(&y.re).unwrap_or(Ordering::Equal)
-    });
+    let block = ComplexGrammar::parse_statements(PROGRAM).unwrap();
 
-    let block = ComplexGrammar::parse_statements(InputSpan::new(PROGRAM)).unwrap();
-    interpreter.evaluate(&block).unwrap();
+    let module = ExecutableModule::builder("custom_cmp", &block)
+        .unwrap()
+        // There is no "natural" comparison function on complex numbers. Here, we'll define one
+        // using comparison of real parts.
+        .with_import(
+            "cmp",
+            Value::wrapped_fn(|x: Complex64, y: Complex64| {
+                x.re.partial_cmp(&y.re).unwrap_or(Ordering::Equal)
+            }),
+        )
+        .with_imports_from(&Prelude)
+        .build();
+    module.run().unwrap();
 }

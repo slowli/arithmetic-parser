@@ -4,7 +4,7 @@ use core::ops;
 
 use crate::{
     alloc::{Box, String, ToOwned},
-    compiler::{Compiler, ImportSpans},
+    compiler::{Compiler, ImportSpans, CMP_FUNCTION_NAME},
     error::{Backtrace, ErrorWithBacktrace},
     Environment, Error, ErrorKind, ModuleId, Number, Value, VariableMap,
 };
@@ -374,7 +374,13 @@ impl<'a, T: Grammar> ExecutableModuleBuilder<'a, T> {
     /// highlights one of such imports.
     pub fn try_build(self) -> Result<ExecutableModule<'a, T>, Error<'a>> {
         if let Some((var_name, span)) = self.undefined_imports.iter().next() {
-            let err = ErrorKind::Undefined(var_name.to_owned());
+            let err = if var_name == CMP_FUNCTION_NAME {
+                ErrorKind::MissingCmpFunction {
+                    name: var_name.to_owned(),
+                }
+            } else {
+                ErrorKind::Undefined(var_name.to_owned())
+            };
             Err(Error::new(self.module.id(), span, err))
         } else {
             Ok(self.module)

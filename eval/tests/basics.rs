@@ -671,7 +671,7 @@ fn comparison_desugaring_with_no_cmp() {
     let err = expect_compilation_error(&mut Environment::new(), "2 > 5");
     assert_matches!(
         err.kind(),
-        ErrorKind::Undefined(ref name) if name == "cmp"
+        ErrorKind::MissingCmpFunction { ref name } if name == "cmp"
     );
     assert_eq!(*err.main_span().code().fragment(), ">");
 }
@@ -717,6 +717,6 @@ fn comparison_desugaring_with_capture() {
 fn comparison_desugaring_with_capture_and_no_cmp() {
     let program = "ge = |x, y| x >= y; ge(2, 3)";
     let err = expect_compilation_error(&mut Environment::new(), program);
-    assert_matches!(err.kind(), ErrorKind::Undefined(ref name) if name == "cmp");
+    assert_matches!(err.kind(), ErrorKind::MissingCmpFunction { ref name } if name == "cmp");
     assert_eq!(*err.main_span().code().fragment(), ">=");
 }

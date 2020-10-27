@@ -24,7 +24,7 @@ mod captures;
 use self::captures::{extract_vars_iter, CapturesExtractor, CompilerExtTarget};
 
 /// Name of the comparison function used in desugaring order comparisons.
-const CMP_FUNCTION_NAME: &str = "cmp";
+pub(crate) const CMP_FUNCTION_NAME: &str = "cmp";
 
 pub(crate) type ImportSpans<'a> = HashMap<String, Spanned<'a>>;
 
@@ -97,8 +97,11 @@ impl Compiler {
         }
     }
 
-    fn get_var(&self, name: &str) -> Option<usize> {
-        self.vars_to_registers.get(name).copied()
+    fn get_var(&self, name: &str) -> usize {
+        *self
+            .vars_to_registers
+            .get(name)
+            .expect("Captures must created during module compilation")
     }
 
     fn push_assignment<'a, T: Grammar, U>(
@@ -192,12 +195,7 @@ impl Compiler {
         let rhs = self.compile_expr(executable, rhs)?;
 
         let compiled = if op.extra.is_order_comparison() {
-            let cmp_function = self.get_var(CMP_FUNCTION_NAME).ok_or_else(|| {
-                let err = ErrorKind::MissingCmpFunction {
-                    name: CMP_FUNCTION_NAME.to_owned(),
-                };
-                self.create_error(binary_expr, err)
-            })?;
+            let cmp_function = self.get_var(CMP_FUNCTION_NAME);
             let cmp_function = op.copy_with_extra(Atom::Register(cmp_function));
 
             let cmp_invocation = CompiledExpr::Function {
@@ -390,9 +388,7 @@ impl Compiler {
             .captures
             .into_iter()
             .map(|(var_name, var_span)| {
-                let register = self
-                    .get_var(var_name)
-                    .expect("Captures must created during module compilation");
+                let register = self.get_var(var_name);
                 let capture = var_span.copy_with_extra(Atom::Register(register));
                 (var_name, capture.into())
             })

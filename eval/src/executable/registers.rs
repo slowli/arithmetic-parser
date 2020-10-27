@@ -1,4 +1,4 @@
-//! Execution `Env` and closely related types.
+//! `Registers` for executing commands and closely related types.
 
 use hashbrown::HashMap;
 

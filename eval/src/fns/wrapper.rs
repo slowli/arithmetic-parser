@@ -35,7 +35,7 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// [native functions]: ../trait.NativeFn.html
 /// [`Environment::insert_wrapped_fn()`]: ../struct.Environment.html#method.insert_wrapped_fn
 /// [`Value::wrapped_fn()`]: ../enum.Value.html#method.wrapped_fn
-/// [`wrap()`]: function.wrap.html
+/// [`wrap()`]: fn.wrap.html
 /// [`TryFromValue`]: trait.TryFromValue.html
 /// [`IntoEvalResult`]: trait.IntoEvalResult.html
 /// [`CallContext`]: ../struct.CallContext.html

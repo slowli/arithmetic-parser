@@ -20,12 +20,33 @@ pub(crate) use self::{
 
 /// Executable module together with its imports.
 ///
+/// An `ExecutableModule` is a result of compiling a `Block` of statements. A module can *import*
+/// [`Value`]s, such as [commonly used functions]. Importing is performed when building the module.
+///
+/// After the module is created, it can be [`run`].  If the last statement of the block
+/// is an expression (that is, not terminated with a `;`), it is the result of the execution;
+/// otherwise, the result is `Value::void()`. It is possible to run a module multiple times
+/// and to change imports by using [`set_import`].
+///
+/// In some cases (e.g., when building a REPL) it is useful to get not only the outcome
+/// of the module execution, but the intermediate results as well. Use [`run_in_env`]
+/// for such cases.
+///
+/// [`Value`]: enum.Value.html
+/// [commonly used functions]: fns/index.html
+/// [`run`]: #method.run
+/// [`set_import`]: #method.set_import
+/// [`run_in_env`]: #method.run_in_env
+///
 /// # Examples
+///
+/// ## Basic usage
 ///
 /// ```
 /// use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
-/// use arithmetic_eval::{fns, Comparisons, ExecutableModule, Prelude, Value, ValueType};
-/// # use std::{collections::HashSet, f32, iter::FromIterator};
+/// use arithmetic_eval::{fns, Comparisons, ExecutableModule, Prelude, Value};
+/// # use core::{f32, iter::FromIterator};
+/// # use hashbrown::HashSet;
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let module = F32Grammar::parse_statements("xs.fold(-INFINITY, max)")?;
@@ -44,16 +65,23 @@ pub(crate) use self::{
 /// // ...or even
 /// assert!(module.imports()["fold"].is_function());
 /// // It's possible to iterate over imports, too.
-/// let imports: HashSet<_> = module.imports().iter().map(|(name, _)| name).collect();
-/// assert!(imports.is_superset(&HashSet::from_iter(vec!["max", "fold", "xs"])));
+/// let imports = module.imports().iter()
+///     .map(|(name, _)| name)
+///     .collect::<HashSet<_>>();
+/// assert!(imports.is_superset(&HashSet::from_iter(vec!["max", "fold"])));
+/// # drop(imports); // necessary to please the borrow checker
 ///
 /// // Change the `xs` import and run the module again.
-/// let array = [1.0, -3.0, 2.0, 0.5].iter().copied().map(Value::Number).collect();
+/// let array = [1.0, -3.0, 2.0, 0.5].iter().copied()
+///     .map(Value::Number)
+///     .collect();
 /// module.set_import("xs", Value::Tuple(array));
 /// assert_eq!(module.run()?, Value::Number(2.0));
 /// # Ok(())
 /// # }
 /// ```
+///
+/// ## Reusing a module
 ///
 /// The same module can be run with multiple imports:
 ///
@@ -72,6 +100,27 @@ pub(crate) use self::{
 /// let mut env = Environment::from_iter(module.imports());
 /// env.insert("x", Value::Number(-1.0));
 /// assert_eq!(module.run_in_env(&mut env)?, Value::Number(4.0));
+/// # Ok(())
+/// # }
+/// ```
+///
+/// ## Behavior on errors
+///
+/// `run_in_env` modifies the environment even if an error occurs during execution:
+///
+/// ```
+/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// # use arithmetic_eval::{Environment, ExecutableModule, Prelude, Value};
+/// # use core::iter::FromIterator;
+/// # fn main() -> anyhow::Result<()> {
+/// let module = F32Grammar::parse_statements("x = 5; assert(x == 4);")?;
+/// let module = ExecutableModule::builder("test", &module)?
+///     .with_imports_from(&Prelude)
+///     .build();
+///
+/// let mut env = Environment::from_iter(module.imports());
+/// assert!(module.run_in_env(&mut env).is_err());
+/// assert_eq!(env["x"], Value::Number(5.0));
 /// # Ok(())
 /// # }
 /// ```
@@ -150,7 +199,8 @@ impl<'a, T: Grammar> ExecutableModule<'a, T>
 where
     T::Lit: Number,
 {
-    /// Runs the module with the current values of imports. The imports are not modified.
+    /// Runs the module with the current values of imports. This is a read-only operation;
+    /// neither the imports, nor other module state are modified by it.
     pub fn run(&self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
         let mut registers = self.imports.inner.clone();
         self.run_with_registers(&mut registers)
@@ -158,8 +208,11 @@ where
 
     /// Runs the module with the specified `Environment`. The environment may contain some of
     /// module imports; they will be used to override imports defined in the module.
+    ///
     /// On execution, the environment is modified to reflect assignments in the topmost scope
-    /// of the module.
+    /// of the module. The modification takes place regardless of whether or not the execution
+    /// succeeds. That is, if an error occurs, all preceding assignments in the topmost scope
+    /// still take place. See [the relevant example](#behavior-on-errors).
     pub fn run_in_env(
         &self,
         env: &mut Environment<'a, T>,
@@ -259,6 +312,11 @@ impl<'a, 'r, T: Grammar> IntoIterator for &'r ModuleImports<'a, T> {
 }
 
 /// Builder for an `ExecutableModule`.
+///
+/// The builder can be created via [`ExecutableModule::builder()`]. See `ExecutableModule` docs
+/// for the examples of usage.
+///
+/// [`ExecutableModule::builder()`]: struct.ExecutableModule.html#method.builder
 #[derive(Debug)]
 pub struct ExecutableModuleBuilder<'a, T: Grammar> {
     module: ExecutableModule<'a, T>,
@@ -284,12 +342,9 @@ impl<'a, T: Grammar> ExecutableModuleBuilder<'a, T> {
     }
 
     /// Adds a single import. If the specified variable is not an import, does nothing.
-    pub fn with_import<V>(mut self, name: &str, value: V) -> Self
-    where
-        V: Into<Value<'a, T>>,
-    {
+    pub fn with_import(mut self, name: &str, value: Value<'a, T>) -> Self {
         if self.module.imports.contains(name) {
-            self.module.set_import(name, value.into());
+            self.module.set_import(name, value);
         }
         self.undefined_imports.remove(name);
         self

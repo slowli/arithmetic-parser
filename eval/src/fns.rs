@@ -21,6 +21,7 @@
 //! (this requires [generic associated types][GAT]). As such, the (implicit) `'static` requirement
 //! is a temporary measure, and macros fill the gaps in their usual clunky manner.
 //!
+//! [`NativeFn`]: ../trait.NativeFn.html
 //! [`FnWrapper`]: struct.FnWrapper.html
 //! [`wrap`]: fn.wrap.html
 //! [`Number`]: ../trait.Number.html

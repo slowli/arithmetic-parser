@@ -3,14 +3,14 @@
 //! Implemented benches:
 //!
 //! - Multiplication of `ELEMENTS` randomly selected numbers
-//! - List reversal (worst-case by the number of reallocations)
+//! - List reversal (worst-case by the number of re-allocations)
 
 use criterion::{criterion_group, criterion_main, BatchSize, Bencher, Criterion, Throughput};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use typed_arena::Arena;
 
 use arithmetic_eval::{fns, CallContext, ExecutableModule, NativeFn, Value, WildcardId};
-use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+use arithmetic_parser::{grammars::F32Grammar, GrammarExt, MaybeSpanned};
 
 const SEED: u64 = 123;
 const ELEMENTS: u64 = 50;
@@ -98,7 +98,7 @@ fn bench_mul_fold(bencher: &mut Bencher<'_>) {
 }
 
 fn bench_fold_fn(bencher: &mut Bencher<'_>) {
-    let mut ctx = CallContext::mock();
+    let mut ctx = CallContext::mock(&WildcardId, MaybeSpanned::from_str("", ..));
     let acc = ctx.apply_call_span(Value::Number(1.0));
     let fold_fn = fns::Binary::new(|x: f32, y| x * y);
     let fold_fn = ctx.apply_call_span(Value::native_fn(fold_fn));
@@ -123,7 +123,7 @@ fn bench_fold_fn(bencher: &mut Bencher<'_>) {
 }
 
 fn bench_interpreted_fn(bencher: &mut Bencher<'_>) {
-    let mut ctx = CallContext::mock();
+    let mut ctx = CallContext::mock(&WildcardId, MaybeSpanned::from_str("", ..));
     let interpreted_fn = F32Grammar::parse_statements("|x, y| x * y").unwrap();
     let interpreted_fn = ExecutableModule::builder(WildcardId, &interpreted_fn)
         .unwrap()

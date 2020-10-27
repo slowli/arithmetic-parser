@@ -7,7 +7,7 @@ use core::iter;
 use crate::{
     alloc::{vec, Box, Vec},
     compiler::CMP_FUNCTION_NAME,
-    error::{AuxErrorInfo, CodeInModule, RepeatedAssignmentContext},
+    error::{AuxErrorInfo, RepeatedAssignmentContext},
     Error, ErrorKind, ModuleId, WildcardId,
 };
 use arithmetic_parser::{
@@ -216,9 +216,8 @@ pub(super) fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
                     let var_span = lvalue.with_no_extra();
                     if let Some(prev_span) = vars.insert(var_name, var_span) {
                         let err = ErrorKind::RepeatedAssignment { context };
-                        let prev_span = CodeInModule::new(module_id, prev_span.into());
                         return Err(Error::new(module_id, lvalue, err)
-                            .with_span(prev_span, AuxErrorInfo::PrevAssignment));
+                            .with_span(&prev_span.into(), AuxErrorInfo::PrevAssignment));
                     }
                 }
             }

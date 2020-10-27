@@ -543,10 +543,9 @@ macro_rules! arity_fn {
                     let span = $arg_name.with_no_extra();
                     let $arg_name = $t::try_from_value($arg_name.extra).map_err(|mut err| {
                         err.set_arg_index(index);
-                        let enriched_span = context.enrich_call_site_span(&span);
                         context
                             .call_site_error(ErrorKind::Wrapper(err))
-                            .with_span(enriched_span, AuxErrorInfo::InvalidArg)
+                            .with_span(&span, AuxErrorInfo::InvalidArg)
                     })?;
                 )+
 
@@ -678,10 +677,9 @@ macro_rules! wrap_fn {
                 let $arg_name = $crate::fns::TryFromValue::try_from_value($arg_name.extra)
                     .map_err(|mut err| {
                         err.set_arg_index(index);
-                        let enriched_span = context.enrich_call_site_span(&span);
                         context
                             .call_site_error($crate::error::ErrorKind::Wrapper(err))
-                            .with_span(enriched_span, $crate::error::AuxErrorInfo::InvalidArg)
+                            .with_span(&span, $crate::error::AuxErrorInfo::InvalidArg)
                     })?;
             )+
 

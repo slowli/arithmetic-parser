@@ -9,11 +9,9 @@ use crate::{
     alloc::{vec, Rc, String, ToOwned, Vec},
     error::{AuxErrorInfo, Backtrace, CodeInModule, TupleLenMismatchContext},
     executable::ExecutableFn,
-    fns, Error, ErrorKind, EvalResult, ModuleId, Number, WildcardId,
+    fns, Error, ErrorKind, EvalResult, ModuleId, Number,
 };
-use arithmetic_parser::{
-    BinaryOp, Grammar, InputSpan, LvalueLen, MaybeSpanned, Op, Spanned, StripCode, UnaryOp,
-};
+use arithmetic_parser::{BinaryOp, Grammar, LvalueLen, MaybeSpanned, Op, StripCode, UnaryOp};
 
 /// Opaque context for native calls.
 #[derive(Debug)]
@@ -23,10 +21,10 @@ pub struct CallContext<'r, 'a> {
 }
 
 impl<'r, 'a> CallContext<'r, 'a> {
-    /// Creates a mock call context.
-    pub fn mock() -> Self {
+    /// Creates a mock call context with the specified module ID and call span.
+    pub fn mock(module_id: &dyn ModuleId, call_span: MaybeSpanned<'a>) -> Self {
         Self {
-            call_span: CodeInModule::new(&WildcardId, Spanned::from(InputSpan::new("")).into()),
+            call_span: CodeInModule::new(module_id, call_span),
             backtrace: None,
         }
     }
@@ -48,11 +46,6 @@ impl<'r, 'a> CallContext<'r, 'a> {
     /// Applies the call span to the specified `value`.
     pub fn apply_call_span<T>(&self, value: T) -> MaybeSpanned<'a, T> {
         self.call_span.code().copy_with_extra(value)
-    }
-
-    #[doc(hidden)] // used in `wrap_fn` macro
-    pub fn enrich_call_site_span<T>(&self, span: &MaybeSpanned<'a, T>) -> CodeInModule<'a> {
-        CodeInModule::new(self.call_span.module_id(), span.with_no_extra())
     }
 
     /// Creates an error spanning the call site.
@@ -507,8 +500,7 @@ impl BinaryOpError {
 
         let mut err = Error::new(module_id, &main_span, self.inner);
         if let Some(aux_info) = aux_info {
-            let rhs_span = CodeInModule::new(module_id, rhs_span);
-            err = err.with_span(rhs_span, aux_info);
+            err = err.with_span(&rhs_span, aux_info);
         }
         err
     }

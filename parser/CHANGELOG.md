@@ -11,6 +11,9 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
   `StripCode` trait). This allows breaking lifetime dependency between code
   and the outcome of its parsing. (#26) 
 
+- Make `GrammarExt` methods more generic: they now accept inputs convertible
+  to an `InputSpan`, such as `&str`. (#32)
+
 ### Changed
 
 - Use homegrown `LocatedSpan` instead of one from `nom_locate` crate.
@@ -18,6 +21,12 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Make most enums and structs with public fields non-exhaustive (e.g., `Expr`,
   `Statement`, `Lvalue`). (#26)
+
+- Rework errors (#32):
+
+  - Rename error types: `Error` to `ErrorKind`, `SpannedError` to `Error`.
+  - Use `Error` as the main error type instead of a `Spanned<_>` wrapper.
+  - Implement `std::error::Error` for `Error`.
 
 ## 0.2.0-beta.1 - 2020-10-04
 

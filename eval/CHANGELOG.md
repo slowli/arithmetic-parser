@@ -15,7 +15,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 - Add IDs for executable modules. These IDs can be used to locate code spans for errors
   and interpreted functions. (#31)
 
-- Allow evaluating blocks with any lifetime against the interpreter. (#31)
+- Decouple `ExecutableModule` compilation and execution. This allows distinguishing
+  between errors on these two steps and gives more control over module lifecycle. (#32)
 
 ### Changed
 
@@ -34,9 +35,18 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 - Make `Backtrace` type crate-private; move backtrace call iterator
   directly to `ErrorWithBacktrace`. (#31)
 
-- Make the interpreter methods that both compile and run code return
-  a new error type, `InterpreterError`. This allows distinguishing between
-  these error kinds and eliminates a "fake" backtrace for compile-time errors. (#31)
+- Refactor `ExecutableModule` creation: add a builder and remove creation
+  methods from an interpreter. (#32)
+
+- Refactor `Interpreter` (#32):
+
+  - Rename to `Environment`
+  - Extract interface related to module construction into a trait, `VariableMap`
+  - Unify method names with `ModuleImports`
+  - Use iterator traits (`IntoIterator` / `FromIterator` / `Extend`) to make
+    `Environment` creation more idiomatic.
+
+- Make `CallContext::mock()` accept custom module ID and call span. (#32)
 
 ## 0.2.0-beta.1 - 2020-10-04
 

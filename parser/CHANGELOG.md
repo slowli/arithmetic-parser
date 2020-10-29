@@ -28,6 +28,18 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
   - Use `Error` as the main error type instead of a `Spanned<_>` wrapper.
   - Implement `std::error::Error` for `Error`.
 
+### Fixed
+
+- Fix parsing of expressions like `1.abs()` for standard grammars. Previously,
+  the parser consumed the `.` char as a part of the number literal, which led
+  to a parser error. (#33)
+
+- Fix relative priority of unary ops and method calls, so that `-1.abs()`
+  is correctly parsed as `-(1.abs())`, not as `(-1).abs()`. (#33)
+
+- Disallow using literals as function names. Thus, an expression like `1(2, x)`
+  is no longer valid. (#33)
+
 ## 0.2.0-beta.1 - 2020-10-04
 
 ### Added

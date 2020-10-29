@@ -133,10 +133,7 @@ impl Context {
 /// Arithmetic expression with an abstract types for type hints and literals.
 #[derive(Debug)]
 #[non_exhaustive]
-pub enum Expr<'a, T>
-where
-    T: Grammar,
-{
+pub enum Expr<'a, T: Grammar> {
     /// Variable use, e.g., `x`.
     Variable,
 

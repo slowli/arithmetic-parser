@@ -6,7 +6,7 @@ use nom::{
 };
 
 use super::*;
-use crate::{alloc::String, Features, Op};
+use crate::{alloc::String, grammars::F32Grammar, Features, Op};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum LiteralType {
@@ -1580,4 +1580,15 @@ fn order_comparisons_when_switched_off() {
         *spanned_err.kind(),
         ErrorKind::UnsupportedOp(Op::Binary(BinaryOp::Ge))
     );
+}
+
+#[test]
+fn function_call_with_literal_as_fn_name() {
+    let input = InputSpan::new("1(2, 3);");
+    let err = expr::<FieldGrammar, Complete>(input).unwrap_err();
+    let spanned_err = match err {
+        NomErr::Failure(spanned) => spanned,
+        _ => panic!("Unexpected error: {}", err),
+    };
+    assert_matches!(spanned_err.kind(), ErrorKind::LiteralName);
 }

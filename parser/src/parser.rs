@@ -1,5 +1,9 @@
 //! Parsers implemented with the help of `nom`.
 
+// FIXME: is something like `1(2, x)` parsed as fn call?
+// FIXME: make method calls on numbers have higher priority than unary ops (negation):
+//    -1.abs() = -(1.abs()), not (-1).abs()
+
 use nom::{
     branch::alt,
     bytes::{
@@ -230,56 +234,91 @@ where
     ))(input)
 }
 
+#[derive(Debug)]
+struct MethodOrFnCall<'a, T: Grammar> {
+    fn_name: Option<InputSpan<'a>>,
+    args: Vec<SpannedExpr<'a, T>>,
+}
+
+impl<T: Grammar> MethodOrFnCall<'_, T> {
+    fn is_method(&self) -> bool {
+        self.fn_name.is_some()
+    }
+}
+
 /// Simple expression, which includes, besides `simplest_expr`s, function calls.
-#[allow(clippy::option_if_let_else)] // See explanation in the function code
 fn simple_expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T>>
 where
     T: Grammar,
     Ty: GrammarType,
 {
-    type MethodOrFnCallReturn<'s, T> = (Option<InputSpan<'s>>, (Vec<SpannedExpr<'s, T>>, bool));
+    let fn_call_parser = map(fn_args::<T, Ty>, |(args, _)| MethodOrFnCall {
+        fn_name: None,
+        args,
+    });
 
-    let method_or_fn_call: Box<
-        dyn Fn(InputSpan<'a>) -> NomResult<'a, MethodOrFnCallReturn<'a, T>>,
-    > = if T::FEATURES.methods {
-        let parser = alt((
-            preceded(
-                tuple((tag_char('.'), ws::<Ty>)),
-                cut(tuple((map(var_name, Some), fn_args::<T, Ty>))),
-            ),
-            map(fn_args::<T, Ty>, |args| (None, args)),
-        ));
-        Box::new(parser)
-    } else {
-        Box::new(map(fn_args::<T, Ty>, |args| (None, args)))
-    };
+    let method_or_fn_call: Box<dyn Fn(InputSpan<'a>) -> NomResult<'a, MethodOrFnCall<'a, T>>> =
+        if T::FEATURES.methods {
+            let method_parser = map(
+                tuple((var_name, fn_args::<T, Ty>)),
+                |(fn_name, (args, _))| MethodOrFnCall {
+                    fn_name: Some(fn_name),
+                    args,
+                },
+            );
+
+            let parser = alt((
+                preceded(tuple((tag_char('.'), ws::<Ty>)), cut(method_parser)),
+                fn_call_parser,
+            ));
+            Box::new(parser)
+        } else {
+            Box::new(fn_call_parser)
+        };
 
     let parser = tuple((
         simplest_expr::<T, Ty>,
         many0(with_span(preceded(ws::<Ty>, method_or_fn_call))),
     ));
+    parser(input).and_then(|(rest, (base, calls))| {
+        fold_args(input, base, calls).map(|folded| (rest, folded))
+    })
+}
 
-    map(parser, |(base, args_vec)| {
-        args_vec.into_iter().fold(base, |name, spanned_args| {
-            let united_span = unite_spans(input, &name, &spanned_args);
-            let (maybe_fn_name, (args, _)) = spanned_args.extra;
+#[allow(clippy::option_if_let_else)] // See explanation in the function code
+fn fold_args<'a, T: Grammar>(
+    input: InputSpan<'a>,
+    base: SpannedExpr<'a, T>,
+    calls: Vec<Spanned<MethodOrFnCall<'a, T>>>,
+) -> Result<SpannedExpr<'a, T>, NomErr<Error<'a>>> {
+    if matches!(base.extra, Expr::Literal(_)) {
+        if matches!(calls.first(), Some(call) if !call.extra.is_method()) {
+            // Bogus function call, such as `1(2, 3)`.
+            let e = Error::from_parts(base.with_no_extra(), ErrorKind::LiteralName);
+            return Err(NomErr::Failure(e));
+        }
+    }
 
-            // Clippy lint is triggered here. `name` cannot be moved into both branches, so it's a false positive.
-            let expr = if let Some(fn_name) = maybe_fn_name {
-                Expr::Method {
-                    name: fn_name.into(),
-                    receiver: Box::new(name),
-                    args,
-                }
-            } else {
-                Expr::Function {
-                    name: Box::new(name),
-                    args,
-                }
-            };
-            Spanned::new(united_span, expr)
-        })
-    })(input)
+    let folded = calls.into_iter().fold(base, |name, call| {
+        let united_span = unite_spans(input, &name, &call);
+
+        // Clippy lint is triggered here. `name` cannot be moved into both branches,
+        // so it's a false positive.
+        let expr = if let Some(fn_name) = call.extra.fn_name {
+            Expr::Method {
+                name: fn_name.into(),
+                receiver: Box::new(name),
+                args: call.extra.args,
+            }
+        } else {
+            Expr::Function {
+                name: Box::new(name),
+                args: call.extra.args,
+            }
+        };
+        Spanned::new(united_span, expr)
+    });
+    Ok(folded)
 }
 
 /// Parses an expression with binary operations into a tree with the hierarchy reflecting

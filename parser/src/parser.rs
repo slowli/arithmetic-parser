@@ -15,7 +15,7 @@ use nom::{
     error::context,
     multi::{many0, separated_list},
     sequence::{delimited, preceded, terminated, tuple},
-    Err as NomErr,
+    Err as NomErr, Slice,
 };
 
 use core::mem;
@@ -285,19 +285,52 @@ where
     })
 }
 
-#[allow(clippy::option_if_let_else)] // See explanation in the function code
+#[allow(clippy::option_if_let_else, clippy::range_plus_one)]
+// ^-- See explanations in the function code.
 fn fold_args<'a, T: Grammar>(
     input: InputSpan<'a>,
-    base: SpannedExpr<'a, T>,
+    mut base: SpannedExpr<'a, T>,
     calls: Vec<Spanned<MethodOrFnCall<'a, T>>>,
 ) -> Result<SpannedExpr<'a, T>, NomErr<Error<'a>>> {
+    // Do we need to reorder unary op application and method calls? This is only applicable if:
+    //
+    // - `base` is a literal (as a corollary, `-` / `!` may be a start of a literal)
+    // - The next call is a method
+    // - A literal is parsed without the unary op.
+    //
+    // If all these conditions hold, we reorder the unary op to execute *after* all calls.
+    // This is necessary to correctly parse `-1.abs()` as `-(1.abs())`, not as `(-1).abs()`.
+    let mut needs_call_reordering = false;
+
     if matches!(base.extra, Expr::Literal(_)) {
-        if matches!(calls.first(), Some(call) if !call.extra.is_method()) {
-            // Bogus function call, such as `1(2, 3)`.
-            let e = Error::from_parts(base.with_no_extra(), ErrorKind::LiteralName);
-            return Err(NomErr::Failure(e));
+        match calls.first() {
+            Some(call) if !call.extra.is_method() => {
+                // Bogus function call, such as `1(2, 3)`.
+                let e = ErrorKind::LiteralName.with_span(&base);
+                return Err(NomErr::Failure(e));
+            }
+            Some(_) => needs_call_reordering = base.fragment().starts_with('-'),
+            None => { /* Special processing is not required. */ }
         }
     }
+
+    let unary_op = if needs_call_reordering {
+        let lit_start = base.location_offset() - input.location_offset();
+        let unsigned_lit_input = input.slice((lit_start + 1)..(lit_start + base.fragment().len()));
+
+        if let Ok((_, unsigned_lit)) = T::parse_literal(unsigned_lit_input) {
+            base = SpannedExpr::new(unsigned_lit_input, Expr::Literal(unsigned_lit));
+
+            // `nom::Slice` is not implemented for inclusive range types, so a Clippy warning
+            // cannot be fixed.
+            let op_span = input.slice(lit_start..(lit_start + 1));
+            Some(Spanned::new(op_span, UnaryOp::Neg))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
 
     let folded = calls.into_iter().fold(base, |name, call| {
         let united_span = unite_spans(input, &name, &call);
@@ -318,7 +351,19 @@ fn fold_args<'a, T: Grammar>(
         };
         Spanned::new(united_span, expr)
     });
-    Ok(folded)
+
+    Ok(if let Some(unary_op) = unary_op {
+        let united_span = unite_spans(input, &unary_op, &folded);
+        Spanned::new(
+            united_span,
+            Expr::Unary {
+                op: unary_op,
+                inner: Box::new(folded),
+            },
+        )
+    } else {
+        folded
+    })
 }
 
 /// Parses an expression with binary operations into a tree with the hierarchy reflecting

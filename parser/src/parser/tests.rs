@@ -1592,3 +1592,27 @@ fn function_call_with_literal_as_fn_name() {
     };
     assert_matches!(spanned_err.kind(), ErrorKind::LiteralName);
 }
+
+#[test]
+fn methods_have_higher_priority_than_unary_ops() {
+    const INPUTS: &[&str] = &["-5.abs();", "-5.5.sin();", "-5.25.foo(1, PI)(1, x).cos();"];
+
+    for &input in INPUTS {
+        let input = InputSpan::new(input);
+        let expr = expr::<F32Grammar, Complete>(input).unwrap().1.extra;
+        assert_matches!(expr, Expr::Unary { .. }, "Errored input: {}", input.fragment());
+    }
+}
+
+#[test]
+fn methods_and_multiple_unary_ops() {
+    let input = InputSpan::new("--1.abs();");
+    let expr = expr::<F32Grammar, Complete>(input).unwrap().1;
+    assert_eq!(*expr.fragment(), "--1.abs()");
+    let inner_expr = match expr.extra {
+        Expr::Unary { inner, .. } => inner,
+        _ => panic!("Unexpected expr: {:?}", expr),
+    };
+    assert_eq!(*inner_expr.fragment(), "-1.abs()");
+    assert_matches!(inner_expr.extra, Expr::Unary { .. });
+}

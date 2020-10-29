@@ -576,10 +576,12 @@ fn cannot_call_error() {
     assert_eq!(err.main_span().code().location_offset(), 7);
     assert_matches!(err.kind(), ErrorKind::CannotCall);
 
-    let other_program = "2 + 1.0(5)";
-    let err = try_evaluate(&mut Environment::new(), other_program).unwrap_err();
+    let other_program = "2 + true(5)";
+    let mut env = Environment::new();
+    env.insert("true", Value::Bool(true));
+    let err = try_evaluate(&mut env, other_program).unwrap_err();
     let err = err.source();
-    assert_eq!(*err.main_span().code().fragment(), "1.0(5)");
+    assert_eq!(*err.main_span().code().fragment(), "true(5)");
     assert_matches!(err.kind(), ErrorKind::CannotCall);
 }
 
@@ -719,4 +721,13 @@ fn comparison_desugaring_with_capture_and_no_cmp() {
     let err = expect_compilation_error(&mut Environment::new(), program);
     assert_matches!(err.kind(), ErrorKind::MissingCmpFunction { ref name } if name == "cmp");
     assert_eq!(*err.main_span().code().fragment(), ">=");
+}
+
+#[test]
+fn priority_of_unary_ops_and_methods() {
+    let program = "-1.abs() == -1 && -1.0.abs() == -1 && --1.abs() == 1 && (-1).abs() == 1";
+    let mut env = Environment::new();
+    env.insert_wrapped_fn("abs", f32::abs);
+    let return_value = evaluate(&mut env, program);
+    assert_eq!(return_value, Value::Bool(true));
 }

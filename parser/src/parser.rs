@@ -57,6 +57,14 @@ impl UnaryOp {
             _ => unreachable!(),
         }
     }
+
+    fn try_from_byte(byte: u8) -> Option<Self> {
+        match byte {
+            b'-' => Some(Self::Neg),
+            b'!' => Some(Self::Not),
+            _ => None,
+        }
+    }
 }
 
 impl BinaryOp {
@@ -300,7 +308,7 @@ fn fold_args<'a, T: Grammar>(
     //
     // If all these conditions hold, we reorder the unary op to execute *after* all calls.
     // This is necessary to correctly parse `-1.abs()` as `-(1.abs())`, not as `(-1).abs()`.
-    let mut needs_call_reordering = false;
+    let mut maybe_reordered_op = None;
 
     if matches!(base.extra, Expr::Literal(_)) {
         match calls.first() {
@@ -309,12 +317,13 @@ fn fold_args<'a, T: Grammar>(
                 let e = ErrorKind::LiteralName.with_span(&base);
                 return Err(NomErr::Failure(e));
             }
-            Some(_) => needs_call_reordering = base.fragment().starts_with('-'),
+            // Indexing should be safe: literals must have non-empty span.
+            Some(_) => maybe_reordered_op = UnaryOp::try_from_byte(base.fragment().as_bytes()[0]),
             None => { /* Special processing is not required. */ }
         }
     }
 
-    let unary_op = if needs_call_reordering {
+    let reordered_op = if let Some(reordered_op) = maybe_reordered_op {
         let lit_start = base.location_offset() - input.location_offset();
         let unsigned_lit_input = input.slice((lit_start + 1)..(lit_start + base.fragment().len()));
 
@@ -324,7 +333,7 @@ fn fold_args<'a, T: Grammar>(
             // `nom::Slice` is not implemented for inclusive range types, so a Clippy warning
             // cannot be fixed.
             let op_span = input.slice(lit_start..(lit_start + 1));
-            Some(Spanned::new(op_span, UnaryOp::Neg))
+            Some(Spanned::new(op_span, reordered_op))
         } else {
             None
         }
@@ -352,7 +361,7 @@ fn fold_args<'a, T: Grammar>(
         Spanned::new(united_span, expr)
     });
 
-    Ok(if let Some(unary_op) = unary_op {
+    Ok(if let Some(unary_op) = reordered_op {
         let united_span = unite_spans(input, &unary_op, &folded);
         Spanned::new(
             united_span,

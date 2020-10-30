@@ -1600,8 +1600,54 @@ fn methods_have_higher_priority_than_unary_ops() {
     for &input in INPUTS {
         let input = InputSpan::new(input);
         let expr = expr::<F32Grammar, Complete>(input).unwrap().1.extra;
-        assert_matches!(expr, Expr::Unary { .. }, "Errored input: {}", input.fragment());
+        assert_matches!(
+            expr,
+            Expr::Unary { op, .. } if op.extra == UnaryOp::Neg,
+            "Errored input: {}",
+            input.fragment()
+        );
     }
+}
+
+#[test]
+fn no_unary_op_if_literal_without_it_not_parsed() {
+    #[derive(Debug)]
+    struct ExclamationGrammar;
+
+    impl Grammar for ExclamationGrammar {
+        type Lit = String;
+        type Type = ();
+
+        const FEATURES: Features = Features {
+            type_annotations: false,
+            ..Features::all()
+        };
+
+        fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
+            map(
+                delimited(
+                    tag_char('!'),
+                    take_while1(|c: char| c != '!'),
+                    tag_char('!'),
+                ),
+                |s: InputSpan<'_>| (*s.fragment()).to_owned(),
+            )(input)
+        }
+
+        fn parse_type(_: InputSpan<'_>) -> NomResult<'_, Self::Type> {
+            unreachable!("Never called per `FEATURES`")
+        }
+    }
+
+    let input = InputSpan::new("!foo!.bar();");
+    let expr = expr::<ExclamationGrammar, Complete>(input).unwrap().1.extra;
+    match expr {
+        Expr::Method { name, receiver, .. } => {
+            assert_eq!(*name.fragment(), "bar");
+            assert_matches!(receiver.extra, Expr::Literal(s) if s == "foo");
+        }
+        _ => panic!("Unexpected expr: {:?}", expr),
+    };
 }
 
 #[test]

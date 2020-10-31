@@ -11,42 +11,13 @@
 A versatile parser for arithmetic expressions which allows customizing literal definitions,
 type annotations and several other aspects of parsing.
 
-## Supported Features
+## Features
 
-- **Variables.** A variable name is defined similar to Rust and other programming languages,
-  as a sequence of alphanumeric chars and underscores that does not start with a digit.
-- **Literals.** The parser for literals is user-provided, thus allowing to apply the library
-  to different domains (e.g., finite group arithmetic).
-- Python-like **comments** staring with `#`.
-- Basic **arithmetic operations**: `+`, `-` (binary and unary), `*`, `/`, `^` (power).
-  The parser outputs AST with nodes organized according to the operation priority.
-- **Boolean operations**: `==`, `!=`, `&&`, `||`, `!`.
-- **Function calls**: `foo(1.0, x)`.
-- **Parentheses** which predictably influence operation priority.
+The parser is overall similar to Rust. It supports variables, literals, comments,
+arithmetic and boolean operations, parentheses, function calls, tuples and tuple destructuring,
+function definitions, blocks, methods, and type annotations.
 
-The parser supports both complete and streaming (incomplete) modes; the latter is useful
-for REPLs and similar applications.
-
-### Optional Features
-
-These features can be switched on or off when defining a grammar.
-
-- **Tuples.** A tuple is two or more elements separated by commas, such as `(x, y)`
-  or `(1, 2 * x)`. Tuples are parsed both as lvalues and rvalues.
-- **Function definitions.** A definition looks like a closure definition in Rust, e.g.,
-  `|x| x - 10` or `|x, y| { z = max(x, y); (z - x, z - y) }`. A definition may be
-  assigned to a variable (which is the way to define named functions).
-- **Blocks.** A block is several `;`-delimited statements enclosed in `{}` braces,
-  e.g, `{ z = max(x, y); (z - x, z - y) }`. The blocks can be used in all contexts
-  instead of a simple expression; for example, `min({ z = 5; z - 1 }, 3)`.
-- **Methods.** Method call is a function call separated from the receiver with a `.` char;
-  for example, `foo.bar(2, x)`. 
-- **Type annotations.** A type annotation in the form `var: Type` can be present
-  in the lvalues or in the function argument definitions. The parser for type annotations
-  is user-defined.
-- **Order comparisons,** that is, `>`, `<`, `>=`, and `<=` boolean ops.
-  (The reason is that these ops do not make sense for some grammars, 
-  such as for modular arithmetic.)
+See the crate docs for more details on the supported features.
 
 ### Code Sample
 

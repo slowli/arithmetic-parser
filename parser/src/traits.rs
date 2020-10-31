@@ -12,13 +12,14 @@ pub enum BooleanOps {
     None,
     /// Basic operations (`==`, `!=`, `&&`, `||`).
     Basic,
-    /// `Basic` + order comparison operations (`>`, `<`, `>=`, `<=`)?
-    Full,
+    /// `Basic` + order comparison operations (`>`, `<`, `>=`, `<=`).
+    OrderComparisons,
 }
 
 /// Parsing features for a `Grammar`.
 #[derive(Debug, Clone)]
 #[allow(clippy::struct_excessive_bools)] // flags are independent
+#[non_exhaustive]
 pub struct Features {
     /// Parse tuple types?
     pub tuples: bool,
@@ -43,7 +44,7 @@ impl Features {
             fn_definitions: true,
             blocks: true,
             methods: true,
-            boolean_ops: BooleanOps::Full,
+            boolean_ops: BooleanOps::OrderComparisons,
         }
     }
 

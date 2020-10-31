@@ -92,7 +92,9 @@ impl BinaryOp {
         match self {
             Self::Add | Self::Sub | Self::Mul | Self::Div | Self::Power => true,
             Self::Eq | Self::NotEq | Self::And | Self::Or => boolean_ops >= BooleanOps::Basic,
-            Self::Gt | Self::Lt | Self::Ge | Self::Le => boolean_ops >= BooleanOps::Full,
+            Self::Gt | Self::Lt | Self::Ge | Self::Le => {
+                boolean_ops >= BooleanOps::OrderComparisons
+            }
         }
     }
 }

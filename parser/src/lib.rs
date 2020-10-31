@@ -11,7 +11,6 @@
 //!     grammars::F32Grammar,
 //!     GrammarExt, NomResult, Statement, Expr, FnDefinition, LvalueLen,
 //! };
-//! use nom::number::complete::float;
 //!
 //! const PROGRAM: &str = r#"
 //!     ## This is a comment.
@@ -133,10 +132,7 @@ impl Context {
 /// Arithmetic expression with an abstract types for type hints and literals.
 #[derive(Debug)]
 #[non_exhaustive]
-pub enum Expr<'a, T>
-where
-    T: Grammar,
-{
+pub enum Expr<'a, T: Grammar> {
     /// Variable use, e.g., `x`.
     Variable,
 
@@ -501,21 +497,21 @@ pub enum Op {
 impl fmt::Display for Op {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Op::Unary(inner) => fmt::Display::fmt(inner, formatter),
-            Op::Binary(inner) => fmt::Display::fmt(inner, formatter),
+            Self::Unary(inner) => fmt::Display::fmt(inner, formatter),
+            Self::Binary(inner) => fmt::Display::fmt(inner, formatter),
         }
     }
 }
 
 impl From<UnaryOp> for Op {
     fn from(value: UnaryOp) -> Self {
-        Op::Unary(value)
+        Self::Unary(value)
     }
 }
 
 impl From<BinaryOp> for Op {
     fn from(value: BinaryOp) -> Self {
-        Op::Binary(value)
+        Self::Binary(value)
     }
 }
 

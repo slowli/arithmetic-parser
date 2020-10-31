@@ -6,7 +6,7 @@ use nom::{
 };
 
 use super::*;
-use crate::{alloc::String, Features, Op};
+use crate::{alloc::String, grammars::F32Grammar, Features, Op};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum LiteralType {
@@ -1580,4 +1580,85 @@ fn order_comparisons_when_switched_off() {
         *spanned_err.kind(),
         ErrorKind::UnsupportedOp(Op::Binary(BinaryOp::Ge))
     );
+}
+
+#[test]
+fn function_call_with_literal_as_fn_name() {
+    let input = InputSpan::new("1(2, 3);");
+    let err = expr::<FieldGrammar, Complete>(input).unwrap_err();
+    let spanned_err = match err {
+        NomErr::Failure(spanned) => spanned,
+        _ => panic!("Unexpected error: {}", err),
+    };
+    assert_matches!(spanned_err.kind(), ErrorKind::LiteralName);
+}
+
+#[test]
+fn methods_have_higher_priority_than_unary_ops() {
+    const INPUTS: &[&str] = &["-5.abs();", "-5.5.sin();", "-5.25.foo(1, PI)(1, x).cos();"];
+
+    for &input in INPUTS {
+        let input = InputSpan::new(input);
+        let expr = expr::<F32Grammar, Complete>(input).unwrap().1.extra;
+        assert_matches!(
+            expr,
+            Expr::Unary { op, .. } if op.extra == UnaryOp::Neg,
+            "Errored input: {}",
+            input.fragment()
+        );
+    }
+}
+
+#[test]
+fn no_unary_op_if_literal_without_it_not_parsed() {
+    #[derive(Debug)]
+    struct ExclamationGrammar;
+
+    impl Grammar for ExclamationGrammar {
+        type Lit = String;
+        type Type = ();
+
+        const FEATURES: Features = Features {
+            type_annotations: false,
+            ..Features::all()
+        };
+
+        fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
+            map(
+                delimited(
+                    tag_char('!'),
+                    take_while1(|c: char| c != '!'),
+                    tag_char('!'),
+                ),
+                |s: InputSpan<'_>| (*s.fragment()).to_owned(),
+            )(input)
+        }
+
+        fn parse_type(_: InputSpan<'_>) -> NomResult<'_, Self::Type> {
+            unreachable!("Never called per `FEATURES`")
+        }
+    }
+
+    let input = InputSpan::new("!foo!.bar();");
+    let expr = expr::<ExclamationGrammar, Complete>(input).unwrap().1.extra;
+    match expr {
+        Expr::Method { name, receiver, .. } => {
+            assert_eq!(*name.fragment(), "bar");
+            assert_matches!(receiver.extra, Expr::Literal(s) if s == "foo");
+        }
+        _ => panic!("Unexpected expr: {:?}", expr),
+    };
+}
+
+#[test]
+fn methods_and_multiple_unary_ops() {
+    let input = InputSpan::new("--1.abs();");
+    let expr = expr::<F32Grammar, Complete>(input).unwrap().1;
+    assert_eq!(*expr.fragment(), "--1.abs()");
+    let inner_expr = match expr.extra {
+        Expr::Unary { inner, .. } => inner,
+        _ => panic!("Unexpected expr: {:?}", expr),
+    };
+    assert_eq!(*inner_expr.fragment(), "-1.abs()");
+    assert_matches!(inner_expr.extra, Expr::Unary { .. });
 }

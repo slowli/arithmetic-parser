@@ -5,6 +5,7 @@ use nom::{
     combinator::{not, peek},
     number::complete::{double, float},
     sequence::terminated,
+    Slice,
 };
 use num_traits::Num;
 
@@ -55,12 +56,40 @@ pub trait NumLiteral: 'static + Copy + Num + fmt::Debug {
 pub fn ensure_no_overlap<'a, T>(
     parser: impl Fn(InputSpan<'a>) -> NomResult<'a, T>,
 ) -> impl Fn(InputSpan<'a>) -> NomResult<'a, T> {
+    let truncating_parser = move |input| {
+        parser(input).map(|(rest, number)| (maybe_truncate_consumed_input(input, rest), number))
+    };
+
     terminated(
-        parser,
+        truncating_parser,
         peek(not(take_while_m_n(1, 1, |c: char| {
             c.is_ascii_alphabetic() || c == '_'
         }))),
     )
+}
+
+fn can_start_a_var_name(byte: u8) -> bool {
+    byte == b'_' || byte.is_ascii_alphabetic()
+}
+
+fn maybe_truncate_consumed_input<'a>(input: InputSpan<'a>, rest: InputSpan<'a>) -> InputSpan<'a> {
+    let relative_offset = rest.location_offset() - input.location_offset();
+    debug_assert!(relative_offset > 0, "num parser succeeded for empty string");
+    let last_consumed_byte_index = relative_offset - 1;
+
+    let input_fragment = *input.fragment();
+    let input_as_bytes = input_fragment.as_bytes();
+    if relative_offset < input_fragment.len()
+        && input_fragment.is_char_boundary(last_consumed_byte_index)
+        && input_as_bytes[last_consumed_byte_index] == b'.'
+        && can_start_a_var_name(input_as_bytes[relative_offset])
+    {
+        // The last char consumed by the parser is '.' and the next part looks like
+        // a method call. Shift the `rest` boundary to include '.'.
+        input.slice(last_consumed_byte_index..)
+    } else {
+        rest
+    }
 }
 
 impl NumLiteral for f32 {
@@ -127,6 +156,48 @@ mod tests {
 
     use assert_matches::assert_matches;
     use core::f32::INFINITY;
+
+    #[test]
+    fn parsing_numbers_with_dot() {
+        #[derive(Debug, Clone, Copy)]
+        struct Sample {
+            input: &'static str,
+            consumed: usize,
+            value: f32,
+        }
+
+        #[rustfmt::skip]
+        const SAMPLES: &[Sample] = &[
+            Sample { input: "1.25+3", consumed: 4, value: 1.25 },
+
+            // Cases in which '.' should be consumed.
+            Sample { input: "1.", consumed: 2, value: 1.0 },
+            Sample { input: "-1.", consumed: 3, value: -1.0 },
+            Sample { input: "1. + 2.", consumed: 2, value: 1.0 },
+            Sample { input: "1.+2.", consumed: 2, value: 1.0 },
+            Sample { input: "1. .sin()", consumed: 2, value: 1.0 },
+
+            // Cases in which '.' should not be consumed.
+            Sample { input: "1.sin()", consumed: 1, value: 1.0 },
+            Sample { input: "-3.sin()", consumed: 2, value: -3.0 },
+            Sample { input: "-3.5.sin()", consumed: 4, value: -3.5 },
+        ];
+
+        for &sample in SAMPLES {
+            let (rest, number) = <f32 as NumLiteral>::parse(InputSpan::new(sample.input)).unwrap();
+            assert!(
+                (number - sample.value).abs() < f32::EPSILON,
+                "Failed sample: {:?}",
+                sample
+            );
+            assert_eq!(
+                rest.location_offset(),
+                sample.consumed,
+                "Failed sample: {:?}",
+                sample
+            );
+        }
+    }
 
     #[test]
     fn parsing_infinity() {

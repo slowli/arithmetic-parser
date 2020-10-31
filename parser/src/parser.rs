@@ -1,5 +1,9 @@
 //! Parsers implemented with the help of `nom`.
 
+// FIXME: is something like `1(2, x)` parsed as fn call?
+// FIXME: make method calls on numbers have higher priority than unary ops (negation):
+//    -1.abs() = -(1.abs()), not (-1).abs()
+
 use nom::{
     branch::alt,
     bytes::{
@@ -11,7 +15,7 @@ use nom::{
     error::context,
     multi::{many0, separated_list},
     sequence::{delimited, preceded, terminated, tuple},
-    Err as NomErr,
+    Err as NomErr, Slice,
 };
 
 use core::mem;
@@ -51,6 +55,14 @@ impl UnaryOp {
             '-' => span.copy_with_extra(UnaryOp::Neg),
             '!' => span.copy_with_extra(UnaryOp::Not),
             _ => unreachable!(),
+        }
+    }
+
+    fn try_from_byte(byte: u8) -> Option<Self> {
+        match byte {
+            b'-' => Some(Self::Neg),
+            b'!' => Some(Self::Not),
+            _ => None,
         }
     }
 }
@@ -230,56 +242,137 @@ where
     ))(input)
 }
 
+#[derive(Debug)]
+struct MethodOrFnCall<'a, T: Grammar> {
+    fn_name: Option<InputSpan<'a>>,
+    args: Vec<SpannedExpr<'a, T>>,
+}
+
+impl<T: Grammar> MethodOrFnCall<'_, T> {
+    fn is_method(&self) -> bool {
+        self.fn_name.is_some()
+    }
+}
+
 /// Simple expression, which includes, besides `simplest_expr`s, function calls.
-#[allow(clippy::option_if_let_else)] // See explanation in the function code
 fn simple_expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T>>
 where
     T: Grammar,
     Ty: GrammarType,
 {
-    type MethodOrFnCallReturn<'s, T> = (Option<InputSpan<'s>>, (Vec<SpannedExpr<'s, T>>, bool));
+    let fn_call_parser = map(fn_args::<T, Ty>, |(args, _)| MethodOrFnCall {
+        fn_name: None,
+        args,
+    });
 
-    let method_or_fn_call: Box<
-        dyn Fn(InputSpan<'a>) -> NomResult<'a, MethodOrFnCallReturn<'a, T>>,
-    > = if T::FEATURES.methods {
-        let parser = alt((
-            preceded(
-                tuple((tag_char('.'), ws::<Ty>)),
-                cut(tuple((map(var_name, Some), fn_args::<T, Ty>))),
-            ),
-            map(fn_args::<T, Ty>, |args| (None, args)),
-        ));
-        Box::new(parser)
-    } else {
-        Box::new(map(fn_args::<T, Ty>, |args| (None, args)))
-    };
+    let method_or_fn_call: Box<dyn Fn(InputSpan<'a>) -> NomResult<'a, MethodOrFnCall<'a, T>>> =
+        if T::FEATURES.methods {
+            let method_parser = map(
+                tuple((var_name, fn_args::<T, Ty>)),
+                |(fn_name, (args, _))| MethodOrFnCall {
+                    fn_name: Some(fn_name),
+                    args,
+                },
+            );
+
+            let parser = alt((
+                preceded(tuple((tag_char('.'), ws::<Ty>)), cut(method_parser)),
+                fn_call_parser,
+            ));
+            Box::new(parser)
+        } else {
+            Box::new(fn_call_parser)
+        };
 
     let parser = tuple((
         simplest_expr::<T, Ty>,
         many0(with_span(preceded(ws::<Ty>, method_or_fn_call))),
     ));
+    parser(input).and_then(|(rest, (base, calls))| {
+        fold_args(input, base, calls).map(|folded| (rest, folded))
+    })
+}
 
-    map(parser, |(base, args_vec)| {
-        args_vec.into_iter().fold(base, |name, spanned_args| {
-            let united_span = unite_spans(input, &name, &spanned_args);
-            let (maybe_fn_name, (args, _)) = spanned_args.extra;
+#[allow(clippy::option_if_let_else, clippy::range_plus_one)]
+// ^-- See explanations in the function code.
+fn fold_args<'a, T: Grammar>(
+    input: InputSpan<'a>,
+    mut base: SpannedExpr<'a, T>,
+    calls: Vec<Spanned<MethodOrFnCall<'a, T>>>,
+) -> Result<SpannedExpr<'a, T>, NomErr<Error<'a>>> {
+    // Do we need to reorder unary op application and method calls? This is only applicable if:
+    //
+    // - `base` is a literal (as a corollary, `-` / `!` may be a start of a literal)
+    // - The next call is a method
+    // - A literal is parsed without the unary op.
+    //
+    // If all these conditions hold, we reorder the unary op to execute *after* all calls.
+    // This is necessary to correctly parse `-1.abs()` as `-(1.abs())`, not as `(-1).abs()`.
+    let mut maybe_reordered_op = None;
 
-            // Clippy lint is triggered here. `name` cannot be moved into both branches, so it's a false positive.
-            let expr = if let Some(fn_name) = maybe_fn_name {
-                Expr::Method {
-                    name: fn_name.into(),
-                    receiver: Box::new(name),
-                    args,
-                }
-            } else {
-                Expr::Function {
-                    name: Box::new(name),
-                    args,
-                }
-            };
-            Spanned::new(united_span, expr)
-        })
-    })(input)
+    if matches!(base.extra, Expr::Literal(_)) {
+        match calls.first() {
+            Some(call) if !call.extra.is_method() => {
+                // Bogus function call, such as `1(2, 3)`.
+                let e = ErrorKind::LiteralName.with_span(&base);
+                return Err(NomErr::Failure(e));
+            }
+            // Indexing should be safe: literals must have non-empty span.
+            Some(_) => maybe_reordered_op = UnaryOp::try_from_byte(base.fragment().as_bytes()[0]),
+            None => { /* Special processing is not required. */ }
+        }
+    }
+
+    let reordered_op = if let Some(reordered_op) = maybe_reordered_op {
+        let lit_start = base.location_offset() - input.location_offset();
+        let unsigned_lit_input = input.slice((lit_start + 1)..(lit_start + base.fragment().len()));
+
+        if let Ok((_, unsigned_lit)) = T::parse_literal(unsigned_lit_input) {
+            base = SpannedExpr::new(unsigned_lit_input, Expr::Literal(unsigned_lit));
+
+            // `nom::Slice` is not implemented for inclusive range types, so a Clippy warning
+            // cannot be fixed.
+            let op_span = input.slice(lit_start..(lit_start + 1));
+            Some(Spanned::new(op_span, reordered_op))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let folded = calls.into_iter().fold(base, |name, call| {
+        let united_span = unite_spans(input, &name, &call);
+
+        // Clippy lint is triggered here. `name` cannot be moved into both branches,
+        // so it's a false positive.
+        let expr = if let Some(fn_name) = call.extra.fn_name {
+            Expr::Method {
+                name: fn_name.into(),
+                receiver: Box::new(name),
+                args: call.extra.args,
+            }
+        } else {
+            Expr::Function {
+                name: Box::new(name),
+                args: call.extra.args,
+            }
+        };
+        Spanned::new(united_span, expr)
+    });
+
+    Ok(if let Some(unary_op) = reordered_op {
+        let united_span = unite_spans(input, &unary_op, &folded);
+        Spanned::new(
+            united_span,
+            Expr::Unary {
+                op: unary_op,
+                inner: Box::new(folded),
+            },
+        )
+    } else {
+        folded
+    })
 }
 
 /// Parses an expression with binary operations into a tree with the hierarchy reflecting

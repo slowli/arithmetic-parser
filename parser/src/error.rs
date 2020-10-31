@@ -17,6 +17,11 @@ pub enum ErrorKind {
     NonAsciiInput,
     /// Error parsing literal.
     Literal(anyhow::Error),
+    /// Literal is used where a name is expected, e.g., as a function identifier.
+    ///
+    /// An example of input triggering this error is `1(2, x)`; `1` is used as the function
+    /// identifier.
+    LiteralName,
     /// Error parsing type hint.
     Type(anyhow::Error),
     /// Unary or binary operation switched off in the parser features.
@@ -49,6 +54,8 @@ impl fmt::Display for ErrorKind {
         match self {
             Self::NonAsciiInput => formatter.write_str("Non-ASCII inputs are not supported"),
             Self::Literal(e) => write!(formatter, "Invalid literal: {}", e),
+            Self::LiteralName => formatter.write_str("Literal used in place of an identifier"),
+
             Self::Type(e) => write!(formatter, "Invalid type hint: {}", e),
 
             Self::UnsupportedOp(op) => write!(

@@ -1765,3 +1765,51 @@ fn and_has_higher_priority_than_or() {
         }
     );
 }
+
+#[test]
+fn chained_comparisons() {
+    const INPUTS: &[&str] = &[
+        "1 > 2 > 3",
+        "1 == 2 == 3",
+        "x < y > z",
+        "x == 2 > y",
+        "x <= 3.foo() > bar(1, 2)",
+        "1 + 2 < 3 != (z + 2)",
+    ];
+
+    for &input in INPUTS {
+        let err = binary_expr::<FieldGrammar, Complete>(InputSpan::new(input)).unwrap_err();
+        let err = match err {
+            NomErr::Failure(err) => err,
+            _ => panic!("Unexpected error: {:?}", err),
+        };
+        assert_matches!(err.kind(), ErrorKind::ChainedComparison);
+        assert_eq!(*err.span().fragment(), input);
+    }
+}
+
+#[test]
+fn chained_comparisons_with_larger_context() {
+    let input = "x == 3 && 1 + 2 > x.abs() == 3 && T";
+    let err = binary_expr::<FieldGrammar, Complete>(InputSpan::new(input)).unwrap_err();
+    let err = match err {
+        NomErr::Failure(err) => err,
+        _ => panic!("Unexpected error: {:?}", err),
+    };
+    assert_matches!(err.kind(), ErrorKind::ChainedComparison);
+    assert_eq!(*err.span().fragment(), "1 + 2 > x.abs() == 3");
+}
+
+#[test]
+fn valid_sequential_comparisons() {
+    const INPUTS: &[&str] = &["x == (y > z)", "(x < 3) < (y == 2)", "(1 == 2) != true"];
+
+    for &input in INPUTS {
+        let input = InputSpan::new(input);
+        let expr = binary_expr::<FieldGrammar, Complete>(input)
+            .unwrap()
+            .1
+            .extra;
+        assert_matches!(expr, Expr::Binary { .. });
+    }
+}

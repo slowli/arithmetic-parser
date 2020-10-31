@@ -42,6 +42,8 @@ pub enum ErrorKind {
     Incomplete,
     /// Unfinished comment.
     UnfinishedComment,
+    /// Chained comparison, such as `1 < 2 < 3`.
+    ChainedComparison,
     /// Other parsing error.
     Other {
         /// `nom`-defined error kind.
@@ -77,6 +79,7 @@ impl fmt::Display for ErrorKind {
             Self::Leftovers => formatter.write_str("Uninterpreted characters after parsing"),
             Self::Incomplete => formatter.write_str("Incomplete input"),
             Self::UnfinishedComment => formatter.write_str("Unfinished comment"),
+            Self::ChainedComparison => formatter.write_str("Chained comparisons"),
             Self::Other { .. } => write!(formatter, "Cannot parse sequence"),
         }
     }

@@ -474,6 +474,7 @@ impl Env {
 
         if !value.is_void() {
             self.dump_value(&value, 0)?;
+            self.newline()?;
         }
         Ok(ParseAndEvalResult::Ok(()))
     }

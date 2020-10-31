@@ -21,7 +21,8 @@ pub fn repl<T: ReplLiteral>() -> io::Result<()> {
         match line {
             Ok(line) => {
                 snippet.push_str(&line);
-                let result = env.parse_and_eval(&line, &mut interpreter, &original_interpreter)?;
+                let result =
+                    env.parse_and_eval(&snippet, &mut interpreter, &original_interpreter)?;
                 match result {
                     ParseAndEvalResult::Ok(_) => {
                         prompt = ">>> ";
@@ -40,8 +41,12 @@ pub fn repl<T: ReplLiteral>() -> io::Result<()> {
                 }
             }
 
-            Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
+            Err(ReadlineError::Interrupted) => {
                 println!("Bye");
+                break Ok(());
+            }
+
+            Err(ReadlineError::Eof) => {
                 break Ok(());
             }
 

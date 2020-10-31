@@ -1,3 +1,5 @@
+//! E2E tests for a non-interactive binary usage.
+
 use assert_cmd::prelude::*;
 use predicates::prelude::*;
 use unindent::unindent;

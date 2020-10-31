@@ -98,7 +98,7 @@ impl Args {
         };
 
         match res {
-            ParseAndEvalResult::Ok(()) => env.newline(),
+            ParseAndEvalResult::Ok(()) => Ok(()),
             ParseAndEvalResult::Incomplete | ParseAndEvalResult::Errored => {
                 process::exit(ERROR_EXIT_CODE);
             }

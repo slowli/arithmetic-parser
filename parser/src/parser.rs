@@ -1,9 +1,5 @@
 //! Parsers implemented with the help of `nom`.
 
-// FIXME: is something like `1(2, x)` parsed as fn call?
-// FIXME: make method calls on numbers have higher priority than unary ops (negation):
-//    -1.abs() = -(1.abs()), not (-1).abs()
-
 use nom::{
     branch::alt,
     bytes::{
@@ -23,9 +19,9 @@ use core::mem;
 use crate::{
     alloc::{vec, Box, Vec},
     spans::{unite_spans, with_span},
-    BinaryOp, Block, Context, Destructure, DestructureRest, Error, ErrorKind, Expr, FnDefinition,
-    Grammar, InputSpan, Lvalue, NomResult, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement,
-    Statement, UnaryOp,
+    BinaryOp, Block, BooleanOps, Context, Destructure, DestructureRest, Error, ErrorKind, Expr,
+    Features, FnDefinition, Grammar, InputSpan, Lvalue, NomResult, Spanned, SpannedExpr,
+    SpannedLvalue, SpannedStatement, Statement, UnaryOp,
 };
 
 #[cfg(test)]
@@ -68,23 +64,36 @@ impl UnaryOp {
 }
 
 impl BinaryOp {
-    fn from_span(span: Spanned<'_, ()>) -> Spanned<'_, Self> {
-        span.copy_with_extra(match *span.fragment() {
-            "+" => Self::Add,
-            "-" => Self::Sub,
-            "*" => Self::Mul,
-            "/" => Self::Div,
-            "^" => Self::Power,
-            "==" => Self::Eq,
-            "!=" => Self::NotEq,
-            "&&" => Self::And,
-            "||" => Self::Or,
-            ">" => Self::Gt,
-            "<" => Self::Lt,
-            ">=" => Self::Ge,
-            "<=" => Self::Le,
-            _ => unreachable!(),
-        })
+    fn from_span(span: InputSpan<'_>) -> Spanned<'_, Self> {
+        Spanned::new(
+            span,
+            match *span.fragment() {
+                "+" => Self::Add,
+                "-" => Self::Sub,
+                "*" => Self::Mul,
+                "/" => Self::Div,
+                "^" => Self::Power,
+                "==" => Self::Eq,
+                "!=" => Self::NotEq,
+                "&&" => Self::And,
+                "||" => Self::Or,
+                ">" => Self::Gt,
+                "<" => Self::Lt,
+                ">=" => Self::Ge,
+                "<=" => Self::Le,
+                _ => unreachable!(),
+            },
+        )
+    }
+
+    fn is_supported(self, features: &Features) -> bool {
+        let boolean_ops = features.boolean_ops;
+
+        match self {
+            Self::Add | Self::Sub | Self::Mul | Self::Div | Self::Power => true,
+            Self::Eq | Self::NotEq | Self::And | Self::Or => boolean_ops >= BooleanOps::Basic,
+            Self::Gt | Self::Lt | Self::Ge | Self::Le => boolean_ops >= BooleanOps::Full,
+        }
     }
 }
 
@@ -393,18 +402,17 @@ where
         tag("&&"), tag("||"), // logical ops
         tag(">="), tag("<="), tag(">"), tag("<"), // order comparisons
     ));
-    let binary_ops = with_span(map(binary_ops, drop));
+    let binary_ops = map(binary_ops, BinaryOp::from_span);
 
     let full_binary_ops = move |input| {
-        let (rest, span) = binary_ops(input)?;
-        let spanned_op = BinaryOp::from_span(span);
-        if spanned_op.extra.is_order_comparison() && !T::FEATURES.order_comparisons {
+        let (rest, spanned_op) = binary_ops(input)?;
+        if spanned_op.extra.is_supported(&T::FEATURES) {
+            Ok((rest, spanned_op))
+        } else {
             // Immediately drop parsing on an unsupported op, since there are no alternatives.
             let err = ErrorKind::UnsupportedOp(spanned_op.extra.into());
-            let spanned_err = Error::from_parts(span, err);
+            let spanned_err = err.with_span(&spanned_op);
             Err(NomErr::Failure(spanned_err))
-        } else {
-            Ok((rest, spanned_op))
         }
     };
 

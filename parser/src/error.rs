@@ -138,12 +138,6 @@ impl<'a> Error<'a> {
             inner: Spanned::new(span, kind),
         }
     }
-
-    pub(crate) fn from_parts(span: Spanned<'a>, kind: ErrorKind) -> Self {
-        Self {
-            inner: span.copy_with_extra(kind),
-        }
-    }
 }
 
 impl<Span> SpannedError<Span> {

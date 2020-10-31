@@ -5,8 +5,18 @@ use crate::{
 
 use core::fmt;
 
+/// Level of support of Boolean operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum BooleanOps {
+    /// Do not support boolean operations at all.
+    None,
+    /// Basic operations (`==`, `!=`, `&&`, `||`).
+    Basic,
+    /// `Basic` + order comparison operations (`>`, `<`, `>=`, `<=`)?
+    Full,
+}
+
 /// Parsing features for a `Grammar`.
-// TODO: make boolean expressions optional, too.
 #[derive(Debug, Clone)]
 #[allow(clippy::struct_excessive_bools)] // flags are independent
 pub struct Features {
@@ -20,8 +30,8 @@ pub struct Features {
     pub blocks: bool,
     /// Parse methods?
     pub methods: bool,
-    /// Parse order comparison operations (`>`, `<`, `>=`, `<=`)?
-    pub order_comparisons: bool,
+    /// Level of support of Boolean operations.
+    pub boolean_ops: BooleanOps,
 }
 
 impl Features {
@@ -33,7 +43,7 @@ impl Features {
             fn_definitions: true,
             blocks: true,
             methods: true,
-            order_comparisons: true,
+            boolean_ops: BooleanOps::Full,
         }
     }
 
@@ -45,14 +55,8 @@ impl Features {
             fn_definitions: false,
             blocks: false,
             methods: false,
-            order_comparisons: false,
+            boolean_ops: BooleanOps::None,
         }
-    }
-}
-
-impl Default for Features {
-    fn default() -> Self {
-        Self::all()
     }
 }
 

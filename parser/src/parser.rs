@@ -3,7 +3,7 @@
 use nom::{
     branch::alt,
     bytes::{
-        complete::{tag, take_while, take_while1, take_while_m_n},
+        complete::{tag, take_until, take_while, take_while1, take_while_m_n},
         streaming,
     },
     character::complete::{char as tag_char, one_of},
@@ -100,8 +100,8 @@ impl BinaryOp {
 }
 
 /// Whitespace and `//` comments.
-fn ws<Ty: GrammarType>(input: InputSpan) -> NomResult<InputSpan> {
-    fn narrow_ws<T: GrammarType>(input: InputSpan) -> NomResult<InputSpan> {
+fn ws<Ty: GrammarType>(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
+    fn narrow_ws<T: GrammarType>(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
         if T::COMPLETE {
             take_while1(|c: char| c.is_ascii_whitespace())(input)
         } else {
@@ -109,8 +109,17 @@ fn ws<Ty: GrammarType>(input: InputSpan) -> NomResult<InputSpan> {
         }
     }
 
+    fn long_comment_body<T: GrammarType>(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
+        if T::COMPLETE {
+            context(Context::Comment.to_str(), cut(take_until("*/")))(input)
+        } else {
+            streaming::take_until("*/")(input)
+        }
+    }
+
     let comment = preceded(tag("//"), take_while(|c: char| c != '\n'));
-    let ws_line = alt((narrow_ws::<Ty>, comment));
+    let long_comment = delimited(tag("/*"), long_comment_body::<Ty>, tag("*/"));
+    let ws_line = alt((narrow_ws::<Ty>, comment, long_comment));
     recognize(many0(ws_line))(input)
 }
 

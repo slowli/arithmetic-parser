@@ -40,6 +40,8 @@ pub enum ErrorKind {
     Leftovers,
     /// Input is incomplete.
     Incomplete,
+    /// Unfinished comment.
+    UnfinishedComment,
     /// Other parsing error.
     Other {
         /// `nom`-defined error kind.
@@ -71,8 +73,10 @@ impl fmt::Display for ErrorKind {
 
             Self::UnexpectedTerm { context: Some(ctx) } => write!(formatter, "Unfinished {}", ctx),
             Self::UnexpectedTerm { .. } => formatter.write_str("Unfinished expression"),
+
             Self::Leftovers => formatter.write_str("Uninterpreted characters after parsing"),
             Self::Incomplete => formatter.write_str("Incomplete input"),
+            Self::UnfinishedComment => formatter.write_str("Unfinished comment"),
             Self::Other { .. } => write!(formatter, "Cannot parse sequence"),
         }
     }
@@ -211,9 +215,14 @@ impl<'a> ParseError<InputSpan<'a>> for Error<'a> {
     }
 
     fn add_context(input: InputSpan<'a>, ctx: &'static str, mut target: Self) -> Self {
+        let ctx = Context::new(ctx);
+        if ctx == Context::Comment {
+            target.inner.extra = ErrorKind::UnfinishedComment;
+        }
+
         if input.location_offset() < target.inner.location_offset() {
             if let Some(context) = target.inner.extra.context_mut() {
-                *context = Some(Context::new(ctx));
+                *context = Some(ctx);
             }
         }
         target

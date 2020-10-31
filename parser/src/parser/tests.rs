@@ -260,6 +260,24 @@ fn whitespace_can_include_comments() {
 }
 
 #[test]
+fn multiline_comments() {
+    let input = InputSpan::new("/* !! */ foo");
+    assert_eq!(ws::<Complete>(input).unwrap().0, span(9, "foo"));
+    let input = InputSpan::new("/*\nFoo\n*/ foo");
+    assert_eq!(ws::<Complete>(input).unwrap().0, span_on_line(10, 3, "foo"));
+    let input = InputSpan::new("/* Foo");
+    assert!(ws::<Streaming>(input).unwrap_err().is_incomplete());
+
+    let input = InputSpan::new("/* Foo");
+    let err = ws::<Complete>(input).unwrap_err();
+    let err = match &err {
+        NomErr::Failure(err) => err.kind(),
+        _ => panic!("Unexpected error: {:?}", err),
+    };
+    assert_matches!(err, ErrorKind::UnfinishedComment);
+}
+
+#[test]
 fn non_ascii_input() {
     let input = InputSpan::new("\u{444}\u{44b}\u{432}\u{430}");
     let err = statements::<FieldGrammar>(input).unwrap_err();
@@ -1708,4 +1726,20 @@ fn methods_and_multiple_unary_ops() {
     };
     assert_eq!(*inner_expr.fragment(), "-1.abs()");
     assert_matches!(inner_expr.extra, Expr::Unary { .. });
+}
+
+#[test]
+fn expr_with_inline_comment() {
+    let input = InputSpan::new("foo(/* 1, */ x, 2)");
+    let expr = expr::<FieldGrammar, Complete>(input).unwrap().1.extra;
+    assert_eq!(
+        expr,
+        Expr::Function {
+            name: Box::new(sp(0, "foo", Expr::Variable)),
+            args: vec![
+                sp(13, "x", Expr::Variable),
+                sp(16, "2", Expr::Literal(Literal::Number)),
+            ]
+        }
+    );
 }

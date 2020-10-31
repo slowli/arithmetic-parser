@@ -10,7 +10,7 @@
 //!   as a sequence of alphanumeric chars and underscores that does not start with a digit.
 //! - **Literals.** The parser for literals is user-provided, thus allowing to apply the library
 //!   to different domains (e.g., finite group arithmetic).
-//! - **Comments** staring with `//` and spanning till the end of the line.
+//! - `//` and `/* .. */` **comments**.
 //! - Basic **arithmetic operations**: `+`, `-` (binary and unary), `*`, `/`, `^` (power).
 //!   The parser outputs AST with nodes organized according to the operation priority.
 //! - **Function calls**: `foo(1.0, x)`.
@@ -70,7 +70,7 @@
 //!
 //! const PROGRAM: &str = r#"
 //!     // This is a comment.
-//!     x = 1 + 2.5 * 3 + sin(a^3 / b^2);
+//!     x = 1 + 2.5 * 3 + sin(a^3 / b^2 /* another comment */);
 //!     // Function declarations have syntax similar to Rust closures.
 //!     some_function = |a, b| (a + b, a - b);
 //!     other_function = |x| {
@@ -154,15 +154,18 @@ pub enum Context {
     Fun,
     /// Arithmetic expression.
     Expr,
+    /// Comment.
+    Comment,
 }
 
 impl fmt::Display for Context {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Context::Var => formatter.write_str("variable"),
-            Context::Fun => formatter.write_str("function call"),
-            Context::Expr => formatter.write_str("arithmetic expression"),
-        }
+        formatter.write_str(match self {
+            Self::Var => "variable",
+            Self::Fun => "function call",
+            Self::Expr => "arithmetic expression",
+            Self::Comment => "comment",
+        })
     }
 }
 
@@ -172,6 +175,7 @@ impl Context {
             "var" => Self::Var,
             "fn" => Self::Fun,
             "expr" => Self::Expr,
+            "comment" => Self::Comment,
             _ => unreachable!(),
         }
     }
@@ -181,6 +185,7 @@ impl Context {
             Self::Var => "var",
             Self::Fun => "fn",
             Self::Expr => "expr",
+            Self::Comment => "comment",
         }
     }
 }

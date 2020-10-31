@@ -53,6 +53,7 @@
 //!   keywords in general.
 //! - Functions are only defined via the closure syntax.
 //! - There is "rest" destructuting for tuples and function arguments.
+//! - Type hints are placed within tuple elements, for example, `(x: Num, _) = y`.
 //!
 //! [`Grammar`]: trait.Grammar.html
 //! [`Features`]: struct.Features.html
@@ -414,6 +415,35 @@ impl fmt::Display for ExprType {
     }
 }
 
+/// Priority of an operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[non_exhaustive]
+pub enum OpPriority {
+    /// Boolean OR (`||`).
+    Or,
+    /// Boolean AND (`&&`).
+    And,
+    /// Equality and order comparisons: `==`, `!=`, `>`, `<`, `>=`, `<=`.
+    Comparison,
+    /// Addition or subtraction: `+` or `-`.
+    AddOrSub,
+    /// Multiplication or division: `*` or `/`.
+    MulOrDiv,
+    /// Power (`^`).
+    Power,
+    /// Numeric or Boolean negation: `!` or unary `-`.
+    Negation,
+    /// Function or method call.
+    Call,
+}
+
+impl OpPriority {
+    /// Returns the maximum priority.
+    pub const fn max_priority() -> Self {
+        Self::Call
+    }
+}
+
 /// Unary operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
@@ -434,9 +464,12 @@ impl fmt::Display for UnaryOp {
 }
 
 impl UnaryOp {
-    /// Priority of unary operations.
-    // TODO: replace with enum?
-    pub const PRIORITY: usize = 5;
+    /// Returns a relative priority of this operation.
+    pub fn priority(self) -> OpPriority {
+        match self {
+            Self::Neg | Self::Not => OpPriority::Negation,
+        }
+    }
 }
 
 /// Binary arithmetic operation.
@@ -512,14 +545,16 @@ impl BinaryOp {
     }
 
     /// Returns the priority of this operation.
-    // TODO: replace with enum?
-    pub fn priority(self) -> usize {
+    pub fn priority(self) -> OpPriority {
         match self {
-            Self::And | Self::Or => 0,
-            Self::Eq | Self::NotEq | Self::Gt | Self::Lt | Self::Le | Self::Ge => 1,
-            Self::Add | Self::Sub => 2,
-            Self::Mul | Self::Div => 3,
-            Self::Power => 4,
+            Self::Or => OpPriority::Or,
+            Self::And => OpPriority::And,
+            Self::Eq | Self::NotEq | Self::Gt | Self::Lt | Self::Le | Self::Ge => {
+                OpPriority::Comparison
+            }
+            Self::Add | Self::Sub => OpPriority::AddOrSub,
+            Self::Mul | Self::Div => OpPriority::MulOrDiv,
+            Self::Power => OpPriority::Power,
         }
     }
 

@@ -14,7 +14,7 @@ use std::{
 
 use arithmetic_parser::{
     grammars::NumGrammar, BinaryOp, Block, Expr, FnDefinition, GrammarExt, InputSpan, Lvalue,
-    SpannedExpr, SpannedLvalue, Statement, UnaryOp,
+    OpPriority, SpannedExpr, SpannedLvalue, Statement, UnaryOp,
 };
 
 type ComplexGrammar = NumGrammar<Complex32>;
@@ -28,7 +28,7 @@ enum Evaluated {
         /// Expression contents serialized as a string.
         content: String,
         /// Priority of the latest executed operation.
-        priority: usize,
+        priority: OpPriority,
     },
     /// Expression has a value known in compile time.
     Value(Complex32),
@@ -38,12 +38,12 @@ impl Evaluated {
     fn var(name: impl Into<String>) -> Self {
         Self::Symbolic {
             content: name.into(),
-            priority: UnaryOp::PRIORITY,
+            priority: OpPriority::max_priority(),
         }
     }
 
     /// Converts this expression into a string.
-    fn into_string(self, caller_priority: usize) -> String {
+    fn into_string(self, caller_priority: OpPriority) -> String {
         match self {
             Evaluated::Symbolic { content, priority } => {
                 if priority < caller_priority {
@@ -118,7 +118,7 @@ impl ops::Mul for Evaluated {
             (Value(lhs), Value(rhs)) => Value(lhs * rhs),
             (lhs, rhs) => Symbolic {
                 content: format!("complex_mul({}, {})", lhs, rhs),
-                priority: UnaryOp::PRIORITY,
+                priority: OpPriority::max_priority(),
             },
         }
     }
@@ -134,7 +134,7 @@ impl ops::Div for Evaluated {
             (Value(lhs), Value(rhs)) => Value(lhs / rhs),
             (lhs, rhs) => Symbolic {
                 content: format!("complex_div({}, {})", lhs, rhs),
-                priority: UnaryOp::PRIORITY,
+                priority: OpPriority::max_priority(),
             },
         }
     }
@@ -150,7 +150,7 @@ impl ops::BitXor for Evaluated {
             (Value(lhs), Value(rhs)) => Value(lhs.powc(rhs)),
             (lhs, rhs) => Symbolic {
                 content: format!("complex_pow({}, {})", lhs, rhs),
-                priority: UnaryOp::PRIORITY,
+                priority: OpPriority::max_priority(),
             },
         }
     }
@@ -165,7 +165,7 @@ impl ops::Neg for Evaluated {
         match self {
             Value(value) => Value(-value),
             value => {
-                let priority = UnaryOp::PRIORITY;
+                let priority = OpPriority::max_priority();
                 let content = format!("-{}", value.into_string(priority));
                 Symbolic { content, priority }
             }
@@ -332,7 +332,7 @@ impl<'a> Context<'a> {
 
                 Evaluated::Symbolic {
                     content: fn_call,
-                    priority: UnaryOp::PRIORITY,
+                    priority: OpPriority::max_priority(),
                 }
             }
 
@@ -348,11 +348,11 @@ impl<'a> Context<'a> {
 fn main() {
     // The input should be one or more function definitions.
     const EXPR: &str = "computation = |z| {
-        # Define a constant.
-        c = (-0.5 + 0.2i) * 3; # Note that this constant will be folded.
+        // Define a constant.
+        c = (-0.5 + 0.2i) * 3; // Note that this constant will be folded.
         d = (-0.3i * 2 + 2) * z^2 + c^2;
 
-        # Returned expression.
+        // Returned expression.
         sinh(z^2 + c) * d
     };
 

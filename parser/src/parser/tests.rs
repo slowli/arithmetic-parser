@@ -1743,3 +1743,25 @@ fn expr_with_inline_comment() {
         }
     );
 }
+
+#[test]
+fn and_has_higher_priority_than_or() {
+    let input = InputSpan::new("x || y && z");
+    let expr = expr::<FieldGrammar, Complete>(input).unwrap().1.extra;
+    assert_eq!(
+        expr,
+        Expr::Binary {
+            lhs: Box::new(sp(0, "x", Expr::Variable)),
+            op: sp(2, "||", BinaryOp::Or),
+            rhs: Box::new(sp(
+                5,
+                "y && z",
+                Expr::Binary {
+                    lhs: Box::new(sp(5, "y", Expr::Variable)),
+                    op: sp(7, "&&", BinaryOp::And),
+                    rhs: Box::new(sp(10, "z", Expr::Variable)),
+                }
+            ))
+        }
+    );
+}

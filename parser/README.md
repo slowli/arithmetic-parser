@@ -25,15 +25,15 @@ Here is an example of code parsed with the grammar with real-valued literals
 and the only supported type `Num`:
 
 ```text
-# This is a comment.
+// This is a comment.
 x = 1 + 2.5 * 3 + sin(a^3 / b^2);
-# Function declarations have syntax similar to Rust closures.
+// Function declarations have syntax similar to Rust closures.
 some_function = |a, b: Num| (a + b, a - b);
 other_function = |x| {
     r = min(rand(), 0.5);
     r * x
 };
-# Tuples and blocks are supported and have a similar syntax to Rust.
+// Tuples and blocks are supported and have a similar syntax to Rust.
 (y, z: Num) = some_function({ x = x - 0.5; x }, x);
 other_function(y - z)
 ```

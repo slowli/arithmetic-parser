@@ -48,8 +48,8 @@
 //!
 //! # fn main() -> anyhow::Result<()> {
 //! let program = r#"
-//!     ## The interpreter supports all parser features, including
-//!     ## function definitions, tuples and blocks.
+//!     // The interpreter supports all parser features, including
+//!     // function definitions, tuples and blocks.
 //!     order = |x, y| (min(x, y), max(x, y));
 //!     assert(order(0.5, -1) == (-1, 0.5));
 //!     (_, M) = order(3^2, { x = 3; x + 5 });

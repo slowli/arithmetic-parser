@@ -237,25 +237,25 @@ fn whitespace_can_include_comments() {
         ws::<Complete>(input).unwrap().0,
         span_on_line(3, 2, "ge(1)")
     );
-    let input = InputSpan::new("# Comment\nge(1)");
+    let input = InputSpan::new("// Comment\nge(1)");
     assert_eq!(
         ws::<Complete>(input).unwrap().0,
-        span_on_line(10, 2, "ge(1)")
+        span_on_line(11, 2, "ge(1)")
     );
-    let input = InputSpan::new("#!\nge(1)");
+    let input = InputSpan::new("//!\nge(1)");
     assert_eq!(
         ws::<Complete>(input).unwrap().0,
-        span_on_line(3, 2, "ge(1)")
+        span_on_line(4, 2, "ge(1)")
     );
 
     let input = InputSpan::new(
-        "   # This is a comment.
-             \t# This is a comment, too
-             this_is_not # although this *is*",
+        "   // This is a comment.
+             \t// This is a comment, too
+             this_is_not // although this *is*",
     );
     assert_eq!(
         ws::<Complete>(input).unwrap().0,
-        span_on_line(76, 3, "this_is_not # although this *is*")
+        span_on_line(78, 3, "this_is_not // although this *is*")
     );
 }
 

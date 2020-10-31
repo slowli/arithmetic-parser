@@ -236,7 +236,7 @@ fn captured_function() {
 
     let continued_program = r#"
         div = gen(|x, y| x / y);
-        div(1, 2) == -1.5 # 1/2 - 2/1
+        div(1, 2) == -1.5 // 1/2 - 2/1
     "#;
     let return_flag = evaluate(&mut env, continued_program);
     assert_eq!(return_flag, Value::Bool(true));
@@ -301,9 +301,9 @@ fn captured_var_in_returned_fn() {
     let program = r#"
         gen = |x| {
             y = (x, x^2);
-            # Check that `x` below is not taken from the arg above, but rather
-            # from the function argument. `y` though should be captured
-            # from the surrounding function.
+            // Check that `x` below is not taken from the arg above, but rather
+            // from the function argument. `y` though should be captured
+            // from the surrounding function.
             |x| y - (x, x^2)
         };
         foo = gen(2);

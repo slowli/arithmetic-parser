@@ -713,9 +713,9 @@ mod tests {
     #[test]
     fn extracting_captures_with_inner_fns() {
         let program = r#"
-            y = 5 * x;          # x is a capture
-            fun = |z| {         # z is not a capture
-                z * x + y * PI  # y is not a capture for the entire module, PI is
+            y = 5 * x;          // x is a capture
+            fun = |z| {         // z is not a capture
+                z * x + y * PI  // y is not a capture for the entire module, PI is
             };
         "#;
         let module = F32Grammar::parse_statements(program).unwrap();

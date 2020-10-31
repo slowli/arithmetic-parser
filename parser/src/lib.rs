@@ -10,7 +10,7 @@
 //!   as a sequence of alphanumeric chars and underscores that does not start with a digit.
 //! - **Literals.** The parser for literals is user-provided, thus allowing to apply the library
 //!   to different domains (e.g., finite group arithmetic).
-//! - Python-like **comments** staring with `#`.
+//! - **Comments** staring with `//` and spanning till the end of the line.
 //! - Basic **arithmetic operations**: `+`, `-` (binary and unary), `*`, `/`, `^` (power).
 //!   The parser outputs AST with nodes organized according to the operation priority.
 //! - **Function calls**: `foo(1.0, x)`.
@@ -69,15 +69,15 @@
 //! };
 //!
 //! const PROGRAM: &str = r#"
-//!     ## This is a comment.
+//!     // This is a comment.
 //!     x = 1 + 2.5 * 3 + sin(a^3 / b^2);
-//!     ## Function declarations have syntax similar to Rust closures.
+//!     // Function declarations have syntax similar to Rust closures.
 //!     some_function = |a, b| (a + b, a - b);
 //!     other_function = |x| {
 //!         r = min(rand(), 0.5);
 //!         r * x
 //!     };
-//!     ## Tuples and blocks are supported and have a similar syntax to Rust.
+//!     // Tuples and blocks are supported and have a similar syntax to Rust.
 //!     (y, z) = some_function({ x = x - 0.5; x }, x);
 //!     other_function(y - z)
 //! "#;

@@ -99,7 +99,7 @@ impl BinaryOp {
     }
 }
 
-/// Whitespace and `#...` comments.
+/// Whitespace and `//` comments.
 fn ws<Ty: GrammarType>(input: InputSpan) -> NomResult<InputSpan> {
     fn narrow_ws<T: GrammarType>(input: InputSpan) -> NomResult<InputSpan> {
         if T::COMPLETE {
@@ -109,7 +109,7 @@ fn ws<Ty: GrammarType>(input: InputSpan) -> NomResult<InputSpan> {
         }
     }
 
-    let comment = preceded(tag_char('#'), take_while(|c: char| c != '\n'));
+    let comment = preceded(tag("//"), take_while(|c: char| c != '\n'));
     let ws_line = alt((narrow_ws::<Ty>, comment));
     recognize(many0(ws_line))(input)
 }

@@ -7,7 +7,54 @@ use nom::{
 
 use core::fmt;
 
-use crate::{alloc::ToOwned, Context, InputSpan, LocatedSpan, Op, Spanned, StripCode};
+use crate::{alloc::ToOwned, InputSpan, LocatedSpan, Op, Spanned, StripCode};
+
+/// Parsing context.
+// TODO: Add more fine-grained contexts.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub enum Context {
+    /// Variable name.
+    Var,
+    /// Function invocation.
+    Fun,
+    /// Arithmetic expression.
+    Expr,
+    /// Comment.
+    Comment,
+}
+
+impl fmt::Display for Context {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Var => "variable",
+            Self::Fun => "function call",
+            Self::Expr => "arithmetic expression",
+            Self::Comment => "comment",
+        })
+    }
+}
+
+impl Context {
+    pub(crate) fn new(s: &str) -> Self {
+        match s {
+            "var" => Self::Var,
+            "fn" => Self::Fun,
+            "expr" => Self::Expr,
+            "comment" => Self::Comment,
+            _ => unreachable!(),
+        }
+    }
+
+    pub(crate) fn to_str(self) -> &'static str {
+        match self {
+            Self::Var => "var",
+            Self::Fun => "fn",
+            Self::Expr => "expr",
+            Self::Comment => "comment",
+        }
+    }
+}
 
 /// Parsing error kind.
 #[derive(Debug)]

@@ -65,7 +65,7 @@ fn main() -> anyhow::Result<()> {
 
     // Importing into a stripped module also works. Let's redefine the `fold` import.
     let fold_program = r#"
-        # Implement right fold instead of standard left one.
+        // Implement right fold instead of standard left one.
         rfold = |xs, acc, fn| {
             (_, acc) = (xs, acc).while(|(xs, _)| xs != (), |(xs, acc)| {
                 (...head, tail) = xs;
@@ -74,7 +74,7 @@ fn main() -> anyhow::Result<()> {
             acc
         };
 
-        # Check that it works.
+        // Check that it works.
         folded = (1, 2, 3).rfold((), |acc, elem| acc.push(elem));
         assert(folded == (3, 2, 1));
 

@@ -1,6 +1,63 @@
 //! Parser for arithmetic expressions with flexible definition of literals and support
 //! of type annotations.
 //!
+//! Overall, parsed grammars are similar to Rust syntax,
+//! [with a few notable differences](#differences-with-rust).
+//!
+//! # Supported Features
+//!
+//! - **Variables.** A variable name is defined similar to Rust and other programming languages,
+//!   as a sequence of alphanumeric chars and underscores that does not start with a digit.
+//! - **Literals.** The parser for literals is user-provided, thus allowing to apply the library
+//!   to different domains (e.g., finite group arithmetic).
+//! - `//` and `/* .. */` **comments**.
+//! - Basic **arithmetic operations**: `+`, `-` (binary and unary), `*`, `/`, `^` (power).
+//!   The parser outputs AST with nodes organized according to the operation priority.
+//! - **Function calls**: `foo(1.0, x)`.
+//! - **Parentheses** which predictably influence operation priority.
+//!
+//! The parser supports both complete and streaming (incomplete) modes; the latter is useful
+//! for REPLs and similar applications.
+//!
+//! ## Optional Features
+//!
+//! These features can be switched on or off when defining a [`Grammar`] by defining
+//! the corresponding [`Features`].
+//!
+//! - **Tuples.** A tuple is two or more elements separated by commas, such as `(x, y)`
+//!   or `(1, 2 * x)`. Tuples are parsed both as lvalues and rvalues.
+//! - **Tuple destructuring.** Using a tuple as an lvalue, for example, `(x, y, z) = foo`.
+//!   The "rest" syntax is also supported, either named or unnamed: `(head, ...tail) = foo`,
+//!   `(a, ..., b, c) = foo`.
+//! - **Function definitions.** A definition looks like a closure definition in Rust, e.g.,
+//!   `|x| x - 10` or `|x, y| { z = max(x, y); (z - x, z - y) }`. A definition may be
+//!   assigned to a variable (which is the way to define named functions).
+//! - **Destructuring for function args.** Similar to tuple destructuring, it is possible to
+//!   destructure and group args in function definitions, for example, `|(x, y), ...zs| { }`.
+//! - **Blocks.** A block is several `;`-delimited statements enclosed in `{}` braces,
+//!   e.g, `{ z = max(x, y); (z - x, z - y) }`. The blocks can be used in all contexts
+//!   instead of a simple expression; for example, `min({ z = 5; z - 1 }, 3)`.
+//! - **Methods.** Method call is a function call separated from the receiver with a `.` char;
+//!   for example, `foo.bar(2, x)`.
+//! - **Type annotations.** A type annotation in the form `var: Type` can be present
+//!   in the lvalues or in the function argument definitions. The parser for type annotations
+//!   is user-defined.
+//! - **Boolean operations**: `==`, `!=`, `&&`, `||`, `!`.
+//! - **Order comparisons,** that is, `>`, `<`, `>=`, and `<=` boolean ops.
+//!
+//! ## Differences with Rust
+//!
+//! *(within shared syntax constructs; of course, Rust is much more expressive)*
+//!
+//! - No keyword for assigning a variable (i.e., no `let` / `let mut`). There are no
+//!   keywords in general.
+//! - Functions are only defined via the closure syntax.
+//! - There is "rest" destructuting for tuples and function arguments.
+//! - Type hints are placed within tuple elements, for example, `(x: Num, _) = y`.
+//!
+//! [`Grammar`]: trait.Grammar.html
+//! [`Features`]: struct.Features.html
+//!
 //! # Examples
 //!
 //! Using a grammar for arithmetic on real values.
@@ -13,15 +70,15 @@
 //! };
 //!
 //! const PROGRAM: &str = r#"
-//!     ## This is a comment.
-//!     x = 1 + 2.5 * 3 + sin(a^3 / b^2);
-//!     ## Function declarations have syntax similar to Rust closures.
+//!     // This is a comment.
+//!     x = 1 + 2.5 * 3 + sin(a^3 / b^2 /* another comment */);
+//!     // Function declarations have syntax similar to Rust closures.
 //!     some_function = |a, b| (a + b, a - b);
 //!     other_function = |x| {
 //!         r = min(rand(), 0.5);
 //!         r * x
 //!     };
-//!     ## Tuples and blocks are supported and have a similar syntax to Rust.
+//!     // Tuples and blocks are supported and have a similar syntax to Rust.
 //!     (y, z) = some_function({ x = x - 0.5; x }, x);
 //!     other_function(y - z)
 //! "#;
@@ -68,13 +125,14 @@ mod alloc {
 }
 
 pub use crate::{
-    error::{Error, ErrorKind, SpannedError},
+    error::{Context, Error, ErrorKind, SpannedError},
+    ops::{BinaryOp, Op, OpPriority, UnaryOp},
     parser::is_valid_variable_name,
     spans::{
         CodeFragment, InputSpan, LocatedSpan, MaybeSpanned, NomResult, Spanned, StripCode,
         StripResultExt,
     },
-    traits::{Features, Grammar, GrammarExt, IntoInputSpan},
+    traits::{BooleanOps, Features, Grammar, GrammarExt, IntoInputSpan},
 };
 
 use core::fmt;
@@ -83,51 +141,10 @@ use crate::alloc::{vec, Box, Vec};
 
 mod error;
 pub mod grammars;
+mod ops;
 mod parser;
 mod spans;
 mod traits;
-
-/// Parsing context.
-// TODO: Add more fine-grained contexts.
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[non_exhaustive]
-pub enum Context {
-    /// Variable name.
-    Var,
-    /// Function invocation.
-    Fun,
-    /// Arithmetic expression.
-    Expr,
-}
-
-impl fmt::Display for Context {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Context::Var => formatter.write_str("variable"),
-            Context::Fun => formatter.write_str("function call"),
-            Context::Expr => formatter.write_str("arithmetic expression"),
-        }
-    }
-}
-
-impl Context {
-    fn new(s: &str) -> Self {
-        match s {
-            "var" => Self::Var,
-            "fn" => Self::Fun,
-            "expr" => Self::Expr,
-            _ => unreachable!(),
-        }
-    }
-
-    fn to_str(self) -> &'static str {
-        match self {
-            Self::Var => "var",
-            Self::Fun => "fn",
-            Self::Expr => "expr",
-        }
-    }
-}
 
 /// Arithmetic expression with an abstract types for type hints and literals.
 #[derive(Debug)]
@@ -350,168 +367,6 @@ impl fmt::Display for ExprType {
             Self::Tuple => "tuple",
             Self::Block => "block",
         })
-    }
-}
-
-/// Unary operation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum UnaryOp {
-    /// Negation (`-`).
-    Neg,
-    /// Boolean negation (`!`).
-    Not,
-}
-
-impl fmt::Display for UnaryOp {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            UnaryOp::Neg => formatter.write_str("negation"),
-            UnaryOp::Not => formatter.write_str("logical negation"),
-        }
-    }
-}
-
-impl UnaryOp {
-    /// Priority of unary operations.
-    // TODO: replace with enum?
-    pub const PRIORITY: usize = 5;
-}
-
-/// Binary arithmetic operation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum BinaryOp {
-    /// Addition (`+`).
-    Add,
-    /// Subtraction (`-`).
-    Sub,
-    /// Multiplication (`*`).
-    Mul,
-    /// Division (`/`).
-    Div,
-    /// Power (`^`).
-    Power,
-    /// Equality (`==`).
-    Eq,
-    /// Non-equality (`!=`).
-    NotEq,
-    /// Boolean AND (`&&`).
-    And,
-    /// Boolean OR (`||`).
-    Or,
-    /// "Greater than" comparison.
-    Gt,
-    /// "Lesser than" comparison.
-    Lt,
-    /// "Greater or equal" comparison.
-    Ge,
-    /// "Lesser or equal" comparison.
-    Le,
-}
-
-impl fmt::Display for BinaryOp {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::Add => "addition",
-            Self::Sub => "subtraction",
-            Self::Mul => "multiplication",
-            Self::Div => "division",
-            Self::Power => "exponentiation",
-            Self::Eq => "equality comparison",
-            Self::NotEq => "non-equality comparison",
-            Self::And => "AND",
-            Self::Or => "OR",
-            Self::Gt => "greater comparison",
-            Self::Lt => "lesser comparison",
-            Self::Ge => "greater-or-equal comparison",
-            Self::Le => "lesser-or-equal comparison",
-        })
-    }
-}
-
-impl BinaryOp {
-    /// Returns the string representation of this operation.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Add => "+",
-            Self::Sub => "-",
-            Self::Mul => "*",
-            Self::Div => "/",
-            Self::Power => "^",
-            Self::Eq => "==",
-            Self::NotEq => "!=",
-            Self::And => "&&",
-            Self::Or => "||",
-            Self::Gt => ">",
-            Self::Lt => "<",
-            Self::Ge => ">=",
-            Self::Le => "<=",
-        }
-    }
-
-    /// Returns the priority of this operation.
-    // TODO: replace with enum?
-    pub fn priority(self) -> usize {
-        match self {
-            Self::And | Self::Or => 0,
-            Self::Eq | Self::NotEq | Self::Gt | Self::Lt | Self::Le | Self::Ge => 1,
-            Self::Add | Self::Sub => 2,
-            Self::Mul | Self::Div => 3,
-            Self::Power => 4,
-        }
-    }
-
-    /// Checks if this operation is arithmetic.
-    pub fn is_arithmetic(self) -> bool {
-        matches!(
-            self,
-            Self::Add | Self::Sub | Self::Mul | Self::Div | Self::Power
-        )
-    }
-
-    /// Checks if this operation is a comparison.
-    pub fn is_comparison(self) -> bool {
-        matches!(
-            self,
-            Self::Eq | Self::NotEq | Self::Gt | Self::Lt | Self::Le | Self::Ge
-        )
-    }
-
-    /// Checks if this operation is an order comparison.
-    pub fn is_order_comparison(self) -> bool {
-        matches!(self, Self::Gt | Self::Lt | Self::Le | Self::Ge)
-    }
-}
-
-/// Generic operation, either unary or binary.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum Op {
-    /// Unary operation.
-    Unary(UnaryOp),
-    /// Binary operation.
-    Binary(BinaryOp),
-}
-
-impl fmt::Display for Op {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Unary(inner) => fmt::Display::fmt(inner, formatter),
-            Self::Binary(inner) => fmt::Display::fmt(inner, formatter),
-        }
-    }
-}
-
-impl From<UnaryOp> for Op {
-    fn from(value: UnaryOp) -> Self {
-        Self::Unary(value)
-    }
-}
-
-impl From<BinaryOp> for Op {
-    fn from(value: BinaryOp) -> Self {
-        Self::Binary(value)
     }
 }
 

@@ -14,6 +14,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 - Make `GrammarExt` methods more generic: they now accept inputs convertible
   to an `InputSpan`, such as `&str`. (#32)
 
+- Allow switching Boolean expressions off. (#36)
+
 ### Changed
 
 - Use homegrown `LocatedSpan` instead of one from `nom_locate` crate.
@@ -28,6 +30,10 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
   - Use `Error` as the main error type instead of a `Spanned<_>` wrapper.
   - Implement `std::error::Error` for `Error`.
 
+- Use `//` and `/* .. */` comments instead of `#` ones. (#36)
+
+- Use the `OpPriority` enum to encode op priorities instead of integers. (#36)
+
 ### Fixed
 
 - Fix parsing of expressions like `1.abs()` for standard grammars. Previously,
@@ -39,6 +45,10 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Disallow using literals as function names. Thus, an expression like `1(2, x)`
   is no longer valid. (#33)
+
+- Disallow chained comparisons, such as `x < y < z`. (#36)
+
+- Make `&&` have higher priority than `||`, as in Rust. (#36)
 
 ## 0.2.0-beta.1 - 2020-10-04
 

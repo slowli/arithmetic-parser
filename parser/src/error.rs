@@ -7,7 +7,54 @@ use nom::{
 
 use core::fmt;
 
-use crate::{alloc::ToOwned, Context, InputSpan, LocatedSpan, Op, Spanned, StripCode};
+use crate::{alloc::ToOwned, InputSpan, LocatedSpan, Op, Spanned, StripCode};
+
+/// Parsing context.
+// TODO: Add more fine-grained contexts.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub enum Context {
+    /// Variable name.
+    Var,
+    /// Function invocation.
+    Fun,
+    /// Arithmetic expression.
+    Expr,
+    /// Comment.
+    Comment,
+}
+
+impl fmt::Display for Context {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Var => "variable",
+            Self::Fun => "function call",
+            Self::Expr => "arithmetic expression",
+            Self::Comment => "comment",
+        })
+    }
+}
+
+impl Context {
+    pub(crate) fn new(s: &str) -> Self {
+        match s {
+            "var" => Self::Var,
+            "fn" => Self::Fun,
+            "expr" => Self::Expr,
+            "comment" => Self::Comment,
+            _ => unreachable!(),
+        }
+    }
+
+    pub(crate) fn to_str(self) -> &'static str {
+        match self {
+            Self::Var => "var",
+            Self::Fun => "fn",
+            Self::Expr => "expr",
+            Self::Comment => "comment",
+        }
+    }
+}
 
 /// Parsing error kind.
 #[derive(Debug)]
@@ -40,6 +87,10 @@ pub enum ErrorKind {
     Leftovers,
     /// Input is incomplete.
     Incomplete,
+    /// Unfinished comment.
+    UnfinishedComment,
+    /// Chained comparison, such as `1 < 2 < 3`.
+    ChainedComparison,
     /// Other parsing error.
     Other {
         /// `nom`-defined error kind.
@@ -71,8 +122,11 @@ impl fmt::Display for ErrorKind {
 
             Self::UnexpectedTerm { context: Some(ctx) } => write!(formatter, "Unfinished {}", ctx),
             Self::UnexpectedTerm { .. } => formatter.write_str("Unfinished expression"),
+
             Self::Leftovers => formatter.write_str("Uninterpreted characters after parsing"),
             Self::Incomplete => formatter.write_str("Incomplete input"),
+            Self::UnfinishedComment => formatter.write_str("Unfinished comment"),
+            Self::ChainedComparison => formatter.write_str("Chained comparisons"),
             Self::Other { .. } => write!(formatter, "Cannot parse sequence"),
         }
     }
@@ -136,12 +190,6 @@ impl<'a> Error<'a> {
     pub(crate) fn new(span: InputSpan<'a>, kind: ErrorKind) -> Self {
         Self {
             inner: Spanned::new(span, kind),
-        }
-    }
-
-    pub(crate) fn from_parts(span: Spanned<'a>, kind: ErrorKind) -> Self {
-        Self {
-            inner: span.copy_with_extra(kind),
         }
     }
 }
@@ -217,9 +265,14 @@ impl<'a> ParseError<InputSpan<'a>> for Error<'a> {
     }
 
     fn add_context(input: InputSpan<'a>, ctx: &'static str, mut target: Self) -> Self {
+        let ctx = Context::new(ctx);
+        if ctx == Context::Comment {
+            target.inner.extra = ErrorKind::UnfinishedComment;
+        }
+
         if input.location_offset() < target.inner.location_offset() {
             if let Some(context) = target.inner.extra.context_mut() {
-                *context = Some(Context::new(ctx));
+                *context = Some(ctx);
             }
         }
         target

@@ -279,7 +279,7 @@ pub(crate) fn unite_spans<'a, T, U>(
     input: InputSpan<'a>,
     start: &Spanned<'_, T>,
     end: &Spanned<'_, U>,
-) -> InputSpan<'a> {
+) -> Spanned<'a> {
     debug_assert!(input.location_offset() <= start.location_offset());
     debug_assert!(start.location_offset() <= end.location_offset());
     debug_assert!(
@@ -289,15 +289,12 @@ pub(crate) fn unite_spans<'a, T, U>(
 
     let start_idx = start.location_offset() - input.location_offset();
     let end_idx = end.location_offset() + end.fragment().len() - input.location_offset();
-    unsafe {
-        // SAFETY: Safe since offset coincides with the input offset (which we consider
-        // well-formed).
-        InputSpan::new_from_raw_offset(
-            start.location_offset(),
-            start.location_line(),
-            &input.fragment()[start_idx..end_idx],
-            (),
-        )
+    Spanned {
+        offset: start.offset,
+        line: start.line,
+        column: start.column,
+        fragment: &input.fragment()[start_idx..end_idx],
+        extra: (),
     }
 }
 

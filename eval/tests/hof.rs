@@ -72,9 +72,9 @@ fn repeated_function() {
     let program = r#"
         fn = |x| 2 * x + 1;
         repeated = fn.repeat(3);
-        # 2 * 1 + 1 = 3 -> 2 * 3 + 1 = 7 -> 2 * 7 + 1 = 15
+        // 2 * 1 + 1 = 3 -> 2 * 3 + 1 = 7 -> 2 * 7 + 1 = 15
         assert(repeated(1) == 15);
-        # -1 is the immovable point of the transform
+        // -1 is the immovable point of the transform
         assert(repeated(-1) == -1);
     "#;
     let program = F32Grammar::parse_statements(program).unwrap();
@@ -91,9 +91,9 @@ fn repeated_function() {
 fn eager_repeated_function() {
     let program = r#"
         fn = |x| 2 * x + 1;
-        # 2 * 1 + 1 = 3 -> 2 * 3 + 1 = 7 -> 2 * 7 + 1 = 15
+        // 2 * 1 + 1 = 3 -> 2 * 3 + 1 = 7 -> 2 * 7 + 1 = 15
         assert(fn.repeat(3, 1) == 15);
-        # -1 is the immovable point of the transform
+        // -1 is the immovable point of the transform
         assert(fn.repeat(3, -1) == -1);
     "#;
     let program = F32Grammar::parse_statements(program).unwrap();

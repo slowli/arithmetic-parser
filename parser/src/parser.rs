@@ -1,13 +1,9 @@
 //! Parsers implemented with the help of `nom`.
 
-// FIXME: is something like `1(2, x)` parsed as fn call?
-// FIXME: make method calls on numbers have higher priority than unary ops (negation):
-//    -1.abs() = -(1.abs()), not (-1).abs()
-
 use nom::{
     branch::alt,
     bytes::{
-        complete::{tag, take_while, take_while1, take_while_m_n},
+        complete::{tag, take_until, take_while, take_while1, take_while_m_n},
         streaming,
     },
     character::complete::{char as tag_char, one_of},
@@ -23,9 +19,9 @@ use core::mem;
 use crate::{
     alloc::{vec, Box, Vec},
     spans::{unite_spans, with_span},
-    BinaryOp, Block, Context, Destructure, DestructureRest, Error, ErrorKind, Expr, FnDefinition,
-    Grammar, InputSpan, Lvalue, NomResult, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement,
-    Statement, UnaryOp,
+    BinaryOp, Block, BooleanOps, Context, Destructure, DestructureRest, Error, ErrorKind, Expr,
+    Features, FnDefinition, Grammar, InputSpan, Lvalue, NomResult, Spanned, SpannedExpr,
+    SpannedLvalue, SpannedStatement, Statement, UnaryOp,
 };
 
 #[cfg(test)]
@@ -68,29 +64,44 @@ impl UnaryOp {
 }
 
 impl BinaryOp {
-    fn from_span(span: Spanned<'_, ()>) -> Spanned<'_, Self> {
-        span.copy_with_extra(match *span.fragment() {
-            "+" => Self::Add,
-            "-" => Self::Sub,
-            "*" => Self::Mul,
-            "/" => Self::Div,
-            "^" => Self::Power,
-            "==" => Self::Eq,
-            "!=" => Self::NotEq,
-            "&&" => Self::And,
-            "||" => Self::Or,
-            ">" => Self::Gt,
-            "<" => Self::Lt,
-            ">=" => Self::Ge,
-            "<=" => Self::Le,
-            _ => unreachable!(),
-        })
+    fn from_span(span: InputSpan<'_>) -> Spanned<'_, Self> {
+        Spanned::new(
+            span,
+            match *span.fragment() {
+                "+" => Self::Add,
+                "-" => Self::Sub,
+                "*" => Self::Mul,
+                "/" => Self::Div,
+                "^" => Self::Power,
+                "==" => Self::Eq,
+                "!=" => Self::NotEq,
+                "&&" => Self::And,
+                "||" => Self::Or,
+                ">" => Self::Gt,
+                "<" => Self::Lt,
+                ">=" => Self::Ge,
+                "<=" => Self::Le,
+                _ => unreachable!(),
+            },
+        )
+    }
+
+    fn is_supported(self, features: &Features) -> bool {
+        let boolean_ops = features.boolean_ops;
+
+        match self {
+            Self::Add | Self::Sub | Self::Mul | Self::Div | Self::Power => true,
+            Self::Eq | Self::NotEq | Self::And | Self::Or => boolean_ops >= BooleanOps::Basic,
+            Self::Gt | Self::Lt | Self::Ge | Self::Le => {
+                boolean_ops >= BooleanOps::OrderComparisons
+            }
+        }
     }
 }
 
-/// Whitespace and `#...` comments.
-fn ws<Ty: GrammarType>(input: InputSpan) -> NomResult<InputSpan> {
-    fn narrow_ws<T: GrammarType>(input: InputSpan) -> NomResult<InputSpan> {
+/// Whitespace and comments.
+fn ws<Ty: GrammarType>(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
+    fn narrow_ws<T: GrammarType>(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
         if T::COMPLETE {
             take_while1(|c: char| c.is_ascii_whitespace())(input)
         } else {
@@ -98,8 +109,17 @@ fn ws<Ty: GrammarType>(input: InputSpan) -> NomResult<InputSpan> {
         }
     }
 
-    let comment = preceded(tag_char('#'), take_while(|c: char| c != '\n'));
-    let ws_line = alt((narrow_ws::<Ty>, comment));
+    fn long_comment_body<T: GrammarType>(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
+        if T::COMPLETE {
+            context(Context::Comment.to_str(), cut(take_until("*/")))(input)
+        } else {
+            streaming::take_until("*/")(input)
+        }
+    }
+
+    let comment = preceded(tag("//"), take_while(|c: char| c != '\n'));
+    let long_comment = delimited(tag("/*"), long_comment_body::<Ty>, tag("*/"));
+    let ws_line = alt((narrow_ws::<Ty>, comment, long_comment));
     recognize(many0(ws_line))(input)
 }
 
@@ -358,18 +378,14 @@ fn fold_args<'a, T: Grammar>(
                 args: call.extra.args,
             }
         };
-        Spanned::new(united_span, expr)
+        united_span.copy_with_extra(expr)
     });
 
     Ok(if let Some(unary_op) = reordered_op {
-        let united_span = unite_spans(input, &unary_op, &folded);
-        Spanned::new(
-            united_span,
-            Expr::Unary {
-                op: unary_op,
-                inner: Box::new(folded),
-            },
-        )
+        unite_spans(input, &unary_op, &folded).copy_with_extra(Expr::Unary {
+            op: unary_op,
+            inner: Box::new(folded),
+        })
     } else {
         folded
     })
@@ -393,18 +409,17 @@ where
         tag("&&"), tag("||"), // logical ops
         tag(">="), tag("<="), tag(">"), tag("<"), // order comparisons
     ));
-    let binary_ops = with_span(map(binary_ops, drop));
+    let binary_ops = map(binary_ops, BinaryOp::from_span);
 
     let full_binary_ops = move |input| {
-        let (rest, span) = binary_ops(input)?;
-        let spanned_op = BinaryOp::from_span(span);
-        if spanned_op.extra.is_order_comparison() && !T::FEATURES.order_comparisons {
+        let (rest, spanned_op) = binary_ops(input)?;
+        if spanned_op.extra.is_supported(&T::FEATURES) {
+            Ok((rest, spanned_op))
+        } else {
             // Immediately drop parsing on an unsupported op, since there are no alternatives.
             let err = ErrorKind::UnsupportedOp(spanned_op.extra.into());
-            let spanned_err = Error::from_parts(span, err);
+            let spanned_err = err.with_span(&spanned_op);
             Err(NomErr::Failure(spanned_err))
-        } else {
-            Ok((rest, spanned_op))
         }
     };
 
@@ -416,87 +431,103 @@ where
         ))),
     ));
 
-    // After obtaining the list, we fold it paying attention to the operation priorities.
-    // We track the `right_contour` of the parsed tree and insert a new operation so that
-    // operations in the contour with lower priority remain in place.
-    //
-    // As an example, consider expression `1 + 2 * foo(x, y) - 7` split into list
-    // `[ 1, +, 2, *, foo(x, y), -, 7 ]`. First, we form a tree
-    //
-    //   +
-    //  / \
-    // 1   2
-    //
-    // Then, we find the place to insert the `*` op and `foo(x, y)` operand. Since `*` has
-    // a higher priority than `+`, we insert it *below* the `+` op:
-    //
-    //   +
-    //  / \
-    // 1   *
-    //    / \
-    //   2  foo(x, y)
-    //
-    // The next op `-` has the same priority as the first op in the right contour (`+`), so
-    // we insert it *above* it:
-    //
-    //    -
-    //   / \
-    //   +  7
-    //  / \
-    // 1   *
-    //    / \
-    //   2  foo(x, y)
-    map(binary_parser, |(first, rest)| {
-        let mut right_contour: Vec<BinaryOp> = vec![];
-        rest.into_iter().fold(first, |mut acc, (new_op, expr)| {
-            let united_span = unite_spans(input, &acc, &expr);
+    let (remaining_input, (first, rest)) = binary_parser(input)?;
+    let folded = fold_binary_expr(input, first, rest).map_err(NomErr::Failure)?;
+    Ok((remaining_input, folded))
+}
 
-            let insert_pos = right_contour
-                .iter()
-                .position(|past_op| past_op.priority() >= new_op.extra.priority())
-                .unwrap_or_else(|| right_contour.len());
+// After obtaining the list, we fold it paying attention to the operation priorities.
+// We track the `right_contour` of the parsed tree and insert a new operation so that
+// operations in the contour with lower priority remain in place.
+//
+// As an example, consider expression `1 + 2 * foo(x, y) - 7` split into list
+// `[ 1, +, 2, *, foo(x, y), -, 7 ]`. First, we form a tree
+//
+//   +
+//  / \
+// 1   2
+//
+// Then, we find the place to insert the `*` op and `foo(x, y)` operand. Since `*` has
+// a higher priority than `+`, we insert it *below* the `+` op:
+//
+//   +
+//  / \
+// 1   *
+//    / \
+//   2  foo(x, y)
+//
+// The next op `-` has the same priority as the first op in the right contour (`+`), so
+// we insert it *above* it:
+//
+//    -
+//   / \
+//   +  7
+//  / \
+// 1   *
+//    / \
+//   2  foo(x, y)
+fn fold_binary_expr<'a, T: Grammar>(
+    input: InputSpan<'a>,
+    first: SpannedExpr<'a, T>,
+    rest: Vec<(Spanned<'a, BinaryOp>, SpannedExpr<'a, T>)>,
+) -> Result<SpannedExpr<'a, T>, Error<'a>> {
+    let mut right_contour: Vec<BinaryOp> = vec![];
 
-            if insert_pos == 0 {
-                right_contour.clear();
-                right_contour.push(new_op.extra);
+    rest.into_iter().try_fold(first, |mut acc, (new_op, expr)| {
+        let united_span = unite_spans(input, &acc, &expr);
 
-                Spanned::new(
-                    united_span,
-                    Expr::Binary {
-                        lhs: Box::new(acc),
-                        op: new_op,
-                        rhs: Box::new(expr),
-                    },
-                )
-            } else {
-                right_contour.truncate(insert_pos);
-                right_contour.push(new_op.extra);
+        let insert_pos = right_contour
+            .iter()
+            .position(|past_op| past_op.priority() >= new_op.extra.priority())
+            .unwrap_or_else(|| right_contour.len());
 
-                let mut parent = &mut acc;
-                for _ in 1..insert_pos {
-                    parent = match parent.extra {
-                        Expr::Binary { ref mut rhs, .. } => rhs,
-                        _ => unreachable!(),
-                    };
-                }
+        // We determine the error span later.
+        let chained_comparison = right_contour.get(insert_pos).map_or(false, |past_op| {
+            past_op.is_comparison() && new_op.extra.is_comparison()
+        });
 
-                *parent = Spanned::new(unite_spans(input, &parent, &expr), parent.extra.clone());
-                if let Expr::Binary { ref mut rhs, .. } = parent.extra {
-                    let rhs_span = unite_spans(input, rhs, &expr);
-                    let dummy = Box::new(rhs.copy_with_extra(Expr::Variable));
-                    let old_rhs = mem::replace(rhs, dummy);
-                    let new_expr = Expr::Binary {
-                        lhs: old_rhs,
-                        op: new_op,
-                        rhs: Box::new(expr),
-                    };
-                    *rhs = Box::new(Spanned::new(rhs_span, new_expr));
-                }
-                acc = Spanned::new(united_span, acc.extra);
-                acc
+        right_contour.truncate(insert_pos);
+        right_contour.push(new_op.extra);
+
+        if insert_pos == 0 {
+            if chained_comparison {
+                return Err(ErrorKind::ChainedComparison.with_span(&united_span));
             }
-        })
-    })(input)
+
+            Ok(united_span.copy_with_extra(Expr::Binary {
+                lhs: Box::new(acc),
+                op: new_op,
+                rhs: Box::new(expr),
+            }))
+        } else {
+            let mut parent = &mut acc;
+            for _ in 1..insert_pos {
+                parent = match parent.extra {
+                    Expr::Binary { ref mut rhs, .. } => rhs,
+                    _ => unreachable!(),
+                };
+            }
+
+            *parent = unite_spans(input, &parent, &expr).copy_with_extra(parent.extra.clone());
+            if let Expr::Binary { ref mut rhs, .. } = parent.extra {
+                let rhs_span = unite_spans(input, rhs, &expr);
+                if chained_comparison {
+                    return Err(ErrorKind::ChainedComparison.with_span(&rhs_span));
+                }
+
+                let dummy = Box::new(rhs.copy_with_extra(Expr::Variable));
+                let old_rhs = mem::replace(rhs, dummy);
+                let new_expr = Expr::Binary {
+                    lhs: old_rhs,
+                    op: new_op,
+                    rhs: Box::new(expr),
+                };
+                *rhs = Box::new(rhs_span.copy_with_extra(new_expr));
+            }
+            acc = united_span.copy_with_extra(acc.extra);
+            Ok(acc)
+        }
+    })
 }
 
 fn expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T>>

@@ -103,8 +103,8 @@ fn extract_fn<'a, T: Grammar>(
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
-///     assert(1 + 2 == 3); # this assertion is fine
-///     assert(3^2 == 10); # this one will fail
+///     assert(1 + 2 == 3); // this assertion is fine
+///     assert(3^2 == 10); // this one will fail
 /// "#;
 /// let program = F32Grammar::parse_statements(program)?;
 /// let module = Environment::new()
@@ -662,7 +662,7 @@ where
 /// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
-///     ## Merges all arguments (which should be tuples) into a single tuple.
+///     // Merges all arguments (which should be tuples) into a single tuple.
 ///     super_merge = |...xs| fold(xs, (), merge);
 ///     super_merge((1, 2), (3,), (), (4, 5, 6)) == (1, 2, 3, 4, 5, 6)
 /// "#;
@@ -819,7 +819,7 @@ mod tests {
     #[test]
     fn loop_basic() {
         let program = r#"
-            # Finds the greatest power of 2 lesser or equal to the value.
+            // Finds the greatest power of 2 lesser or equal to the value.
             discrete_log2 = |x| {
                 loop(0, |i| {
                     continue = 2^i <= x;

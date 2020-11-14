@@ -17,8 +17,7 @@ use arithmetic_parser::{
     OpPriority, SpannedExpr, SpannedLvalue, Statement, UnaryOp, Untyped,
 };
 
-type ComplexBase = NumGrammar<Complex32>;
-type ComplexGrammar = Untyped<ComplexBase>;
+type ComplexGrammar = Untyped<NumGrammar<Complex32>>;
 
 /// Evaluated expression.
 #[derive(Debug, Clone)]
@@ -188,7 +187,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    fn generate_code(block: &Block<'a, ComplexBase>) -> String {
+    fn generate_code(block: &Block<'a, ComplexGrammar>) -> String {
         let mut code = String::new();
 
         for statement in &block.statements {
@@ -209,7 +208,7 @@ impl<'a> Context<'a> {
         code
     }
 
-    fn eval_function(fn_def: &FnDefinition<ComplexBase>, name: &str) -> String {
+    fn eval_function(fn_def: &FnDefinition<ComplexGrammar>, name: &str) -> String {
         let mut context = Self::new();
         let mut evaluated = format!("float2 {}(", name);
         let args = &fn_def.args.extra.start;
@@ -257,7 +256,7 @@ impl<'a> Context<'a> {
     fn eval_assignment(
         &mut self,
         lhs: &SpannedLvalue<'a, ()>,
-        rhs: &SpannedExpr<'a, ComplexBase>,
+        rhs: &SpannedExpr<'a, ComplexGrammar>,
     ) -> Option<String> {
         let variable_name = match lhs.extra {
             Lvalue::Variable { .. } => *lhs.fragment(),
@@ -280,7 +279,7 @@ impl<'a> Context<'a> {
         return_value
     }
 
-    fn eval_expr(&self, expr: &SpannedExpr<'a, ComplexBase>) -> Evaluated {
+    fn eval_expr(&self, expr: &SpannedExpr<'a, ComplexGrammar>) -> Evaluated {
         match &expr.extra {
             Expr::Variable => {
                 let var = self

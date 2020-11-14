@@ -20,8 +20,8 @@ use crate::{
     alloc::{vec, Box, Vec},
     spans::{unite_spans, with_span},
     BinaryOp, Block, BooleanOps, Context, Destructure, DestructureRest, Error, ErrorKind, Expr,
-    Features, FnDefinition, Grammar, GrammarExt, InputSpan, Lvalue, NomResult, Spanned,
-    SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
+    Features, FnDefinition, Grammar, GrammarExt, InputSpan, Lvalue, NomResult, ParseLiteral,
+    Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
 };
 
 #[cfg(test)]

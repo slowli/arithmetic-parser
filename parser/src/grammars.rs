@@ -11,7 +11,7 @@ use num_traits::Num;
 
 use core::{f32, f64, fmt, marker::PhantomData};
 
-use crate::{spans::NomResult, Grammar, InputSpan};
+use crate::{spans::NomResult, InputSpan, ParseLiteral};
 
 /// Single-type numeric grammar parameterized by the literal type.
 #[derive(Debug)]
@@ -22,16 +22,11 @@ pub type F32Grammar = NumGrammar<f32>;
 /// Type alias for a grammar on `f64` literals.
 pub type F64Grammar = NumGrammar<f64>;
 
-impl<T: NumLiteral> Grammar for NumGrammar<T> {
+impl<T: NumLiteral> ParseLiteral for NumGrammar<T> {
     type Lit = T;
-    type Type = ();
 
     fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
         T::parse(input)
-    }
-
-    fn parse_type(_input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
-        unimplemented!()
     }
 }
 

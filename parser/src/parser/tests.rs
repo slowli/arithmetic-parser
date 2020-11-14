@@ -8,7 +8,7 @@ use nom::{
 use core::fmt;
 
 use super::*;
-use crate::{alloc::String, grammars::F32Grammar, Features, Op, Typed, Untyped};
+use crate::{alloc::String, grammars::F32Grammar, Features, Op, ParseLiteral, Typed, Untyped};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum LiteralType {
@@ -136,13 +136,16 @@ fn type_info<Ty: GrammarType>(input: InputSpan<'_>) -> NomResult<'_, ValueType> 
 #[derive(Debug, Clone)]
 struct FieldGrammarBase;
 
-impl Grammar for FieldGrammarBase {
+impl ParseLiteral for FieldGrammarBase {
     type Lit = Literal;
-    type Type = ValueType;
 
     fn parse_literal(span: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
         Literal::parse(span)
     }
+}
+
+impl Grammar for FieldGrammarBase {
+    type Type = ValueType;
 
     fn parse_type(span: InputSpan<'_>) -> NomResult<'_, Self::Type> {
         type_info::<Streaming>(span)
@@ -1388,7 +1391,7 @@ fn type_hints_when_switched_off() {
     assert_eq!(
         stmt.extra,
         Statement::Assignment {
-            lhs: lsp(0, "x", Lvalue::Variable { ty: None }),
+            lhs: sp(0, "x", Lvalue::Variable { ty: None }),
             rhs: Box::new(sp(
                 4,
                 "1 + y",
@@ -1610,9 +1613,8 @@ fn no_unary_op_if_literal_without_it_not_parsed() {
     #[derive(Debug)]
     struct ExclamationGrammar;
 
-    impl Grammar for ExclamationGrammar {
+    impl ParseLiteral for ExclamationGrammar {
         type Lit = String;
-        type Type = ();
 
         fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
             map(
@@ -1623,10 +1625,6 @@ fn no_unary_op_if_literal_without_it_not_parsed() {
                 ),
                 |s: InputSpan<'_>| (*s.fragment()).to_owned(),
             )(input)
-        }
-
-        fn parse_type(_: InputSpan<'_>) -> NomResult<'_, Self::Type> {
-            unreachable!("Never called per `FEATURES`")
         }
     }
 

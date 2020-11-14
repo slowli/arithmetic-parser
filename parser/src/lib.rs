@@ -132,7 +132,9 @@ pub use crate::{
         CodeFragment, InputSpan, LocatedSpan, MaybeSpanned, NomResult, Spanned, StripCode,
         StripResultExt,
     },
-    traits::{BooleanOps, Features, Grammar, GrammarExt, IntoInputSpan, Typed, Untyped},
+    traits::{
+        BooleanOps, Features, Grammar, GrammarExt, IntoInputSpan, ParseLiteral, Typed, Untyped,
+    },
 };
 
 use core::fmt;
@@ -507,10 +509,7 @@ impl fmt::Display for LvalueType {
 /// Statement: an expression or a variable assignment.
 #[derive(Debug)]
 #[non_exhaustive]
-pub enum Statement<'a, T>
-where
-    T: Grammar,
-{
+pub enum Statement<'a, T: Grammar> {
     /// Expression, e.g., `x + (1, 2)`.
     Expr(SpannedExpr<'a, T>),
 

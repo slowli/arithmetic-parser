@@ -1,9 +1,12 @@
-use crate::{
-    parser::{statements, streaming_statements},
-    Block, Error, InputSpan, NomResult,
-};
+use anyhow::anyhow;
+use nom::Err as NomErr;
 
 use core::{fmt, marker::PhantomData};
+
+use crate::{
+    parser::{statements, streaming_statements},
+    Block, Error, ErrorKind, InputSpan, NomResult, SpannedError,
+};
 
 /// Level of support of Boolean operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -122,11 +125,9 @@ impl Features {
 /// # Ok(())
 /// # }
 /// ```
-pub trait Grammar: 'static {
+pub trait ParseLiteral: 'static {
     /// Type of the literal used in the grammar.
     type Lit: Clone + fmt::Debug;
-    /// Type of the type annotation used in the grammar.
-    type Type: Clone + fmt::Debug;
 
     /// Attempts to parse a literal.
     ///
@@ -154,6 +155,12 @@ pub trait Grammar: 'static {
     ///
     /// [`FEATURES`]: #associatedconstant.FEATURES
     fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit>;
+}
+
+/// FIXME
+pub trait Grammar: ParseLiteral {
+    /// Type of the type annotation used in the grammar.
+    type Type: Clone + fmt::Debug;
 
     /// Attempts to parse a type hint.
     ///
@@ -183,7 +190,7 @@ impl<'a> IntoInputSpan<'a> for &'a str {
 
 /// FIXME
 pub trait GrammarExt {
-    /// Base for the grammar providing necessary parsers.
+    /// Base for the grammar providing the literal parser.
     type Base: Grammar;
     /// Features supported by this grammar.
     const FEATURES: Features;
@@ -211,8 +218,28 @@ pub trait GrammarExt {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Untyped<T>(PhantomData<T>);
 
-impl<T: Grammar> GrammarExt for Untyped<T> {
-    type Base = T;
+impl<T: ParseLiteral> ParseLiteral for Untyped<T> {
+    type Lit = T::Lit;
+
+    #[inline]
+    fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
+        T::parse_literal(input)
+    }
+}
+
+impl<T: ParseLiteral> Grammar for Untyped<T> {
+    type Type = ();
+
+    #[inline]
+    fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
+        let err = anyhow!("Type annotations are not supported by this parser");
+        let err = SpannedError::new(input, ErrorKind::Type(err));
+        Err(NomErr::Failure(err))
+    }
+}
+
+impl<T: ParseLiteral> GrammarExt for Untyped<T> {
+    type Base = Self;
 
     const FEATURES: Features = Features {
         type_annotations: false,

@@ -3,7 +3,7 @@ use crate::{
     Block, Error, InputSpan, NomResult,
 };
 
-use core::fmt;
+use core::{fmt, marker::PhantomData};
 
 /// Level of support of Boolean operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -128,9 +128,6 @@ pub trait Grammar: 'static {
     /// Type of the type annotation used in the grammar.
     type Type: Clone + fmt::Debug;
 
-    /// Features supported by this grammar.
-    const FEATURES: Features;
-
     /// Attempts to parse a literal.
     ///
     /// Literals should follow these rules:
@@ -184,35 +181,51 @@ impl<'a> IntoInputSpan<'a> for &'a str {
     }
 }
 
-/// Extension trait for `Grammar` used by the client applications.
-pub trait GrammarExt: Grammar {
+/// FIXME
+pub trait GrammarExt {
+    /// Base for the grammar providing necessary parsers.
+    type Base: Grammar;
+    /// Features supported by this grammar.
+    const FEATURES: Features;
+
     /// Parses a list of statements.
-    fn parse_statements<'a, I>(input: I) -> Result<Block<'a, Self>, Error<'a>>
+    fn parse_statements<'a, I>(input: I) -> Result<Block<'a, Self::Base>, Error<'a>>
     where
         I: IntoInputSpan<'a>,
-        Self: Sized;
+        Self: Sized,
+    {
+        statements::<Self>(input.into_input_span())
+    }
 
     /// Parses a potentially incomplete list of statements.
-    fn parse_streaming_statements<'a, I>(input: I) -> Result<Block<'a, Self>, Error<'a>>
+    fn parse_streaming_statements<'a, I>(input: I) -> Result<Block<'a, Self::Base>, Error<'a>>
     where
         I: IntoInputSpan<'a>,
-        Self: Sized;
+        Self: Sized,
+    {
+        streaming_statements::<Self>(input.into_input_span())
+    }
 }
 
-impl<T: Grammar> GrammarExt for T {
-    fn parse_statements<'a, I>(input: I) -> Result<Block<'a, Self>, Error<'a>>
-    where
-        I: IntoInputSpan<'a>,
-        Self: Sized,
-    {
-        statements(input.into_input_span())
-    }
+/// FIXME
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Untyped<T>(PhantomData<T>);
 
-    fn parse_streaming_statements<'a, I>(input: I) -> Result<Block<'a, Self>, Error<'a>>
-    where
-        I: IntoInputSpan<'a>,
-        Self: Sized,
-    {
-        streaming_statements(input.into_input_span())
-    }
+impl<T: Grammar> GrammarExt for Untyped<T> {
+    type Base = T;
+
+    const FEATURES: Features = Features {
+        type_annotations: false,
+        ..Features::all()
+    };
+}
+
+/// FIXME
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Typed<T>(PhantomData<T>);
+
+impl<T: Grammar> GrammarExt for Typed<T> {
+    type Base = T;
+
+    const FEATURES: Features = Features::all();
 }

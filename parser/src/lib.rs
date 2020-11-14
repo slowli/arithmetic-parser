@@ -132,7 +132,7 @@ pub use crate::{
         CodeFragment, InputSpan, LocatedSpan, MaybeSpanned, NomResult, Spanned, StripCode,
         StripResultExt,
     },
-    traits::{BooleanOps, Features, Grammar, GrammarExt, IntoInputSpan},
+    traits::{BooleanOps, Features, Grammar, GrammarExt, IntoInputSpan, Typed, Untyped},
 };
 
 use core::fmt;

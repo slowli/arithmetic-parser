@@ -8,7 +8,7 @@ use nom::{
 use core::fmt;
 
 use super::*;
-use crate::{alloc::String, grammars::F32Grammar, Features, Op};
+use crate::{alloc::String, grammars::F32Grammar, Features, Op, Typed, Untyped};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum LiteralType {
@@ -134,13 +134,11 @@ fn type_info<Ty: GrammarType>(input: InputSpan<'_>) -> NomResult<'_, ValueType> 
 }
 
 #[derive(Debug, Clone)]
-struct FieldGrammar;
+struct FieldGrammarBase;
 
-impl Grammar for FieldGrammar {
+impl Grammar for FieldGrammarBase {
     type Lit = Literal;
     type Type = ValueType;
-
-    const FEATURES: Features = Features::all();
 
     fn parse_literal(span: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
         Literal::parse(span)
@@ -150,6 +148,8 @@ impl Grammar for FieldGrammar {
         type_info::<Streaming>(span)
     }
 }
+
+type FieldGrammar = Typed<FieldGrammarBase>;
 
 fn span(offset: usize, fragment: &str) -> InputSpan<'_> {
     span_on_line(offset, 1, fragment)
@@ -519,7 +519,7 @@ fn method_expr_works() {
 
 #[test]
 fn element_expr_works() {
-    fn simple_fn(offset: usize) -> Expr<'static, FieldGrammar> {
+    fn simple_fn(offset: usize) -> Expr<'static, FieldGrammarBase> {
         Expr::Function {
             name: Box::new(sp(offset, "ge", Expr::Variable)),
             args: vec![sp(
@@ -1380,26 +1380,7 @@ fn separated_statements_parse() {
 
 #[test]
 fn type_hints_when_switched_off() {
-    #[derive(Debug, Clone)]
-    struct SimpleGrammar;
-
-    impl Grammar for SimpleGrammar {
-        type Lit = Literal;
-        type Type = ValueType;
-
-        const FEATURES: Features = Features {
-            type_annotations: false,
-            ..Features::all()
-        };
-
-        fn parse_literal(span: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
-            Literal::parse(span)
-        }
-
-        fn parse_type(span: InputSpan<'_>) -> NomResult<'_, Self::Type> {
-            type_info::<Complete>(span)
-        }
-    }
+    type SimpleGrammar = Untyped<FieldGrammarBase>;
 
     // Check that expressions without type hints are parsed fine.
     let input = InputSpan::new("x = 1 + y");
@@ -1446,22 +1427,13 @@ fn fn_defs_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Grammar for SimpleGrammar {
-        type Lit = Literal;
-        type Type = ValueType;
+    impl GrammarExt for SimpleGrammar {
+        type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features {
             fn_definitions: false,
             ..Features::all()
         };
-
-        fn parse_literal(span: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
-            Literal::parse(span)
-        }
-
-        fn parse_type(span: InputSpan<'_>) -> NomResult<'_, Self::Type> {
-            type_info::<Complete>(span)
-        }
     }
 
     let input = InputSpan::new("foo = |x| { x + 3 }");
@@ -1474,22 +1446,13 @@ fn tuples_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Grammar for SimpleGrammar {
-        type Lit = Literal;
-        type Type = ValueType;
+    impl GrammarExt for SimpleGrammar {
+        type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features {
             tuples: false,
             ..Features::all()
         };
-
-        fn parse_literal(span: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
-            Literal::parse(span)
-        }
-
-        fn parse_type(span: InputSpan<'_>) -> NomResult<'_, Self::Type> {
-            type_info::<Complete>(span)
-        }
     }
 
     let input = InputSpan::new("tup = (1 + 2, 3 + 5)");
@@ -1506,22 +1469,13 @@ fn blocks_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Grammar for SimpleGrammar {
-        type Lit = Literal;
-        type Type = ValueType;
+    impl GrammarExt for SimpleGrammar {
+        type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features {
             blocks: false,
             ..Features::all()
         };
-
-        fn parse_literal(span: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
-            Literal::parse(span)
-        }
-
-        fn parse_type(span: InputSpan<'_>) -> NomResult<'_, Self::Type> {
-            type_info::<Complete>(span)
-        }
     }
 
     let input = InputSpan::new("x = { y = 10; y * 2 }");
@@ -1538,22 +1492,13 @@ fn methods_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Grammar for SimpleGrammar {
-        type Lit = Literal;
-        type Type = ValueType;
+    impl GrammarExt for SimpleGrammar {
+        type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features {
             methods: false,
             ..Features::all()
         };
-
-        fn parse_literal(span: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
-            Literal::parse(span)
-        }
-
-        fn parse_type(span: InputSpan<'_>) -> NomResult<'_, Self::Type> {
-            type_info::<Complete>(span)
-        }
     }
 
     let input = InputSpan::new("foo.bar(1)");
@@ -1570,22 +1515,13 @@ fn order_comparisons_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Grammar for SimpleGrammar {
-        type Lit = Literal;
-        type Type = ValueType;
+    impl GrammarExt for SimpleGrammar {
+        type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features {
             boolean_ops: BooleanOps::Basic,
             ..Features::all()
         };
-
-        fn parse_literal(span: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
-            Literal::parse(span)
-        }
-
-        fn parse_type(span: InputSpan<'_>) -> NomResult<'_, Self::Type> {
-            type_info::<Complete>(span)
-        }
     }
 
     for &op in &[BinaryOp::Gt, BinaryOp::Lt, BinaryOp::Ge, BinaryOp::Le] {
@@ -1595,7 +1531,8 @@ fn order_comparisons_when_switched_off() {
 
 fn assert_binary_op_is_not_parsed<T>(op: BinaryOp)
 where
-    T: Grammar + fmt::Debug,
+    T: GrammarExt,
+    T::Base: fmt::Debug,
 {
     let input = format!("x {} 1;", op.as_str());
     let input = InputSpan::new(&input);
@@ -1617,22 +1554,13 @@ fn boolean_ops_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Grammar for SimpleGrammar {
-        type Lit = Literal;
-        type Type = ValueType;
+    impl GrammarExt for SimpleGrammar {
+        type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features {
             boolean_ops: BooleanOps::None,
             ..Features::all()
         };
-
-        fn parse_literal(span: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
-            Literal::parse(span)
-        }
-
-        fn parse_type(span: InputSpan<'_>) -> NomResult<'_, Self::Type> {
-            type_info::<Complete>(span)
-        }
     }
 
     for &op in &[
@@ -1664,7 +1592,10 @@ fn methods_have_higher_priority_than_unary_ops() {
 
     for &input in INPUTS {
         let input = InputSpan::new(input);
-        let expr = expr::<F32Grammar, Complete>(input).unwrap().1.extra;
+        let expr = expr::<Untyped<F32Grammar>, Complete>(input)
+            .unwrap()
+            .1
+            .extra;
         assert_matches!(
             expr,
             Expr::Unary { op, .. } if op.extra == UnaryOp::Neg,
@@ -1683,11 +1614,6 @@ fn no_unary_op_if_literal_without_it_not_parsed() {
         type Lit = String;
         type Type = ();
 
-        const FEATURES: Features = Features {
-            type_annotations: false,
-            ..Features::all()
-        };
-
         fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
             map(
                 delimited(
@@ -1705,7 +1631,10 @@ fn no_unary_op_if_literal_without_it_not_parsed() {
     }
 
     let input = InputSpan::new("!foo!.bar();");
-    let expr = expr::<ExclamationGrammar, Complete>(input).unwrap().1.extra;
+    let expr = expr::<Untyped<ExclamationGrammar>, Complete>(input)
+        .unwrap()
+        .1
+        .extra;
     match expr {
         Expr::Method { name, receiver, .. } => {
             assert_eq!(*name.fragment(), "bar");
@@ -1718,7 +1647,7 @@ fn no_unary_op_if_literal_without_it_not_parsed() {
 #[test]
 fn methods_and_multiple_unary_ops() {
     let input = InputSpan::new("--1.abs();");
-    let expr = expr::<F32Grammar, Complete>(input).unwrap().1;
+    let expr = expr::<Untyped<F32Grammar>, Complete>(input).unwrap().1;
     assert_eq!(*expr.fragment(), "--1.abs()");
     let inner_expr = match expr.extra {
         Expr::Unary { inner, .. } => inner,

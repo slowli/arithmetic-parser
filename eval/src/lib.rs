@@ -43,7 +43,7 @@
 //! # Examples
 //!
 //! ```
-//! use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt};
+//! use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 //! use arithmetic_eval::{fns, Comparisons, Environment, Prelude, Value, VariableMap};
 //!
 //! # fn main() -> anyhow::Result<()> {
@@ -55,7 +55,7 @@
 //!     (_, M) = order(3^2, { x = 3; x + 5 });
 //!     M
 //! "#;
-//! let program = F32Grammar::parse_statements(program)?;
+//! let program = Untyped::<F32Grammar>::parse_statements(program)?;
 //!
 //! let mut env = Environment::new();
 //! // Add some native functions to the environment.

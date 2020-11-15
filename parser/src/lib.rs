@@ -65,8 +65,8 @@
 //! ```
 //! # use assert_matches::assert_matches;
 //! use arithmetic_parser::{
-//!     grammars::F32Grammar,
-//!     GrammarExt, NomResult, Statement, Expr, FnDefinition, LvalueLen,
+//!     grammars::{F32Grammar, Parse, Untyped},
+//!     NomResult, Statement, Expr, FnDefinition, LvalueLen,
 //! };
 //!
 //! const PROGRAM: &str = r#"
@@ -83,7 +83,8 @@
 //!     other_function(y - z)
 //! "#;
 //!
-//! let block = F32Grammar::parse_statements(PROGRAM).unwrap();
+//! # fn main() -> anyhow::Result<()> {
+//! let block = Untyped::<F32Grammar>::parse_statements(PROGRAM)?;
 //! // First statement is an assignment.
 //! assert_matches!(
 //!     block.statements[0].extra,
@@ -102,6 +103,8 @@
 //!             && body.statements.is_empty()
 //!             && body.return_value.is_some()
 //! );
+//! # Ok(())
+//! # }
 //! ```
 
 #![cfg_attr(not(feature = "std"), no_std)]

@@ -590,19 +590,22 @@ impl Compiler {
 /// # Examples
 ///
 /// ```
-/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// use arithmetic_eval::CompilerExt;
 /// # use hashbrown::HashSet;
 /// # use core::iter::FromIterator;
 ///
+/// # fn main() -> anyhow::Result<()> {
 /// let block = "x = sin(0.5) / PI; y = x * E; (x, y)";
-/// let block = F32Grammar::parse_statements(block).unwrap();
-/// let undefined_vars = block.undefined_variables().unwrap();
+/// let block = Untyped::<F32Grammar>::parse_statements(block)?;
+/// let undefined_vars = block.undefined_variables()?;
 /// assert_eq!(
 ///     undefined_vars.keys().copied().collect::<HashSet<_>>(),
 ///     HashSet::from_iter(vec!["sin", "PI", "E"])
 /// );
 /// assert_eq!(undefined_vars["PI"].location_offset(), 15);
+/// # Ok(())
+/// # }
 /// ```
 pub trait CompilerExt<'a> {
     /// Returns variables not defined within the AST node, together with the span of their first

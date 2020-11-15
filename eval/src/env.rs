@@ -27,10 +27,9 @@ use crate::{
 ///
 /// ```
 /// use arithmetic_eval::{Environment, Comparisons, Prelude, Value};
-/// use arithmetic_parser::grammars::F64Grammar;
 ///
 /// // Load environment from the standard containers.
-/// let mut env: Environment<'_, F64Grammar> = Prelude.iter()
+/// let mut env: Environment<'_, f64> = Prelude.iter()
 ///     .chain(Comparisons.iter())
 ///     // Add a custom variable for a good measure.
 ///     .chain(vec![("x", Value::Number(1.0))])

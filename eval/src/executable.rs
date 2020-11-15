@@ -43,13 +43,13 @@ pub(crate) use self::{
 /// ## Basic usage
 ///
 /// ```
-/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// use arithmetic_eval::{fns, Comparisons, ExecutableModule, Prelude, Value};
 /// # use core::{f32, iter::FromIterator};
 /// # use hashbrown::HashSet;
 ///
 /// # fn main() -> anyhow::Result<()> {
-/// let module = F32Grammar::parse_statements("xs.fold(-INFINITY, max)")?;
+/// let module = Untyped::<F32Grammar>::parse_statements("xs.fold(-INFINITY, max)")?;
 /// let mut module = ExecutableModule::builder("test", &module)?
 ///     .with_imports_from(&Prelude)
 ///     .with_imports_from(&Comparisons)
@@ -86,11 +86,11 @@ pub(crate) use self::{
 /// The same module can be run with multiple imports:
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{Environment, ExecutableModule, Value};
 /// # use core::iter::FromIterator;
 /// # fn main() -> anyhow::Result<()> {
-/// let block = F32Grammar::parse_statements("x + y")?;
+/// let block = Untyped::<F32Grammar>::parse_statements("x + y")?;
 /// let mut module = ExecutableModule::builder("test", &block)?
 ///     .with_import("x", Value::Number(3.0))
 ///     .with_import("y", Value::Number(5.0))
@@ -109,11 +109,11 @@ pub(crate) use self::{
 /// `run_in_env` modifies the environment even if an error occurs during execution:
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{Environment, ExecutableModule, Prelude, Value};
 /// # use core::iter::FromIterator;
 /// # fn main() -> anyhow::Result<()> {
-/// let module = F32Grammar::parse_statements("x = 5; assert(x == 4);")?;
+/// let module = Untyped::<F32Grammar>::parse_statements("x = 5; assert(x == 4);")?;
 /// let module = ExecutableModule::builder("test", &module)?
 ///     .with_imports_from(&Prelude)
 ///     .build();

@@ -46,14 +46,14 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// ## Basic function
 ///
 /// ```
-/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// use arithmetic_eval::{fns, Environment, Value, VariableMap};
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let max = fns::wrap(|x: f32, y: f32| if x > y { x } else { y });
 ///
 /// let program = "max(1, 3) == 3 && max(-1, -3) == -1";
-/// let program = F32Grammar::parse_statements(program)?;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = Environment::new()
 ///     .insert_native_fn("max", max)
 ///     .compile_module("test_max", &program)?;
@@ -65,7 +65,7 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// ## Fallible function with complex args
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns::FnWrapper, Environment, Value, VariableMap};
 /// fn zip_arrays(xs: Vec<f32>, ys: Vec<f32>) -> Result<Vec<(f32, f32)>, String> {
 ///     if xs.len() == ys.len() {
@@ -77,7 +77,7 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let program = "(1, 2, 3).zip((4, 5, 6)) == ((1, 4), (2, 5), (3, 6))";
-/// let program = F32Grammar::parse_statements(program)?;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_wrapped_fn("zip", zip_arrays)
@@ -594,15 +594,15 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{wrap_fn, Function, Environment, Value, VariableMap};
-/// fn is_function<G: Grammar>(value: Value<'_, G>) -> bool {
+/// fn is_function<T>(value: Value<'_, T>) -> bool {
 ///     value.is_function()
 /// }
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let program = "is_function(is_function) && !is_function(1)";
-/// let program = F32Grammar::parse_statements(program)?;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("is_function", wrap_fn!(1, is_function))
@@ -615,19 +615,19 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 /// Usage of lifetimes:
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{
 /// #     wrap_fn, CallContext, Function, Environment, Prelude, Value, VariableMap,
 /// # };
 /// # use core::iter::FromIterator;
 /// // Note that both `Value`s have the same lifetime due to elision.
-/// fn take_if<G: Grammar>(value: Value<'_, G>, condition: bool) -> Value<'_, G> {
+/// fn take_if<T>(value: Value<'_, T>, condition: bool) -> Value<'_, T> {
 ///     if condition { value } else { Value::void() }
 /// }
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let program = "(1, 2).take_if(true) == (1, 2) && (3, 4).take_if(false) != (3, 4)";
-/// let program = F32Grammar::parse_statements(program)?;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::from_iter(Prelude.iter())
 ///     .insert_native_fn("take_if", wrap_fn!(2, take_if))
@@ -694,15 +694,15 @@ macro_rules! wrap_fn {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{
 /// #     wrap_fn_with_context, CallContext, Function, Environment, Value, Error, VariableMap,
 /// # };
-/// fn map_array<'a, G: Grammar<Lit = f32>>(
+/// fn map_array<'a>(
 ///     context: &mut CallContext<'_, 'a>,
-///     array: Vec<Value<'a, G>>,
-///     map_fn: Function<'a, G>,
-/// ) -> Result<Vec<Value<'a, G>>, Error<'a>> {
+///     array: Vec<Value<'a, f32>>,
+///     map_fn: Function<'a, f32>,
+/// ) -> Result<Vec<Value<'a, f32>>, Error<'a>> {
 ///     array
 ///         .into_iter()
 ///         .map(|value| {
@@ -714,7 +714,7 @@ macro_rules! wrap_fn {
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let program = "(1, 2, 3).map(|x| x + 3) == (4, 5, 6)";
-/// let program = F32Grammar::parse_statements(program)?;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("map", wrap_fn_with_context!(2, map_array))

@@ -357,10 +357,10 @@ impl fmt::Display for AuxErrorInfo {
 /// in the `arithmetic-parser` crate:
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F64Grammar, GrammarExt, StripResultExt};
+/// # use arithmetic_parser::{grammars::{F64Grammar, Parse, Untyped}, StripResultExt};
 /// # use arithmetic_eval::{Environment, Error, ExecutableModule, VariableMap, WildcardId};
-/// fn compile_code(code: &str) -> anyhow::Result<ExecutableModule<'_, F64Grammar>> {
-///     let block = F64Grammar::parse_statements(code).strip_err()?;
+/// fn compile_code(code: &str) -> anyhow::Result<ExecutableModule<'_, f64>> {
+///     let block = Untyped::<F64Grammar>::parse_statements(code).strip_err()?;
 ///
 ///     // Without `strip_err()` call, the code below won't compile:
 ///     // `Error<'_>` in general cannot be boxed into `anyhow::Error`,

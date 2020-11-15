@@ -97,7 +97,7 @@ fn extract_fn<'a, T>(
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, Environment, ErrorKind, VariableMap};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
@@ -105,7 +105,7 @@ fn extract_fn<'a, T>(
 ///     assert(1 + 2 == 3); // this assertion is fine
 ///     assert(3^2 == 10); // this one will fail
 /// "#;
-/// let program = F32Grammar::parse_statements(program)?;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = Environment::new()
 ///     .insert_native_fn("assert", fns::Assert)
 ///     .compile_module("test_assert", &program)?;
@@ -156,11 +156,11 @@ impl<T> NativeFn<T> for Assert {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = "x = 3; if(x == 2, -1, x + 1)";
-/// let program = F32Grammar::parse_statements(program)?;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("if", fns::If)
@@ -174,11 +174,11 @@ impl<T> NativeFn<T> for Assert {
 /// afterwards:
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = "x = 3; if(x == 2, || -1, || x + 1)()";
-/// let program = F32Grammar::parse_statements(program)?;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("if", fns::If)
@@ -222,7 +222,7 @@ impl<T: Number> NativeFn<T> for If {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
@@ -234,7 +234,7 @@ impl<T: Number> NativeFn<T> for If {
 ///     };
 ///     factorial(5) == 120 && factorial(10) == 3628800
 /// "#;
-/// let program = F32Grammar::parse_statements(program)?;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("cmp", fns::Compare)
@@ -310,7 +310,7 @@ impl<T: Number> NativeFn<T> for Loop {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
@@ -323,7 +323,7 @@ impl<T: Number> NativeFn<T> for Loop {
 ///     };
 ///     factorial(5) == 120 && factorial(10) == 3628800
 /// "#;
-/// let program = F32Grammar::parse_statements(program)?;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("cmp", fns::Compare)
@@ -386,14 +386,14 @@ impl<T: Number> NativeFn<T> for While {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     xs = (1, -2, 3, -0.3);
 ///     map(xs, |x| if(x > 0, x, 0)) == (1, 0, 3, 0)
 /// "#;
-/// let program = F32Grammar::parse_statements(program)?;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("cmp", fns::Compare)
@@ -448,14 +448,14 @@ impl<T: Number> NativeFn<T> for Map {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     xs = (1, -2, 3, -7, -0.3);
 ///     filter(xs, |x| x > -1) == (1, 3, -0.3)
 /// "#;
-/// let program = F32Grammar::parse_statements(program)?;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("cmp", fns::Compare)
@@ -515,14 +515,14 @@ impl<T: Number> NativeFn<T> for Filter {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     xs = (1, -2, 3, -7);
 ///     fold(xs, 1, |acc, x| acc * x) == 42
 /// "#;
-/// let program = F32Grammar::parse_statements(program)?;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("fold", fns::Fold)
@@ -571,7 +571,7 @@ impl<T: Number> NativeFn<T> for Fold {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
@@ -585,7 +585,7 @@ impl<T: Number> NativeFn<T> for Fold {
 ///     repeat(-2, 3) == (-2, -2, -2) &&
 ///         repeat((7,), 4) == ((7,), (7,), (7,), (7,))
 /// "#;
-/// let program = F32Grammar::parse_statements(program)?;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("cmp", fns::Compare)
@@ -629,7 +629,7 @@ impl<T: Number> NativeFn<T> for Push {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
@@ -637,7 +637,7 @@ impl<T: Number> NativeFn<T> for Push {
 ///     super_merge = |...xs| fold(xs, (), merge);
 ///     super_merge((1, 2), (3,), (), (4, 5, 6)) == (1, 2, 3, 4, 5, 6)
 /// "#;
-/// let program = F32Grammar::parse_statements(program)?;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("fold", fns::Fold)

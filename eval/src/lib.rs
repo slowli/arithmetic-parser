@@ -116,7 +116,6 @@ pub use self::{
     variable_map::{Comparisons, Prelude, VariableMap},
 };
 
-use num_complex::{Complex32, Complex64};
 use num_traits::Pow;
 
 use core::ops;
@@ -137,5 +136,7 @@ pub trait Number: NumLiteral + ops::Neg<Output = Self> + Pow<Self, Output = Self
 
 impl Number for f32 {}
 impl Number for f64 {}
-impl Number for Complex32 {}
-impl Number for Complex64 {}
+#[cfg(feature = "num-complex")]
+impl Number for num_complex::Complex32 {}
+#[cfg(feature = "num-complex")]
+impl Number for num_complex::Complex64 {}

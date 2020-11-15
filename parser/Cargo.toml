@@ -15,9 +15,7 @@ keywords = ["parser", "arithmetic"]
 anyhow = { version = "1.0.27", default_features = false }
 nom = { version = "6.0.0", default_features = false, features = ["alloc"] }
 num-traits = { version = "0.2.11", default_features = false }
-
-# Optional dependencies (public)
-num-complex = { version = "0.3.0", default_features = false, optional = true }
+num-complex = { version = "0.3.0", optional = true }
 
 [dependencies.nom_locate]
 version = "2.1.0"

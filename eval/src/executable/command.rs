@@ -1,24 +1,22 @@
 //! Executable `Command` and its building blocks.
 
-use num_traits::{One, Zero};
-
 use core::cmp::Ordering;
 
 use crate::{
     alloc::{String, Vec},
     Number, Value,
 };
-use arithmetic_parser::{BinaryOp, Grammar, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
+use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
 
 /// Pointer to a register or constant.
 #[derive(Debug)]
-pub(crate) enum Atom<T: Grammar> {
-    Constant(T::Lit),
+pub(crate) enum Atom<T> {
+    Constant(T),
     Register(usize),
     Void,
 }
 
-impl<T: Grammar> Clone for Atom<T> {
+impl<T: Clone> Clone for Atom<T> {
     fn clone(&self) -> Self {
         match self {
             Self::Constant(literal) => Self::Constant(literal.clone()),
@@ -32,7 +30,7 @@ pub(crate) type SpannedAtom<'a, T> = MaybeSpanned<'a, Atom<T>>;
 
 /// Atomic operation on registers and/or constants.
 #[derive(Debug)]
-pub(crate) enum CompiledExpr<'a, T: Grammar> {
+pub(crate) enum CompiledExpr<'a, T> {
     Atom(Atom<T>),
     Tuple(Vec<Atom<T>>),
     Unary {
@@ -62,7 +60,7 @@ pub(crate) enum CompiledExpr<'a, T: Grammar> {
     },
 }
 
-impl<T: Grammar> Clone for CompiledExpr<'_, T> {
+impl<T: Clone> Clone for CompiledExpr<'_, T> {
     fn clone(&self) -> Self {
         match self {
             Self::Atom(atom) => Self::Atom(atom.clone()),
@@ -107,7 +105,7 @@ impl<T: Grammar> Clone for CompiledExpr<'_, T> {
     }
 }
 
-impl<T: Grammar> StripCode for CompiledExpr<'_, T> {
+impl<T: 'static + Clone> StripCode for CompiledExpr<'_, T> {
     type Stripped = CompiledExpr<'static, T>;
 
     fn strip_code(self) -> Self::Stripped {
@@ -173,11 +171,7 @@ impl ComparisonOp {
         }
     }
 
-    pub fn compare<T>(self, cmp_value: &Value<'_, T>) -> Option<bool>
-    where
-        T: Grammar,
-        T::Lit: Number,
-    {
+    pub fn compare<T: Number>(self, cmp_value: &Value<'_, T>) -> Option<bool> {
         let ordering = match cmp_value {
             Value::Number(num) if num.is_one() => Ordering::Greater,
             Value::Number(num) if num.is_zero() => Ordering::Equal,
@@ -195,7 +189,7 @@ impl ComparisonOp {
 
 /// Commands for a primitive register VM used to execute compiled programs.
 #[derive(Debug)]
-pub(crate) enum Command<'a, T: Grammar> {
+pub(crate) enum Command<'a, T> {
     /// Create a new register and push the result of the specified computation there.
     Push(CompiledExpr<'a, T>),
 
@@ -230,7 +224,7 @@ pub(crate) enum Command<'a, T: Grammar> {
     TruncateRegisters(usize),
 }
 
-impl<T: Grammar> Clone for Command<'_, T> {
+impl<T: Clone> Clone for Command<'_, T> {
     fn clone(&self) -> Self {
         match self {
             Self::Push(expr) => Self::Push(expr.clone()),
@@ -269,7 +263,7 @@ impl<T: Grammar> Clone for Command<'_, T> {
     }
 }
 
-impl<T: Grammar> StripCode for Command<'_, T> {
+impl<T: 'static + Clone> StripCode for Command<'_, T> {
     type Stripped = Command<'static, T>;
 
     fn strip_code(self) -> Self::Stripped {

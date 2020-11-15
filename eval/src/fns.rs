@@ -29,7 +29,6 @@
 //! [`wrap_fn_with_context`]: ../macro.wrap_fn_with_context.html
 //! [GAT]: https://github.com/rust-lang/rust/issues/44265
 
-use arithmetic_parser::Grammar;
 use num_traits::{One, Zero};
 
 use crate::{
@@ -44,11 +43,11 @@ pub use self::wrapper::{
     FromValueErrorLocation, IntoEvalResult, Quaternary, Ternary, TryFromValue, Unary,
 };
 
-fn extract_number<'a, T: Grammar>(
+fn extract_number<'a, T>(
     ctx: &CallContext<'_, 'a>,
     value: SpannedValue<'a, T>,
     error_msg: &str,
-) -> Result<T::Lit, Error<'a>> {
+) -> Result<T, Error<'a>> {
     match value.extra {
         Value::Number(value) => Ok(value),
         _ => Err(ctx
@@ -57,7 +56,7 @@ fn extract_number<'a, T: Grammar>(
     }
 }
 
-fn extract_array<'a, T: Grammar>(
+fn extract_array<'a, T>(
     ctx: &CallContext<'_, 'a>,
     value: SpannedValue<'a, T>,
     error_msg: &str,
@@ -72,7 +71,7 @@ fn extract_array<'a, T: Grammar>(
     }
 }
 
-fn extract_fn<'a, T: Grammar>(
+fn extract_fn<'a, T>(
     ctx: &CallContext<'_, 'a>,
     value: SpannedValue<'a, T>,
     error_msg: &str,
@@ -123,7 +122,7 @@ fn extract_fn<'a, T: Grammar>(
 #[derive(Debug, Clone, Copy)]
 pub struct Assert;
 
-impl<T: Grammar> NativeFn<T> for Assert {
+impl<T> NativeFn<T> for Assert {
     fn evaluate<'a>(
         &self,
         args: Vec<SpannedValue<'a, T>>,
@@ -191,11 +190,7 @@ impl<T: Grammar> NativeFn<T> for Assert {
 #[derive(Debug, Clone, Copy)]
 pub struct If;
 
-impl<T> NativeFn<T> for If
-where
-    T: Grammar,
-    T::Lit: Number,
-{
+impl<T: Number> NativeFn<T> for If {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -258,11 +253,7 @@ impl Loop {
         "iteration function should return a 2-element tuple with first bool value";
 }
 
-impl<T> NativeFn<T> for Loop
-where
-    T: Grammar,
-    T::Lit: Number,
-{
+impl<T: Number> NativeFn<T> for Loop {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -345,11 +336,7 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct While;
 
-impl<T> NativeFn<T> for While
-where
-    T: Grammar,
-    T::Lit: Number,
-{
+impl<T: Number> NativeFn<T> for While {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -420,11 +407,7 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Map;
 
-impl<T> NativeFn<T> for Map
-where
-    T: Grammar,
-    T::Lit: Number,
-{
+impl<T: Number> NativeFn<T> for Map {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -485,11 +468,7 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Filter;
 
-impl<T> NativeFn<T> for Filter
-where
-    T: Grammar,
-    T::Lit: Number,
-{
+impl<T: Number> NativeFn<T> for Filter {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -555,11 +534,7 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Fold;
 
-impl<T> NativeFn<T> for Fold
-where
-    T: Grammar,
-    T::Lit: Number,
-{
+impl<T: Number> NativeFn<T> for Fold {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -624,11 +599,7 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Push;
 
-impl<T> NativeFn<T> for Push
-where
-    T: Grammar,
-    T::Lit: Number,
-{
+impl<T: Number> NativeFn<T> for Push {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -679,11 +650,7 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct Merge;
 
-impl<T> NativeFn<T> for Merge
-where
-    T: Grammar,
-    T::Lit: Number,
-{
+impl<T: Number> NativeFn<T> for Merge {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -719,11 +686,7 @@ pub struct Compare;
 
 const COMPARE_ERROR_MSG: &str = "Compare requires 2 number arguments";
 
-impl<T> NativeFn<T> for Compare
-where
-    T: Grammar,
-    T::Lit: Number + PartialOrd,
-{
+impl<T: Number + PartialOrd> NativeFn<T> for Compare {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -737,11 +700,11 @@ where
         let y = extract_number(ctx, y, COMPARE_ERROR_MSG)?;
 
         Ok(Value::Number(if x < y {
-            -<T::Lit as One>::one()
+            -<T as One>::one()
         } else if x > y {
-            <T::Lit as One>::one()
+            <T as One>::one()
         } else {
-            <T::Lit as Zero>::zero()
+            <T as Zero>::zero()
         }))
     }
 }
@@ -751,7 +714,7 @@ mod tests {
     use super::*;
     use crate::{Environment, ExecutableModule, WildcardId};
 
-    use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Untyped};
     use assert_matches::assert_matches;
 
     use core::{f32, iter::FromIterator};
@@ -762,7 +725,7 @@ mod tests {
             x = 1.0;
             if(x < 2, x + 5, 3 - x)
         "#;
-        let block = F32Grammar::parse_statements(block).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(block).unwrap();
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
             .with_import("if", Value::native_fn(If))
@@ -777,7 +740,7 @@ mod tests {
             x = 4.5;
             if(x < 2, || x + 5, || 3 - x)()
         "#;
-        let block = F32Grammar::parse_statements(block).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(block).unwrap();
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
             .with_import("if", Value::native_fn(If))
@@ -791,7 +754,7 @@ mod tests {
         let compare_fn = Value::native_fn(Compare);
 
         let program = "x = 1.0; x > 0 && x <= 3";
-        let block = F32Grammar::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
             .with_import("cmp", compare_fn.clone())
@@ -799,7 +762,7 @@ mod tests {
         assert_eq!(module.run().unwrap(), Value::Bool(true));
 
         let bogus_program = "x = 1.0; x > (1, 2)";
-        let bogus_block = F32Grammar::parse_statements(bogus_program).unwrap();
+        let bogus_block = Untyped::<F32Grammar>::parse_statements(bogus_program).unwrap();
         let bogus_module = ExecutableModule::builder(WildcardId, &bogus_block)
             .unwrap()
             .with_import("cmp", compare_fn)
@@ -830,7 +793,7 @@ mod tests {
             (discrete_log2(1), discrete_log2(2),
                 discrete_log2(4), discrete_log2(6.5), discrete_log2(1000))
         "#;
-        let block = F32Grammar::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
 
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
@@ -859,7 +822,7 @@ mod tests {
             };
             max_value(1, -2, 7, 2, 5) == 7 && max_value(3, -5, 9) == 9
         "#;
-        let block = F32Grammar::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
 
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
@@ -887,7 +850,7 @@ mod tests {
             xs = (-4, 3, 0, 1);
             xs.reverse() == (1, 0, 3, -4)
         "#;
-        let block = F32Grammar::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
 
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
@@ -898,7 +861,7 @@ mod tests {
         let mut env = Environment::from_iter(module.imports());
         assert_eq!(module.run_in_env(&mut env).unwrap(), Value::Bool(true));
 
-        let test_block = F32Grammar::parse_statements("xs.reverse()").unwrap();
+        let test_block = Untyped::<F32Grammar>::parse_statements("xs.reverse()").unwrap();
         let mut test_module = ExecutableModule::builder("test", &test_block)
             .unwrap()
             .with_import("reverse", env["reverse"].to_owned())

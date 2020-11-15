@@ -5,13 +5,15 @@ use assert_matches::assert_matches;
 use core::iter::FromIterator;
 
 use arithmetic_eval::{Environment, ErrorKind, ExecutableModule, Prelude, Value};
-use arithmetic_parser::{grammars::F64Grammar, BinaryOp, GrammarExt, StripCode, StripResultExt};
+use arithmetic_parser::{
+    grammars::F64Grammar, BinaryOp, GrammarExt, StripCode, StripResultExt, Untyped,
+};
 
 fn create_module<'a>(
     module_name: &'static str,
     program: &'a str,
-) -> anyhow::Result<ExecutableModule<'a, F64Grammar>> {
-    let block = F64Grammar::parse_statements(program).strip_err()?;
+) -> anyhow::Result<ExecutableModule<'a, f64>> {
+    let block = Untyped::<F64Grammar>::parse_statements(program).strip_err()?;
     Ok(ExecutableModule::builder(module_name, &block)
         .strip_err()?
         .with_imports_from(&Prelude)
@@ -21,7 +23,7 @@ fn create_module<'a>(
 fn create_static_module(
     module_name: &'static str,
     program: &str,
-) -> anyhow::Result<ExecutableModule<'static, F64Grammar>> {
+) -> anyhow::Result<ExecutableModule<'static, f64>> {
     // By default, the module is tied by its lifetime to the `program`. However,
     // we can break this tie using the `StripCode` trait.
     create_module(module_name, program).map(StripCode::strip_code)

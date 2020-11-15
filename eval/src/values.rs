@@ -11,7 +11,7 @@ use crate::{
     executable::ExecutableFn,
     fns, Error, ErrorKind, EvalResult, ModuleId, Number,
 };
-use arithmetic_parser::{BinaryOp, Grammar, LvalueLen, MaybeSpanned, Op, StripCode, UnaryOp};
+use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, Op, StripCode, UnaryOp};
 
 /// Opaque context for native calls.
 #[derive(Debug)]
@@ -54,7 +54,7 @@ impl<'r, 'a> CallContext<'r, 'a> {
     }
 
     /// Checks argument count and returns an error if it doesn't match.
-    pub fn check_args_count<T: Grammar>(
+    pub fn check_args_count<T>(
         &self,
         args: &[SpannedValue<'a, T>],
         expected_count: impl Into<LvalueLen>,
@@ -72,7 +72,7 @@ impl<'r, 'a> CallContext<'r, 'a> {
 }
 
 /// Function on zero or more `Value`s.
-pub trait NativeFn<T: Grammar> {
+pub trait NativeFn<T> {
     /// Executes the function on the specified arguments.
     fn evaluate<'a>(
         &self,
@@ -81,7 +81,7 @@ pub trait NativeFn<T: Grammar> {
     ) -> EvalResult<'a, T>;
 }
 
-impl<T: Grammar, F: 'static> NativeFn<T> for F
+impl<T, F: 'static> NativeFn<T> for F
 where
     F: for<'a> Fn(Vec<SpannedValue<'a, T>>, &mut CallContext<'_, 'a>) -> EvalResult<'a, T>,
 {
@@ -94,13 +94,13 @@ where
     }
 }
 
-impl<T: Grammar> fmt::Debug for dyn NativeFn<T> {
+impl<T> fmt::Debug for dyn NativeFn<T> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.debug_tuple("NativeFn").finish()
     }
 }
 
-impl<T: Grammar> dyn NativeFn<T> {
+impl<T> dyn NativeFn<T> {
     /// Extracts a data pointer from this trait object reference.
     pub(crate) fn data_ptr(&self) -> *const () {
         // `*const dyn Trait as *const ()` extracts the data pointer,
@@ -113,13 +113,13 @@ impl<T: Grammar> dyn NativeFn<T> {
 
 /// Function defined within the interpreter.
 #[derive(Debug)]
-pub struct InterpretedFn<'a, T: Grammar> {
+pub struct InterpretedFn<'a, T> {
     definition: Rc<ExecutableFn<'a, T>>,
     captures: Vec<Value<'a, T>>,
     capture_names: Vec<String>,
 }
 
-impl<T: Grammar> Clone for InterpretedFn<'_, T> {
+impl<T: Clone> Clone for InterpretedFn<'_, T> {
     fn clone(&self) -> Self {
         Self {
             definition: Rc::clone(&self.definition),
@@ -129,7 +129,7 @@ impl<T: Grammar> Clone for InterpretedFn<'_, T> {
     }
 }
 
-impl<T: Grammar> StripCode for InterpretedFn<'_, T> {
+impl<T: 'static + Clone> StripCode for InterpretedFn<'_, T> {
     type Stripped = InterpretedFn<'static, T>;
 
     fn strip_code(self) -> Self::Stripped {
@@ -145,7 +145,7 @@ impl<T: Grammar> StripCode for InterpretedFn<'_, T> {
     }
 }
 
-impl<'a, T: Grammar> InterpretedFn<'a, T> {
+impl<'a, T> InterpretedFn<'a, T> {
     pub(crate) fn new(
         definition: Rc<ExecutableFn<'a, T>>,
         captures: Vec<Value<'a, T>>,
@@ -156,10 +156,6 @@ impl<'a, T: Grammar> InterpretedFn<'a, T> {
             captures,
             capture_names,
         }
-    }
-
-    fn to_stripped_code(&self) -> InterpretedFn<'static, T> {
-        self.clone().strip_code()
     }
 
     /// Returns ID of the module defining this function.
@@ -182,11 +178,13 @@ impl<'a, T: Grammar> InterpretedFn<'a, T> {
     }
 }
 
-impl<'a, T> InterpretedFn<'a, T>
-where
-    T: Grammar,
-    T::Lit: Number,
-{
+impl<T: 'static + Clone> InterpretedFn<'_, T> {
+    fn to_stripped_code(&self) -> InterpretedFn<'static, T> {
+        self.clone().strip_code()
+    }
+}
+
+impl<'a, T: Number> InterpretedFn<'a, T> {
     /// Evaluates this function with the provided arguments and the execution context.
     pub fn evaluate(
         &self,
@@ -211,17 +209,14 @@ where
 /// Function definition. Functions can be either native (defined in the Rust code) or defined
 /// in the interpreter.
 #[derive(Debug)]
-pub enum Function<'a, T>
-where
-    T: Grammar,
-{
+pub enum Function<'a, T> {
     /// Native function.
     Native(Rc<dyn NativeFn<T>>),
     /// Interpreted function.
     Interpreted(Rc<InterpretedFn<'a, T>>),
 }
 
-impl<T: Grammar> Clone for Function<'_, T> {
+impl<T> Clone for Function<'_, T> {
     fn clone(&self) -> Self {
         match self {
             Self::Native(function) => Self::Native(Rc::clone(&function)),
@@ -230,7 +225,7 @@ impl<T: Grammar> Clone for Function<'_, T> {
     }
 }
 
-impl<T: Grammar> StripCode for Function<'_, T> {
+impl<T: 'static + Clone> StripCode for Function<'_, T> {
     type Stripped = Function<'static, T>;
 
     fn strip_code(self) -> Self::Stripped {
@@ -243,7 +238,7 @@ impl<T: Grammar> StripCode for Function<'_, T> {
     }
 }
 
-impl<'a, T: Grammar> Function<'a, T> {
+impl<'a, T> Function<'a, T> {
     /// Creates a native function.
     pub fn native(function: impl NativeFn<T> + 'static) -> Self {
         Self::Native(Rc::new(function))
@@ -259,11 +254,7 @@ impl<'a, T: Grammar> Function<'a, T> {
     }
 }
 
-impl<'a, T> Function<'a, T>
-where
-    T: Grammar,
-    T::Lit: Number,
-{
+impl<'a, T: Number> Function<'a, T> {
     /// Evaluates the function on the specified arguments.
     pub fn evaluate(
         &self,
@@ -326,9 +317,9 @@ impl fmt::Display for ValueType {
 /// Values produced by expressions during their interpretation.
 #[derive(Debug)]
 #[non_exhaustive]
-pub enum Value<'a, T: Grammar> {
+pub enum Value<'a, T> {
     /// Primitive value: a single literal.
-    Number(T::Lit),
+    Number(T),
     /// Boolean value.
     Bool(bool),
     /// Function.
@@ -340,7 +331,7 @@ pub enum Value<'a, T: Grammar> {
 /// Value together with a span that has produced it.
 pub type SpannedValue<'a, T> = MaybeSpanned<'a, Value<'a, T>>;
 
-impl<'a, T: Grammar> Value<'a, T> {
+impl<'a, T> Value<'a, T> {
     /// Creates a value for a native function.
     pub fn native_fn(function: impl NativeFn<T> + 'static) -> Self {
         Self::Function(Function::Native(Rc::new(function)))
@@ -396,7 +387,7 @@ impl<'a, T: Grammar> Value<'a, T> {
     }
 }
 
-impl<T: Grammar> Clone for Value<'_, T> {
+impl<T: Clone> Clone for Value<'_, T> {
     fn clone(&self) -> Self {
         match self {
             Self::Number(lit) => Self::Number(lit.clone()),
@@ -407,7 +398,7 @@ impl<T: Grammar> Clone for Value<'_, T> {
     }
 }
 
-impl<T: Grammar> StripCode for Value<'_, T> {
+impl<T: 'static + Clone> StripCode for Value<'_, T> {
     type Stripped = Value<'static, T>;
 
     fn strip_code(self) -> Self::Stripped {
@@ -422,16 +413,13 @@ impl<T: Grammar> StripCode for Value<'_, T> {
     }
 }
 
-impl<'a, T: Grammar> From<&Value<'a, T>> for Value<'a, T> {
+impl<'a, T: Number> From<&Value<'a, T>> for Value<'a, T> {
     fn from(reference: &Value<'a, T>) -> Self {
         reference.to_owned()
     }
 }
 
-impl<T: Grammar> PartialEq for Value<'_, T>
-where
-    T::Lit: PartialEq,
-{
+impl<T: PartialEq> PartialEq for Value<'_, T> {
     fn eq(&self, rhs: &Self) -> bool {
         match (self, rhs) {
             (Self::Number(this), Self::Number(other)) => this == other,
@@ -506,16 +494,12 @@ impl BinaryOpError {
     }
 }
 
-impl<'a, T> Value<'a, T>
-where
-    T: Grammar,
-    T::Lit: Number,
-{
+impl<'a, T: Number> Value<'a, T> {
     fn try_binary_op_inner(
         self,
         rhs: Self,
         op: BinaryOp,
-        primitive_op: fn(T::Lit, T::Lit) -> T::Lit,
+        primitive_op: fn(T, T) -> T,
     ) -> Result<Self, BinaryOpError> {
         match (self, rhs) {
             (Self::Number(this), Self::Number(other)) => {
@@ -565,7 +549,7 @@ where
         lhs: MaybeSpanned<'a, Self>,
         rhs: MaybeSpanned<'a, Self>,
         op: BinaryOp,
-        primitive_op: fn(T::Lit, T::Lit) -> T::Lit,
+        primitive_op: fn(T, T) -> T,
     ) -> Result<Self, Error<'a>> {
         let lhs_span = lhs.with_no_extra();
         let rhs_span = rhs.with_no_extra();

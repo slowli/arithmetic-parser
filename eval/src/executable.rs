@@ -125,12 +125,12 @@ pub(crate) use self::{
 /// # }
 /// ```
 #[derive(Debug)]
-pub struct ExecutableModule<'a, T: Grammar> {
+pub struct ExecutableModule<'a, T> {
     inner: Executable<'a, T>,
     imports: ModuleImports<'a, T>,
 }
 
-impl<T: Grammar> Clone for ExecutableModule<'_, T> {
+impl<T: Clone> Clone for ExecutableModule<'_, T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -139,7 +139,7 @@ impl<T: Grammar> Clone for ExecutableModule<'_, T> {
     }
 }
 
-impl<T: Grammar> StripCode for ExecutableModule<'_, T> {
+impl<T: 'static + Clone> StripCode for ExecutableModule<'_, T> {
     type Stripped = ExecutableModule<'static, T>;
 
     fn strip_code(self) -> Self::Stripped {
@@ -150,24 +150,12 @@ impl<T: Grammar> StripCode for ExecutableModule<'_, T> {
     }
 }
 
-impl<'a, T: Grammar> ExecutableModule<'a, T> {
+impl<'a, T> ExecutableModule<'a, T> {
     pub(crate) fn from_parts(inner: Executable<'a, T>, imports: Registers<'a, T>) -> Self {
         Self {
             inner,
             imports: ModuleImports { inner: imports },
         }
-    }
-
-    /// Starts building a new module.
-    pub fn builder<Id>(
-        id: Id,
-        block: &Block<'a, T>,
-    ) -> Result<ExecutableModuleBuilder<'a, T>, Error<'a>>
-    where
-        Id: ModuleId,
-    {
-        let (module, import_spans) = Compiler::compile_module(id, block)?;
-        Ok(ExecutableModuleBuilder::new(module, import_spans))
     }
 
     /// Gets the identifier of this module.
@@ -195,10 +183,20 @@ impl<'a, T: Grammar> ExecutableModule<'a, T> {
     }
 }
 
-impl<'a, T: Grammar> ExecutableModule<'a, T>
-where
-    T::Lit: Number,
-{
+impl<'a, T: Number> ExecutableModule<'a, T> {
+    /// Starts building a new module.
+    pub fn builder<G, Id>(
+        id: Id,
+        block: &Block<'a, G>,
+    ) -> Result<ExecutableModuleBuilder<'a, T>, Error<'a>>
+    where
+        Id: ModuleId,
+        G: Grammar<Lit = T>,
+    {
+        let (module, import_spans) = Compiler::compile_module(id, block)?;
+        Ok(ExecutableModuleBuilder::new(module, import_spans))
+    }
+
     /// Runs the module with the current values of imports. This is a read-only operation;
     /// neither the imports, nor other module state are modified by it.
     pub fn run(&self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
@@ -243,11 +241,11 @@ where
 /// [`ExecutableModule`]: struct.ExecutableModule.html
 /// [`Index`]: https://doc.rust-lang.org/std/ops/trait.Index.html
 #[derive(Debug)]
-pub struct ModuleImports<'a, T: Grammar> {
+pub struct ModuleImports<'a, T> {
     inner: Registers<'a, T>,
 }
 
-impl<T: Grammar> Clone for ModuleImports<'_, T> {
+impl<T: Clone> Clone for ModuleImports<'_, T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -255,7 +253,7 @@ impl<T: Grammar> Clone for ModuleImports<'_, T> {
     }
 }
 
-impl<T: Grammar> StripCode for ModuleImports<'_, T> {
+impl<T: 'static + Clone> StripCode for ModuleImports<'_, T> {
     type Stripped = ModuleImports<'static, T>;
 
     fn strip_code(self) -> Self::Stripped {
@@ -265,7 +263,7 @@ impl<T: Grammar> StripCode for ModuleImports<'_, T> {
     }
 }
 
-impl<'a, T: Grammar> ModuleImports<'a, T> {
+impl<'a, T> ModuleImports<'a, T> {
     /// Checks if the imports contain a variable with the specified name.
     pub fn contains(&self, name: &str) -> bool {
         self.inner.variables_map().contains_key(name)
@@ -283,7 +281,7 @@ impl<'a, T: Grammar> ModuleImports<'a, T> {
     }
 }
 
-impl<'a, T: Grammar> ops::Index<&str> for ModuleImports<'a, T> {
+impl<'a, T> ops::Index<&str> for ModuleImports<'a, T> {
     type Output = Value<'a, T>;
 
     fn index(&self, index: &str) -> &Self::Output {
@@ -293,7 +291,7 @@ impl<'a, T: Grammar> ops::Index<&str> for ModuleImports<'a, T> {
     }
 }
 
-impl<'a, T: Grammar> IntoIterator for ModuleImports<'a, T> {
+impl<'a, T: Number> IntoIterator for ModuleImports<'a, T> {
     type Item = (String, Value<'a, T>);
     type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'a>;
 
@@ -302,7 +300,7 @@ impl<'a, T: Grammar> IntoIterator for ModuleImports<'a, T> {
     }
 }
 
-impl<'a, 'r, T: Grammar> IntoIterator for &'r ModuleImports<'a, T> {
+impl<'a, 'r, T> IntoIterator for &'r ModuleImports<'a, T> {
     type Item = (&'r str, &'r Value<'a, T>);
     type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'r>;
 
@@ -318,12 +316,12 @@ impl<'a, 'r, T: Grammar> IntoIterator for &'r ModuleImports<'a, T> {
 ///
 /// [`ExecutableModule::builder()`]: struct.ExecutableModule.html#method.builder
 #[derive(Debug)]
-pub struct ExecutableModuleBuilder<'a, T: Grammar> {
+pub struct ExecutableModuleBuilder<'a, T> {
     module: ExecutableModule<'a, T>,
     undefined_imports: ImportSpans<'a>,
 }
 
-impl<'a, T: Grammar> ExecutableModuleBuilder<'a, T> {
+impl<'a, T: Number> ExecutableModuleBuilder<'a, T> {
     fn new(module: ExecutableModule<'a, T>, undefined_imports: ImportSpans<'a>) -> Self {
         Self {
             module,
@@ -413,12 +411,12 @@ mod tests {
     use super::*;
     use crate::{compiler::Compiler, WildcardId};
 
-    use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Untyped};
 
     #[test]
     fn cloning_module() {
         let block = "y = x + 2 * (x + 1) + 1; y";
-        let block = F32Grammar::parse_statements(block).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(block).unwrap();
         let (mut module, _) = Compiler::compile_module(WildcardId, &block).unwrap();
 
         let mut module_copy = module.clone();

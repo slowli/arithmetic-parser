@@ -126,14 +126,12 @@ mod alloc {
 
 pub use crate::{
     error::{Context, Error, ErrorKind, SpannedError},
+    grammars::Grammar,
     ops::{BinaryOp, Op, OpPriority, UnaryOp},
     parser::is_valid_variable_name,
     spans::{
         CodeFragment, InputSpan, LocatedSpan, MaybeSpanned, NomResult, Spanned, StripCode,
         StripResultExt,
-    },
-    traits::{
-        BooleanOps, Features, Grammar, GrammarExt, IntoInputSpan, ParseLiteral, Typed, Untyped,
     },
 };
 
@@ -146,7 +144,6 @@ pub mod grammars;
 mod ops;
 mod parser;
 mod spans;
-mod traits;
 
 /// Arithmetic expression with an abstract types for type hints and literals.
 #[derive(Debug)]

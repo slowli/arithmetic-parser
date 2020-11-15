@@ -6,7 +6,7 @@ use alloc::string::ToString;
 use core::{f64, iter::FromIterator};
 
 use arithmetic_eval::{fns, Environment, Prelude, Value, VariableMap, WildcardId};
-use arithmetic_parser::{grammars::F64Grammar, GrammarExt, Untyped};
+use arithmetic_parser::grammars::{F64Grammar, GrammarExt, Untyped};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]

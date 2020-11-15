@@ -491,7 +491,7 @@ impl<'a, T: Number> Registers<'a, T> {
 mod tests {
     use super::*;
     use crate::{compiler::Compiler, executable::ModuleImports, WildcardId};
-    use arithmetic_parser::{grammars::F32Grammar, GrammarExt, Untyped};
+    use arithmetic_parser::grammars::{F32Grammar, GrammarExt, Untyped};
 
     #[test]
     fn iterative_evaluation() {

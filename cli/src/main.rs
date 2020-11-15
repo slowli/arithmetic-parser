@@ -13,7 +13,7 @@ use crate::{
     common::{Env, ParseAndEvalResult, ReplLiteral, ERROR_EXIT_CODE},
     repl::repl,
 };
-use arithmetic_parser::{grammars::NumGrammar, Untyped};
+use arithmetic_parser::grammars::{NumGrammar, Untyped};
 
 const ABOUT: &str = "CLI and REPL for parsing and evaluating arithmetic expressions.";
 

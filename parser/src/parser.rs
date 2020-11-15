@@ -18,10 +18,11 @@ use core::mem;
 
 use crate::{
     alloc::{vec, Box, Vec},
+    grammars::{BooleanOps, Features, Grammar, GrammarExt, ParseLiteral},
     spans::{unite_spans, with_span},
-    BinaryOp, Block, BooleanOps, Context, Destructure, DestructureRest, Error, ErrorKind, Expr,
-    Features, FnDefinition, Grammar, GrammarExt, InputSpan, Lvalue, NomResult, ParseLiteral,
-    Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
+    BinaryOp, Block, Context, Destructure, DestructureRest, Error, ErrorKind, Expr, FnDefinition,
+    InputSpan, Lvalue, NomResult, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
+    UnaryOp,
 };
 
 #[cfg(test)]

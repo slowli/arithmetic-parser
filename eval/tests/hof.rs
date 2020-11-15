@@ -4,7 +4,10 @@ use arithmetic_eval::{
     fns, wrap_fn, wrap_fn_with_context, CallContext, ErrorKind, EvalResult, ExecutableModule,
     Function, NativeFn, Number, SpannedValue, Value,
 };
-use arithmetic_parser::{grammars::F32Grammar, GrammarExt, StripCode, Untyped};
+use arithmetic_parser::{
+    grammars::{F32Grammar, GrammarExt, Untyped},
+    StripCode,
+};
 
 /// Function that applies the `inner` function the specified amount of times to the result of
 /// the previous execution.

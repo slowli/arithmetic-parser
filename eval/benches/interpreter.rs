@@ -10,7 +10,10 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 use typed_arena::Arena;
 
 use arithmetic_eval::{fns, CallContext, ExecutableModule, NativeFn, Value, WildcardId};
-use arithmetic_parser::{grammars::F32Grammar, GrammarExt, MaybeSpanned, Untyped};
+use arithmetic_parser::{
+    grammars::{F32Grammar, GrammarExt, Untyped},
+    MaybeSpanned,
+};
 
 const SEED: u64 = 123;
 const ELEMENTS: u64 = 50;

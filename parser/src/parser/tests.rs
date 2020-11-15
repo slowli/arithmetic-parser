@@ -8,7 +8,11 @@ use nom::{
 use core::fmt;
 
 use super::*;
-use crate::{alloc::String, grammars::F32Grammar, Features, Op, ParseLiteral, Typed, Untyped};
+use crate::{
+    alloc::String,
+    grammars::{F32Grammar, Features, ParseLiteral, Typed, Untyped},
+    Op,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum LiteralType {

@@ -8,7 +8,10 @@ use arithmetic_eval::{
     fns::{self, FromValueErrorKind},
     Environment, Error, ErrorKind, Function, NativeFn, Value, ValueType, VariableMap, WildcardId,
 };
-use arithmetic_parser::{grammars::F32Grammar, BinaryOp, GrammarExt, LvalueLen, UnaryOp, Untyped};
+use arithmetic_parser::{
+    grammars::{F32Grammar, GrammarExt, Untyped},
+    BinaryOp, LvalueLen, UnaryOp,
+};
 
 const SIN: fns::Unary<f32> = fns::Unary::new(f32::sin);
 

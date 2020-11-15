@@ -5,7 +5,7 @@ use num_complex::Complex64;
 use core::cmp::Ordering;
 
 use arithmetic_eval::{ExecutableModule, Prelude, Value};
-use arithmetic_parser::{grammars::NumGrammar, GrammarExt, Untyped};
+use arithmetic_parser::grammars::{GrammarExt, NumGrammar, Untyped};
 
 const PROGRAM: &str = r#"
     // The original comparison function compares numbers by their real part.

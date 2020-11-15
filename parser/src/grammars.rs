@@ -11,7 +11,13 @@ use num_traits::Num;
 
 use core::{f32, f64, fmt, marker::PhantomData};
 
-use crate::{spans::NomResult, InputSpan, ParseLiteral};
+mod traits;
+
+pub use self::traits::{
+    BooleanOps, Features, Grammar, GrammarExt, IntoInputSpan, ParseLiteral, Typed, Untyped,
+};
+
+use crate::{spans::NomResult, InputSpan};
 
 /// Single-type numeric grammar parameterized by the literal type.
 #[derive(Debug)]
@@ -140,7 +146,7 @@ mod complex {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Expr, GrammarExt, UnaryOp, Untyped};
+    use crate::{Expr, UnaryOp};
 
     use assert_matches::assert_matches;
     use core::f32::INFINITY;

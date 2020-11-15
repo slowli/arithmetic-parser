@@ -6,7 +6,8 @@ use core::iter::FromIterator;
 
 use arithmetic_eval::{Environment, ErrorKind, ExecutableModule, Prelude, Value};
 use arithmetic_parser::{
-    grammars::F64Grammar, BinaryOp, GrammarExt, StripCode, StripResultExt, Untyped,
+    grammars::{F64Grammar, GrammarExt, Untyped},
+    BinaryOp, StripCode, StripResultExt,
 };
 
 fn create_module<'a>(

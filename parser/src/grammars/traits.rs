@@ -19,7 +19,9 @@ pub enum BooleanOps {
     OrderComparisons,
 }
 
-/// Parsing features for a `Grammar`.
+/// Parsing features used to configure [`Parse`] implementations.
+///
+/// [`Parse`]: trait.Parse.html
 #[derive(Debug, Clone)]
 #[allow(clippy::struct_excessive_bools)] // flags are independent
 #[non_exhaustive]
@@ -148,9 +150,12 @@ pub trait ParseLiteral: 'static {
 ///
 /// # Examples
 ///
-/// Use a [`Typed`] wrapper to create a parser from the grammar, which will support all features:
+/// Use a [`Typed`] wrapper to create a parser from the grammar, which will support all
+/// parsing [`Features`]:
 ///
-/// [`ParseLiteral`]: trait.ParseLiteral.html
+/// [`ParseLiteral`]: grammars/trait.ParseLiteral.html
+/// [`Typed`]: grammars/struct.Typed.html
+/// [`Features`]: grammars/struct.Features.html
 ///
 /// ```
 /// # use arithmetic_parser::{
@@ -236,11 +241,14 @@ impl<'a> IntoInputSpan<'a> for &'a str {
 /// A `Grammar` also defines a set of supported [`Features`]. This allows to customize which
 /// constructs are parsed.
 ///
-/// Most common sets of `Features` are covered by [`Typed`] and [`Untyped`] wrappers, but it
-/// is possible to define custom [`Parse`] implementations as well.
+/// Most common sets of `Features` are covered by [`Typed`] and [`Untyped`] wrappers;
+/// these types allow to not declare `Parse` impl explicitly. It is still possible
+/// to define custom `Parse` implementations, as shown in the example below.
 ///
 /// [`Base`]: #associatedtype.Base
 /// [`Features`]: struct.Features.html
+/// [`Typed`]: struct.Typed.html
+/// [`Untyped`]: struct.Untyped.html
 ///
 /// # Examples
 ///
@@ -275,7 +283,7 @@ impl<'a> IntoInputSpan<'a> for &'a str {
 /// # }
 /// ```
 pub trait Parse {
-    /// Base for the grammar providing the literal parser.
+    /// Base for the grammar providing the literal and type annotation parsers.
     type Base: Grammar;
     /// Features supported by this grammar.
     const FEATURES: Features;
@@ -299,7 +307,11 @@ pub trait Parse {
     }
 }
 
-/// Wrapper for [`ParseLiteral`] types that allows to use them as a [`Grammar`] or [`Parse`].
+/// Wrapper for [`ParseLiteral`] types that allows to use them as a [`Grammar`] or [`Parse`]r.
+///
+/// When used as a `Grammar`, type annotations are not supported; any use of an annotation will
+/// lead to a parsing error. When used as a `Parse`r, all [`Features`] are on except for
+/// type annotations.
 ///
 /// # Examples
 ///
@@ -308,6 +320,7 @@ pub trait Parse {
 /// [`ParseLiteral`]: trait.ParseLiteral.html
 /// [`Grammar`]: trait.Grammar.html
 /// [`Parse`]: trait.Parse.html
+/// [`Features`]: struct.Features.html
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Untyped<T>(PhantomData<T>);
 
@@ -340,7 +353,8 @@ impl<T: ParseLiteral> Parse for Untyped<T> {
     };
 }
 
-/// Wrapper for [`Grammar`] types that allows to convert the type to a [`Parse`]r.
+/// Wrapper for [`Grammar`] types that allows to convert the type to a [`Parse`]r. The resulting
+/// parser supports all [`Features`].
 ///
 /// # Examples
 ///
@@ -348,6 +362,7 @@ impl<T: ParseLiteral> Parse for Untyped<T> {
 ///
 /// [`Grammar`]: trait.Grammar.html
 /// [`Parse`]: trait.Parse.html
+/// [`Features`]: struct.Features.html
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Typed<T>(PhantomData<T>);
 

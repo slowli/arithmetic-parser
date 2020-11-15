@@ -21,7 +21,7 @@
 //!
 //! ## Optional Features
 //!
-//! These features can be switched on or off when defining a [`Grammar`] by defining
+//! These features can be switched on or off when defining a [`Parse`] impl by declaring
 //! the corresponding [`Features`].
 //!
 //! - **Tuples.** A tuple is two or more elements separated by commas, such as `(x, y)`
@@ -55,8 +55,8 @@
 //! - There is "rest" destructuting for tuples and function arguments.
 //! - Type hints are placed within tuple elements, for example, `(x: Num, _) = y`.
 //!
-//! [`Grammar`]: trait.Grammar.html
-//! [`Features`]: struct.Features.html
+//! [`Parse`]: grammars/trait.Parse.html
+//! [`Features`]: grammars/struct.Features.html
 //!
 //! # Examples
 //!

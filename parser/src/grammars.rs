@@ -1,4 +1,29 @@
-//! Standard grammars.
+//! Grammar functionality and a collection of standard grammars.
+//!
+//! # Defining grammars
+//!
+//! To define a [`Grammar`], you'll need a [`ParseLiteral`] implementation, which defines
+//! how literals are parsed (numbers, strings, chars, hex- / base64-encoded byte sequences, etc.).
+//! There are standard impls for floating-point number parsing and the complex numbers
+//! (if the relevant feature is on).
+//!
+//! You may define how to parse type annotations by implementing `Grammar` explicitly.
+//! Alternatively, if you don't need type annotations, a `Grammar` can be obtained from
+//! a [`ParseLiteral`] impl by wrapping it into [`Untyped`].
+//!
+//! Once you have a `Grammar`, you can supply it as a `Base` for [`Parse`]. `Parse` methods
+//! allow to parse complete or streaming [`Block`]s of statements. Note that `Untyped` and
+//! [`Typed`] wrappers allow to avoid an explicit `Parse` impl.
+//!
+//! See [`ParseLiteral`], [`Grammar`] and [`Parse`] docs for the examples of various grammar
+//! definitions.
+//!
+//! [`Grammar`]: ../trait.Grammar.html
+//! [`ParseLiteral`]: trait.ParseLiteral.html
+//! [`Parse`]: trait.Parse.html
+//! [`Typed`]: struct.Typed.html
+//! [`Untyped`]: struct.Untyped.html
+//! [`Block`]: ../struct.Block.html
 
 use nom::{
     bytes::complete::take_while_m_n,

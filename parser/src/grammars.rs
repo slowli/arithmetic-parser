@@ -18,7 +18,7 @@
 //! See [`ParseLiteral`], [`Grammar`] and [`Parse`] docs for the examples of various grammar
 //! definitions.
 //!
-//! [`Grammar`]: ../trait.Grammar.html
+//! [`Grammar`]: trait.Grammar.html
 //! [`ParseLiteral`]: trait.ParseLiteral.html
 //! [`Parse`]: trait.Parse.html
 //! [`Typed`]: struct.Typed.html

@@ -146,16 +146,15 @@ pub trait ParseLiteral: 'static {
     fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit>;
 }
 
-/// Extension of [`ParseLiteral`] that parses type annotations.
+/// Extension of `ParseLiteral` that parses type annotations.
 ///
 /// # Examples
 ///
 /// Use a [`Typed`] wrapper to create a parser from the grammar, which will support all
 /// parsing [`Features`]:
 ///
-/// [`ParseLiteral`]: grammars/trait.ParseLiteral.html
-/// [`Typed`]: grammars/struct.Typed.html
-/// [`Features`]: grammars/struct.Features.html
+/// [`Typed`]: struct.Typed.html
+/// [`Features`]: struct.Features.html
 ///
 /// ```
 /// # use arithmetic_parser::{

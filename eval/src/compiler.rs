@@ -14,9 +14,9 @@ use crate::{
     Error, ErrorKind, ModuleId, Value,
 };
 use arithmetic_parser::{
-    is_valid_variable_name, BinaryOp, Block, Destructure, Expr, FnDefinition, Grammar, InputSpan,
-    Lvalue, MaybeSpanned, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
-    UnaryOp,
+    grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Destructure, Expr, FnDefinition,
+    InputSpan, Lvalue, MaybeSpanned, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement,
+    Statement, UnaryOp,
 };
 
 mod captures;

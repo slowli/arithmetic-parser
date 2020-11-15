@@ -22,8 +22,8 @@ use arithmetic_eval::{
     Prelude, Value, VariableMap,
 };
 use arithmetic_parser::{
-    grammars::{NumGrammar, Parse, Untyped},
-    Block, CodeFragment, Error as ParseError, Grammar, LocatedSpan, LvalueLen, StripCode,
+    grammars::{Grammar, NumGrammar, Parse, Untyped},
+    Block, CodeFragment, Error as ParseError, LocatedSpan, LvalueLen, StripCode,
 };
 
 /// Exit code on parse or evaluation error.

@@ -1,6 +1,6 @@
 //! `VariableMap` trait and implementations.
 
-use arithmetic_parser::{Block, Grammar};
+use arithmetic_parser::{grammars::Grammar, Block};
 
 use crate::{fns, Environment, Error, ExecutableModule, ModuleId, ModuleImports, Number, Value};
 

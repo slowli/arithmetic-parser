@@ -8,7 +8,7 @@ use crate::{
     error::{Backtrace, ErrorWithBacktrace},
     Environment, Error, ErrorKind, ModuleId, Number, Value, VariableMap,
 };
-use arithmetic_parser::{Block, Grammar, StripCode};
+use arithmetic_parser::{grammars::Grammar, Block, StripCode};
 
 mod command;
 mod registers;

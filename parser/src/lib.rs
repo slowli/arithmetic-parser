@@ -129,7 +129,6 @@ mod alloc {
 
 pub use crate::{
     error::{Context, Error, ErrorKind, SpannedError},
-    grammars::Grammar,
     ops::{BinaryOp, Op, OpPriority, UnaryOp},
     parser::is_valid_variable_name,
     spans::{
@@ -140,7 +139,10 @@ pub use crate::{
 
 use core::fmt;
 
-use crate::alloc::{vec, Box, Vec};
+use crate::{
+    alloc::{vec, Box, Vec},
+    grammars::Grammar,
+};
 
 mod error;
 pub mod grammars;

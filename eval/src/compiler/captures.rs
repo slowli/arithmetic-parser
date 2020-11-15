@@ -11,8 +11,8 @@ use crate::{
     Error, ErrorKind, ModuleId, WildcardId,
 };
 use arithmetic_parser::{
-    BinaryOp, Block, Destructure, Expr, FnDefinition, Grammar, Lvalue, Spanned, SpannedExpr,
-    SpannedLvalue, SpannedStatement, Statement,
+    grammars::Grammar, BinaryOp, Block, Destructure, Expr, FnDefinition, Lvalue, Spanned,
+    SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
 };
 
 /// Helper context for symbolic execution of a function body or a block in order to determine

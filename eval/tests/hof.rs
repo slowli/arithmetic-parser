@@ -4,25 +4,25 @@ use arithmetic_eval::{
     fns, wrap_fn, wrap_fn_with_context, CallContext, ErrorKind, EvalResult, ExecutableModule,
     Function, NativeFn, Number, SpannedValue, Value,
 };
-use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt, StripCode};
+use arithmetic_parser::{
+    grammars::{F32Grammar, Parse, Untyped},
+    StripCode,
+};
 
 /// Function that applies the `inner` function the specified amount of times to the result of
 /// the previous execution.
 #[derive(Debug, Clone)]
-struct Repeated<G: Grammar> {
-    inner: Function<'static, G>,
+struct Repeated<T> {
+    inner: Function<'static, T>,
     times: usize,
 }
 
-impl<G: Grammar> NativeFn<G> for Repeated<G>
-where
-    G::Lit: Number,
-{
+impl<T: Number> NativeFn<T> for Repeated<T> {
     fn evaluate<'a>(
         &self,
-        mut args: Vec<SpannedValue<'a, G>>,
+        mut args: Vec<SpannedValue<'a, T>>,
         context: &mut CallContext<'_, 'a>,
-    ) -> EvalResult<'a, G> {
+    ) -> EvalResult<'a, T> {
         if args.len() != 1 {
             let err = ErrorKind::native("Should be called with single argument");
             return Err(context.call_site_error(err));
@@ -36,10 +36,7 @@ where
     }
 }
 
-fn repeat<G: Grammar<Lit = f32>>(
-    function: Function<'_, G>,
-    times: f32,
-) -> Result<Function<'_, G>, String> {
+fn repeat(function: Function<'_, f32>, times: f32) -> Result<Function<'_, f32>, String> {
     if times <= 0.0 {
         Err("`times` should be positive".to_owned())
     } else {
@@ -51,12 +48,12 @@ fn repeat<G: Grammar<Lit = f32>>(
     }
 }
 
-fn eager_repeat<'a, G: Grammar<Lit = f32>>(
+fn eager_repeat<'a>(
     context: &mut CallContext<'_, 'a>,
-    function: Function<'a, G>,
+    function: Function<'a, f32>,
     times: f32,
-    mut arg: Value<'a, G>,
-) -> EvalResult<'a, G> {
+    mut arg: Value<'a, f32>,
+) -> EvalResult<'a, f32> {
     if times <= 0.0 {
         Err(context.call_site_error(ErrorKind::native("`times` should be positive")))
     } else {
@@ -77,7 +74,7 @@ fn repeated_function() {
         // -1 is the immovable point of the transform
         assert(repeated(-1) == -1);
     "#;
-    let program = F32Grammar::parse_statements(program).unwrap();
+    let program = Untyped::<F32Grammar>::parse_statements(program).unwrap();
 
     let program = ExecutableModule::builder("repeat", &program)
         .unwrap()
@@ -96,7 +93,7 @@ fn eager_repeated_function() {
         // -1 is the immovable point of the transform
         assert(fn.repeat(3, -1) == -1);
     "#;
-    let program = F32Grammar::parse_statements(program).unwrap();
+    let program = Untyped::<F32Grammar>::parse_statements(program).unwrap();
 
     let program = ExecutableModule::builder("repeat", &program)
         .unwrap()

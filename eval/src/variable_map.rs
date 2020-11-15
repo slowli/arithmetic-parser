@@ -1,35 +1,39 @@
 //! `VariableMap` trait and implementations.
 
-use arithmetic_parser::{Block, Grammar};
+use arithmetic_parser::{grammars::Grammar, Block};
 
 use crate::{fns, Environment, Error, ExecutableModule, ModuleId, ModuleImports, Number, Value};
 
 /// Encapsulates read access to named variables.
-pub trait VariableMap<'a, T: Grammar> {
+pub trait VariableMap<'a, T: Number> {
     /// Returns value of the named variable, or `None` if it is not defined.
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>>;
 
     /// Creates a module based on imports solely from this map.
     ///
     /// The default implementation is reasonable for most cases.
-    fn compile_module<Id: ModuleId>(
+    fn compile_module<Id, G>(
         &self,
         id: Id,
-        block: &Block<'a, T>,
-    ) -> Result<ExecutableModule<'a, T>, Error<'a>> {
+        block: &Block<'a, G>,
+    ) -> Result<ExecutableModule<'a, T>, Error<'a>>
+    where
+        Id: ModuleId,
+        G: Grammar<Lit = T>,
+    {
         ExecutableModule::builder(id, block)?
             .with_imports_from(self)
             .try_build()
     }
 }
 
-impl<'a, T: Grammar> VariableMap<'a, T> for Environment<'a, T> {
+impl<'a, T: Number> VariableMap<'a, T> for Environment<'a, T> {
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
         self.get(name).cloned()
     }
 }
 
-impl<'a, T: Grammar> VariableMap<'a, T> for ModuleImports<'a, T> {
+impl<'a, T: Number> VariableMap<'a, T> for ModuleImports<'a, T> {
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
         self.get(name).cloned()
     }
@@ -51,11 +55,7 @@ pub struct Prelude;
 
 impl Prelude {
     /// Creates an iterator over contained values and the corresponding names.
-    pub fn iter<T>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)>
-    where
-        T: Grammar,
-        T::Lit: Number,
-    {
+    pub fn iter<T: Number>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
         const VAR_NAMES: &[&str] = &[
             "false", "true", "assert", "if", "loop", "while", "map", "filter", "fold", "push",
             "merge",
@@ -67,11 +67,7 @@ impl Prelude {
     }
 }
 
-impl<'a, T> VariableMap<'a, T> for Prelude
-where
-    T: Grammar,
-    T::Lit: Number,
-{
+impl<'a, T: Number> VariableMap<'a, T> for Prelude {
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
         Some(match name {
             "false" => Value::Bool(false),
@@ -114,14 +110,13 @@ impl Comparisons {
 
 impl<'a, T> VariableMap<'a, T> for Comparisons
 where
-    T: Grammar,
-    T::Lit: Number + PartialOrd,
+    T: Number + PartialOrd,
 {
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
         Some(match name {
             "cmp" => Value::native_fn(fns::Compare),
-            "min" => Value::native_fn(fns::Binary::new(Self::min::<T::Lit>)),
-            "max" => Value::native_fn(fns::Binary::new(Self::max::<T::Lit>)),
+            "min" => Value::native_fn(fns::Binary::new(Self::min::<T>)),
+            "max" => Value::native_fn(fns::Binary::new(Self::max::<T>)),
             _ => return None,
         })
     }
@@ -131,8 +126,7 @@ impl Comparisons {
     /// Creates an iterator over contained values and the corresponding names.
     pub fn iter<T>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)>
     where
-        T: Grammar,
-        T::Lit: Number + PartialOrd,
+        T: Number + PartialOrd,
     {
         const VAR_NAMES: &[&str] = &["cmp", "min", "max"];
 

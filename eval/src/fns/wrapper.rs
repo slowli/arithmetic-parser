@@ -8,7 +8,6 @@ use crate::{
     CallContext, Error, ErrorKind, EvalResult, Function, NativeFn, Number, SpannedValue, Value,
     ValueType,
 };
-use arithmetic_parser::Grammar;
 
 /// Wraps a function enriching it with the information about its arguments.
 /// This is a slightly shorter way to create wrappers compared to calling [`FnWrapper::new()`].
@@ -47,14 +46,14 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// ## Basic function
 ///
 /// ```
-/// use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// use arithmetic_eval::{fns, Environment, Value, VariableMap};
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let max = fns::wrap(|x: f32, y: f32| if x > y { x } else { y });
 ///
 /// let program = "max(1, 3) == 3 && max(-1, -3) == -1";
-/// let program = F32Grammar::parse_statements(program)?;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = Environment::new()
 ///     .insert_native_fn("max", max)
 ///     .compile_module("test_max", &program)?;
@@ -66,7 +65,7 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// ## Fallible function with complex args
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns::FnWrapper, Environment, Value, VariableMap};
 /// fn zip_arrays(xs: Vec<f32>, ys: Vec<f32>) -> Result<Vec<(f32, f32)>, String> {
 ///     if xs.len() == ys.len() {
@@ -78,7 +77,7 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let program = "(1, 2, 3).zip((4, 5, 6)) == ((1, 4), (2, 5), (3, 6))";
-/// let program = F32Grammar::parse_statements(program)?;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_wrapped_fn("zip", zip_arrays)
@@ -146,10 +145,7 @@ pub struct FromValueError {
 }
 
 impl FromValueError {
-    pub(crate) fn invalid_type<T>(expected: ValueType, actual_value: &Value<'_, T>) -> Self
-    where
-        T: Grammar,
-    {
+    pub(crate) fn invalid_type<T>(expected: ValueType, actual_value: &Value<'_, T>) -> Self {
         Self {
             kind: FromValueErrorKind::InvalidType {
                 expected,
@@ -268,13 +264,13 @@ pub enum FromValueErrorLocation {
 /// [`Number`]: ../trait.Number.html
 /// [`Function`]: ../enum.Function.html
 /// [`Value`]: ../enum.Value.html
-pub trait TryFromValue<'a, G: Grammar>: Sized {
+pub trait TryFromValue<'a, T>: Sized {
     /// Attempts to convert `value` to a type supported by the function.
-    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError>;
+    fn try_from_value(value: Value<'a, T>) -> Result<Self, FromValueError>;
 }
 
-impl<'a, T: Number, G: Grammar<Lit = T>> TryFromValue<'a, G> for T {
-    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
+impl<'a, T: Number> TryFromValue<'a, T> for T {
+    fn try_from_value(value: Value<'a, T>) -> Result<Self, FromValueError> {
         match value {
             Value::Number(number) => Ok(number),
             _ => Err(FromValueError::invalid_type(ValueType::Number, &value)),
@@ -282,8 +278,8 @@ impl<'a, T: Number, G: Grammar<Lit = T>> TryFromValue<'a, G> for T {
     }
 }
 
-impl<'a, G: Grammar> TryFromValue<'a, G> for bool {
-    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
+impl<'a, T> TryFromValue<'a, T> for bool {
+    fn try_from_value(value: Value<'a, T>) -> Result<Self, FromValueError> {
         match value {
             Value::Bool(flag) => Ok(flag),
             _ => Err(FromValueError::invalid_type(ValueType::Bool, &value)),
@@ -291,14 +287,14 @@ impl<'a, G: Grammar> TryFromValue<'a, G> for bool {
     }
 }
 
-impl<'a, G: Grammar> TryFromValue<'a, G> for Value<'a, G> {
-    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
+impl<'a, T> TryFromValue<'a, T> for Value<'a, T> {
+    fn try_from_value(value: Value<'a, T>) -> Result<Self, FromValueError> {
         Ok(value)
     }
 }
 
-impl<'a, G: Grammar> TryFromValue<'a, G> for Function<'a, G> {
-    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
+impl<'a, T> TryFromValue<'a, T> for Function<'a, T> {
+    fn try_from_value(value: Value<'a, T>) -> Result<Self, FromValueError> {
         match value {
             Value::Function(function) => Ok(function),
             _ => Err(FromValueError::invalid_type(ValueType::Function, &value)),
@@ -306,11 +302,11 @@ impl<'a, G: Grammar> TryFromValue<'a, G> for Function<'a, G> {
     }
 }
 
-impl<'a, U, G: Grammar> TryFromValue<'a, G> for Vec<U>
+impl<'a, U, T> TryFromValue<'a, T> for Vec<U>
 where
-    U: TryFromValue<'a, G>,
+    U: TryFromValue<'a, T>,
 {
-    fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
+    fn try_from_value(value: Value<'a, T>) -> Result<Self, FromValueError> {
         match value {
             Value::Tuple(values) => {
                 let tuple_len = values.len();
@@ -334,12 +330,12 @@ where
 
 macro_rules! try_from_value_for_tuple {
     ($size:expr => $($var:ident : $ty:ident),+) => {
-        impl<'a, G: Grammar, $($ty,)+> TryFromValue<'a, G> for ($($ty,)+)
+        impl<'a, Num, $($ty,)+> TryFromValue<'a, Num> for ($($ty,)+)
         where
-            $($ty: TryFromValue<'a, G>,)+
+            $($ty: TryFromValue<'a, Num>,)+
         {
             #[allow(clippy::shadow_unrelated)] // makes it easier to write macro
-            fn try_from_value(value: Value<'a, G>) -> Result<Self, FromValueError> {
+            fn try_from_value(value: Value<'a, Num>) -> Result<Self, FromValueError> {
                 const EXPECTED_TYPE: ValueType = ValueType::Tuple($size);
 
                 match value {
@@ -414,80 +410,76 @@ impl<'a> ErrorOutput<'a> {
 /// [wrapped functions]: struct.FnWrapper.html
 /// [`NativeFn`]: ../trait.NativeFn.html
 /// [`ErrorOutput`]: enum.ErrorOutput.html
-pub trait IntoEvalResult<'a, G: Grammar> {
+pub trait IntoEvalResult<'a, T> {
     /// Performs the conversion.
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>>;
+    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>>;
 }
 
-impl<'a, G: Grammar, U> IntoEvalResult<'a, G> for Result<U, String>
+impl<'a, T, U> IntoEvalResult<'a, T> for Result<U, String>
 where
-    U: IntoEvalResult<'a, G>,
+    U: IntoEvalResult<'a, T>,
 {
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
         self.map_err(ErrorOutput::Message)
             .and_then(U::into_eval_result)
     }
 }
 
-impl<'a, G: Grammar, U> IntoEvalResult<'a, G> for Result<U, Error<'a>>
+impl<'a, T, U> IntoEvalResult<'a, T> for Result<U, Error<'a>>
 where
-    U: IntoEvalResult<'a, G>,
+    U: IntoEvalResult<'a, T>,
 {
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
         self.map_err(ErrorOutput::Spanned)
             .and_then(U::into_eval_result)
     }
 }
 
-impl<'a, T: Number, G: Grammar<Lit = T>> IntoEvalResult<'a, G> for T {
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+impl<'a, T: Number> IntoEvalResult<'a, T> for T {
+    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
         Ok(Value::Number(self))
     }
 }
 
-impl<'a, G: Grammar> IntoEvalResult<'a, G> for () {
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+impl<'a, T> IntoEvalResult<'a, T> for () {
+    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
         Ok(Value::void())
     }
 }
 
-impl<'a, G: Grammar> IntoEvalResult<'a, G> for bool {
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+impl<'a, T> IntoEvalResult<'a, T> for bool {
+    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
         Ok(Value::Bool(self))
     }
 }
 
-impl<'a, G> IntoEvalResult<'a, G> for cmp::Ordering
-where
-    G: Grammar,
-    G::Lit: Number,
-{
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+impl<'a, T: Number> IntoEvalResult<'a, T> for cmp::Ordering {
+    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
         Ok(Value::Number(match self {
-            Self::Less => -<G::Lit as One>::one(),
-            Self::Equal => <G::Lit as Zero>::zero(),
-            Self::Greater => <G::Lit as One>::one(),
+            Self::Less => -<T as One>::one(),
+            Self::Equal => <T as Zero>::zero(),
+            Self::Greater => <T as One>::one(),
         }))
     }
 }
 
-impl<'a, G: Grammar> IntoEvalResult<'a, G> for Value<'a, G> {
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+impl<'a, T> IntoEvalResult<'a, T> for Value<'a, T> {
+    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
         Ok(self)
     }
 }
 
-impl<'a, G: Grammar> IntoEvalResult<'a, G> for Function<'a, G> {
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+impl<'a, T> IntoEvalResult<'a, T> for Function<'a, T> {
+    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
         Ok(Value::Function(self))
     }
 }
 
-impl<'a, U, G: Grammar> IntoEvalResult<'a, G> for Vec<U>
+impl<'a, U, T> IntoEvalResult<'a, T> for Vec<U>
 where
-    U: IntoEvalResult<'a, G>,
+    U: IntoEvalResult<'a, T>,
 {
-    fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
         let values = self
             .into_iter()
             .map(U::into_eval_result)
@@ -498,11 +490,11 @@ where
 
 macro_rules! into_value_for_tuple {
     ($($i:tt : $ty:ident),+) => {
-        impl<'a, G: Grammar, $($ty,)+> IntoEvalResult<'a, G> for ($($ty,)+)
+        impl<'a, Num, $($ty,)+> IntoEvalResult<'a, Num> for ($($ty,)+)
         where
-            $($ty: IntoEvalResult<'a, G>,)+
+            $($ty: IntoEvalResult<'a, Num>,)+
         {
-            fn into_eval_result(self) -> Result<Value<'a, G>, ErrorOutput<'a>> {
+            fn into_eval_result(self) -> Result<Value<'a, Num>, ErrorOutput<'a>> {
                 Ok(Value::Tuple(vec![$(self.$i.into_eval_result()?,)+]))
             }
         }
@@ -522,19 +514,18 @@ into_value_for_tuple!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A, 8: B, 9: C
 
 macro_rules! arity_fn {
     ($arity:tt => $($arg_name:ident : $t:ident),+) => {
-        impl<G, F, Ret, $($t,)+> NativeFn<G> for FnWrapper<(Ret, $($t,)+), F>
+        impl<Num, F, Ret, $($t,)+> NativeFn<Num> for FnWrapper<(Ret, $($t,)+), F>
         where
-            G: Grammar,
             F: Fn($($t,)+) -> Ret,
-            $($t: for<'val> TryFromValue<'val, G>,)+
-            Ret: for<'val> IntoEvalResult<'val, G>,
+            $($t: for<'val> TryFromValue<'val, Num>,)+
+            Ret: for<'val> IntoEvalResult<'val, Num>,
         {
             #[allow(clippy::shadow_unrelated)] // makes it easier to write macro
             fn evaluate<'a>(
                 &self,
-                args: Vec<SpannedValue<'a, G>>,
+                args: Vec<SpannedValue<'a, Num>>,
                 context: &mut CallContext<'_, 'a>,
-            ) -> EvalResult<'a, G> {
+            ) -> EvalResult<'a, Num> {
                 context.check_args_count(&args, $arity)?;
                 let mut args_iter = args.into_iter().enumerate();
 
@@ -603,15 +594,15 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{wrap_fn, Function, Environment, Value, VariableMap};
-/// fn is_function<G: Grammar>(value: Value<'_, G>) -> bool {
+/// fn is_function<T>(value: Value<'_, T>) -> bool {
 ///     value.is_function()
 /// }
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let program = "is_function(is_function) && !is_function(1)";
-/// let program = F32Grammar::parse_statements(program)?;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("is_function", wrap_fn!(1, is_function))
@@ -624,19 +615,19 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 /// Usage of lifetimes:
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{
 /// #     wrap_fn, CallContext, Function, Environment, Prelude, Value, VariableMap,
 /// # };
 /// # use core::iter::FromIterator;
 /// // Note that both `Value`s have the same lifetime due to elision.
-/// fn take_if<G: Grammar>(value: Value<'_, G>, condition: bool) -> Value<'_, G> {
+/// fn take_if<T>(value: Value<'_, T>, condition: bool) -> Value<'_, T> {
 ///     if condition { value } else { Value::void() }
 /// }
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let program = "(1, 2).take_if(true) == (1, 2) && (3, 4).take_if(false) != (3, 4)";
-/// let program = F32Grammar::parse_statements(program)?;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::from_iter(Prelude.iter())
 ///     .insert_native_fn("take_if", wrap_fn!(2, take_if))
@@ -703,15 +694,15 @@ macro_rules! wrap_fn {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::{grammars::F32Grammar, Grammar, GrammarExt};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{
 /// #     wrap_fn_with_context, CallContext, Function, Environment, Value, Error, VariableMap,
 /// # };
-/// fn map_array<'a, G: Grammar<Lit = f32>>(
+/// fn map_array<'a>(
 ///     context: &mut CallContext<'_, 'a>,
-///     array: Vec<Value<'a, G>>,
-///     map_fn: Function<'a, G>,
-/// ) -> Result<Vec<Value<'a, G>>, Error<'a>> {
+///     array: Vec<Value<'a, f32>>,
+///     map_fn: Function<'a, f32>,
+/// ) -> Result<Vec<Value<'a, f32>>, Error<'a>> {
 ///     array
 ///         .into_iter()
 ///         .map(|value| {
@@ -723,7 +714,7 @@ macro_rules! wrap_fn {
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let program = "(1, 2, 3).map(|x| x + 3) == (4, 5, 6)";
-/// let program = F32Grammar::parse_statements(program)?;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
 ///     .insert_native_fn("map", wrap_fn_with_context!(2, map_array))
@@ -758,9 +749,9 @@ macro_rules! wrap_fn_with_context {
 }
 
 #[doc(hidden)] // necessary for `wrap_fn` macro
-pub fn enforce_closure_type<G: Grammar, F>(function: F) -> F
+pub fn enforce_closure_type<T, F>(function: F) -> F
 where
-    F: for<'a> Fn(Vec<SpannedValue<'a, G>>, &mut CallContext<'_, 'a>) -> EvalResult<'a, G>,
+    F: for<'a> Fn(Vec<SpannedValue<'a, T>>, &mut CallContext<'_, 'a>) -> EvalResult<'a, T>,
 {
     function
 }
@@ -770,7 +761,7 @@ mod tests {
     use super::*;
     use crate::{Environment, ExecutableModule, Prelude, WildcardId};
 
-    use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+    use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
     use assert_matches::assert_matches;
     use core::f32;
 
@@ -784,7 +775,7 @@ mod tests {
             unary_fn(2) == 5 && binary_fn(1, -3) == -3 &&
                 ternary_fn(1, 2, 3) == 2 && ternary_fn(-1, 2, 3) == 3
         "#;
-        let block = F32Grammar::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
 
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
@@ -820,7 +811,7 @@ mod tests {
             (1, 5, -3, 2, 1).array_min_max() == (-3, 5) &&
                 total_sum(((1, 2), (3, 4)), ((5, 6, 7), 8)) == 36
         "#;
-        let block = F32Grammar::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
 
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
@@ -841,7 +832,7 @@ mod tests {
     #[test]
     fn fallible_function() {
         let program = "(1, 2, 3).sum_arrays((4, 5, 6)) == (5, 7, 9)";
-        let block = F32Grammar::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
             .with_import("sum_arrays", Value::wrapped_fn(sum_arrays))
@@ -852,7 +843,7 @@ mod tests {
     #[test]
     fn fallible_function_with_bogus_program() {
         let program = "(1, 2, 3).sum_arrays((4, 5))";
-        let block = F32Grammar::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
 
         let err = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
@@ -872,7 +863,7 @@ mod tests {
         let contains = wrap(|(a, b): (f32, f32), x: f32| (a..=b).contains(&x));
 
         let program = "(-1, 2).contains(0) && !(1, 3).contains(0)";
-        let block = F32Grammar::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
             .with_import("contains", Value::native_fn(contains))
@@ -895,7 +886,7 @@ mod tests {
         });
 
         let program = "assert_eq(3, 1 + 2)";
-        let block = F32Grammar::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
             .with_imports_from(&env)
@@ -903,7 +894,7 @@ mod tests {
         assert!(module.run().unwrap().is_void());
 
         let bogus_program = "assert_eq(3, 1 - 2)";
-        let bogus_block = F32Grammar::parse_statements(bogus_program).unwrap();
+        let bogus_block = Untyped::<F32Grammar>::parse_statements(bogus_program).unwrap();
         let err = ExecutableModule::builder(WildcardId, &bogus_block)
             .unwrap()
             .with_imports_from(&env)
@@ -919,7 +910,7 @@ mod tests {
     #[test]
     fn function_with_bool_argument() {
         let program = "flip_sign(-1, true) == 1 && flip_sign(-1, false) == -1";
-        let block = F32Grammar::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
 
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
@@ -935,7 +926,7 @@ mod tests {
     #[test]
     fn error_reporting_with_destructuring() {
         let program = "((true, 1), (2, 3)).destructure()";
-        let block = F32Grammar::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
 
         let err = ExecutableModule::builder(WildcardId, &block)
             .unwrap()

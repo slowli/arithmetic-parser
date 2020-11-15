@@ -8,29 +8,29 @@ use arithmetic_eval::{
     fns::{self, FromValueErrorKind},
     Environment, Error, ErrorKind, Function, NativeFn, Value, ValueType, VariableMap, WildcardId,
 };
-use arithmetic_parser::{grammars::F32Grammar, BinaryOp, GrammarExt, LvalueLen, UnaryOp};
+use arithmetic_parser::{
+    grammars::{F32Grammar, Parse, Untyped},
+    BinaryOp, LvalueLen, UnaryOp,
+};
 
 const SIN: fns::Unary<f32> = fns::Unary::new(f32::sin);
 
-fn expect_compilation_error<'a>(
-    env: &mut Environment<'a, F32Grammar>,
-    program: &'a str,
-) -> Error<'a> {
-    let block = F32Grammar::parse_statements(program).unwrap();
+fn expect_compilation_error<'a>(env: &mut Environment<'a, f32>, program: &'a str) -> Error<'a> {
+    let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
     env.compile_module(WildcardId, &block).unwrap_err()
 }
 
 fn try_evaluate<'a>(
-    env: &mut Environment<'a, F32Grammar>,
+    env: &mut Environment<'a, f32>,
     program: &'a str,
-) -> Result<Value<'a, F32Grammar>, ErrorWithBacktrace<'a>> {
-    let block = F32Grammar::parse_statements(program).unwrap();
+) -> Result<Value<'a, f32>, ErrorWithBacktrace<'a>> {
+    let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
     env.compile_module(WildcardId, &block)
         .unwrap()
         .run_in_env(env)
 }
 
-fn evaluate<'a>(env: &mut Environment<'a, F32Grammar>, program: &'a str) -> Value<'a, F32Grammar> {
+fn evaluate<'a>(env: &mut Environment<'a, f32>, program: &'a str) -> Value<'a, f32> {
     try_evaluate(env, program).unwrap()
 }
 

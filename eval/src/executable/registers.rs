@@ -9,11 +9,11 @@ use crate::{
     CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, ModuleId, Number,
     SpannedValue, Value,
 };
-use arithmetic_parser::{BinaryOp, Grammar, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
+use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
 
 /// Sequence of instructions that can be executed with the `Registers`.
 #[derive(Debug)]
-pub(crate) struct Executable<'a, T: Grammar> {
+pub(crate) struct Executable<'a, T> {
     id: Box<dyn ModuleId>,
     commands: Vec<SpannedCommand<'a, T>>,
     child_fns: Vec<Rc<ExecutableFn<'a, T>>>,
@@ -21,7 +21,7 @@ pub(crate) struct Executable<'a, T: Grammar> {
     register_capacity: usize,
 }
 
-impl<'a, T: Grammar> Clone for Executable<'a, T> {
+impl<'a, T: Clone> Clone for Executable<'a, T> {
     fn clone(&self) -> Self {
         Self {
             id: self.id.clone_boxed(),
@@ -32,7 +32,7 @@ impl<'a, T: Grammar> Clone for Executable<'a, T> {
     }
 }
 
-impl<T: Grammar> StripCode for Executable<'_, T> {
+impl<T: 'static + Clone> StripCode for Executable<'_, T> {
     type Stripped = Executable<'static, T>;
 
     fn strip_code(self) -> Self::Stripped {
@@ -53,7 +53,7 @@ impl<T: Grammar> StripCode for Executable<'_, T> {
     }
 }
 
-impl<'a, T: Grammar> Executable<'a, T> {
+impl<'a, T> Executable<'a, T> {
     pub fn new(id: Box<dyn ModuleId>) -> Self {
         Self {
             id,
@@ -98,11 +98,7 @@ impl<'a, T: Grammar> Executable<'a, T> {
     }
 }
 
-impl<'a, T> Executable<'a, T>
-where
-    T: Grammar,
-    T::Lit: Number,
-{
+impl<'a, T: Number> Executable<'a, T> {
     pub fn call_function(
         &self,
         captures: Vec<Value<'a, T>>,
@@ -121,13 +117,13 @@ where
 
 /// `Executable` together with function-specific info.
 #[derive(Debug)]
-pub(crate) struct ExecutableFn<'a, T: Grammar> {
+pub(crate) struct ExecutableFn<'a, T> {
     pub inner: Executable<'a, T>,
     pub def_span: MaybeSpanned<'a>,
     pub arg_count: LvalueLen,
 }
 
-impl<T: Grammar> ExecutableFn<'_, T> {
+impl<T: 'static + Clone> ExecutableFn<'_, T> {
     pub fn to_stripped_code(&self) -> ExecutableFn<'static, T> {
         ExecutableFn {
             inner: self.inner.clone().strip_code(),
@@ -137,7 +133,7 @@ impl<T: Grammar> ExecutableFn<'_, T> {
     }
 }
 
-impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
+impl<T: 'static + Clone> StripCode for ExecutableFn<'_, T> {
     type Stripped = ExecutableFn<'static, T>;
 
     fn strip_code(self) -> Self::Stripped {
@@ -150,7 +146,7 @@ impl<T: Grammar> StripCode for ExecutableFn<'_, T> {
 }
 
 #[derive(Debug)]
-pub(crate) struct Registers<'a, T: Grammar> {
+pub(crate) struct Registers<'a, T> {
     // TODO: restore `SmallVec` wrapped into a covariant wrapper.
     registers: Vec<Value<'a, T>>,
     // Maps variables to registers. Variables are mapped only from the global scope;
@@ -162,7 +158,7 @@ pub(crate) struct Registers<'a, T: Grammar> {
     inner_scope_start: Option<usize>,
 }
 
-impl<T: Grammar> Clone for Registers<'_, T> {
+impl<T: Clone> Clone for Registers<'_, T> {
     fn clone(&self) -> Self {
         Self {
             registers: self.registers.clone(),
@@ -172,7 +168,7 @@ impl<T: Grammar> Clone for Registers<'_, T> {
     }
 }
 
-impl<T: Grammar> StripCode for Registers<'_, T> {
+impl<T: 'static + Clone> StripCode for Registers<'_, T> {
     type Stripped = Registers<'static, T>;
 
     fn strip_code(self) -> Self::Stripped {
@@ -188,7 +184,7 @@ impl<T: Grammar> StripCode for Registers<'_, T> {
     }
 }
 
-impl<'a, T: Grammar> Registers<'a, T> {
+impl<'a, T> Registers<'a, T> {
     pub fn new() -> Self {
         Self {
             registers: vec![],
@@ -206,14 +202,6 @@ impl<'a, T: Grammar> Registers<'a, T> {
         self.vars
             .iter()
             .map(move |(name, register)| (name.as_str(), &self.registers[*register]))
-    }
-
-    pub fn into_variables(self) -> impl Iterator<Item = (String, Value<'a, T>)> {
-        let registers = self.registers;
-        // Moving out of `registers` is not sound because of possible aliasing.
-        self.vars
-            .into_iter()
-            .map(move |(name, register)| (name, registers[register].clone()))
     }
 
     pub fn variables_map(&self) -> &HashMap<String, usize> {
@@ -243,7 +231,9 @@ impl<'a, T: Grammar> Registers<'a, T> {
             true
         }
     }
+}
 
+impl<'a, T: Clone> Registers<'a, T> {
     /// Updates from the specified environment. Updates are performed in place.
     pub fn update_from_env(&mut self, env: &Environment<'a, T>) {
         for (var_name, register) in &self.vars {
@@ -263,13 +253,17 @@ impl<'a, T: Grammar> Registers<'a, T> {
             env.insert(var_name, value);
         }
     }
+
+    pub fn into_variables(self) -> impl Iterator<Item = (String, Value<'a, T>)> {
+        let registers = self.registers;
+        // Moving out of `registers` is not sound because of possible aliasing.
+        self.vars
+            .into_iter()
+            .map(move |(name, register)| (name, registers[register].clone()))
+    }
 }
 
-impl<'a, T> Registers<'a, T>
-where
-    T: Grammar,
-    T::Lit: Number,
-{
+impl<'a, T: Number> Registers<'a, T> {
     pub fn execute(
         &mut self,
         executable: &Executable<'a, T>,
@@ -497,17 +491,17 @@ where
 mod tests {
     use super::*;
     use crate::{compiler::Compiler, executable::ModuleImports, WildcardId};
-    use arithmetic_parser::{grammars::F32Grammar, GrammarExt};
+    use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 
     #[test]
     fn iterative_evaluation() {
-        let block = F32Grammar::parse_statements("x").unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements("x").unwrap();
         let (mut module, _) = Compiler::compile_module(WildcardId, &block).unwrap();
         assert_eq!(module.inner.register_capacity, 2);
         assert_eq!(module.inner.commands.len(), 1); // push `x` from r0 to r1
 
         let mut env = Registers::new();
-        env.insert_var("x", Value::<F32Grammar>::Number(5.0));
+        env.insert_var("x", Value::Number(5.0));
         module.imports = ModuleImports { inner: env };
         let value = module.run().unwrap();
         assert_eq!(value, Value::Number(5.0));

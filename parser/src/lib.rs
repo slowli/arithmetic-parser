@@ -21,7 +21,7 @@
 //!
 //! ## Optional Features
 //!
-//! These features can be switched on or off when defining a [`Grammar`] by defining
+//! These features can be switched on or off when defining a [`Parse`] impl by declaring
 //! the corresponding [`Features`].
 //!
 //! - **Tuples.** A tuple is two or more elements separated by commas, such as `(x, y)`
@@ -55,8 +55,8 @@
 //! - There is "rest" destructuting for tuples and function arguments.
 //! - Type hints are placed within tuple elements, for example, `(x: Num, _) = y`.
 //!
-//! [`Grammar`]: trait.Grammar.html
-//! [`Features`]: struct.Features.html
+//! [`Parse`]: grammars/trait.Parse.html
+//! [`Features`]: grammars/struct.Features.html
 //!
 //! # Examples
 //!
@@ -65,8 +65,8 @@
 //! ```
 //! # use assert_matches::assert_matches;
 //! use arithmetic_parser::{
-//!     grammars::F32Grammar,
-//!     GrammarExt, NomResult, Statement, Expr, FnDefinition, LvalueLen,
+//!     grammars::{F32Grammar, Parse, Untyped},
+//!     NomResult, Statement, Expr, FnDefinition, LvalueLen,
 //! };
 //!
 //! const PROGRAM: &str = r#"
@@ -83,7 +83,8 @@
 //!     other_function(y - z)
 //! "#;
 //!
-//! let block = F32Grammar::parse_statements(PROGRAM).unwrap();
+//! # fn main() -> anyhow::Result<()> {
+//! let block = Untyped::<F32Grammar>::parse_statements(PROGRAM)?;
 //! // First statement is an assignment.
 //! assert_matches!(
 //!     block.statements[0].extra,
@@ -102,6 +103,8 @@
 //!             && body.statements.is_empty()
 //!             && body.return_value.is_some()
 //! );
+//! # Ok(())
+//! # }
 //! ```
 
 #![cfg_attr(not(feature = "std"), no_std)]
@@ -132,19 +135,20 @@ pub use crate::{
         CodeFragment, InputSpan, LocatedSpan, MaybeSpanned, NomResult, Spanned, StripCode,
         StripResultExt,
     },
-    traits::{BooleanOps, Features, Grammar, GrammarExt, IntoInputSpan},
 };
 
 use core::fmt;
 
-use crate::alloc::{vec, Box, Vec};
+use crate::{
+    alloc::{vec, Box, Vec},
+    grammars::Grammar,
+};
 
 mod error;
 pub mod grammars;
 mod ops;
 mod parser;
 mod spans;
-mod traits;
 
 /// Arithmetic expression with an abstract types for type hints and literals.
 #[derive(Debug)]
@@ -507,10 +511,7 @@ impl fmt::Display for LvalueType {
 /// Statement: an expression or a variable assignment.
 #[derive(Debug)]
 #[non_exhaustive]
-pub enum Statement<'a, T>
-where
-    T: Grammar,
-{
+pub enum Statement<'a, T: Grammar> {
     /// Expression, e.g., `x + (1, 2)`.
     Expr(SpannedExpr<'a, T>),
 

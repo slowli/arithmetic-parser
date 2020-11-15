@@ -6,7 +6,7 @@ use alloc::string::ToString;
 use core::{f64, iter::FromIterator};
 
 use arithmetic_eval::{fns, Environment, Prelude, Value, VariableMap, WildcardId};
-use arithmetic_parser::{grammars::F64Grammar, GrammarExt};
+use arithmetic_parser::grammars::{F64Grammar, Parse, Untyped};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -18,7 +18,7 @@ extern "C" {
 }
 
 #[allow(clippy::type_complexity)]
-fn initialize_env(env: &mut Environment<'_, F64Grammar>) {
+fn initialize_env(env: &mut Environment<'_, f64>) {
     const CONSTANTS: &[(&str, f64)] = &[
         ("E", f64::consts::E),
         ("PI", f64::consts::PI),
@@ -69,8 +69,8 @@ fn initialize_env(env: &mut Environment<'_, F64Grammar>) {
 
 #[wasm_bindgen]
 pub fn evaluate(program: &str) -> Result<JsValue, JsValue> {
-    let block =
-        F64Grammar::parse_statements(program).map_err(|err| Error::new(&err.to_string()))?;
+    let block = Untyped::<F64Grammar>::parse_statements(program)
+        .map_err(|err| Error::new(&err.to_string()))?;
 
     let mut env = Environment::from_iter(Prelude.iter());
     initialize_env(&mut env);

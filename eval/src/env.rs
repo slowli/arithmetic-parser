@@ -11,7 +11,6 @@ use crate::{
     alloc::{String, ToOwned},
     fns, NativeFn, Value,
 };
-use arithmetic_parser::Grammar;
 
 /// Environment containing named `Value`s.
 ///
@@ -28,10 +27,9 @@ use arithmetic_parser::Grammar;
 ///
 /// ```
 /// use arithmetic_eval::{Environment, Comparisons, Prelude, Value};
-/// use arithmetic_parser::grammars::F64Grammar;
 ///
 /// // Load environment from the standard containers.
-/// let mut env: Environment<'_, F64Grammar> = Prelude.iter()
+/// let mut env: Environment<'_, f64> = Prelude.iter()
 ///     .chain(Comparisons.iter())
 ///     // Add a custom variable for a good measure.
 ///     .chain(vec![("x", Value::Number(1.0))])
@@ -50,17 +48,17 @@ use arithmetic_parser::Grammar;
 /// assert!(other_env.get("x").is_none());
 /// ```
 #[derive(Debug)]
-pub struct Environment<'a, T: Grammar> {
+pub struct Environment<'a, T> {
     variables: HashMap<String, Value<'a, T>>,
 }
 
-impl<T: Grammar> Default for Environment<'_, T> {
+impl<T> Default for Environment<'_, T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: Grammar> Clone for Environment<'_, T> {
+impl<T: Clone> Clone for Environment<'_, T> {
     fn clone(&self) -> Self {
         Self {
             variables: self.variables.clone(),
@@ -68,16 +66,13 @@ impl<T: Grammar> Clone for Environment<'_, T> {
     }
 }
 
-impl<T: Grammar> PartialEq for Environment<'_, T>
-where
-    T::Lit: PartialEq,
-{
+impl<T: PartialEq> PartialEq for Environment<'_, T> {
     fn eq(&self, other: &Self) -> bool {
         self.variables == other.variables
     }
 }
 
-impl<'a, T: Grammar> Environment<'a, T> {
+impl<'a, T> Environment<'a, T> {
     /// Creates a new environment.
     pub fn new() -> Self {
         Self {
@@ -131,7 +126,7 @@ impl<'a, T: Grammar> Environment<'a, T> {
     }
 }
 
-impl<'a, T: Grammar> ops::Index<&str> for Environment<'a, T> {
+impl<'a, T> ops::Index<&str> for Environment<'a, T> {
     type Output = Value<'a, T>;
 
     fn index(&self, index: &str) -> &Self::Output {
@@ -140,7 +135,7 @@ impl<'a, T: Grammar> ops::Index<&str> for Environment<'a, T> {
     }
 }
 
-impl<'a, T: Grammar> IntoIterator for Environment<'a, T> {
+impl<'a, T> IntoIterator for Environment<'a, T> {
     type Item = (String, Value<'a, T>);
     type IntoIter = IntoIter<'a, T>;
 
@@ -153,11 +148,11 @@ impl<'a, T: Grammar> IntoIterator for Environment<'a, T> {
 
 /// Result of converting `Environment` into an iterator.
 #[derive(Debug)]
-pub struct IntoIter<'a, T: Grammar> {
+pub struct IntoIter<'a, T> {
     inner: hash_map::IntoIter<String, Value<'a, T>>,
 }
 
-impl<'a, T: Grammar> Iterator for IntoIter<'a, T> {
+impl<'a, T> Iterator for IntoIter<'a, T> {
     type Item = (String, Value<'a, T>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -169,13 +164,13 @@ impl<'a, T: Grammar> Iterator for IntoIter<'a, T> {
     }
 }
 
-impl<T: Grammar> ExactSizeIterator for IntoIter<'_, T> {
+impl<T> ExactSizeIterator for IntoIter<'_, T> {
     fn len(&self) -> usize {
         self.inner.len()
     }
 }
 
-impl<'r, 'a, T: Grammar> IntoIterator for &'r Environment<'a, T> {
+impl<'r, 'a, T> IntoIterator for &'r Environment<'a, T> {
     type Item = (&'r str, &'r Value<'a, T>);
     type IntoIter = Iter<'r, 'a, T>;
 
@@ -193,11 +188,11 @@ type MapFn<'r, 'a, T> = fn((&'r String, &'r Value<'a, T>)) -> (&'r str, &'r Valu
 
 /// Iterator over references of the `Environment` entries.
 #[derive(Debug)]
-pub struct Iter<'r, 'a, T: Grammar> {
+pub struct Iter<'r, 'a, T> {
     inner: iter::Map<hash_map::Iter<'r, String, Value<'a, T>>, MapFn<'r, 'a, T>>,
 }
 
-impl<'r, 'a, T: Grammar> Iterator for Iter<'r, 'a, T> {
+impl<'r, 'a, T> Iterator for Iter<'r, 'a, T> {
     type Item = (&'r str, &'r Value<'a, T>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -209,7 +204,7 @@ impl<'r, 'a, T: Grammar> Iterator for Iter<'r, 'a, T> {
     }
 }
 
-impl<T: Grammar> ExactSizeIterator for Iter<'_, '_, T> {
+impl<T> ExactSizeIterator for Iter<'_, '_, T> {
     fn len(&self) -> usize {
         self.inner.len()
     }
@@ -217,7 +212,6 @@ impl<T: Grammar> ExactSizeIterator for Iter<'_, '_, T> {
 
 impl<'a, T, S, V> FromIterator<(S, V)> for Environment<'a, T>
 where
-    T: Grammar,
     S: Into<String>,
     V: Into<Value<'a, T>>,
 {
@@ -233,7 +227,6 @@ where
 
 impl<'a, T, S, V> Extend<(S, V)> for Environment<'a, T>
 where
-    T: Grammar,
     S: Into<String>,
     V: Into<Value<'a, T>>,
 {

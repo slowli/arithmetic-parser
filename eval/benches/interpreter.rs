@@ -10,7 +10,10 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 use typed_arena::Arena;
 
 use arithmetic_eval::{fns, CallContext, ExecutableModule, NativeFn, Value, WildcardId};
-use arithmetic_parser::{grammars::F32Grammar, GrammarExt, MaybeSpanned};
+use arithmetic_parser::{
+    grammars::{F32Grammar, Parse, Untyped},
+    MaybeSpanned,
+};
 
 const SEED: u64 = 123;
 const ELEMENTS: u64 = 50;
@@ -36,13 +39,13 @@ fn bench_mul_native_with_value(bencher: &mut Bencher<'_>) {
         || {
             (0..ELEMENTS)
                 .map(|_| rng.gen_range(0.5_f32, 1.5))
-                .map(Value::<F32Grammar>::Number)
+                .map(Value::Number)
                 .collect::<Vec<_>>()
         },
         |values| {
             values
                 .into_iter()
-                .fold(Value::<F32Grammar>::Number(1.0), |acc, x| match (acc, x) {
+                .fold(Value::Number(1.0), |acc, x| match (acc, x) {
                     (Value::Number(acc), Value::Number(x)) => Value::Number(acc * x),
                     _ => unreachable!(),
                 })
@@ -61,7 +64,7 @@ fn bench_mul(bencher: &mut Bencher<'_>) {
                 .map(|_| rng.gen_range(0.5_f32, 1.5).to_string())
                 .collect();
             let program = arena.alloc(values.join(" * "));
-            let program = F32Grammar::parse_statements(program.as_str()).unwrap();
+            let program = Untyped::<F32Grammar>::parse_statements(program.as_str()).unwrap();
 
             ExecutableModule::builder(WildcardId, &program)
                 .unwrap()
@@ -75,7 +78,7 @@ fn bench_mul(bencher: &mut Bencher<'_>) {
 fn bench_mul_fold(bencher: &mut Bencher<'_>) {
     let mut rng = StdRng::seed_from_u64(SEED);
     let program = "xs.fold(1, |acc, x| acc * x)";
-    let program = F32Grammar::parse_statements(program).unwrap();
+    let program = Untyped::<F32Grammar>::parse_statements(program).unwrap();
 
     bencher.iter_batched(
         || {
@@ -109,7 +112,7 @@ fn bench_fold_fn(bencher: &mut Bencher<'_>) {
         || {
             (0..ELEMENTS)
                 .map(|_| rng.gen_range(0.5_f32, 1.5))
-                .map(Value::<F32Grammar>::Number)
+                .map(Value::Number)
                 .collect::<Vec<_>>()
         },
         |array| {
@@ -124,7 +127,7 @@ fn bench_fold_fn(bencher: &mut Bencher<'_>) {
 
 fn bench_interpreted_fn(bencher: &mut Bencher<'_>) {
     let mut ctx = CallContext::mock(&WildcardId, MaybeSpanned::from_str("", ..));
-    let interpreted_fn = F32Grammar::parse_statements("|x, y| x * y").unwrap();
+    let interpreted_fn = Untyped::<F32Grammar>::parse_statements("|x, y| x * y").unwrap();
     let interpreted_fn = ExecutableModule::builder(WildcardId, &interpreted_fn)
         .unwrap()
         .build()
@@ -141,7 +144,7 @@ fn bench_interpreted_fn(bencher: &mut Bencher<'_>) {
         || {
             (0..ELEMENTS)
                 .map(|_| rng.gen_range(0.5_f32, 1.5))
-                .map(Value::<F32Grammar>::Number)
+                .map(Value::Number)
                 .collect::<Vec<_>>()
         },
         |array| {
@@ -183,7 +186,7 @@ fn bench_reverse(bencher: &mut Bencher<'_>) {
     let mut rng = StdRng::seed_from_u64(SEED);
 
     let rev_fn = "|xs| xs.fold((), |acc, x| (x,).merge(acc))";
-    let rev_fn = F32Grammar::parse_statements(rev_fn).unwrap();
+    let rev_fn = Untyped::<F32Grammar>::parse_statements(rev_fn).unwrap();
     let rev_fn = ExecutableModule::builder("rev_fn", &rev_fn)
         .unwrap()
         .with_import("fold", Value::native_fn(fns::Fold))
@@ -193,7 +196,7 @@ fn bench_reverse(bencher: &mut Bencher<'_>) {
     assert!(rev_fn.is_function());
 
     let program = "xs.reverse()";
-    let program = F32Grammar::parse_statements(program).unwrap();
+    let program = Untyped::<F32Grammar>::parse_statements(program).unwrap();
     let mut program = ExecutableModule::builder("rev_fn", &program)
         .unwrap()
         .with_import("reverse", rev_fn)

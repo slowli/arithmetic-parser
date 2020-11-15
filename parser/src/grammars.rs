@@ -1,4 +1,29 @@
-//! Standard grammars.
+//! Grammar functionality and a collection of standard grammars.
+//!
+//! # Defining grammars
+//!
+//! To define a [`Grammar`], you'll need a [`ParseLiteral`] implementation, which defines
+//! how literals are parsed (numbers, strings, chars, hex- / base64-encoded byte sequences, etc.).
+//! There are standard impls for floating-point number parsing and the complex numbers
+//! (if the relevant feature is on).
+//!
+//! You may define how to parse type annotations by implementing `Grammar` explicitly.
+//! Alternatively, if you don't need type annotations, a `Grammar` can be obtained from
+//! a [`ParseLiteral`] impl by wrapping it into [`Untyped`].
+//!
+//! Once you have a `Grammar`, you can supply it as a `Base` for [`Parse`]. `Parse` methods
+//! allow to parse complete or streaming [`Block`]s of statements. Note that `Untyped` and
+//! [`Typed`] wrappers allow to avoid an explicit `Parse` impl.
+//!
+//! See [`ParseLiteral`], [`Grammar`] and [`Parse`] docs for the examples of various grammar
+//! definitions.
+//!
+//! [`Grammar`]: trait.Grammar.html
+//! [`ParseLiteral`]: trait.ParseLiteral.html
+//! [`Parse`]: trait.Parse.html
+//! [`Typed`]: struct.Typed.html
+//! [`Untyped`]: struct.Untyped.html
+//! [`Block`]: ../struct.Block.html
 
 use nom::{
     bytes::complete::take_while_m_n,
@@ -11,9 +36,13 @@ use num_traits::Num;
 
 use core::{f32, f64, fmt, marker::PhantomData};
 
-use crate::{spans::NomResult, Features, Grammar, InputSpan};
+mod traits;
 
-// FIXME: `1.foo()` does not work because float parser consumes `1.`
+pub use self::traits::{
+    BooleanOps, Features, Grammar, IntoInputSpan, Parse, ParseLiteral, Typed, Untyped,
+};
+
+use crate::{spans::NomResult, InputSpan};
 
 /// Single-type numeric grammar parameterized by the literal type.
 #[derive(Debug)]
@@ -24,21 +53,11 @@ pub type F32Grammar = NumGrammar<f32>;
 /// Type alias for a grammar on `f64` literals.
 pub type F64Grammar = NumGrammar<f64>;
 
-impl<T: NumLiteral> Grammar for NumGrammar<T> {
+impl<T: NumLiteral> ParseLiteral for NumGrammar<T> {
     type Lit = T;
-    type Type = ();
-
-    const FEATURES: Features = Features {
-        type_annotations: false,
-        ..Features::all()
-    };
 
     fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
         T::parse(input)
-    }
-
-    fn parse_type(_input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
-        unimplemented!()
     }
 }
 
@@ -152,7 +171,7 @@ mod complex {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Expr, GrammarExt, UnaryOp};
+    use crate::{Expr, UnaryOp};
 
     use assert_matches::assert_matches;
     use core::f32::INFINITY;
@@ -201,27 +220,27 @@ mod tests {
 
     #[test]
     fn parsing_infinity() {
-        let parsed = F32Grammar::parse_statements("Inf").unwrap();
+        let parsed = Untyped::<F32Grammar>::parse_statements("Inf").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         assert_matches!(ret, Expr::Literal(lit) if lit == INFINITY);
 
-        let parsed = F32Grammar::parse_statements("-Inf").unwrap();
+        let parsed = Untyped::<F32Grammar>::parse_statements("-Inf").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         assert_matches!(ret, Expr::Literal(lit) if lit == -INFINITY);
 
-        let parsed = F32Grammar::parse_statements("Infty").unwrap();
+        let parsed = Untyped::<F32Grammar>::parse_statements("Infty").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         assert_matches!(ret, Expr::Variable);
 
-        let parsed = F32Grammar::parse_statements("Infer(1)").unwrap();
+        let parsed = Untyped::<F32Grammar>::parse_statements("Infer(1)").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         assert_matches!(ret, Expr::Function { .. });
 
-        let parsed = F32Grammar::parse_statements("-Infty").unwrap();
+        let parsed = Untyped::<F32Grammar>::parse_statements("-Infty").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         assert_matches!(ret, Expr::Unary { .. });
 
-        let parsed = F32Grammar::parse_statements("-Infer(2, 3)").unwrap();
+        let parsed = Untyped::<F32Grammar>::parse_statements("-Infer(2, 3)").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         assert_matches!(ret, Expr::Unary { .. });
     }
@@ -231,27 +250,29 @@ mod tests {
     fn parsing_i() {
         use num_complex::Complex32;
 
-        let parsed = NumGrammar::<Complex32>::parse_statements("i").unwrap();
+        type C32Grammar = Untyped<NumGrammar<Complex32>>;
+
+        let parsed = C32Grammar::parse_statements("i").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         assert_matches!(ret, Expr::Literal(lit) if lit == Complex32::i());
 
-        let parsed = NumGrammar::<Complex32>::parse_statements("i + 5").unwrap();
+        let parsed = C32Grammar::parse_statements("i + 5").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         let i_as_lhs = &ret.binary_lhs().unwrap().extra;
         assert_matches!(*i_as_lhs, Expr::Literal(lit) if lit == Complex32::i());
 
-        let parsed = NumGrammar::<Complex32>::parse_statements("5 - i").unwrap();
+        let parsed = C32Grammar::parse_statements("5 - i").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         let i_as_rhs = &ret.binary_rhs().unwrap().extra;
         assert_matches!(*i_as_rhs, Expr::Literal(lit) if lit == Complex32::i());
 
         // `i` should not be parsed as a literal if it's a part of larger expression.
-        let parsed = NumGrammar::<Complex32>::parse_statements("ix + 5").unwrap();
+        let parsed = C32Grammar::parse_statements("ix + 5").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         let variable = &ret.binary_lhs().unwrap().extra;
         assert_matches!(*variable, Expr::Variable);
 
-        let parsed = NumGrammar::<Complex32>::parse_statements("-i + 5").unwrap();
+        let parsed = C32Grammar::parse_statements("-i + 5").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         let negation_expr = &ret.binary_lhs().unwrap().extra;
         let inner_lhs = match negation_expr {
@@ -260,7 +281,7 @@ mod tests {
         };
         assert_matches!(inner_lhs, Expr::Literal(lit) if *lit == Complex32::i());
 
-        let parsed = NumGrammar::<Complex32>::parse_statements("-ix + 5").unwrap();
+        let parsed = C32Grammar::parse_statements("-ix + 5").unwrap();
         let ret = parsed.return_value.unwrap().extra;
         let var_negation = &ret.binary_lhs().unwrap().extra;
         let negated_var = match var_negation {

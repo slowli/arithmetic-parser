@@ -13,11 +13,12 @@ use std::{
 };
 
 use arithmetic_parser::{
-    grammars::NumGrammar, BinaryOp, Block, Expr, FnDefinition, GrammarExt, InputSpan, Lvalue,
-    OpPriority, SpannedExpr, SpannedLvalue, Statement, UnaryOp,
+    grammars::{NumGrammar, Parse, Untyped},
+    BinaryOp, Block, Expr, FnDefinition, InputSpan, Lvalue, OpPriority, SpannedExpr, SpannedLvalue,
+    Statement, UnaryOp,
 };
 
-type ComplexGrammar = NumGrammar<Complex32>;
+type ComplexGrammar = Untyped<NumGrammar<Complex32>>;
 
 /// Evaluated expression.
 #[derive(Debug, Clone)]

@@ -15,8 +15,6 @@ use arithmetic_parser::{
 };
 
 /// Context for [`ErrorKind::TupleLenMismatch`].
-///
-/// [`ErrorKind::TupleLenMismatch`]: enum.ErrorKind.html#variant.TupleLenMismatch
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TupleLenMismatchContext {
     /// An error has occurred when evaluating a binary operation.
@@ -35,8 +33,6 @@ impl fmt::Display for TupleLenMismatchContext {
 }
 
 /// Context for [`ErrorKind::RepeatedAssignment`].
-///
-/// [`ErrorKind::RepeatedAssignment`]: enum.ErrorKind.html#variant.RepeatedAssignment
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RepeatedAssignmentContext {
     /// A duplicated variable is in function args.
@@ -111,9 +107,7 @@ pub enum ErrorKind {
     #[display(fmt = "Failed executing native function: {}", _0)]
     NativeCall(String),
 
-    /// Error while converting arguments for [`FnWrapper`].
-    ///
-    /// [`FnWrapper`]: ../fns/struct.FnWrapper.html
+    /// Error while converting arguments for [`FnWrapper`](crate::fns::FnWrapper).
     #[display(
         fmt = "Failed converting arguments for native function wrapper: {}",
         _0
@@ -314,20 +308,14 @@ impl From<LvalueType> for UnsupportedType {
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum AuxErrorInfo {
-    /// Function arguments declaration for [`ArgsLenMismatch`].
-    ///
-    /// [`ArgsLenMismatch`]: enum.ErrorKind.html#variant.ArgsLenMismatch
+    /// Function arguments declaration for [`ErrorKind::ArgsLenMismatch`].
     FnArgs,
 
-    /// Previous variable assignment for [`RepeatedAssignment`].
-    ///
-    /// [`RepeatedAssignment`]: enum.ErrorKind.html#variant.RepeatedAssignment
+    /// Previous variable assignment for [`ErrorKind::RepeatedAssignment`].
     PrevAssignment,
 
-    /// Rvalue containing an invalid assignment for [`CannotDestructure`] or [`TupleLenMismatch`].
-    ///
-    /// [`CannotDestructure`]: enum.ErrorKind.html#variant.CannotDestructure
-    /// [`TupleLenMismatch`]: enum.ErrorKind.html#variant.TupleLenMismatch
+    /// Rvalue containing an invalid assignment for [`ErrorKind::CannotDestructure`]
+    /// or [`ErrorKind::TupleLenMismatch`].
     Rvalue,
 
     /// RHS of a binary operation on differently sized tuples.
@@ -351,9 +339,10 @@ impl fmt::Display for AuxErrorInfo {
 
 /// Evaluation error together with one or more relevant code spans.
 ///
-/// Use the `StripCode` implementation to convert an `Error` to the `'static` lifetime, e.g.,
+/// Use the [`StripCode`] implementation to convert an `Error` to the `'static` lifetime, e.g.,
 /// before boxing it into `Box<dyn std::error::Error>` or `anyhow::Error`.
-/// If the error is wrapped into a `Result`, you can do this via `StripResultExt` trait defined
+/// If the error is wrapped into a [`Result`], you can do this via
+/// [`StripResultExt`](arithmetic_parser::StripResultExt) trait defined
 /// in the `arithmetic-parser` crate:
 ///
 /// ```
@@ -583,7 +572,7 @@ impl StripCode for Backtrace<'_> {
 
 /// Error with the associated backtrace.
 ///
-/// Use the `StripCode` implementation to convert an `Error` to the `'static` lifetime, e.g.,
+/// Use the [`StripCode`] implementation to convert this to the `'static` lifetime, e.g.,
 /// before boxing it into `Box<dyn std::error::Error>` or `anyhow::Error`.
 #[derive(Debug)]
 pub struct ErrorWithBacktrace<'a> {

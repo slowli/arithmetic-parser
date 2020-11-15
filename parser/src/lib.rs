@@ -21,8 +21,8 @@
 //!
 //! ## Optional Features
 //!
-//! These features can be switched on or off when defining a [`Parse`] impl by declaring
-//! the corresponding [`Features`].
+//! These features can be switched on or off when defining a [`Parse`](grammars::Parse) impl
+//! by declaring the corresponding [`Features`](grammars::Features).
 //!
 //! - **Tuples.** A tuple is two or more elements separated by commas, such as `(x, y)`
 //!   or `(1, 2 * x)`. Tuples are parsed both as lvalues and rvalues.
@@ -54,9 +54,6 @@
 //! - Functions are only defined via the closure syntax.
 //! - There is "rest" destructuting for tuples and function arguments.
 //! - Type hints are placed within tuple elements, for example, `(x: Num, _) = y`.
-//!
-//! [`Parse`]: grammars/trait.Parse.html
-//! [`Features`]: grammars/struct.Features.html
 //!
 //! # Examples
 //!
@@ -486,10 +483,10 @@ impl<T> Lvalue<'_, T> {
     }
 }
 
-/// `Lvalue` with the associated code span.
+/// [`Lvalue`] with the associated code span.
 pub type SpannedLvalue<'a, T> = Spanned<'a, Lvalue<'a, T>>;
 
-/// Type of an `Lvalue`.
+/// Type of an [`Lvalue`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum LvalueType {
@@ -572,7 +569,7 @@ where
 /// Statement with the associated code span.
 pub type SpannedStatement<'a, T> = Spanned<'a, Statement<'a, T>>;
 
-/// Type of a `Statement`.
+/// Type of a [`Statement`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum StatementType {

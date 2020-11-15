@@ -71,7 +71,7 @@ impl<'r, 'a> CallContext<'r, 'a> {
     }
 }
 
-/// Function on zero or more `Value`s.
+/// Function on zero or more [`Value`]s.
 pub trait NativeFn<T> {
     /// Executes the function on the specified arguments.
     fn evaluate<'a>(
@@ -279,8 +279,6 @@ impl<'a, T: Number> Function<'a, T> {
 }
 
 /// Possible high-level types of [`Value`]s.
-///
-/// [`Value`]: enum.Value.html
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum ValueType {
@@ -296,8 +294,6 @@ pub enum ValueType {
     ///
     /// This variant is never returned from [`Value::value_type()`]; at the same time, it is
     /// used for error reporting etc.
-    ///
-    /// [`Value::value_type()`]: enum.Value.html#method.value_type
     Array,
 }
 
@@ -337,17 +333,13 @@ impl<'a, T> Value<'a, T> {
         Self::Function(Function::Native(Rc::new(function)))
     }
 
-    /// Creates a [wrapped function].
+    /// Creates a [wrapped function](fns::FnWrapper).
     ///
-    /// Calling this method is equivalent to [`wrap`]ping a function and calling [`native_fn()`]
-    /// on it. Thanks to type inference magic, the Rust compiler will usually be able to extract
-    /// the `Args` type param from the function definition, provided that type of
-    /// function arguments and its return type are defined explicitly or can be
-    /// unequivocally inferred from the declaration.
-    ///
-    /// [wrapped function]: fns/struct.FnWrapper.html
-    /// [`wrap`]: fns/fn.wrap.html
-    /// [`native_fn()`]: #method.native_fn
+    /// Calling this method is equivalent to [`wrap`](fns::wrap)ping a function and calling
+    /// [`Self::native_fn()`] on it. Thanks to type inference magic, the Rust compiler
+    /// will usually be able to extract the `Args` type param from the function definition,
+    /// provided that type of function arguments and its return type are defined explicitly
+    /// or can be unequivocally inferred from the declaration.
     pub fn wrapped_fn<Args, F>(fn_to_wrap: F) -> Self
     where
         fns::FnWrapper<Args, F>: NativeFn<T> + 'static,

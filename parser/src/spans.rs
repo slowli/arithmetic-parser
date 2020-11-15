@@ -156,8 +156,6 @@ impl<'a> Spanned<'a> {
 ///
 /// The stripped version allows to retain information about code location within [`LocatedSpan`]
 /// without a restriction by the code lifetime.
-///
-/// [`LocatedSpan`]: struct.LocatedSpan.html
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CodeFragment<'a> {
     /// Original code fragment: a string reference.
@@ -298,7 +296,7 @@ pub(crate) fn unite_spans<'a, T, U>(
     }
 }
 
-/// Helper trait for `Result`s with the error component that implements `StripCode`.
+/// Helper trait for [`Result`]s with the error component that implements [`StripCode`].
 pub trait StripResultExt {
     /// Type wrapped by the `Result::Ok` variant.
     type Ok;

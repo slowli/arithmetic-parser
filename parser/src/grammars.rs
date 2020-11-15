@@ -12,18 +12,11 @@
 //! a [`ParseLiteral`] impl by wrapping it into [`Untyped`].
 //!
 //! Once you have a `Grammar`, you can supply it as a `Base` for [`Parse`]. `Parse` methods
-//! allow to parse complete or streaming [`Block`]s of statements. Note that `Untyped` and
-//! [`Typed`] wrappers allow to avoid an explicit `Parse` impl.
+//! allow to parse complete or streaming [`Block`](crate::Block)s of statements.
+//! Note that `Untyped` and [`Typed`] wrappers allow to avoid an explicit `Parse` impl.
 //!
 //! See [`ParseLiteral`], [`Grammar`] and [`Parse`] docs for the examples of various grammar
 //! definitions.
-//!
-//! [`Grammar`]: trait.Grammar.html
-//! [`ParseLiteral`]: trait.ParseLiteral.html
-//! [`Parse`]: trait.Parse.html
-//! [`Typed`]: struct.Typed.html
-//! [`Untyped`]: struct.Untyped.html
-//! [`Block`]: ../struct.Block.html
 
 use nom::{
     bytes::complete::take_while_m_n,

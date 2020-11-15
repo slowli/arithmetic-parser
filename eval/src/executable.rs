@@ -21,22 +21,17 @@ pub(crate) use self::{
 /// Executable module together with its imports.
 ///
 /// An `ExecutableModule` is a result of compiling a `Block` of statements. A module can *import*
-/// [`Value`]s, such as [commonly used functions]. Importing is performed when building the module.
+/// [`Value`]s, such as [commonly used functions](crate::fns). Importing is performed
+/// when building the module.
 ///
-/// After the module is created, it can be [`run`].  If the last statement of the block
+/// After the module is created, it can be [`run`](Self::run). If the last statement of the block
 /// is an expression (that is, not terminated with a `;`), it is the result of the execution;
-/// otherwise, the result is `Value::void()`. It is possible to run a module multiple times
-/// and to change imports by using [`set_import`].
+/// otherwise, the result is [`Value::void()`]. It is possible to run a module multiple times
+/// and to change imports by using [`Self::set_import()`].
 ///
 /// In some cases (e.g., when building a REPL) it is useful to get not only the outcome
-/// of the module execution, but the intermediate results as well. Use [`run_in_env`]
+/// of the module execution, but the intermediate results as well. Use [`Self::run_in_env()`]
 /// for such cases.
-///
-/// [`Value`]: enum.Value.html
-/// [commonly used functions]: fns/index.html
-/// [`run`]: #method.run
-/// [`set_import`]: #method.set_import
-/// [`run_in_env`]: #method.run_in_env
 ///
 /// # Examples
 ///
@@ -171,7 +166,7 @@ impl<'a, T> ExecutableModule<'a, T> {
     /// that the import exists beforehand via [`imports().contains()`] if this is
     /// unknown at compile time.
     ///
-    /// [`imports().contains()`]: struct.ModuleImports.html#method.contains
+    /// [`imports().contains()`]: ModuleImports::contains()
     pub fn set_import(&mut self, name: &str, value: Value<'a, T>) -> &mut Self {
         self.imports.inner.set_var(name, value);
         self
@@ -204,7 +199,7 @@ impl<'a, T: Number> ExecutableModule<'a, T> {
         self.run_with_registers(&mut registers)
     }
 
-    /// Runs the module with the specified `Environment`. The environment may contain some of
+    /// Runs the module with the specified [`Environment`]. The environment may contain some of
     /// module imports; they will be used to override imports defined in the module.
     ///
     /// On execution, the environment is modified to reflect assignments in the topmost scope
@@ -236,10 +231,8 @@ impl<'a, T: Number> ExecutableModule<'a, T> {
 
 /// Imports of an [`ExecutableModule`].
 ///
-/// Note that imports implement [`Index`] trait, which allows to eloquently get imports by name.
-///
-/// [`ExecutableModule`]: struct.ExecutableModule.html
-/// [`Index`]: https://doc.rust-lang.org/std/ops/trait.Index.html
+/// Note that imports implement [`Index`](ops::Index) trait, which allows to eloquently
+/// get imports by name.
 #[derive(Debug)]
 pub struct ModuleImports<'a, T> {
     inner: Registers<'a, T>,
@@ -311,10 +304,8 @@ impl<'a, 'r, T> IntoIterator for &'r ModuleImports<'a, T> {
 
 /// Builder for an `ExecutableModule`.
 ///
-/// The builder can be created via [`ExecutableModule::builder()`]. See `ExecutableModule` docs
+/// The builder can be created via [`ExecutableModule::builder()`]. See [`ExecutableModule`] docs
 /// for the examples of usage.
-///
-/// [`ExecutableModule::builder()`]: struct.ExecutableModule.html#method.builder
 #[derive(Debug)]
 pub struct ExecutableModuleBuilder<'a, T> {
     module: ExecutableModule<'a, T>,
@@ -385,16 +376,14 @@ impl<'a, T: Number> ExecutableModuleBuilder<'a, T> {
         }
     }
 
-    /// A version of [`try_build()`] that panics if there are undefined imports.
-    ///
-    /// [`try_build()`]: #method.try_build
+    /// A version of [`Self::try_build()`] that panics if there are undefined imports.
     pub fn build(self) -> ExecutableModule<'a, T> {
         self.try_build().unwrap()
     }
 
     /// Sets the undefined imports using the provided closure and returns the resulting module.
     /// The closure is called with the name of each undefined import and should return
-    /// the corresponding `Value`.
+    /// the corresponding [`Value`].
     pub fn set_imports<F>(mut self, mut setter: F) -> ExecutableModule<'a, T>
     where
         F: FnMut(&str) -> Value<'a, T>,

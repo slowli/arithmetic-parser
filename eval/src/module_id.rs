@@ -7,20 +7,18 @@ use core::{
 
 use crate::alloc::Box;
 
-/// Identifier of an `ExecutableModule`. This is usually a "small" type, such as an integer
-/// or a string.
+/// Identifier of an [`ExecutableModule`](crate::ExecutableModule). This is usually a "small" type,
+/// such as an integer or a string.
 ///
-/// The ID is provided when [creating] a module. It is displayed in error messages
-/// (using `Display::fmt`). `ModuleId` is also associated with some types (e.g., [`InterpretedFn`]
-/// and [`CodeInModule`]), which allows to obtain module info. This can be particularly useful
-/// for outputting rich error information.
+/// The ID is provided when [creating](crate::ExecutableModule::builder()) a module. It is displayed
+/// in error messages (using `Display::fmt`). `ModuleId` is also associated with some types
+/// (e.g., [`InterpretedFn`] and [`CodeInModule`]), which allows to obtain module info.
+/// This can be particularly useful for outputting rich error information.
 ///
 /// A `ModuleId` can be downcast to a specific type, similarly to [`Any`].
 ///
-/// [creating]: struct.ExecutableModule.html#method.builder
-/// [`InterpretedFn`]: struct.InterpretedFn.html
-/// [`CodeInModule`]: error/struct.CodeInModule.html
-/// [`Any`]: https://doc.rust-lang.org/std/any/trait.Any.html
+/// [`InterpretedFn`]: crate::InterpretedFn
+/// [`CodeInModule`]: crate::error::CodeInModule
 pub trait ModuleId: Any + fmt::Display + Send + Sync {
     /// Clones this module ID and boxes the result. It is expected that the output will have
     /// the same specific type as the original module ID. This operation is generally expected

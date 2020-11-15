@@ -39,17 +39,14 @@ impl<'a, T: Number> VariableMap<'a, T> for ModuleImports<'a, T> {
     }
 }
 
-/// Commonly used constants and functions from the [`fns` module].
+/// Commonly used constants and functions from the [`fns` module](fns).
 ///
 /// # Contents
 ///
-/// - All functions from the `fns` module, except for [`Compare`] (since it requires
+/// - All functions from the `fns` module, except for [`Compare`](fns::Compare) (since it requires
 ///   `PartialOrd` implementation for numbers). All functions are named in lowercase,
 ///   e.g., `if`, `map`.
 /// - `true` and `false` Boolean constants.
-///
-/// [`fns` module]: fns/index.html
-/// [`Compare`]: fns/struct.Compare.html
 #[derive(Debug, Clone, Copy)]
 pub struct Prelude;
 

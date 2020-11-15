@@ -64,43 +64,117 @@ impl Features {
     }
 }
 
-/// Unites all necessary parsers to form a complete grammar definition.
-///
-/// The two extension points for a `Grammar` are *literals* and *type annotations*. Each of them
-/// have a corresponding associated type and a parser method ([`Lit`] and [`parse_literal`]
-/// for literals; [`Type`] and [`parse_type`] for annotations).
-///
-/// A `Grammar` also defines a set of supported [`Features`]. This allows to customize which
-/// constructs are parsed.
-///
-/// [`Lit`]: #associatedtype.Lit
-/// [`parse_literal`]: #tymethod.parse_literal
-/// [`Type`]: #associatedtype.Type
-/// [`parse_type`]: #tymethod.parse_type
-/// [`Features`]: struct.Features.html
+/// Encapsulates parsing literals in a grammar.
 ///
 /// # Examples
 ///
-/// ```
-/// use arithmetic_parser::{Features, Grammar, GrammarExt, InputSpan, NomResult};
+/// If your grammar does not need to support type annotations, you can define a `ParseLiteral` impl
+/// and wrap it into [`Untyped`] to get a [`Grammar`] / [`GrammarExt`]:
 ///
-/// /// Grammar that parses `u64` numbers and has a single type annotation, `Num`.
+/// [`Untyped`]: struct.Untyped.html
+/// [`Grammar`]: trait.Grammar.html
+/// [`GrammarExt`]: trait.GrammarExt.html
+///
+/// ```
+/// use arithmetic_parser::{
+///     grammars::{Features, ParseLiteral, GrammarExt, Untyped},
+///     InputSpan, NomResult,
+/// };
+///
+/// /// Grammar that parses `u64` numbers.
 /// #[derive(Debug)]
 /// struct IntegerGrammar;
 ///
-/// #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-/// struct Num;
-///
-/// impl Grammar for IntegerGrammar {
+/// impl ParseLiteral for IntegerGrammar {
 ///     type Lit = u64;
-///     type Type = Num;
-///     const FEATURES: Features = Features::all();
 ///
 ///     // We use the `nom` crate to construct necessary parsers.
 ///     fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
 ///         use nom::{character::complete::digit1, combinator::map_res};
 ///         map_res(digit1, |s: InputSpan<'_>| s.fragment().parse())(input)
 ///     }
+/// }
+///
+/// // Here's how a grammar can be used.
+/// # fn main() -> anyhow::Result<()> {
+/// let program = r#"
+///     x = 1 + 2 * 3 + sin(a^3 / b^2);
+///     some_function = |a, b| (a + b, a - b);
+///     other_function = |x| {
+///         r = min(rand(), 0);
+///         r * x
+///     };
+///     (y, z) = some_function({ x = x - 1; x }, x);
+///     other_function(y - z)
+/// "#;
+/// let parsed = Untyped::<IntegerGrammar>::parse_statements(program)?;
+/// println!("{:#?}", parsed);
+/// # Ok(())
+/// # }
+/// ```
+pub trait ParseLiteral: 'static {
+    /// Type of the literal used in the grammar.
+    type Lit: Clone + fmt::Debug;
+
+    /// Attempts to parse a literal.
+    ///
+    /// Literals should follow these rules:
+    ///
+    /// - A literal must be distinguished from other constructs, in particular,
+    ///   variable identifiers.
+    /// - If a literal may end with `.` and methods are enabled in [`GrammarExt::FEATURES`],
+    ///   care should be taken for cases when `.` is a part of a call, rather than a part
+    ///   of a literal. For example, a parser for real-valued literals should interpret `1.abs()`
+    ///   as a call of the `abs` method on receiver `1`, rather than `1.` followed by
+    ///   ineligible `abs()`.
+    ///
+    /// If a literal may start with `-` or `!` (in general, unary ops), these ops will be
+    /// consumed as a part of the literal, rather than `Expr::Unary`, *unless* the literal
+    /// is followed by an eligible higher-priority operation (i.e., a method call) *and*
+    /// the literal without a preceding unary op is still eligible. That is, if `-1` and `1`
+    /// are both valid literals, then `-1.abs()` will be parsed as negation applied to `1.abs()`.
+    /// On the other hand, if `!foo!` is a valid literal, but `foo!` isn't, `!foo!.bar()` will
+    /// be parsed as method `bar()` called on `!foo!`.
+    ///
+    /// # Return value
+    ///
+    /// The output should follow `nom` conventions on errors / failures.
+    ///
+    /// [`GrammarExt::FEATURES`]: trait.GrammarExt.html#associatedconstant.FEATURES
+    fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit>;
+}
+
+/// Extension of [`ParseLiteral`] that parses type annotations.
+///
+/// # Examples
+///
+/// Use a [`Typed`] wrapper to create a parser from the grammar, which will support all features:
+///
+/// [`ParseLiteral`]: trait.ParseLiteral.html
+///
+/// ```
+/// # use arithmetic_parser::{
+/// #     grammars::{Features, ParseLiteral, Grammar, GrammarExt, Typed},
+/// #     InputSpan, NomResult,
+/// # };
+/// /// Grammar that parses `u64` numbers and has a single type annotation, `Num`.
+/// #[derive(Debug)]
+/// struct IntegerGrammar;
+///
+/// impl ParseLiteral for IntegerGrammar {
+///     type Lit = u64;
+///
+///     fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
+///         use nom::{character::complete::digit1, combinator::map_res};
+///         map_res(digit1, |s: InputSpan<'_>| s.fragment().parse())(input)
+///     }
+/// }
+///
+/// #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// struct Num;
+///
+/// impl Grammar for IntegerGrammar {
+///     type Type = Num;
 ///
 ///     fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
 ///         use nom::{bytes::complete::tag, combinator::map};
@@ -120,44 +194,11 @@ impl Features {
 ///     (y, z: Num) = some_function({ x = x - 1; x }, x);
 ///     other_function(y - z)
 /// "#;
-/// let parsed = IntegerGrammar::parse_statements(program)?;
+/// let parsed = Typed::<IntegerGrammar>::parse_statements(program)?;
 /// println!("{:#?}", parsed);
 /// # Ok(())
 /// # }
 /// ```
-pub trait ParseLiteral: 'static {
-    /// Type of the literal used in the grammar.
-    type Lit: Clone + fmt::Debug;
-
-    /// Attempts to parse a literal.
-    ///
-    /// Literals should follow these rules:
-    ///
-    /// - A literal must be distinguished from other constructs, in particular,
-    ///   variable identifiers.
-    /// - If a literal may end with `.` and methods are enabled in [`FEATURES`], care should be
-    ///   taken for cases when `.` is a part of a call, rather than a part of a literal.
-    ///   For example, a parser for real-valued literals should interpret `1.abs()`
-    ///   as a call of the `abs` method on receiver `1`, rather than `1.` followed by
-    ///   ineligible `abs()`.
-    ///
-    /// If a literal may start with `-` or `!` (in general, unary ops), these ops will be
-    /// consumed as a part of the literal, rather than `Expr::Unary`, *unless* the literal
-    /// is followed by an eligible higher-priority operation (i.e., a method call) *and*
-    /// the literal without a preceding unary op is still eligible. That is, if `-1` and `1`
-    /// are both valid literals, then `-1.abs()` will be parsed as negation applied to `1.abs()`.
-    /// On the other hand, if `!foo!` is a valid literal, but `foo!` isn't, `!foo!.bar()` will
-    /// be parsed as method `bar()` called on `!foo!`.
-    ///
-    /// # Return value
-    ///
-    /// The output should follow `nom` conventions on errors / failures.
-    ///
-    /// [`FEATURES`]: #associatedconstant.FEATURES
-    fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit>;
-}
-
-/// FIXME
 pub trait Grammar: ParseLiteral {
     /// Type of the type annotation used in the grammar.
     type Type: Clone + fmt::Debug;
@@ -188,7 +229,51 @@ impl<'a> IntoInputSpan<'a> for &'a str {
     }
 }
 
-/// FIXME
+/// Unites all necessary parsers to form a complete grammar definition.
+///
+/// The two extension points for a `Grammar` are *literals* and *type annotations*. They are
+/// defined via [`Base`] type.
+/// A `Grammar` also defines a set of supported [`Features`]. This allows to customize which
+/// constructs are parsed.
+///
+/// Most common sets of `Features` are covered by [`Typed`] and [`Untyped`] wrappers, but it
+/// is possible to define custom [`GrammarExt`] implementations as well.
+///
+/// [`Base`]: #associatedtype.Base
+/// [`Features`]: struct.Features.html
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::{
+/// #     grammars::{Features, ParseLiteral, GrammarExt, Untyped},
+/// #     InputSpan, NomResult,
+/// # };
+/// #[derive(Debug)]
+/// struct IntegerGrammar;
+///
+/// impl ParseLiteral for IntegerGrammar {
+///     // Implementation skipped...
+/// #   type Lit = u64;
+/// #   fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
+/// #       use nom::{character::complete::digit1, combinator::map_res};
+/// #       map_res(digit1, |s: InputSpan<'_>| s.fragment().parse())(input)
+/// #   }
+/// }
+///
+/// impl GrammarExt for IntegerGrammar {
+///     type Base = Untyped<Self>;
+///     const FEATURES: Features = Features::none();
+/// }
+///
+/// // Here's how a grammar can be used.
+/// # fn main() -> anyhow::Result<()> {
+/// let program = "x = 1 + 2 * 3 + sin(a^3 / b^2);";
+/// let parsed = IntegerGrammar::parse_statements(program)?;
+/// println!("{:#?}", parsed);
+/// # Ok(())
+/// # }
+/// ```
 pub trait GrammarExt {
     /// Base for the grammar providing the literal parser.
     type Base: Grammar;
@@ -214,7 +299,15 @@ pub trait GrammarExt {
     }
 }
 
-/// FIXME
+/// Wrapper for [`ParseLiteral`] types that allows to use them as a [`Grammar`] or [`GrammarExt`].
+///
+/// # Examples
+///
+/// See [`ParseLiteral`] docs for an example of usage.
+///
+/// [`ParseLiteral`]: trait.ParseLiteral.html
+/// [`Grammar`]: trait.Grammar.html
+/// [`GrammarExt`]: trait.GrammarExt.html
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Untyped<T>(PhantomData<T>);
 
@@ -247,7 +340,14 @@ impl<T: ParseLiteral> GrammarExt for Untyped<T> {
     };
 }
 
-/// FIXME
+/// Wrapper for [`Grammar`] types that allows to convert the type to [`GrammarExt`].
+///
+/// # Examples
+///
+/// See [`Grammar`] docs for an example of usage.
+///
+/// [`Grammar`]: trait.Grammar.html
+/// [`GrammarExt`]: trait.GrammarExt.html
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Typed<T>(PhantomData<T>);
 

@@ -112,7 +112,10 @@ pub use self::{
     error::{Error, ErrorKind, EvalResult},
     executable::{ExecutableModule, ExecutableModuleBuilder, ModuleImports},
     module_id::{IndexedId, ModuleId, WildcardId},
-    values::{CallContext, Function, InterpretedFn, NativeFn, SpannedValue, Value, ValueType},
+    values::{
+        Arithmetic, CallContext, Function, InterpretedFn, NativeFn, SpannedValue, StdArithmetic,
+        Value, ValueType,
+    },
     variable_map::{Comparisons, Prelude, VariableMap},
 };
 
@@ -131,6 +134,7 @@ mod module_id;
 mod values;
 mod variable_map;
 
+// FIXME: remove
 /// Number with fully defined arithmetic operations.
 pub trait Number: NumLiteral + ops::Neg<Output = Self> + Pow<Self, Output = Self> {}
 

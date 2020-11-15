@@ -6,7 +6,7 @@ use crate::{
     alloc::{Box, String, ToOwned},
     compiler::{Compiler, ImportSpans, CMP_FUNCTION_NAME},
     error::{Backtrace, ErrorWithBacktrace},
-    Environment, Error, ErrorKind, ModuleId, Number, Value, VariableMap,
+    Arithmetic, Environment, Error, ErrorKind, ModuleId, Number, StdArithmetic, Value, VariableMap,
 };
 use arithmetic_parser::{grammars::Grammar, Block, StripCode};
 
@@ -196,7 +196,7 @@ impl<'a, T: Number> ExecutableModule<'a, T> {
     /// neither the imports, nor other module state are modified by it.
     pub fn run(&self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
         let mut registers = self.imports.inner.clone();
-        self.run_with_registers(&mut registers)
+        self.run_with_registers(&mut registers, &StdArithmetic)
     }
 
     /// Runs the module with the specified [`Environment`]. The environment may contain some of
@@ -213,7 +213,7 @@ impl<'a, T: Number> ExecutableModule<'a, T> {
         let mut registers = self.imports.inner.clone();
         registers.update_from_env(env);
 
-        let result = self.run_with_registers(&mut registers);
+        let result = self.run_with_registers(&mut registers, &StdArithmetic);
         registers.update_env(env);
         result
     }
@@ -221,10 +221,11 @@ impl<'a, T: Number> ExecutableModule<'a, T> {
     fn run_with_registers(
         &self,
         registers: &mut Registers<'a, T>,
+        arithmetic: &impl Arithmetic<T>,
     ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
         let mut backtrace = Backtrace::default();
         registers
-            .execute(&self.inner, Some(&mut backtrace))
+            .execute(&self.inner, arithmetic, Some(&mut backtrace))
             .map_err(|err| ErrorWithBacktrace::new(err, backtrace))
     }
 }

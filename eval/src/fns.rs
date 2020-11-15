@@ -38,8 +38,8 @@ pub use self::wrapper::{
     FromValueErrorLocation, IntoEvalResult, Quaternary, Ternary, TryFromValue, Unary,
 };
 
-fn extract_number<'a, T>(
-    ctx: &CallContext<'_, 'a>,
+fn extract_number<'a, T, A>(
+    ctx: &CallContext<'_, 'a, A>,
     value: SpannedValue<'a, T>,
     error_msg: &str,
 ) -> Result<T, Error<'a>> {
@@ -51,8 +51,8 @@ fn extract_number<'a, T>(
     }
 }
 
-fn extract_array<'a, T>(
-    ctx: &CallContext<'_, 'a>,
+fn extract_array<'a, T, A>(
+    ctx: &CallContext<'_, 'a, A>,
     value: SpannedValue<'a, T>,
     error_msg: &str,
 ) -> Result<Vec<Value<'a, T>>, Error<'a>> {
@@ -66,8 +66,8 @@ fn extract_array<'a, T>(
     }
 }
 
-fn extract_fn<'a, T>(
-    ctx: &CallContext<'_, 'a>,
+fn extract_fn<'a, T, A>(
+    ctx: &CallContext<'_, 'a, A>,
     value: SpannedValue<'a, T>,
     error_msg: &str,
 ) -> Result<Function<'a, T>, Error<'a>> {
@@ -121,7 +121,7 @@ impl<T> NativeFn<T> for Assert {
     fn evaluate<'a>(
         &self,
         args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
+        ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(&args, 1)?;
         match args[0].extra {
@@ -189,7 +189,7 @@ impl<T: Number> NativeFn<T> for If {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
+        ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(&args, 3)?;
         let else_val = args.pop().unwrap().extra;
@@ -252,7 +252,7 @@ impl<T: Number> NativeFn<T> for Loop {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
+        ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(&args, 2)?;
         let iter = args.pop().unwrap();
@@ -335,7 +335,7 @@ impl<T: Number> NativeFn<T> for While {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
+        ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(&args, 3)?;
 
@@ -406,7 +406,7 @@ impl<T: Number> NativeFn<T> for Map {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
+        ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(&args, 2)?;
         let map_fn = extract_fn(
@@ -467,7 +467,7 @@ impl<T: Number> NativeFn<T> for Filter {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
+        ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(&args, 2)?;
         let filter_fn = extract_fn(
@@ -533,7 +533,7 @@ impl<T: Number> NativeFn<T> for Fold {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
+        ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(&args, 3)?;
         let fold_fn = extract_fn(
@@ -598,7 +598,7 @@ impl<T: Number> NativeFn<T> for Push {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
+        ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(&args, 2)?;
         let elem = args.pop().unwrap().extra;
@@ -649,7 +649,7 @@ impl<T: Number> NativeFn<T> for Merge {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
+        ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(&args, 2)?;
         let second = extract_array(
@@ -685,7 +685,7 @@ impl<T: Number + PartialOrd> NativeFn<T> for Compare {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
+        ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(&args, 2)?;
         let y = args.pop().unwrap();

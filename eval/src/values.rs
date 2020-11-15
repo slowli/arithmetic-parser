@@ -1,7 +1,6 @@
 //! Values used by the interpreter.
 
 use hashbrown::HashMap;
-use num_traits::Pow;
 
 use core::fmt;
 
@@ -13,29 +12,39 @@ use crate::{
 };
 use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, Op, StripCode, UnaryOp};
 
+mod arithmetic;
+pub use self::arithmetic::{Arithmetic, StdArithmetic};
+
 /// Opaque context for native calls.
 #[derive(Debug)]
-pub struct CallContext<'r, 'a> {
+pub struct CallContext<'r, 'a, T> {
     call_span: CodeInModule<'a>,
     backtrace: Option<&'r mut Backtrace<'a>>,
+    // TODO: investigate impact on performance; may go with special case for `StdArithmetic`.
+    arithmetic: &'r dyn Arithmetic<T>,
 }
 
-impl<'r, 'a> CallContext<'r, 'a> {
+impl<'r, 'a, T> CallContext<'r, 'a, T> {
     /// Creates a mock call context with the specified module ID and call span.
-    pub fn mock(module_id: &dyn ModuleId, call_span: MaybeSpanned<'a>) -> Self {
+    pub fn mock(_module_id: &dyn ModuleId, _call_span: MaybeSpanned<'a>) -> Self {
+        /*
         Self {
             call_span: CodeInModule::new(module_id, call_span),
             backtrace: None,
         }
+         */
+        unimplemented!()
     }
 
     pub(crate) fn new(
         call_span: CodeInModule<'a>,
         backtrace: Option<&'r mut Backtrace<'a>>,
+        arithmetic: &'r dyn Arithmetic<T>,
     ) -> Self {
         Self {
             call_span,
             backtrace,
+            arithmetic,
         }
     }
 
@@ -43,8 +52,12 @@ impl<'r, 'a> CallContext<'r, 'a> {
         self.backtrace.as_deref_mut()
     }
 
+    pub(crate) fn arithmetic(&self) -> &'r dyn Arithmetic<T> {
+        self.arithmetic
+    }
+
     /// Applies the call span to the specified `value`.
-    pub fn apply_call_span<T>(&self, value: T) -> MaybeSpanned<'a, T> {
+    pub fn apply_call_span<U>(&self, value: U) -> MaybeSpanned<'a, U> {
         self.call_span.code().copy_with_extra(value)
     }
 
@@ -54,7 +67,7 @@ impl<'r, 'a> CallContext<'r, 'a> {
     }
 
     /// Checks argument count and returns an error if it doesn't match.
-    pub fn check_args_count<T>(
+    pub fn check_args_count(
         &self,
         args: &[SpannedValue<'a, T>],
         expected_count: impl Into<LvalueLen>,
@@ -77,18 +90,18 @@ pub trait NativeFn<T> {
     fn evaluate<'a>(
         &self,
         args: Vec<SpannedValue<'a, T>>,
-        context: &mut CallContext<'_, 'a>,
+        context: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T>;
 }
 
 impl<T, F: 'static> NativeFn<T> for F
 where
-    F: for<'a> Fn(Vec<SpannedValue<'a, T>>, &mut CallContext<'_, 'a>) -> EvalResult<'a, T>,
+    F: for<'a> Fn(Vec<SpannedValue<'a, T>>, &mut CallContext<'_, 'a, T>) -> EvalResult<'a, T>,
 {
     fn evaluate<'a>(
         &self,
         args: Vec<SpannedValue<'a, T>>,
-        context: &mut CallContext<'_, 'a>,
+        context: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         self(args, context)
     }
@@ -184,12 +197,12 @@ impl<T: 'static + Clone> InterpretedFn<'_, T> {
     }
 }
 
-impl<'a, T: Number> InterpretedFn<'a, T> {
+impl<'a, T: Clone> InterpretedFn<'a, T> {
     /// Evaluates this function with the provided arguments and the execution context.
     pub fn evaluate(
         &self,
         args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
+        ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         if !self.arg_count().matches(args.len()) {
             let err = ErrorKind::ArgsLenMismatch {
@@ -252,20 +265,6 @@ impl<'a, T> Function<'a, T> {
             _ => false,
         }
     }
-}
-
-impl<'a, T: Number> Function<'a, T> {
-    /// Evaluates the function on the specified arguments.
-    pub fn evaluate(
-        &self,
-        args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
-    ) -> EvalResult<'a, T> {
-        match self {
-            Self::Native(function) => function.evaluate(args, ctx),
-            Self::Interpreted(function) => function.evaluate(args, ctx),
-        }
-    }
 
     pub(crate) fn def_span(&self) -> Option<CodeInModule<'a>> {
         match self {
@@ -274,6 +273,20 @@ impl<'a, T: Number> Function<'a, T> {
                 function.module_id(),
                 function.definition.def_span,
             )),
+        }
+    }
+}
+
+impl<'a, T: Clone> Function<'a, T> {
+    /// Evaluates the function on the specified arguments.
+    pub fn evaluate(
+        &self,
+        args: Vec<SpannedValue<'a, T>>,
+        ctx: &mut CallContext<'_, 'a, T>,
+    ) -> EvalResult<'a, T> {
+        match self {
+            Self::Native(function) => function.evaluate(args, ctx),
+            Self::Interpreted(function) => function.evaluate(args, ctx),
         }
     }
 }
@@ -459,6 +472,11 @@ impl BinaryOpError {
         self
     }
 
+    fn with_error_kind(mut self, error_kind: ErrorKind) -> Self {
+        self.inner = error_kind;
+        self
+    }
+
     fn span<'a>(
         self,
         module_id: &dyn ModuleId,
@@ -486,22 +504,32 @@ impl BinaryOpError {
     }
 }
 
-impl<'a, T: Number> Value<'a, T> {
+impl<'a, T: Clone> Value<'a, T> {
     fn try_binary_op_inner(
         self,
         rhs: Self,
         op: BinaryOp,
-        primitive_op: fn(T, T) -> T,
+        arithmetic: &dyn Arithmetic<T>,
     ) -> Result<Self, BinaryOpError> {
         match (self, rhs) {
             (Self::Number(this), Self::Number(other)) => {
-                Ok(Self::Number(primitive_op(this, other)))
+                let op_result = match op {
+                    BinaryOp::Add => arithmetic.add(this, other),
+                    BinaryOp::Sub => arithmetic.sub(this, other),
+                    BinaryOp::Mul => arithmetic.mul(this, other),
+                    BinaryOp::Div => arithmetic.div(this, other),
+                    BinaryOp::Power => arithmetic.pow(this, other),
+                    _ => unreachable!(),
+                };
+                op_result
+                    .map(Self::Number)
+                    .map_err(|e| BinaryOpError::new(op).with_error_kind(ErrorKind::Op(e)))
             }
 
             (this @ Self::Number(_), Self::Tuple(other)) => {
                 let output: Result<Vec<_>, _> = other
                     .into_iter()
-                    .map(|y| this.clone().try_binary_op_inner(y, op, primitive_op))
+                    .map(|y| this.clone().try_binary_op_inner(y, op, arithmetic))
                     .collect();
                 output.map(Self::Tuple)
             }
@@ -509,7 +537,7 @@ impl<'a, T: Number> Value<'a, T> {
             (Self::Tuple(this), other @ Self::Number(_)) => {
                 let output: Result<Vec<_>, _> = this
                     .into_iter()
-                    .map(|x| x.try_binary_op_inner(other.clone(), op, primitive_op))
+                    .map(|x| x.try_binary_op_inner(other.clone(), op, arithmetic))
                     .collect();
                 output.map(Self::Tuple)
             }
@@ -519,7 +547,7 @@ impl<'a, T: Number> Value<'a, T> {
                     let output: Result<Vec<_>, _> = this
                         .into_iter()
                         .zip(other)
-                        .map(|(x, y)| x.try_binary_op_inner(y, op, primitive_op))
+                        .map(|(x, y)| x.try_binary_op_inner(y, op, arithmetic))
                         .collect();
                     output.map(Self::Tuple)
                 } else {
@@ -535,71 +563,30 @@ impl<'a, T: Number> Value<'a, T> {
     }
 
     #[inline]
-    fn try_binary_op(
+    pub(crate) fn try_binary_op(
         module_id: &dyn ModuleId,
         total_span: MaybeSpanned<'a>,
         lhs: MaybeSpanned<'a, Self>,
         rhs: MaybeSpanned<'a, Self>,
         op: BinaryOp,
-        primitive_op: fn(T, T) -> T,
+        arithmetic: &dyn Arithmetic<T>,
     ) -> Result<Self, Error<'a>> {
         let lhs_span = lhs.with_no_extra();
         let rhs_span = rhs.with_no_extra();
         lhs.extra
-            .try_binary_op_inner(rhs.extra, op, primitive_op)
+            .try_binary_op_inner(rhs.extra, op, arithmetic)
             .map_err(|e| e.span(module_id, total_span, lhs_span, rhs_span))
     }
 
-    pub(crate) fn try_add(
-        module_id: &dyn ModuleId,
-        total_span: MaybeSpanned<'a>,
-        lhs: MaybeSpanned<'a, Self>,
-        rhs: MaybeSpanned<'a, Self>,
-    ) -> Result<Self, Error<'a>> {
-        Self::try_binary_op(module_id, total_span, lhs, rhs, BinaryOp::Add, |x, y| x + y)
-    }
-
-    pub(crate) fn try_sub(
-        module_id: &dyn ModuleId,
-        total_span: MaybeSpanned<'a>,
-        lhs: MaybeSpanned<'a, Self>,
-        rhs: MaybeSpanned<'a, Self>,
-    ) -> Result<Self, Error<'a>> {
-        Self::try_binary_op(module_id, total_span, lhs, rhs, BinaryOp::Sub, |x, y| x - y)
-    }
-
-    pub(crate) fn try_mul(
-        module_id: &dyn ModuleId,
-        total_span: MaybeSpanned<'a>,
-        lhs: MaybeSpanned<'a, Self>,
-        rhs: MaybeSpanned<'a, Self>,
-    ) -> Result<Self, Error<'a>> {
-        Self::try_binary_op(module_id, total_span, lhs, rhs, BinaryOp::Mul, |x, y| x * y)
-    }
-
-    pub(crate) fn try_div(
-        module_id: &dyn ModuleId,
-        total_span: MaybeSpanned<'a>,
-        lhs: MaybeSpanned<'a, Self>,
-        rhs: MaybeSpanned<'a, Self>,
-    ) -> Result<Self, Error<'a>> {
-        Self::try_binary_op(module_id, total_span, lhs, rhs, BinaryOp::Div, |x, y| x / y)
-    }
-
-    pub(crate) fn try_pow(
-        module_id: &dyn ModuleId,
-        total_span: MaybeSpanned<'a>,
-        lhs: MaybeSpanned<'a, Self>,
-        rhs: MaybeSpanned<'a, Self>,
-    ) -> Result<Self, Error<'a>> {
-        Self::try_binary_op(module_id, total_span, lhs, rhs, BinaryOp::Power, Pow::pow)
-    }
-
-    pub(crate) fn try_neg(self) -> Result<Self, ErrorKind> {
+    pub(crate) fn try_neg(self, arithmetic: &dyn Arithmetic<T>) -> Result<Self, ErrorKind> {
         match self {
-            Self::Number(val) => Ok(Self::Number(-val)),
+            Self::Number(val) => arithmetic.neg(val).map(Self::Number).map_err(ErrorKind::Op),
+
             Self::Tuple(tuple) => {
-                let res: Result<Vec<_>, _> = tuple.into_iter().map(Value::try_neg).collect();
+                let res: Result<Vec<_>, _> = tuple
+                    .into_iter()
+                    .map(|elem| Value::try_neg(elem, arithmetic))
+                    .collect();
                 res.map(Self::Tuple)
             }
 
@@ -620,6 +607,25 @@ impl<'a, T: Number> Value<'a, T> {
             _ => Err(ErrorKind::UnexpectedOperand {
                 op: UnaryOp::Not.into(),
             }),
+        }
+    }
+
+    // **NB.** Should match `PartialEq` impl for `Value`!
+    pub(crate) fn eq_by_arithmetic(&self, rhs: &Self, arithmetic: &dyn Arithmetic<T>) -> bool {
+        match (self, rhs) {
+            (Self::Number(this), Self::Number(other)) => arithmetic.eq(this, other),
+            (Self::Bool(this), Self::Bool(other)) => this == other,
+            (Self::Tuple(this), Self::Tuple(other)) => {
+                if this.len() == other.len() {
+                    this.iter()
+                        .zip(other.iter())
+                        .all(|(x, y)| x.eq_by_arithmetic(y, arithmetic))
+                } else {
+                    false
+                }
+            }
+            (Self::Function(this), Self::Function(other)) => this.is_same_function(other),
+            _ => false,
         }
     }
 

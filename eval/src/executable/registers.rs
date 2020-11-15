@@ -6,7 +6,7 @@ use crate::{
     alloc::{vec, Box, Rc, String, ToOwned, Vec},
     error::{Backtrace, CodeInModule, EvalResult, TupleLenMismatchContext},
     executable::command::{Atom, Command, CompiledExpr, SpannedCommand},
-    CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, ModuleId, Number,
+    Arithmetic, CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, ModuleId,
     SpannedValue, Value,
 };
 use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
@@ -98,12 +98,12 @@ impl<'a, T> Executable<'a, T> {
     }
 }
 
-impl<'a, T: Number> Executable<'a, T> {
+impl<'a, T: Clone> Executable<'a, T> {
     pub fn call_function(
         &self,
         captures: Vec<Value<'a, T>>,
         args: Vec<Value<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
+        ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         let mut registers = captures;
         registers.push(Value::Tuple(args));
@@ -111,7 +111,7 @@ impl<'a, T: Number> Executable<'a, T> {
             registers,
             ..Registers::new()
         };
-        env.execute(self, ctx.backtrace())
+        env.execute(self, ctx.arithmetic(), ctx.backtrace())
     }
 }
 
@@ -263,23 +263,26 @@ impl<'a, T: Clone> Registers<'a, T> {
     }
 }
 
-impl<'a, T: Number> Registers<'a, T> {
+impl<'a, T: Clone> Registers<'a, T> {
     pub fn execute(
         &mut self,
         executable: &Executable<'a, T>,
+        arithmetic: &dyn Arithmetic<T>,
         backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
-        self.execute_inner(executable, backtrace).map_err(|err| {
-            if let Some(scope_start) = self.inner_scope_start.take() {
-                self.registers.truncate(scope_start);
-            }
-            err
-        })
+        self.execute_inner(executable, arithmetic, backtrace)
+            .map_err(|err| {
+                if let Some(scope_start) = self.inner_scope_start.take() {
+                    self.registers.truncate(scope_start);
+                }
+                err
+            })
     }
 
     fn execute_inner(
         &mut self,
         executable: &Executable<'a, T>,
+        arithmetic: &dyn Arithmetic<T>,
         mut backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
         if let Some(additional_capacity) = executable
@@ -293,8 +296,13 @@ impl<'a, T: Number> Registers<'a, T> {
             match &command.extra {
                 Command::Push(expr) => {
                     let expr_span = command.with_no_extra();
-                    let expr_value =
-                        self.execute_expr(expr_span, expr, executable, backtrace.as_deref_mut())?;
+                    let expr_value = self.execute_expr(
+                        expr_span,
+                        expr,
+                        executable,
+                        arithmetic,
+                        backtrace.as_deref_mut(),
+                    )?;
                     self.registers.push(expr_value);
                 }
 
@@ -361,6 +369,7 @@ impl<'a, T: Number> Registers<'a, T> {
         span: MaybeSpanned<'a>,
         expr: &CompiledExpr<'a, T>,
         executable: &Executable<'a, T>,
+        arithmetic: &dyn Arithmetic<T>,
         backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
         match expr {
@@ -373,7 +382,7 @@ impl<'a, T: Number> Registers<'a, T> {
             CompiledExpr::Unary { op, inner } => {
                 let inner_value = self.resolve_atom(&inner.extra);
                 match op {
-                    UnaryOp::Neg => inner_value.try_neg(),
+                    UnaryOp::Neg => inner_value.try_neg(arithmetic),
                     UnaryOp::Not => inner_value.try_not(),
                     _ => unreachable!("Checked during compilation"),
                 }
@@ -386,14 +395,24 @@ impl<'a, T: Number> Registers<'a, T> {
                 let module_id = executable.id();
 
                 match op {
-                    BinaryOp::Add => Value::try_add(module_id, span, lhs_value, rhs_value),
-                    BinaryOp::Sub => Value::try_sub(module_id, span, lhs_value, rhs_value),
-                    BinaryOp::Mul => Value::try_mul(module_id, span, lhs_value, rhs_value),
-                    BinaryOp::Div => Value::try_div(module_id, span, lhs_value, rhs_value),
-                    BinaryOp::Power => Value::try_pow(module_id, span, lhs_value, rhs_value),
+                    BinaryOp::Add
+                    | BinaryOp::Sub
+                    | BinaryOp::Mul
+                    | BinaryOp::Div
+                    | BinaryOp::Power => {
+                        Value::try_binary_op(module_id, span, lhs_value, rhs_value, *op, arithmetic)
+                    }
 
-                    BinaryOp::Eq => Ok(Value::Bool(lhs_value.extra == rhs_value.extra)),
-                    BinaryOp::NotEq => Ok(Value::Bool(lhs_value.extra != rhs_value.extra)),
+                    BinaryOp::Eq | BinaryOp::NotEq => {
+                        let is_eq = lhs_value
+                            .extra
+                            .eq_by_arithmetic(&rhs_value.extra, arithmetic);
+                        Ok(Value::Bool(if *op == BinaryOp::Eq {
+                            is_eq
+                        } else {
+                            !is_eq
+                        }))
+                    }
 
                     BinaryOp::And => Value::try_and(module_id, &lhs_value, &rhs_value),
                     BinaryOp::Or => Value::try_or(module_id, &lhs_value, &rhs_value),
@@ -430,6 +449,7 @@ impl<'a, T: Number> Registers<'a, T> {
                         executable.id.as_ref(),
                         span,
                         arg_values,
+                        arithmetic,
                         backtrace,
                     )
                 } else {
@@ -461,13 +481,14 @@ impl<'a, T: Number> Registers<'a, T> {
         module_id: &dyn ModuleId,
         call_span: MaybeSpanned<'a>,
         arg_values: Vec<SpannedValue<'a, T>>,
+        arithmetic: &dyn Arithmetic<T>,
         mut backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
         let full_call_span = CodeInModule::new(module_id, call_span);
         if let Some(backtrace) = backtrace.as_deref_mut() {
             backtrace.push_call(fn_name, function.def_span(), full_call_span.clone());
         }
-        let mut context = CallContext::new(full_call_span, backtrace.as_deref_mut());
+        let mut context = CallContext::new(full_call_span, backtrace.as_deref_mut(), arithmetic);
 
         function.evaluate(arg_values, &mut context).map(|value| {
             if let Some(backtrace) = backtrace {
@@ -481,7 +502,7 @@ impl<'a, T: Number> Registers<'a, T> {
     fn resolve_atom(&self, atom: &Atom<T>) -> Value<'a, T> {
         match atom {
             Atom::Register(index) => self.registers[*index].clone(),
-            Atom::Constant(value) => Value::Number(*value),
+            Atom::Constant(value) => Value::Number(value.clone()),
             Atom::Void => Value::void(),
         }
     }

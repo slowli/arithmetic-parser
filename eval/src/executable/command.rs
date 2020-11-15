@@ -1,10 +1,8 @@
 //! Executable `Command` and its building blocks.
 
-use core::cmp::Ordering;
-
 use crate::{
     alloc::{String, Vec},
-    Number, Value,
+    Value,
 };
 use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
 
@@ -171,19 +169,23 @@ impl ComparisonOp {
         }
     }
 
-    pub fn compare<T: Number>(self, cmp_value: &Value<'_, T>) -> Option<bool> {
-        let ordering = match cmp_value {
-            Value::Number(num) if num.is_one() => Ordering::Greater,
-            Value::Number(num) if num.is_zero() => Ordering::Equal,
-            Value::Number(num) if (-*num).is_one() => Ordering::Less,
-            _ => return None,
-        };
-        Some(match self {
-            Self::Gt => ordering == Ordering::Greater,
-            Self::Lt => ordering == Ordering::Less,
-            Self::Ge => ordering != Ordering::Less,
-            Self::Le => ordering != Ordering::Greater,
-        })
+    #[allow(clippy::unused_self)]
+    pub fn compare<T>(self, _cmp_value: &Value<'_, T>) -> Option<bool> {
+        None // FIXME
+             /*
+             let ordering = match cmp_value {
+                 Value::Number(num) if num.is_one() => Ordering::Greater,
+                 Value::Number(num) if num.is_zero() => Ordering::Equal,
+                 Value::Number(num) if (-*num).is_one() => Ordering::Less,
+                 _ => return None,
+             };
+             Some(match self {
+                 Self::Gt => ordering == Ordering::Greater,
+                 Self::Lt => ordering == Ordering::Less,
+                 Self::Ge => ordering != Ordering::Less,
+                 Self::Le => ordering != Ordering::Greater,
+             })
+              */
     }
 }
 

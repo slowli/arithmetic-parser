@@ -2,7 +2,7 @@
 
 use arithmetic_eval::{
     fns, wrap_fn, wrap_fn_with_context, CallContext, ErrorKind, EvalResult, ExecutableModule,
-    Function, NativeFn, Number, SpannedValue, Value,
+    Function, NativeFn, SpannedValue, Value,
 };
 use arithmetic_parser::{
     grammars::{F32Grammar, Parse, Untyped},
@@ -17,11 +17,11 @@ struct Repeated<T> {
     times: usize,
 }
 
-impl<T: Number> NativeFn<T> for Repeated<T> {
+impl<T: Clone> NativeFn<T> for Repeated<T> {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
-        context: &mut CallContext<'_, 'a>,
+        context: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         if args.len() != 1 {
             let err = ErrorKind::native("Should be called with single argument");
@@ -49,7 +49,7 @@ fn repeat(function: Function<'_, f32>, times: f32) -> Result<Function<'_, f32>, 
 }
 
 fn eager_repeat<'a>(
-    context: &mut CallContext<'_, 'a>,
+    context: &mut CallContext<'_, 'a, f32>,
     function: Function<'a, f32>,
     times: f32,
     mut arg: Value<'a, f32>,

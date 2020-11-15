@@ -13,7 +13,7 @@ use crate::{
     common::{Env, ParseAndEvalResult, ReplLiteral, ERROR_EXIT_CODE},
     repl::repl,
 };
-use arithmetic_parser::grammars::NumGrammar;
+use arithmetic_parser::{grammars::NumGrammar, Untyped};
 
 const ABOUT: &str = "CLI and REPL for parsing and evaluating arithmetic expressions.";
 
@@ -91,7 +91,7 @@ impl Args {
         let mut env = Env::new();
 
         let res = if self.ast {
-            env.parse::<NumGrammar<T>>(&command)?
+            env.parse::<Untyped<NumGrammar<T>>>(&command)?
                 .map(|parsed| println!("{:#?}", parsed))
         } else {
             env.parse_and_eval(&command, &mut T::create_env(), &T::create_env())?

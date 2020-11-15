@@ -23,7 +23,7 @@ use arithmetic_eval::{
 };
 use arithmetic_parser::{
     grammars::NumGrammar, Block, CodeFragment, Error as ParseError, Grammar, GrammarExt,
-    LocatedSpan, LvalueLen, StripCode,
+    LocatedSpan, LvalueLen, StripCode, Untyped,
 };
 
 /// Exit code on parse or evaluation error.
@@ -278,8 +278,7 @@ impl Env {
 
     fn dump_value<T>(&mut self, value: &Value<T>, indent: usize) -> io::Result<()>
     where
-        T: Grammar,
-        T::Lit: fmt::Display,
+        T: fmt::Display,
     {
         let bool_color = ColorSpec::new().set_fg(Some(Color::Cyan)).clone();
         let num_color = ColorSpec::new().set_fg(Some(Color::Green)).clone();
@@ -349,8 +348,7 @@ impl Env {
         dump_original_scope: bool,
     ) -> io::Result<()>
     where
-        T: Grammar,
-        T::Lit: PartialEq + fmt::Display,
+        T: PartialEq + fmt::Display,
     {
         for (name, var) in scope {
             if let Some(original_var) = original_scope.get(name) {
@@ -367,10 +365,10 @@ impl Env {
         Ok(())
     }
 
-    pub fn parse<'a, T: Grammar>(
+    pub fn parse<'a, T: GrammarExt>(
         &mut self,
         line: &'a str,
-    ) -> io::Result<ParseAndEvalResult<Block<'a, T>>> {
+    ) -> io::Result<ParseAndEvalResult<Block<'a, T::Base>>> {
         self.code_map.add(line.to_owned());
 
         T::parse_streaming_statements(line)
@@ -392,15 +390,14 @@ impl Env {
         original_env: &Environment<'static, T>,
     ) -> io::Result<ParseAndEvalResult>
     where
-        T: Grammar,
-        T::Lit: fmt::Display + Number,
+        T: fmt::Display + Number,
     {
         if line.starts_with('.') {
             self.process_command(line, env, original_env)?;
             return Ok(ParseAndEvalResult::Ok(()));
         }
 
-        let parse_result = self.parse(line)?;
+        let parse_result = self.parse::<Untyped<NumGrammar<T>>>(line)?;
         Ok(if let ParseAndEvalResult::Ok(statements) = parse_result {
             self.compile_and_execute(&statements, env)?
         } else {
@@ -415,8 +412,7 @@ impl Env {
         original_env: &Environment<'a, T>,
     ) -> io::Result<()>
     where
-        T: Grammar,
-        T::Lit: fmt::Display + Number,
+        T: fmt::Display + Number,
     {
         let file_id = *self.code_map.file_ids.last().expect("no files");
 
@@ -449,7 +445,7 @@ impl Env {
     fn compile_and_execute<T>(
         &mut self,
         statements: &Block<'_, T>,
-        env: &mut Environment<'static, T>,
+        env: &mut Environment<'static, T::Lit>,
     ) -> io::Result<ParseAndEvalResult>
     where
         T: Grammar,
@@ -481,7 +477,7 @@ impl Env {
 }
 
 pub trait ReplLiteral: Number + fmt::Display {
-    fn create_env() -> Environment<'static, NumGrammar<Self>>;
+    fn create_env() -> Environment<'static, Self>;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -492,15 +488,15 @@ pub struct StdLibrary<T: 'static> {
     binary: &'static [(&'static str, fn(T, T) -> T)],
 }
 
-impl<'a, T: Number> VariableMap<'a, NumGrammar<T>> for StdLibrary<T> {
-    fn get_variable(&self, name: &str) -> Option<Value<'a, NumGrammar<T>>> {
+impl<'a, T: Number> VariableMap<'a, T> for StdLibrary<T> {
+    fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
         self.variables()
             .find_map(|(var_name, value)| if var_name == name { Some(value) } else { None })
     }
 }
 
 impl<T: Number> StdLibrary<T> {
-    fn variables(self) -> impl Iterator<Item = (&'static str, Value<'static, NumGrammar<T>>)> {
+    fn variables(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
         let constants = self
             .constants
             .iter()
@@ -561,7 +557,7 @@ declare_real_functions!(F32_FUNCTIONS: f32);
 declare_real_functions!(F64_FUNCTIONS: f64);
 
 impl ReplLiteral for f32 {
-    fn create_env() -> Environment<'static, NumGrammar<Self>> {
+    fn create_env() -> Environment<'static, Self> {
         Prelude
             .iter()
             .chain(Comparisons.iter())
@@ -571,7 +567,7 @@ impl ReplLiteral for f32 {
 }
 
 impl ReplLiteral for f64 {
-    fn create_env() -> Environment<'static, NumGrammar<Self>> {
+    fn create_env() -> Environment<'static, Self> {
         Prelude
             .iter()
             .chain(Comparisons.iter())
@@ -618,7 +614,7 @@ declare_complex_functions!(COMPLEX32_FUNCTIONS: Complex32, f32);
 declare_complex_functions!(COMPLEX64_FUNCTIONS: Complex64, f64);
 
 impl ReplLiteral for Complex32 {
-    fn create_env() -> Environment<'static, NumGrammar<Self>> {
+    fn create_env() -> Environment<'static, Self> {
         Prelude
             .iter()
             .chain(COMPLEX32_FUNCTIONS.variables())
@@ -627,7 +623,7 @@ impl ReplLiteral for Complex32 {
 }
 
 impl ReplLiteral for Complex64 {
-    fn create_env() -> Environment<'static, NumGrammar<Self>> {
+    fn create_env() -> Environment<'static, Self> {
         Prelude
             .iter()
             .chain(COMPLEX64_FUNCTIONS.variables())

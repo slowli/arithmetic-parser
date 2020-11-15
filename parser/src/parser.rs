@@ -47,7 +47,7 @@ impl GrammarType for Streaming {
 }
 
 impl UnaryOp {
-    fn from_span(span: Spanned<char>) -> Spanned<Self> {
+    fn from_span(span: Spanned<'_, char>) -> Spanned<'_, Self> {
         match span.extra {
             '-' => span.copy_with_extra(UnaryOp::Neg),
             '!' => span.copy_with_extra(UnaryOp::Not),
@@ -173,7 +173,7 @@ where
 
 /// Expression enclosed in parentheses. This may be a simple value (e.g., `(1 + 2)`)
 /// or a tuple (e.g., `(x, y)`), depending on the number of comma-separated terms.
-fn paren_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<SpannedExpr<'_, T::Base>>
+fn paren_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
 where
     T: Parse,
     Ty: GrammarType,
@@ -321,7 +321,7 @@ where
 fn fold_args<'a, T: Grammar>(
     input: InputSpan<'a>,
     mut base: SpannedExpr<'a, T>,
-    calls: Vec<Spanned<MethodOrFnCall<'a, T>>>,
+    calls: Vec<Spanned<'_, MethodOrFnCall<'a, T>>>,
 ) -> Result<SpannedExpr<'a, T>, NomErr<Error<'a>>> {
     // Do we need to reorder unary op application and method calls? This is only applicable if:
     //

@@ -261,7 +261,7 @@ impl Compiler {
         args: &[SpannedExpr<'a, T>],
     ) -> Result<Atom<T::Lit>, Error<'a>> {
         let original_name = Some((*name.fragment()).to_owned());
-        let name: MaybeSpanned<_> = name
+        let name: MaybeSpanned<'_, _> = name
             .copy_with_extra(Atom::Register(self.vars_to_registers[*name.fragment()]))
             .into();
         let args = iter::once(receiver)

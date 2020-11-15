@@ -257,8 +257,8 @@ impl<T: Clone + 'static> StripCode for MaybeSpanned<'_, T> {
 /// Wrapper around parsers allowing to capture both their output and the relevant span.
 pub(crate) fn with_span<'a, O>(
     mut parser: impl FnMut(InputSpan<'a>) -> NomResult<'a, O>,
-) -> impl FnMut(InputSpan<'a>) -> NomResult<'a, Spanned<O>> {
-    move |input: InputSpan| {
+) -> impl FnMut(InputSpan<'a>) -> NomResult<'a, Spanned<'_, O>> {
+    move |input: InputSpan<'_>| {
         parser(input).map(|(rest, output)| {
             let len = rest.location_offset() - input.location_offset();
             let spanned = Spanned {

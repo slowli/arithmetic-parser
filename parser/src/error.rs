@@ -25,7 +25,7 @@ pub enum Context {
 }
 
 impl fmt::Display for Context {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::Var => "variable",
             Self::Fun => "function call",

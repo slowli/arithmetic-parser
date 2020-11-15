@@ -39,6 +39,9 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
   - `ParseLiteral` responsible for parsing literals
   - `Grammar: ParseLiteral` for a complete set of parsers (literals + type annotations)
   - `Parse` (renamed from `GrammarExt`) to contain parsing features and parse `Block`s
+  - Add helper wrappers `Typed` and `Untyped` to assist in composing parsing functionality.
+
+- Export `ParseLiteral`, `Grammar` and `Parse` from the `grammars` module. (#38)
 
 ### Fixed
 

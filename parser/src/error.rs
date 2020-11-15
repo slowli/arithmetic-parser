@@ -1,7 +1,7 @@
 //! Error handling.
 
 use nom::{
-    error::{ErrorKind as NomErrorKind, ParseError},
+    error::{ContextError, ErrorKind as NomErrorKind, FromExternalError, ParseError},
     Slice,
 };
 
@@ -263,7 +263,9 @@ impl<'a> ParseError<InputSpan<'a>> for Error<'a> {
     fn append(_: InputSpan<'a>, _: NomErrorKind, other: Self) -> Self {
         other
     }
+}
 
+impl<'a> ContextError<InputSpan<'a>> for Error<'a> {
     fn add_context(input: InputSpan<'a>, ctx: &'static str, mut target: Self) -> Self {
         let ctx = Context::new(ctx);
         if ctx == Context::Comment {
@@ -276,5 +278,11 @@ impl<'a> ParseError<InputSpan<'a>> for Error<'a> {
             }
         }
         target
+    }
+}
+
+impl<'a> FromExternalError<InputSpan<'a>, ErrorKind> for Error<'a> {
+    fn from_external_error(input: InputSpan<'a>, _: NomErrorKind, err: ErrorKind) -> Self {
+        Self::new(input, err)
     }
 }

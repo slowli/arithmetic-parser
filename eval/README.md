@@ -24,6 +24,13 @@ floating-point arithmetic.
 
 ## Usage
 
+Add this to your `Crate.toml`:
+
+```toml
+[dependencies]
+arithmetic-eval = "0.2.0-beta.1"
+```
+
 Please see the crate docs for the examples of usage.
 
 ## License

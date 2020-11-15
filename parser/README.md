@@ -11,7 +11,14 @@
 A versatile parser for arithmetic expressions which allows customizing literal definitions,
 type annotations and several other aspects of parsing.
 
-## Features
+## Usage
+
+Add this to your `Crate.toml`:
+
+```toml
+[dependencies]
+arithmetic-parser = "0.2.0-beta.1"
+```
 
 The parser is overall similar to Rust. It supports variables, literals, comments,
 arithmetic and boolean operations, parentheses, function calls, tuples and tuple destructuring,

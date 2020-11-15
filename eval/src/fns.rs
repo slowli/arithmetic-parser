@@ -714,7 +714,7 @@ mod tests {
     use super::*;
     use crate::{Environment, ExecutableModule, WildcardId};
 
-    use arithmetic_parser::grammars::{F32Grammar, GrammarExt, Untyped};
+    use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
     use assert_matches::assert_matches;
 
     use core::{f32, iter::FromIterator};

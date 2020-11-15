@@ -11,7 +11,7 @@ use typed_arena::Arena;
 
 use arithmetic_eval::{fns, CallContext, ExecutableModule, NativeFn, Value, WildcardId};
 use arithmetic_parser::{
-    grammars::{F32Grammar, GrammarExt, Untyped},
+    grammars::{F32Grammar, Parse, Untyped},
     MaybeSpanned,
 };
 

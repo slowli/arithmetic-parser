@@ -22,7 +22,7 @@ use arithmetic_eval::{
     Prelude, Value, VariableMap,
 };
 use arithmetic_parser::{
-    grammars::{GrammarExt, NumGrammar, Untyped},
+    grammars::{NumGrammar, Parse, Untyped},
     Block, CodeFragment, Error as ParseError, Grammar, LocatedSpan, LvalueLen, StripCode,
 };
 
@@ -365,7 +365,7 @@ impl Env {
         Ok(())
     }
 
-    pub fn parse<'a, T: GrammarExt>(
+    pub fn parse<'a, T: Parse>(
         &mut self,
         line: &'a str,
     ) -> io::Result<ParseAndEvalResult<Block<'a, T::Base>>> {

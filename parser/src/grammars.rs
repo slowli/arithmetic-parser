@@ -14,7 +14,7 @@ use core::{f32, f64, fmt, marker::PhantomData};
 mod traits;
 
 pub use self::traits::{
-    BooleanOps, Features, Grammar, GrammarExt, IntoInputSpan, ParseLiteral, Typed, Untyped,
+    BooleanOps, Features, Grammar, IntoInputSpan, Parse, ParseLiteral, Typed, Untyped,
 };
 
 use crate::{spans::NomResult, InputSpan};

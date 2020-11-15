@@ -6,7 +6,7 @@ use core::iter::FromIterator;
 
 use arithmetic_eval::{Environment, ErrorKind, ExecutableModule, Prelude, Value};
 use arithmetic_parser::{
-    grammars::{F64Grammar, GrammarExt, Untyped},
+    grammars::{F64Grammar, Parse, Untyped},
     BinaryOp, StripCode, StripResultExt,
 };
 

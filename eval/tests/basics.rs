@@ -9,7 +9,7 @@ use arithmetic_eval::{
     Environment, Error, ErrorKind, Function, NativeFn, Value, ValueType, VariableMap, WildcardId,
 };
 use arithmetic_parser::{
-    grammars::{F32Grammar, GrammarExt, Untyped},
+    grammars::{F32Grammar, Parse, Untyped},
     BinaryOp, LvalueLen, UnaryOp,
 };
 

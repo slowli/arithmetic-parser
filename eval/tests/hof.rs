@@ -5,7 +5,7 @@ use arithmetic_eval::{
     Function, NativeFn, Number, SpannedValue, Value,
 };
 use arithmetic_parser::{
-    grammars::{F32Grammar, GrammarExt, Untyped},
+    grammars::{F32Grammar, Parse, Untyped},
     StripCode,
 };
 

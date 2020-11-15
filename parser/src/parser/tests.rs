@@ -1434,7 +1434,7 @@ fn fn_defs_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl GrammarExt for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features {
@@ -1453,7 +1453,7 @@ fn tuples_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl GrammarExt for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features {
@@ -1476,7 +1476,7 @@ fn blocks_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl GrammarExt for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features {
@@ -1499,7 +1499,7 @@ fn methods_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl GrammarExt for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features {
@@ -1522,7 +1522,7 @@ fn order_comparisons_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl GrammarExt for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features {
@@ -1538,7 +1538,7 @@ fn order_comparisons_when_switched_off() {
 
 fn assert_binary_op_is_not_parsed<T>(op: BinaryOp)
 where
-    T: GrammarExt,
+    T: Parse,
     T::Base: fmt::Debug,
 {
     let input = format!("x {} 1;", op.as_str());
@@ -1561,7 +1561,7 @@ fn boolean_ops_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl GrammarExt for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features {

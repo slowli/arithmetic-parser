@@ -636,7 +636,7 @@ mod tests {
     use super::*;
     use crate::{Value, WildcardId};
 
-    use arithmetic_parser::grammars::{F32Grammar, GrammarExt, Untyped};
+    use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 
     #[test]
     fn compilation_basics() {

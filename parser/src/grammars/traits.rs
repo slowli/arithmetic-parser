@@ -69,15 +69,15 @@ impl Features {
 /// # Examples
 ///
 /// If your grammar does not need to support type annotations, you can define a `ParseLiteral` impl
-/// and wrap it into [`Untyped`] to get a [`Grammar`] / [`GrammarExt`]:
+/// and wrap it into [`Untyped`] to get a [`Grammar`] / [`Parse`]:
 ///
 /// [`Untyped`]: struct.Untyped.html
 /// [`Grammar`]: trait.Grammar.html
-/// [`GrammarExt`]: trait.GrammarExt.html
+/// [`Parse`]: trait.Parse.html
 ///
 /// ```
 /// use arithmetic_parser::{
-///     grammars::{Features, ParseLiteral, GrammarExt, Untyped},
+///     grammars::{Features, ParseLiteral, Parse, Untyped},
 ///     InputSpan, NomResult,
 /// };
 ///
@@ -122,7 +122,7 @@ pub trait ParseLiteral: 'static {
     ///
     /// - A literal must be distinguished from other constructs, in particular,
     ///   variable identifiers.
-    /// - If a literal may end with `.` and methods are enabled in [`GrammarExt::FEATURES`],
+    /// - If a literal may end with `.` and methods are enabled in [`Parse::FEATURES`],
     ///   care should be taken for cases when `.` is a part of a call, rather than a part
     ///   of a literal. For example, a parser for real-valued literals should interpret `1.abs()`
     ///   as a call of the `abs` method on receiver `1`, rather than `1.` followed by
@@ -140,7 +140,7 @@ pub trait ParseLiteral: 'static {
     ///
     /// The output should follow `nom` conventions on errors / failures.
     ///
-    /// [`GrammarExt::FEATURES`]: trait.GrammarExt.html#associatedconstant.FEATURES
+    /// [`Parse::FEATURES`]: trait.Parse.html#associatedconstant.FEATURES
     fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit>;
 }
 
@@ -154,7 +154,7 @@ pub trait ParseLiteral: 'static {
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     grammars::{Features, ParseLiteral, Grammar, GrammarExt, Typed},
+/// #     grammars::{Features, ParseLiteral, Grammar, Parse, Typed},
 /// #     InputSpan, NomResult,
 /// # };
 /// /// Grammar that parses `u64` numbers and has a single type annotation, `Num`.
@@ -211,7 +211,7 @@ pub trait Grammar: ParseLiteral {
     fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type>;
 }
 
-/// Helper trait allowing `GrammarExt` to accept multiple types as inputs.
+/// Helper trait allowing `Parse` to accept multiple types as inputs.
 pub trait IntoInputSpan<'a> {
     /// Converts input into a span.
     fn into_input_span(self) -> InputSpan<'a>;
@@ -237,7 +237,7 @@ impl<'a> IntoInputSpan<'a> for &'a str {
 /// constructs are parsed.
 ///
 /// Most common sets of `Features` are covered by [`Typed`] and [`Untyped`] wrappers, but it
-/// is possible to define custom [`GrammarExt`] implementations as well.
+/// is possible to define custom [`Parse`] implementations as well.
 ///
 /// [`Base`]: #associatedtype.Base
 /// [`Features`]: struct.Features.html
@@ -246,7 +246,7 @@ impl<'a> IntoInputSpan<'a> for &'a str {
 ///
 /// ```
 /// # use arithmetic_parser::{
-/// #     grammars::{Features, ParseLiteral, GrammarExt, Untyped},
+/// #     grammars::{Features, ParseLiteral, Parse, Untyped},
 /// #     InputSpan, NomResult,
 /// # };
 /// #[derive(Debug)]
@@ -261,7 +261,7 @@ impl<'a> IntoInputSpan<'a> for &'a str {
 /// #   }
 /// }
 ///
-/// impl GrammarExt for IntegerGrammar {
+/// impl Parse for IntegerGrammar {
 ///     type Base = Untyped<Self>;
 ///     const FEATURES: Features = Features::none();
 /// }
@@ -274,7 +274,7 @@ impl<'a> IntoInputSpan<'a> for &'a str {
 /// # Ok(())
 /// # }
 /// ```
-pub trait GrammarExt {
+pub trait Parse {
     /// Base for the grammar providing the literal parser.
     type Base: Grammar;
     /// Features supported by this grammar.
@@ -299,7 +299,7 @@ pub trait GrammarExt {
     }
 }
 
-/// Wrapper for [`ParseLiteral`] types that allows to use them as a [`Grammar`] or [`GrammarExt`].
+/// Wrapper for [`ParseLiteral`] types that allows to use them as a [`Grammar`] or [`Parse`].
 ///
 /// # Examples
 ///
@@ -307,7 +307,7 @@ pub trait GrammarExt {
 ///
 /// [`ParseLiteral`]: trait.ParseLiteral.html
 /// [`Grammar`]: trait.Grammar.html
-/// [`GrammarExt`]: trait.GrammarExt.html
+/// [`Parse`]: trait.Parse.html
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Untyped<T>(PhantomData<T>);
 
@@ -331,7 +331,7 @@ impl<T: ParseLiteral> Grammar for Untyped<T> {
     }
 }
 
-impl<T: ParseLiteral> GrammarExt for Untyped<T> {
+impl<T: ParseLiteral> Parse for Untyped<T> {
     type Base = Self;
 
     const FEATURES: Features = Features {
@@ -340,18 +340,18 @@ impl<T: ParseLiteral> GrammarExt for Untyped<T> {
     };
 }
 
-/// Wrapper for [`Grammar`] types that allows to convert the type to [`GrammarExt`].
+/// Wrapper for [`Grammar`] types that allows to convert the type to a [`Parse`]r.
 ///
 /// # Examples
 ///
 /// See [`Grammar`] docs for an example of usage.
 ///
 /// [`Grammar`]: trait.Grammar.html
-/// [`GrammarExt`]: trait.GrammarExt.html
+/// [`Parse`]: trait.Parse.html
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Typed<T>(PhantomData<T>);
 
-impl<T: Grammar> GrammarExt for Typed<T> {
+impl<T: Grammar> Parse for Typed<T> {
     type Base = T;
 
     const FEATURES: Features = Features::all();

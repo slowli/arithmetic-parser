@@ -13,7 +13,7 @@ use std::{
 };
 
 use arithmetic_parser::{
-    grammars::{GrammarExt, NumGrammar, Untyped},
+    grammars::{NumGrammar, Parse, Untyped},
     BinaryOp, Block, Expr, FnDefinition, InputSpan, Lvalue, OpPriority, SpannedExpr, SpannedLvalue,
     Statement, UnaryOp,
 };

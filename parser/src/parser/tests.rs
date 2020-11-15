@@ -66,7 +66,7 @@ impl Literal {
                             take_while1(|c: char| c.is_ascii_hexdigit()),
                         ),
                         |digits: InputSpan<'_>| {
-                            hex::decode(digits.fragment()).map_err(|e| ErrorKind::Literal(e.into()))
+                            hex::decode(digits.fragment()).map_err(ErrorKind::literal)
                         },
                     ),
                     vec![],

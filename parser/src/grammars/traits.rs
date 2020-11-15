@@ -74,7 +74,7 @@ impl Features {
 /// ```
 /// use arithmetic_parser::{
 ///     grammars::{Features, ParseLiteral, Parse, Untyped},
-///     InputSpan, NomResult,
+///     ErrorKind, InputSpan, NomResult,
 /// };
 ///
 /// /// Grammar that parses `u64` numbers.
@@ -87,7 +87,10 @@ impl Features {
 ///     // We use the `nom` crate to construct necessary parsers.
 ///     fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
 ///         use nom::{character::complete::digit1, combinator::map_res};
-///         map_res(digit1, |s: InputSpan<'_>| s.fragment().parse())(input)
+///         let parser = |s: InputSpan<'_>| {
+///             s.fragment().parse().map_err(ErrorKind::literal)
+///         };
+///         map_res(digit1, parser)(input)
 ///     }
 /// }
 ///
@@ -148,7 +151,7 @@ pub trait ParseLiteral: 'static {
 /// ```
 /// # use arithmetic_parser::{
 /// #     grammars::{Features, ParseLiteral, Grammar, Parse, Typed},
-/// #     InputSpan, NomResult,
+/// #     ErrorKind, InputSpan, NomResult,
 /// # };
 /// /// Grammar that parses `u64` numbers and has a single type annotation, `Num`.
 /// #[derive(Debug)]
@@ -159,7 +162,10 @@ pub trait ParseLiteral: 'static {
 ///
 ///     fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
 ///         use nom::{character::complete::digit1, combinator::map_res};
-///         map_res(digit1, |s: InputSpan<'_>| s.fragment().parse())(input)
+///         let parser = |s: InputSpan<'_>| {
+///             s.fragment().parse().map_err(ErrorKind::literal)
+///         };
+///         map_res(digit1, parser)(input)
 ///     }
 /// }
 ///
@@ -238,7 +244,7 @@ impl<'a> IntoInputSpan<'a> for &'a str {
 /// ```
 /// # use arithmetic_parser::{
 /// #     grammars::{Features, ParseLiteral, Parse, Untyped},
-/// #     InputSpan, NomResult,
+/// #     ErrorKind, InputSpan, NomResult,
 /// # };
 /// #[derive(Debug)]
 /// struct IntegerGrammar;
@@ -248,7 +254,8 @@ impl<'a> IntoInputSpan<'a> for &'a str {
 /// #   type Lit = u64;
 /// #   fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
 /// #       use nom::{character::complete::digit1, combinator::map_res};
-/// #       map_res(digit1, |s: InputSpan<'_>| s.fragment().parse())(input)
+/// #       let parser = |s: InputSpan<'_>| s.fragment().parse().map_err(ErrorKind::literal);
+/// #       map_res(digit1, parser)(input)
 /// #   }
 /// }
 ///

@@ -133,6 +133,11 @@ impl fmt::Display for ErrorKind {
 }
 
 impl ErrorKind {
+    /// Creates a `Literal` variant with the specified error.
+    pub fn literal<T: Into<anyhow::Error>>(error: T) -> Self {
+        Self::Literal(error.into())
+    }
+
     fn context_mut(&mut self) -> Option<&mut Option<Context>> {
         match self {
             Self::UnexpectedChar { context }

@@ -48,6 +48,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Make `CallContext::mock()` accept custom module ID and call span. (#32)
 
+- Crate types now have a numeric literal type param, rather than a `Grammar`. (#38)
+
 ## 0.2.0-beta.1 - 2020-10-04
 
 ### Added

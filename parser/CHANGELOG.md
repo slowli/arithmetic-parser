@@ -34,6 +34,12 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Use the `OpPriority` enum to encode op priorities instead of integers. (#36)
 
+- Split `Grammar` into several traits (#38):
+
+  - `ParseLiteral` responsible for parsing literals
+  - `Grammar: ParseLiteral` for a complete set of parsers (literals + type annotations)
+  - `Parse` (renamed from `GrammarExt`) to contain parsing features and parse `Block`s
+
 ### Fixed
 
 - Fix parsing of expressions like `1.abs()` for standard grammars. Previously,

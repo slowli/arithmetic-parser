@@ -211,6 +211,8 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "std")]
+    // ^-- This behavior is specific to `lexical-core` dependency, which is switched on with `std`.
     #[test]
     fn parsing_infinity() {
         let parsed = Untyped::<F32Grammar>::parse_statements("Inf").unwrap();

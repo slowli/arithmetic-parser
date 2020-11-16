@@ -8,7 +8,7 @@ use crate::{
     alloc::{vec, Rc, String, ToOwned, Vec},
     error::{AuxErrorInfo, Backtrace, CodeInModule, TupleLenMismatchContext},
     executable::ExecutableFn,
-    fns, Error, ErrorKind, EvalResult, ModuleId, Number,
+    fns, Error, ErrorKind, EvalResult, ModuleId,
 };
 use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, Op, StripCode, UnaryOp};
 
@@ -418,7 +418,7 @@ impl<T: 'static + Clone> StripCode for Value<'_, T> {
     }
 }
 
-impl<'a, T: Number> From<&Value<'a, T>> for Value<'a, T> {
+impl<'a, T: Clone> From<&Value<'a, T>> for Value<'a, T> {
     fn from(reference: &Value<'a, T>) -> Self {
         reference.to_owned()
     }

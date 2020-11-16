@@ -24,12 +24,10 @@
 //!
 //! [GAT]: https://github.com/rust-lang/rust/issues/44265
 
-use num_traits::{One, Zero};
-
 use crate::{
     alloc::{vec, Vec},
     error::AuxErrorInfo,
-    CallContext, Error, ErrorKind, EvalResult, Function, NativeFn, Number, SpannedValue, Value,
+    CallContext, Error, ErrorKind, EvalResult, Function, NativeFn, SpannedValue, Value,
 };
 
 mod wrapper;
@@ -185,7 +183,7 @@ impl<T> NativeFn<T> for Assert {
 #[derive(Debug, Clone, Copy)]
 pub struct If;
 
-impl<T: Number> NativeFn<T> for If {
+impl<T> NativeFn<T> for If {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -248,7 +246,7 @@ impl Loop {
         "iteration function should return a 2-element tuple with first bool value";
 }
 
-impl<T: Number> NativeFn<T> for Loop {
+impl<T: Clone> NativeFn<T> for Loop {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -331,7 +329,7 @@ impl<T: Number> NativeFn<T> for Loop {
 #[derive(Debug, Clone, Copy)]
 pub struct While;
 
-impl<T: Number> NativeFn<T> for While {
+impl<T: Clone> NativeFn<T> for While {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -402,7 +400,7 @@ impl<T: Number> NativeFn<T> for While {
 #[derive(Debug, Clone, Copy)]
 pub struct Map;
 
-impl<T: Number> NativeFn<T> for Map {
+impl<T: Clone> NativeFn<T> for Map {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -463,7 +461,7 @@ impl<T: Number> NativeFn<T> for Map {
 #[derive(Debug, Clone, Copy)]
 pub struct Filter;
 
-impl<T: Number> NativeFn<T> for Filter {
+impl<T: Clone> NativeFn<T> for Filter {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -529,7 +527,7 @@ impl<T: Number> NativeFn<T> for Filter {
 #[derive(Debug, Clone, Copy)]
 pub struct Fold;
 
-impl<T: Number> NativeFn<T> for Fold {
+impl<T: Clone> NativeFn<T> for Fold {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -594,7 +592,7 @@ impl<T: Number> NativeFn<T> for Fold {
 #[derive(Debug, Clone, Copy)]
 pub struct Push;
 
-impl<T: Number> NativeFn<T> for Push {
+impl<T> NativeFn<T> for Push {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -645,7 +643,7 @@ impl<T: Number> NativeFn<T> for Push {
 #[derive(Debug, Clone, Copy)]
 pub struct Merge;
 
-impl<T: Number> NativeFn<T> for Merge {
+impl<T: Clone> NativeFn<T> for Merge {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -681,7 +679,7 @@ pub struct Compare;
 
 const COMPARE_ERROR_MSG: &str = "Compare requires 2 number arguments";
 
-impl<T: Number + PartialOrd> NativeFn<T> for Compare {
+impl<T: PartialOrd> NativeFn<T> for Compare {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -691,16 +689,10 @@ impl<T: Number + PartialOrd> NativeFn<T> for Compare {
         let y = args.pop().unwrap();
         let x = args.pop().unwrap();
 
-        let x = extract_number(ctx, x, COMPARE_ERROR_MSG)?;
-        let y = extract_number(ctx, y, COMPARE_ERROR_MSG)?;
-
-        Ok(Value::Number(if x < y {
-            -<T as One>::one()
-        } else if x > y {
-            <T as One>::one()
-        } else {
-            <T as Zero>::zero()
-        }))
+        let _x = extract_number(ctx, x, COMPARE_ERROR_MSG)?;
+        let _y = extract_number(ctx, y, COMPARE_ERROR_MSG)?;
+        // FIXME: restore logic
+        Ok(Value::void())
     }
 }
 

@@ -119,12 +119,6 @@ pub use self::{
     variable_map::{Comparisons, Prelude, VariableMap},
 };
 
-use num_traits::Pow;
-
-use core::ops;
-
-use arithmetic_parser::grammars::NumLiteral;
-
 mod compiler;
 mod env;
 pub mod error;
@@ -134,9 +128,8 @@ mod module_id;
 mod values;
 mod variable_map;
 
-// FIXME: remove
-/// Number with fully defined arithmetic operations.
-pub trait Number: NumLiteral + ops::Neg<Output = Self> + Pow<Self, Output = Self> {}
+/// FIXME
+pub trait Number: Clone + 'static {}
 
 impl Number for f32 {}
 impl Number for f64 {}

@@ -1,5 +1,3 @@
-use num_traits::{One, Zero};
-
 use core::{cmp, fmt, marker::PhantomData};
 
 use crate::{
@@ -424,13 +422,10 @@ impl<'a, T> IntoEvalResult<'a, T> for bool {
     }
 }
 
-impl<'a, T: Number> IntoEvalResult<'a, T> for cmp::Ordering {
+impl<'a, T> IntoEvalResult<'a, T> for cmp::Ordering {
     fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
-        Ok(Value::Number(match self {
-            Self::Less => -<T as One>::one(),
-            Self::Equal => <T as Zero>::zero(),
-            Self::Greater => <T as One>::one(),
-        }))
+        // FIXME: restore
+        Ok(Value::void())
     }
 }
 

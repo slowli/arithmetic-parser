@@ -2,10 +2,12 @@
 
 use arithmetic_parser::{grammars::Grammar, Block};
 
+use core::fmt;
+
 use crate::{fns, Environment, Error, ExecutableModule, ModuleId, ModuleImports, Number, Value};
 
 /// Encapsulates read access to named variables.
-pub trait VariableMap<'a, T: Number> {
+pub trait VariableMap<'a, T> {
     /// Returns value of the named variable, or `None` if it is not defined.
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>>;
 
@@ -20,6 +22,7 @@ pub trait VariableMap<'a, T: Number> {
     where
         Id: ModuleId,
         G: Grammar<Lit = T>,
+        T: Clone + fmt::Debug,
     {
         ExecutableModule::builder(id, block)?
             .with_imports_from(self)
@@ -27,13 +30,13 @@ pub trait VariableMap<'a, T: Number> {
     }
 }
 
-impl<'a, T: Number> VariableMap<'a, T> for Environment<'a, T> {
+impl<'a, T: Clone> VariableMap<'a, T> for Environment<'a, T> {
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
         self.get(name).cloned()
     }
 }
 
-impl<'a, T: Number> VariableMap<'a, T> for ModuleImports<'a, T> {
+impl<'a, T: Clone> VariableMap<'a, T> for ModuleImports<'a, T> {
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
         self.get(name).cloned()
     }
@@ -52,7 +55,7 @@ pub struct Prelude;
 
 impl Prelude {
     /// Creates an iterator over contained values and the corresponding names.
-    pub fn iter<T: Number>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
+    pub fn iter<T: Clone>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
         const VAR_NAMES: &[&str] = &[
             "false", "true", "assert", "if", "loop", "while", "map", "filter", "fold", "push",
             "merge",
@@ -64,7 +67,7 @@ impl Prelude {
     }
 }
 
-impl<'a, T: Number> VariableMap<'a, T> for Prelude {
+impl<'a, T: Clone> VariableMap<'a, T> for Prelude {
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
         Some(match name {
             "false" => Value::Bool(false),

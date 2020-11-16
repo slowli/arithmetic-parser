@@ -1,12 +1,12 @@
 //! Executables output by a `Compiler` and related types.
 
-use core::ops;
+use core::{fmt, ops};
 
 use crate::{
     alloc::{Box, String, ToOwned},
     compiler::{Compiler, ImportSpans, CMP_FUNCTION_NAME},
     error::{Backtrace, ErrorWithBacktrace},
-    Arithmetic, Environment, Error, ErrorKind, ModuleId, Number, StdArithmetic, Value, VariableMap,
+    Arithmetic, Environment, Error, ErrorKind, ModuleId, StdArithmetic, Value, VariableMap,
 };
 use arithmetic_parser::{grammars::Grammar, Block, StripCode};
 
@@ -178,7 +178,7 @@ impl<'a, T> ExecutableModule<'a, T> {
     }
 }
 
-impl<'a, T: Number> ExecutableModule<'a, T> {
+impl<'a, T: Clone + fmt::Debug> ExecutableModule<'a, T> {
     /// Starts building a new module.
     pub fn builder<G, Id>(
         id: Id,
@@ -192,6 +192,22 @@ impl<'a, T: Number> ExecutableModule<'a, T> {
         Ok(ExecutableModuleBuilder::new(module, import_spans))
     }
 
+    fn run_with_registers(
+        &self,
+        registers: &mut Registers<'a, T>,
+        arithmetic: &impl Arithmetic<T>,
+    ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
+        let mut backtrace = Backtrace::default();
+        registers
+            .execute(&self.inner, arithmetic, Some(&mut backtrace))
+            .map_err(|err| ErrorWithBacktrace::new(err, backtrace))
+    }
+}
+
+impl<'a, T: Clone + fmt::Debug> ExecutableModule<'a, T>
+where
+    StdArithmetic: Arithmetic<T>,
+{
     /// Runs the module with the current values of imports. This is a read-only operation;
     /// neither the imports, nor other module state are modified by it.
     pub fn run(&self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
@@ -216,17 +232,6 @@ impl<'a, T: Number> ExecutableModule<'a, T> {
         let result = self.run_with_registers(&mut registers, &StdArithmetic);
         registers.update_env(env);
         result
-    }
-
-    fn run_with_registers(
-        &self,
-        registers: &mut Registers<'a, T>,
-        arithmetic: &impl Arithmetic<T>,
-    ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
-        let mut backtrace = Backtrace::default();
-        registers
-            .execute(&self.inner, arithmetic, Some(&mut backtrace))
-            .map_err(|err| ErrorWithBacktrace::new(err, backtrace))
     }
 }
 
@@ -285,7 +290,7 @@ impl<'a, T> ops::Index<&str> for ModuleImports<'a, T> {
     }
 }
 
-impl<'a, T: Number> IntoIterator for ModuleImports<'a, T> {
+impl<'a, T: Clone + 'a> IntoIterator for ModuleImports<'a, T> {
     type Item = (String, Value<'a, T>);
     type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'a>;
 
@@ -313,7 +318,7 @@ pub struct ExecutableModuleBuilder<'a, T> {
     undefined_imports: ImportSpans<'a>,
 }
 
-impl<'a, T: Number> ExecutableModuleBuilder<'a, T> {
+impl<'a, T> ExecutableModuleBuilder<'a, T> {
     fn new(module: ExecutableModule<'a, T>, undefined_imports: ImportSpans<'a>) -> Self {
         Self {
             module,

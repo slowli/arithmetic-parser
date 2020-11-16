@@ -18,11 +18,11 @@ use std::{
 use arithmetic_eval::error::ErrorWithBacktrace;
 use arithmetic_eval::{
     error::{BacktraceElement, CodeInModule},
-    fns, Comparisons, Environment, Error as EvalError, Function, IndexedId, ModuleId, Number,
-    Prelude, Value, VariableMap,
+    fns, Arithmetic, Comparisons, Environment, Error as EvalError, Function, IndexedId, ModuleId,
+    Number, Prelude, StdArithmetic, Value, VariableMap,
 };
 use arithmetic_parser::{
-    grammars::{Grammar, NumGrammar, Parse, Untyped},
+    grammars::{Grammar, NumGrammar, NumLiteral, Parse, Untyped},
     Block, CodeFragment, Error as ParseError, LocatedSpan, LvalueLen, StripCode,
 };
 
@@ -390,7 +390,8 @@ impl Env {
         original_env: &Environment<'static, T>,
     ) -> io::Result<ParseAndEvalResult>
     where
-        T: fmt::Display + Number,
+        T: ReplLiteral,
+        StdArithmetic: Arithmetic<T>,
     {
         if line.starts_with('.') {
             self.process_command(line, env, original_env)?;
@@ -405,15 +406,12 @@ impl Env {
         })
     }
 
-    fn process_command<'a, T>(
+    fn process_command<'a, T: ReplLiteral>(
         &mut self,
         line: &str,
         env: &mut Environment<'a, T>,
         original_env: &Environment<'a, T>,
-    ) -> io::Result<()>
-    where
-        T: fmt::Display + Number,
-    {
+    ) -> io::Result<()> {
         let file_id = *self.code_map.file_ids.last().expect("no files");
 
         match line {
@@ -449,7 +447,8 @@ impl Env {
     ) -> io::Result<ParseAndEvalResult>
     where
         T: Grammar,
-        T::Lit: fmt::Display + Number,
+        T::Lit: ReplLiteral,
+        StdArithmetic: Arithmetic<T::Lit>,
     {
         let module_id = self.code_map.latest_module_id();
         let module = match env.compile_module(module_id, statements) {
@@ -476,7 +475,7 @@ impl Env {
     }
 }
 
-pub trait ReplLiteral: Number + fmt::Display {
+pub trait ReplLiteral: NumLiteral + Number + PartialEq + fmt::Display {
     fn create_env() -> Environment<'static, Self>;
 }
 
@@ -488,14 +487,14 @@ pub struct StdLibrary<T: 'static> {
     binary: &'static [(&'static str, fn(T, T) -> T)],
 }
 
-impl<'a, T: Number> VariableMap<'a, T> for StdLibrary<T> {
+impl<'a, T: ReplLiteral> VariableMap<'a, T> for StdLibrary<T> {
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
         self.variables()
             .find_map(|(var_name, value)| if var_name == name { Some(value) } else { None })
     }
 }
 
-impl<T: Number> StdLibrary<T> {
+impl<T: ReplLiteral> StdLibrary<T> {
     fn variables(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
         let constants = self
             .constants

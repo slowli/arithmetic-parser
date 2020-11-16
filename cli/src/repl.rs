@@ -5,8 +5,12 @@ use rustyline::{error::ReadlineError, Editor};
 use std::io;
 
 use crate::common::{Env, ParseAndEvalResult, ReplLiteral};
+use arithmetic_eval::{Arithmetic, StdArithmetic};
 
-pub fn repl<T: ReplLiteral>() -> io::Result<()> {
+pub fn repl<T: ReplLiteral>() -> io::Result<()>
+where
+    StdArithmetic: Arithmetic<T>,
+{
     let mut rl = Editor::<()>::new();
     let mut env = Env::new();
     env.print_greeting()?;

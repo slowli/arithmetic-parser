@@ -36,7 +36,13 @@
 //!   if `cmp(x, y) == -1`, then `x < y` and `x <= y` will return `true`, and `x > y` will
 //!   return `false`.
 //!
+//! # Crate features
+//!
+//! - `complex`. Implements [`Number`] for floating-point complex numbers from
+//!   the [`num-complex`] crate (i.e., `Complex32` and `Complex64`).
+//!
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
+//! [`num-complex`]: https://crates.io/crates/num-complex
 //!
 //! # Examples
 //!

@@ -720,7 +720,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Environment, ExecutableModule, Prelude, WildcardId};
+    use crate::{alloc::{format, ToOwned}, Environment, ExecutableModule, Prelude, WildcardId};
 
     use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
     use assert_matches::assert_matches;

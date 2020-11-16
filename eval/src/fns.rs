@@ -24,6 +24,8 @@
 //!
 //! [GAT]: https://github.com/rust-lang/rust/issues/44265
 
+use core::cmp::Ordering;
+
 use crate::{
     alloc::{vec, Vec},
     error::AuxErrorInfo,
@@ -689,10 +691,10 @@ impl<T: PartialOrd> NativeFn<T> for Compare {
         let y = args.pop().unwrap();
         let x = args.pop().unwrap();
 
-        let _x = extract_number(ctx, x, COMPARE_ERROR_MSG)?;
-        let _y = extract_number(ctx, y, COMPARE_ERROR_MSG)?;
-        // FIXME: restore logic
-        Ok(Value::void())
+        let x = extract_number(ctx, x, COMPARE_ERROR_MSG)?;
+        let y = extract_number(ctx, y, COMPARE_ERROR_MSG)?;
+        let ordering = x.partial_cmp(&y).unwrap_or(Ordering::Equal);
+        Ok(Value::any(ordering))
     }
 }
 

@@ -2,7 +2,7 @@
 
 use arithmetic_parser::{grammars::Grammar, Block};
 
-use core::fmt;
+use core::{cmp::Ordering, fmt};
 
 use crate::{fns, Environment, Error, ExecutableModule, ModuleId, ModuleImports, Number, Value};
 
@@ -114,6 +114,9 @@ where
 {
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
         Some(match name {
+            "LESS" => Value::any(Ordering::Less),
+            "EQUAL" => Value::any(Ordering::Equal),
+            "GREATER" => Value::any(Ordering::Greater),
             "cmp" => Value::native_fn(fns::Compare),
             "min" => Value::native_fn(fns::Binary::new(Self::min::<T>)),
             "max" => Value::native_fn(fns::Binary::new(Self::max::<T>)),
@@ -128,7 +131,7 @@ impl Comparisons {
     where
         T: Number + PartialOrd,
     {
-        const VAR_NAMES: &[&str] = &["cmp", "min", "max"];
+        const VAR_NAMES: &[&str] = &["LESS", "EQUAL", "GREATER", "cmp", "min", "max"];
 
         VAR_NAMES
             .iter()

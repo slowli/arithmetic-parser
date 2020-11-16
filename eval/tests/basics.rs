@@ -6,7 +6,8 @@ use std::iter::FromIterator;
 use arithmetic_eval::{
     error::{ErrorWithBacktrace, RepeatedAssignmentContext},
     fns::{self, FromValueErrorKind},
-    Environment, Error, ErrorKind, Function, NativeFn, Value, ValueType, VariableMap, WildcardId,
+    Comparisons, Environment, Error, ErrorKind, Function, NativeFn, Value, ValueType, VariableMap,
+    WildcardId,
 };
 use arithmetic_parser::{
     grammars::{F32Grammar, Parse, Untyped},
@@ -703,6 +704,25 @@ fn function_with_non_linear_flow() {
     let program = "(|x| { y = x - 3; x })(2)";
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(return_value, Value::Number(2.0));
+}
+
+#[test]
+fn comparison_return_value() {
+    let program = "cmp(5, 3) == GREATER && cmp(3, 5) == LESS && cmp(4, 4) == EQUAL";
+    let mut env = Environment::from_iter(Comparisons.iter());
+    let return_value = evaluate(&mut env, program);
+    assert_eq!(return_value, Value::Bool(true));
+}
+
+#[test]
+fn comparison_constants_are_comparable() {
+    let program = r#"
+        EQUAL != LESS && cmp(5, 3) != LESS && (LESS, GREATER) == (cmp(3, 4), cmp(4, -5)) &&
+            EQUAL != 0 && LESS != -1
+    "#;
+    let mut env = Environment::from_iter(Comparisons.iter());
+    let return_value = evaluate(&mut env, program);
+    assert_eq!(return_value, Value::Bool(true));
 }
 
 #[test]

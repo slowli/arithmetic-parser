@@ -424,8 +424,7 @@ impl<'a, T> IntoEvalResult<'a, T> for bool {
 
 impl<'a, T> IntoEvalResult<'a, T> for cmp::Ordering {
     fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
-        // FIXME: restore
-        Ok(Value::void())
+        Ok(Value::any(self))
     }
 }
 

@@ -1,5 +1,7 @@
 //! Executable `Command` and its building blocks.
 
+use core::cmp::Ordering;
+
 use crate::{
     alloc::{String, Vec},
     Value,
@@ -169,23 +171,17 @@ impl ComparisonOp {
         }
     }
 
-    #[allow(clippy::unused_self)]
-    pub fn compare<T>(self, _cmp_value: &Value<'_, T>) -> Option<bool> {
-        None // FIXME
-             /*
-             let ordering = match cmp_value {
-                 Value::Number(num) if num.is_one() => Ordering::Greater,
-                 Value::Number(num) if num.is_zero() => Ordering::Equal,
-                 Value::Number(num) if (-*num).is_one() => Ordering::Less,
-                 _ => return None,
-             };
-             Some(match self {
-                 Self::Gt => ordering == Ordering::Greater,
-                 Self::Lt => ordering == Ordering::Less,
-                 Self::Ge => ordering != Ordering::Less,
-                 Self::Le => ordering != Ordering::Greater,
-             })
-              */
+    pub fn compare<T>(self, cmp_value: &Value<'_, T>) -> Option<bool> {
+        let maybe_ordering = match cmp_value {
+            Value::Ref(value) => value.downcast_ref::<Ordering>().copied(),
+            _ => None,
+        };
+        maybe_ordering.map(|ordering| match self {
+            Self::Gt => ordering == Ordering::Greater,
+            Self::Lt => ordering == Ordering::Less,
+            Self::Ge => ordering != Ordering::Less,
+            Self::Le => ordering != Ordering::Greater,
+        })
     }
 }
 

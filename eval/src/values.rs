@@ -2,7 +2,7 @@
 
 use hashbrown::HashMap;
 
-use core::fmt;
+use core::{any::Any, fmt};
 
 use crate::{
     alloc::{vec, Rc, String, ToOwned, Vec},
@@ -26,14 +26,16 @@ pub struct CallContext<'r, 'a, T> {
 
 impl<'r, 'a, T> CallContext<'r, 'a, T> {
     /// Creates a mock call context with the specified module ID and call span.
-    pub fn mock(_module_id: &dyn ModuleId, _call_span: MaybeSpanned<'a>) -> Self {
-        /*
+    pub fn mock(
+        module_id: &dyn ModuleId,
+        call_span: MaybeSpanned<'a>,
+        arithmetic: &'r dyn Arithmetic<T>,
+    ) -> Self {
         Self {
             call_span: CodeInModule::new(module_id, call_span),
             backtrace: None,
+            arithmetic,
         }
-         */
-        unimplemented!()
     }
 
     pub(crate) fn new(
@@ -308,6 +310,8 @@ pub enum ValueType {
     /// This variant is never returned from [`Value::value_type()`]; at the same time, it is
     /// used for error reporting etc.
     Array,
+    /// Opaque reference to a value.
+    Ref,
 }
 
 impl fmt::Display for ValueType {
@@ -319,7 +323,56 @@ impl fmt::Display for ValueType {
             Self::Tuple(1) => write!(formatter, "tuple with 1 element"),
             Self::Tuple(size) => write!(formatter, "tuple with {} elements", size),
             Self::Array => formatter.write_str("array"),
+            Self::Ref => formatter.write_str("reference"),
         }
+    }
+}
+
+/// FIXME
+pub struct OpaqueRef {
+    value: Rc<dyn Any>,
+    // FIXME: do we need a `Debug` impl in the "vtable" as well?
+    dyn_eq: fn(&dyn Any, &dyn Any) -> bool,
+}
+
+impl OpaqueRef {
+    /// FIXME
+    pub fn new<T: Any + PartialEq>(value: T) -> Self {
+        Self {
+            value: Rc::new(value),
+            dyn_eq: |this, other| {
+                let this_cast = this.downcast_ref::<T>().unwrap();
+                other
+                    .downcast_ref::<T>()
+                    .map_or(false, |other_cast| other_cast == this_cast)
+            },
+        }
+    }
+
+    /// FIXME
+    pub fn downcast_ref<T: Any + PartialEq>(&self) -> Option<&T> {
+        self.value.downcast_ref()
+    }
+}
+
+impl Clone for OpaqueRef {
+    fn clone(&self) -> Self {
+        Self {
+            value: Rc::clone(&self.value),
+            dyn_eq: self.dyn_eq,
+        }
+    }
+}
+
+impl PartialEq for OpaqueRef {
+    fn eq(&self, other: &Self) -> bool {
+        (self.dyn_eq)(self.value.as_ref(), other.value.as_ref())
+    }
+}
+
+impl fmt::Debug for OpaqueRef {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_tuple("OpaqueRef").field(&self.value.as_ref()).finish()
     }
 }
 
@@ -335,6 +388,8 @@ pub enum Value<'a, T> {
     Function(Function<'a, T>),
     /// Tuple of zero or more values.
     Tuple(Vec<Value<'a, T>>),
+    /// Opaque reference to a native variable.
+    Ref(OpaqueRef),
 }
 
 /// Value together with a span that has produced it.
@@ -371,6 +426,11 @@ impl<'a, T> Value<'a, T> {
         Self::Tuple(vec![])
     }
 
+    /// Creates a reference to a native variable.
+    pub fn any(value: impl Any + PartialEq) -> Self {
+        Self::Ref(OpaqueRef::new(value))
+    }
+
     /// Returns the type of this value.
     pub fn value_type(&self) -> ValueType {
         match self {
@@ -378,6 +438,7 @@ impl<'a, T> Value<'a, T> {
             Self::Bool(_) => ValueType::Bool,
             Self::Function(_) => ValueType::Function,
             Self::Tuple(elements) => ValueType::Tuple(elements.len()),
+            Self::Ref(_) => ValueType::Ref,
         }
     }
 
@@ -399,6 +460,7 @@ impl<T: Clone> Clone for Value<'_, T> {
             Self::Bool(bool) => Self::Bool(*bool),
             Self::Function(function) => Self::Function(function.clone()),
             Self::Tuple(tuple) => Self::Tuple(tuple.clone()),
+            Self::Ref(reference) => Self::Ref(reference.clone()),
         }
     }
 }
@@ -414,6 +476,7 @@ impl<T: 'static + Clone> StripCode for Value<'_, T> {
             Self::Tuple(tuple) => {
                 Value::Tuple(tuple.into_iter().map(StripCode::strip_code).collect())
             }
+            Self::Ref(reference) => Value::Ref(reference),
         }
     }
 }
@@ -431,6 +494,7 @@ impl<T: PartialEq> PartialEq for Value<'_, T> {
             (Self::Bool(this), Self::Bool(other)) => this == other,
             (Self::Tuple(this), Self::Tuple(other)) => this == other,
             (Self::Function(this), Self::Function(other)) => this.is_same_function(other),
+            (Self::Ref(this), Self::Ref(other)) => this == other,
             _ => false,
         }
     }
@@ -610,7 +674,7 @@ impl<'a, T: Clone> Value<'a, T> {
         }
     }
 
-    // **NB.** Should match `PartialEq` impl for `Value`!
+    // **NB.** Must match `PartialEq` impl for `Value`!
     pub(crate) fn eq_by_arithmetic(&self, rhs: &Self, arithmetic: &dyn Arithmetic<T>) -> bool {
         match (self, rhs) {
             (Self::Number(this), Self::Number(other)) => arithmetic.eq(this, other),
@@ -625,6 +689,7 @@ impl<'a, T: Clone> Value<'a, T> {
                 }
             }
             (Self::Function(this), Self::Function(other)) => this.is_same_function(other),
+            (Self::Ref(this), Self::Ref(other)) => this == other,
             _ => false,
         }
     }
@@ -671,5 +736,22 @@ impl<'a, T: Clone> Value<'a, T> {
                 Err(Error::new(module_id, &lhs, err))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use core::cmp::Ordering;
+
+    #[test]
+    fn opaque_ref_equality() {
+        let value = Value::<f32>::any(Ordering::Less);
+        let same_value = Value::<f32>::any(Ordering::Less);
+        assert_eq!(value, same_value);
+        assert_eq!(value, value.clone());
+        let other_value = Value::<f32>::any(Ordering::Greater);
+        assert_ne!(value, other_value);
     }
 }

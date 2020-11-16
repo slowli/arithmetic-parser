@@ -337,6 +337,8 @@ impl Env {
                 write!(self.writer, "{})", " ".repeat(indent))
             }
 
+            Value::Ref(_) => todo!(),
+
             _ => unreachable!(),
         }
     }

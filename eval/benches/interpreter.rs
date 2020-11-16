@@ -9,7 +9,9 @@ use criterion::{criterion_group, criterion_main, BatchSize, Bencher, Criterion, 
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use typed_arena::Arena;
 
-use arithmetic_eval::{fns, CallContext, ExecutableModule, NativeFn, Value, WildcardId};
+use arithmetic_eval::{
+    fns, CallContext, ExecutableModule, NativeFn, StdArithmetic, Value, WildcardId,
+};
 use arithmetic_parser::{
     grammars::{F32Grammar, Parse, Untyped},
     MaybeSpanned,
@@ -101,7 +103,7 @@ fn bench_mul_fold(bencher: &mut Bencher<'_>) {
 }
 
 fn bench_fold_fn(bencher: &mut Bencher<'_>) {
-    let mut ctx = CallContext::mock(&WildcardId, MaybeSpanned::from_str("", ..));
+    let mut ctx = CallContext::mock(&WildcardId, MaybeSpanned::from_str("", ..), &StdArithmetic);
     let acc = ctx.apply_call_span(Value::Number(1.0));
     let fold_fn = fns::Binary::new(|x: f32, y| x * y);
     let fold_fn = ctx.apply_call_span(Value::native_fn(fold_fn));
@@ -126,7 +128,7 @@ fn bench_fold_fn(bencher: &mut Bencher<'_>) {
 }
 
 fn bench_interpreted_fn(bencher: &mut Bencher<'_>) {
-    let mut ctx = CallContext::mock(&WildcardId, MaybeSpanned::from_str("", ..));
+    let mut ctx = CallContext::mock(&WildcardId, MaybeSpanned::from_str("", ..), &StdArithmetic);
     let interpreted_fn = Untyped::<F32Grammar>::parse_statements("|x, y| x * y").unwrap();
     let interpreted_fn = ExecutableModule::builder(WildcardId, &interpreted_fn)
         .unwrap()

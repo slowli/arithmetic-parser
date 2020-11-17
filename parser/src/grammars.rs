@@ -20,7 +20,8 @@
 
 use nom::{
     bytes::complete::take_while_m_n,
-    combinator::{not, peek},
+    character::complete::digit1,
+    combinator::{map_res, not, peek},
     number::complete::{double, float},
     sequence::terminated,
     Slice,
@@ -35,7 +36,7 @@ pub use self::traits::{
     BooleanOps, Features, Grammar, IntoInputSpan, Parse, ParseLiteral, Typed, Untyped,
 };
 
-use crate::{spans::NomResult, InputSpan};
+use crate::{spans::NomResult, ErrorKind, InputSpan};
 
 /// Single-type numeric grammar parameterized by the literal type.
 #[derive(Debug)]
@@ -103,6 +104,22 @@ fn maybe_truncate_consumed_input<'a>(input: InputSpan<'a>, rest: InputSpan<'a>) 
         rest
     }
 }
+
+macro_rules! impl_num_literal_for_ints {
+    ($($num:ident),+) => {
+        $(
+        impl NumLiteral for $num {
+            fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
+                let parser = |s: InputSpan<'_>| s.fragment().parse().map_err(ErrorKind::literal);
+                map_res(digit1, parser)(input)
+            }
+        }
+        )+
+    };
+}
+
+// FIXME: do we need sign parsing for `i*`?
+impl_num_literal_for_ints!(u8, i8, u16, i16, u32, i32, u64, i64, u128, i128);
 
 impl NumLiteral for f32 {
     fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {

@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 use hashbrown::HashMap;
 
-use std::iter::FromIterator;
+use core::iter::FromIterator;
 
 use arithmetic_eval::{
     error::{ErrorWithBacktrace, RepeatedAssignmentContext},

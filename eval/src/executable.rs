@@ -176,6 +176,17 @@ impl<'a, T> ExecutableModule<'a, T> {
     pub fn imports(&self) -> &ModuleImports<'a, T> {
         &self.imports
     }
+
+    /// FIXME
+    pub fn with_arithmetic<'s, A>(&'s self, arithmetic: &'s A) -> WithArithmetic<&'s Self, &'s A>
+    where
+        A: Arithmetic<T> + ?Sized,
+    {
+        WithArithmetic {
+            module: self,
+            arithmetic,
+        }
+    }
 }
 
 impl<'a, T: Clone + fmt::Debug> ExecutableModule<'a, T> {
@@ -195,7 +206,7 @@ impl<'a, T: Clone + fmt::Debug> ExecutableModule<'a, T> {
     fn run_with_registers(
         &self,
         registers: &mut Registers<'a, T>,
-        arithmetic: &impl Arithmetic<T>,
+        arithmetic: &dyn Arithmetic<T>,
     ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
         let mut backtrace = Backtrace::default();
         registers
@@ -211,8 +222,7 @@ where
     /// Runs the module with the current values of imports. This is a read-only operation;
     /// neither the imports, nor other module state are modified by it.
     pub fn run(&self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
-        let mut registers = self.imports.inner.clone();
-        self.run_with_registers(&mut registers, &StdArithmetic)
+        self.with_arithmetic(&StdArithmetic).run()
     }
 
     /// Runs the module with the specified [`Environment`]. The environment may contain some of
@@ -226,10 +236,47 @@ where
         &self,
         env: &mut Environment<'a, T>,
     ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
-        let mut registers = self.imports.inner.clone();
+        self.with_arithmetic(&StdArithmetic).run_in_env(env)
+    }
+}
+
+/// FIXME
+#[derive(Debug, Clone, Copy)]
+pub struct WithArithmetic<M, A> {
+    module: M,
+    arithmetic: A,
+}
+
+impl<'a, A, T> WithArithmetic<&ExecutableModule<'a, T>, &A>
+where
+    T: Clone + fmt::Debug,
+    A: Arithmetic<T>, // FIXME: why doesn't `?Sized` work here?
+{
+    /// Runs the module with the current values of imports. This is a read-only operation;
+    /// neither the imports, nor other module state are modified by it.
+    pub fn run(&self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
+        let mut registers = self.module.imports.inner.clone();
+        self.module
+            .run_with_registers(&mut registers, self.arithmetic)
+    }
+
+    /// Runs the module with the specified [`Environment`]. The environment may contain some of
+    /// module imports; they will be used to override imports defined in the module.
+    ///
+    /// On execution, the environment is modified to reflect assignments in the topmost scope
+    /// of the module. The modification takes place regardless of whether or not the execution
+    /// succeeds. That is, if an error occurs, all preceding assignments in the topmost scope
+    /// still take place. See [the relevant example](#behavior-on-errors).
+    pub fn run_in_env(
+        &self,
+        env: &mut Environment<'a, T>,
+    ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
+        let mut registers = self.module.imports.inner.clone();
         registers.update_from_env(env);
 
-        let result = self.run_with_registers(&mut registers, &StdArithmetic);
+        let result = self
+            .module
+            .run_with_registers(&mut registers, self.arithmetic);
         registers.update_env(env);
         result
     }

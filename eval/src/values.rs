@@ -13,7 +13,9 @@ use crate::{
 use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, Op, StripCode, UnaryOp};
 
 mod arithmetic;
-pub use self::arithmetic::{Arithmetic, StdArithmetic};
+pub use self::arithmetic::{
+    Arithmetic, CheckedArithmetic, ModularArithmetic, StdArithmetic, WrappingArithmetic,
+};
 
 /// Opaque context for native calls.
 #[derive(Debug)]
@@ -372,7 +374,10 @@ impl PartialEq for OpaqueRef {
 
 impl fmt::Debug for OpaqueRef {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.debug_tuple("OpaqueRef").field(&self.value.as_ref()).finish()
+        formatter
+            .debug_tuple("OpaqueRef")
+            .field(&self.value.as_ref())
+            .finish()
     }
 }
 

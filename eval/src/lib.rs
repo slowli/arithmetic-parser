@@ -113,8 +113,8 @@ pub use self::{
     executable::{ExecutableModule, ExecutableModuleBuilder, ModuleImports},
     module_id::{IndexedId, ModuleId, WildcardId},
     values::{
-        Arithmetic, CallContext, Function, InterpretedFn, NativeFn, SpannedValue, StdArithmetic,
-        Value, ValueType,
+        Arithmetic, CallContext, CheckedArithmetic, Function, InterpretedFn, ModularArithmetic,
+        NativeFn, SpannedValue, StdArithmetic, Value, ValueType, WrappingArithmetic,
     },
     variable_map::{Comparisons, Prelude, VariableMap},
 };
@@ -131,8 +131,20 @@ mod variable_map;
 /// FIXME
 pub trait Number: Clone + 'static {}
 
+impl Number for i8 {}
+impl Number for u8 {}
+impl Number for i16 {}
+impl Number for u16 {}
+impl Number for i32 {}
+impl Number for u32 {}
+impl Number for i64 {}
+impl Number for u64 {}
+impl Number for i128 {}
+impl Number for u128 {}
+
 impl Number for f32 {}
 impl Number for f64 {}
+
 #[cfg(feature = "num-complex")]
 impl Number for num_complex::Complex32 {}
 #[cfg(feature = "num-complex")]

@@ -71,7 +71,7 @@ where
 
     let err = try_evaluate::<T, _>(&mut Environment::new(), "1 - 2 + 5", &arithmetic).unwrap_err();
     let err_kind = err.source().kind();
-    assert_matches!(err_kind, ErrorKind::Op(ref e) if e.to_string().contains("Integer overflow"));
+    assert_matches!(err_kind, ErrorKind::Arithmetic(ref e) if e.to_string().contains("Integer overflow"));
     let err_span = err.source().main_span().code();
     assert_eq!(*err_span.fragment(), "1 - 2");
 }

@@ -14,6 +14,8 @@ use arithmetic_parser::{
     StatementType, StripCode, UnaryOp,
 };
 
+pub use crate::values::ArithmeticError;
+
 /// Context for [`ErrorKind::TupleLenMismatch`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TupleLenMismatchContext {
@@ -140,9 +142,9 @@ pub enum ErrorKind {
     #[display(fmt = "Unsupported {}", _0)]
     Unsupported(UnsupportedType),
 
-    /// FIXME
+    /// [`Arithmetic`](crate::Arithmetic) error, such as division by zero.
     #[display(fmt = "Arithmetic error: {}", _0)]
-    Op(anyhow::Error),
+    Arithmetic(ArithmeticError),
 }
 
 impl ErrorKind {
@@ -178,7 +180,7 @@ impl ErrorKind {
             Self::MissingCmpFunction { .. } => "Missing comparison function".to_owned(),
             Self::InvalidCmpResult => "Invalid comparison result".to_owned(),
             Self::Unsupported(_) => "Grammar construct not supported".to_owned(),
-            Self::Op(_) => "Arithmetic error".to_owned(),
+            Self::Arithmetic(_) => "Arithmetic error".to_owned(),
         }
     }
 
@@ -199,7 +201,7 @@ impl ErrorKind {
             }
             Self::InvalidCmpResult => "Comparison function must return -1, 0 or 1".to_owned(),
             Self::Unsupported(ty) => format!("Unsupported {}", ty),
-            Self::Op(e) => e.to_string(),
+            Self::Arithmetic(e) => e.to_string(),
         }
     }
 
@@ -247,7 +249,7 @@ impl std::error::Error for ErrorKind {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Wrapper(error) => Some(error),
-            Self::Op(error) => Some(error.as_ref()),
+            Self::Arithmetic(error) => Some(error),
             _ => None,
         }
     }

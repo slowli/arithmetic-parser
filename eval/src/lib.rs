@@ -110,11 +110,12 @@ pub use self::{
     compiler::CompilerExt,
     env::Environment,
     error::{Error, ErrorKind, EvalResult},
-    executable::{ExecutableModule, ExecutableModuleBuilder, ModuleImports},
+    executable::{ExecutableModule, ExecutableModuleBuilder, ModuleImports, WithArithmetic},
     module_id::{IndexedId, ModuleId, WildcardId},
     values::{
-        Arithmetic, CallContext, CheckedArithmetic, Function, InterpretedFn, ModularArithmetic,
-        NativeFn, SpannedValue, StdArithmetic, Value, ValueType, WrappingArithmetic,
+        Arithmetic, CallContext, CheckedArithmetic, DoubleWidth, Function, InterpretedFn,
+        ModularArithmetic, NativeFn, OpaqueRef, SpannedValue, StdArithmetic, Value, ValueType,
+        WrappingArithmetic,
     },
     variable_map::{Comparisons, Prelude, VariableMap},
 };
@@ -128,7 +129,12 @@ mod module_id;
 mod values;
 mod variable_map;
 
-/// FIXME
+/// Marker trait for possible literals.
+///
+/// This trait is somewhat of a crutch, necessary to ensure that [function wrappers] can accept
+/// number arguments and distinguish them from other types (booleans, vectors, tuples, etc.).
+///
+/// [function wrappers]: crate::fns::FnWrapper
 pub trait Number: Clone + 'static {}
 
 impl Number for i8 {}

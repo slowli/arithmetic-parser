@@ -177,10 +177,10 @@ impl<'a, T> ExecutableModule<'a, T> {
         &self.imports
     }
 
-    /// FIXME
-    pub fn with_arithmetic<'s, A>(&'s self, arithmetic: &'s A) -> WithArithmetic<&'s Self, &'s A>
+    /// Combines this module with the specified `arithmetic`.
+    pub fn with_arithmetic<'s, A>(&'s self, arithmetic: &'s A) -> WithArithmetic<'s, Self, A>
     where
-        A: Arithmetic<T> + ?Sized,
+        A: Arithmetic<T>,
     {
         WithArithmetic {
             module: self,
@@ -240,21 +240,33 @@ where
     }
 }
 
-/// FIXME
-#[derive(Debug, Clone, Copy)]
-pub struct WithArithmetic<M, A> {
-    module: M,
-    arithmetic: A,
+/// Container for an [`ExecutableModule`] together with [`Arithmetic`].
+#[derive(Debug)]
+pub struct WithArithmetic<'r, M, A: ?Sized> {
+    module: &'r M,
+    arithmetic: &'r A,
 }
 
-impl<'a, A, T> WithArithmetic<&ExecutableModule<'a, T>, &A>
+impl<M, A: ?Sized> Clone for WithArithmetic<'_, M, A> {
+    fn clone(&self) -> Self {
+        Self {
+            module: self.module,
+            arithmetic: self.arithmetic,
+        }
+    }
+}
+
+impl<M, A: ?Sized> Copy for WithArithmetic<'_, M, A> {}
+
+impl<'a, A, T> WithArithmetic<'_, ExecutableModule<'a, T>, A>
 where
     T: Clone + fmt::Debug,
-    A: Arithmetic<T>, // FIXME: why doesn't `?Sized` work here?
+    A: Arithmetic<T>,
 {
-    /// Runs the module with the current values of imports. This is a read-only operation;
-    /// neither the imports, nor other module state are modified by it.
-    pub fn run(&self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
+    /// Runs the module with the provided [`Arithmetic`] and the current values of imports.
+    ///
+    /// See [`ExecutableModule::run()`] for more details.
+    pub fn run(self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
         let mut registers = self.module.imports.inner.clone();
         self.module
             .run_with_registers(&mut registers, self.arithmetic)
@@ -263,12 +275,9 @@ where
     /// Runs the module with the specified [`Environment`]. The environment may contain some of
     /// module imports; they will be used to override imports defined in the module.
     ///
-    /// On execution, the environment is modified to reflect assignments in the topmost scope
-    /// of the module. The modification takes place regardless of whether or not the execution
-    /// succeeds. That is, if an error occurs, all preceding assignments in the topmost scope
-    /// still take place. See [the relevant example](#behavior-on-errors).
+    /// See [`ExecutableModule::run_in_env()`] for more details.
     pub fn run_in_env(
-        &self,
+        self,
         env: &mut Environment<'a, T>,
     ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
         let mut registers = self.module.imports.inner.clone();

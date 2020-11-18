@@ -1,9 +1,8 @@
-#![allow(missing_docs)]
+//! `Arithmetic` trait and its implementations.
 
-use anyhow::anyhow;
 use num_traits::{
     checked_pow, CheckedAdd, CheckedDiv, CheckedMul, CheckedNeg, CheckedSub, NumOps, One, Pow,
-    Signed, WrappingAdd, WrappingMul, WrappingNeg, WrappingSub, Zero,
+    Signed, Unsigned, WrappingAdd, WrappingMul, WrappingNeg, WrappingSub, Zero,
 };
 
 use core::{
@@ -11,15 +10,57 @@ use core::{
     fmt, mem, ops,
 };
 
+/// Encapsulates arithmetic operations on a certain number type.
+///
+/// Unlike operations on built-in integer types, arithmetic operations may be fallible.
+/// Additionally, the arithmetic can have a state. This is used, for example, in
+/// [`ModularArithmetic`], which stores the modulus in the state.
 pub trait Arithmetic<T> {
-    fn add(&self, x: T, y: T) -> anyhow::Result<T>;
-    fn sub(&self, x: T, y: T) -> anyhow::Result<T>;
-    fn mul(&self, x: T, y: T) -> anyhow::Result<T>;
-    fn div(&self, x: T, y: T) -> anyhow::Result<T>;
-    fn pow(&self, x: T, y: T) -> anyhow::Result<T>;
+    /// Adds two numbers.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation is unsuccessful (e.g., on integer overflow).
+    fn add(&self, x: T, y: T) -> Result<T, ArithmeticError>;
 
-    fn neg(&self, x: T) -> anyhow::Result<T>;
+    /// Subtracts two numbers.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation is unsuccessful (e.g., on integer underflow).
+    fn sub(&self, x: T, y: T) -> Result<T, ArithmeticError>;
 
+    /// Multiplies two numbers.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation is unsuccessful (e.g., on integer overflow).
+    fn mul(&self, x: T, y: T) -> Result<T, ArithmeticError>;
+
+    /// Divides two numbers.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation is unsuccessful (e.g., if `y` is zero or does
+    /// not have a multiplicative inverse in the case of modular arithmetic).
+    fn div(&self, x: T, y: T) -> Result<T, ArithmeticError>;
+
+    /// Raises `x` to the power of `y`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation is unsuccessful (e.g., on integer overflow).
+    fn pow(&self, x: T, y: T) -> Result<T, ArithmeticError>;
+
+    /// Negates a number.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation is unsuccessful (e.g., on integer overflow).
+    fn neg(&self, x: T) -> Result<T, ArithmeticError>;
+
+    /// Checks if two numbers are equal. Note that equality can be a non-trivial operation;
+    /// e.g., different numbers may be equal as per modular arithmetic.
     fn eq(&self, x: &T, y: &T) -> bool;
 }
 
@@ -29,6 +70,12 @@ impl<T> fmt::Debug for dyn Arithmetic<T> + '_ {
     }
 }
 
+/// Arithmetic on a number type that implements all necessary operations natively.
+///
+/// As an example, this type implements [`Arithmetic`] for `f32`, `f64`, and the floating-point
+/// complex numbers from the [`num-complex`] crate.
+///
+/// [`num-complex`]: https://crates.io/crates/num-complex/
 #[derive(Debug, Clone, Copy, Default)]
 pub struct StdArithmetic;
 
@@ -37,32 +84,32 @@ where
     T: Copy + NumOps + PartialEq + ops::Neg<Output = T> + Pow<T, Output = T>,
 {
     #[inline]
-    fn add(&self, x: T, y: T) -> anyhow::Result<T> {
+    fn add(&self, x: T, y: T) -> Result<T, ArithmeticError> {
         Ok(x + y)
     }
 
     #[inline]
-    fn sub(&self, x: T, y: T) -> anyhow::Result<T> {
+    fn sub(&self, x: T, y: T) -> Result<T, ArithmeticError> {
         Ok(x - y)
     }
 
     #[inline]
-    fn mul(&self, x: T, y: T) -> anyhow::Result<T> {
+    fn mul(&self, x: T, y: T) -> Result<T, ArithmeticError> {
         Ok(x * y)
     }
 
     #[inline]
-    fn div(&self, x: T, y: T) -> anyhow::Result<T> {
+    fn div(&self, x: T, y: T) -> Result<T, ArithmeticError> {
         Ok(x / y)
     }
 
     #[inline]
-    fn pow(&self, x: T, y: T) -> anyhow::Result<T> {
+    fn pow(&self, x: T, y: T) -> Result<T, ArithmeticError> {
         Ok(x.pow(y))
     }
 
     #[inline]
-    fn neg(&self, x: T) -> anyhow::Result<T> {
+    fn neg(&self, x: T) -> Result<T, ArithmeticError> {
         Ok(-x)
     }
 
@@ -81,6 +128,7 @@ static_assertions::assert_impl_all!(
     Arithmetic<num_complex::Complex64>
 );
 
+/// Arithmetic errors raised by [`Arithmetic`] operations on numbers.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum ArithmeticError {
@@ -88,9 +136,10 @@ pub enum ArithmeticError {
     IntegerOverflow,
     /// Division by zero.
     DivisionByZero,
-    /// Exponent cannot be converted to `usize`, for example because it is too large or negative.
+    /// Exponent of [`Arithmetic::pow()`] cannot be converted to `usize`, for example because
+    /// it is too large or negative.
     InvalidExponent,
-    /// Integer has no multiplicative inverse.
+    /// Integer used as a denominator in [`Arithmetic::div()`] has no multiplicative inverse.
     NoInverse,
 }
 
@@ -108,6 +157,11 @@ impl fmt::Display for ArithmeticError {
 #[cfg(feature = "std")]
 impl std::error::Error for ArithmeticError {}
 
+/// Arithmetic on an integer type (e.g., `i32`) that checks overflow and other failure
+/// conditions for all operations.
+///
+/// As an example, this type implements [`Arithmetic`] for all built-in integer types
+/// with a definite size (`u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64`, `i64`, `u128`, `i128`).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CheckedArithmetic;
 
@@ -125,39 +179,39 @@ where
     usize: TryFrom<T>,
 {
     #[inline]
-    fn add(&self, x: T, y: T) -> anyhow::Result<T> {
+    fn add(&self, x: T, y: T) -> Result<T, ArithmeticError> {
         x.checked_add(&y)
-            .ok_or_else(|| anyhow!(ArithmeticError::IntegerOverflow))
+            .ok_or_else(|| ArithmeticError::IntegerOverflow)
     }
 
     #[inline]
-    fn sub(&self, x: T, y: T) -> anyhow::Result<T> {
+    fn sub(&self, x: T, y: T) -> Result<T, ArithmeticError> {
         x.checked_sub(&y)
-            .ok_or_else(|| anyhow!(ArithmeticError::IntegerOverflow))
+            .ok_or_else(|| ArithmeticError::IntegerOverflow)
     }
 
     #[inline]
-    fn mul(&self, x: T, y: T) -> anyhow::Result<T> {
+    fn mul(&self, x: T, y: T) -> Result<T, ArithmeticError> {
         x.checked_mul(&y)
-            .ok_or_else(|| anyhow!(ArithmeticError::IntegerOverflow))
+            .ok_or_else(|| ArithmeticError::IntegerOverflow)
     }
 
     #[inline]
-    fn div(&self, x: T, y: T) -> anyhow::Result<T> {
+    fn div(&self, x: T, y: T) -> Result<T, ArithmeticError> {
         x.checked_div(&y)
-            .ok_or_else(|| anyhow!(ArithmeticError::DivisionByZero))
+            .ok_or_else(|| ArithmeticError::DivisionByZero)
     }
 
     #[inline]
-    fn pow(&self, x: T, y: T) -> anyhow::Result<T> {
-        let exp = usize::try_from(y).map_err(|_| anyhow!(ArithmeticError::InvalidExponent))?;
-        checked_pow(x, exp).ok_or_else(|| anyhow!(ArithmeticError::IntegerOverflow))
+    fn pow(&self, x: T, y: T) -> Result<T, ArithmeticError> {
+        let exp = usize::try_from(y).map_err(|_| ArithmeticError::InvalidExponent)?;
+        checked_pow(x, exp).ok_or_else(|| ArithmeticError::IntegerOverflow)
     }
 
     #[inline]
-    fn neg(&self, x: T) -> anyhow::Result<T> {
+    fn neg(&self, x: T) -> Result<T, ArithmeticError> {
         x.checked_neg()
-            .ok_or_else(|| anyhow!(ArithmeticError::IntegerOverflow))
+            .ok_or_else(|| ArithmeticError::IntegerOverflow)
     }
 
     #[inline]
@@ -180,6 +234,10 @@ static_assertions::assert_impl_all!(
     Arithmetic<i128>
 );
 
+/// Arithmetic on an integer type (e.g., `i32`), in which all operations have wrapping semantics.
+///
+/// As an example, this type implements [`Arithmetic`] for all built-in integer types
+/// with a definite size (`u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64`, `i64`, `u128`, `i128`).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct WrappingArithmetic;
 
@@ -197,24 +255,24 @@ where
     usize: TryFrom<T>,
 {
     #[inline]
-    fn add(&self, x: T, y: T) -> anyhow::Result<T> {
+    fn add(&self, x: T, y: T) -> Result<T, ArithmeticError> {
         Ok(x.wrapping_add(&y))
     }
 
     #[inline]
-    fn sub(&self, x: T, y: T) -> anyhow::Result<T> {
+    fn sub(&self, x: T, y: T) -> Result<T, ArithmeticError> {
         Ok(x.wrapping_sub(&y))
     }
 
     #[inline]
-    fn mul(&self, x: T, y: T) -> anyhow::Result<T> {
+    fn mul(&self, x: T, y: T) -> Result<T, ArithmeticError> {
         Ok(x.wrapping_mul(&y))
     }
 
     #[inline]
-    fn div(&self, x: T, y: T) -> anyhow::Result<T> {
+    fn div(&self, x: T, y: T) -> Result<T, ArithmeticError> {
         if y.is_zero() {
-            Err(anyhow!(ArithmeticError::DivisionByZero))
+            Err(ArithmeticError::DivisionByZero)
         } else if y.wrapping_neg().is_one() {
             // Division by -1 is the only case when an overflow may occur. We just replace it
             // with `wrapping_neg`.
@@ -225,13 +283,13 @@ where
     }
 
     #[inline]
-    fn pow(&self, x: T, y: T) -> anyhow::Result<T> {
-        let exp = usize::try_from(y).map_err(|_| anyhow!(ArithmeticError::InvalidExponent))?;
+    fn pow(&self, x: T, y: T) -> Result<T, ArithmeticError> {
+        let exp = usize::try_from(y).map_err(|_| ArithmeticError::InvalidExponent)?;
         Ok(wrapping_exp(x, exp))
     }
 
     #[inline]
-    fn neg(&self, x: T) -> anyhow::Result<T> {
+    fn neg(&self, x: T) -> Result<T, ArithmeticError> {
         Ok(x.wrapping_neg())
     }
 
@@ -281,8 +339,13 @@ static_assertions::assert_impl_all!(
     Arithmetic<i128>
 );
 
-pub trait DoubleWidth: Sized {
-    type Wide: Copy + From<Self> + TryInto<Self> + NumOps;
+/// Encapsulates extension of an unsigned integer type into signed and unsigned double-width types.
+/// This allows performing certain operations (e.g., multiplication) without a possibility of
+/// integer overflow.
+pub trait DoubleWidth: Sized + Unsigned {
+    /// Unsigned double-width extension type.
+    type Wide: Copy + From<Self> + TryInto<Self> + NumOps + Unsigned;
+    /// Signed double-width extension type.
     type SignedWide: Copy + From<Self> + TryInto<Self> + NumOps + Zero + One + Signed + PartialOrd;
 }
 
@@ -306,6 +369,11 @@ impl DoubleWidth for u64 {
     type SignedWide = i128;
 }
 
+/// Modular arithmetic on integers.
+///
+/// As an example, `ModularArithmetic<T>` implements `Arithmetic<T>` if `T` is one of unsigned
+/// built-in integer types (`u8`, `u16`, `u32`, `u64`; `u128` **is excluded** because it cannot be
+/// extended to double width).
 #[derive(Debug, Clone, Copy)]
 pub struct ModularArithmetic<T> {
     modulus: T,
@@ -315,6 +383,11 @@ impl<T> ModularArithmetic<T>
 where
     T: Copy + PartialEq + NumOps + Zero + One + DoubleWidth,
 {
+    /// Creates a new arithmetic with the specified `modulus`.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if modulus is 0 or 1.
     pub fn new(modulus: T) -> Self {
         assert!(!modulus.is_zero(), "Modulus cannot be 0");
         assert!(!modulus.is_one(), "Modulus cannot be 1");
@@ -327,6 +400,8 @@ where
         wide.try_into().ok().unwrap() // `unwrap` is safe by construction
     }
 
+    /// Computes the multiplicative inverse of `value` using the extended Euclid algorithm.
+    /// Care is taken to not overflow anywhere.
     fn invert(self, value: T) -> Option<T> {
         let value = value % self.modulus; // Reduce value since this influences speed.
         let mut t = <T::SignedWide>::zero();
@@ -389,42 +464,40 @@ where
     usize: TryFrom<T>,
 {
     #[inline]
-    fn add(&self, x: T, y: T) -> anyhow::Result<T> {
+    fn add(&self, x: T, y: T) -> Result<T, ArithmeticError> {
         let wide = (<T::Wide>::from(x) + <T::Wide>::from(y)) % <T::Wide>::from(self.modulus);
         Ok(wide.try_into().ok().unwrap()) // `unwrap` is safe by construction
     }
 
     #[inline]
-    fn sub(&self, x: T, y: T) -> anyhow::Result<T> {
+    fn sub(&self, x: T, y: T) -> Result<T, ArithmeticError> {
         let y = y % self.modulus; // Prevent possible overflow in the following subtraction
         self.add(x, self.modulus - y)
     }
 
     #[inline]
-    fn mul(&self, x: T, y: T) -> anyhow::Result<T> {
+    fn mul(&self, x: T, y: T) -> Result<T, ArithmeticError> {
         Ok(self.mul_inner(x, y))
     }
 
     #[inline]
-    fn div(&self, x: T, y: T) -> anyhow::Result<T> {
+    fn div(&self, x: T, y: T) -> Result<T, ArithmeticError> {
         if y.is_zero() {
-            Err(anyhow!(ArithmeticError::DivisionByZero))
+            Err(ArithmeticError::DivisionByZero)
         } else {
-            let y_inv = self
-                .invert(y)
-                .ok_or_else(|| anyhow!(ArithmeticError::NoInverse))?;
+            let y_inv = self.invert(y).ok_or_else(|| ArithmeticError::NoInverse)?;
             self.mul(x, y_inv)
         }
     }
 
     #[inline]
-    fn pow(&self, x: T, y: T) -> anyhow::Result<T> {
-        let exp = usize::try_from(y).map_err(|_| anyhow!(ArithmeticError::InvalidExponent))?;
+    fn pow(&self, x: T, y: T) -> Result<T, ArithmeticError> {
+        let exp = usize::try_from(y).map_err(|_| ArithmeticError::InvalidExponent)?;
         Ok(self.modular_exp(x, exp))
     }
 
     #[inline]
-    fn neg(&self, x: T) -> anyhow::Result<T> {
+    fn neg(&self, x: T) -> Result<T, ArithmeticError> {
         Ok(self.modulus - x)
     }
 

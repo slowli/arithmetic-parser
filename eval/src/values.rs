@@ -14,7 +14,8 @@ use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, Op, StripCode, UnaryO
 
 mod arithmetic;
 pub use self::arithmetic::{
-    Arithmetic, CheckedArithmetic, ModularArithmetic, StdArithmetic, WrappingArithmetic,
+    Arithmetic, ArithmeticError, CheckedArithmetic, DoubleWidth, ModularArithmetic, StdArithmetic,
+    WrappingArithmetic,
 };
 
 /// Opaque context for native calls.
@@ -22,7 +23,6 @@ pub use self::arithmetic::{
 pub struct CallContext<'r, 'a, T> {
     call_span: CodeInModule<'a>,
     backtrace: Option<&'r mut Backtrace<'a>>,
-    // TODO: investigate impact on performance; may go with special case for `StdArithmetic`.
     arithmetic: &'r dyn Arithmetic<T>,
 }
 
@@ -330,7 +330,16 @@ impl fmt::Display for ValueType {
     }
 }
 
-/// FIXME
+/// Opaque reference to a native value.
+///
+/// The references cannot be created by interpreted code, but can be used as function args
+/// or return values of native functions. References are [`Rc`]'d, thus can easily be cloned.
+///
+/// References are comparable among each other:
+///
+/// - If the wrapped value implements [`PartialEq`], this implementation will be used
+///   for comparison.
+/// - If `PartialEq` is not implemented, the comparison is by the `Rc` pointer.
 pub struct OpaqueRef {
     value: Rc<dyn Any>,
     // FIXME: do we need a `Debug` impl in the "vtable" as well?
@@ -338,7 +347,10 @@ pub struct OpaqueRef {
 }
 
 impl OpaqueRef {
-    /// FIXME
+    /// Creates a reference to `value` that implements equality comparison.
+    ///
+    /// Prefer using this method to [`Self::with_identity_eq()`] if the wrapped type implements
+    /// [`PartialEq`].
     pub fn new<T: Any + PartialEq>(value: T) -> Self {
         Self {
             value: Rc::new(value),
@@ -351,8 +363,23 @@ impl OpaqueRef {
         }
     }
 
-    /// FIXME
-    pub fn downcast_ref<T: Any + PartialEq>(&self) -> Option<&T> {
+    /// Creates a reference to `value` with the identity comparison: values are considered
+    /// equal iff they point to the same data.
+    ///
+    /// Prefer [`Self::new()`] when possible.
+    pub fn with_identity_eq<T: Any>(value: T) -> Self {
+        Self {
+            value: Rc::new(value),
+            dyn_eq: |this, other| {
+                let this_data = this as *const dyn Any as *const ();
+                let other_data = other as *const dyn Any as *const ();
+                this_data == other_data
+            },
+        }
+    }
+
+    /// Tries to downcast this reference to a specific type.
+    pub fn downcast_ref<T: Any>(&self) -> Option<&T> {
         self.value.downcast_ref()
     }
 }
@@ -592,7 +619,7 @@ impl<'a, T: Clone> Value<'a, T> {
                 };
                 op_result
                     .map(Self::Number)
-                    .map_err(|e| BinaryOpError::new(op).with_error_kind(ErrorKind::Op(e)))
+                    .map_err(|e| BinaryOpError::new(op).with_error_kind(ErrorKind::Arithmetic(e)))
             }
 
             (this @ Self::Number(_), Self::Tuple(other)) => {
@@ -649,7 +676,10 @@ impl<'a, T: Clone> Value<'a, T> {
 
     pub(crate) fn try_neg(self, arithmetic: &dyn Arithmetic<T>) -> Result<Self, ErrorKind> {
         match self {
-            Self::Number(val) => arithmetic.neg(val).map(Self::Number).map_err(ErrorKind::Op),
+            Self::Number(val) => arithmetic
+                .neg(val)
+                .map(Self::Number)
+                .map_err(ErrorKind::Arithmetic),
 
             Self::Tuple(tuple) => {
                 let res: Result<Vec<_>, _> = tuple

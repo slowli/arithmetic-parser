@@ -22,6 +22,7 @@
 //! (this requires [generic associated types][GAT]). As such, the (implicit) `'static` requirement
 //! is a temporary measure, and macros fill the gaps in their usual clunky manner.
 //!
+//! [`Number`]: crate::Number
 //! [GAT]: https://github.com/rust-lang/rust/issues/44265
 
 use core::cmp::Ordering;

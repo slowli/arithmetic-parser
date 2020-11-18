@@ -110,7 +110,7 @@ impl Comparisons {
 
 impl<'a, T> VariableMap<'a, T> for Comparisons
 where
-    T: Number + PartialOrd,
+    T: Number + PartialOrd, // FIXME: get rid of `Number` bound
 {
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
         Some(match name {

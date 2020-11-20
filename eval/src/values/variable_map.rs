@@ -90,37 +90,15 @@ impl<'a, T: Clone> VariableMap<'a, T> for Prelude {
 #[derive(Debug, Clone, Copy)]
 pub struct Comparisons;
 
-impl Comparisons {
-    // FIXME: this is incorrect!
-    fn min<T: PartialOrd>(x: T, y: T) -> T {
-        if x < y {
-            x
-        } else {
-            y
-        }
-    }
-
-    fn max<T: PartialOrd>(x: T, y: T) -> T {
-        if x > y {
-            x
-        } else {
-            y
-        }
-    }
-}
-
-impl<'a, T> VariableMap<'a, T> for Comparisons
-where
-    T: Number + PartialOrd, // FIXME: get rid of `Number` bound
-{
+impl<'a, T> VariableMap<'a, T> for Comparisons {
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
         Some(match name {
             "LESS" => Value::any(Ordering::Less),
             "EQUAL" => Value::any(Ordering::Equal),
             "GREATER" => Value::any(Ordering::Greater),
-            "cmp" => Value::native_fn(fns::Compare), // FIXME: incorrect!
-            "min" => Value::native_fn(fns::Binary::new(Self::min::<T>)),
-            "max" => Value::native_fn(fns::Binary::new(Self::max::<T>)),
+            "cmp" => Value::native_fn(fns::Compare::Raw),
+            "min" => Value::native_fn(fns::Compare::Min),
+            "max" => Value::native_fn(fns::Compare::Max),
             _ => return None,
         })
     }

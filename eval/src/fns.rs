@@ -233,7 +233,6 @@ impl<T> NativeFn<T> for If {
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
-///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("if", fns::If)
 ///     .insert_native_fn("loop", fns::Loop)
 ///     .compile_module("test_loop", &program)?;
@@ -322,7 +321,6 @@ impl<T: Clone> NativeFn<T> for Loop {
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
-///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("while", fns::While)
 ///     .compile_module("test_while", &program)?;
 /// assert_eq!(module.run()?, Value::Bool(true));
@@ -392,7 +390,6 @@ impl<T: Clone> NativeFn<T> for While {
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
-///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("if", fns::If)
 ///     .insert_native_fn("map", fns::Map)
 ///     .compile_module("test_map", &program)?;
@@ -454,7 +451,6 @@ impl<T: Clone> NativeFn<T> for Map {
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
-///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("filter", fns::Filter)
 ///     .compile_module("test_filter", &program)?;
 /// assert_eq!(module.run()?, Value::Bool(true));
@@ -584,7 +580,6 @@ impl<T: Clone> NativeFn<T> for Fold {
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
-///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("while", fns::While)
 ///     .insert_native_fn("push", fns::Push)
 ///     .compile_module("test_push", &program)?;
@@ -669,33 +664,110 @@ impl<T: Clone> NativeFn<T> for Merge {
     }
 }
 
-/// Comparator function on two arguments. Returns `-1` if the first argument is lesser than
-/// the second, `1` if the first argument is greater, and `0` in other cases.
+/// Comparator functions on two number arguments. All functions use [`Arithmetic`] to determine
+/// ordering between the args.
 ///
 /// # Type
 ///
 /// ```text
-/// fn(Num, Num) -> Num
+/// fn(Num, Num) -> Ordering // for `Compare::Raw`
+/// fn(Num, Num) -> Num // for `Compare::Min` and `Compare::Max`
+/// ```
+///
+/// # Examples
+///
+/// Using `min` function:
+///
+/// ```
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # fn main() -> anyhow::Result<()> {
+/// let program = r#"
+///     // Finds a minimum number in an array.
+///     extended_min = |...xs| xs.fold(INFINITY, min);
+///     extended_min(2, -3, 7, 1, 3) == -3
+/// "#;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+///
+/// let module = Environment::new()
+///     .insert("INFINITY", Value::Number(f32::INFINITY))
+///     .insert_native_fn("fold", fns::Fold)
+///     .insert_native_fn("min", fns::Compare::Min)
+///     .compile_module("test_min", &program)?;
+/// assert_eq!(module.run()?, Value::Bool(true));
+/// # Ok(())
+/// # }
+/// ```
+///
+/// Using `cmp` function with [`Comparisons`].
+///
+/// ```
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # use arithmetic_eval::{fns, Comparisons, Environment, Value, VariableMap};
+/// # use core::iter::FromIterator;
+/// # fn main() -> anyhow::Result<()> {
+/// let program = r#"
+///     (1, -7, 0, 2).map(|x| cmp(x, 0)) == (GREATER, LESS, EQUAL, GREATER)
+/// "#;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+///
+/// let module = Environment::from_iter(Comparisons.iter())
+///     .insert_native_fn("map", fns::Map)
+///     .compile_module("test_cmp", &program)?;
+/// assert_eq!(module.run()?, Value::Bool(true));
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone, Copy)]
-pub struct Compare;
+#[non_exhaustive]
+pub enum Compare {
+    /// Returns an [`Ordering`] wrapped into an [`OpaqueRef`], or [`Value::void()`]
+    /// if the provided values are not comparable.
+    Raw,
+    /// Returns the minimum of the two numbers. If the numbers are equal, returns the first one.
+    Min,
+    /// Returns the maximum of the two numbers. If the numbers are equal, returns the first one.
+    Max,
+}
 
-const COMPARE_ERROR_MSG: &str = "Compare requires 2 number arguments";
-
-impl<T: PartialOrd> NativeFn<T> for Compare {
-    fn evaluate<'a>(
-        &self,
+impl Compare {
+    fn extract_numbers<'a, T>(
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+    ) -> Result<(T, T), Error<'a>> {
         ctx.check_args_count(&args, 2)?;
         let y = args.pop().unwrap();
         let x = args.pop().unwrap();
-
         let x = extract_number(ctx, x, COMPARE_ERROR_MSG)?;
         let y = extract_number(ctx, y, COMPARE_ERROR_MSG)?;
-        let ordering = x.partial_cmp(&y).unwrap_or(Ordering::Equal);
-        Ok(Value::any(ordering))
+        Ok((x, y))
+    }
+}
+
+const COMPARE_ERROR_MSG: &str = "Compare requires 2 number arguments";
+
+impl<T> NativeFn<T> for Compare {
+    fn evaluate<'a>(
+        &self,
+        args: Vec<SpannedValue<'a, T>>,
+        ctx: &mut CallContext<'_, 'a, T>,
+    ) -> EvalResult<'a, T> {
+        let (x, y) = Self::extract_numbers(args, ctx)?;
+        let maybe_ordering = ctx.arithmetic().partial_cmp(&x, &y);
+
+        if let Self::Raw = self {
+            Ok(maybe_ordering.map_or_else(Value::void, Value::any))
+        } else {
+            let ordering =
+                maybe_ordering.ok_or_else(|| ctx.call_site_error(ErrorKind::CannotCompare))?;
+            let value = match (ordering, self) {
+                (Ordering::Equal, _)
+                | (Ordering::Less, Self::Min)
+                | (Ordering::Greater, Self::Max) => x,
+                _ => y,
+            };
+            Ok(Value::Number(value))
+        }
     }
 }
 
@@ -719,7 +791,6 @@ mod tests {
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
             .with_import("if", Value::native_fn(If))
-            .with_import("cmp", Value::native_fn(Compare))
             .build();
         assert_eq!(module.run().unwrap(), Value::Number(6.0));
     }
@@ -734,20 +805,16 @@ mod tests {
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
             .with_import("if", Value::native_fn(If))
-            .with_import("cmp", Value::native_fn(Compare))
             .build();
         assert_eq!(module.run().unwrap(), Value::Number(-1.5));
     }
 
     #[test]
     fn cmp_sugar() {
-        let compare_fn = Value::native_fn(Compare);
-
         let program = "x = 1.0; x > 0 && x <= 3";
         let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
-            .with_import("cmp", compare_fn.clone())
             .build();
         assert_eq!(module.run().unwrap(), Value::Bool(true));
 
@@ -755,7 +822,6 @@ mod tests {
         let bogus_block = Untyped::<F32Grammar>::parse_statements(bogus_program).unwrap();
         let bogus_module = ExecutableModule::builder(WildcardId, &bogus_block)
             .unwrap()
-            .with_import("cmp", compare_fn)
             .build();
 
         let err = bogus_module.run().unwrap_err();
@@ -784,7 +850,6 @@ mod tests {
             .unwrap()
             .with_import("loop", Value::native_fn(Loop))
             .with_import("if", Value::native_fn(If))
-            .with_import("cmp", Value::native_fn(Compare))
             .build();
 
         assert_eq!(
@@ -814,7 +879,6 @@ mod tests {
             .with_import("Inf", Value::Number(f32::INFINITY))
             .with_import("fold", Value::native_fn(Fold))
             .with_import("if", Value::native_fn(If))
-            .with_import("cmp", Value::native_fn(Compare))
             .build();
 
         assert_eq!(module.run().unwrap(), Value::Bool(true));

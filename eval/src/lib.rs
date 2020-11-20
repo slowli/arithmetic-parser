@@ -108,26 +108,23 @@ mod alloc {
 
 pub use self::{
     compiler::CompilerExt,
-    env::Environment,
     error::{Error, ErrorKind, EvalResult},
-    executable::{ExecutableModule, ExecutableModuleBuilder, ModuleImports, WithArithmetic},
-    module_id::{IndexedId, ModuleId, WildcardId},
-    values::{
-        Arithmetic, CallContext, CheckedArithmetic, DoubleWidth, Function, InterpretedFn,
-        ModularArithmetic, NativeFn, OpaqueRef, SpannedValue, StdArithmetic, Value, ValueType,
-        WrappingArithmetic,
+    executable::{
+        ExecutableModule, ExecutableModuleBuilder, IndexedId, ModuleId, ModuleImports, WildcardId,
+        WithArithmetic,
     },
-    variable_map::{Comparisons, Prelude, VariableMap},
+    values::{
+        CallContext, Comparisons, Environment, Function, InterpretedFn, NativeFn, OpaqueRef,
+        Prelude, SpannedValue, Value, ValueType, VariableMap,
+    },
 };
 
+pub mod arith;
 mod compiler;
-mod env;
 pub mod error;
 mod executable;
 pub mod fns;
-mod module_id;
 mod values;
-mod variable_map;
 
 /// Marker trait for possible literals.
 ///

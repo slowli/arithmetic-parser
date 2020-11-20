@@ -6,16 +6,19 @@ use core::{any::Any, fmt};
 
 use crate::{
     alloc::{vec, Rc, String, ToOwned, Vec},
+    arith::Arithmetic,
     error::{AuxErrorInfo, Backtrace, CodeInModule, TupleLenMismatchContext},
     executable::ExecutableFn,
     fns, Error, ErrorKind, EvalResult, ModuleId,
 };
 use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, Op, StripCode, UnaryOp};
 
-mod arithmetic;
-pub use self::arithmetic::{
-    Arithmetic, ArithmeticError, CheckedArithmetic, DoubleWidth, ModularArithmetic, StdArithmetic,
-    WrappingArithmetic,
+mod env;
+mod variable_map;
+
+pub use self::{
+    env::Environment,
+    variable_map::{Comparisons, Prelude, VariableMap},
 };
 
 /// Opaque context for native calls.

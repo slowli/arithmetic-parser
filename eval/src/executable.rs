@@ -4,15 +4,18 @@ use core::{fmt, ops};
 
 use crate::{
     alloc::{Box, String, ToOwned},
+    arith::{Arithmetic, StdArithmetic},
     compiler::{Compiler, ImportSpans, CMP_FUNCTION_NAME},
     error::{Backtrace, ErrorWithBacktrace},
-    Arithmetic, Environment, Error, ErrorKind, ModuleId, StdArithmetic, Value, VariableMap,
+    Environment, Error, ErrorKind, Value, VariableMap,
 };
 use arithmetic_parser::{grammars::Grammar, Block, StripCode};
 
 mod command;
+mod module_id;
 mod registers;
 
+pub use self::module_id::{IndexedId, ModuleId, WildcardId};
 pub(crate) use self::{
     command::{Atom, Command, ComparisonOp, CompiledExpr, SpannedAtom},
     registers::{Executable, ExecutableFn, Registers},

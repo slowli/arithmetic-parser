@@ -1,6 +1,7 @@
 use arithmetic_eval::{
-    error::ErrorWithBacktrace, Arithmetic, CheckedArithmetic, Comparisons, Environment, ErrorKind,
-    ModularArithmetic, Number, Prelude, Value, VariableMap, WildcardId, WrappingArithmetic,
+    arith::{Arithmetic, CheckedArithmetic, ModularArithmetic, WrappingArithmetic},
+    error::ErrorWithBacktrace,
+    Comparisons, Environment, ErrorKind, Number, Prelude, Value, VariableMap, WildcardId,
 };
 use arithmetic_parser::grammars::{NumGrammar, NumLiteral, Parse, Untyped};
 use assert_matches::assert_matches;

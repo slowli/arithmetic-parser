@@ -13,7 +13,7 @@ use crate::{
     common::{Env, ParseAndEvalResult, ReplLiteral, ERROR_EXIT_CODE},
     repl::repl,
 };
-use arithmetic_eval::StdArithmetic;
+use arithmetic_eval::arith::{Arithmetic, StdArithmetic};
 use arithmetic_parser::grammars::{NumGrammar, Untyped};
 
 const ABOUT: &str = "CLI and REPL for parsing and evaluating arithmetic expressions.";
@@ -25,14 +25,14 @@ EXIT CODES:
     2    Parsing or evaluation error in non-interactive mode";
 
 #[derive(Debug, Clone, Copy)]
-enum Arithmetic {
+enum ArithmeticType {
     F32,
     F64,
     Complex32,
     Complex64,
 }
 
-impl FromStr for Arithmetic {
+impl FromStr for ArithmeticType {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -61,7 +61,7 @@ struct Args {
 
     /// Arithmetic system to use. Available values are `f32`, `f64`, `complex32`, `complex64`.
     #[structopt(name = "arithmetic", long, short = "a", default_value = "f32")]
-    arithmetic: Arithmetic,
+    arithmetic: ArithmeticType,
 
     /// Command to parse and interpret. The line will be ignored in the interactive mode.
     #[structopt(name = "command")]
@@ -72,24 +72,24 @@ impl Args {
     fn run(self) -> io::Result<()> {
         if self.interactive {
             match self.arithmetic {
-                Arithmetic::F32 => repl::<f32>(),
-                Arithmetic::F64 => repl::<f64>(),
-                Arithmetic::Complex32 => repl::<Complex32>(),
-                Arithmetic::Complex64 => repl::<Complex64>(),
+                ArithmeticType::F32 => repl::<f32>(),
+                ArithmeticType::F64 => repl::<f64>(),
+                ArithmeticType::Complex32 => repl::<Complex32>(),
+                ArithmeticType::Complex64 => repl::<Complex64>(),
             }
         } else {
             match self.arithmetic {
-                Arithmetic::F32 => self.run_command::<f32>(),
-                Arithmetic::F64 => self.run_command::<f64>(),
-                Arithmetic::Complex32 => self.run_command::<Complex32>(),
-                Arithmetic::Complex64 => self.run_command::<Complex64>(),
+                ArithmeticType::F32 => self.run_command::<f32>(),
+                ArithmeticType::F64 => self.run_command::<f64>(),
+                ArithmeticType::Complex32 => self.run_command::<Complex32>(),
+                ArithmeticType::Complex64 => self.run_command::<Complex64>(),
             }
         }
     }
 
     fn run_command<T: ReplLiteral>(self) -> io::Result<()>
     where
-        StdArithmetic: arithmetic_eval::Arithmetic<T>,
+        StdArithmetic: Arithmetic<T>,
     {
         let command = self.command.unwrap_or_default();
         let mut env = Env::new();

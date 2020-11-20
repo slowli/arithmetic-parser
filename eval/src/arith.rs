@@ -10,6 +10,8 @@ use core::{
     fmt, mem, ops,
 };
 
+use crate::error::ArithmeticError;
+
 /// Encapsulates arithmetic operations on a certain number type.
 ///
 /// Unlike operations on built-in integer types, arithmetic operations may be fallible.
@@ -127,35 +129,6 @@ static_assertions::assert_impl_all!(
     StdArithmetic: Arithmetic<num_complex::Complex32>,
     Arithmetic<num_complex::Complex64>
 );
-
-/// Arithmetic errors raised by [`Arithmetic`] operations on numbers.
-#[derive(Debug)]
-#[non_exhaustive]
-pub enum ArithmeticError {
-    /// Integer overflow or underflow.
-    IntegerOverflow,
-    /// Division by zero.
-    DivisionByZero,
-    /// Exponent of [`Arithmetic::pow()`] cannot be converted to `usize`, for example because
-    /// it is too large or negative.
-    InvalidExponent,
-    /// Integer used as a denominator in [`Arithmetic::div()`] has no multiplicative inverse.
-    NoInverse,
-}
-
-impl fmt::Display for ArithmeticError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::IntegerOverflow => "Integer overflow or underflow",
-            Self::DivisionByZero => "Integer division by zero",
-            Self::InvalidExponent => "Invalid exponent",
-            Self::NoInverse => "Integer has no multiplicative inverse",
-        })
-    }
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for ArithmeticError {}
 
 /// Arithmetic on an integer type (e.g., `i32`) that checks overflow and other failure
 /// conditions for all operations.

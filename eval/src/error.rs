@@ -14,7 +14,40 @@ use arithmetic_parser::{
     StatementType, StripCode, UnaryOp,
 };
 
-pub use crate::values::ArithmeticError;
+/// Arithmetic errors raised by [`Arithmetic`] operations on numbers.
+///
+/// [`Arithmetic`]: crate::arith::Arithmetic
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum ArithmeticError {
+    /// Integer overflow or underflow.
+    IntegerOverflow,
+    /// Division by zero.
+    DivisionByZero,
+    /// Exponent of [`Arithmetic::pow()`] cannot be converted to `usize`, for example because
+    /// it is too large or negative.
+    ///
+    /// [`Arithmetic::pow()`]: crate::arith::Arithmetic::pow()
+    InvalidExponent,
+    /// Integer used as a denominator in [`Arithmetic::div()`] has no multiplicative inverse.
+    ///
+    /// [`Arithmetic::div()`]: crate::arith::Arithmetic::div()
+    NoInverse,
+}
+
+impl fmt::Display for ArithmeticError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::IntegerOverflow => "Integer overflow or underflow",
+            Self::DivisionByZero => "Integer division by zero",
+            Self::InvalidExponent => "Invalid exponent",
+            Self::NoInverse => "Integer has no multiplicative inverse",
+        })
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for ArithmeticError {}
 
 /// Context for [`ErrorKind::TupleLenMismatch`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -142,7 +175,7 @@ pub enum ErrorKind {
     #[display(fmt = "Unsupported {}", _0)]
     Unsupported(UnsupportedType),
 
-    /// [`Arithmetic`](crate::Arithmetic) error, such as division by zero.
+    /// [`Arithmetic`](crate::arith::Arithmetic) error, such as division by zero.
     #[display(fmt = "Arithmetic error: {}", _0)]
     Arithmetic(ArithmeticError),
 }

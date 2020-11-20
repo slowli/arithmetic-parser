@@ -17,9 +17,10 @@ use std::{
 
 use arithmetic_eval::error::ErrorWithBacktrace;
 use arithmetic_eval::{
+    arith::{Arithmetic, StdArithmetic},
     error::{BacktraceElement, CodeInModule},
-    fns, Arithmetic, Comparisons, Environment, Error as EvalError, Function, IndexedId, ModuleId,
-    Number, Prelude, StdArithmetic, Value, VariableMap,
+    fns, Comparisons, Environment, Error as EvalError, Function, IndexedId, ModuleId, Number,
+    Prelude, Value, VariableMap,
 };
 use arithmetic_parser::{
     grammars::{Grammar, NumGrammar, NumLiteral, Parse, Untyped},

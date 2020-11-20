@@ -10,7 +10,7 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 use typed_arena::Arena;
 
 use arithmetic_eval::{
-    fns, CallContext, ExecutableModule, NativeFn, StdArithmetic, Value, WildcardId,
+    arith::StdArithmetic, fns, CallContext, ExecutableModule, NativeFn, Value, WildcardId,
 };
 use arithmetic_parser::{
     grammars::{F32Grammar, Parse, Untyped},

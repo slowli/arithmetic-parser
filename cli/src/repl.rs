@@ -5,7 +5,7 @@ use rustyline::{error::ReadlineError, Editor};
 use std::io;
 
 use crate::common::{Env, ParseAndEvalResult, ReplLiteral};
-use arithmetic_eval::{Arithmetic, StdArithmetic};
+use arithmetic_eval::arith::{Arithmetic, StdArithmetic};
 
 pub fn repl<T: ReplLiteral>() -> io::Result<()>
 where

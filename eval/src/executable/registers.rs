@@ -4,10 +4,11 @@ use hashbrown::HashMap;
 
 use crate::{
     alloc::{vec, Box, Rc, String, ToOwned, Vec},
+    arith::Arithmetic,
     error::{Backtrace, CodeInModule, EvalResult, TupleLenMismatchContext},
     executable::command::{Atom, Command, CompiledExpr, SpannedCommand},
-    Arithmetic, CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, ModuleId,
-    SpannedValue, Value,
+    CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, ModuleId, SpannedValue,
+    Value,
 };
 use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
 

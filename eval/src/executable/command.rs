@@ -1,11 +1,6 @@
 //! Executable `Command` and its building blocks.
 
-use core::cmp::Ordering;
-
-use crate::{
-    alloc::{String, Vec},
-    Value,
-};
+use crate::alloc::{String, Vec};
 use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
 
 /// Pointer to a register or constant.
@@ -42,10 +37,6 @@ pub(crate) enum CompiledExpr<'a, T> {
         lhs: SpannedAtom<'a, T>,
         rhs: SpannedAtom<'a, T>,
     },
-    Compare {
-        inner: SpannedAtom<'a, T>,
-        op: ComparisonOp,
-    },
     Function {
         name: SpannedAtom<'a, T>,
         // Original function name if it is a proper variable name.
@@ -75,11 +66,6 @@ impl<T: Clone> Clone for CompiledExpr<'_, T> {
                 op: *op,
                 lhs: lhs.clone(),
                 rhs: rhs.clone(),
-            },
-
-            Self::Compare { inner, op } => Self::Compare {
-                inner: inner.clone(),
-                op: *op,
             },
 
             Self::Function {
@@ -124,11 +110,6 @@ impl<T: 'static + Clone> StripCode for CompiledExpr<'_, T> {
                 rhs: rhs.strip_code(),
             },
 
-            Self::Compare { inner, op } => CompiledExpr::Compare {
-                inner: inner.strip_code(),
-                op,
-            },
-
             Self::Function {
                 name,
                 original_name,
@@ -149,39 +130,6 @@ impl<T: 'static + Clone> StripCode for CompiledExpr<'_, T> {
                 capture_names,
             },
         }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum ComparisonOp {
-    Gt,
-    Lt,
-    Ge,
-    Le,
-}
-
-impl ComparisonOp {
-    pub fn from(op: BinaryOp) -> Self {
-        match op {
-            BinaryOp::Gt => Self::Gt,
-            BinaryOp::Lt => Self::Lt,
-            BinaryOp::Ge => Self::Ge,
-            BinaryOp::Le => Self::Le,
-            _ => unreachable!("Never called with other variants"),
-        }
-    }
-
-    pub fn compare<T>(self, cmp_value: &Value<'_, T>) -> Option<bool> {
-        let maybe_ordering = match cmp_value {
-            Value::Ref(value) => value.downcast_ref::<Ordering>().copied(),
-            _ => None,
-        };
-        maybe_ordering.map(|ordering| match self {
-            Self::Gt => ordering == Ordering::Greater,
-            Self::Lt => ordering == Ordering::Less,
-            Self::Ge => ordering != Ordering::Less,
-            Self::Le => ordering != Ordering::Greater,
-        })
     }
 }
 

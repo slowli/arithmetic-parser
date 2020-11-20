@@ -670,22 +670,14 @@ fn native_fn_error() {
 }
 
 #[test]
-fn comparison_desugaring_with_no_cmp() {
-    let err = expect_compilation_error(&mut Environment::new(), "2 > 5");
-    assert_matches!(
-        err.kind(),
-        ErrorKind::MissingCmpFunction { ref name } if name == "cmp"
-    );
-    assert_eq!(*err.main_span().code().fragment(), ">");
-}
+fn comparison_of_invalid_values() {
+    let err = try_evaluate(&mut Environment::new(), "(2,) > 5").unwrap_err();
+    assert_matches!(err.source().kind(), ErrorKind::CannotCompare);
+    assert_eq!(*err.source().main_span().code().fragment(), "(2,)");
 
-#[test]
-fn comparison_desugaring_with_invalid_cmp() {
-    let program = "cmp = |_, _| 2; 1 > 3";
-    let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
-    let err = err.source();
-    assert_matches!(err.kind(), ErrorKind::InvalidCmpResult);
-    assert_eq!(*err.main_span().code().fragment(), "1 > 3");
+    let err = try_evaluate(&mut Environment::new(), "2 > (3, 5)").unwrap_err();
+    assert_matches!(err.source().kind(), ErrorKind::CannotCompare);
+    assert_eq!(*err.source().main_span().code().fragment(), "(3, 5)");
 }
 
 #[test]
@@ -726,21 +718,18 @@ fn comparison_constants_are_comparable() {
 }
 
 #[test]
-fn comparison_desugaring_with_capture() {
+fn comparison_within_capture() {
     let program = "ge = |x, y| x >= y; ge(2, 3)";
-    let return_value = evaluate(
-        &mut Environment::new().insert_native_fn("cmp", fns::Compare),
-        program,
-    );
+    let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(return_value, Value::Bool(false));
 }
 
 #[test]
-fn comparison_desugaring_with_capture_and_no_cmp() {
-    let program = "ge = |x, y| x >= y; ge(2, 3)";
-    let err = expect_compilation_error(&mut Environment::new(), program);
-    assert_matches!(err.kind(), ErrorKind::MissingCmpFunction { ref name } if name == "cmp");
-    assert_eq!(*err.main_span().code().fragment(), ">=");
+fn comparison_error_within_capture() {
+    let program = "ge = |x, y| x >= (y,); ge(2, 3)";
+    let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
+    assert_matches!(err.source().kind(), ErrorKind::CannotCompare);
+    assert_eq!(*err.source().main_span().code().fragment(), "(y,)");
 }
 
 #[test]

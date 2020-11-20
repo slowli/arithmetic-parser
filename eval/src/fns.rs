@@ -760,13 +760,8 @@ mod tests {
 
         let err = bogus_module.run().unwrap_err();
         let err = err.source();
-        assert_matches!(
-            err.kind(),
-            ErrorKind::NativeCall(ref message) if message.contains("Compare requires")
-        );
-        assert_eq!(*err.main_span().code().fragment(), "x > (1, 2)");
-        assert_eq!(err.aux_spans().len(), 1);
-        assert_eq!(*err.aux_spans()[0].code().fragment(), "(1, 2)");
+        assert_matches!(err.kind(), ErrorKind::CannotCompare);
+        assert_eq!(*err.main_span().code().fragment(), "(1, 2)");
     }
 
     #[test]

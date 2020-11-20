@@ -2,7 +2,7 @@
 
 use hashbrown::HashMap;
 
-use core::{any::Any, fmt};
+use core::{any::Any, cmp::Ordering, fmt};
 
 use crate::{
     alloc::{vec, Rc, String, ToOwned, Vec},
@@ -730,6 +730,34 @@ impl<'a, T: Clone> Value<'a, T> {
             (Self::Ref(this), Self::Ref(other)) => this == other,
             _ => false,
         }
+    }
+
+    pub(crate) fn compare(
+        module_id: &dyn ModuleId,
+        lhs: &MaybeSpanned<'a, Self>,
+        rhs: &MaybeSpanned<'a, Self>,
+        op: BinaryOp,
+        arithmetic: &dyn Arithmetic<T>,
+    ) -> Result<Self, Error<'a>> {
+        // We only know how to compare numbers.
+        let lhs_number = match &lhs.extra {
+            Value::Number(number) => number,
+            _ => return Err(Error::new(module_id, &lhs, ErrorKind::CannotCompare)),
+        };
+        let rhs_number = match &rhs.extra {
+            Value::Number(number) => number,
+            _ => return Err(Error::new(module_id, &rhs, ErrorKind::CannotCompare)),
+        };
+
+        let maybe_ordering = arithmetic.partial_cmp(lhs_number, rhs_number);
+        let cmp_result = maybe_ordering.map_or(false, |ordering| match op {
+            BinaryOp::Gt => ordering == Ordering::Greater,
+            BinaryOp::Lt => ordering == Ordering::Less,
+            BinaryOp::Ge => ordering != Ordering::Less,
+            BinaryOp::Le => ordering != Ordering::Greater,
+            _ => unreachable!(),
+        });
+        Ok(Value::Bool(cmp_result))
     }
 
     pub(crate) fn try_and(

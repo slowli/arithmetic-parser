@@ -1,7 +1,6 @@
 //! Simple CLI / REPL for evaluating arithmetic expressions.
 
 use anyhow::format_err;
-use num_complex::{Complex32, Complex64};
 use structopt::StructOpt;
 
 use std::{io, process, str::FromStr};
@@ -74,15 +73,15 @@ impl Args {
             match self.arithmetic {
                 ArithmeticType::F32 => repl::<f32>(),
                 ArithmeticType::F64 => repl::<f64>(),
-                ArithmeticType::Complex32 => repl::<Complex32>(),
-                ArithmeticType::Complex64 => repl::<Complex64>(),
+                ArithmeticType::Complex32 => todo!(), //repl::<Complex32>(),
+                ArithmeticType::Complex64 => todo!(), //repl::<Complex64>(),
             }
         } else {
             match self.arithmetic {
                 ArithmeticType::F32 => self.run_command::<f32>(),
                 ArithmeticType::F64 => self.run_command::<f64>(),
-                ArithmeticType::Complex32 => self.run_command::<Complex32>(),
-                ArithmeticType::Complex64 => self.run_command::<Complex64>(),
+                ArithmeticType::Complex32 => todo!(), // self.run_command::<Complex32>(),
+                ArithmeticType::Complex64 => todo!(), //self.run_command::<Complex64>(),
             }
         }
     }

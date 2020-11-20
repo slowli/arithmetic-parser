@@ -91,6 +91,7 @@ impl<'a, T: Clone> VariableMap<'a, T> for Prelude {
 pub struct Comparisons;
 
 impl Comparisons {
+    // FIXME: this is incorrect!
     fn min<T: PartialOrd>(x: T, y: T) -> T {
         if x < y {
             x
@@ -117,7 +118,7 @@ where
             "LESS" => Value::any(Ordering::Less),
             "EQUAL" => Value::any(Ordering::Equal),
             "GREATER" => Value::any(Ordering::Greater),
-            "cmp" => Value::native_fn(fns::Compare),
+            "cmp" => Value::native_fn(fns::Compare), // FIXME: incorrect!
             "min" => Value::native_fn(fns::Binary::new(Self::min::<T>)),
             "max" => Value::native_fn(fns::Binary::new(Self::max::<T>)),
             _ => return None,

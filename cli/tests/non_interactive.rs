@@ -35,9 +35,7 @@ fn outputting_interpreted_function() {
     const PROGRAM: &str = "is_positive = |x| x > 0; is_positive";
 
     let assert = create_command(PROGRAM).assert();
-    assert
-        .success()
-        .stderr("fn(1 arg)[\n  cmp = (native fn)\n]\n");
+    assert.success().stderr("fn(1 arg)\n");
 }
 
 #[test]
@@ -98,16 +96,18 @@ fn error_with_call_trace() {
         is_positive(3) && !is_positive((1, 2))
     "#;
     const EXPECTED_ERR: &str = r#"
-        error[EVAL]: Compare requires 2 number arguments
-          ┌─ Snippet #1:1:19
+        error[EVAL]: Value is not comparable
+          ┌─ Snippet #1:1:15
           │
         1 │ is_positive = |x| x > 0;
-          │                   ^^^^^
-          │                   │
-          │                   Failed call
-          │                   Invalid argument
+          │               ----^----
+          │               │   │
+          │               │   Cannot be compared
+          │               The error occurred in function `is_positive`
         2 │ is_positive(3) && !is_positive((1, 2))
-          │                    ------------------- Call at depth 2
+          │                    ------------------- Call at depth 1
+          │
+          = Only numbers can be compared; complex values cannot
     "#;
 
     let assert = create_command(&unindent(PROGRAM)).assert();
@@ -155,20 +155,22 @@ fn error_with_call_complex_call_trace_and_native_fns() {
         (1, 2, map).all(|x| 0 < x)
     "#;
     const EXPECTED_ERR: &str = r#"
-        error[EVAL]: Compare requires 2 number arguments
+        error[EVAL]: Value is not comparable
           ┌─ Snippet #1:1:26
           │
         1 │ all = |array, predicate| array.fold(true, |acc, x| acc && predicate(x));
           │                          ----------------------------------------------
           │                          │                                │
-          │                          │                                Call at depth 2
-          │                          Call at depth 3
+          │                          │                                Call at depth 1
+          │                          Call at depth 2
         2 │ (1, 2, map).all(|x| 0 < x)
-          │ --------------------^^^^^-
-          │ │                   │   │
-          │ │                   │   Invalid argument
-          │ │                   Failed call
-          │ Call at depth 4
+          │ ------------------------^-
+          │ │               │       │
+          │ │               │       Cannot be compared
+          │ │               The error occurred in function `predicate`
+          │ Call at depth 3
+          │
+          = Only numbers can be compared; complex values cannot
     "#;
 
     let assert = create_command(&unindent(PROGRAM)).assert();

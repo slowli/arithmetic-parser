@@ -5,7 +5,7 @@ use core::{fmt, ops};
 use crate::{
     alloc::{Box, String, ToOwned},
     arith::{Arithmetic, StdArithmetic},
-    compiler::{Compiler, ImportSpans, CMP_FUNCTION_NAME},
+    compiler::{Compiler, ImportSpans},
     error::{Backtrace, ErrorWithBacktrace},
     Environment, Error, ErrorKind, Value, VariableMap,
 };
@@ -17,7 +17,7 @@ mod registers;
 
 pub use self::module_id::{IndexedId, ModuleId, WildcardId};
 pub(crate) use self::{
-    command::{Atom, Command, ComparisonOp, CompiledExpr, SpannedAtom},
+    command::{Atom, Command, CompiledExpr, SpannedAtom},
     registers::{Executable, ExecutableFn, Registers},
 };
 
@@ -428,13 +428,7 @@ impl<'a, T> ExecutableModuleBuilder<'a, T> {
     /// highlights one of such imports.
     pub fn try_build(self) -> Result<ExecutableModule<'a, T>, Error<'a>> {
         if let Some((var_name, span)) = self.undefined_imports.iter().next() {
-            let err = if var_name == CMP_FUNCTION_NAME {
-                ErrorKind::MissingCmpFunction {
-                    name: var_name.to_owned(),
-                }
-            } else {
-                ErrorKind::Undefined(var_name.to_owned())
-            };
+            let err = ErrorKind::Undefined(var_name.to_owned());
             Err(Error::new(self.module.id(), span, err))
         } else {
             Ok(self.module)

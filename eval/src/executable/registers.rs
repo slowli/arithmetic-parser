@@ -419,18 +419,11 @@ impl<'a, T: Clone> Registers<'a, T> {
                     BinaryOp::Or => Value::try_or(module_id, &lhs_value, &rhs_value),
 
                     BinaryOp::Gt | BinaryOp::Lt | BinaryOp::Ge | BinaryOp::Le => {
-                        unreachable!("Must be desugared by the compiler")
+                        Value::compare(module_id, &lhs_value, &rhs_value, *op, arithmetic)
                     }
 
                     _ => unreachable!("Checked during compilation"),
                 }
-            }
-
-            CompiledExpr::Compare { inner, op } => {
-                let inner_value = self.resolve_atom(&inner.extra);
-                op.compare(&inner_value)
-                    .map(Value::Bool)
-                    .ok_or_else(|| executable.create_error(&span, ErrorKind::InvalidCmpResult))
             }
 
             CompiledExpr::Function {

@@ -2,6 +2,8 @@
 //!
 //! # Assumptions
 //!
+//! FIXME: outdated!
+//!
 //! - There is only one numeric type, which is complete w.r.t. all arithmetic operations.
 //!   This is expressed via type constraints on relevant types via the [`Number`] trait.
 //! - Arithmetic operations are assumed to be infallible; panics during their execution
@@ -34,7 +36,7 @@
 //!   anything else leads to an error).
 //!   Finally, the `Ordering` is used to compute the original comparison operation. For example,
 //!   if `cmp(x, y) == -1`, then `x < y` and `x <= y` will return `true`, and `x > y` will
-//!   return `false`.
+//!   return `false`. (FIXME: outdated!)
 //!
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
 //!

@@ -131,9 +131,7 @@ fn repl_basics() {
 
     let response = repl.send_line("is_positive");
     let expected_fn = r#"
-        fn(1 arg)[
-          cmp = (native fn)
-        ]
+        fn(1 arg)
     "#;
     assert_eq!(response, unindent(expected_fn).trim());
 }

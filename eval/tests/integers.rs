@@ -1,5 +1,7 @@
 use arithmetic_eval::{
-    arith::{Arithmetic, CheckedArithmetic, ModularArithmetic, WrappingArithmetic},
+    arith::{
+        Arithmetic, CheckedArithmetic, ModularArithmetic, PreArithmeticExt, WrappingArithmetic,
+    },
     error::ErrorWithBacktrace,
     Comparisons, Environment, ErrorKind, Number, Prelude, Value, VariableMap, WildcardId,
 };
@@ -143,9 +145,9 @@ fn wrapping_u128_arithmetic() {
 
 #[test]
 fn modular_arithmetic() {
-    let arithmetic = ModularArithmetic::new(61);
-    // While comparisons with modular arithmetic don't make much sense, they are technically
+    // While comparisons with modular arithmetic don't make much sense, they can be technically
     // implemented.
+    let arithmetic = ModularArithmetic::new(61).with_natural_comparison();
     test_arithmetic_base::<u32, _>(&arithmetic);
 
     let modular_eq_program = "-1 == 60 && 1111111 == 57 && 3 / 5 == 25 && 60^60 == 1";

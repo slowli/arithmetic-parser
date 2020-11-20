@@ -5,11 +5,11 @@ use hashbrown::HashMap;
 use core::iter;
 
 use crate::{
-    alloc::{vec, Box, String, ToOwned, Vec},
+    alloc::{Box, String, ToOwned, Vec},
     error::RepeatedAssignmentContext,
     executable::{
-        Atom, Command, ComparisonOp, CompiledExpr, Executable, ExecutableFn, ExecutableModule,
-        Registers, SpannedAtom,
+        Atom, Command, CompiledExpr, Executable, ExecutableFn, ExecutableModule, Registers,
+        SpannedAtom,
     },
     Error, ErrorKind, ModuleId, Value,
 };
@@ -22,9 +22,6 @@ use arithmetic_parser::{
 mod captures;
 
 use self::captures::{extract_vars_iter, CapturesExtractor, CompilerExtTarget};
-
-/// Name of the comparison function used in desugaring order comparisons.
-pub(crate) const CMP_FUNCTION_NAME: &str = "cmp";
 
 pub(crate) type ImportSpans<'a> = HashMap<String, Spanned<'a>>;
 
@@ -194,29 +191,10 @@ impl Compiler {
         let lhs = self.compile_expr(executable, lhs)?;
         let rhs = self.compile_expr(executable, rhs)?;
 
-        let compiled = if op.extra.is_order_comparison() {
-            let cmp_function = self.get_var(CMP_FUNCTION_NAME);
-            let cmp_function = op.copy_with_extra(Atom::Register(cmp_function));
-
-            let cmp_invocation = CompiledExpr::Function {
-                original_name: Some((*cmp_function.fragment()).to_owned()),
-                name: cmp_function.into(),
-                args: vec![lhs, rhs],
-            };
-            let cmp_register = self.push_assignment(executable, cmp_invocation, binary_expr);
-
-            CompiledExpr::Compare {
-                inner: binary_expr
-                    .copy_with_extra(Atom::Register(cmp_register))
-                    .into(),
-                op: ComparisonOp::from(op.extra),
-            }
-        } else {
-            CompiledExpr::Binary {
-                op: self.check_binary_op(op)?,
-                lhs,
-                rhs,
-            }
+        let compiled = CompiledExpr::Binary {
+            op: self.check_binary_op(op)?,
+            lhs,
+            rhs,
         };
 
         let register = self.push_assignment(executable, compiled, binary_expr);

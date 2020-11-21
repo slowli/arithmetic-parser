@@ -674,6 +674,8 @@ impl<T: Clone> NativeFn<T> for Merge {
 /// fn(Num, Num) -> Num // for `Compare::Min` and `Compare::Max`
 /// ```
 ///
+/// [`Arithmetic`]: crate::arith::Arithmetic
+///
 /// # Examples
 ///
 /// Using `min` function:
@@ -699,7 +701,7 @@ impl<T: Clone> NativeFn<T> for Merge {
 /// # }
 /// ```
 ///
-/// Using `cmp` function with [`Comparisons`].
+/// Using `cmp` function with [`Comparisons`](crate::Comparisons).
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
@@ -721,8 +723,8 @@ impl<T: Clone> NativeFn<T> for Merge {
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub enum Compare {
-    /// Returns an [`Ordering`] wrapped into an [`OpaqueRef`], or [`Value::void()`]
-    /// if the provided values are not comparable.
+    /// Returns an [`Ordering`] wrapped into an [`OpaqueRef`](crate::OpaqueRef),
+    /// or [`Value::void()`] if the provided values are not comparable.
     Raw,
     /// Returns the minimum of the two numbers. If the numbers are equal, returns the first one.
     Min,
@@ -922,5 +924,39 @@ mod tests {
             test_module.set_import("xs", Value::Tuple(input));
             assert_eq!(test_module.run().unwrap(), Value::Tuple(expected));
         }
+    }
+
+    #[test]
+    fn error_with_min_function_args() {
+        let program = "5 - min(1, (2, 3))";
+        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
+        let module = ExecutableModule::builder(WildcardId, &block)
+            .unwrap()
+            .with_import("min", Value::native_fn(Compare::Min))
+            .build();
+
+        let err = module.run().unwrap_err();
+        let err = err.source();
+        assert_eq!(*err.main_span().code().fragment(), "min(1, (2, 3))");
+        assert_matches!(
+            err.kind(),
+            ErrorKind::NativeCall(ref msg) if msg.contains("requires 2 number arguments")
+        );
+    }
+
+    #[test]
+    fn error_with_min_function_incomparable_args() {
+        let program = "5 - min(1, NAN)";
+        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
+        let module = ExecutableModule::builder(WildcardId, &block)
+            .unwrap()
+            .with_import("NAN", Value::Number(f32::NAN))
+            .with_import("min", Value::native_fn(Compare::Min))
+            .build();
+
+        let err = module.run().unwrap_err();
+        let err = err.source();
+        assert_eq!(*err.main_span().code().fragment(), "min(1, NAN)");
+        assert_matches!(err.kind(), ErrorKind::CannotCompare);
     }
 }

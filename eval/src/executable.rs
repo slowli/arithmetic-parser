@@ -4,7 +4,7 @@ use core::{fmt, ops};
 
 use crate::{
     alloc::{Box, String, ToOwned},
-    arith::{Arithmetic, StdArithmetic},
+    arith::{Arithmetic, Compare, OrdArithmetic, StdArithmetic},
     compiler::{Compiler, ImportSpans},
     error::{Backtrace, ErrorWithBacktrace},
     Environment, Error, ErrorKind, Value, VariableMap,
@@ -183,7 +183,7 @@ impl<'a, T> ExecutableModule<'a, T> {
     /// Combines this module with the specified `arithmetic`.
     pub fn with_arithmetic<'s, A>(&'s self, arithmetic: &'s A) -> WithArithmetic<'s, Self, A>
     where
-        A: Arithmetic<T>,
+        A: Arithmetic<T> + Compare<T>,
     {
         WithArithmetic {
             module: self,
@@ -209,7 +209,7 @@ impl<'a, T: Clone + fmt::Debug> ExecutableModule<'a, T> {
     fn run_with_registers(
         &self,
         registers: &mut Registers<'a, T>,
-        arithmetic: &dyn Arithmetic<T>,
+        arithmetic: &dyn OrdArithmetic<T>,
     ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
         let mut backtrace = Backtrace::default();
         registers
@@ -220,7 +220,7 @@ impl<'a, T: Clone + fmt::Debug> ExecutableModule<'a, T> {
 
 impl<'a, T: Clone + fmt::Debug> ExecutableModule<'a, T>
 where
-    StdArithmetic: Arithmetic<T>,
+    StdArithmetic: Arithmetic<T> + Compare<T>,
 {
     /// Runs the module with the current values of imports. This is a read-only operation;
     /// neither the imports, nor other module state are modified by it.
@@ -264,7 +264,7 @@ impl<M, A: ?Sized> Copy for WithArithmetic<'_, M, A> {}
 impl<'a, A, T> WithArithmetic<'_, ExecutableModule<'a, T>, A>
 where
     T: Clone + fmt::Debug,
-    A: Arithmetic<T>,
+    A: Arithmetic<T> + Compare<T>,
 {
     /// Runs the module with the provided [`Arithmetic`] and the current values of imports.
     ///

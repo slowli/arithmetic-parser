@@ -117,6 +117,13 @@ fn comparisons() {
 }
 
 #[test]
+fn tuple_destructuring_with_multiple_components() {
+    let program = "(x, y, z) = (1, 12, 5); x == 1 && y == 12 && z == 5";
+    let return_value = evaluate(&mut Environment::new(), program);
+    assert_eq!(return_value, Value::Bool(true));
+}
+
+#[test]
 fn tuple_destructuring_with_middle() {
     let program = r#"
         (x, ...) = (1, 2, 3);
@@ -125,8 +132,7 @@ fn tuple_destructuring_with_middle() {
         ((_, a), ..., (b, ...)) = ((1, 2), (3, 4, 5));
         x == 1 && u == -2 && v == -1 && middle == (3, 4) && y == 5 && a == 2 && b == 3
     "#;
-    let mut env = Environment::new();
-    let return_value = evaluate(&mut env, program);
+    let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(return_value, Value::Bool(true));
 }
 

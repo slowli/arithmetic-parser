@@ -3,7 +3,7 @@
 use num_complex::Complex64;
 
 use arithmetic_eval::{
-    arith::{PreArithmeticExt, StdArithmetic},
+    arith::{ArithmeticExt, StdArithmetic},
     ExecutableModule, Prelude,
 };
 use arithmetic_parser::grammars::{NumGrammar, Parse, Untyped};

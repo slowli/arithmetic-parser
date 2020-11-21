@@ -5,11 +5,11 @@ use rustyline::{error::ReadlineError, Editor};
 use std::io;
 
 use crate::common::{Env, ParseAndEvalResult, ReplLiteral};
-use arithmetic_eval::arith::{Arithmetic, StdArithmetic};
+use arithmetic_eval::arith::{Arithmetic, Compare, StdArithmetic};
 
 pub fn repl<T: ReplLiteral>() -> io::Result<()>
 where
-    StdArithmetic: Arithmetic<T>,
+    StdArithmetic: Arithmetic<T> + Compare<T>,
 {
     let mut rl = Editor::<()>::new();
     let mut env = Env::new();

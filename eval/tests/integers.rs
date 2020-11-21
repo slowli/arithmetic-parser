@@ -1,6 +1,7 @@
 use arithmetic_eval::{
     arith::{
-        Arithmetic, CheckedArithmetic, ModularArithmetic, PreArithmeticExt, WrappingArithmetic,
+        Arithmetic, ArithmeticExt, CheckedArithmetic, Compare, ModularArithmetic,
+        WrappingArithmetic,
     },
     error::ErrorWithBacktrace,
     Comparisons, Environment, ErrorKind, Number, Prelude, Value, VariableMap, WildcardId,
@@ -18,7 +19,7 @@ fn try_evaluate<'a, T, A>(
 ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>>
 where
     T: NumLiteral,
-    A: Arithmetic<T>,
+    A: Arithmetic<T> + Compare<T>,
 {
     let block = Untyped::<NumGrammar<T>>::parse_statements(program).unwrap();
     env.compile_module(WildcardId, &block)
@@ -34,7 +35,7 @@ fn evaluate<'a, T, A>(
 ) -> Value<'a, T>
 where
     T: NumLiteral,
-    A: Arithmetic<T>,
+    A: Arithmetic<T> + Compare<T>,
 {
     try_evaluate(env, program, arithmetic).unwrap()
 }
@@ -42,7 +43,7 @@ where
 fn test_arithmetic_base<T, A>(arithmetic: &A)
 where
     T: PartialEq + PartialOrd + From<u8> + NumLiteral + Number,
-    A: Arithmetic<T>,
+    A: Arithmetic<T> + Compare<T>,
 {
     let value = evaluate::<T, _>(&mut Environment::new(), "2 * 2 + 1 - 2", arithmetic);
     assert_eq!(value, Value::Number(3_u8.into()));
@@ -67,7 +68,7 @@ where
 fn test_unsigned_checked_arithmetic<T>()
 where
     T: PartialEq + PartialOrd + From<u8> + NumLiteral + Number,
-    CheckedArithmetic: Arithmetic<T>,
+    CheckedArithmetic: Arithmetic<T> + Compare<T>,
 {
     let arithmetic = CheckedArithmetic;
     test_arithmetic_base::<T, _>(&arithmetic);
@@ -107,7 +108,7 @@ fn checked_u128_arithmetic() {
 fn test_wrapping_unsigned_arithmetic<T>()
 where
     T: PartialEq + PartialOrd + From<u8> + Bounded + NumLiteral + Number,
-    WrappingArithmetic: Arithmetic<T>,
+    WrappingArithmetic: Arithmetic<T> + Compare<T>,
 {
     let arithmetic = WrappingArithmetic;
     test_arithmetic_base::<T, _>(&arithmetic);

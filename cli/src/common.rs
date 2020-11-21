@@ -17,7 +17,7 @@ use std::{
 
 use arithmetic_eval::error::ErrorWithBacktrace;
 use arithmetic_eval::{
-    arith::{Arithmetic, StdArithmetic},
+    arith::{Arithmetic, Compare, StdArithmetic},
     error::{BacktraceElement, CodeInModule},
     fns, Comparisons, Environment, Error as EvalError, Function, IndexedId, ModuleId, Number,
     Prelude, Value, VariableMap,
@@ -394,7 +394,7 @@ impl Env {
     ) -> io::Result<ParseAndEvalResult>
     where
         T: ReplLiteral,
-        StdArithmetic: Arithmetic<T>,
+        StdArithmetic: Arithmetic<T> + Compare<T>,
     {
         if line.starts_with('.') {
             self.process_command(line, env, original_env)?;
@@ -451,7 +451,7 @@ impl Env {
     where
         T: Grammar,
         T::Lit: ReplLiteral,
-        StdArithmetic: Arithmetic<T::Lit>,
+        StdArithmetic: Arithmetic<T::Lit> + Compare<T::Lit>,
     {
         let module_id = self.code_map.latest_module_id();
         let module = match env.compile_module(module_id, statements) {

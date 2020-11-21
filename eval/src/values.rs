@@ -6,7 +6,7 @@ use core::{any::Any, cmp::Ordering, fmt};
 
 use crate::{
     alloc::{vec, Rc, String, ToOwned, Vec},
-    arith::Arithmetic,
+    arith::{Arithmetic, Compare, OrdArithmetic},
     error::{AuxErrorInfo, Backtrace, CodeInModule, TupleLenMismatchContext},
     executable::ExecutableFn,
     fns, Error, ErrorKind, EvalResult, ModuleId,
@@ -26,16 +26,15 @@ pub use self::{
 pub struct CallContext<'r, 'a, T> {
     call_span: CodeInModule<'a>,
     backtrace: Option<&'r mut Backtrace<'a>>,
-    arithmetic: &'r dyn Arithmetic<T>,
+    arithmetic: &'r dyn OrdArithmetic<T>,
 }
 
 impl<'r, 'a, T> CallContext<'r, 'a, T> {
     /// Creates a mock call context with the specified module ID and call span.
-    pub fn mock(
-        module_id: &dyn ModuleId,
-        call_span: MaybeSpanned<'a>,
-        arithmetic: &'r dyn Arithmetic<T>,
-    ) -> Self {
+    pub fn mock<A>(module_id: &dyn ModuleId, call_span: MaybeSpanned<'a>, arithmetic: &'r A) -> Self
+    where
+        A: Arithmetic<T> + Compare<T>,
+    {
         Self {
             call_span: CodeInModule::new(module_id, call_span),
             backtrace: None,
@@ -46,7 +45,7 @@ impl<'r, 'a, T> CallContext<'r, 'a, T> {
     pub(crate) fn new(
         call_span: CodeInModule<'a>,
         backtrace: Option<&'r mut Backtrace<'a>>,
-        arithmetic: &'r dyn Arithmetic<T>,
+        arithmetic: &'r dyn OrdArithmetic<T>,
     ) -> Self {
         Self {
             call_span,
@@ -59,7 +58,7 @@ impl<'r, 'a, T> CallContext<'r, 'a, T> {
         self.backtrace.as_deref_mut()
     }
 
-    pub(crate) fn arithmetic(&self) -> &'r dyn Arithmetic<T> {
+    pub(crate) fn arithmetic(&self) -> &'r dyn OrdArithmetic<T> {
         self.arithmetic
     }
 
@@ -608,7 +607,7 @@ impl<'a, T: Clone> Value<'a, T> {
         self,
         rhs: Self,
         op: BinaryOp,
-        arithmetic: &dyn Arithmetic<T>,
+        arithmetic: &dyn OrdArithmetic<T>,
     ) -> Result<Self, BinaryOpError> {
         match (self, rhs) {
             (Self::Number(this), Self::Number(other)) => {
@@ -668,7 +667,7 @@ impl<'a, T: Clone> Value<'a, T> {
         lhs: MaybeSpanned<'a, Self>,
         rhs: MaybeSpanned<'a, Self>,
         op: BinaryOp,
-        arithmetic: &dyn Arithmetic<T>,
+        arithmetic: &dyn OrdArithmetic<T>,
     ) -> Result<Self, Error<'a>> {
         let lhs_span = lhs.with_no_extra();
         let rhs_span = rhs.with_no_extra();
@@ -677,7 +676,7 @@ impl<'a, T: Clone> Value<'a, T> {
             .map_err(|e| e.span(module_id, total_span, lhs_span, rhs_span))
     }
 
-    pub(crate) fn try_neg(self, arithmetic: &dyn Arithmetic<T>) -> Result<Self, ErrorKind> {
+    pub(crate) fn try_neg(self, arithmetic: &dyn OrdArithmetic<T>) -> Result<Self, ErrorKind> {
         match self {
             Self::Number(val) => arithmetic
                 .neg(val)
@@ -713,7 +712,7 @@ impl<'a, T: Clone> Value<'a, T> {
     }
 
     // **NB.** Must match `PartialEq` impl for `Value`!
-    pub(crate) fn eq_by_arithmetic(&self, rhs: &Self, arithmetic: &dyn Arithmetic<T>) -> bool {
+    pub(crate) fn eq_by_arithmetic(&self, rhs: &Self, arithmetic: &dyn OrdArithmetic<T>) -> bool {
         match (self, rhs) {
             (Self::Number(this), Self::Number(other)) => arithmetic.eq(this, other),
             (Self::Bool(this), Self::Bool(other)) => this == other,
@@ -737,7 +736,7 @@ impl<'a, T: Clone> Value<'a, T> {
         lhs: &MaybeSpanned<'a, Self>,
         rhs: &MaybeSpanned<'a, Self>,
         op: BinaryOp,
-        arithmetic: &dyn Arithmetic<T>,
+        arithmetic: &dyn OrdArithmetic<T>,
     ) -> Result<Self, Error<'a>> {
         // We only know how to compare numbers.
         let lhs_number = match &lhs.extra {

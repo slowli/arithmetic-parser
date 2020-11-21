@@ -18,7 +18,7 @@ use crate::error::ArithmeticError;
 /// Unlike operations on built-in integer types, arithmetic operations may be fallible.
 /// Additionally, the arithmetic can have a state. This is used, for example, in
 /// [`ModularArithmetic`], which stores the modulus in the state.
-pub trait PreArithmetic<T> {
+pub trait Arithmetic<T> {
     /// Adds two numbers.
     ///
     /// # Errors
@@ -67,17 +67,24 @@ pub trait PreArithmetic<T> {
     fn eq(&self, x: &T, y: &T) -> bool;
 }
 
-impl<T> fmt::Debug for dyn Arithmetic<T> + '_ {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.debug_tuple("Arithmetic").finish()
-    }
-}
-
 /// Extends an [`Arithmetic`] with a comparison operation on numbers.
-pub trait Arithmetic<T>: PreArithmetic<T> {
-    /// Compares two numbers. Returns `None` if the numbers are not comparable, and the comparison
+pub trait Compare<T> {
+    /// Compares two numbers. Returns `None` if the numbers are not comparable, or the comparison
     /// result otherwise.
     fn partial_cmp(&self, x: &T, y: &T) -> Option<Ordering>;
+}
+
+/// Helper trait wrapping together [`Arithmetic`] and [`Compare`].
+///
+/// This trait is automatically implemented for types implementing both supertraits.
+pub trait OrdArithmetic<T>: Arithmetic<T> + Compare<T> {}
+
+impl<T, A: Arithmetic<T> + Compare<T>> OrdArithmetic<T> for A {}
+
+impl<T> fmt::Debug for dyn OrdArithmetic<T> + '_ {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_tuple("ArithmeticAndCompare").finish()
+    }
 }
 
 /// Arithmetic on a number type that implements all necessary operations natively.
@@ -89,7 +96,7 @@ pub trait Arithmetic<T>: PreArithmetic<T> {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct StdArithmetic;
 
-impl<T> PreArithmetic<T> for StdArithmetic
+impl<T> Arithmetic<T> for StdArithmetic
 where
     T: Copy + NumOps + PartialEq + ops::Neg<Output = T> + Pow<T, Output = T>,
 {
@@ -129,23 +136,19 @@ where
     }
 }
 
-impl<T> Arithmetic<T> for StdArithmetic
-where
-    Self: PreArithmetic<T>,
-    T: PartialOrd,
-{
+impl<T: PartialOrd> Compare<T> for StdArithmetic {
     fn partial_cmp(&self, x: &T, y: &T) -> Option<Ordering> {
         x.partial_cmp(y)
     }
 }
 
 #[cfg(all(test, feature = "std"))]
-static_assertions::assert_impl_all!(StdArithmetic: Arithmetic<f32>, Arithmetic<f64>);
+static_assertions::assert_impl_all!(StdArithmetic: OrdArithmetic<f32>, OrdArithmetic<f64>);
 
 #[cfg(all(test, feature = "complex"))]
 static_assertions::assert_impl_all!(
-    StdArithmetic: PreArithmetic<num_complex::Complex32>,
-    PreArithmetic<num_complex::Complex64>
+    StdArithmetic: Arithmetic<num_complex::Complex32>,
+    Arithmetic<num_complex::Complex64>
 );
 
 /// Arithmetic on an integer type (e.g., `i32`) that checks overflow and other failure
@@ -156,7 +159,7 @@ static_assertions::assert_impl_all!(
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CheckedArithmetic;
 
-impl<T> PreArithmetic<T> for CheckedArithmetic
+impl<T> Arithmetic<T> for CheckedArithmetic
 where
     T: Copy
         + PartialEq
@@ -211,11 +214,7 @@ where
     }
 }
 
-impl<T> Arithmetic<T> for CheckedArithmetic
-where
-    Self: PreArithmetic<T>,
-    T: PartialOrd,
-{
+impl<T: PartialOrd> Compare<T> for CheckedArithmetic {
     #[inline]
     fn partial_cmp(&self, x: &T, y: &T) -> Option<Ordering> {
         x.partial_cmp(y)
@@ -243,7 +242,7 @@ static_assertions::assert_impl_all!(
 #[derive(Debug, Clone, Copy, Default)]
 pub struct WrappingArithmetic;
 
-impl<T> PreArithmetic<T> for WrappingArithmetic
+impl<T> Arithmetic<T> for WrappingArithmetic
 where
     T: Copy
         + PartialEq
@@ -301,11 +300,7 @@ where
     }
 }
 
-impl<T> Arithmetic<T> for WrappingArithmetic
-where
-    Self: PreArithmetic<T>,
-    T: PartialOrd,
-{
+impl<T: PartialOrd> Compare<T> for WrappingArithmetic {
     #[inline]
     fn partial_cmp(&self, x: &T, y: &T) -> Option<Ordering> {
         x.partial_cmp(y)
@@ -340,16 +335,16 @@ fn wrapping_exp<T: Copy + One + WrappingMul>(mut base: T, mut exp: usize) -> T {
 
 #[cfg(test)]
 static_assertions::assert_impl_all!(
-    WrappingArithmetic: Arithmetic<u8>,
-    Arithmetic<i8>,
-    Arithmetic<u16>,
-    Arithmetic<i16>,
-    Arithmetic<u32>,
-    Arithmetic<i32>,
-    Arithmetic<u64>,
-    Arithmetic<i64>,
-    Arithmetic<u128>,
-    Arithmetic<i128>
+    WrappingArithmetic: OrdArithmetic<u8>,
+    OrdArithmetic<i8>,
+    OrdArithmetic<u16>,
+    OrdArithmetic<i16>,
+    OrdArithmetic<u32>,
+    OrdArithmetic<i32>,
+    OrdArithmetic<u64>,
+    OrdArithmetic<i64>,
+    OrdArithmetic<u128>,
+    OrdArithmetic<i128>
 );
 
 /// Encapsulates extension of an unsigned integer type into signed and unsigned double-width types.
@@ -471,7 +466,7 @@ where
     }
 }
 
-impl<T> PreArithmetic<T> for ModularArithmetic<T>
+impl<T> Arithmetic<T> for ModularArithmetic<T>
 where
     T: Copy + PartialEq + NumOps + Zero + One + DoubleWidth,
     usize: TryFrom<T>,
@@ -521,140 +516,176 @@ where
 }
 
 #[cfg(test)]
-static_assertions::assert_impl_all!(ModularArithmetic<u8>: PreArithmetic<u8>);
+static_assertions::assert_impl_all!(ModularArithmetic<u8>: Arithmetic<u8>);
 #[cfg(test)]
-static_assertions::assert_impl_all!(ModularArithmetic<u16>: PreArithmetic<u16>);
+static_assertions::assert_impl_all!(ModularArithmetic<u16>: Arithmetic<u16>);
 #[cfg(test)]
-static_assertions::assert_impl_all!(ModularArithmetic<u32>: PreArithmetic<u32>);
+static_assertions::assert_impl_all!(ModularArithmetic<u32>: Arithmetic<u32>);
 #[cfg(test)]
-static_assertions::assert_impl_all!(ModularArithmetic<u64>: PreArithmetic<u64>);
+static_assertions::assert_impl_all!(ModularArithmetic<u64>: Arithmetic<u64>);
 
-/// FIXME
-#[derive(Debug, Clone, Copy)]
-pub struct FullArithmetic<A, F> {
-    arithmetic: A,
-    comparison: F,
+/// Wrapper type allowing to combine an [`Arithmetic`] with a [`Compare`] implementation.
+///
+/// # Examples
+///
+/// This type can only be constructed via [`ArithmeticExt`] trait. See it for the examples
+/// of usage.
+pub struct FullArithmetic<T, A> {
+    base: A,
+    comparison: fn(&T, &T) -> Option<Ordering>,
 }
 
-impl<T, A, F> PreArithmetic<T> for FullArithmetic<A, F>
+impl<T, A: Clone> Clone for FullArithmetic<T, A> {
+    fn clone(&self) -> Self {
+        Self {
+            base: self.base.clone(),
+            comparison: self.comparison,
+        }
+    }
+}
+
+impl<T, A: Copy> Copy for FullArithmetic<T, A> {}
+
+impl<T, A: fmt::Debug> fmt::Debug for FullArithmetic<T, A> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("FullArithmetic")
+            .field("base", &self.base)
+            .finish()
+    }
+}
+
+impl<T, A> Arithmetic<T> for FullArithmetic<T, A>
 where
-    A: PreArithmetic<T>,
+    A: Arithmetic<T>,
 {
     #[inline]
     fn add(&self, x: T, y: T) -> Result<T, ArithmeticError> {
-        self.arithmetic.add(x, y)
+        self.base.add(x, y)
     }
 
     #[inline]
     fn sub(&self, x: T, y: T) -> Result<T, ArithmeticError> {
-        self.arithmetic.sub(x, y)
+        self.base.sub(x, y)
     }
 
     #[inline]
     fn mul(&self, x: T, y: T) -> Result<T, ArithmeticError> {
-        self.arithmetic.mul(x, y)
+        self.base.mul(x, y)
     }
 
     #[inline]
     fn div(&self, x: T, y: T) -> Result<T, ArithmeticError> {
-        self.arithmetic.div(x, y)
+        self.base.div(x, y)
     }
 
     #[inline]
     fn pow(&self, x: T, y: T) -> Result<T, ArithmeticError> {
-        self.arithmetic.pow(x, y)
+        self.base.pow(x, y)
     }
 
     #[inline]
     fn neg(&self, x: T) -> Result<T, ArithmeticError> {
-        self.arithmetic.neg(x)
+        self.base.neg(x)
     }
 
     #[inline]
     fn eq(&self, x: &T, y: &T) -> bool {
-        self.arithmetic.eq(x, y)
+        self.base.eq(x, y)
     }
 }
 
-impl<T, A, F> Arithmetic<T> for FullArithmetic<A, F>
+impl<T, A> Compare<T> for FullArithmetic<T, A>
 where
-    A: PreArithmetic<T>,
-    F: Fn(&T, &T) -> Option<Ordering>,
+    A: Arithmetic<T>,
 {
     fn partial_cmp(&self, x: &T, y: &T) -> Option<Ordering> {
         (self.comparison)(x, y)
     }
 }
 
-impl<A, F> FullArithmetic<A, F> {
-    /// Creates a new instance with a generic comparison function.
-    pub fn new<T>(arithmetic: A, comparison: F) -> Self
+/// Extension trait for [`Arithmetic`] allowing to combine the arithmetic with a [`Compare`]
+/// implementation.
+///
+/// # Examples
+///
+/// ```
+/// use arithmetic_eval::arith::{ArithmeticExt, ModularArithmetic};
+/// # use arithmetic_eval::{ExecutableModule, Value};
+/// # use arithmetic_parser::grammars::{NumGrammar, Untyped, Parse};
+///
+/// # fn main() -> anyhow::Result<()> {
+/// let base = ModularArithmetic::new(11);
+///
+/// // `ModularArithmetic` requires to define how numbers will be compared -
+/// // and the simplest solution is to not compare them at all.
+/// let program = Untyped::<NumGrammar<u32>>::parse_statements("1 < 3 || 1 >= 3")?;
+/// let module = ExecutableModule::builder("test", &program)?.build();
+/// assert_eq!(
+///     module.with_arithmetic(&base.without_comparisons()).run()?,
+///     Value::Bool(false)
+/// );
+///
+/// // We can compare numbers by their integer value. This can lead
+/// // to pretty confusing results, though.
+/// let bogus_arithmetic = base.with_natural_comparison();
+/// let program = Untyped::<NumGrammar<u32>>::parse_statements(r#"
+///     (x, y, z) = (1, 12, 5);
+///     x == y && x < z && y > z
+/// "#)?;
+/// let module = ExecutableModule::builder("test", &program)?.build();
+/// assert_eq!(
+///     module.with_arithmetic(&bogus_arithmetic).run()?,
+///     Value::Bool(true)
+/// );
+///
+/// // It's possible to fix the situation using a custom comparison function,
+/// // which will compare numbers by their residual class.
+/// let less_bogus_arithmetic = base.with_comparison(|&x: &u32, &y: &u32| {
+///     (x % 11).partial_cmp(&(y % 11))
+/// });
+/// assert_eq!(
+///     module.with_arithmetic(&less_bogus_arithmetic).run()?,
+///     Value::Bool(false)
+/// );
+/// # Ok(())
+/// # }
+/// ```
+pub trait ArithmeticExt<T>: Arithmetic<T> + Sized {
+    /// Combines this arithmetic with a comparison function that assumes any two numbers are
+    /// incomparable.
+    fn without_comparisons(self) -> FullArithmetic<T, Self> {
+        FullArithmetic {
+            base: self,
+            comparison: |_, _| None,
+        }
+    }
+
+    /// Combines this arithmetic with a comparison function specified by the [`PartialOrd`]
+    /// implementation for `T`.
+    fn with_natural_comparison(self) -> FullArithmetic<T, Self>
     where
-        A: PreArithmetic<T>,
-        F: Fn(&T, &T) -> Option<Ordering>,
+        T: PartialOrd,
     {
-        Self {
-            arithmetic,
+        FullArithmetic {
+            base: self,
+            comparison: |x, y| x.partial_cmp(y),
+        }
+    }
+
+    /// Combines this arithmetic with the specified comparison function.
+    fn with_comparison(
+        self,
+        comparison: fn(&T, &T) -> Option<Ordering>,
+    ) -> FullArithmetic<T, Self> {
+        FullArithmetic {
+            base: self,
             comparison,
         }
     }
 }
 
-/// FIXME
-pub type StatelessFullArithmetic<T, A> = FullArithmetic<A, fn(&T, &T) -> Option<Ordering>>;
-
-impl<T, A> StatelessFullArithmetic<T, A>
-where
-    A: PreArithmetic<T>,
-{
-    /// FIXME
-    pub fn without_comparisons(arithmetic: A) -> Self {
-        Self {
-            arithmetic,
-            comparison: |_, _| None,
-        }
-    }
-}
-
-impl<T, A> StatelessFullArithmetic<T, A>
-where
-    A: PreArithmetic<T>,
-    T: PartialOrd,
-{
-    /// FIXME
-    pub fn with_natural_comparison(arithmetic: A) -> Self {
-        Self {
-            arithmetic,
-            comparison: |x, y| x.partial_cmp(y),
-        }
-    }
-}
-
-/// Extension trait for [`PreArithmetic`] allowing to eloquently convert it to [`Arithmetic`]s.
-pub trait PreArithmeticExt<T>: PreArithmetic<T> + Sized {
-    /// FIXME
-    fn without_comparisons(self) -> StatelessFullArithmetic<T, Self> {
-        FullArithmetic::without_comparisons(self)
-    }
-
-    /// FIXME
-    fn with_natural_comparison(self) -> StatelessFullArithmetic<T, Self>
-    where
-        T: PartialOrd,
-    {
-        FullArithmetic::with_natural_comparison(self)
-    }
-
-    /// FIXME
-    fn with_comparison<F>(self, comparison: F) -> FullArithmetic<Self, F>
-    where
-        F: Fn(&T, &T) -> Option<Ordering>,
-    {
-        FullArithmetic::new(self, comparison)
-    }
-}
-
-impl<T, A> PreArithmeticExt<T> for A where A: PreArithmetic<T> {}
+impl<T, A> ArithmeticExt<T> for A where A: Arithmetic<T> {}
 
 #[cfg(test)]
 mod tests {

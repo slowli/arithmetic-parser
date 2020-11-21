@@ -12,7 +12,7 @@ use crate::{
     common::{Env, ParseAndEvalResult, ReplLiteral, ERROR_EXIT_CODE},
     repl::repl,
 };
-use arithmetic_eval::arith::{Arithmetic, StdArithmetic};
+use arithmetic_eval::arith::{Arithmetic, Compare, StdArithmetic};
 use arithmetic_parser::grammars::{NumGrammar, Untyped};
 
 const ABOUT: &str = "CLI and REPL for parsing and evaluating arithmetic expressions.";
@@ -88,7 +88,7 @@ impl Args {
 
     fn run_command<T: ReplLiteral>(self) -> io::Result<()>
     where
-        StdArithmetic: Arithmetic<T>,
+        StdArithmetic: Arithmetic<T> + Compare<T>,
     {
         let command = self.command.unwrap_or_default();
         let mut env = Env::new();

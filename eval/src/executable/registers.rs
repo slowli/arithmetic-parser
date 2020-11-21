@@ -4,7 +4,7 @@ use hashbrown::HashMap;
 
 use crate::{
     alloc::{vec, Box, Rc, String, ToOwned, Vec},
-    arith::Arithmetic,
+    arith::OrdArithmetic,
     error::{Backtrace, CodeInModule, EvalResult, TupleLenMismatchContext},
     executable::command::{Atom, Command, CompiledExpr, SpannedCommand},
     CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, ModuleId, SpannedValue,
@@ -268,7 +268,7 @@ impl<'a, T: Clone> Registers<'a, T> {
     pub fn execute(
         &mut self,
         executable: &Executable<'a, T>,
-        arithmetic: &dyn Arithmetic<T>,
+        arithmetic: &dyn OrdArithmetic<T>,
         backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
         self.execute_inner(executable, arithmetic, backtrace)
@@ -283,7 +283,7 @@ impl<'a, T: Clone> Registers<'a, T> {
     fn execute_inner(
         &mut self,
         executable: &Executable<'a, T>,
-        arithmetic: &dyn Arithmetic<T>,
+        arithmetic: &dyn OrdArithmetic<T>,
         mut backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
         if let Some(additional_capacity) = executable
@@ -370,7 +370,7 @@ impl<'a, T: Clone> Registers<'a, T> {
         span: MaybeSpanned<'a>,
         expr: &CompiledExpr<'a, T>,
         executable: &Executable<'a, T>,
-        arithmetic: &dyn Arithmetic<T>,
+        arithmetic: &dyn OrdArithmetic<T>,
         backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
         match expr {
@@ -475,7 +475,7 @@ impl<'a, T: Clone> Registers<'a, T> {
         module_id: &dyn ModuleId,
         call_span: MaybeSpanned<'a>,
         arg_values: Vec<SpannedValue<'a, T>>,
-        arithmetic: &dyn Arithmetic<T>,
+        arithmetic: &dyn OrdArithmetic<T>,
         mut backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
         let full_call_span = CodeInModule::new(module_id, call_span);

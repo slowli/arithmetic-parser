@@ -243,7 +243,7 @@ where
     }
 }
 
-/// Container for an [`ExecutableModule`] together with [`Arithmetic`].
+/// Container for an [`ExecutableModule`] together with an [`OrdArithmetic`].
 #[derive(Debug)]
 pub struct WithArithmetic<'r, 'a, T> {
     module: &'r ExecutableModule<'a, T>,
@@ -265,7 +265,8 @@ impl<'a, T> WithArithmetic<'_, 'a, T>
 where
     T: Clone + fmt::Debug,
 {
-    /// Runs the module with the provided [`Arithmetic`] and the current values of imports.
+    /// Runs the module with the previously provided [`OrdArithmetic`] and the current values
+    /// of imports.
     ///
     /// See [`ExecutableModule::run()`] for more details.
     pub fn run(self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {

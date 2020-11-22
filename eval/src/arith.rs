@@ -1,4 +1,35 @@
 //! `Arithmetic` trait and its implementations.
+//!
+//! # Traits
+//!
+//! An [`Arithmetic`] defines fallible arithmetic operations on literals
+//! of an [`ExecutableModule`], namely, addition, subtraction, multiplication, division,
+//! exponentiation (all binary ops), and negation (a unary op). Any module can be run
+//! with any `Arithmetic` on its literals, although some modules are reasonably tied
+//! to a particular arithmetic or class of arithmetics (e.g., arithmetics on finite fields).
+//!
+//! [`OrdArithmetic`] extends [`Arithmetic`] with a partial comparison operation
+//! (i.e., an analogue to [`PartialOrd`]). This is motivated by the fact that comparisons
+//! may be switched off during parsing, and some `Arithmetic`s do not have well-defined comparisons.
+//!
+//! [`ArithmeticExt`] helps converting an [`Arithmetic`] into an [`OrdArithmetic`].
+//!
+//! # Implementations
+//!
+//! This module defines the following kinds of arithmetics:
+//!
+//! - [`StdArithmetic`] takes all implementations from the corresponding [`ops`] traits. This
+//!   means that it's safe to use *provided* the ops are infallible. As a counter-example,
+//!   using [`StdArithmetic`] with built-in integer types (such as `u64`) is usually not a good
+//!   idea since the corresponding ops have failure modes (e.g., division by zero or integer
+//!   overflow).
+//! - [`WrappingArithmetic`] is defined for integer types; it uses wrapping semantics for all ops.
+//! - [`CheckedArithmetic`] is defined for integer types; it uses checked semantics for all ops.
+//! - [`ModularArithmetic`] operates on integers modulo the specified number.
+//!
+//! All defined [`Arithmetic`]s strive to be as generic as possible.
+//!
+//! [`ExecutableModule`]: crate::ExecutableModule
 
 use num_traits::{
     checked_pow, CheckedAdd, CheckedDiv, CheckedMul, CheckedNeg, CheckedSub, NumOps, One, Pow,

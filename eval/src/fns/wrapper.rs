@@ -654,7 +654,7 @@ macro_rules! wrap_fn {
 /// #     wrap_fn_with_context, CallContext, Function, Environment, Value, Error, VariableMap,
 /// # };
 /// fn map_array<'a>(
-///     context: &mut CallContext<'_, 'a>,
+///     context: &mut CallContext<'_, 'a, f32>,
 ///     array: Vec<Value<'a, f32>>,
 ///     map_fn: Function<'a, f32>,
 /// ) -> Result<Vec<Value<'a, f32>>, Error<'a>> {

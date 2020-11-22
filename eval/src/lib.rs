@@ -1,43 +1,66 @@
 //! Simple interpreter for ASTs produced by [`arithmetic-parser`].
 //!
-//! # Assumptions
+//! # How it works
 //!
-//! FIXME: outdated!
+//! 1. A `Block` of statements is *compiled* into an [`ExecutableModule`]. Internally,
+//!   compilation processes the AST of the block and transforms it into a non-recusrive form.
+//!   An [`ExecutableModule`] may require *imports* (such as [`NativeFn`]s or constant [`Value`]s),
+//!   which can be taken from a [`VariableMap`] (e.g., an [`Environment`]).
+//! 2. [`ExecutableModule`] can then be executed, for the return value and/or for the
+//!   changes at the top-level variable scope. There are two major variables influencing
+//!   the execution outcome. An [arithmetic](crate::arith) is used to define arithmetic ops
+//!   (`+`, unary and binary `-`, `*`, `/`, `^`) and comparisons (`==`, `!=`, `>`, `<`, `>=`, `<=`).
+//!   Imports may be redefined at this stage as well.
 //!
-//! - There is only one numeric type, which is complete w.r.t. all arithmetic operations.
-//!   This is expressed via type constraints on relevant types via the [`Number`] trait.
-//! - Arithmetic operations are assumed to be infallible; panics during their execution
-//!   are **not** caught by the interpreter.
-//! - Grammar literals are directly parsed to the aforementioned numeric type.
+//! # Type system
 //!
-//! These assumptions do not hold for some grammars parsed by the crate. For example, finite
-//! cyclic groups have two types (scalars and group elements) and thus cannot be effectively
-//! interpreted.
+//! [`Value`]s have 4 major types:
+//!
+//! - **Numbers** corresponding to literals in the parsed `Block`
+//! - **Boolean values**
+//! - **Functions,** which are further subdivided into native functions (defined in the Rust code)
+//!   and interpreted ones (defined within a module)
+//! - **Tuples / arrays**.
+//!
+//! Besides these types, there is an auxiliary one: [`OpaqueRef`], which represents a
+//! reference-counted native value, which can be returned from native functions or provided to
+//! them as an arg, but is otherwise opaque from the point of view of the interpreted code
+//! (cf. `anyref` in WASM).
 //!
 //! # Semantics
 //!
 //! - All variables are immutable. Re-declaring a var shadows the previous declaration.
 //! - Functions are first-class (in fact, a function is just a variant of the [`Value`] enum).
 //! - Functions can capture variables (including other functions). All captures are by value.
-//! - Arithmetic operations are defined on primitive vars and tuples. With tuples, operations
-//!   are performed per-element. Binary operations require tuples of the same size,
-//!   or a tuple and a primitive value. As an example, `(1, 2) + 3` and `(2, 3) / (4, 5)` are valid,
-//!   but `(1, 2) * (3, 4, 5)` isn't.
+//! - Arithmetic operations are defined on numbers and tuples. Ops or numbers are defined
+//!   via the [`Arithmetic`]. With tuples, operations are performed per-element.
+//!   Binary operations require tuples of the same size, or a tuple and a primitive value.
+//!   As an example, `(1, 2) + 3` and `(2, 3) / (4, 5)` are valid, but `(1, 2) * (3, 4, 5)` isn't.
 //! - Methods are considered syntactic sugar for functions, with the method receiver considered
 //!   the first function argument. For example, `(1, 2).map(sin)` is equivalent to
 //!   `map((1, 2), sin)`.
+//! - Equality comparisons (`==`, `!=`) are defined on all types of values.
+//!
+//!   - For bool values, the comparisons work as expected.
+//!   - For functions, the equality is determined by the pointer (2 functions are equal
+//!     iff they alias each other).
+//!   - `OpaqueRef`s either use the [`PartialEq`] impl of the underlying type or
+//!     the pointer equality, depending on how the reference was created; see [`OpaqueRef`] docs
+//!     for more details.
+//!   - Equality for numbers is determined by the [`Arithmetic`].
+//!   - Tuples are equal if they contain the same number of elements and elements are pairwise
+//!     equal.
+//!   - Different types of values are always non-equal.
+//!
+//! - Order comparisons (`>`, `<`, `>=`, `<=`) are defined for primitive values only and use
+//!   [`OrdArithmetic`].
 //! - No type checks are performed before evaluation.
 //! - Type annotations are completely ignored. This means that the interpreter may execute
 //!   code that is incorrect with annotations (e.g., assignment of a tuple to a variable which
 //!   is annotated to have a numeric type).
-//! - Order comparisons (`>`, `<`, `>=`, `<=`) are desugared as follows. First, the `cmp` function
-//!   is called with LHS and RHS as args (in this order). The result is then interpreted as
-//!   [`Ordering`](core::cmp::Ordering) (-1 is `Less`, 1 is `Greater`, 0 is `Equal`;
-//!   anything else leads to an error).
-//!   Finally, the `Ordering` is used to compute the original comparison operation. For example,
-//!   if `cmp(x, y) == -1`, then `x < y` and `x <= y` will return `true`, and `x > y` will
-//!   return `false`. (FIXME: outdated!)
 //!
+//! [`Arithmetic`]: crate::arith::Arithmetic
+//! [`OrdArithmetic`]: crate::arith::OrdArithmetic
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
 //!
 //! # Examples

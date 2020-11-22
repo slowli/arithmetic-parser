@@ -7,27 +7,33 @@ readme = "README.md"
 license = "Apache-2.0"
 description = "Parser for arithmetic expressions with flexible literals and type annotations."
 repository = "https://github.com/slowli/arithmetic-parser"
-categories = ["parser-implementations", "mathematics", "no-std"]
+categories = ["parser-implementations", "mathematics"]
 keywords = ["parser", "arithmetic"]
 
 [dependencies]
 # Public dependencies (present in the public API).
 anyhow = { version = "1.0.27", default_features = false }
-nom = "5.1.1"
-nom_locate = "2.0.0"
-num-traits = "0.2.11"
-
-# Optional dependencies (public)
+nom = { version = "6.0.0", default_features = false, features = ["alloc"] }
+num-traits = { version = "0.2.11", default_features = false }
 num-complex = { version = "0.3.0", optional = true }
+
+[dependencies.nom_locate]
+version = "2.1.0"
+git = "https://github.com/fflorent/nom_locate.git"
+rev = "164fd443e266c7d681b7010341a3f3eef344fcb9"
+default_features = false
+features = ["alloc"]
 
 [dev-dependencies]
 assert_matches = "1.3.0"
 hex = "0.4.2"
+version-sync = "0.9"
 
 [features]
 default = ["std"]
-# Enables support of types from `std`, such as the `Error` trait.
-std = ["anyhow/std"]
+# Enables support of types from `std`, such as the `Error` trait, and propagates
+# to dependencies.
+std = ["anyhow/std", "nom/std", "nom/lexical"]
 
 [[example]]
 name = "complex_c"

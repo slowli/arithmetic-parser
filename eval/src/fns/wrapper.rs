@@ -13,16 +13,13 @@ use crate::{
 /// This is a slightly shorter way to create wrappers compared to calling [`FnWrapper::new()`].
 ///
 /// See [`FnWrapper`] for more details on function requirements.
-///
-/// [`FnWrapper::new()`]: struct.FnWrapper.html#method.new
-/// [`FnWrapper`]: struct.FnWrapper.html
 pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
     FnWrapper::new(function)
 }
 
 /// Wrapper of a function containing information about its arguments.
 ///
-/// Using `FnWrapper` allows to define [native functions] with minimum boilerplate
+/// Using `FnWrapper` allows to define [native functions](NativeFn) with minimum boilerplate
 /// and with increased type safety. `FnWrapper`s can be constructed explcitly or indirectly
 /// via [`Environment::insert_wrapped_fn()`], [`Value::wrapped_fn()`], or [`wrap()`].
 ///
@@ -31,15 +28,9 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// have non-`'static` lifetime, use the [`wrap_fn`] macro. If you need [`CallContext`] (e.g.,
 /// to call functions provided as an argument), use the [`wrap_fn_with_context`] macro.
 ///
-/// [native functions]: ../trait.NativeFn.html
-/// [`Environment::insert_wrapped_fn()`]: ../struct.Environment.html#method.insert_wrapped_fn
-/// [`Value::wrapped_fn()`]: ../enum.Value.html#method.wrapped_fn
-/// [`wrap()`]: fn.wrap.html
-/// [`TryFromValue`]: trait.TryFromValue.html
-/// [`IntoEvalResult`]: trait.IntoEvalResult.html
-/// [`CallContext`]: ../struct.CallContext.html
-/// [`wrap_fn`]: ../macro.wrap_fn.html
-/// [`wrap_fn_with_context`]: ../macro.wrap_fn_with_context.html
+/// [`Environment::insert_wrapped_fn()`]: crate::Environment::insert_wrapped_fn()
+/// [`wrap_fn`]: crate::wrap_fn
+/// [`wrap_fn_with_context`]: crate::wrap_fn_with_context
 ///
 /// # Examples
 ///
@@ -120,11 +111,11 @@ impl<T, F> FnWrapper<T, F> {
     /// Creates a new wrapper.
     ///
     /// Note that the created wrapper is not guaranteed to be usable as [`NativeFn`]. For this
-    /// to be the case, `function` needs to be a function or an `Fn` closure,
+    /// to be the case, `function` needs to be a function or an [`Fn`] closure,
     /// and the `T` type argument needs to be a tuple with the function return type
     /// and the argument types (in this order).
     ///
-    /// [`NativeFn`]: ../trait.NativeFn.html
+    /// [`NativeFn`]: crate::NativeFn
     pub const fn new(function: F) -> Self {
         Self {
             function,
@@ -135,8 +126,6 @@ impl<T, F> FnWrapper<T, F> {
 
 /// Error raised when a value cannot be converted to the expected type when using
 /// [`FnWrapper`].
-///
-/// [`FnWrapper`]: struct.FnWrapper.html
 #[derive(Debug, Clone)]
 pub struct FromValueError {
     kind: FromValueErrorKind,
@@ -204,8 +193,6 @@ impl fmt::Display for FromValueError {
 impl std::error::Error for FromValueError {}
 
 /// Error kinds for [`FromValueError`].
-///
-/// [`FromValueError`]: struct.FromValueError.html
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum FromValueErrorKind {
@@ -232,11 +219,8 @@ impl fmt::Display for FromValueErrorKind {
 ///
 /// Note that the distinction between tuples and arrays is determined by the [`FnWrapper`].
 /// If the corresponding type in the wrapper is defined as a tuple, then
-/// a [`Tuple`](#variant.Tuple) element will be added to the location; otherwise,
-/// an [`Array`](#variant.Array) will be added.
-///
-/// [`FromValueError`]: struct.FromValueError.html
-/// [`FnWrapper`]: struct.FnWrapper.html
+/// a [`Tuple`](FromValueErrorLocation::Tuple) element will be added to the location; otherwise,
+/// an [`Array`](FromValueErrorLocation::Array) will be added.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum FromValueErrorLocation {
@@ -260,10 +244,6 @@ pub enum FromValueErrorLocation {
 ///
 /// This trait is implemented for base value types (such as [`Number`]s, [`Function`]s, [`Value`]s),
 /// and for two container types: vectors and tuples.
-///
-/// [`Number`]: ../trait.Number.html
-/// [`Function`]: ../enum.Function.html
-/// [`Value`]: ../enum.Value.html
 pub trait TryFromValue<'a, T>: Sized {
     /// Attempts to convert `value` to a type supported by the function.
     fn try_from_value(value: Value<'a, T>) -> Result<Self, FromValueError>;
@@ -370,9 +350,7 @@ try_from_value_for_tuple!(8 => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z, 
 try_from_value_for_tuple!(9 => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z, x7: A, x8: B);
 try_from_value_for_tuple!(10 => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z, x7: A, x8: B, x9: C);
 
-/// Generic error output encompassing all error types supported by [wrapped functions].
-///
-/// [wrapped functions]: struct.FnWrapper.html
+/// Generic error output encompassing all error types supported by [wrapped functions](FnWrapper).
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum ErrorOutput<'a> {
@@ -393,7 +371,7 @@ impl<'a> ErrorOutput<'a> {
 }
 
 /// Converts type into `Value` or an error. This is used to convert the return type
-/// of [wrapped functions] to the result expected by [`NativeFn`].
+/// of [wrapped functions](FnWrapper) to the result expected by [`NativeFn`].
 ///
 /// Unlike with `TryInto` trait from the standard library, the erroneous result here does not
 /// mean that the conversion *itself* is impossible. Rather, it means that the function evaluation
@@ -403,13 +381,6 @@ impl<'a> ErrorOutput<'a> {
 /// This trait is implemented for base value types (such as [`Number`]s, [`Function`]s, [`Value`]s),
 /// for two container types: vectors and tuples, and for `Result`s with the error type
 /// convertible to [`ErrorOutput`].
-///
-/// [`Number`]: ../trait.Number.html
-/// [`Function`]: ../enum.Function.html
-/// [`Value`]: ../enum.Value.html
-/// [wrapped functions]: struct.FnWrapper.html
-/// [`NativeFn`]: ../trait.NativeFn.html
-/// [`ErrorOutput`]: enum.ErrorOutput.html
 pub trait IntoEvalResult<'a, T> {
     /// Performs the conversion.
     fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>>;
@@ -584,13 +555,6 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 /// need to have a `'static` lifetime; examples include [`Value`]s, [`Function`]s
 /// and [`EvalResult`]s. Lifetimes of all arguments and the return result must match.
 ///
-/// [`wrap`]: fns/fn.wrap.html
-/// [`TryFromValue`]: fns/trait.TryFromValue.html
-/// [`IntoEvalResult`]: fns/trait.IntoEvalResult.html
-/// [`Value`]: enum.Value.html
-/// [`Function`]: enum.Function.html
-/// [`EvalResult`]: error/type.EvalResult.html
-///
 /// # Examples
 ///
 /// ```
@@ -682,14 +646,11 @@ macro_rules! wrap_fn {
     }}
 }
 
-/// Analogue of [`wrap_fn`] macro that injects the [`CallContext`] as the first argument.
-/// This can be used to call functions within the implementation.
+/// Analogue of [`wrap_fn`](crate::wrap_fn) macro that injects the [`CallContext`]
+/// as the first argument. This can be used to call functions within the implementation.
 ///
 /// As with `wrap_fn`, this macro must be called with 2 args: the arity of the function
 /// (**excluding** `CallContext`), and then the function / closure itself.
-///
-/// [`wrap_fn`]: macro.wrap_fn.html
-/// [`CallContext`]: struct.CallContext.html
 ///
 /// # Examples
 ///
@@ -759,7 +720,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Environment, ExecutableModule, Prelude, WildcardId};
+    use crate::{
+        alloc::{format, ToOwned},
+        Environment, ExecutableModule, Prelude, WildcardId,
+    };
 
     use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
     use assert_matches::assert_matches;

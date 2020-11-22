@@ -276,7 +276,7 @@ impl Env {
         writeln!(self.writer)
     }
 
-    fn dump_value<T>(&mut self, value: &Value<T>, indent: usize) -> io::Result<()>
+    fn dump_value<T>(&mut self, value: &Value<'_, T>, indent: usize) -> io::Result<()>
     where
         T: fmt::Display,
     {

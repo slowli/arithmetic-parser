@@ -65,8 +65,8 @@ impl Literal {
                             opt(tag_char('_')),
                             take_while1(|c: char| c.is_ascii_hexdigit()),
                         ),
-                        |digits: InputSpan| {
-                            hex::decode(digits.fragment()).map_err(anyhow::Error::from)
+                        |digits: InputSpan<'_>| {
+                            hex::decode(digits.fragment()).map_err(ErrorKind::literal)
                         },
                     ),
                     vec![],
@@ -126,7 +126,7 @@ fn type_info<Ty: GrammarType>(input: InputSpan<'_>) -> NomResult<'_, ValueType> 
         map(
             delimited(
                 terminated(tag_char('('), ws::<Ty>),
-                separated_list(
+                separated_list0(
                     delimited(ws::<Ty>, tag_char(','), ws::<Ty>),
                     type_info::<Ty>,
                 ),

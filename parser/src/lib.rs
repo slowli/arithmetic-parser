@@ -4,7 +4,7 @@
 //! Overall, parsed grammars are similar to Rust syntax,
 //! [with a few notable differences](#differences-with-rust).
 //!
-//! # Supported Features
+//! # Supported syntax features
 //!
 //! - **Variables.** A variable name is defined similar to Rust and other programming languages,
 //!   as a sequence of alphanumeric chars and underscores that does not start with a digit.
@@ -19,10 +19,10 @@
 //! The parser supports both complete and streaming (incomplete) modes; the latter is useful
 //! for REPLs and similar applications.
 //!
-//! ## Optional Features
+//! ## Optional syntax features
 //!
-//! These features can be switched on or off when defining a [`Parse`] impl by declaring
-//! the corresponding [`Features`].
+//! These features can be switched on or off when defining a [`Parse`](grammars::Parse) impl
+//! by declaring the corresponding [`Features`](grammars::Features).
 //!
 //! - **Tuples.** A tuple is two or more elements separated by commas, such as `(x, y)`
 //!   or `(1, 2 * x)`. Tuples are parsed both as lvalues and rvalues.
@@ -55,8 +55,12 @@
 //! - There is "rest" destructuting for tuples and function arguments.
 //! - Type hints are placed within tuple elements, for example, `(x: Num, _) = y`.
 //!
-//! [`Parse`]: grammars/trait.Parse.html
-//! [`Features`]: grammars/struct.Features.html
+//! # Crate features
+//!
+//! - `std`. Enables support of types from `std`, such as the `Error` trait, and propagates
+//!   to dependencies.
+//! - `num-complex`. Implements [`NumLiteral`](crate::grammars::NumLiteral) for floating-point
+//!   complex numbers (`Complex32` and `Complex64`).
 //!
 //! # Examples
 //!
@@ -108,6 +112,7 @@
 //! ```
 
 #![cfg_attr(not(feature = "std"), no_std)]
+#![doc(html_root_url = "https://docs.rs/arithmetic-parser/0.2.0-beta.1")]
 #![warn(missing_docs, missing_debug_implementations)]
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(
@@ -486,10 +491,10 @@ impl<T> Lvalue<'_, T> {
     }
 }
 
-/// `Lvalue` with the associated code span.
+/// [`Lvalue`] with the associated code span.
 pub type SpannedLvalue<'a, T> = Spanned<'a, Lvalue<'a, T>>;
 
-/// Type of an `Lvalue`.
+/// Type of an [`Lvalue`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum LvalueType {
@@ -572,7 +577,7 @@ where
 /// Statement with the associated code span.
 pub type SpannedStatement<'a, T> = Spanned<'a, Statement<'a, T>>;
 
-/// Type of a `Statement`.
+/// Type of a [`Statement`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum StatementType {

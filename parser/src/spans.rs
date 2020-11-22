@@ -156,8 +156,6 @@ impl<'a> Spanned<'a> {
 ///
 /// The stripped version allows to retain information about code location within [`LocatedSpan`]
 /// without a restriction by the code lifetime.
-///
-/// [`LocatedSpan`]: struct.LocatedSpan.html
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CodeFragment<'a> {
     /// Original code fragment: a string reference.
@@ -258,9 +256,9 @@ impl<T: Clone + 'static> StripCode for MaybeSpanned<'_, T> {
 
 /// Wrapper around parsers allowing to capture both their output and the relevant span.
 pub(crate) fn with_span<'a, O>(
-    parser: impl Fn(InputSpan<'a>) -> NomResult<'a, O>,
-) -> impl Fn(InputSpan<'a>) -> NomResult<'a, Spanned<O>> {
-    move |input: InputSpan| {
+    mut parser: impl FnMut(InputSpan<'a>) -> NomResult<'a, O>,
+) -> impl FnMut(InputSpan<'a>) -> NomResult<'a, Spanned<'_, O>> {
+    move |input: InputSpan<'_>| {
         parser(input).map(|(rest, output)| {
             let len = rest.location_offset() - input.location_offset();
             let spanned = Spanned {
@@ -298,7 +296,7 @@ pub(crate) fn unite_spans<'a, T, U>(
     }
 }
 
-/// Helper trait for `Result`s with the error component that implements `StripCode`.
+/// Helper trait for [`Result`]s with the error component that implements [`StripCode`].
 pub trait StripResultExt {
     /// Type wrapped by the `Result::Ok` variant.
     type Ok;

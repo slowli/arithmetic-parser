@@ -20,11 +20,11 @@ unindent = "0.1.6"
 [dependencies.arithmetic-parser]
 version = "0.2.0-beta.1"
 path = "../parser"
-features = ["num-complex"]
 
 [dependencies.arithmetic-eval]
 version = "0.2.0-beta.1"
 path = "../eval"
+features = ["complex"]
 
 [dev-dependencies]
 assert_cmd = "1.0.1"

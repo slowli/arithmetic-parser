@@ -1,7 +1,7 @@
 //! Error handling.
 
 use nom::{
-    error::{ErrorKind as NomErrorKind, ParseError},
+    error::{ContextError, ErrorKind as NomErrorKind, FromExternalError, ParseError},
     Slice,
 };
 
@@ -25,7 +25,7 @@ pub enum Context {
 }
 
 impl fmt::Display for Context {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::Var => "variable",
             Self::Fun => "function call",
@@ -133,6 +133,11 @@ impl fmt::Display for ErrorKind {
 }
 
 impl ErrorKind {
+    /// Creates a `Literal` variant with the specified error.
+    pub fn literal<T: Into<anyhow::Error>>(error: T) -> Self {
+        Self::Literal(error.into())
+    }
+
     fn context_mut(&mut self) -> Option<&mut Option<Context>> {
         match self {
             Self::UnexpectedChar { context }
@@ -263,7 +268,9 @@ impl<'a> ParseError<InputSpan<'a>> for Error<'a> {
     fn append(_: InputSpan<'a>, _: NomErrorKind, other: Self) -> Self {
         other
     }
+}
 
+impl<'a> ContextError<InputSpan<'a>> for Error<'a> {
     fn add_context(input: InputSpan<'a>, ctx: &'static str, mut target: Self) -> Self {
         let ctx = Context::new(ctx);
         if ctx == Context::Comment {
@@ -276,5 +283,11 @@ impl<'a> ParseError<InputSpan<'a>> for Error<'a> {
             }
         }
         target
+    }
+}
+
+impl<'a> FromExternalError<InputSpan<'a>, ErrorKind> for Error<'a> {
+    fn from_external_error(input: InputSpan<'a>, _: NomErrorKind, err: ErrorKind) -> Self {
+        Self::new(input, err)
     }
 }

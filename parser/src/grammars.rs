@@ -12,18 +12,11 @@
 //! a [`ParseLiteral`] impl by wrapping it into [`Untyped`].
 //!
 //! Once you have a `Grammar`, you can supply it as a `Base` for [`Parse`]. `Parse` methods
-//! allow to parse complete or streaming [`Block`]s of statements. Note that `Untyped` and
-//! [`Typed`] wrappers allow to avoid an explicit `Parse` impl.
+//! allow to parse complete or streaming [`Block`](crate::Block)s of statements.
+//! Note that `Untyped` and [`Typed`] wrappers allow to avoid an explicit `Parse` impl.
 //!
 //! See [`ParseLiteral`], [`Grammar`] and [`Parse`] docs for the examples of various grammar
 //! definitions.
-//!
-//! [`Grammar`]: trait.Grammar.html
-//! [`ParseLiteral`]: trait.ParseLiteral.html
-//! [`Parse`]: trait.Parse.html
-//! [`Typed`]: struct.Typed.html
-//! [`Untyped`]: struct.Untyped.html
-//! [`Block`]: ../struct.Block.html
 
 use nom::{
     bytes::complete::take_while_m_n,
@@ -73,8 +66,8 @@ pub trait NumLiteral: 'static + Copy + Num + fmt::Debug {
 /// For example, `float` parses `-Inf`, which can lead to parser failure if it's a part of
 /// a larger expression (e.g., `-Infer(2, 3)`).
 pub fn ensure_no_overlap<'a, T>(
-    parser: impl Fn(InputSpan<'a>) -> NomResult<'a, T>,
-) -> impl Fn(InputSpan<'a>) -> NomResult<'a, T> {
+    mut parser: impl FnMut(InputSpan<'a>) -> NomResult<'a, T>,
+) -> impl FnMut(InputSpan<'a>) -> NomResult<'a, T> {
     let truncating_parser = move |input| {
         parser(input).map(|(rest, number)| (maybe_truncate_consumed_input(input, rest), number))
     };
@@ -139,8 +132,8 @@ mod complex {
     use crate::{InputSpan, NomResult};
 
     fn complex_parser<'a, T: Num>(
-        num_parser: impl Fn(InputSpan<'a>) -> NomResult<'a, T>,
-    ) -> impl Fn(InputSpan<'a>) -> NomResult<'a, Complex<T>> {
+        num_parser: impl FnMut(InputSpan<'a>) -> NomResult<'a, T>,
+    ) -> impl FnMut(InputSpan<'a>) -> NomResult<'a, Complex<T>> {
         let i_parser = map(one_of("ij"), |_| Complex::new(T::zero(), T::one()));
 
         let parser = tuple((num_parser, opt(one_of("ij"))));
@@ -218,6 +211,8 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "std")]
+    // ^-- This behavior is specific to `lexical-core` dependency, which is switched on with `std`.
     #[test]
     fn parsing_infinity() {
         let parsed = Untyped::<F32Grammar>::parse_statements("Inf").unwrap();

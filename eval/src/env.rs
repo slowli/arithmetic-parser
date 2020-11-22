@@ -14,14 +14,9 @@ use crate::{
 
 /// Environment containing named `Value`s.
 ///
-/// Note that the environment implements the [`Index`] trait, which allows to eloquently
+/// Note that the environment implements the [`Index`](ops::Index) trait, which allows to eloquently
 /// access or modify environment. Similarly, [`IntoIterator`] / [`FromIterator`] / [`Extend`] traits
 /// allow to construct environments.
-///
-/// [`Index`]: https://doc.rust-lang.org/std/ops/trait.Index.html
-/// [`IntoIterator`]: https://doc.rust-lang.org/std/iter/trait.IntoIterator.html
-/// [`FromIterator`]: https://doc.rust-lang.org/std/iter/trait.FromIterator.html
-/// [`Extend`]: https://doc.rust-lang.org/std/iter/trait.Extend.html
 ///
 /// # Examples
 ///
@@ -107,16 +102,13 @@ impl<'a, T> Environment<'a, T> {
         self.insert(name, Value::native_fn(native_fn))
     }
 
-    /// Inserts a [wrapped function] with the specified name.
+    /// Inserts a [wrapped function](fns::FnWrapper) with the specified name.
     ///
-    /// Calling this method is equivalent to [`wrap`]ping a function and calling
-    /// [`insert_native_fn()`](#method.insert_native_fn) on it. Thanks to type inference magic,
+    /// Calling this method is equivalent to [`wrap`](fns::wrap)ping a function and calling
+    /// [`insert_native_fn()`](Self::insert_native_fn) on it. Thanks to type inference magic,
     /// the Rust compiler will usually be able to extract the `Args` type param
     /// from the function definition, provided that type of function arguments and its return type
     /// are defined explicitly or can be unequivocally inferred from the declaration.
-    ///
-    /// [wrapped function]: fns/struct.FnWrapper.html
-    /// [`wrap`]: fns/fn.wrap.html
     pub fn insert_wrapped_fn<Args, F>(&mut self, name: &str, fn_to_wrap: F) -> &mut Self
     where
         fns::FnWrapper<Args, F>: NativeFn<T> + 'static,

@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/slowli/arithmetic-parser/workflows/Rust/badge.svg?branch=master)](https://github.com/slowli/arithmetic-parser/actions)
 [![License: Apache-2.0](https://img.shields.io/crates/l/arithmetic-parser)](https://github.com/slowli/arithmetic-parser/blob/master/LICENSE)
-![rust 1.42+ required](https://img.shields.io/badge/rust-1.42+-blue.svg) 
+![rust 1.44+ required](https://img.shields.io/badge/rust-1.44+-blue.svg) 
 
 **Links:** [![Docs.rs](https://docs.rs/arithmetic-parser/badge.svg)](https://docs.rs/arithmetic-parser/)
 [![crate docs (master)](https://img.shields.io/badge/master-yellow.svg?label=docs)](https://slowli.github.io/arithmetic-parser/arithmetic_parser/) 
@@ -11,7 +11,14 @@
 A versatile parser for arithmetic expressions which allows customizing literal definitions,
 type annotations and several other aspects of parsing.
 
-## Features
+## Usage
+
+Add this to your `Crate.toml`:
+
+```toml
+[dependencies]
+arithmetic-parser = "0.2.0-beta.1"
+```
 
 The parser is overall similar to Rust. It supports variables, literals, comments,
 arithmetic and boolean operations, parentheses, function calls, tuples and tuple destructuring,

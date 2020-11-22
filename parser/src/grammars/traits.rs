@@ -20,8 +20,6 @@ pub enum BooleanOps {
 }
 
 /// Parsing features used to configure [`Parse`] implementations.
-///
-/// [`Parse`]: trait.Parse.html
 #[derive(Debug, Clone)]
 #[allow(clippy::struct_excessive_bools)] // flags are independent
 #[non_exhaustive]
@@ -73,14 +71,10 @@ impl Features {
 /// If your grammar does not need to support type annotations, you can define a `ParseLiteral` impl
 /// and wrap it into [`Untyped`] to get a [`Grammar`] / [`Parse`]:
 ///
-/// [`Untyped`]: struct.Untyped.html
-/// [`Grammar`]: trait.Grammar.html
-/// [`Parse`]: trait.Parse.html
-///
 /// ```
 /// use arithmetic_parser::{
 ///     grammars::{Features, ParseLiteral, Parse, Untyped},
-///     InputSpan, NomResult,
+///     ErrorKind, InputSpan, NomResult,
 /// };
 ///
 /// /// Grammar that parses `u64` numbers.
@@ -93,7 +87,10 @@ impl Features {
 ///     // We use the `nom` crate to construct necessary parsers.
 ///     fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
 ///         use nom::{character::complete::digit1, combinator::map_res};
-///         map_res(digit1, |s: InputSpan<'_>| s.fragment().parse())(input)
+///         let parser = |s: InputSpan<'_>| {
+///             s.fragment().parse().map_err(ErrorKind::literal)
+///         };
+///         map_res(digit1, parser)(input)
 ///     }
 /// }
 ///
@@ -141,8 +138,6 @@ pub trait ParseLiteral: 'static {
     /// # Return value
     ///
     /// The output should follow `nom` conventions on errors / failures.
-    ///
-    /// [`Parse::FEATURES`]: trait.Parse.html#associatedconstant.FEATURES
     fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit>;
 }
 
@@ -153,13 +148,10 @@ pub trait ParseLiteral: 'static {
 /// Use a [`Typed`] wrapper to create a parser from the grammar, which will support all
 /// parsing [`Features`]:
 ///
-/// [`Typed`]: struct.Typed.html
-/// [`Features`]: struct.Features.html
-///
 /// ```
 /// # use arithmetic_parser::{
 /// #     grammars::{Features, ParseLiteral, Grammar, Parse, Typed},
-/// #     InputSpan, NomResult,
+/// #     ErrorKind, InputSpan, NomResult,
 /// # };
 /// /// Grammar that parses `u64` numbers and has a single type annotation, `Num`.
 /// #[derive(Debug)]
@@ -170,7 +162,10 @@ pub trait ParseLiteral: 'static {
 ///
 ///     fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
 ///         use nom::{character::complete::digit1, combinator::map_res};
-///         map_res(digit1, |s: InputSpan<'_>| s.fragment().parse())(input)
+///         let parser = |s: InputSpan<'_>| {
+///             s.fragment().parse().map_err(ErrorKind::literal)
+///         };
+///         map_res(digit1, parser)(input)
 ///     }
 /// }
 ///
@@ -236,7 +231,7 @@ impl<'a> IntoInputSpan<'a> for &'a str {
 /// Unites all necessary parsers to form a complete grammar definition.
 ///
 /// The two extension points for a `Grammar` are *literals* and *type annotations*. They are
-/// defined via [`Base`] type.
+/// defined via [`Base`](Self::Base) type.
 /// A `Grammar` also defines a set of supported [`Features`]. This allows to customize which
 /// constructs are parsed.
 ///
@@ -244,17 +239,12 @@ impl<'a> IntoInputSpan<'a> for &'a str {
 /// these types allow to not declare `Parse` impl explicitly. It is still possible
 /// to define custom `Parse` implementations, as shown in the example below.
 ///
-/// [`Base`]: #associatedtype.Base
-/// [`Features`]: struct.Features.html
-/// [`Typed`]: struct.Typed.html
-/// [`Untyped`]: struct.Untyped.html
-///
 /// # Examples
 ///
 /// ```
 /// # use arithmetic_parser::{
 /// #     grammars::{Features, ParseLiteral, Parse, Untyped},
-/// #     InputSpan, NomResult,
+/// #     ErrorKind, InputSpan, NomResult,
 /// # };
 /// #[derive(Debug)]
 /// struct IntegerGrammar;
@@ -264,7 +254,8 @@ impl<'a> IntoInputSpan<'a> for &'a str {
 /// #   type Lit = u64;
 /// #   fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
 /// #       use nom::{character::complete::digit1, combinator::map_res};
-/// #       map_res(digit1, |s: InputSpan<'_>| s.fragment().parse())(input)
+/// #       let parser = |s: InputSpan<'_>| s.fragment().parse().map_err(ErrorKind::literal);
+/// #       map_res(digit1, parser)(input)
 /// #   }
 /// }
 ///
@@ -315,11 +306,6 @@ pub trait Parse {
 /// # Examples
 ///
 /// See [`ParseLiteral`] docs for an example of usage.
-///
-/// [`ParseLiteral`]: trait.ParseLiteral.html
-/// [`Grammar`]: trait.Grammar.html
-/// [`Parse`]: trait.Parse.html
-/// [`Features`]: struct.Features.html
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Untyped<T>(PhantomData<T>);
 
@@ -358,10 +344,6 @@ impl<T: ParseLiteral> Parse for Untyped<T> {
 /// # Examples
 ///
 /// See [`Grammar`] docs for an example of usage.
-///
-/// [`Grammar`]: trait.Grammar.html
-/// [`Parse`]: trait.Parse.html
-/// [`Features`]: struct.Features.html
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Typed<T>(PhantomData<T>);
 

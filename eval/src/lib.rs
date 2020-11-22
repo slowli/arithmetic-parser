@@ -30,15 +30,19 @@
 //!   is annotated to have a numeric type).
 //! - Order comparisons (`>`, `<`, `>=`, `<=`) are desugared as follows. First, the `cmp` function
 //!   is called with LHS and RHS as args (in this order). The result is then interpreted as
-//!   [`Ordering`] (-1 is `Less`, 1 is `Greater`, 0 is `Equal`; anything else leads to an error).
+//!   [`Ordering`](core::cmp::Ordering) (-1 is `Less`, 1 is `Greater`, 0 is `Equal`;
+//!   anything else leads to an error).
 //!   Finally, the `Ordering` is used to compute the original comparison operation. For example,
 //!   if `cmp(x, y) == -1`, then `x < y` and `x <= y` will return `true`, and `x > y` will
 //!   return `false`.
 //!
+//! # Crate features
+//!
+//! - `complex`. Implements [`Number`] for floating-point complex numbers from
+//!   the [`num-complex`] crate (i.e., `Complex32` and `Complex64`).
+//!
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
-//! [`Number`]: trait.Number.html
-//! [`Value`]: enum.Value.html
-//! [`Ordering`]: https://doc.rust-lang.org/std/cmp/enum.Ordering.html
+//! [`num-complex`]: https://crates.io/crates/num-complex
 //!
 //! # Examples
 //!
@@ -71,6 +75,7 @@
 //! ```
 
 #![cfg_attr(not(feature = "std"), no_std)]
+#![doc(html_root_url = "https://docs.rs/arithmetic-eval/0.2.0-beta.1")]
 #![warn(missing_docs, missing_debug_implementations)]
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(
@@ -117,7 +122,6 @@ pub use self::{
     variable_map::{Comparisons, Prelude, VariableMap},
 };
 
-use num_complex::{Complex32, Complex64};
 use num_traits::Pow;
 
 use core::ops;
@@ -138,5 +142,7 @@ pub trait Number: NumLiteral + ops::Neg<Output = Self> + Pow<Self, Output = Self
 
 impl Number for f32 {}
 impl Number for f64 {}
-impl Number for Complex32 {}
-impl Number for Complex64 {}
+#[cfg(feature = "num-complex")]
+impl Number for num_complex::Complex32 {}
+#[cfg(feature = "num-complex")]
+impl Number for num_complex::Complex64 {}

@@ -9,7 +9,8 @@
 //! - Use [`FnWrapper`] or the [`wrap`] function. This allows specifying arguments / output
 //!   with custom types (such as `bool` or a [`Number`]), but does not work for non-`'static`
 //!   types.
-//! - Use [`wrap_fn`] or [`wrap_fn_with_context`] macros. These macros support
+//! - Use [`wrap_fn`](crate::wrap_fn) or [`wrap_fn_with_context`](crate::wrap_fn_with_context)
+//!   macros. These macros support
 //!   the same eloquent interface as `wrap`, and also do not have `'static` requirement for args.
 //!   As a downside, debugging compile-time errors when using macros can be rather painful.
 //!
@@ -21,12 +22,6 @@
 //! (this requires [generic associated types][GAT]). As such, the (implicit) `'static` requirement
 //! is a temporary measure, and macros fill the gaps in their usual clunky manner.
 //!
-//! [`NativeFn`]: ../trait.NativeFn.html
-//! [`FnWrapper`]: struct.FnWrapper.html
-//! [`wrap`]: fn.wrap.html
-//! [`Number`]: ../trait.Number.html
-//! [`wrap_fn`]: ../macro.wrap_fn.html
-//! [`wrap_fn_with_context`]: ../macro.wrap_fn_with_context.html
 //! [GAT]: https://github.com/rust-lang/rust/issues/44265
 
 use num_traits::{One, Zero};
@@ -712,7 +707,7 @@ impl<T: Number + PartialOrd> NativeFn<T> for Compare {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Environment, ExecutableModule, WildcardId};
+    use crate::{alloc::ToOwned, Environment, ExecutableModule, WildcardId};
 
     use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
     use assert_matches::assert_matches;

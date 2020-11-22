@@ -9,7 +9,7 @@ use nom::{
     character::complete::{char as tag_char, one_of},
     combinator::{cut, map, not, opt, peek, recognize},
     error::context,
-    multi::{many0, separated_list},
+    multi::{many0, separated_list0},
     sequence::{delimited, preceded, terminated, tuple},
     Err as NomErr, Slice,
 };
@@ -47,7 +47,7 @@ impl GrammarType for Streaming {
 }
 
 impl UnaryOp {
-    fn from_span(span: Spanned<char>) -> Spanned<Self> {
+    fn from_span(span: Spanned<'_, char>) -> Spanned<'_, Self> {
         match span.extra {
             '-' => span.copy_with_extra(UnaryOp::Neg),
             '!' => span.copy_with_extra(UnaryOp::Not),
@@ -165,7 +165,7 @@ where
         terminated(tag_char('('), ws::<Ty>),
         // Once we've encountered the opening `(`, the input *must* correspond to the parser.
         cut(tuple((
-            separated_list(delimited(ws::<Ty>, tag_char(','), ws::<Ty>), expr::<T, Ty>),
+            separated_list0(delimited(ws::<Ty>, tag_char(','), ws::<Ty>), expr::<T, Ty>),
             terminated(maybe_comma, tuple((ws::<Ty>, tag_char(')')))),
         ))),
     )(input)
@@ -173,7 +173,7 @@ where
 
 /// Expression enclosed in parentheses. This may be a simple value (e.g., `(1 + 2)`)
 /// or a tuple (e.g., `(x, y)`), depending on the number of comma-separated terms.
-fn paren_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<SpannedExpr<'_, T::Base>>
+fn paren_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
 where
     T: Parse,
     Ty: GrammarType,
@@ -210,7 +210,7 @@ where
     T: Parse,
     Ty: GrammarType,
 {
-    let block_parser: Box<dyn Fn(InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>> =
+    let block_parser: Box<dyn FnMut(InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>> =
         if T::FEATURES.blocks {
             let parser = map(with_span(block::<T, Ty>), |spanned| {
                 spanned.map_extra(Expr::Block)
@@ -224,7 +224,7 @@ where
             })
         };
 
-    let fn_def_parser: Box<dyn Fn(InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>> =
+    let fn_def_parser: Box<dyn FnMut(InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>> =
         if T::FEATURES.fn_definitions {
             let parser = map(with_span(fn_def::<T, Ty>), |span| {
                 span.map_extra(Expr::FnDefinition)
@@ -281,32 +281,33 @@ where
     T: Parse,
     Ty: GrammarType,
 {
+    type MethodParseResult<'a, T> = NomResult<'a, MethodOrFnCall<'a, <T as Parse>::Base>>;
+
     let fn_call_parser = map(fn_args::<T, Ty>, |(args, _)| MethodOrFnCall {
         fn_name: None,
         args,
     });
 
-    let method_or_fn_call: Box<
-        dyn Fn(InputSpan<'a>) -> NomResult<'a, MethodOrFnCall<'a, T::Base>>,
-    > = if T::FEATURES.methods {
-        let method_parser = map(
-            tuple((var_name, fn_args::<T, Ty>)),
-            |(fn_name, (args, _))| MethodOrFnCall {
-                fn_name: Some(fn_name),
-                args,
-            },
-        );
+    let method_or_fn_call: Box<dyn FnMut(InputSpan<'a>) -> MethodParseResult<'a, T>> =
+        if T::FEATURES.methods {
+            let method_parser = map(
+                tuple((var_name, fn_args::<T, Ty>)),
+                |(fn_name, (args, _))| MethodOrFnCall {
+                    fn_name: Some(fn_name),
+                    args,
+                },
+            );
 
-        let parser = alt((
-            preceded(tuple((tag_char('.'), ws::<Ty>)), cut(method_parser)),
-            fn_call_parser,
-        ));
-        Box::new(parser)
-    } else {
-        Box::new(fn_call_parser)
-    };
+            let parser = alt((
+                preceded(tuple((tag_char('.'), ws::<Ty>)), cut(method_parser)),
+                fn_call_parser,
+            ));
+            Box::new(parser)
+        } else {
+            Box::new(fn_call_parser)
+        };
 
-    let parser = tuple((
+    let mut parser = tuple((
         simplest_expr::<T, Ty>,
         many0(with_span(preceded(ws::<Ty>, method_or_fn_call))),
     ));
@@ -320,7 +321,7 @@ where
 fn fold_args<'a, T: Grammar>(
     input: InputSpan<'a>,
     mut base: SpannedExpr<'a, T>,
-    calls: Vec<Spanned<MethodOrFnCall<'a, T>>>,
+    calls: Vec<Spanned<'_, MethodOrFnCall<'a, T>>>,
 ) -> Result<SpannedExpr<'a, T>, NomErr<Error<'a>>> {
     // Do we need to reorder unary op application and method calls? This is only applicable if:
     //
@@ -411,7 +412,7 @@ where
         tag("&&"), tag("||"), // logical ops
         tag(">="), tag("<="), tag(">"), tag("<"), // order comparisons
     ));
-    let binary_ops = map(binary_ops, BinaryOp::from_span);
+    let mut binary_ops = map(binary_ops, BinaryOp::from_span);
 
     let full_binary_ops = move |input| {
         let (rest, spanned_op) = binary_ops(input)?;
@@ -425,7 +426,7 @@ where
         }
     };
 
-    let binary_parser = tuple((
+    let mut binary_parser = tuple((
         simple_expr::<T, Ty>,
         many0(tuple((
             delimited(ws::<Ty>, full_binary_ops, ws::<Ty>),
@@ -549,7 +550,7 @@ where
     T: Parse,
     Ty: GrammarType,
 {
-    separated_list(comma_sep::<Ty>, lvalue::<T, Ty>)(input)
+    separated_list0(comma_sep::<Ty>, lvalue::<T, Ty>)(input)
 }
 
 fn destructure_rest<T, Ty>(
@@ -637,7 +638,7 @@ where
     T: Parse,
     Ty: GrammarType,
 {
-    let simple_lvalue: Box<dyn Fn(InputSpan<'a>) -> NomResult<'a, GrammarLvalue<'a, T>>> =
+    let mut simple_lvalue: Box<dyn FnMut(InputSpan<'a>) -> NomResult<'a, GrammarLvalue<'a, T>>> =
         if T::FEATURES.type_annotations {
             let parser = map(
                 tuple((

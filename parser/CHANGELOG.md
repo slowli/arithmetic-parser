@@ -43,6 +43,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Export `ParseLiteral`, `Grammar` and `Parse` from the `grammars` module. (#38)
 
+- Update dependencies. (#39)
+
 ### Fixed
 
 - Fix parsing of expressions like `1.abs()` for standard grammars. Previously,

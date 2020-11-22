@@ -18,6 +18,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 - Decouple `ExecutableModule` compilation and execution. This allows distinguishing
   between errors on these two steps and gives more control over module lifecycle. (#32)
 
+- Support integer and modular arithmetics.
+
 ### Changed
 
 - Change APIs related to code spans according to the updates in the parser crate. (#26)
@@ -49,6 +51,9 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 - Make `CallContext::mock()` accept custom module ID and call span. (#32)
 
 - Crate types now have a numeric literal type param, rather than a `Grammar`. (#38)
+
+- Change module execution logic to use a customizable abstraction (arithmetic)
+  for foundational arithmetic ops and comparisons.
 
 ## 0.2.0-beta.1 - 2020-10-04
 

@@ -20,10 +20,10 @@
 
 use nom::{
     bytes::complete::take_while_m_n,
-    character::complete::digit1,
-    combinator::{map_res, not, peek},
+    character::complete::{char as tag_char, digit1},
+    combinator::{map_res, not, opt, peek, recognize},
     number::complete::{double, float},
-    sequence::terminated,
+    sequence::{terminated, tuple},
     Slice,
 };
 use num_traits::Num;
@@ -105,7 +105,7 @@ fn maybe_truncate_consumed_input<'a>(input: InputSpan<'a>, rest: InputSpan<'a>) 
     }
 }
 
-macro_rules! impl_num_literal_for_ints {
+macro_rules! impl_num_literal_for_uint {
     ($($num:ident),+) => {
         $(
         impl NumLiteral for $num {
@@ -118,8 +118,22 @@ macro_rules! impl_num_literal_for_ints {
     };
 }
 
-// FIXME: do we need sign parsing for `i*`?
-impl_num_literal_for_ints!(u8, i8, u16, i16, u32, i32, u64, i64, u128, i128);
+impl_num_literal_for_uint!(u8, u16, u32, u64, u128);
+
+macro_rules! impl_num_literal_for_int {
+    ($($num:ident),+) => {
+        $(
+        impl NumLiteral for $num {
+            fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
+                let parser = |s: InputSpan<'_>| s.fragment().parse().map_err(ErrorKind::literal);
+                map_res(recognize(tuple((opt(tag_char('-')), digit1))), parser)(input)
+            }
+        }
+        )+
+    };
+}
+
+impl_num_literal_for_int!(i8, i16, i32, i64, i128);
 
 impl NumLiteral for f32 {
     fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
@@ -185,6 +199,7 @@ mod tests {
 
     use assert_matches::assert_matches;
     use core::f32::INFINITY;
+    use nom::Err as NomErr;
 
     #[test]
     fn parsing_numbers_with_dot() {
@@ -301,5 +316,36 @@ mod tests {
             _ => panic!("Unexpected LHS: {:?}", var_negation),
         };
         assert_matches!(negated_var, Expr::Variable);
+    }
+
+    #[test]
+    fn uint_parsers() {
+        let (_, u8_val) = <u8 as NumLiteral>::parse(InputSpan::new("3")).unwrap();
+        assert_eq!(u8_val, 3);
+        let (_, u16_val) = <u16 as NumLiteral>::parse(InputSpan::new("33333")).unwrap();
+        assert_eq!(u16_val, 33_333);
+        let (_, u32_val) = <u32 as NumLiteral>::parse(InputSpan::new("1111111111")).unwrap();
+        assert_eq!(u32_val, 1_111_111_111);
+        let (_, u64_val) =
+            <u64 as NumLiteral>::parse(InputSpan::new(&u64::max_value().to_string())).unwrap();
+        assert_eq!(u64_val, u64::max_value());
+        let (_, u128_val) =
+            <u128 as NumLiteral>::parse(InputSpan::new(&u128::max_value().to_string())).unwrap();
+        assert_eq!(u128_val, u128::max_value());
+    }
+
+    #[test]
+    fn int_parsers() {
+        let (_, min_val) = <i8 as NumLiteral>::parse(InputSpan::new("-128")).unwrap();
+        assert_eq!(min_val, -128);
+        let (_, max_val) = <i8 as NumLiteral>::parse(InputSpan::new("127")).unwrap();
+        assert_eq!(max_val, 127);
+
+        let err = <i8 as NumLiteral>::parse(InputSpan::new("128")).unwrap_err();
+        let err_kind = match &err {
+            NomErr::Error(err) => err.kind(),
+            _ => panic!("Unexpected error type: {:?}", err),
+        };
+        assert_matches!(err_kind, ErrorKind::Literal(_));
     }
 }

@@ -68,22 +68,15 @@ pub trait Arithmetic<T> {
 }
 
 /// Extends an [`Arithmetic`] with a comparison operation on numbers.
-pub trait Compare<T> {
+pub trait OrdArithmetic<T>: Arithmetic<T> {
     /// Compares two numbers. Returns `None` if the numbers are not comparable, or the comparison
     /// result otherwise.
     fn partial_cmp(&self, x: &T, y: &T) -> Option<Ordering>;
 }
 
-/// Helper trait wrapping together [`Arithmetic`] and [`Compare`].
-///
-/// This trait is automatically implemented for types implementing both supertraits.
-pub trait OrdArithmetic<T>: Arithmetic<T> + Compare<T> {}
-
-impl<T, A: Arithmetic<T> + Compare<T>> OrdArithmetic<T> for A {}
-
 impl<T> fmt::Debug for dyn OrdArithmetic<T> + '_ {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.debug_tuple("ArithmeticAndCompare").finish()
+        formatter.debug_tuple("OrdArithmetic").finish()
     }
 }
 
@@ -136,7 +129,11 @@ where
     }
 }
 
-impl<T: PartialOrd> Compare<T> for StdArithmetic {
+impl<T> OrdArithmetic<T> for StdArithmetic
+where
+    Self: Arithmetic<T>,
+    T: PartialOrd,
+{
     fn partial_cmp(&self, x: &T, y: &T) -> Option<Ordering> {
         x.partial_cmp(y)
     }
@@ -214,7 +211,11 @@ where
     }
 }
 
-impl<T: PartialOrd> Compare<T> for CheckedArithmetic {
+impl<T> OrdArithmetic<T> for CheckedArithmetic
+where
+    Self: Arithmetic<T>,
+    T: PartialOrd,
+{
     #[inline]
     fn partial_cmp(&self, x: &T, y: &T) -> Option<Ordering> {
         x.partial_cmp(y)
@@ -223,16 +224,16 @@ impl<T: PartialOrd> Compare<T> for CheckedArithmetic {
 
 #[cfg(test)]
 static_assertions::assert_impl_all!(
-    CheckedArithmetic: Arithmetic<u8>,
-    Arithmetic<i8>,
-    Arithmetic<u16>,
-    Arithmetic<i16>,
-    Arithmetic<u32>,
-    Arithmetic<i32>,
-    Arithmetic<u64>,
-    Arithmetic<i64>,
-    Arithmetic<u128>,
-    Arithmetic<i128>
+    CheckedArithmetic: OrdArithmetic<u8>,
+    OrdArithmetic<i8>,
+    OrdArithmetic<u16>,
+    OrdArithmetic<i16>,
+    OrdArithmetic<u32>,
+    OrdArithmetic<i32>,
+    OrdArithmetic<u64>,
+    OrdArithmetic<i64>,
+    OrdArithmetic<u128>,
+    OrdArithmetic<i128>
 );
 
 /// Arithmetic on an integer type (e.g., `i32`), in which all operations have wrapping semantics.
@@ -300,7 +301,11 @@ where
     }
 }
 
-impl<T: PartialOrd> Compare<T> for WrappingArithmetic {
+impl<T> OrdArithmetic<T> for WrappingArithmetic
+where
+    Self: Arithmetic<T>,
+    T: PartialOrd,
+{
     #[inline]
     fn partial_cmp(&self, x: &T, y: &T) -> Option<Ordering> {
         x.partial_cmp(y)
@@ -524,7 +529,7 @@ static_assertions::assert_impl_all!(ModularArithmetic<u32>: Arithmetic<u32>);
 #[cfg(test)]
 static_assertions::assert_impl_all!(ModularArithmetic<u64>: Arithmetic<u64>);
 
-/// Wrapper type allowing to combine an [`Arithmetic`] with a [`Compare`] implementation.
+/// Wrapper type allowing to extend an [`Arithmetic`] to an [`OrdArithmetic`] implementation.
 ///
 /// # Examples
 ///
@@ -595,7 +600,7 @@ where
     }
 }
 
-impl<T, A> Compare<T> for FullArithmetic<T, A>
+impl<T, A> OrdArithmetic<T> for FullArithmetic<T, A>
 where
     A: Arithmetic<T>,
 {
@@ -604,8 +609,7 @@ where
     }
 }
 
-/// Extension trait for [`Arithmetic`] allowing to combine the arithmetic with a [`Compare`]
-/// implementation.
+/// Extension trait for [`Arithmetic`] allowing to combine the arithmetic with a number comparison.
 ///
 /// # Examples
 ///

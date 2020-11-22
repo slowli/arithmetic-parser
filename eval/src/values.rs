@@ -6,7 +6,7 @@ use core::{any::Any, cmp::Ordering, fmt};
 
 use crate::{
     alloc::{vec, Rc, String, ToOwned, Vec},
-    arith::{Arithmetic, Compare, OrdArithmetic},
+    arith::OrdArithmetic,
     error::{AuxErrorInfo, Backtrace, CodeInModule, TupleLenMismatchContext},
     executable::ExecutableFn,
     fns, Error, ErrorKind, EvalResult, ModuleId,
@@ -33,7 +33,7 @@ impl<'r, 'a, T> CallContext<'r, 'a, T> {
     /// Creates a mock call context with the specified module ID and call span.
     pub fn mock<A>(module_id: &dyn ModuleId, call_span: MaybeSpanned<'a>, arithmetic: &'r A) -> Self
     where
-        A: Arithmetic<T> + Compare<T>,
+        A: OrdArithmetic<T>,
     {
         Self {
             call_span: CodeInModule::new(module_id, call_span),

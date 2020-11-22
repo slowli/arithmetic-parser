@@ -4,7 +4,7 @@ use core::{fmt, ops};
 
 use crate::{
     alloc::{Box, String, ToOwned},
-    arith::{Arithmetic, Compare, OrdArithmetic, StdArithmetic},
+    arith::{OrdArithmetic, StdArithmetic},
     compiler::{Compiler, ImportSpans},
     error::{Backtrace, ErrorWithBacktrace},
     Environment, Error, ErrorKind, Value, VariableMap,
@@ -220,7 +220,7 @@ impl<'a, T: Clone + fmt::Debug> ExecutableModule<'a, T> {
 
 impl<'a, T: Clone + fmt::Debug> ExecutableModule<'a, T>
 where
-    StdArithmetic: Arithmetic<T> + Compare<T>,
+    StdArithmetic: OrdArithmetic<T>,
 {
     /// Runs the module with the current values of imports. This is a read-only operation;
     /// neither the imports, nor other module state are modified by it.

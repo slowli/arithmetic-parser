@@ -492,7 +492,7 @@ impl<'a, T> Value<'a, T> {
     }
 
     /// Creates a reference to a native variable.
-    pub fn any(value: impl Any + fmt::Debug + PartialEq) -> Self {
+    pub fn opaque_ref(value: impl Any + fmt::Debug + PartialEq) -> Self {
         Self::Ref(OpaqueRef::new(value))
     }
 
@@ -843,11 +843,11 @@ mod tests {
 
     #[test]
     fn opaque_ref_equality() {
-        let value = Value::<f32>::any(Ordering::Less);
-        let same_value = Value::<f32>::any(Ordering::Less);
+        let value = Value::<f32>::opaque_ref(Ordering::Less);
+        let same_value = Value::<f32>::opaque_ref(Ordering::Less);
         assert_eq!(value, same_value);
         assert_eq!(value, value.clone());
-        let other_value = Value::<f32>::any(Ordering::Greater);
+        let other_value = Value::<f32>::opaque_ref(Ordering::Greater);
         assert_ne!(value, other_value);
     }
 

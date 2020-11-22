@@ -424,7 +424,7 @@ impl<'a, T> IntoEvalResult<'a, T> for bool {
 
 impl<'a, T> IntoEvalResult<'a, T> for cmp::Ordering {
     fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
-        Ok(Value::any(self))
+        Ok(Value::opaque_ref(self))
     }
 }
 

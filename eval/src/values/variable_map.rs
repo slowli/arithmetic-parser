@@ -93,9 +93,9 @@ pub struct Comparisons;
 impl<'a, T> VariableMap<'a, T> for Comparisons {
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
         Some(match name {
-            "LESS" => Value::any(Ordering::Less),
-            "EQUAL" => Value::any(Ordering::Equal),
-            "GREATER" => Value::any(Ordering::Greater),
+            "LESS" => Value::opaque_ref(Ordering::Less),
+            "EQUAL" => Value::opaque_ref(Ordering::Equal),
+            "GREATER" => Value::opaque_ref(Ordering::Greater),
             "cmp" => Value::native_fn(fns::Compare::Raw),
             "min" => Value::native_fn(fns::Compare::Min),
             "max" => Value::native_fn(fns::Compare::Max),

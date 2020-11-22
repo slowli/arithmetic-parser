@@ -758,7 +758,7 @@ impl<T> NativeFn<T> for Compare {
         let maybe_ordering = ctx.arithmetic().partial_cmp(&x, &y);
 
         if let Self::Raw = self {
-            Ok(maybe_ordering.map_or_else(Value::void, Value::any))
+            Ok(maybe_ordering.map_or_else(Value::void, Value::opaque_ref))
         } else {
             let ordering =
                 maybe_ordering.ok_or_else(|| ctx.call_site_error(ErrorKind::CannotCompare))?;

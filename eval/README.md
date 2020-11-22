@@ -19,8 +19,7 @@ The primary goal is to be intuitive for simple grammars (such as the aforementio
 real-valued arithmetic), even if this comes at the cost of rendering the interpreter
 unusable for other grammars. Universality is explicitly not the design goal.
 
-The interpreter is quite slow – 1–2 orders of magnitude slower than native
-floating-point arithmetic.
+The interpreter is quite slow – 1–2 orders of magnitude slower than native arithmetic.
 
 ## Usage
 

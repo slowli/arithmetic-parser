@@ -20,7 +20,7 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Make complex number support optional. (#39)
 
-- Support integer and modular arithmetics.
+- Support integer and modular arithmetics. (#40)
 
 ### Changed
 
@@ -55,7 +55,7 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 - Crate types now have a numeric literal type param, rather than a `Grammar`. (#38)
 
 - Change module execution logic to use a customizable abstraction (arithmetic)
-  for foundational arithmetic ops and comparisons.
+  for foundational arithmetic ops and comparisons. (#40)
 
 ## 0.2.0-beta.1 - 2020-10-04
 

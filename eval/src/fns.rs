@@ -776,7 +776,7 @@ impl<T> NativeFn<T> for Compare {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Environment, ExecutableModule, WildcardId};
+    use crate::{alloc::ToOwned, Environment, ExecutableModule, WildcardId};
 
     use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
     use assert_matches::assert_matches;

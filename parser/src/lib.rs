@@ -4,7 +4,7 @@
 //! Overall, parsed grammars are similar to Rust syntax,
 //! [with a few notable differences](#differences-with-rust).
 //!
-//! # Supported Features
+//! # Supported syntax features
 //!
 //! - **Variables.** A variable name is defined similar to Rust and other programming languages,
 //!   as a sequence of alphanumeric chars and underscores that does not start with a digit.
@@ -19,7 +19,7 @@
 //! The parser supports both complete and streaming (incomplete) modes; the latter is useful
 //! for REPLs and similar applications.
 //!
-//! ## Optional Features
+//! ## Optional syntax features
 //!
 //! These features can be switched on or off when defining a [`Parse`](grammars::Parse) impl
 //! by declaring the corresponding [`Features`](grammars::Features).
@@ -54,6 +54,13 @@
 //! - Functions are only defined via the closure syntax.
 //! - There is "rest" destructuting for tuples and function arguments.
 //! - Type hints are placed within tuple elements, for example, `(x: Num, _) = y`.
+//!
+//! # Crate features
+//!
+//! - `std`. Enables support of types from `std`, such as the `Error` trait, and propagates
+//!   to dependencies.
+//! - `num-complex`. Implements [`NumLiteral`](crate::grammars::NumLiteral) for floating-point
+//!   complex numbers (`Complex32` and `Complex64`).
 //!
 //! # Examples
 //!

@@ -59,9 +59,15 @@
 //!   code that is incorrect with annotations (e.g., assignment of a tuple to a variable which
 //!   is annotated to have a numeric type).
 //!
+//! # Crate features
+//!
+//! - `complex`. Implements [`Number`] for floating-point complex numbers from
+//!   the [`num-complex`] crate (i.e., `Complex32` and `Complex64`).
+//!
 //! [`Arithmetic`]: crate::arith::Arithmetic
 //! [`OrdArithmetic`]: crate::arith::OrdArithmetic
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
+//! [`num-complex`]: https://crates.io/crates/num-complex
 //!
 //! # Examples
 //!

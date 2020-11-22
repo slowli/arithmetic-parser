@@ -18,6 +18,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 - Decouple `ExecutableModule` compilation and execution. This allows distinguishing
   between errors on these two steps and gives more control over module lifecycle. (#32)
 
+- Make complex number support optional. (#39)
+
 - Support integer and modular arithmetics.
 
 ### Changed

@@ -381,9 +381,8 @@ impl fmt::Display for AuxErrorInfo {
 ///
 /// Use the [`StripCode`] implementation to convert an `Error` to the `'static` lifetime, e.g.,
 /// before boxing it into `Box<dyn std::error::Error>` or `anyhow::Error`.
-/// If the error is wrapped into a [`Result`], you can do this via
-/// [`StripResultExt`](arithmetic_parser::StripResultExt) trait defined
-/// in the `arithmetic-parser` crate:
+/// If the error is wrapped into a [`Result`], you can do this via the `StripResultExt` trait
+/// defined in the `arithmetic-parser` crate:
 ///
 /// ```
 /// # use arithmetic_parser::{grammars::{F64Grammar, Parse, Untyped}, StripResultExt};

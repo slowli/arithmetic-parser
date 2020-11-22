@@ -185,3 +185,39 @@ fn undefined_var_error() {
     let response = repl.send_line("foo(3)");
     assert_eq!(response, "4");
 }
+
+#[test]
+fn getting_help() {
+    let mut repl = ReplTester::new();
+    repl.assert_intro();
+
+    let response = repl.send_line(".help");
+    assert!(response.contains("Syntax is similar to Rust"));
+    assert!(response.contains("Several commands are supported."));
+}
+
+#[test]
+fn dumping_all_vars() {
+    let mut repl = ReplTester::new();
+    repl.assert_intro();
+
+    let response = repl.send_line(".dump all");
+    assert!(response.contains("PI = 3.1415"));
+    assert!(response.contains("sin = (native fn)"));
+}
+
+#[test]
+fn unknown_command() {
+    let mut repl = ReplTester::new();
+    repl.assert_intro();
+
+    let response = repl.send_line(".exit");
+    let expected_err = r#"
+        error[CMD]: Unknown command
+          ┌─ Snippet #1:1:1
+          │
+        1 │ .exit
+          │ ^^^^^ Use `.help` to find out commands
+    "#;
+    assert_eq!(response, unindent(expected_err));
+}

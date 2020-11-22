@@ -406,6 +406,8 @@ impl<T: ReplLiteral> Env<T> {
     }
 
     fn process_command(&mut self, line: &str) -> io::Result<()> {
+        let line = line.trim();
+        self.code_map.add(line.to_owned());
         let file_id = *self.code_map.file_ids.last().expect("no files");
 
         match line {
@@ -415,9 +417,8 @@ impl<T: ReplLiteral> Env<T> {
             ".help" => self.print_help()?,
 
             _ => {
-                // FIXME: incorrect span on error!
                 let label = Label::primary(file_id, 0..line.len())
-                    .with_message("Use `.help commands` to find out commands");
+                    .with_message("Use `.help` to find out commands");
                 let diagnostic = Diagnostic::error()
                     .with_message("Unknown command")
                     .with_code("CMD")

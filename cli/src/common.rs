@@ -288,6 +288,10 @@ impl<T: ReplLiteral> Env<T> {
     ) -> io::Result<()> {
         let bool_color = ColorSpec::new().set_fg(Some(Color::Cyan)).clone();
         let num_color = ColorSpec::new().set_fg(Some(Color::Green)).clone();
+        let opaque_ref_color = ColorSpec::new()
+            .set_fg(Some(Color::Black))
+            .set_bg(Some(Color::White))
+            .clone();
 
         match value {
             Value::Bool(b) => {
@@ -343,7 +347,11 @@ impl<T: ReplLiteral> Env<T> {
                 write!(writer, "{})", " ".repeat(indent))
             }
 
-            Value::Ref(_) => todo!(),
+            Value::Ref(opaque_ref) => {
+                writer.set_color(&opaque_ref_color)?;
+                write!(writer, "{}", opaque_ref)?;
+                writer.reset()
+            }
 
             _ => unreachable!(),
         }

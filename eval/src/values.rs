@@ -2,7 +2,11 @@
 
 use hashbrown::HashMap;
 
-use core::{any::Any, cmp::Ordering, fmt};
+use core::{
+    any::{type_name, Any},
+    cmp::Ordering,
+    fmt,
+};
 
 use crate::{
     alloc::{vec, Rc, String, ToOwned, Vec},
@@ -344,23 +348,32 @@ impl fmt::Display for ValueType {
 /// - If `PartialEq` is not implemented, the comparison is by the `Rc` pointer.
 pub struct OpaqueRef {
     value: Rc<dyn Any>,
-    // FIXME: do we need a `Debug` impl in the "vtable" as well?
+    type_name: &'static str,
     dyn_eq: fn(&dyn Any, &dyn Any) -> bool,
+    dyn_fmt: fn(&dyn Any, &mut fmt::Formatter<'_>) -> fmt::Result,
 }
 
 impl OpaqueRef {
     /// Creates a reference to `value` that implements equality comparison.
     ///
-    /// Prefer using this method to [`Self::with_identity_eq()`] if the wrapped type implements
-    /// [`PartialEq`].
-    pub fn new<T: Any + PartialEq>(value: T) -> Self {
+    /// Prefer using this method if the wrapped type implements [`PartialEq`].
+    pub fn new<T>(value: T) -> Self
+    where
+        T: Any + fmt::Debug + PartialEq,
+    {
         Self {
             value: Rc::new(value),
+            type_name: type_name::<T>(),
+
             dyn_eq: |this, other| {
                 let this_cast = this.downcast_ref::<T>().unwrap();
                 other
                     .downcast_ref::<T>()
                     .map_or(false, |other_cast| other_cast == this_cast)
+            },
+            dyn_fmt: |this, formatter| {
+                let this_cast = this.downcast_ref::<T>().unwrap();
+                fmt::Debug::fmt(this_cast, formatter)
             },
         }
     }
@@ -369,13 +382,22 @@ impl OpaqueRef {
     /// equal iff they point to the same data.
     ///
     /// Prefer [`Self::new()`] when possible.
-    pub fn with_identity_eq<T: Any>(value: T) -> Self {
+    pub fn with_identity_eq<T>(value: T) -> Self
+    where
+        T: Any + fmt::Debug,
+    {
         Self {
             value: Rc::new(value),
+            type_name: type_name::<T>(),
+
             dyn_eq: |this, other| {
                 let this_data = this as *const dyn Any as *const ();
                 let other_data = other as *const dyn Any as *const ();
                 this_data == other_data
+            },
+            dyn_fmt: |this, formatter| {
+                let this_cast = this.downcast_ref::<T>().unwrap();
+                fmt::Debug::fmt(this_cast, formatter)
             },
         }
     }
@@ -390,7 +412,9 @@ impl Clone for OpaqueRef {
     fn clone(&self) -> Self {
         Self {
             value: Rc::clone(&self.value),
+            type_name: self.type_name,
             dyn_eq: self.dyn_eq,
+            dyn_fmt: self.dyn_fmt,
         }
     }
 }
@@ -407,6 +431,13 @@ impl fmt::Debug for OpaqueRef {
             .debug_tuple("OpaqueRef")
             .field(&self.value.as_ref())
             .finish()
+    }
+}
+
+impl fmt::Display for OpaqueRef {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}::", self.type_name)?;
+        (self.dyn_fmt)(self.value.as_ref(), formatter)
     }
 }
 
@@ -461,7 +492,7 @@ impl<'a, T> Value<'a, T> {
     }
 
     /// Creates a reference to a native variable.
-    pub fn any(value: impl Any + PartialEq) -> Self {
+    pub fn any(value: impl Any + fmt::Debug + PartialEq) -> Self {
         Self::Ref(OpaqueRef::new(value))
     }
 
@@ -818,5 +849,11 @@ mod tests {
         assert_eq!(value, value.clone());
         let other_value = Value::<f32>::any(Ordering::Greater);
         assert_ne!(value, other_value);
+    }
+
+    #[test]
+    fn opaque_ref_formatting() {
+        let value = OpaqueRef::new(Ordering::Less);
+        assert_eq!(value.to_string(), "core::cmp::Ordering::Less");
     }
 }

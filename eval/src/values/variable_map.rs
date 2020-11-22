@@ -4,7 +4,7 @@ use arithmetic_parser::{grammars::Grammar, Block};
 
 use core::{cmp::Ordering, fmt};
 
-use crate::{fns, Environment, Error, ExecutableModule, ModuleId, ModuleImports, Number, Value};
+use crate::{fns, Environment, Error, ExecutableModule, ModuleId, ModuleImports, Value};
 
 /// Encapsulates read access to named variables.
 pub trait VariableMap<'a, T> {
@@ -106,10 +106,7 @@ impl<'a, T> VariableMap<'a, T> for Comparisons {
 
 impl Comparisons {
     /// Creates an iterator over contained values and the corresponding names.
-    pub fn iter<T>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)>
-    where
-        T: Number + PartialOrd,
-    {
+    pub fn iter<T>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
         const VAR_NAMES: &[&str] = &["LESS", "EQUAL", "GREATER", "cmp", "min", "max"];
 
         VAR_NAMES

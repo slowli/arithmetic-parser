@@ -6,26 +6,24 @@ use codespan_reporting::{
     term::termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor},
     term::{emit, Config as ReportingConfig},
 };
-use num_complex::{Complex, Complex32, Complex64};
 use unindent::unindent;
 
 use std::{
-    fmt,
     io::{self, Write},
     ops::Range,
 };
 
-use arithmetic_eval::error::ErrorWithBacktrace;
 use arithmetic_eval::{
-    arith::{Arithmetic, Compare, StdArithmetic},
-    error::{BacktraceElement, CodeInModule},
-    fns, Comparisons, Environment, Error as EvalError, Function, IndexedId, ModuleId, Number,
-    Prelude, Value, VariableMap,
+    arith::OrdArithmetic,
+    error::{BacktraceElement, CodeInModule, ErrorWithBacktrace},
+    Environment, Error as EvalError, Function, IndexedId, ModuleId, Value, VariableMap,
 };
 use arithmetic_parser::{
-    grammars::{Grammar, NumGrammar, NumLiteral, Parse, Untyped},
+    grammars::{Grammar, NumGrammar, Parse, Untyped},
     Block, CodeFragment, Error as ParseError, LocatedSpan, LvalueLen, StripCode,
 };
+
+use crate::library::ReplLiteral;
 
 /// Exit code on parse or evaluation error.
 pub const ERROR_EXIT_CODE: i32 = 2;
@@ -111,18 +109,24 @@ impl<T> ParseAndEvalResult<T> {
     }
 }
 
-pub struct Env {
+pub struct Env<T> {
     code_map: CodeMap,
     writer: StandardStream,
     config: ReportingConfig,
+    original_env: Environment<'static, T>,
+    env: Environment<'static, T>,
+    arithmetic: Box<dyn OrdArithmetic<T>>,
 }
 
-impl Env {
-    pub fn new() -> Self {
+impl<T: ReplLiteral> Env<T> {
+    pub fn new(arithmetic: Box<dyn OrdArithmetic<T>>, env: Environment<'static, T>) -> Self {
         Self {
             code_map: CodeMap::default(),
             writer: StandardStream::stderr(ColorChoice::Auto),
             config: ReportingConfig::default(),
+            original_env: env.clone(),
+            env,
+            arithmetic,
         }
     }
 
@@ -277,21 +281,22 @@ impl Env {
         writeln!(self.writer)
     }
 
-    fn dump_value<T>(&mut self, value: &Value<'_, T>, indent: usize) -> io::Result<()>
-    where
-        T: fmt::Display,
-    {
+    fn dump_value(
+        writer: &mut StandardStream,
+        value: &Value<'_, T>,
+        indent: usize,
+    ) -> io::Result<()> {
         let bool_color = ColorSpec::new().set_fg(Some(Color::Cyan)).clone();
         let num_color = ColorSpec::new().set_fg(Some(Color::Green)).clone();
 
         match value {
             Value::Bool(b) => {
-                self.writer.set_color(&bool_color)?;
-                write!(self.writer, "{}", if *b { "true" } else { "false" })?;
-                self.writer.reset()
+                writer.set_color(&bool_color)?;
+                write!(writer, "{}", if *b { "true" } else { "false" })?;
+                writer.reset()
             }
 
-            Value::Function(Function::Native(_)) => write!(self.writer, "(native fn)"),
+            Value::Function(Function::Native(_)) => write!(writer, "(native fn)"),
 
             Value::Function(Function::Interpreted(function)) => {
                 let plurality = if function.arg_count() == LvalueLen::Exact(1) {
@@ -299,43 +304,43 @@ impl Env {
                 } else {
                     "s"
                 };
-                write!(self.writer, "fn({} arg{})", function.arg_count(), plurality)?;
+                write!(writer, "fn({} arg{})", function.arg_count(), plurality)?;
 
                 let captures = function.captures();
                 if !captures.is_empty() {
-                    writeln!(self.writer, "[")?;
+                    writeln!(writer, "[")?;
                     for (i, (var_name, capture)) in captures.iter().enumerate() {
-                        write!(self.writer, "{}{} = ", " ".repeat(indent + 2), var_name)?;
-                        self.dump_value(capture, indent + 2)?;
+                        write!(writer, "{}{} = ", " ".repeat(indent + 2), var_name)?;
+                        Self::dump_value(writer, capture, indent + 2)?;
                         if i + 1 < captures.len() {
-                            writeln!(self.writer, ",")?;
+                            writeln!(writer, ",")?;
                         } else {
-                            writeln!(self.writer)?;
+                            writeln!(writer)?;
                         }
                     }
-                    write!(self.writer, "{}]", " ".repeat(indent))?;
+                    write!(writer, "{}]", " ".repeat(indent))?;
                 }
                 Ok(())
             }
 
             Value::Number(num) => {
-                self.writer.set_color(&num_color)?;
-                write!(self.writer, "{}", num)?;
-                self.writer.reset()
+                writer.set_color(&num_color)?;
+                write!(writer, "{}", num)?;
+                writer.reset()
             }
 
             Value::Tuple(fragments) => {
-                writeln!(self.writer, "(")?;
+                writeln!(writer, "(")?;
                 for (i, fragment) in fragments.iter().enumerate() {
-                    write!(self.writer, "{}", " ".repeat(indent + 2))?;
-                    self.dump_value(fragment, indent + 2)?;
+                    write!(writer, "{}", " ".repeat(indent + 2))?;
+                    Self::dump_value(writer, fragment, indent + 2)?;
                     if i + 1 < fragments.len() {
-                        writeln!(self.writer, ",")?;
+                        writeln!(writer, ",")?;
                     } else {
-                        writeln!(self.writer)?;
+                        writeln!(writer)?;
                     }
                 }
-                write!(self.writer, "{})", " ".repeat(indent))
+                write!(writer, "{})", " ".repeat(indent))
             }
 
             Value::Ref(_) => todo!(),
@@ -344,17 +349,9 @@ impl Env {
         }
     }
 
-    fn dump_scope<T>(
-        &mut self,
-        scope: &Environment<'_, T>,
-        original_scope: &Environment<'_, T>,
-        dump_original_scope: bool,
-    ) -> io::Result<()>
-    where
-        T: PartialEq + fmt::Display,
-    {
-        for (name, var) in scope {
-            if let Some(original_var) = original_scope.get(name) {
+    fn dump_scope(&mut self, dump_original_scope: bool) -> io::Result<()> {
+        for (name, var) in &self.env {
+            if let Some(original_var) = self.original_env.get(name) {
                 if !dump_original_scope && original_var == var {
                     // The variable is present in the original scope, no need to output it.
                     continue;
@@ -362,19 +359,19 @@ impl Env {
             }
 
             write!(self.writer, "{} = ", name)?;
-            self.dump_value(var, 0)?;
+            Self::dump_value(&mut self.writer, var, 0)?;
             writeln!(self.writer)?;
         }
         Ok(())
     }
 
-    pub fn parse<'a, T: Parse>(
+    pub fn parse<'a, P: Parse>(
         &mut self,
         line: &'a str,
-    ) -> io::Result<ParseAndEvalResult<Block<'a, T::Base>>> {
+    ) -> io::Result<ParseAndEvalResult<Block<'a, P::Base>>> {
         self.code_map.add(line.to_owned());
 
-        T::parse_streaming_statements(line)
+        P::parse_streaming_statements(line)
             .map(ParseAndEvalResult::Ok)
             .or_else(|e| {
                 if e.kind().is_incomplete() {
@@ -386,44 +383,31 @@ impl Env {
             })
     }
 
-    pub fn parse_and_eval<T>(
-        &mut self,
-        line: &str,
-        env: &mut Environment<'static, T>,
-        original_env: &Environment<'static, T>,
-    ) -> io::Result<ParseAndEvalResult>
-    where
-        T: ReplLiteral,
-        StdArithmetic: Arithmetic<T> + Compare<T>,
-    {
+    pub fn parse_and_eval(&mut self, line: &str) -> io::Result<ParseAndEvalResult> {
         if line.starts_with('.') {
-            self.process_command(line, env, original_env)?;
+            self.process_command(line)?;
             return Ok(ParseAndEvalResult::Ok(()));
         }
 
         let parse_result = self.parse::<Untyped<NumGrammar<T>>>(line)?;
         Ok(if let ParseAndEvalResult::Ok(statements) = parse_result {
-            self.compile_and_execute(&statements, env)?
+            self.compile_and_execute(&statements)?
         } else {
             parse_result.map(drop)
         })
     }
 
-    fn process_command<'a, T: ReplLiteral>(
-        &mut self,
-        line: &str,
-        env: &mut Environment<'a, T>,
-        original_env: &Environment<'a, T>,
-    ) -> io::Result<()> {
+    fn process_command(&mut self, line: &str) -> io::Result<()> {
         let file_id = *self.code_map.file_ids.last().expect("no files");
 
         match line {
-            ".clear" => env.clone_from(original_env),
-            ".dump" => self.dump_scope(env, original_env, false)?,
-            ".dump all" => self.dump_scope(env, original_env, true)?,
+            ".clear" => self.env.clone_from(&self.original_env),
+            ".dump" => self.dump_scope(false)?,
+            ".dump all" => self.dump_scope(true)?,
             ".help" => self.print_help()?,
 
             _ => {
+                // FIXME: incorrect span on error!
                 let label = Label::primary(file_id, 0..line.len())
                     .with_message("Use `.help commands` to find out commands");
                 let diagnostic = Diagnostic::error()
@@ -443,18 +427,15 @@ impl Env {
         Ok(())
     }
 
-    fn compile_and_execute<T>(
+    fn compile_and_execute<G>(
         &mut self,
-        statements: &Block<'_, T>,
-        env: &mut Environment<'static, T::Lit>,
+        statements: &Block<'_, G>,
     ) -> io::Result<ParseAndEvalResult>
     where
-        T: Grammar,
-        T::Lit: ReplLiteral,
-        StdArithmetic: Arithmetic<T::Lit> + Compare<T::Lit>,
+        G: Grammar<Lit = T>,
     {
         let module_id = self.code_map.latest_module_id();
-        let module = match env.compile_module(module_id, statements) {
+        let module = match self.env.compile_module(module_id, statements) {
             Ok(builder) => builder,
             Err(err) => {
                 self.report_compile_error(&err)?;
@@ -462,7 +443,11 @@ impl Env {
             }
         };
 
-        let value = match module.strip_code().run_in_env(env) {
+        let value = match module
+            .strip_code()
+            .with_arithmetic(self.arithmetic.as_ref())
+            .run_in_env(&mut self.env)
+        {
             Ok(value) => value,
             Err(err) => {
                 self.report_eval_error(&err)?;
@@ -471,164 +456,9 @@ impl Env {
         };
 
         if !value.is_void() {
-            self.dump_value(&value, 0)?;
+            Self::dump_value(&mut self.writer, &value, 0)?;
             self.newline()?;
         }
         Ok(ParseAndEvalResult::Ok(()))
-    }
-}
-
-pub trait ReplLiteral: NumLiteral + Number + PartialEq + fmt::Display {
-    fn create_env() -> Environment<'static, Self>;
-}
-
-#[derive(Debug, Clone, Copy)]
-#[allow(clippy::type_complexity)] // not that complex, really
-pub struct StdLibrary<T: 'static> {
-    constants: &'static [(&'static str, T)],
-    unary: &'static [(&'static str, fn(T) -> T)],
-    binary: &'static [(&'static str, fn(T, T) -> T)],
-}
-
-impl<'a, T: ReplLiteral> VariableMap<'a, T> for StdLibrary<T> {
-    fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
-        self.variables()
-            .find_map(|(var_name, value)| if var_name == name { Some(value) } else { None })
-    }
-}
-
-impl<T: ReplLiteral> StdLibrary<T> {
-    fn variables(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
-        let constants = self
-            .constants
-            .iter()
-            .map(|(name, constant)| (*name, Value::Number(*constant)));
-        let unary_fns = self
-            .unary
-            .iter()
-            .copied()
-            .map(|(name, function)| (name, Value::native_fn(fns::Unary::new(function))));
-        let binary_fns = self
-            .binary
-            .iter()
-            .copied()
-            .map(|(name, function)| (name, Value::native_fn(fns::Binary::new(function))));
-
-        constants.chain(unary_fns).chain(binary_fns)
-    }
-}
-
-macro_rules! declare_real_functions {
-    ($functions:ident : $type:ident) => {
-        const $functions: StdLibrary<$type> = StdLibrary {
-            constants: &[("E", std::$type::consts::E), ("PI", std::$type::consts::PI)],
-
-            unary: &[
-                // Rounding functions.
-                ("floor", $type::floor),
-                ("ceil", $type::ceil),
-                ("round", $type::round),
-                ("frac", $type::fract),
-                // Exponential functions.
-                ("exp", $type::exp),
-                ("ln", $type::ln),
-                ("sinh", $type::sinh),
-                ("cosh", $type::cosh),
-                ("tanh", $type::tanh),
-                ("asinh", $type::asinh),
-                ("acosh", $type::acosh),
-                ("atanh", $type::atanh),
-                // Trigonometric functions.
-                ("sin", $type::sin),
-                ("cos", $type::cos),
-                ("tan", $type::tan),
-                ("asin", $type::asin),
-                ("acos", $type::acos),
-                ("atan", $type::atan),
-            ],
-
-            binary: &[
-                ("min", |x, y| if x < y { x } else { y }),
-                ("max", |x, y| if x > y { x } else { y }),
-            ],
-        };
-    };
-}
-
-declare_real_functions!(F32_FUNCTIONS: f32);
-declare_real_functions!(F64_FUNCTIONS: f64);
-
-impl ReplLiteral for f32 {
-    fn create_env() -> Environment<'static, Self> {
-        Prelude
-            .iter()
-            .chain(Comparisons.iter())
-            .chain(F32_FUNCTIONS.variables())
-            .collect()
-    }
-}
-
-impl ReplLiteral for f64 {
-    fn create_env() -> Environment<'static, Self> {
-        Prelude
-            .iter()
-            .chain(Comparisons.iter())
-            .chain(F64_FUNCTIONS.variables())
-            .collect()
-    }
-}
-
-macro_rules! declare_complex_functions {
-    ($functions:ident : $type:ident, $real:ident) => {
-        const $functions: StdLibrary<$type> = StdLibrary {
-            constants: &[
-                ("E", Complex::new(std::$real::consts::E, 0.0)),
-                ("PI", Complex::new(std::$real::consts::PI, 0.0)),
-            ],
-
-            unary: &[
-                ("norm", |x| Complex::new(x.norm(), 0.0)),
-                ("arg", |x| Complex::new(x.arg(), 0.0)),
-                // Exponential functions.
-                ("exp", |x| x.exp()),
-                ("ln", |x| x.ln()),
-                ("sinh", |x| x.sinh()),
-                ("cosh", |x| x.cosh()),
-                ("tanh", |x| x.tanh()),
-                ("asinh", |x| x.asinh()),
-                ("acosh", |x| x.acosh()),
-                ("atanh", |x| x.atanh()),
-                // Trigonometric functions.
-                ("sin", |x| x.sin()),
-                ("cos", |x| x.cos()),
-                ("tan", |x| x.tan()),
-                ("asin", |x| x.asin()),
-                ("acos", |x| x.acos()),
-                ("atan", |x| x.atan()),
-            ],
-
-            binary: &[],
-        };
-    };
-}
-
-declare_complex_functions!(COMPLEX32_FUNCTIONS: Complex32, f32);
-declare_complex_functions!(COMPLEX64_FUNCTIONS: Complex64, f64);
-
-impl ReplLiteral for Complex32 {
-    fn create_env() -> Environment<'static, Self> {
-        Prelude
-            .iter()
-            .chain(COMPLEX32_FUNCTIONS.variables())
-            .collect()
-    }
-}
-
-impl ReplLiteral for Complex64 {
-    fn create_env() -> Environment<'static, Self> {
-        Prelude
-            .iter()
-            .chain(COMPLEX64_FUNCTIONS.variables())
-            .collect()
     }
 }

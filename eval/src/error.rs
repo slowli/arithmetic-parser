@@ -40,7 +40,7 @@ impl fmt::Display for ArithmeticError {
         formatter.write_str(match self {
             Self::IntegerOverflow => "Integer overflow or underflow",
             Self::DivisionByZero => "Integer division by zero",
-            Self::InvalidExponent => "Invalid exponent",
+            Self::InvalidExponent => "Exponent is too large or negative",
             Self::NoInverse => "Integer has no multiplicative inverse",
         })
     }

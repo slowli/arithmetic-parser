@@ -181,10 +181,10 @@ impl<'a, T> ExecutableModule<'a, T> {
     }
 
     /// Combines this module with the specified `arithmetic`.
-    pub fn with_arithmetic<'s, A>(&'s self, arithmetic: &'s A) -> WithArithmetic<'s, Self, A>
-    where
-        A: Arithmetic<T> + Compare<T>,
-    {
+    pub fn with_arithmetic<'s>(
+        &'s self,
+        arithmetic: &'s dyn OrdArithmetic<T>,
+    ) -> WithArithmetic<'s, 'a, T> {
         WithArithmetic {
             module: self,
             arithmetic,
@@ -245,12 +245,12 @@ where
 
 /// Container for an [`ExecutableModule`] together with [`Arithmetic`].
 #[derive(Debug)]
-pub struct WithArithmetic<'r, M, A: ?Sized> {
-    module: &'r M,
-    arithmetic: &'r A,
+pub struct WithArithmetic<'r, 'a, T> {
+    module: &'r ExecutableModule<'a, T>,
+    arithmetic: &'r dyn OrdArithmetic<T>,
 }
 
-impl<M, A: ?Sized> Clone for WithArithmetic<'_, M, A> {
+impl<T> Clone for WithArithmetic<'_, '_, T> {
     fn clone(&self) -> Self {
         Self {
             module: self.module,
@@ -259,12 +259,11 @@ impl<M, A: ?Sized> Clone for WithArithmetic<'_, M, A> {
     }
 }
 
-impl<M, A: ?Sized> Copy for WithArithmetic<'_, M, A> {}
+impl<T> Copy for WithArithmetic<'_, '_, T> {}
 
-impl<'a, A, T> WithArithmetic<'_, ExecutableModule<'a, T>, A>
+impl<'a, T> WithArithmetic<'_, 'a, T>
 where
     T: Clone + fmt::Debug,
-    A: Arithmetic<T> + Compare<T>,
 {
     /// Runs the module with the provided [`Arithmetic`] and the current values of imports.
     ///

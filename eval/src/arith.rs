@@ -31,6 +31,8 @@
 //!
 //! [`ExecutableModule`]: crate::ExecutableModule
 
+#![allow(clippy::unknown_clippy_lints)] // `map_err_ignore` is newer than MSRV
+
 use num_traits::{
     checked_pow, CheckedAdd, CheckedDiv, CheckedMul, CheckedNeg, CheckedSub, NumOps, One, Pow,
     Signed, Unsigned, WrappingAdd, WrappingMul, WrappingNeg, WrappingSub, Zero,
@@ -202,38 +204,34 @@ where
 {
     #[inline]
     fn add(&self, x: T, y: T) -> Result<T, ArithmeticError> {
-        x.checked_add(&y)
-            .ok_or_else(|| ArithmeticError::IntegerOverflow)
+        x.checked_add(&y).ok_or(ArithmeticError::IntegerOverflow)
     }
 
     #[inline]
     fn sub(&self, x: T, y: T) -> Result<T, ArithmeticError> {
-        x.checked_sub(&y)
-            .ok_or_else(|| ArithmeticError::IntegerOverflow)
+        x.checked_sub(&y).ok_or(ArithmeticError::IntegerOverflow)
     }
 
     #[inline]
     fn mul(&self, x: T, y: T) -> Result<T, ArithmeticError> {
-        x.checked_mul(&y)
-            .ok_or_else(|| ArithmeticError::IntegerOverflow)
+        x.checked_mul(&y).ok_or(ArithmeticError::IntegerOverflow)
     }
 
     #[inline]
     fn div(&self, x: T, y: T) -> Result<T, ArithmeticError> {
-        x.checked_div(&y)
-            .ok_or_else(|| ArithmeticError::DivisionByZero)
+        x.checked_div(&y).ok_or(ArithmeticError::DivisionByZero)
     }
 
     #[inline]
+    #[allow(clippy::map_err_ignore)]
     fn pow(&self, x: T, y: T) -> Result<T, ArithmeticError> {
         let exp = usize::try_from(y).map_err(|_| ArithmeticError::InvalidExponent)?;
-        checked_pow(x, exp).ok_or_else(|| ArithmeticError::IntegerOverflow)
+        checked_pow(x, exp).ok_or(ArithmeticError::IntegerOverflow)
     }
 
     #[inline]
     fn neg(&self, x: T) -> Result<T, ArithmeticError> {
-        x.checked_neg()
-            .ok_or_else(|| ArithmeticError::IntegerOverflow)
+        x.checked_neg().ok_or(ArithmeticError::IntegerOverflow)
     }
 
     #[inline]
@@ -316,6 +314,7 @@ where
     }
 
     #[inline]
+    #[allow(clippy::map_err_ignore)]
     fn pow(&self, x: T, y: T) -> Result<T, ArithmeticError> {
         let exp = usize::try_from(y).map_err(|_| ArithmeticError::InvalidExponent)?;
         Ok(wrapping_exp(x, exp))
@@ -529,12 +528,13 @@ where
         if y.is_zero() {
             Err(ArithmeticError::DivisionByZero)
         } else {
-            let y_inv = self.invert(y).ok_or_else(|| ArithmeticError::NoInverse)?;
+            let y_inv = self.invert(y).ok_or(ArithmeticError::NoInverse)?;
             self.mul(x, y_inv)
         }
     }
 
     #[inline]
+    #[allow(clippy::map_err_ignore)]
     fn pow(&self, x: T, y: T) -> Result<T, ArithmeticError> {
         let exp = usize::try_from(y).map_err(|_| ArithmeticError::InvalidExponent)?;
         Ok(self.modular_exp(x, exp))

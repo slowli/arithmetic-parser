@@ -60,9 +60,7 @@ macro_rules! declare_int_functions {
                 unary: &[
                     ("count_ones", |x| x.count_ones() as $type),
                     ("count_zeros", |x| x.count_zeros() as $type),
-                    ("leading_ones", |x| x.leading_ones() as $type),
                     ("leading_zeros", |x| x.leading_zeros() as $type),
-                    ("trailing_ones", |x| x.trailing_ones() as $type),
                     ("trailing_zeros", |x| x.trailing_zeros() as $type),
                 ],
 

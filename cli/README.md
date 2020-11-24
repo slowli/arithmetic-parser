@@ -2,10 +2,9 @@
 
 CLI and REPL for parsing and evaluating arithmetic expressions
 that uses [`arithmetic-parser`](../parser) and [`arithmetic-eval`](../eval) internally.
-Supports real-valued and complex arithmetic with 32-bit and 64-bit precisions.
+Supports integer, modular, real and complex-valued arithmetic.
 Each arithmetic is supplied with all standard functions from the `arithmetic-eval` crate
-(`map`, `assert` and so on). Real-valued arithmetics define a comparison function (`cmp`),
-making comparison operators (`>`, `<`, `>=`, `<=`) work as expected.
+(`map`, `assert` and so on) and some functions / constants specific to the number type.
 
 ![REPL example](repl-example.svg)
 

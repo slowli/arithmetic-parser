@@ -183,3 +183,8 @@ impl Number for f64 {}
 impl Number for num_complex::Complex32 {}
 #[cfg(feature = "num-complex")]
 impl Number for num_complex::Complex64 {}
+
+#[cfg(feature = "num-bigint")]
+impl Number for num_bigint::BigInt {}
+#[cfg(feature = "num-bigint")]
+impl Number for num_bigint::BigUint {}

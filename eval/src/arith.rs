@@ -41,7 +41,9 @@ use num_traits::{
 use core::{
     cmp::Ordering,
     convert::{TryFrom, TryInto},
-    fmt, mem, ops,
+    fmt,
+    marker::PhantomData,
+    mem, ops,
 };
 
 use crate::error::ArithmeticError;
@@ -124,7 +126,7 @@ pub struct StdArithmetic;
 
 impl<T> Arithmetic<T> for StdArithmetic
 where
-    T: Copy + NumOps + PartialEq + ops::Neg<Output = T> + Pow<T, Output = T>,
+    T: Clone + NumOps + PartialEq + ops::Neg<Output = T> + Pow<T, Output = T>,
 {
     #[inline]
     fn add(&self, x: T, y: T) -> Result<T, ArithmeticError> {
@@ -181,25 +183,45 @@ static_assertions::assert_impl_all!(
     Arithmetic<num_complex::Complex64>
 );
 
+/// Helper trait for [`CheckedArithmetic`] describing how number negation should be implemented.
+pub trait CheckedArithmeticKind<T> {
+    /// Negates the provided `value`, or returns `None` if the value cannot be negated.
+    fn checked_neg(value: T) -> Option<T>;
+}
+
 /// Arithmetic on an integer type (e.g., `i32`) that checks overflow and other failure
 /// conditions for all operations.
 ///
 /// As an example, this type implements [`Arithmetic`] for all built-in integer types
 /// with a definite size (`u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64`, `i64`, `u128`, `i128`).
-#[derive(Debug, Clone, Copy, Default)]
-pub struct CheckedArithmetic;
+#[derive(Debug)]
+pub struct CheckedArithmetic<Kind = Checked>(PhantomData<Kind>);
 
-impl<T> Arithmetic<T> for CheckedArithmetic
+impl<Kind> Clone for CheckedArithmetic<Kind> {
+    fn clone(&self) -> Self {
+        Self(self.0)
+    }
+}
+
+impl<Kind> Copy for CheckedArithmetic<Kind> {}
+
+impl<Kind> Default for CheckedArithmetic<Kind> {
+    fn default() -> Self {
+        Self(PhantomData)
+    }
+}
+
+impl<Kind> CheckedArithmetic<Kind> {
+    /// Creates a new arithmetic instance.
+    pub const fn new() -> Self {
+        Self(PhantomData)
+    }
+}
+
+impl<T, Kind> Arithmetic<T> for CheckedArithmetic<Kind>
 where
-    T: Copy
-        + PartialEq
-        + Zero
-        + One
-        + CheckedAdd
-        + CheckedSub
-        + CheckedMul
-        + CheckedDiv
-        + CheckedNeg,
+    T: Clone + PartialEq + Zero + One + CheckedAdd + CheckedSub + CheckedMul + CheckedDiv,
+    Kind: CheckedArithmeticKind<T>,
     usize: TryFrom<T>,
 {
     #[inline]
@@ -231,7 +253,7 @@ where
 
     #[inline]
     fn neg(&self, x: T) -> Result<T, ArithmeticError> {
-        x.checked_neg().ok_or(ArithmeticError::IntegerOverflow)
+        Kind::checked_neg(x).ok_or(ArithmeticError::IntegerOverflow)
     }
 
     #[inline]
@@ -240,7 +262,44 @@ where
     }
 }
 
-impl<T> OrdArithmetic<T> for CheckedArithmetic
+/// Marker for [`CheckedArithmetic`] signalling that negation should be inherited
+/// from the [`CheckedNeg`] trait.
+#[derive(Debug)]
+pub struct Checked(());
+
+impl<T: CheckedNeg> CheckedArithmeticKind<T> for Checked {
+    fn checked_neg(value: T) -> Option<T> {
+        value.checked_neg()
+    }
+}
+
+/// Marker for [`CheckedArithmetic`] signalling that negation is only possible for zero.
+#[derive(Debug)]
+pub struct NegateOnlyZero(());
+
+impl<T: Unsigned + Zero> CheckedArithmeticKind<T> for NegateOnlyZero {
+    fn checked_neg(value: T) -> Option<T> {
+        if value.is_zero() {
+            Some(value)
+        } else {
+            None
+        }
+    }
+}
+
+/// Marker for [`CheckedArithmetic`] signalling that negation should be inherited from
+/// the [`Neg`](ops::Neg) trait. This is appropriate if `Neg` never panics (e.g.,
+/// for signed big integers).
+#[derive(Debug)]
+pub struct Unchecked(());
+
+impl<T: Signed> CheckedArithmeticKind<T> for Unchecked {
+    fn checked_neg(value: T) -> Option<T> {
+        Some(-value)
+    }
+}
+
+impl<T, Kind> OrdArithmetic<T> for CheckedArithmetic<Kind>
 where
     Self: Arithmetic<T>,
     T: PartialOrd,
@@ -424,7 +483,7 @@ pub struct ModularArithmetic<T> {
 
 impl<T> ModularArithmetic<T>
 where
-    T: Copy + PartialEq + NumOps + Zero + One + DoubleWidth,
+    T: Clone + PartialEq + NumOps + Zero + One,
 {
     /// Creates a new arithmetic with the specified `modulus`.
     ///
@@ -436,7 +495,12 @@ where
         assert!(!modulus.is_one(), "Modulus cannot be 1");
         Self { modulus }
     }
+}
 
+impl<T> ModularArithmetic<T>
+where
+    T: Copy + PartialEq + NumOps + Zero + One + DoubleWidth,
+{
     #[inline]
     fn mul_inner(self, x: T, y: T) -> T {
         let wide = (<T::Wide>::from(x) * <T::Wide>::from(y)) % <T::Wide>::from(self.modulus);
@@ -542,6 +606,7 @@ where
 
     #[inline]
     fn neg(&self, x: T) -> Result<T, ArithmeticError> {
+        let x = x % self.modulus; // Prevent possible overflow in the following subtraction
         Ok(self.modulus - x)
     }
 
@@ -722,6 +787,95 @@ pub trait ArithmeticExt<T>: Arithmetic<T> + Sized {
 
 impl<T, A> ArithmeticExt<T> for A where A: Arithmetic<T> {}
 
+#[cfg(feature = "bigint")]
+mod bigint {
+    use num_bigint::{BigInt, BigUint};
+    use num_traits::{One, Signed, Zero};
+
+    use core::{convert::TryFrom, mem};
+
+    use super::{Arithmetic, ArithmeticError, ModularArithmetic};
+
+    #[cfg(test)]
+    static_assertions::assert_impl_all!(
+        super::CheckedArithmetic<super::NegateOnlyZero>: super::OrdArithmetic<BigUint>
+    );
+    #[cfg(test)]
+    static_assertions::assert_impl_all!(
+        super::CheckedArithmetic<super::Unchecked>: super::OrdArithmetic<BigInt>
+    );
+
+    impl ModularArithmetic<BigUint> {
+        fn invert_big(&self, value: BigUint) -> Option<BigUint> {
+            let value = value % &self.modulus; // Reduce value since this influences speed.
+            let mut t = BigInt::zero();
+            let mut new_t = BigInt::one();
+
+            let modulus = BigInt::from(self.modulus.clone());
+            let mut r = modulus.clone();
+            let mut new_r = BigInt::from(value);
+
+            while !new_r.is_zero() {
+                let quotient = &r / &new_r;
+                t -= &quotient * &new_t;
+                mem::swap(&mut new_t, &mut t);
+                r -= quotient * &new_r;
+                mem::swap(&mut new_r, &mut r);
+            }
+
+            if r > BigInt::one() {
+                None // r = gcd(self.modulus, value) > 1
+            } else {
+                if t.is_negative() {
+                    t += modulus;
+                }
+                Some(BigUint::try_from(t).unwrap())
+                // ^-- `unwrap` is safe by construction
+            }
+        }
+    }
+
+    impl Arithmetic<num_bigint::BigUint> for ModularArithmetic<num_bigint::BigUint> {
+        fn add(&self, x: BigUint, y: BigUint) -> Result<BigUint, ArithmeticError> {
+            Ok((x + y) % &self.modulus)
+        }
+
+        fn sub(&self, x: BigUint, y: BigUint) -> Result<BigUint, ArithmeticError> {
+            let y_neg = &self.modulus - (y % &self.modulus);
+            self.add(x, y_neg)
+        }
+
+        fn mul(&self, x: BigUint, y: BigUint) -> Result<BigUint, ArithmeticError> {
+            Ok((x * y) % &self.modulus)
+        }
+
+        fn div(&self, x: BigUint, y: BigUint) -> Result<BigUint, ArithmeticError> {
+            if y.is_zero() {
+                Err(ArithmeticError::DivisionByZero)
+            } else {
+                let y_inv = self.invert_big(y).ok_or(ArithmeticError::NoInverse)?;
+                self.mul(x, y_inv)
+            }
+        }
+
+        fn pow(&self, x: BigUint, y: BigUint) -> Result<BigUint, ArithmeticError> {
+            Ok(x.modpow(&y, &self.modulus))
+        }
+
+        fn neg(&self, x: BigUint) -> Result<BigUint, ArithmeticError> {
+            let x = x % &self.modulus;
+            Ok(&self.modulus - x)
+        }
+
+        fn eq(&self, x: &BigUint, y: &BigUint) -> bool {
+            x % &self.modulus == y % &self.modulus
+        }
+    }
+
+    #[cfg(test)]
+    static_assertions::assert_impl_all!(ModularArithmetic<BigUint>: Arithmetic<BigUint>);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -865,5 +1019,113 @@ mod tests {
         mini_fuzz_for_prime_modulus(5_647_618_287_156_850_721);
         mini_fuzz_for_prime_modulus(9_223_372_036_854_775_837);
         mini_fuzz_for_prime_modulus(10_902_486_311_044_492_273);
+    }
+}
+
+#[cfg(all(test, feature = "bigint"))]
+mod bigint_tests {
+    use super::*;
+
+    use num_bigint::{BigInt, BigUint};
+    use rand::{rngs::StdRng, Rng, SeedableRng};
+
+    fn gen_biguint<R: Rng>(rng: &mut R, bits: u64) -> BigUint {
+        let bits = usize::try_from(bits).expect("Capacity overflow");
+        let (div, rem) = (bits / 8, bits % 8);
+
+        let mut buffer = vec![0_u8; div + (rem != 0) as usize];
+        rng.fill_bytes(&mut buffer);
+        if rem > 0 {
+            // Zero out most significant bits in the first byte.
+            let mask = u8::try_from((1_u16 << rem) - 1).unwrap();
+            buffer[0] &= mask;
+        }
+
+        BigUint::from_bytes_be(&buffer)
+    }
+
+    fn mini_fuzz_for_big_prime_modulus(modulus: &BigUint, sample_count: usize) {
+        let arithmetic = ModularArithmetic::new(modulus.clone());
+        let mut rng = StdRng::seed_from_u64(modulus.bits());
+        let signed_modulus = BigInt::from(modulus.clone());
+
+        for _ in 0..sample_count {
+            let x = gen_biguint(&mut rng, modulus.bits() - 1);
+            let y = gen_biguint(&mut rng, modulus.bits() - 1);
+            let expected = (&x + &y) % modulus;
+            assert_eq!(arithmetic.add(x.clone(), y.clone()).unwrap(), expected);
+
+            let mut expected =
+                (BigInt::from(x.clone()) - BigInt::from(y.clone())) % &signed_modulus;
+            if expected < BigInt::zero() {
+                expected += &signed_modulus;
+            }
+            let expected = BigUint::try_from(expected).unwrap();
+            assert_eq!(arithmetic.sub(x.clone(), y.clone()).unwrap(), expected);
+
+            let expected = (&x * &y) % modulus;
+            assert_eq!(arithmetic.mul(x, y).unwrap(), expected);
+        }
+
+        for _ in 0..sample_count {
+            let x = gen_biguint(&mut rng, modulus.bits());
+            let inv = arithmetic.div(BigUint::one(), x.clone());
+            if (&x % modulus).is_zero() {
+                // Quite unlikely, but better be safe than sorry.
+                assert!(inv.is_err());
+            } else {
+                let inv = inv.unwrap();
+                assert_eq!((inv * &x) % modulus, BigUint::one());
+            }
+        }
+
+        for _ in 0..(sample_count / 10) {
+            let x = gen_biguint(&mut rng, modulus.bits());
+
+            // Check a random small exponent.
+            let exp = rng.gen_range(1_u64, 1_000);
+            let expected_pow = (0..exp).fold(BigUint::one(), |acc, _| (acc * &x) % modulus);
+            assert_eq!(
+                arithmetic.pow(x.clone(), BigUint::from(exp)).unwrap(),
+                expected_pow
+            );
+
+            if !(&x % modulus).is_zero() {
+                // Check Fermat's little theorem.
+                let pow = arithmetic.pow(x, modulus - 1_u32).unwrap();
+                assert_eq!(pow, BigUint::one());
+            }
+        }
+    }
+
+    // Primes taken from https://bigprimes.org/
+
+    #[test]
+    fn mini_fuzz_for_128_bit_prime_modulus() {
+        let modulus = "904717851509176637007209984924163038177";
+        mini_fuzz_for_big_prime_modulus(&modulus.parse().unwrap(), 10_000);
+    }
+
+    #[test]
+    fn mini_fuzz_for_256_bit_prime_modulus() {
+        let modulus =
+            "35383204059922826862591333932184957269284020569026927321130404396066349029943";
+        mini_fuzz_for_big_prime_modulus(&modulus.parse().unwrap(), 5_000);
+    }
+
+    #[test]
+    fn mini_fuzz_for_384_bit_prime_modulus() {
+        let modulus =
+            "680077592003957715873956706738577254635634257392753873876268782486415186187701100959\
+             54501183649227109037342431341197";
+        mini_fuzz_for_big_prime_modulus(&modulus.parse().unwrap(), 2_000);
+    }
+
+    #[test]
+    fn mini_fuzz_for_512_bit_prime_modulus() {
+        let modulus =
+            "134956060831834915306923365068985449378393338769474235719041178417311022526812045709\
+             1169866466743447386864273902296614844109589811099153700965207136981133";
+        mini_fuzz_for_big_prime_modulus(&modulus.parse().unwrap(), 2_000);
     }
 }

@@ -26,7 +26,6 @@ use nom::{
     sequence::{terminated, tuple},
     Slice,
 };
-use num_traits::Num;
 
 use core::{f32, f64, fmt, marker::PhantomData};
 
@@ -56,7 +55,7 @@ impl<T: NumLiteral> ParseLiteral for NumGrammar<T> {
 }
 
 /// Numeric literal used in `NumGrammar`s.
-pub trait NumLiteral: 'static + Copy + Num + fmt::Debug {
+pub trait NumLiteral: 'static + Clone + fmt::Debug {
     /// Tries to parse a literal.
     fn parse(input: InputSpan<'_>) -> NomResult<'_, Self>;
 }
@@ -188,6 +187,38 @@ mod complex {
     impl NumLiteral for num_complex::Complex64 {
         fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
             ensure_no_overlap(complex_parser(double))(input)
+        }
+    }
+}
+
+#[cfg(feature = "num-bigint")]
+mod bigint {
+    use nom::{
+        character::complete::{char as tag_char, digit1},
+        combinator::{map_res, opt, recognize},
+        sequence::tuple,
+    };
+    use num_bigint::{BigInt, BigUint};
+    use num_traits::Num;
+
+    use super::NumLiteral;
+    use crate::{ErrorKind, InputSpan, NomResult};
+
+    impl NumLiteral for BigInt {
+        fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
+            let parser = |s: InputSpan<'_>| {
+                BigInt::from_str_radix(s.fragment(), 10).map_err(ErrorKind::literal)
+            };
+            map_res(recognize(tuple((opt(tag_char('-')), digit1))), parser)(input)
+        }
+    }
+
+    impl NumLiteral for BigUint {
+        fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
+            let parser = |s: InputSpan<'_>| {
+                BigUint::from_str_radix(s.fragment(), 10).map_err(ErrorKind::literal)
+            };
+            map_res(digit1, parser)(input)
         }
     }
 }
@@ -347,5 +378,24 @@ mod tests {
             _ => panic!("Unexpected error type: {:?}", err),
         };
         assert_matches!(err_kind, ErrorKind::Literal(_));
+    }
+
+    #[cfg(feature = "num-bigint")]
+    #[test]
+    fn bigint_parsers() {
+        use num_bigint::{BigInt, BigUint};
+
+        for len in 1..500 {
+            let input = "1".repeat(len);
+            let (_, value) = <BigUint as NumLiteral>::parse(InputSpan::new(&input)).unwrap();
+            assert_eq!(value, BigUint::parse_bytes(input.as_bytes(), 10).unwrap());
+
+            let (_, value) = <BigInt as NumLiteral>::parse(InputSpan::new(&input)).unwrap();
+            let expected_value = BigInt::parse_bytes(input.as_bytes(), 10).unwrap();
+            assert_eq!(value, expected_value);
+            let (_, value) =
+                <BigInt as NumLiteral>::parse(InputSpan::new(&format!("-{}", input))).unwrap();
+            assert_eq!(value, -expected_value);
+        }
     }
 }

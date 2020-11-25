@@ -111,7 +111,7 @@ impl Args {
         if wrapping {
             Box::new(WrappingArithmetic)
         } else {
-            Box::new(CheckedArithmetic)
+            Box::new(CheckedArithmetic::new())
         }
     }
 

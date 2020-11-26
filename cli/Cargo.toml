@@ -14,7 +14,7 @@ codespan = "0.9.0"
 codespan-reporting = "0.9.0"
 num-complex = "0.3.0"
 num-traits = "0.2.14"
-rustyline = "6.0.0"
+rustyline = "7.0.0"
 structopt = "0.3.13"
 unindent = "0.1.6"
 

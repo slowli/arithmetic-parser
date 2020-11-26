@@ -498,6 +498,11 @@ where
         assert!(!modulus.is_one(), "Modulus cannot be 1");
         Self { modulus }
     }
+
+    /// Returns the modulus for this arithmetic.
+    pub fn modulus(&self) -> &T {
+        &self.modulus
+    }
 }
 
 impl<T> ModularArithmetic<T>

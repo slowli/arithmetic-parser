@@ -33,7 +33,12 @@ use crate::{
     CallContext, Error, ErrorKind, EvalResult, Function, NativeFn, SpannedValue, Value,
 };
 
+#[cfg(feature = "std")]
+mod std;
 mod wrapper;
+
+#[cfg(feature = "std")]
+pub use self::std::Dbg;
 pub use self::wrapper::{
     enforce_closure_type, wrap, Binary, ErrorOutput, FnWrapper, FromValueError, FromValueErrorKind,
     FromValueErrorLocation, IntoEvalResult, Quaternary, Ternary, TryFromValue, Unary,

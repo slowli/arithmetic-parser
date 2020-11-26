@@ -1,5 +1,3 @@
-use num_traits::{One, Zero};
-
 use core::{cmp, fmt, marker::PhantomData};
 
 use crate::{
@@ -362,7 +360,7 @@ pub enum ErrorOutput<'a> {
 
 impl<'a> ErrorOutput<'a> {
     #[doc(hidden)] // necessary for `wrap_fn` macro
-    pub fn into_spanned(self, context: &CallContext<'_, 'a>) -> Error<'a> {
+    pub fn into_spanned<A>(self, context: &CallContext<'_, 'a, A>) -> Error<'a> {
         match self {
             Self::Spanned(err) => err,
             Self::Message(message) => context.call_site_error(ErrorKind::native(message)),
@@ -424,13 +422,9 @@ impl<'a, T> IntoEvalResult<'a, T> for bool {
     }
 }
 
-impl<'a, T: Number> IntoEvalResult<'a, T> for cmp::Ordering {
+impl<'a, T> IntoEvalResult<'a, T> for cmp::Ordering {
     fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
-        Ok(Value::Number(match self {
-            Self::Less => -<T as One>::one(),
-            Self::Equal => <T as Zero>::zero(),
-            Self::Greater => <T as One>::one(),
-        }))
+        Ok(Value::opaque_ref(self))
     }
 }
 
@@ -495,7 +489,7 @@ macro_rules! arity_fn {
             fn evaluate<'a>(
                 &self,
                 args: Vec<SpannedValue<'a, Num>>,
-                context: &mut CallContext<'_, 'a>,
+                context: &mut CallContext<'_, 'a, Num>,
             ) -> EvalResult<'a, Num> {
                 context.check_args_count(&args, $arity)?;
                 let mut args_iter = args.into_iter().enumerate();
@@ -660,7 +654,7 @@ macro_rules! wrap_fn {
 /// #     wrap_fn_with_context, CallContext, Function, Environment, Value, Error, VariableMap,
 /// # };
 /// fn map_array<'a>(
-///     context: &mut CallContext<'_, 'a>,
+///     context: &mut CallContext<'_, 'a, f32>,
 ///     array: Vec<Value<'a, f32>>,
 ///     map_fn: Function<'a, f32>,
 /// ) -> Result<Vec<Value<'a, f32>>, Error<'a>> {
@@ -710,9 +704,9 @@ macro_rules! wrap_fn_with_context {
 }
 
 #[doc(hidden)] // necessary for `wrap_fn` macro
-pub fn enforce_closure_type<T, F>(function: F) -> F
+pub fn enforce_closure_type<T, A, F>(function: F) -> F
 where
-    F: for<'a> Fn(Vec<SpannedValue<'a, T>>, &mut CallContext<'_, 'a>) -> EvalResult<'a, T>,
+    F: for<'a> Fn(Vec<SpannedValue<'a, T>>, &mut CallContext<'_, 'a, A>) -> EvalResult<'a, T>,
 {
     function
 }

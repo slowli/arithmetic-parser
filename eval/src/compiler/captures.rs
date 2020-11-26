@@ -6,13 +6,12 @@ use core::iter;
 
 use crate::{
     alloc::{vec, Box, Vec},
-    compiler::CMP_FUNCTION_NAME,
     error::{AuxErrorInfo, RepeatedAssignmentContext},
     Error, ErrorKind, ModuleId, WildcardId,
 };
 use arithmetic_parser::{
-    grammars::Grammar, BinaryOp, Block, Destructure, Expr, FnDefinition, Lvalue, Spanned,
-    SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
+    grammars::Grammar, Block, Destructure, Expr, FnDefinition, Lvalue, Spanned, SpannedExpr,
+    SpannedLvalue, SpannedStatement, Statement,
 };
 
 /// Helper context for symbolic execution of a function body or a block in order to determine
@@ -60,13 +59,6 @@ impl<'a> CapturesExtractor<'a> {
         }
     }
 
-    fn eval_cmp(&mut self, op_span: &Spanned<'a, BinaryOp>) {
-        if !self.has_var(CMP_FUNCTION_NAME) && !self.captures.contains_key(CMP_FUNCTION_NAME) {
-            self.captures
-                .insert(CMP_FUNCTION_NAME, op_span.with_no_extra());
-        }
-    }
-
     fn create_error<T>(&self, span: &Spanned<'a, T>, err: ErrorKind) -> Error<'a> {
         Error::new(self.module_id.as_ref(), span, err)
     }
@@ -89,13 +81,9 @@ impl<'a> CapturesExtractor<'a> {
             Expr::Unary { inner, .. } => {
                 self.eval(inner)?;
             }
-            Expr::Binary { lhs, rhs, op } => {
+            Expr::Binary { lhs, rhs, .. } => {
                 self.eval(lhs)?;
                 self.eval(rhs)?;
-
-                if op.extra.is_order_comparison() {
-                    self.eval_cmp(op);
-                }
             }
 
             Expr::Function { args, name } => {

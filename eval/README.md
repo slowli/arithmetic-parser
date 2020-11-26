@@ -9,7 +9,7 @@
 [![changelog](https://img.shields.io/badge/-changelog-orange)](CHANGELOG.md)
 
 The library provides a simple interpreter, which can be used for *some* grammars
-recognized by [`arithmetic-parser`] (e.g., real-valued and complex-valued arithmetic).
+recognized by [`arithmetic-parser`] (e.g., integer-, real-, complex-valued and modular arithmetic).
 The interpreter provides support for native functions,
 which allows to overcome some syntax limitations (e.g., the lack of control flow
 can be solved with native `if` / `loop` functions).
@@ -19,8 +19,7 @@ The primary goal is to be intuitive for simple grammars (such as the aforementio
 real-valued arithmetic), even if this comes at the cost of rendering the interpreter
 unusable for other grammars. Universality is explicitly not the design goal.
 
-The interpreter is quite slow – 1–2 orders of magnitude slower than native
-floating-point arithmetic.
+The interpreter is quite slow – 1–2 orders of magnitude slower than native arithmetic.
 
 ## Usage
 

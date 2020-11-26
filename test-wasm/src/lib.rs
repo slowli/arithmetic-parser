@@ -54,8 +54,6 @@ fn initialize_env(env: &mut Environment<'_, f64>) {
         ("max", |x, y| if x > y { x } else { y }),
     ];
 
-    env.insert_native_fn("cmp", fns::Compare);
-
     for (name, c) in CONSTANTS {
         env.insert(name, Value::Number(*c));
     }

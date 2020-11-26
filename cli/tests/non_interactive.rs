@@ -8,25 +8,81 @@ use std::process::Command;
 
 const ERROR_EXIT_CODE: i32 = 2;
 
-fn create_command(program: &str) -> Command {
+fn create_command(program: &str, arithmetic: &str) -> Command {
     let mut command = Command::cargo_bin(env!("CARGO_PKG_NAME")).expect("CLI binary");
     command
         .env("TERM", "dumb")
         .arg("-a")
-        .arg("f64")
+        .arg(arithmetic)
         .arg(program);
     command
 }
 
 #[test]
-fn successful_execution() {
-    let assert = create_command("1 + 2 * 3").assert();
+fn successful_execution_for_u64_arithmetic() {
+    let assert = create_command("1 + 2 * 3", "u64").assert();
     assert.success().stderr("7\n");
 }
 
 #[test]
+fn successful_execution_for_i64_arithmetic() {
+    let assert = create_command("1 - 2 * 3", "i64").assert();
+    assert.success().stderr("-5\n");
+}
+
+#[test]
+fn successful_execution_for_u128_arithmetic() {
+    let assert = create_command("1 + 2 * 3", "u128").assert();
+    assert.success().stderr("7\n");
+}
+
+#[test]
+fn successful_execution_for_i128_arithmetic() {
+    let assert = create_command("1 - 2 * 3", "i128").assert();
+    assert.success().stderr("-5\n");
+}
+
+#[test]
+fn successful_execution_for_wrapping_int_arithmetic() {
+    let assert = create_command("1 - 2 + 3", "u128")
+        .arg("--wrapping")
+        .assert();
+    assert.success().stderr("2\n");
+}
+
+#[test]
+fn successful_execution_for_f32_arithmetic() {
+    let assert = create_command("1 + 3 / 2", "f32").assert();
+    assert.success().stderr("2.5\n");
+}
+
+#[test]
+fn successful_execution_for_f64_arithmetic() {
+    let assert = create_command("1 + 3 / 2", "f64").assert();
+    assert.success().stderr("2.5\n");
+}
+
+#[test]
+fn successful_execution_for_c32_arithmetic() {
+    let assert = create_command("2 / (1 - i)", "c32").assert();
+    assert.success().stderr("1+1i\n");
+}
+
+#[test]
+fn successful_execution_for_c64_arithmetic() {
+    let assert = create_command("2 / (1 - i)", "c64").assert();
+    assert.success().stderr("1+1i\n");
+}
+
+#[test]
+fn successful_execution_for_u64_modular_arithmetic() {
+    let assert = create_command("5 / 9", "u64/11").assert();
+    assert.success().stderr("3\n");
+}
+
+#[test]
 fn outputting_native_function() {
-    let assert = create_command("if").assert();
+    let assert = create_command("if", "f64").assert();
     assert.success().stderr("(native fn)\n");
 }
 
@@ -34,10 +90,8 @@ fn outputting_native_function() {
 fn outputting_interpreted_function() {
     const PROGRAM: &str = "is_positive = |x| x > 0; is_positive";
 
-    let assert = create_command(PROGRAM).assert();
-    assert
-        .success()
-        .stderr("fn(1 arg)[\n  cmp = (native fn)\n]\n");
+    let assert = create_command(PROGRAM, "f64").assert();
+    assert.success().stderr("fn(1 arg)\n");
 }
 
 #[test]
@@ -50,7 +104,7 @@ fn syntax_error() {
           │     ^^^^^ Error occurred here
     "#;
 
-    let assert = create_command("let x = 5").assert();
+    let assert = create_command("let x = 5", "f64").assert();
     assert
         .failure()
         .code(ERROR_EXIT_CODE)
@@ -67,7 +121,58 @@ fn undefined_variable_error() {
           │         ^ Undefined variable occurrence
     "#;
 
-    let assert = create_command("1 + 2 * x").assert();
+    let assert = create_command("1 + 2 * x", "f64").assert();
+    assert
+        .failure()
+        .code(ERROR_EXIT_CODE)
+        .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+}
+
+#[test]
+fn integer_overflow_for_u64_arithmetic() {
+    const EXPECTED_ERR: &str = r#"
+        error[EVAL]: Arithmetic error
+          ┌─ Snippet #1:1:1
+          │
+        1 │ 1 - 3 + 5
+          │ ^^^^^ Integer overflow or underflow
+    "#;
+
+    let assert = create_command("1 - 3 + 5", "u64").assert();
+    assert
+        .failure()
+        .code(ERROR_EXIT_CODE)
+        .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+}
+
+#[test]
+fn integer_overflow_for_i64_arithmetic() {
+    const EXPECTED_ERR: &str = r#"
+        error[EVAL]: Arithmetic error
+          ┌─ Snippet #1:1:1
+          │
+        1 │ 20 ^ 20
+          │ ^^^^^^^ Integer overflow or underflow
+    "#;
+
+    let assert = create_command("20 ^ 20", "i64").assert();
+    assert
+        .failure()
+        .code(ERROR_EXIT_CODE)
+        .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+}
+
+#[test]
+fn negative_exp_for_integer_arithmetic() {
+    const EXPECTED_ERR: &str = r#"
+        error[EVAL]: Arithmetic error
+          ┌─ Snippet #1:1:1
+          │
+        1 │ 10 ^ -3
+          │ ^^^^^^^ Exponent is too large or negative
+    "#;
+
+    let assert = create_command("10 ^ -3", "i128").assert();
     assert
         .failure()
         .code(ERROR_EXIT_CODE)
@@ -84,7 +189,7 @@ fn incompatible_arg_count_error() {
           │ ^^^^^^^^^^^^ Called with 2 arg(s) here
     "#;
 
-    let assert = create_command("if(2 > 1, 3)").assert();
+    let assert = create_command("if(2 > 1, 3)", "f64").assert();
     assert
         .failure()
         .code(ERROR_EXIT_CODE)
@@ -98,19 +203,21 @@ fn error_with_call_trace() {
         is_positive(3) && !is_positive((1, 2))
     "#;
     const EXPECTED_ERR: &str = r#"
-        error[EVAL]: Compare requires 2 number arguments
-          ┌─ Snippet #1:1:19
+        error[EVAL]: Value is not comparable
+          ┌─ Snippet #1:1:15
           │
         1 │ is_positive = |x| x > 0;
-          │                   ^^^^^
-          │                   │
-          │                   Failed call
-          │                   Invalid argument
+          │               ----^----
+          │               │   │
+          │               │   Cannot be compared
+          │               The error occurred in function `is_positive`
         2 │ is_positive(3) && !is_positive((1, 2))
-          │                    ------------------- Call at depth 2
+          │                    ------------------- Call at depth 1
+          │
+          = Only numbers can be compared; complex values cannot
     "#;
 
-    let assert = create_command(&unindent(PROGRAM)).assert();
+    let assert = create_command(&unindent(PROGRAM), "f64").assert();
     assert
         .failure()
         .code(ERROR_EXIT_CODE)
@@ -141,7 +248,7 @@ fn error_with_call_complex_call_trace() {
           = Operands of binary arithmetic ops must be numbers or tuples containing numbers
     "#;
 
-    let assert = create_command(&unindent(PROGRAM)).assert();
+    let assert = create_command(&unindent(PROGRAM), "f64").assert();
     assert
         .failure()
         .code(ERROR_EXIT_CODE)
@@ -155,23 +262,25 @@ fn error_with_call_complex_call_trace_and_native_fns() {
         (1, 2, map).all(|x| 0 < x)
     "#;
     const EXPECTED_ERR: &str = r#"
-        error[EVAL]: Compare requires 2 number arguments
+        error[EVAL]: Value is not comparable
           ┌─ Snippet #1:1:26
           │
         1 │ all = |array, predicate| array.fold(true, |acc, x| acc && predicate(x));
           │                          ----------------------------------------------
           │                          │                                │
-          │                          │                                Call at depth 2
-          │                          Call at depth 3
+          │                          │                                Call at depth 1
+          │                          Call at depth 2
         2 │ (1, 2, map).all(|x| 0 < x)
-          │ --------------------^^^^^-
-          │ │                   │   │
-          │ │                   │   Invalid argument
-          │ │                   Failed call
-          │ Call at depth 4
+          │ ------------------------^-
+          │ │               │       │
+          │ │               │       Cannot be compared
+          │ │               The error occurred in function `predicate`
+          │ Call at depth 3
+          │
+          = Only numbers can be compared; complex values cannot
     "#;
 
-    let assert = create_command(&unindent(PROGRAM)).assert();
+    let assert = create_command(&unindent(PROGRAM), "f64").assert();
     assert
         .failure()
         .code(ERROR_EXIT_CODE)

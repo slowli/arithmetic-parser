@@ -16,6 +16,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Allow switching Boolean expressions off. (#36)
 
+- Add parsers for integer numbers. (#40)
+
 ### Changed
 
 - Use homegrown `LocatedSpan` instead of one from `nom_locate` crate.

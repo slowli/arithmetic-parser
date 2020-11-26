@@ -1,20 +1,23 @@
 //! Executables output by a `Compiler` and related types.
 
-use core::ops;
+use core::{fmt, ops};
 
 use crate::{
     alloc::{Box, String, ToOwned},
-    compiler::{Compiler, ImportSpans, CMP_FUNCTION_NAME},
+    arith::{OrdArithmetic, StdArithmetic},
+    compiler::{Compiler, ImportSpans},
     error::{Backtrace, ErrorWithBacktrace},
-    Environment, Error, ErrorKind, ModuleId, Number, Value, VariableMap,
+    Environment, Error, ErrorKind, Value, VariableMap,
 };
 use arithmetic_parser::{grammars::Grammar, Block, StripCode};
 
 mod command;
+mod module_id;
 mod registers;
 
+pub use self::module_id::{IndexedId, ModuleId, WildcardId};
 pub(crate) use self::{
-    command::{Atom, Command, ComparisonOp, CompiledExpr, SpannedAtom},
+    command::{Atom, Command, CompiledExpr, SpannedAtom},
     registers::{Executable, ExecutableFn, Registers},
 };
 
@@ -176,9 +179,20 @@ impl<'a, T> ExecutableModule<'a, T> {
     pub fn imports(&self) -> &ModuleImports<'a, T> {
         &self.imports
     }
+
+    /// Combines this module with the specified `arithmetic`.
+    pub fn with_arithmetic<'s>(
+        &'s self,
+        arithmetic: &'s dyn OrdArithmetic<T>,
+    ) -> WithArithmetic<'s, 'a, T> {
+        WithArithmetic {
+            module: self,
+            arithmetic,
+        }
+    }
 }
 
-impl<'a, T: Number> ExecutableModule<'a, T> {
+impl<'a, T: Clone + fmt::Debug> ExecutableModule<'a, T> {
     /// Starts building a new module.
     pub fn builder<G, Id>(
         id: Id,
@@ -192,11 +206,26 @@ impl<'a, T: Number> ExecutableModule<'a, T> {
         Ok(ExecutableModuleBuilder::new(module, import_spans))
     }
 
+    fn run_with_registers(
+        &self,
+        registers: &mut Registers<'a, T>,
+        arithmetic: &dyn OrdArithmetic<T>,
+    ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
+        let mut backtrace = Backtrace::default();
+        registers
+            .execute(&self.inner, arithmetic, Some(&mut backtrace))
+            .map_err(|err| ErrorWithBacktrace::new(err, backtrace))
+    }
+}
+
+impl<'a, T: Clone + fmt::Debug> ExecutableModule<'a, T>
+where
+    StdArithmetic: OrdArithmetic<T>,
+{
     /// Runs the module with the current values of imports. This is a read-only operation;
     /// neither the imports, nor other module state are modified by it.
     pub fn run(&self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
-        let mut registers = self.imports.inner.clone();
-        self.run_with_registers(&mut registers)
+        self.with_arithmetic(&StdArithmetic).run()
     }
 
     /// Runs the module with the specified [`Environment`]. The environment may contain some of
@@ -210,22 +239,58 @@ impl<'a, T: Number> ExecutableModule<'a, T> {
         &self,
         env: &mut Environment<'a, T>,
     ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
-        let mut registers = self.imports.inner.clone();
-        registers.update_from_env(env);
+        self.with_arithmetic(&StdArithmetic).run_in_env(env)
+    }
+}
 
-        let result = self.run_with_registers(&mut registers);
-        registers.update_env(env);
-        result
+/// Container for an [`ExecutableModule`] together with an [`OrdArithmetic`].
+#[derive(Debug)]
+pub struct WithArithmetic<'r, 'a, T> {
+    module: &'r ExecutableModule<'a, T>,
+    arithmetic: &'r dyn OrdArithmetic<T>,
+}
+
+impl<T> Clone for WithArithmetic<'_, '_, T> {
+    fn clone(&self) -> Self {
+        Self {
+            module: self.module,
+            arithmetic: self.arithmetic,
+        }
+    }
+}
+
+impl<T> Copy for WithArithmetic<'_, '_, T> {}
+
+impl<'a, T> WithArithmetic<'_, 'a, T>
+where
+    T: Clone + fmt::Debug,
+{
+    /// Runs the module with the previously provided [`OrdArithmetic`] and the current values
+    /// of imports.
+    ///
+    /// See [`ExecutableModule::run()`] for more details.
+    pub fn run(self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
+        let mut registers = self.module.imports.inner.clone();
+        self.module
+            .run_with_registers(&mut registers, self.arithmetic)
     }
 
-    fn run_with_registers(
-        &self,
-        registers: &mut Registers<'a, T>,
+    /// Runs the module with the specified [`Environment`]. The environment may contain some of
+    /// module imports; they will be used to override imports defined in the module.
+    ///
+    /// See [`ExecutableModule::run_in_env()`] for more details.
+    pub fn run_in_env(
+        self,
+        env: &mut Environment<'a, T>,
     ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
-        let mut backtrace = Backtrace::default();
-        registers
-            .execute(&self.inner, Some(&mut backtrace))
-            .map_err(|err| ErrorWithBacktrace::new(err, backtrace))
+        let mut registers = self.module.imports.inner.clone();
+        registers.update_from_env(env);
+
+        let result = self
+            .module
+            .run_with_registers(&mut registers, self.arithmetic);
+        registers.update_env(env);
+        result
     }
 }
 
@@ -284,7 +349,7 @@ impl<'a, T> ops::Index<&str> for ModuleImports<'a, T> {
     }
 }
 
-impl<'a, T: Number> IntoIterator for ModuleImports<'a, T> {
+impl<'a, T: Clone + 'a> IntoIterator for ModuleImports<'a, T> {
     type Item = (String, Value<'a, T>);
     type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'a>;
 
@@ -312,7 +377,7 @@ pub struct ExecutableModuleBuilder<'a, T> {
     undefined_imports: ImportSpans<'a>,
 }
 
-impl<'a, T: Number> ExecutableModuleBuilder<'a, T> {
+impl<'a, T> ExecutableModuleBuilder<'a, T> {
     fn new(module: ExecutableModule<'a, T>, undefined_imports: ImportSpans<'a>) -> Self {
         Self {
             module,
@@ -363,13 +428,7 @@ impl<'a, T: Number> ExecutableModuleBuilder<'a, T> {
     /// highlights one of such imports.
     pub fn try_build(self) -> Result<ExecutableModule<'a, T>, Error<'a>> {
         if let Some((var_name, span)) = self.undefined_imports.iter().next() {
-            let err = if var_name == CMP_FUNCTION_NAME {
-                ErrorKind::MissingCmpFunction {
-                    name: var_name.to_owned(),
-                }
-            } else {
-                ErrorKind::Undefined(var_name.to_owned())
-            };
+            let err = ErrorKind::Undefined(var_name.to_owned());
             Err(Error::new(self.module.id(), span, err))
         } else {
             Ok(self.module)

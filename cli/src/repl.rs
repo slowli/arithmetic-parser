@@ -4,15 +4,21 @@ use rustyline::{error::ReadlineError, Editor};
 
 use std::io;
 
-use crate::common::{Env, ParseAndEvalResult, ReplLiteral};
+use crate::{
+    common::{Env, ParseAndEvalResult},
+    library::ReplLiteral,
+};
+use arithmetic_eval::arith::OrdArithmetic;
+use arithmetic_eval::Environment;
 
-pub fn repl<T: ReplLiteral>() -> io::Result<()> {
+pub fn repl<T: ReplLiteral>(
+    arithmetic: Box<dyn OrdArithmetic<T>>,
+    env: Environment<'static, T>,
+) -> io::Result<()> {
     let mut rl = Editor::<()>::new();
-    let mut env = Env::new();
+    let mut env = Env::new(arithmetic, env);
     env.print_greeting()?;
 
-    let mut interpreter = T::create_env();
-    let original_interpreter = interpreter.clone();
     let mut snippet = String::new();
     let mut prompt = ">>> ";
 
@@ -21,8 +27,7 @@ pub fn repl<T: ReplLiteral>() -> io::Result<()> {
         match line {
             Ok(line) => {
                 snippet.push_str(&line);
-                let result =
-                    env.parse_and_eval(&snippet, &mut interpreter, &original_interpreter)?;
+                let result = env.parse_and_eval(&snippet)?;
                 match result {
                     ParseAndEvalResult::Ok(_) => {
                         prompt = ">>> ";

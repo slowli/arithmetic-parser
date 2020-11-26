@@ -14,6 +14,41 @@ use arithmetic_parser::{
     StatementType, StripCode, UnaryOp,
 };
 
+/// Arithmetic errors raised by [`Arithmetic`] operations on numbers.
+///
+/// [`Arithmetic`]: crate::arith::Arithmetic
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum ArithmeticError {
+    /// Integer overflow or underflow.
+    IntegerOverflow,
+    /// Division by zero.
+    DivisionByZero,
+    /// Exponent of [`Arithmetic::pow()`] cannot be converted to `usize`, for example because
+    /// it is too large or negative.
+    ///
+    /// [`Arithmetic::pow()`]: crate::arith::Arithmetic::pow()
+    InvalidExponent,
+    /// Integer used as a denominator in [`Arithmetic::div()`] has no multiplicative inverse.
+    ///
+    /// [`Arithmetic::div()`]: crate::arith::Arithmetic::div()
+    NoInverse,
+}
+
+impl fmt::Display for ArithmeticError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::IntegerOverflow => "Integer overflow or underflow",
+            Self::DivisionByZero => "Integer division by zero",
+            Self::InvalidExponent => "Exponent is too large or negative",
+            Self::NoInverse => "Integer has no multiplicative inverse",
+        })
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for ArithmeticError {}
+
 /// Context for [`ErrorKind::TupleLenMismatch`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TupleLenMismatchContext {
@@ -51,7 +86,7 @@ impl fmt::Display for RepeatedAssignmentContext {
 }
 
 /// Kinds of errors that can occur when compiling or interpreting expressions and statements.
-#[derive(Debug, Clone, Display)]
+#[derive(Debug, Display)]
 #[non_exhaustive]
 pub enum ErrorKind {
     /// Mismatch between length of tuples in a binary operation or assignment.
@@ -121,12 +156,10 @@ pub enum ErrorKind {
         op: Op,
     },
 
-    /// Missing comparison function.
-    #[display(fmt = "Missing comparison function {}", name)]
-    MissingCmpFunction {
-        /// Expected function name.
-        name: String,
-    },
+    /// Value cannot be compared to other values. Only numbers can be compared; other value types
+    /// cannot.
+    #[display(fmt = "Value cannot be compared to other values")]
+    CannotCompare,
 
     /// Unexpected result of a comparison function invocation. The comparison function should
     /// always return -1, 0, or 1.
@@ -139,6 +172,10 @@ pub enum ErrorKind {
     /// Construct not supported by the interpreter.
     #[display(fmt = "Unsupported {}", _0)]
     Unsupported(UnsupportedType),
+
+    /// [`Arithmetic`](crate::arith::Arithmetic) error, such as division by zero.
+    #[display(fmt = "Arithmetic error: {}", _0)]
+    Arithmetic(ArithmeticError),
 }
 
 impl ErrorKind {
@@ -171,9 +208,10 @@ impl ErrorKind {
             Self::NativeCall(message) => message.to_owned(),
             Self::Wrapper(err) => err.to_string(),
             Self::UnexpectedOperand { op } => format!("Unexpected operand type for {}", op),
-            Self::MissingCmpFunction { .. } => "Missing comparison function".to_owned(),
+            Self::CannotCompare => "Value is not comparable".to_owned(),
             Self::InvalidCmpResult => "Invalid comparison result".to_owned(),
             Self::Unsupported(_) => "Grammar construct not supported".to_owned(),
+            Self::Arithmetic(_) => "Arithmetic error".to_owned(),
         }
     }
 
@@ -189,11 +227,10 @@ impl ErrorKind {
             Self::Undefined(_) => "Undefined variable occurrence".to_owned(),
             Self::CannotCall | Self::NativeCall(_) | Self::Wrapper(_) => "Failed call".to_owned(),
             Self::UnexpectedOperand { .. } => "Operand of wrong type".to_owned(),
-            Self::MissingCmpFunction { name } => {
-                format!("Function with name {} should exist in the context", name)
-            }
+            Self::CannotCompare => "Cannot be compared".to_owned(),
             Self::InvalidCmpResult => "Comparison function must return -1, 0 or 1".to_owned(),
             Self::Unsupported(ty) => format!("Unsupported {}", ty),
+            Self::Arithmetic(e) => e.to_string(),
         }
     }
 
@@ -231,6 +268,8 @@ impl ErrorKind {
                 op: Op::Unary(UnaryOp::Not),
             } => "Operand of boolean negation must be boolean".to_owned(),
 
+            Self::CannotCompare => "Only numbers can be compared; complex values cannot".to_owned(),
+
             _ => return None,
         })
     }
@@ -241,6 +280,7 @@ impl std::error::Error for ErrorKind {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Wrapper(error) => Some(error),
+            Self::Arithmetic(error) => Some(error),
             _ => None,
         }
     }

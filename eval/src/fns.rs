@@ -22,14 +22,15 @@
 //! (this requires [generic associated types][GAT]). As such, the (implicit) `'static` requirement
 //! is a temporary measure, and macros fill the gaps in their usual clunky manner.
 //!
+//! [`Number`]: crate::Number
 //! [GAT]: https://github.com/rust-lang/rust/issues/44265
 
-use num_traits::{One, Zero};
+use core::cmp::Ordering;
 
 use crate::{
     alloc::{vec, Vec},
     error::AuxErrorInfo,
-    CallContext, Error, ErrorKind, EvalResult, Function, NativeFn, Number, SpannedValue, Value,
+    CallContext, Error, ErrorKind, EvalResult, Function, NativeFn, SpannedValue, Value,
 };
 
 mod wrapper;
@@ -38,8 +39,8 @@ pub use self::wrapper::{
     FromValueErrorLocation, IntoEvalResult, Quaternary, Ternary, TryFromValue, Unary,
 };
 
-fn extract_number<'a, T>(
-    ctx: &CallContext<'_, 'a>,
+fn extract_number<'a, T, A>(
+    ctx: &CallContext<'_, 'a, A>,
     value: SpannedValue<'a, T>,
     error_msg: &str,
 ) -> Result<T, Error<'a>> {
@@ -51,8 +52,8 @@ fn extract_number<'a, T>(
     }
 }
 
-fn extract_array<'a, T>(
-    ctx: &CallContext<'_, 'a>,
+fn extract_array<'a, T, A>(
+    ctx: &CallContext<'_, 'a, A>,
     value: SpannedValue<'a, T>,
     error_msg: &str,
 ) -> Result<Vec<Value<'a, T>>, Error<'a>> {
@@ -66,8 +67,8 @@ fn extract_array<'a, T>(
     }
 }
 
-fn extract_fn<'a, T>(
-    ctx: &CallContext<'_, 'a>,
+fn extract_fn<'a, T, A>(
+    ctx: &CallContext<'_, 'a, A>,
     value: SpannedValue<'a, T>,
     error_msg: &str,
 ) -> Result<Function<'a, T>, Error<'a>> {
@@ -121,7 +122,7 @@ impl<T> NativeFn<T> for Assert {
     fn evaluate<'a>(
         &self,
         args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
+        ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(&args, 1)?;
         match args[0].extra {
@@ -185,11 +186,11 @@ impl<T> NativeFn<T> for Assert {
 #[derive(Debug, Clone, Copy)]
 pub struct If;
 
-impl<T: Number> NativeFn<T> for If {
+impl<T> NativeFn<T> for If {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
+        ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(&args, 3)?;
         let else_val = args.pop().unwrap().extra;
@@ -232,7 +233,6 @@ impl<T: Number> NativeFn<T> for If {
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
-///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("if", fns::If)
 ///     .insert_native_fn("loop", fns::Loop)
 ///     .compile_module("test_loop", &program)?;
@@ -248,11 +248,11 @@ impl Loop {
         "iteration function should return a 2-element tuple with first bool value";
 }
 
-impl<T: Number> NativeFn<T> for Loop {
+impl<T: Clone> NativeFn<T> for Loop {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
+        ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(&args, 2)?;
         let iter = args.pop().unwrap();
@@ -321,7 +321,6 @@ impl<T: Number> NativeFn<T> for Loop {
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
-///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("while", fns::While)
 ///     .compile_module("test_while", &program)?;
 /// assert_eq!(module.run()?, Value::Bool(true));
@@ -331,11 +330,11 @@ impl<T: Number> NativeFn<T> for Loop {
 #[derive(Debug, Clone, Copy)]
 pub struct While;
 
-impl<T: Number> NativeFn<T> for While {
+impl<T: Clone> NativeFn<T> for While {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
+        ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(&args, 3)?;
 
@@ -391,7 +390,6 @@ impl<T: Number> NativeFn<T> for While {
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
-///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("if", fns::If)
 ///     .insert_native_fn("map", fns::Map)
 ///     .compile_module("test_map", &program)?;
@@ -402,11 +400,11 @@ impl<T: Number> NativeFn<T> for While {
 #[derive(Debug, Clone, Copy)]
 pub struct Map;
 
-impl<T: Number> NativeFn<T> for Map {
+impl<T: Clone> NativeFn<T> for Map {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
+        ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(&args, 2)?;
         let map_fn = extract_fn(
@@ -453,7 +451,6 @@ impl<T: Number> NativeFn<T> for Map {
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
-///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("filter", fns::Filter)
 ///     .compile_module("test_filter", &program)?;
 /// assert_eq!(module.run()?, Value::Bool(true));
@@ -463,11 +460,11 @@ impl<T: Number> NativeFn<T> for Map {
 #[derive(Debug, Clone, Copy)]
 pub struct Filter;
 
-impl<T: Number> NativeFn<T> for Filter {
+impl<T: Clone> NativeFn<T> for Filter {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
+        ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(&args, 2)?;
         let filter_fn = extract_fn(
@@ -529,11 +526,11 @@ impl<T: Number> NativeFn<T> for Filter {
 #[derive(Debug, Clone, Copy)]
 pub struct Fold;
 
-impl<T: Number> NativeFn<T> for Fold {
+impl<T: Clone> NativeFn<T> for Fold {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
+        ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(&args, 3)?;
         let fold_fn = extract_fn(
@@ -583,7 +580,6 @@ impl<T: Number> NativeFn<T> for Fold {
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
-///     .insert_native_fn("cmp", fns::Compare)
 ///     .insert_native_fn("while", fns::While)
 ///     .insert_native_fn("push", fns::Push)
 ///     .compile_module("test_push", &program)?;
@@ -594,11 +590,11 @@ impl<T: Number> NativeFn<T> for Fold {
 #[derive(Debug, Clone, Copy)]
 pub struct Push;
 
-impl<T: Number> NativeFn<T> for Push {
+impl<T> NativeFn<T> for Push {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
+        ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(&args, 2)?;
         let elem = args.pop().unwrap().extra;
@@ -645,11 +641,11 @@ impl<T: Number> NativeFn<T> for Push {
 #[derive(Debug, Clone, Copy)]
 pub struct Merge;
 
-impl<T: Number> NativeFn<T> for Merge {
+impl<T: Clone> NativeFn<T> for Merge {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
+        ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         ctx.check_args_count(&args, 2)?;
         let second = extract_array(
@@ -668,39 +664,112 @@ impl<T: Number> NativeFn<T> for Merge {
     }
 }
 
-/// Comparator function on two arguments. Returns `-1` if the first argument is lesser than
-/// the second, `1` if the first argument is greater, and `0` in other cases.
+/// Comparator functions on two number arguments. All functions use [`Arithmetic`] to determine
+/// ordering between the args.
 ///
 /// # Type
 ///
 /// ```text
-/// fn(Num, Num) -> Num
+/// fn(Num, Num) -> Ordering // for `Compare::Raw`
+/// fn(Num, Num) -> Num // for `Compare::Min` and `Compare::Max`
+/// ```
+///
+/// [`Arithmetic`]: crate::arith::Arithmetic
+///
+/// # Examples
+///
+/// Using `min` function:
+///
+/// ```
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # fn main() -> anyhow::Result<()> {
+/// let program = r#"
+///     // Finds a minimum number in an array.
+///     extended_min = |...xs| xs.fold(INFINITY, min);
+///     extended_min(2, -3, 7, 1, 3) == -3
+/// "#;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+///
+/// let module = Environment::new()
+///     .insert("INFINITY", Value::Number(f32::INFINITY))
+///     .insert_native_fn("fold", fns::Fold)
+///     .insert_native_fn("min", fns::Compare::Min)
+///     .compile_module("test_min", &program)?;
+/// assert_eq!(module.run()?, Value::Bool(true));
+/// # Ok(())
+/// # }
+/// ```
+///
+/// Using `cmp` function with [`Comparisons`](crate::Comparisons).
+///
+/// ```
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # use arithmetic_eval::{fns, Comparisons, Environment, Value, VariableMap};
+/// # use core::iter::FromIterator;
+/// # fn main() -> anyhow::Result<()> {
+/// let program = r#"
+///     (1, -7, 0, 2).map(|x| cmp(x, 0)) == (GREATER, LESS, EQUAL, GREATER)
+/// "#;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+///
+/// let module = Environment::from_iter(Comparisons.iter())
+///     .insert_native_fn("map", fns::Map)
+///     .compile_module("test_cmp", &program)?;
+/// assert_eq!(module.run()?, Value::Bool(true));
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone, Copy)]
-pub struct Compare;
+#[non_exhaustive]
+pub enum Compare {
+    /// Returns an [`Ordering`] wrapped into an [`OpaqueRef`](crate::OpaqueRef),
+    /// or [`Value::void()`] if the provided values are not comparable.
+    Raw,
+    /// Returns the minimum of the two numbers. If the numbers are equal, returns the first one.
+    Min,
+    /// Returns the maximum of the two numbers. If the numbers are equal, returns the first one.
+    Max,
+}
 
-const COMPARE_ERROR_MSG: &str = "Compare requires 2 number arguments";
-
-impl<T: Number + PartialOrd> NativeFn<T> for Compare {
-    fn evaluate<'a>(
-        &self,
+impl Compare {
+    fn extract_numbers<'a, T>(
         mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a>,
-    ) -> EvalResult<'a, T> {
+        ctx: &mut CallContext<'_, 'a, T>,
+    ) -> Result<(T, T), Error<'a>> {
         ctx.check_args_count(&args, 2)?;
         let y = args.pop().unwrap();
         let x = args.pop().unwrap();
-
         let x = extract_number(ctx, x, COMPARE_ERROR_MSG)?;
         let y = extract_number(ctx, y, COMPARE_ERROR_MSG)?;
+        Ok((x, y))
+    }
+}
 
-        Ok(Value::Number(if x < y {
-            -<T as One>::one()
-        } else if x > y {
-            <T as One>::one()
+const COMPARE_ERROR_MSG: &str = "Compare requires 2 number arguments";
+
+impl<T> NativeFn<T> for Compare {
+    fn evaluate<'a>(
+        &self,
+        args: Vec<SpannedValue<'a, T>>,
+        ctx: &mut CallContext<'_, 'a, T>,
+    ) -> EvalResult<'a, T> {
+        let (x, y) = Self::extract_numbers(args, ctx)?;
+        let maybe_ordering = ctx.arithmetic().partial_cmp(&x, &y);
+
+        if let Self::Raw = self {
+            Ok(maybe_ordering.map_or_else(Value::void, Value::opaque_ref))
         } else {
-            <T as Zero>::zero()
-        }))
+            let ordering =
+                maybe_ordering.ok_or_else(|| ctx.call_site_error(ErrorKind::CannotCompare))?;
+            let value = match (ordering, self) {
+                (Ordering::Equal, _)
+                | (Ordering::Less, Self::Min)
+                | (Ordering::Greater, Self::Max) => x,
+                _ => y,
+            };
+            Ok(Value::Number(value))
+        }
     }
 }
 
@@ -724,7 +793,6 @@ mod tests {
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
             .with_import("if", Value::native_fn(If))
-            .with_import("cmp", Value::native_fn(Compare))
             .build();
         assert_eq!(module.run().unwrap(), Value::Number(6.0));
     }
@@ -739,20 +807,16 @@ mod tests {
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
             .with_import("if", Value::native_fn(If))
-            .with_import("cmp", Value::native_fn(Compare))
             .build();
         assert_eq!(module.run().unwrap(), Value::Number(-1.5));
     }
 
     #[test]
     fn cmp_sugar() {
-        let compare_fn = Value::native_fn(Compare);
-
         let program = "x = 1.0; x > 0 && x <= 3";
         let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
-            .with_import("cmp", compare_fn.clone())
             .build();
         assert_eq!(module.run().unwrap(), Value::Bool(true));
 
@@ -760,18 +824,12 @@ mod tests {
         let bogus_block = Untyped::<F32Grammar>::parse_statements(bogus_program).unwrap();
         let bogus_module = ExecutableModule::builder(WildcardId, &bogus_block)
             .unwrap()
-            .with_import("cmp", compare_fn)
             .build();
 
         let err = bogus_module.run().unwrap_err();
         let err = err.source();
-        assert_matches!(
-            err.kind(),
-            ErrorKind::NativeCall(ref message) if message.contains("Compare requires")
-        );
-        assert_eq!(*err.main_span().code().fragment(), "x > (1, 2)");
-        assert_eq!(err.aux_spans().len(), 1);
-        assert_eq!(*err.aux_spans()[0].code().fragment(), "(1, 2)");
+        assert_matches!(err.kind(), ErrorKind::CannotCompare);
+        assert_eq!(*err.main_span().code().fragment(), "(1, 2)");
     }
 
     #[test]
@@ -794,7 +852,6 @@ mod tests {
             .unwrap()
             .with_import("loop", Value::native_fn(Loop))
             .with_import("if", Value::native_fn(If))
-            .with_import("cmp", Value::native_fn(Compare))
             .build();
 
         assert_eq!(
@@ -824,7 +881,6 @@ mod tests {
             .with_import("Inf", Value::Number(f32::INFINITY))
             .with_import("fold", Value::native_fn(Fold))
             .with_import("if", Value::native_fn(If))
-            .with_import("cmp", Value::native_fn(Compare))
             .build();
 
         assert_eq!(module.run().unwrap(), Value::Bool(true));
@@ -868,5 +924,39 @@ mod tests {
             test_module.set_import("xs", Value::Tuple(input));
             assert_eq!(test_module.run().unwrap(), Value::Tuple(expected));
         }
+    }
+
+    #[test]
+    fn error_with_min_function_args() {
+        let program = "5 - min(1, (2, 3))";
+        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
+        let module = ExecutableModule::builder(WildcardId, &block)
+            .unwrap()
+            .with_import("min", Value::native_fn(Compare::Min))
+            .build();
+
+        let err = module.run().unwrap_err();
+        let err = err.source();
+        assert_eq!(*err.main_span().code().fragment(), "min(1, (2, 3))");
+        assert_matches!(
+            err.kind(),
+            ErrorKind::NativeCall(ref msg) if msg.contains("requires 2 number arguments")
+        );
+    }
+
+    #[test]
+    fn error_with_min_function_incomparable_args() {
+        let program = "5 - min(1, NAN)";
+        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
+        let module = ExecutableModule::builder(WildcardId, &block)
+            .unwrap()
+            .with_import("NAN", Value::Number(f32::NAN))
+            .with_import("min", Value::native_fn(Compare::Min))
+            .build();
+
+        let err = module.run().unwrap_err();
+        let err = err.source();
+        assert_eq!(*err.main_span().code().fragment(), "min(1, NAN)");
+        assert_matches!(err.kind(), ErrorKind::CannotCompare);
     }
 }

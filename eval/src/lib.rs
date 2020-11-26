@@ -1,46 +1,71 @@
 //! Simple interpreter for ASTs produced by [`arithmetic-parser`].
 //!
-//! # Assumptions
+//! # How it works
 //!
-//! - There is only one numeric type, which is complete w.r.t. all arithmetic operations.
-//!   This is expressed via type constraints on relevant types via the [`Number`] trait.
-//! - Arithmetic operations are assumed to be infallible; panics during their execution
-//!   are **not** caught by the interpreter.
-//! - Grammar literals are directly parsed to the aforementioned numeric type.
+//! 1. A `Block` of statements is *compiled* into an [`ExecutableModule`]. Internally,
+//!   compilation processes the AST of the block and transforms it into a non-recusrive form.
+//!   An [`ExecutableModule`] may require *imports* (such as [`NativeFn`]s or constant [`Value`]s),
+//!   which can be taken from a [`VariableMap`] (e.g., an [`Environment`]).
+//! 2. [`ExecutableModule`] can then be executed, for the return value and/or for the
+//!   changes at the top-level variable scope. There are two major variables influencing
+//!   the execution outcome. An [arithmetic](crate::arith) is used to define arithmetic ops
+//!   (`+`, unary and binary `-`, `*`, `/`, `^`) and comparisons (`==`, `!=`, `>`, `<`, `>=`, `<=`).
+//!   Imports may be redefined at this stage as well.
 //!
-//! These assumptions do not hold for some grammars parsed by the crate. For example, finite
-//! cyclic groups have two types (scalars and group elements) and thus cannot be effectively
-//! interpreted.
+//! # Type system
+//!
+//! [`Value`]s have 4 major types:
+//!
+//! - **Numbers** corresponding to literals in the parsed `Block`
+//! - **Boolean values**
+//! - **Functions,** which are further subdivided into native functions (defined in the Rust code)
+//!   and interpreted ones (defined within a module)
+//! - **Tuples / arrays**.
+//!
+//! Besides these types, there is an auxiliary one: [`OpaqueRef`], which represents a
+//! reference-counted native value, which can be returned from native functions or provided to
+//! them as an arg, but is otherwise opaque from the point of view of the interpreted code
+//! (cf. `anyref` in WASM).
 //!
 //! # Semantics
 //!
 //! - All variables are immutable. Re-declaring a var shadows the previous declaration.
 //! - Functions are first-class (in fact, a function is just a variant of the [`Value`] enum).
 //! - Functions can capture variables (including other functions). All captures are by value.
-//! - Arithmetic operations are defined on primitive vars and tuples. With tuples, operations
-//!   are performed per-element. Binary operations require tuples of the same size,
-//!   or a tuple and a primitive value. As an example, `(1, 2) + 3` and `(2, 3) / (4, 5)` are valid,
-//!   but `(1, 2) * (3, 4, 5)` isn't.
+//! - Arithmetic operations are defined on numbers and tuples. Ops or numbers are defined
+//!   via the [`Arithmetic`]. With tuples, operations are performed per-element.
+//!   Binary operations require tuples of the same size, or a tuple and a primitive value.
+//!   As an example, `(1, 2) + 3` and `(2, 3) / (4, 5)` are valid, but `(1, 2) * (3, 4, 5)` isn't.
 //! - Methods are considered syntactic sugar for functions, with the method receiver considered
 //!   the first function argument. For example, `(1, 2).map(sin)` is equivalent to
 //!   `map((1, 2), sin)`.
+//! - Equality comparisons (`==`, `!=`) are defined on all types of values.
+//!
+//!   - For bool values, the comparisons work as expected.
+//!   - For functions, the equality is determined by the pointer (2 functions are equal
+//!     iff they alias each other).
+//!   - `OpaqueRef`s either use the [`PartialEq`] impl of the underlying type or
+//!     the pointer equality, depending on how the reference was created; see [`OpaqueRef`] docs
+//!     for more details.
+//!   - Equality for numbers is determined by the [`Arithmetic`].
+//!   - Tuples are equal if they contain the same number of elements and elements are pairwise
+//!     equal.
+//!   - Different types of values are always non-equal.
+//!
+//! - Order comparisons (`>`, `<`, `>=`, `<=`) are defined for primitive values only and use
+//!   [`OrdArithmetic`].
 //! - No type checks are performed before evaluation.
 //! - Type annotations are completely ignored. This means that the interpreter may execute
 //!   code that is incorrect with annotations (e.g., assignment of a tuple to a variable which
 //!   is annotated to have a numeric type).
-//! - Order comparisons (`>`, `<`, `>=`, `<=`) are desugared as follows. First, the `cmp` function
-//!   is called with LHS and RHS as args (in this order). The result is then interpreted as
-//!   [`Ordering`](core::cmp::Ordering) (-1 is `Less`, 1 is `Greater`, 0 is `Equal`;
-//!   anything else leads to an error).
-//!   Finally, the `Ordering` is used to compute the original comparison operation. For example,
-//!   if `cmp(x, y) == -1`, then `x < y` and `x <= y` will return `true`, and `x > y` will
-//!   return `false`.
 //!
 //! # Crate features
 //!
 //! - `complex`. Implements [`Number`] for floating-point complex numbers from
 //!   the [`num-complex`] crate (i.e., `Complex32` and `Complex64`).
 //!
+//! [`Arithmetic`]: crate::arith::Arithmetic
+//! [`OrdArithmetic`]: crate::arith::OrdArithmetic
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
 //! [`num-complex`]: https://crates.io/crates/num-complex
 //!
@@ -114,34 +139,46 @@ mod alloc {
 
 pub use self::{
     compiler::CompilerExt,
-    env::Environment,
     error::{Error, ErrorKind, EvalResult},
-    executable::{ExecutableModule, ExecutableModuleBuilder, ModuleImports},
-    module_id::{IndexedId, ModuleId, WildcardId},
-    values::{CallContext, Function, InterpretedFn, NativeFn, SpannedValue, Value, ValueType},
-    variable_map::{Comparisons, Prelude, VariableMap},
+    executable::{
+        ExecutableModule, ExecutableModuleBuilder, IndexedId, ModuleId, ModuleImports, WildcardId,
+        WithArithmetic,
+    },
+    values::{
+        CallContext, Comparisons, Environment, Function, InterpretedFn, NativeFn, OpaqueRef,
+        Prelude, SpannedValue, Value, ValueType, VariableMap,
+    },
 };
 
-use num_traits::Pow;
-
-use core::ops;
-
-use arithmetic_parser::grammars::NumLiteral;
-
+pub mod arith;
 mod compiler;
-mod env;
 pub mod error;
 mod executable;
 pub mod fns;
-mod module_id;
 mod values;
-mod variable_map;
 
-/// Number with fully defined arithmetic operations.
-pub trait Number: NumLiteral + ops::Neg<Output = Self> + Pow<Self, Output = Self> {}
+/// Marker trait for possible literals.
+///
+/// This trait is somewhat of a crutch, necessary to ensure that [function wrappers] can accept
+/// number arguments and distinguish them from other types (booleans, vectors, tuples, etc.).
+///
+/// [function wrappers]: crate::fns::FnWrapper
+pub trait Number: Clone + 'static {}
+
+impl Number for i8 {}
+impl Number for u8 {}
+impl Number for i16 {}
+impl Number for u16 {}
+impl Number for i32 {}
+impl Number for u32 {}
+impl Number for i64 {}
+impl Number for u64 {}
+impl Number for i128 {}
+impl Number for u128 {}
 
 impl Number for f32 {}
 impl Number for f64 {}
+
 #[cfg(feature = "num-complex")]
 impl Number for num_complex::Complex32 {}
 #[cfg(feature = "num-complex")]

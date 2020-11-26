@@ -35,7 +35,7 @@ impl dyn ModuleId {
     ///
     /// [`<dyn Any>::is`]: https://doc.rust-lang.org/std/any/trait.Any.html#method.is
     #[inline]
-    pub fn is<T: Any>(&self) -> bool {
+    pub fn is<T: ModuleId>(&self) -> bool {
         let t = TypeId::of::<T>();
         let concrete = self.type_id();
         t == concrete
@@ -48,7 +48,7 @@ impl dyn ModuleId {
     /// having `Any` as a super-trait.
     ///
     /// [`<dyn Any>::downcast_ref`]: https://doc.rust-lang.org/std/any/trait.Any.html#method.downcast_ref
-    pub fn downcast_ref<T: Any>(&self) -> Option<&T> {
+    pub fn downcast_ref<T: ModuleId>(&self) -> Option<&T> {
         if self.is::<T>() {
             // SAFETY: Same code as for `<dyn Any>::downcast_ref()`.
             unsafe { Some(&*(self as *const dyn ModuleId as *const T)) }

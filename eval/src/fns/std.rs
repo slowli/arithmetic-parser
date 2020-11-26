@@ -1,11 +1,32 @@
-//! Functions that require the standard library.
+//! Functions that require the Rust standard library.
 
 use std::fmt;
 
 use crate::{CallContext, EvalResult, ModuleId, NativeFn, SpannedValue, Value};
 use arithmetic_parser::CodeFragment;
 
-/// FIXME
+/// Acts similarly to the `dbg!` macro, outputting the argument(s) to stderr and returning
+/// them. If a single argument is provided, it's returned as-is; otherwise, the arguments
+/// are wrapped into a tuple.
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # fn main() -> anyhow::Result<()> {
+/// let program = "dbg(1 + 2) > 2.5";
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = Environment::new()
+///     .insert_native_fn("dbg", fns::Dbg)
+///     .compile_module("test_assert", &program)?;
+///
+/// let value = module.run()?;
+/// // Should output `[test_assert:1:5] 1 + 2 = 3` to stderr.
+/// assert_eq!(value, Value::Bool(true));
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone, Copy)]
 pub struct Dbg;
 

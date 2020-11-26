@@ -577,7 +577,7 @@ impl<T: fmt::Display> fmt::Display for Value<'_, T> {
             Self::Bool(true) => formatter.write_str("true"),
             Self::Bool(false) => formatter.write_str("false"),
             Self::Ref(opaque_ref) => fmt::Display::fmt(opaque_ref, formatter),
-            Self::Function(_) => formatter.write_str("function"), // FIXME
+            Self::Function(_) => formatter.write_str("[function]"),
             Self::Tuple(elements) => {
                 formatter.write_str("(")?;
                 for (i, element) in elements.iter().enumerate() {

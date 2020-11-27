@@ -22,6 +22,10 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Support integer and modular arithmetics. (#40)
 
+- Add arithmetics for big integers from the `num-bigint` crate. (#46)
+
+- Add `Dbg` native function that outputs the argument(s) to stderr. (#46)
+
 ### Changed
 
 - Change APIs related to code spans according to the updates in the parser crate. (#26)

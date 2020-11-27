@@ -1,7 +1,7 @@
 [workspace]
 members = ["parser", "eval", "cli", "test-wasm"]
 
-# Speed up `num-bigint`.
+# Speed up big integer crates.
 [profile.dev.package.num-bigint]
 opt-level = 2
 [profile.dev.package.glass_pumpkin]

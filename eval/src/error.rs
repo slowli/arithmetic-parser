@@ -35,7 +35,8 @@ pub enum ArithmeticError {
     NoInverse,
     /// Invalid operation with a custom error message.
     ///
-    /// This error may be used by [`Arithmetic`] implementations.
+    /// This error may be used by [`Arithmetic`](crate::arith::Arithmetic) implementations
+    /// as a catch-all fallback.
     InvalidOp(anyhow::Error),
 }
 

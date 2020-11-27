@@ -27,6 +27,7 @@ use arithmetic_parser::CodeFragment;
 /// # Ok(())
 /// # }
 /// ```
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 #[derive(Debug, Clone, Copy)]
 pub struct Dbg;
 

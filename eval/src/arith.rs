@@ -197,6 +197,10 @@ pub trait CheckedArithmeticKind<T> {
 ///
 /// As an example, this type implements [`Arithmetic`] for all built-in integer types
 /// with a definite size (`u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64`, `i64`, `u128`, `i128`).
+///
+/// The type param defines how negation should be performed; it should be one of [`Checked`]
+/// (default value), [`Unchecked`] or [`NegateOnlyZero`]. See the docs for these types for
+/// more details.
 #[derive(Debug)]
 pub struct CheckedArithmetic<Kind = Checked>(PhantomData<Kind>);
 
@@ -486,7 +490,7 @@ pub struct ModularArithmetic<T> {
 
 impl<T> ModularArithmetic<T>
 where
-    T: Clone + PartialEq + NumOps + Zero + One,
+    T: Clone + PartialEq + NumOps + Unsigned + Zero + One,
 {
     /// Creates a new arithmetic with the specified `modulus`.
     ///
@@ -507,7 +511,7 @@ where
 
 impl<T> ModularArithmetic<T>
 where
-    T: Copy + PartialEq + NumOps + Zero + One + DoubleWidth,
+    T: Copy + PartialEq + NumOps + Unsigned + Zero + One + DoubleWidth,
 {
     #[inline]
     fn mul_inner(self, x: T, y: T) -> T {

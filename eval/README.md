@@ -9,7 +9,8 @@
 [![changelog](https://img.shields.io/badge/-changelog-orange)](CHANGELOG.md)
 
 The library provides a simple interpreter, which can be used for *some* grammars
-recognized by [`arithmetic-parser`] (e.g., integer-, real-, complex-valued and modular arithmetic).
+recognized by [`arithmetic-parser`], e.g., integer-, real-, complex-valued and modular arithmetic.
+(Both built-in integer types and big integers from [`num-bigint`] are supported.)
 The interpreter provides support for native functions,
 which allows to overcome some syntax limitations (e.g., the lack of control flow
 can be solved with native `if` / `loop` functions).
@@ -30,10 +31,11 @@ Add this to your `Crate.toml`:
 arithmetic-eval = "0.2.0-beta.1"
 ```
 
-Please see the crate docs for the examples of usage.
+Please see the crate docs and [examples](examples) for the examples of usage.
 
 ## License
 
 Licensed under the [Apache-2.0 license](LICENSE).
 
 [`arithmetic-parser`]: https://docs.rs/crates/arithmetic-parser
+[`num-bigint`]: https://crates.io/crates/num-bigint

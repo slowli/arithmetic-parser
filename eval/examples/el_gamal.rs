@@ -1,6 +1,9 @@
 //! Showcases modular arithmetic by implementing a toy version of ElGamal encryption.
 //!
 //! See the `cyclic_group` example for a more complex usage of the crate.
+//!
+//! ⚠ This implementation is NOT SECURE (e.g., in terms of side-channel attacks)
+//! and should be viewed only as a showcase of the crate abilities.
 
 use glass_pumpkin::safe_prime;
 use num_bigint::{BigUint, RandBigInt};

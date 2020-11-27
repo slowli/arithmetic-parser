@@ -3,6 +3,9 @@
 //!
 //! The cyclic group used is the prime-order multiplicative subgroup (~Z/qZ) of integers modulo
 //! a safe prime `p = 2q + 1`, i.e., the ElGamal construction.
+//!
+//! ⚠ This implementation is NOT SECURE (e.g., in terms of side-channel attacks)
+//! and should be viewed only as a showcase of the crate abilities.
 
 use glass_pumpkin::safe_prime;
 use num_bigint::{BigUint, RandBigInt};
@@ -11,10 +14,9 @@ use sha2::{digest::Digest, Sha256};
 
 use std::{cell::RefCell, fmt};
 
-use arithmetic_eval::arith::ArithmeticExt;
 use arithmetic_eval::{
-    arith::{Arithmetic, ModularArithmetic},
-    error::ArithmeticError,
+    arith::{Arithmetic, ArithmeticExt, ModularArithmetic},
+    error::{ArithmeticError, AuxErrorInfo},
     fns, CallContext, ErrorKind, EvalResult, ExecutableModule, NativeFn, Number, Prelude,
     SpannedValue, Value,
 };
@@ -103,8 +105,12 @@ impl CyclicGroupArithmetic {
 
     /// Returns a native function hashing data to a scalar.
     fn hash_to_scalar(&self) -> HashToScalar {
+        let max_bit_len = self.for_group.modulus().bits();
+        let max_byte_len = (max_bit_len / 8) as usize + (max_bit_len % 8 != 0) as usize;
+
         HashToScalar {
             modulus: self.for_scalars.modulus().to_owned(),
+            max_byte_len,
         }
     }
 
@@ -133,19 +139,27 @@ impl CyclicGroupArithmetic {
 #[derive(Debug)]
 struct HashToScalar {
     modulus: BigUint,
+    /// Upper bound on the byte length of hashed `BigUint`s.
+    max_byte_len: usize,
 }
 
 impl HashToScalar {
-    fn hash_scalar(hasher: &mut Sha256, sc: &BigUint) {
+    fn hash_scalar(&self, hasher: &mut Sha256, sc: &BigUint) {
         hasher.update(&[0]); // "scalar" marker
-        hasher.update(&sc.bits().to_le_bytes()); // length of the integer
-        hasher.update(&sc.to_bytes_le()); // serialization of the value
+
+        let mut sc_bytes = sc.to_bytes_le();
+        assert!(sc_bytes.len() <= self.max_byte_len);
+        sc_bytes.resize(self.max_byte_len, 0);
+        hasher.update(&sc_bytes); // little-endian, 0-padded serialization of the value
     }
 
-    fn hash_group_element(hasher: &mut Sha256, ge: &BigUint) {
-        hasher.update(&[1]); // "scalar" marker
-        hasher.update(&ge.bits().to_le_bytes()); // length of the integer
-        hasher.update(&ge.to_bytes_le()); // serialization of the value
+    fn hash_group_element(&self, hasher: &mut Sha256, ge: &BigUint) {
+        hasher.update(&[1]); // "group element" marker
+
+        let mut ge_bytes = ge.to_bytes_le();
+        assert!(ge_bytes.len() <= self.max_byte_len);
+        ge_bytes.resize(self.max_byte_len, 0);
+        hasher.update(&ge_bytes); // little-endian, 0-padded serialization of the value
     }
 }
 
@@ -161,14 +175,15 @@ impl NativeFn<GroupLiteral> for HashToScalar {
         let mut hasher = Sha256::default();
         for arg in &args {
             match &arg.extra {
-                Value::Number(GroupLiteral::Scalar(sc)) => Self::hash_scalar(&mut hasher, sc),
+                Value::Number(GroupLiteral::Scalar(sc)) => self.hash_scalar(&mut hasher, sc),
                 Value::Number(GroupLiteral::GroupElement(ge)) => {
-                    Self::hash_group_element(&mut hasher, ge)
+                    self.hash_group_element(&mut hasher, ge);
                 }
                 _ => {
                     let err = ErrorKind::native("Cannot hash value");
-                    return Err(context.call_site_error(err));
-                    // TODO: add arg span!
+                    return Err(context
+                        .call_site_error(err)
+                        .with_span(arg, AuxErrorInfo::InvalidArg));
                 }
             }
         }
@@ -337,18 +352,19 @@ const DSA_SIGNATURES: &str = r#"
     })
 "#;
 
+type GroupGrammar = Untyped<NumGrammar<GroupLiteral>>;
+
 fn main() -> anyhow::Result<()> {
     /// Bit length of `p = 2q + 1`. This value is not cryptographically secure!
     const BIT_LENGTH: usize = 256;
 
-    let schnorr_signatures =
-        Untyped::<NumGrammar<GroupLiteral>>::parse_statements(SCHNORR_SIGNATURES)?;
+    let schnorr_signatures = GroupGrammar::parse_statements(SCHNORR_SIGNATURES)?;
     let mut schnorr_signatures = ExecutableModule::builder("schnorr", &schnorr_signatures)?
         .with_imports_from(&Prelude)
         .with_import("dbg", Value::native_fn(fns::Dbg))
         .set_imports(|_| Value::void());
 
-    let dsa_signatures = Untyped::<NumGrammar<GroupLiteral>>::parse_statements(DSA_SIGNATURES)?;
+    let dsa_signatures = GroupGrammar::parse_statements(DSA_SIGNATURES)?;
     let mut dsa_signatures = ExecutableModule::builder("dsa", &dsa_signatures)?
         .with_imports_from(&Prelude)
         .with_import("dbg", Value::native_fn(fns::Dbg))

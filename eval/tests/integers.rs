@@ -1,6 +1,7 @@
 use arithmetic_eval::{
     arith::{
-        ArithmeticExt, CheckedArithmetic, ModularArithmetic, OrdArithmetic, WrappingArithmetic,
+        ArithmeticExt, Checked, CheckedArithmetic, ModularArithmetic, NegateOnlyZero,
+        OrdArithmetic, Unchecked, WrappingArithmetic,
     },
     error::ErrorWithBacktrace,
     Comparisons, Environment, ErrorKind, Number, Prelude, Value, VariableMap, WildcardId,
@@ -64,12 +65,12 @@ where
     assert_eq!(value, Value::Bool(true));
 }
 
-fn test_unsigned_checked_arithmetic<T>()
+fn test_unsigned_checked_arithmetic<T, Kind>()
 where
     T: PartialEq + PartialOrd + From<u8> + NumLiteral + Number,
-    CheckedArithmetic: OrdArithmetic<T>,
+    CheckedArithmetic<Kind>: OrdArithmetic<T>,
 {
-    let arithmetic = CheckedArithmetic;
+    let arithmetic = CheckedArithmetic::<Kind>::new();
     test_arithmetic_base::<T, _>(&arithmetic);
 
     let err = try_evaluate::<T, _>(&mut Environment::new(), "1 - 2 + 5", &arithmetic).unwrap_err();
@@ -81,27 +82,85 @@ where
 
 #[test]
 fn checked_u8_arithmetic() {
-    test_unsigned_checked_arithmetic::<u8>();
+    test_unsigned_checked_arithmetic::<u8, Checked>();
 }
 
 #[test]
 fn checked_u16_arithmetic() {
-    test_unsigned_checked_arithmetic::<u16>();
+    test_unsigned_checked_arithmetic::<u16, Checked>();
 }
 
 #[test]
 fn checked_u32_arithmetic() {
-    test_unsigned_checked_arithmetic::<u32>();
+    test_unsigned_checked_arithmetic::<u32, Checked>();
 }
 
 #[test]
 fn checked_u64_arithmetic() {
-    test_unsigned_checked_arithmetic::<u64>();
+    test_unsigned_checked_arithmetic::<u64, Checked>();
 }
 
 #[test]
 fn checked_u128_arithmetic() {
-    test_unsigned_checked_arithmetic::<u128>();
+    test_unsigned_checked_arithmetic::<u128, Checked>();
+}
+
+#[cfg(feature = "bigint")]
+#[test]
+fn checked_unsigned_bigint_arithmetic() {
+    use num_bigint::BigUint;
+    test_unsigned_checked_arithmetic::<BigUint, NegateOnlyZero>();
+}
+
+fn test_signed_checked_arithmetic<T, Kind>()
+where
+    T: PartialEq + PartialOrd + From<u8> + NumLiteral + Number,
+    CheckedArithmetic<Kind>: OrdArithmetic<T>,
+{
+    let arithmetic = CheckedArithmetic::<Kind>::new();
+    test_arithmetic_base::<T, _>(&arithmetic);
+
+    let value = evaluate::<T, _>(&mut Environment::new(), "1 - 2 + 5", &arithmetic);
+    assert_eq!(value, Value::Number(4_u8.into()));
+
+    let err = try_evaluate::<T, _>(&mut Environment::new(), "-2 / 0 + 1", &arithmetic).unwrap_err();
+    let err_kind = err.source().kind();
+    assert_matches!(err_kind, ErrorKind::Arithmetic(ref e) if e.to_string().contains("division by zero"));
+    let err_span = err.source().main_span().code();
+    assert_eq!(*err_span.fragment(), "-2 / 0");
+
+    let err = try_evaluate::<T, _>(&mut Environment::new(), "2 ^ -3 + 1", &arithmetic).unwrap_err();
+    let err_kind = err.source().kind();
+    assert_matches!(err_kind, ErrorKind::Arithmetic(ref e) if e.to_string().contains("Exponent is too large or negative"));
+    let err_span = err.source().main_span().code();
+    assert_eq!(*err_span.fragment(), "2 ^ -3");
+}
+
+#[test]
+fn checked_i16_arithmetic() {
+    test_signed_checked_arithmetic::<i16, Checked>();
+}
+
+#[test]
+fn checked_i32_arithmetic() {
+    test_signed_checked_arithmetic::<i32, Checked>();
+}
+
+#[test]
+fn checked_i64_arithmetic() {
+    test_signed_checked_arithmetic::<i64, Checked>();
+}
+
+#[test]
+fn checked_i128_arithmetic() {
+    test_signed_checked_arithmetic::<i128, Checked>();
+}
+
+#[cfg(feature = "bigint")]
+#[test]
+fn checked_signed_bigint_arithmetic() {
+    use num_bigint::BigInt;
+    test_signed_checked_arithmetic::<BigInt, Unchecked>();
 }
 
 fn test_wrapping_unsigned_arithmetic<T>()

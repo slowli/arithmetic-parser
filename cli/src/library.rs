@@ -1,7 +1,7 @@
 //! Standard libraries for different arithmetics.
 
 use num_complex::{Complex, Complex32, Complex64};
-use num_traits::{CheckedRem, WrappingNeg};
+use num_traits::{CheckedRem, Num, WrappingNeg};
 
 use std::{fmt, iter::FromIterator, ops};
 
@@ -24,11 +24,11 @@ impl<'a, T: ReplLiteral> VariableMap<'a, T> for StdLibrary<T> {
 }
 
 impl<T: ReplLiteral> StdLibrary<T> {
-    fn variables(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
+    fn variables(&self) -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
         let constants = self
             .constants
             .iter()
-            .map(|(name, constant)| (*name, Value::Number(*constant)));
+            .map(|(name, constant)| (*name, Value::Number(constant.to_owned())));
         let unary_fns = self
             .unary
             .iter()
@@ -44,7 +44,7 @@ impl<T: ReplLiteral> StdLibrary<T> {
     }
 }
 
-pub trait ReplLiteral: NumLiteral + Number + PartialEq + fmt::Display {
+pub trait ReplLiteral: NumLiteral + Num + Number + PartialEq + fmt::Display {
     const STD_LIB: StdLibrary<Self>;
 }
 

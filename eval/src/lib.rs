@@ -61,13 +61,20 @@
 //!
 //! # Crate features
 //!
+//! - `std`. Enables support of types from `std`, such as the `Error` trait, and propagates
+//!   to dependencies. Importantly, `std` is necessary for floating-point arithmetics.
 //! - `complex`. Implements [`Number`] for floating-point complex numbers from
-//!   the [`num-complex`] crate (i.e., `Complex32` and `Complex64`).
+//!   the [`num-complex`] crate (i.e., `Complex32` and `Complex64`). Enables complex number parsing
+//!   in `arithmetic-parser`.
+//! - `bigint`. Implements `Number` and a couple of other helpers for big integers
+//!   from the [`num-bigint`] crate (i.e., `BigInt` and `BigUint`). Enables big integer parsing
+//!   in `arithmetic-parser`.
 //!
 //! [`Arithmetic`]: crate::arith::Arithmetic
 //! [`OrdArithmetic`]: crate::arith::OrdArithmetic
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
 //! [`num-complex`]: https://crates.io/crates/num-complex
+//! [`num-bigint`]: https://crates.io/crates/num-bigint
 //!
 //! # Examples
 //!
@@ -100,6 +107,7 @@
 //! ```
 
 #![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc(html_root_url = "https://docs.rs/arithmetic-eval/0.2.0-beta.1")]
 #![warn(missing_docs, missing_debug_implementations)]
 #![warn(clippy::all, clippy::pedantic)]
@@ -183,3 +191,8 @@ impl Number for f64 {}
 impl Number for num_complex::Complex32 {}
 #[cfg(feature = "num-complex")]
 impl Number for num_complex::Complex64 {}
+
+#[cfg(feature = "num-bigint")]
+impl Number for num_bigint::BigInt {}
+#[cfg(feature = "num-bigint")]
+impl Number for num_bigint::BigUint {}

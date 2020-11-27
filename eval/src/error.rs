@@ -33,21 +33,41 @@ pub enum ArithmeticError {
     ///
     /// [`Arithmetic::div()`]: crate::arith::Arithmetic::div()
     NoInverse,
+    /// Invalid operation with a custom error message.
+    ///
+    /// This error may be used by [`Arithmetic`](crate::arith::Arithmetic) implementations
+    /// as a catch-all fallback.
+    InvalidOp(anyhow::Error),
+}
+
+impl ArithmeticError {
+    /// Creates a new invalid operation error with the specified `message`.
+    pub fn invalid_op(message: impl Into<String>) -> Self {
+        Self::InvalidOp(anyhow::Error::msg(message.into()))
+    }
 }
 
 impl fmt::Display for ArithmeticError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::IntegerOverflow => "Integer overflow or underflow",
-            Self::DivisionByZero => "Integer division by zero",
-            Self::InvalidExponent => "Exponent is too large or negative",
-            Self::NoInverse => "Integer has no multiplicative inverse",
-        })
+        match self {
+            Self::IntegerOverflow => formatter.write_str("Integer overflow or underflow"),
+            Self::DivisionByZero => formatter.write_str("Integer division by zero"),
+            Self::InvalidExponent => formatter.write_str("Exponent is too large or negative"),
+            Self::NoInverse => formatter.write_str("Integer has no multiplicative inverse"),
+            Self::InvalidOp(e) => write!(formatter, "Invalid operation: {}", e),
+        }
     }
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for ArithmeticError {}
+impl std::error::Error for ArithmeticError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::InvalidOp(e) => Some(e.as_ref()),
+            _ => None,
+        }
+    }
+}
 
 /// Context for [`ErrorKind::TupleLenMismatch`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -41,10 +41,15 @@ use num_traits::{
 use core::{
     cmp::Ordering,
     convert::{TryFrom, TryInto},
-    fmt, mem, ops,
+    fmt,
+    marker::PhantomData,
+    mem, ops,
 };
 
 use crate::error::ArithmeticError;
+
+#[cfg(feature = "bigint")]
+mod bigint;
 
 /// Encapsulates arithmetic operations on a certain number type.
 ///
@@ -124,7 +129,7 @@ pub struct StdArithmetic;
 
 impl<T> Arithmetic<T> for StdArithmetic
 where
-    T: Copy + NumOps + PartialEq + ops::Neg<Output = T> + Pow<T, Output = T>,
+    T: Clone + NumOps + PartialEq + ops::Neg<Output = T> + Pow<T, Output = T>,
 {
     #[inline]
     fn add(&self, x: T, y: T) -> Result<T, ArithmeticError> {
@@ -181,25 +186,49 @@ static_assertions::assert_impl_all!(
     Arithmetic<num_complex::Complex64>
 );
 
+/// Helper trait for [`CheckedArithmetic`] describing how number negation should be implemented.
+pub trait CheckedArithmeticKind<T> {
+    /// Negates the provided `value`, or returns `None` if the value cannot be negated.
+    fn checked_neg(value: T) -> Option<T>;
+}
+
 /// Arithmetic on an integer type (e.g., `i32`) that checks overflow and other failure
 /// conditions for all operations.
 ///
 /// As an example, this type implements [`Arithmetic`] for all built-in integer types
 /// with a definite size (`u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64`, `i64`, `u128`, `i128`).
-#[derive(Debug, Clone, Copy, Default)]
-pub struct CheckedArithmetic;
+///
+/// The type param defines how negation should be performed; it should be one of [`Checked`]
+/// (default value), [`Unchecked`] or [`NegateOnlyZero`]. See the docs for these types for
+/// more details.
+#[derive(Debug)]
+pub struct CheckedArithmetic<Kind = Checked>(PhantomData<Kind>);
 
-impl<T> Arithmetic<T> for CheckedArithmetic
+impl<Kind> Clone for CheckedArithmetic<Kind> {
+    fn clone(&self) -> Self {
+        Self(self.0)
+    }
+}
+
+impl<Kind> Copy for CheckedArithmetic<Kind> {}
+
+impl<Kind> Default for CheckedArithmetic<Kind> {
+    fn default() -> Self {
+        Self(PhantomData)
+    }
+}
+
+impl<Kind> CheckedArithmetic<Kind> {
+    /// Creates a new arithmetic instance.
+    pub const fn new() -> Self {
+        Self(PhantomData)
+    }
+}
+
+impl<T, Kind> Arithmetic<T> for CheckedArithmetic<Kind>
 where
-    T: Copy
-        + PartialEq
-        + Zero
-        + One
-        + CheckedAdd
-        + CheckedSub
-        + CheckedMul
-        + CheckedDiv
-        + CheckedNeg,
+    T: Clone + PartialEq + Zero + One + CheckedAdd + CheckedSub + CheckedMul + CheckedDiv,
+    Kind: CheckedArithmeticKind<T>,
     usize: TryFrom<T>,
 {
     #[inline]
@@ -231,7 +260,7 @@ where
 
     #[inline]
     fn neg(&self, x: T) -> Result<T, ArithmeticError> {
-        x.checked_neg().ok_or(ArithmeticError::IntegerOverflow)
+        Kind::checked_neg(x).ok_or(ArithmeticError::IntegerOverflow)
     }
 
     #[inline]
@@ -240,7 +269,44 @@ where
     }
 }
 
-impl<T> OrdArithmetic<T> for CheckedArithmetic
+/// Marker for [`CheckedArithmetic`] signalling that negation should be inherited
+/// from the [`CheckedNeg`] trait.
+#[derive(Debug)]
+pub struct Checked(());
+
+impl<T: CheckedNeg> CheckedArithmeticKind<T> for Checked {
+    fn checked_neg(value: T) -> Option<T> {
+        value.checked_neg()
+    }
+}
+
+/// Marker for [`CheckedArithmetic`] signalling that negation is only possible for zero.
+#[derive(Debug)]
+pub struct NegateOnlyZero(());
+
+impl<T: Unsigned + Zero> CheckedArithmeticKind<T> for NegateOnlyZero {
+    fn checked_neg(value: T) -> Option<T> {
+        if value.is_zero() {
+            Some(value)
+        } else {
+            None
+        }
+    }
+}
+
+/// Marker for [`CheckedArithmetic`] signalling that negation should be inherited from
+/// the [`Neg`](ops::Neg) trait. This is appropriate if `Neg` never panics (e.g.,
+/// for signed big integers).
+#[derive(Debug)]
+pub struct Unchecked(());
+
+impl<T: Signed> CheckedArithmeticKind<T> for Unchecked {
+    fn checked_neg(value: T) -> Option<T> {
+        Some(-value)
+    }
+}
+
+impl<T, Kind> OrdArithmetic<T> for CheckedArithmetic<Kind>
 where
     Self: Arithmetic<T>,
     T: PartialOrd,
@@ -424,7 +490,7 @@ pub struct ModularArithmetic<T> {
 
 impl<T> ModularArithmetic<T>
 where
-    T: Copy + PartialEq + NumOps + Zero + One + DoubleWidth,
+    T: Clone + PartialEq + NumOps + Unsigned + Zero + One,
 {
     /// Creates a new arithmetic with the specified `modulus`.
     ///
@@ -437,6 +503,16 @@ where
         Self { modulus }
     }
 
+    /// Returns the modulus for this arithmetic.
+    pub fn modulus(&self) -> &T {
+        &self.modulus
+    }
+}
+
+impl<T> ModularArithmetic<T>
+where
+    T: Copy + PartialEq + NumOps + Unsigned + Zero + One + DoubleWidth,
+{
     #[inline]
     fn mul_inner(self, x: T, y: T) -> T {
         let wide = (<T::Wide>::from(x) * <T::Wide>::from(y)) % <T::Wide>::from(self.modulus);
@@ -542,6 +618,7 @@ where
 
     #[inline]
     fn neg(&self, x: T) -> Result<T, ArithmeticError> {
+        let x = x % self.modulus; // Prevent possible overflow in the following subtraction
         Ok(self.modulus - x)
     }
 

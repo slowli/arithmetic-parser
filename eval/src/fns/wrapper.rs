@@ -478,14 +478,15 @@ into_value_for_tuple!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A, 8: B);
 into_value_for_tuple!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A, 8: B, 9: C);
 
 macro_rules! arity_fn {
-    ($arity:tt => $($arg_name:ident : $t:ident),+) => {
-        impl<Num, F, Ret, $($t,)+> NativeFn<Num> for FnWrapper<(Ret, $($t,)+), F>
+    ($arity:tt => $($arg_name:ident : $t:ident),*) => {
+        impl<Num, F, Ret, $($t,)*> NativeFn<Num> for FnWrapper<(Ret, $($t,)*), F>
         where
-            F: Fn($($t,)+) -> Ret,
-            $($t: for<'val> TryFromValue<'val, Num>,)+
+            F: Fn($($t,)*) -> Ret,
+            $($t: for<'val> TryFromValue<'val, Num>,)*
             Ret: for<'val> IntoEvalResult<'val, Num>,
         {
             #[allow(clippy::shadow_unrelated)] // makes it easier to write macro
+            #[allow(unused_variables, unused_mut)] // `args_iter` is unused for 0-ary functions
             fn evaluate<'a>(
                 &self,
                 args: Vec<SpannedValue<'a, Num>>,
@@ -503,15 +504,16 @@ macro_rules! arity_fn {
                             .call_site_error(ErrorKind::Wrapper(err))
                             .with_span(&span, AuxErrorInfo::InvalidArg)
                     })?;
-                )+
+                )*
 
-                let output = (self.function)($($arg_name,)+);
+                let output = (self.function)($($arg_name,)*);
                 output.into_eval_result().map_err(|err| err.into_spanned(context))
             }
         }
     };
 }
 
+arity_fn!(0 =>);
 arity_fn!(1 => x0: T);
 arity_fn!(2 => x0: T, x1: U);
 arity_fn!(3 => x0: T, x1: U, x2: V);

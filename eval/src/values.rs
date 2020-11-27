@@ -66,6 +66,11 @@ impl<'r, 'a, T> CallContext<'r, 'a, T> {
         self.arithmetic
     }
 
+    /// Returns the call span of the currently executing function.
+    pub fn call_span(&self) -> &CodeInModule<'a> {
+        &self.call_span
+    }
+
     /// Applies the call span to the specified `value`.
     pub fn apply_call_span<U>(&self, value: U) -> MaybeSpanned<'a, U> {
         self.call_span.code().copy_with_extra(value)
@@ -561,6 +566,28 @@ impl<T: PartialEq> PartialEq for Value<'_, T> {
             (Self::Function(this), Self::Function(other)) => this.is_same_function(other),
             (Self::Ref(this), Self::Ref(other)) => this == other,
             _ => false,
+        }
+    }
+}
+
+impl<T: fmt::Display> fmt::Display for Value<'_, T> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Number(number) => fmt::Display::fmt(number, formatter),
+            Self::Bool(true) => formatter.write_str("true"),
+            Self::Bool(false) => formatter.write_str("false"),
+            Self::Ref(opaque_ref) => fmt::Display::fmt(opaque_ref, formatter),
+            Self::Function(_) => formatter.write_str("[function]"),
+            Self::Tuple(elements) => {
+                formatter.write_str("(")?;
+                for (i, element) in elements.iter().enumerate() {
+                    fmt::Display::fmt(element, formatter)?;
+                    if i + 1 < elements.len() {
+                        formatter.write_str(", ")?;
+                    }
+                }
+                formatter.write_str(")")
+            }
         }
     }
 }

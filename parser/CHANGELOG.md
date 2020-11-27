@@ -18,6 +18,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Add parsers for integer numbers. (#40)
 
+- Add parsers for big integers from the `num-bigint` crate. (#46)
+
 ### Changed
 
 - Use homegrown `LocatedSpan` instead of one from `nom_locate` crate.

@@ -79,7 +79,7 @@ fn main() -> anyhow::Result<()> {
 
         // Check that it works.
         folded = (1, 2, 3).rfold((), |acc, elem| acc.push(elem));
-        assert(folded == (3, 2, 1));
+        assert_eq(folded, (3, 2, 1));
 
         rfold
     "#;

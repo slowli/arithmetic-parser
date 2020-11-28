@@ -111,7 +111,7 @@ pub(crate) use self::{
 /// # use arithmetic_eval::{Environment, ExecutableModule, Prelude, Value};
 /// # use core::iter::FromIterator;
 /// # fn main() -> anyhow::Result<()> {
-/// let module = Untyped::<F32Grammar>::parse_statements("x = 5; assert(x == 4);")?;
+/// let module = Untyped::<F32Grammar>::parse_statements("x = 5; assert_eq(x, 4);")?;
 /// let module = ExecutableModule::builder("test", &module)?
 ///     .with_imports_from(&Prelude)
 ///     .build();

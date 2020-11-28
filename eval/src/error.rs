@@ -364,8 +364,8 @@ impl From<LvalueType> for UnsupportedType {
     }
 }
 
-/// Auxiliary information about error.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// Auxiliary information about an evaluation error.
+#[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum AuxErrorInfo {
     /// Function arguments declaration for [`ErrorKind::ArgsLenMismatch`].

@@ -1,7 +1,7 @@
 use arithmetic_eval::{
     arith::{
-        ArithmeticExt, Checked, CheckedArithmetic, ModularArithmetic, NegateOnlyZero,
-        OrdArithmetic, Unchecked, WrappingArithmetic,
+        ArithmeticExt, Checked, CheckedArithmetic, ModularArithmetic, OrdArithmetic,
+        WrappingArithmetic,
     },
     error::ErrorWithBacktrace,
     Comparisons, Environment, ErrorKind, Number, Prelude, Value, VariableMap, WildcardId,
@@ -108,7 +108,9 @@ fn checked_u128_arithmetic() {
 #[cfg(feature = "bigint")]
 #[test]
 fn checked_unsigned_bigint_arithmetic() {
+    use arithmetic_eval::arith::NegateOnlyZero;
     use num_bigint::BigUint;
+
     test_unsigned_checked_arithmetic::<BigUint, NegateOnlyZero>();
 }
 
@@ -159,7 +161,9 @@ fn checked_i128_arithmetic() {
 #[cfg(feature = "bigint")]
 #[test]
 fn checked_signed_bigint_arithmetic() {
+    use arithmetic_eval::arith::Unchecked;
     use num_bigint::BigInt;
+
     test_signed_checked_arithmetic::<BigInt, Unchecked>();
 }
 
@@ -213,7 +217,7 @@ fn modular_arithmetic() {
     let value = evaluate(&mut Environment::new(), modular_eq_program, &arithmetic);
     assert_eq!(value, Value::Bool(true));
 
-    let fermat_theorem_check = "1.while(|i| i != 0, |i| { assert(i^60 == 1); i + 1 })";
+    let fermat_theorem_check = "1.while(|i| i != 0, |i| { assert_eq(i^60, 1); i + 1 })";
     let mut env = Environment::from_iter(Prelude.iter().chain(Comparisons.iter()));
     evaluate(&mut env, fermat_theorem_check, &arithmetic);
 }

@@ -733,7 +733,9 @@ impl<'a, T: Clone> Value<'a, T> {
             .try_binary_op_inner(rhs.extra, op, arithmetic)
             .map_err(|e| e.span(module_id, total_span, lhs_span, rhs_span))
     }
+}
 
+impl<'a, T> Value<'a, T> {
     pub(crate) fn try_neg(self, arithmetic: &dyn OrdArithmetic<T>) -> Result<Self, ErrorKind> {
         match self {
             Self::Number(val) => arithmetic

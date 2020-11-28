@@ -70,16 +70,16 @@ fn repeated_function() {
         fn = |x| 2 * x + 1;
         repeated = fn.repeat(3);
         // 2 * 1 + 1 = 3 -> 2 * 3 + 1 = 7 -> 2 * 7 + 1 = 15
-        assert(repeated(1) == 15);
+        assert_eq(repeated(1), 15);
         // -1 is the immovable point of the transform
-        assert(repeated(-1) == -1);
+        assert_eq(repeated(-1), -1);
     "#;
     let program = Untyped::<F32Grammar>::parse_statements(program).unwrap();
 
     let program = ExecutableModule::builder("repeat", &program)
         .unwrap()
         .with_import("repeat", Value::native_fn(wrap_fn!(2, repeat)))
-        .with_import("assert", Value::native_fn(fns::Assert))
+        .with_import("assert_eq", Value::native_fn(fns::AssertEq))
         .build();
     program.run().unwrap();
 }
@@ -89,9 +89,9 @@ fn eager_repeated_function() {
     let program = r#"
         fn = |x| 2 * x + 1;
         // 2 * 1 + 1 = 3 -> 2 * 3 + 1 = 7 -> 2 * 7 + 1 = 15
-        assert(fn.repeat(3, 1) == 15);
+        assert_eq(fn.repeat(3, 1), 15);
         // -1 is the immovable point of the transform
-        assert(fn.repeat(3, -1) == -1);
+        assert_eq(fn.repeat(3, -1), -1);
     "#;
     let program = Untyped::<F32Grammar>::parse_statements(program).unwrap();
 
@@ -101,7 +101,7 @@ fn eager_repeated_function() {
             "repeat",
             Value::native_fn(wrap_fn_with_context!(3, eager_repeat)),
         )
-        .with_import("assert", Value::native_fn(fns::Assert))
+        .with_import("assert_eq", Value::native_fn(fns::AssertEq))
         .build();
     program.run().unwrap();
 }

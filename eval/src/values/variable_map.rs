@@ -56,9 +56,10 @@ pub struct Prelude;
 impl Prelude {
     /// Creates an iterator over contained values and the corresponding names.
     pub fn iter<T: Clone>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
+        #[rustfmt::skip]
         const VAR_NAMES: &[&str] = &[
-            "false", "true", "assert", "if", "loop", "while", "map", "filter", "fold", "push",
-            "merge",
+            "false", "true", "assert", "assert_eq", "if", "loop", "while", "map", "filter", "fold",
+            "push", "merge",
         ];
 
         VAR_NAMES
@@ -73,6 +74,7 @@ impl<'a, T: Clone> VariableMap<'a, T> for Prelude {
             "false" => Value::Bool(false),
             "true" => Value::Bool(true),
             "assert" => Value::native_fn(fns::Assert),
+            "assert_eq" => Value::native_fn(fns::AssertEq),
             "if" => Value::native_fn(fns::If),
             "loop" => Value::native_fn(fns::Loop),
             "while" => Value::native_fn(fns::While),

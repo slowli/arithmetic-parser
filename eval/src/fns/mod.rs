@@ -121,7 +121,7 @@ fn extract_fn<'a, T, A>(
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Assert;
 
 impl<T> NativeFn<T> for Assert {
@@ -186,7 +186,7 @@ impl<T> NativeFn<T> for Assert {
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct AssertEq;
 
 impl<T> NativeFn<T> for AssertEq {
@@ -258,7 +258,7 @@ impl<T> NativeFn<T> for AssertEq {
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct If;
 
 impl<T> NativeFn<T> for If {
@@ -315,7 +315,7 @@ impl<T> NativeFn<T> for If {
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Loop;
 
 impl Loop {
@@ -402,7 +402,7 @@ impl<T: Clone> NativeFn<T> for Loop {
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct While;
 
 impl<T: Clone> NativeFn<T> for While {
@@ -472,7 +472,7 @@ impl<T: Clone> NativeFn<T> for While {
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Map;
 
 impl<T: Clone> NativeFn<T> for Map {
@@ -532,7 +532,7 @@ impl<T: Clone> NativeFn<T> for Map {
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Filter;
 
 impl<T: Clone> NativeFn<T> for Filter {
@@ -598,7 +598,7 @@ impl<T: Clone> NativeFn<T> for Filter {
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Fold;
 
 impl<T: Clone> NativeFn<T> for Fold {
@@ -662,7 +662,7 @@ impl<T: Clone> NativeFn<T> for Fold {
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Push;
 
 impl<T> NativeFn<T> for Push {
@@ -713,7 +713,7 @@ impl<T> NativeFn<T> for Push {
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Merge;
 
 impl<T: Clone> NativeFn<T> for Merge {

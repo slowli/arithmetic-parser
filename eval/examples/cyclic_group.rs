@@ -21,7 +21,7 @@ use arithmetic_eval::{
     Prelude, SpannedValue, Value,
 };
 use arithmetic_parser::{
-    grammars::{NumGrammar, NumLiteral, Parse, Untyped},
+    grammars::{BooleanOps, Features, NumGrammar, NumLiteral, Parse, Untyped},
     InputSpan, NomResult,
 };
 
@@ -352,7 +352,21 @@ const DSA_SIGNATURES: &str = r#"
     })
 "#;
 
-type GroupGrammar = Untyped<NumGrammar<GroupLiteral>>;
+/// Type for a custom grammar definition.
+#[derive(Debug, Clone, Copy)]
+struct GroupGrammar;
+
+impl Parse for GroupGrammar {
+    type Base = Untyped<NumGrammar<GroupLiteral>>;
+
+    // Disable comparisons in the parser.
+    const FEATURES: Features = {
+        let mut features = Features::all();
+        features.type_annotations = false;
+        features.boolean_ops = BooleanOps::Basic;
+        features
+    };
+}
 
 fn main() -> anyhow::Result<()> {
     /// Bit length of `p = 2q + 1`. This value is not cryptographically secure!

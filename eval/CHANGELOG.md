@@ -26,6 +26,9 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Add `Dbg` native function that outputs the argument(s) to stderr. (#46)
 
+- Add `AssertEq` native function that compares two args and raises an error
+  if they are not equal. (#47)
+
 ### Changed
 
 - Change APIs related to code spans according to the updates in the parser crate. (#26)
@@ -60,6 +63,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Change module execution logic to use a customizable abstraction (arithmetic)
   for foundational arithmetic ops and comparisons. (#40)
+
+- Move `assert` function to a separate container, `Assertions`. (#47)
 
 ## 0.2.0-beta.1 - 2020-10-04
 

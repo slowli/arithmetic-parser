@@ -1,16 +1,16 @@
+use assert_matches::assert_matches;
+use num_traits::Bounded;
+
 use arithmetic_eval::{
     arith::{
         ArithmeticExt, Checked, CheckedArithmetic, ModularArithmetic, OrdArithmetic,
         WrappingArithmetic,
     },
     error::ErrorWithBacktrace,
-    Comparisons, Environment, ErrorKind, Number, Prelude, Value, VariableMap, WildcardId,
+    Assertions, Comparisons, Environment, ErrorKind, Number, Prelude, Value, VariableMap,
+    WildcardId,
 };
 use arithmetic_parser::grammars::{NumGrammar, NumLiteral, Parse, Untyped};
-use assert_matches::assert_matches;
-use num_traits::Bounded;
-
-use core::iter::FromIterator;
 
 fn try_evaluate<'a, T, A>(
     env: &mut Environment<'a, T>,
@@ -58,7 +58,7 @@ where
 
     let program_with_comparisons = "1 < 2 && 1 + 1 == 2 && 2 ^ 3 > 7";
     let value = evaluate::<T, _>(
-        &mut Environment::from_iter(Comparisons.iter()),
+        &mut Comparisons.iter().collect(),
         program_with_comparisons,
         arithmetic,
     );
@@ -218,6 +218,10 @@ fn modular_arithmetic() {
     assert_eq!(value, Value::Bool(true));
 
     let fermat_theorem_check = "1.while(|i| i != 0, |i| { assert_eq(i^60, 1); i + 1 })";
-    let mut env = Environment::from_iter(Prelude.iter().chain(Comparisons.iter()));
+    let mut env = Prelude
+        .iter()
+        .chain(Comparisons.iter())
+        .chain(Assertions.iter())
+        .collect();
     evaluate(&mut env, fermat_theorem_check, &arithmetic);
 }

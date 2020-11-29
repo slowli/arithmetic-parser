@@ -17,8 +17,8 @@ use std::{cell::RefCell, fmt};
 use arithmetic_eval::{
     arith::{Arithmetic, ArithmeticExt, ModularArithmetic},
     error::{ArithmeticError, AuxErrorInfo},
-    fns, CallContext, ErrorKind, EvalResult, ExecutableModule, NativeFn, Number, Prelude,
-    SpannedValue, Value,
+    fns, Assertions, CallContext, ErrorKind, EvalResult, ExecutableModule, NativeFn, Number,
+    Prelude, SpannedValue, Value,
 };
 use arithmetic_parser::{
     grammars::{NumGrammar, NumLiteral, Parse, Untyped},
@@ -361,12 +361,14 @@ fn main() -> anyhow::Result<()> {
     let schnorr_signatures = GroupGrammar::parse_statements(SCHNORR_SIGNATURES)?;
     let mut schnorr_signatures = ExecutableModule::builder("schnorr", &schnorr_signatures)?
         .with_imports_from(&Prelude)
+        .with_imports_from(&Assertions)
         .with_import("dbg", Value::native_fn(fns::Dbg))
         .set_imports(|_| Value::void());
 
     let dsa_signatures = GroupGrammar::parse_statements(DSA_SIGNATURES)?;
     let mut dsa_signatures = ExecutableModule::builder("dsa", &dsa_signatures)?
         .with_imports_from(&Prelude)
+        .with_imports_from(&Assertions)
         .with_import("dbg", Value::native_fn(fns::Dbg))
         .set_imports(|_| Value::void());
 

@@ -25,7 +25,7 @@
 //! [`Number`]: crate::Number
 //! [GAT]: https://github.com/rust-lang/rust/issues/44265
 
-use core::cmp::Ordering;
+use core::{cmp::Ordering, fmt};
 
 use crate::{
     alloc::{format, vec, Vec},
@@ -189,7 +189,7 @@ impl<T> NativeFn<T> for Assert {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AssertEq;
 
-impl<T> NativeFn<T> for AssertEq {
+impl<T: fmt::Display> NativeFn<T> for AssertEq {
     fn evaluate<'a>(
         &self,
         args: Vec<SpannedValue<'a, T>>,
@@ -211,7 +211,10 @@ impl<T> NativeFn<T> for AssertEq {
             } else {
                 ErrorKind::native("Equality assertion failed")
             };
-            Err(ctx.call_site_error(err))
+            Err(ctx
+                .call_site_error(err)
+                .with_span(&args[0], AuxErrorInfo::arg_value(&args[0].extra))
+                .with_span(&args[1], AuxErrorInfo::arg_value(&args[1].extra)))
         }
     }
 }
@@ -856,7 +859,7 @@ mod tests {
     use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
     use assert_matches::assert_matches;
 
-    use core::{f32, iter::FromIterator};
+    use core::f32;
 
     #[test]
     fn if_basic() {
@@ -984,7 +987,7 @@ mod tests {
             .with_import("fold", Value::native_fn(Fold))
             .build();
 
-        let mut env = Environment::from_iter(module.imports());
+        let mut env = module.imports().into_iter().collect::<Environment<_>>();
         assert_eq!(module.run_in_env(&mut env).unwrap(), Value::Bool(true));
 
         let test_block = Untyped::<F32Grammar>::parse_statements("xs.reverse()").unwrap();

@@ -707,7 +707,7 @@ fn function_with_non_linear_flow() {
 #[test]
 fn comparison_return_value() {
     let program = "cmp(5, 3) == GREATER && cmp(3, 5) == LESS && cmp(4, 4) == EQUAL";
-    let mut env = Environment::from_iter(Comparisons.iter());
+    let mut env = Comparisons.iter().collect();
     let return_value = evaluate(&mut env, program);
     assert_eq!(return_value, Value::Bool(true));
 }
@@ -718,7 +718,7 @@ fn comparison_constants_are_comparable() {
         EQUAL != LESS && cmp(5, 3) != LESS && (LESS, GREATER) == (cmp(3, 4), cmp(4, -5)) &&
             EQUAL != 0 && LESS != -1
     "#;
-    let mut env = Environment::from_iter(Comparisons.iter());
+    let mut env = Comparisons.iter().collect();
     let return_value = evaluate(&mut env, program);
     assert_eq!(return_value, Value::Bool(true));
 }

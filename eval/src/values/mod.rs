@@ -22,7 +22,7 @@ mod variable_map;
 
 pub use self::{
     env::Environment,
-    variable_map::{Comparisons, Prelude, VariableMap},
+    variable_map::{Assertions, Comparisons, Prelude, VariableMap},
 };
 
 /// Opaque context for native calls.

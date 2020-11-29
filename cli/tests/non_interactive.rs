@@ -286,3 +286,24 @@ fn error_with_call_complex_call_trace_and_native_fns() {
         .code(ERROR_EXIT_CODE)
         .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
 }
+
+#[test]
+fn assertion_error() {
+    const EXPECTED_ERR: &str = r#"
+        error[EVAL]: Equality assertion failed
+          ┌─ Snippet #1:1:1
+          │
+        1 │ assert_eq(1 + 2, 3 / 2)
+          │ ^^^^^^^^^^^^^^^^^^^^^^^
+          │ │         │      │
+          │ │         │      Has value: 1.5
+          │ │         Has value: 3
+          │ Failed call
+    "#;
+
+    let assert = create_command("assert_eq(1 + 2, 3 / 2)", "f64").assert();
+    assert
+        .failure()
+        .code(ERROR_EXIT_CODE)
+        .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+}

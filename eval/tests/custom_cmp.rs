@@ -4,7 +4,7 @@ use num_complex::Complex64;
 
 use arithmetic_eval::{
     arith::{ArithmeticExt, StdArithmetic},
-    ExecutableModule, Prelude,
+    Assertions, ExecutableModule, Prelude,
 };
 use arithmetic_parser::grammars::{NumGrammar, Parse, Untyped};
 
@@ -15,6 +15,7 @@ fn compile_module(program: &str) -> ExecutableModule<'_, Complex64> {
     ExecutableModule::builder("custom_cmp", &block)
         .unwrap()
         .with_imports_from(&Prelude)
+        .with_imports_from(&Assertions)
         .build()
 }
 

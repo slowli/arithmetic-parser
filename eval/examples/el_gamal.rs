@@ -13,7 +13,7 @@ use std::cell::RefCell;
 
 use arithmetic_eval::{
     arith::{ArithmeticExt, ModularArithmetic},
-    fns, ExecutableModule, Prelude, Value,
+    fns, Assertions, ExecutableModule, Prelude, Value,
 };
 use arithmetic_parser::grammars::{NumGrammar, Parse, Untyped};
 
@@ -75,6 +75,7 @@ fn main() -> anyhow::Result<()> {
         Untyped::<NumGrammar<BigUint>>::parse_statements(EL_GAMAL_ENCRYPTION)?;
     let mut el_gamal_encryption = ExecutableModule::builder("el_gamal", &el_gamal_encryption)?
         .with_imports_from(&Prelude)
+        .with_imports_from(&Assertions)
         .with_import("dbg", Value::native_fn(fns::Dbg))
         .set_imports(|_| Value::void());
 

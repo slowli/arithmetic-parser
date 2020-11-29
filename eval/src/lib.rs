@@ -80,14 +80,14 @@
 //!
 //! ```
 //! use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-//! use arithmetic_eval::{fns, Comparisons, Environment, Prelude, Value, VariableMap};
+//! use arithmetic_eval::{fns, Assertions, Comparisons, Environment, Prelude, Value, VariableMap};
 //!
 //! # fn main() -> anyhow::Result<()> {
 //! let program = r#"
 //!     // The interpreter supports all parser features, including
 //!     // function definitions, tuples and blocks.
 //!     order = |x, y| (min(x, y), max(x, y));
-//!     assert(order(0.5, -1) == (-1, 0.5));
+//!     assert_eq(order(0.5, -1), (-1, 0.5));
 //!     (_, M) = order(3^2, { x = 3; x + 5 });
 //!     M
 //! "#;
@@ -96,6 +96,7 @@
 //! let mut env = Environment::new();
 //! // Add some native functions to the environment.
 //! env.extend(Prelude.iter());
+//! env.extend(Assertions.iter());
 //! env.extend(Comparisons.iter());
 //!
 //! // To execute statements, we first compile them into a module.
@@ -153,8 +154,8 @@ pub use self::{
         WithArithmetic,
     },
     values::{
-        CallContext, Comparisons, Environment, Function, InterpretedFn, NativeFn, OpaqueRef,
-        Prelude, SpannedValue, Value, ValueType, VariableMap,
+        Assertions, CallContext, Comparisons, Environment, Function, InterpretedFn, NativeFn,
+        OpaqueRef, Prelude, SpannedValue, Value, ValueType, VariableMap,
     },
 };
 

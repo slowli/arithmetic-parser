@@ -13,7 +13,7 @@ use std::cell::RefCell;
 
 use arithmetic_eval::{
     arith::{ArithmeticExt, ModularArithmetic},
-    fns, ExecutableModule, Prelude, Value,
+    fns, Assertions, ExecutableModule, Prelude, Value,
 };
 use arithmetic_parser::grammars::{NumGrammar, Parse, Untyped};
 
@@ -56,7 +56,7 @@ const EL_GAMAL_ENCRYPTION: &str = r#"
         dbg(message);
         encrypted = message.encrypt(pk);
         dbg(encrypted);
-        assert(dbg(encrypted.decrypt(sk)) == message);
+        assert_eq(encrypted.decrypt(sk), message);
 
         // ElGamal encryption is partially homomorphic: a product of encryptions
         // is an encryption of the product of plaintexts.
@@ -64,7 +64,7 @@ const EL_GAMAL_ENCRYPTION: &str = r#"
         dbg(other_message);
         encrypted_total = dbg(other_message.encrypt(pk)) * encrypted;
         dbg(encrypted_total);
-        assert(dbg(encrypted_total.decrypt(sk)) == dbg(message * other_message));
+        assert_eq(encrypted_total.decrypt(sk), message * other_message);
 
         i - 1
     })
@@ -75,6 +75,7 @@ fn main() -> anyhow::Result<()> {
         Untyped::<NumGrammar<BigUint>>::parse_statements(EL_GAMAL_ENCRYPTION)?;
     let mut el_gamal_encryption = ExecutableModule::builder("el_gamal", &el_gamal_encryption)?
         .with_imports_from(&Prelude)
+        .with_imports_from(&Assertions)
         .with_import("dbg", Value::native_fn(fns::Dbg))
         .set_imports(|_| Value::void());
 

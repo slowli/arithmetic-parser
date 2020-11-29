@@ -364,8 +364,8 @@ impl From<LvalueType> for UnsupportedType {
     }
 }
 
-/// Auxiliary information about error.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// Auxiliary information about an evaluation error.
+#[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum AuxErrorInfo {
     /// Function arguments declaration for [`ErrorKind::ArgsLenMismatch`].
@@ -383,6 +383,15 @@ pub enum AuxErrorInfo {
 
     /// Invalid argument.
     InvalidArg,
+
+    /// String representation of an argument value (e.g., for a failed equality assertion).
+    ArgValue(String),
+}
+
+impl AuxErrorInfo {
+    pub(crate) fn arg_value<T: fmt::Display>(value: &Value<'_, T>) -> Self {
+        Self::ArgValue(value.to_string())
+    }
 }
 
 impl fmt::Display for AuxErrorInfo {
@@ -393,6 +402,7 @@ impl fmt::Display for AuxErrorInfo {
             Self::Rvalue => formatter.write_str("RHS containing the invalid assignment"),
             Self::UnbalancedRhs(size) => write!(formatter, "RHS with the {}-element tuple", size),
             Self::InvalidArg => formatter.write_str("Invalid argument"),
+            Self::ArgValue(val) => write!(formatter, "Has value: {}", val),
         }
     }
 }

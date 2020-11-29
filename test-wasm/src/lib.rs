@@ -3,9 +3,9 @@
 extern crate alloc;
 
 use alloc::string::ToString;
-use core::{f64, iter::FromIterator};
+use core::f64;
 
-use arithmetic_eval::{fns, Environment, Prelude, Value, VariableMap, WildcardId};
+use arithmetic_eval::{fns, Assertions, Environment, Prelude, Value, VariableMap, WildcardId};
 use arithmetic_parser::grammars::{F64Grammar, Parse, Untyped};
 use wasm_bindgen::prelude::*;
 
@@ -70,7 +70,7 @@ pub fn evaluate(program: &str) -> Result<JsValue, JsValue> {
     let block = Untyped::<F64Grammar>::parse_statements(program)
         .map_err(|err| Error::new(&err.to_string()))?;
 
-    let mut env = Environment::from_iter(Prelude.iter());
+    let mut env = Prelude.iter().chain(Assertions.iter()).collect();
     initialize_env(&mut env);
 
     let value = env

@@ -46,19 +46,18 @@ impl<'a, T: Clone> VariableMap<'a, T> for ModuleImports<'a, T> {
 ///
 /// # Contents
 ///
-/// - All functions from the `fns` module, except for [`Compare`](fns::Compare) (since it requires
-///   `PartialOrd` implementation for numbers). All functions are named in lowercase,
-///   e.g., `if`, `map`.
+/// - All functions from the `fns` module, except for [`Compare`](fns::Compare)
+///   (contained in [`Comparisons`]) and assertion functions (contained in [`Assertions`]).
+///   All functions are named in lowercase, e.g., `if`, `map`.
 /// - `true` and `false` Boolean constants.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Prelude;
 
 impl Prelude {
     /// Creates an iterator over contained values and the corresponding names.
     pub fn iter<T: Clone>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
         const VAR_NAMES: &[&str] = &[
-            "false", "true", "assert", "if", "loop", "while", "map", "filter", "fold", "push",
-            "merge",
+            "false", "true", "if", "loop", "while", "map", "filter", "fold", "push", "merge",
         ];
 
         VAR_NAMES
@@ -72,7 +71,6 @@ impl<'a, T: Clone> VariableMap<'a, T> for Prelude {
         Some(match name {
             "false" => Value::Bool(false),
             "true" => Value::Bool(true),
-            "assert" => Value::native_fn(fns::Assert),
             "if" => Value::native_fn(fns::If),
             "loop" => Value::native_fn(fns::Loop),
             "while" => Value::native_fn(fns::While),
@@ -86,8 +84,33 @@ impl<'a, T: Clone> VariableMap<'a, T> for Prelude {
     }
 }
 
+/// Container for assertion functions: `assert` and `assert_eq`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Assertions;
+
+impl Assertions {
+    /// Creates an iterator over contained values and the corresponding names.
+    pub fn iter<T: fmt::Display>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
+        const VAR_NAMES: &[&str] = &["assert", "assert_eq"];
+
+        VAR_NAMES
+            .iter()
+            .map(move |&var_name| (var_name, self.get_variable(var_name).unwrap()))
+    }
+}
+
+impl<'a, T: fmt::Display> VariableMap<'a, T> for Assertions {
+    fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
+        Some(match name {
+            "assert" => Value::native_fn(fns::Assert),
+            "assert_eq" => Value::native_fn(fns::AssertEq),
+            _ => return None,
+        })
+    }
+}
+
 /// Container with the comparison functions: `cmp`, `min` and `max`.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Comparisons;
 
 impl<'a, T> VariableMap<'a, T> for Comparisons {

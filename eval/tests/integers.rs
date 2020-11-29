@@ -1,16 +1,16 @@
-use arithmetic_eval::{
-    arith::{
-        ArithmeticExt, Checked, CheckedArithmetic, ModularArithmetic, NegateOnlyZero,
-        OrdArithmetic, Unchecked, WrappingArithmetic,
-    },
-    error::ErrorWithBacktrace,
-    Comparisons, Environment, ErrorKind, Number, Prelude, Value, VariableMap, WildcardId,
-};
-use arithmetic_parser::grammars::{NumGrammar, NumLiteral, Parse, Untyped};
 use assert_matches::assert_matches;
 use num_traits::Bounded;
 
-use core::iter::FromIterator;
+use arithmetic_eval::{
+    arith::{
+        ArithmeticExt, Checked, CheckedArithmetic, ModularArithmetic, OrdArithmetic,
+        WrappingArithmetic,
+    },
+    error::ErrorWithBacktrace,
+    Assertions, Comparisons, Environment, ErrorKind, Number, Prelude, Value, VariableMap,
+    WildcardId,
+};
+use arithmetic_parser::grammars::{NumGrammar, NumLiteral, Parse, Untyped};
 
 fn try_evaluate<'a, T, A>(
     env: &mut Environment<'a, T>,
@@ -58,7 +58,7 @@ where
 
     let program_with_comparisons = "1 < 2 && 1 + 1 == 2 && 2 ^ 3 > 7";
     let value = evaluate::<T, _>(
-        &mut Environment::from_iter(Comparisons.iter()),
+        &mut Comparisons.iter().collect(),
         program_with_comparisons,
         arithmetic,
     );
@@ -108,7 +108,9 @@ fn checked_u128_arithmetic() {
 #[cfg(feature = "bigint")]
 #[test]
 fn checked_unsigned_bigint_arithmetic() {
+    use arithmetic_eval::arith::NegateOnlyZero;
     use num_bigint::BigUint;
+
     test_unsigned_checked_arithmetic::<BigUint, NegateOnlyZero>();
 }
 
@@ -159,7 +161,9 @@ fn checked_i128_arithmetic() {
 #[cfg(feature = "bigint")]
 #[test]
 fn checked_signed_bigint_arithmetic() {
+    use arithmetic_eval::arith::Unchecked;
     use num_bigint::BigInt;
+
     test_signed_checked_arithmetic::<BigInt, Unchecked>();
 }
 
@@ -213,7 +217,11 @@ fn modular_arithmetic() {
     let value = evaluate(&mut Environment::new(), modular_eq_program, &arithmetic);
     assert_eq!(value, Value::Bool(true));
 
-    let fermat_theorem_check = "1.while(|i| i != 0, |i| { assert(i^60 == 1); i + 1 })";
-    let mut env = Environment::from_iter(Prelude.iter().chain(Comparisons.iter()));
+    let fermat_theorem_check = "1.while(|i| i != 0, |i| { assert_eq(i^60, 1); i + 1 })";
+    let mut env = Prelude
+        .iter()
+        .chain(Comparisons.iter())
+        .chain(Assertions.iter())
+        .collect();
     evaluate(&mut env, fermat_theorem_check, &arithmetic);
 }

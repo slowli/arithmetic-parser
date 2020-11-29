@@ -4,7 +4,7 @@ use assert_matches::assert_matches;
 
 use core::iter::FromIterator;
 
-use arithmetic_eval::{Environment, ErrorKind, ExecutableModule, Prelude, Value};
+use arithmetic_eval::{Assertions, Environment, ErrorKind, ExecutableModule, Prelude, Value};
 use arithmetic_parser::{
     grammars::{F64Grammar, Parse, Untyped},
     BinaryOp, StripCode, StripResultExt,
@@ -18,6 +18,7 @@ fn create_module<'a>(
     Ok(ExecutableModule::builder(module_name, &block)
         .strip_err()?
         .with_imports_from(&Prelude)
+        .with_imports_from(&Assertions)
         .set_imports(|_| Value::void()))
 }
 
@@ -79,7 +80,7 @@ fn main() -> anyhow::Result<()> {
 
         // Check that it works.
         folded = (1, 2, 3).rfold((), |acc, elem| acc.push(elem));
-        assert(folded == (3, 2, 1));
+        assert_eq(folded, (3, 2, 1));
 
         rfold
     "#;

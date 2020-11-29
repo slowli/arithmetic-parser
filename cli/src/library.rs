@@ -3,9 +3,11 @@
 use num_complex::{Complex, Complex32, Complex64};
 use num_traits::{CheckedRem, Num, WrappingNeg};
 
-use std::{fmt, iter::FromIterator, ops};
+use std::{fmt, ops};
 
-use arithmetic_eval::{fns, Comparisons, Environment, Number, Prelude, Value, VariableMap};
+use arithmetic_eval::{
+    fns, Assertions, Comparisons, Environment, Number, Prelude, Value, VariableMap,
+};
 use arithmetic_parser::grammars::NumLiteral;
 
 #[derive(Debug, Clone, Copy)]
@@ -88,6 +90,7 @@ where
 
     let mut env: Environment<'static, T> = Prelude
         .iter()
+        .chain(Assertions.iter())
         .chain(Comparisons.iter())
         .chain(T::STD_LIB.variables())
         .collect();
@@ -112,7 +115,7 @@ where
 }
 
 pub fn create_modular_env(modulus: u64) -> Environment<'static, u64> {
-    let mut env = Environment::from_iter(Prelude.iter());
+    let mut env: Environment<u64> = Prelude.iter().chain(Assertions.iter()).collect();
     env.insert("MAX_VALUE", Value::Number(modulus - 1));
     env
 }
@@ -159,6 +162,7 @@ declare_real_functions!(f64);
 pub fn create_float_env<T: ReplLiteral>() -> Environment<'static, T> {
     Prelude
         .iter()
+        .chain(Assertions.iter())
         .chain(Comparisons.iter())
         .chain(T::STD_LIB.variables())
         .collect()
@@ -204,5 +208,9 @@ declare_complex_functions!(Complex32, f32);
 declare_complex_functions!(Complex64, f64);
 
 pub fn create_complex_env<T: ReplLiteral>() -> Environment<'static, T> {
-    Prelude.iter().chain(T::STD_LIB.variables()).collect()
+    Prelude
+        .iter()
+        .chain(Assertions.iter())
+        .chain(T::STD_LIB.variables())
+        .collect()
 }

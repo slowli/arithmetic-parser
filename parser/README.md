@@ -48,7 +48,7 @@ other_function(y - z)
 ## Implementation Details 
 
 The parser is based on the [`nom`](https://docs.rs/nom/) crate. The core trait of the library,
-`Grammar`, is designed in such a way that switching [optional features](#optional-features)
+`Grammar`, is designed in such a way that switching optional features
 should not induce run-time overhead; the unused parsing code paths should be removed during
 compilation.
 

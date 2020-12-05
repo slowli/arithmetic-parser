@@ -80,7 +80,9 @@
 //!
 //! ```
 //! use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-//! use arithmetic_eval::{fns, Assertions, Comparisons, Environment, Prelude, Value, VariableMap};
+//! use arithmetic_eval::{
+//!     fns, Assertions, Comparisons, Environment, Prelude, Value, VariableMap,
+//! };
 //!
 //! # fn main() -> anyhow::Result<()> {
 //! let program = r#"

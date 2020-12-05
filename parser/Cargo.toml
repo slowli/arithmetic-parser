@@ -10,6 +10,9 @@ repository = "https://github.com/slowli/arithmetic-parser"
 categories = ["parser-implementations", "mathematics"]
 keywords = ["parser", "arithmetic"]
 
+[package.metadata.docs.rs]
+all-features = true
+
 [dependencies]
 # Public dependencies (present in the public API).
 anyhow = { version = "1.0.27", default_features = false }

@@ -281,7 +281,7 @@ pub trait Parse {
 /// # Examples
 ///
 /// See [`ParseLiteral`] docs for an example of usage.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug)]
 pub struct Untyped<T>(PhantomData<T>);
 
 impl<T: ParseLiteral> ParseLiteral for Untyped<T> {
@@ -316,7 +316,7 @@ impl<T: ParseLiteral> Parse for Untyped<T> {
 /// # Examples
 ///
 /// See [`Grammar`] docs for an example of usage.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug)]
 pub struct Typed<T>(PhantomData<T>);
 
 impl<T: Grammar> Parse for Typed<T> {

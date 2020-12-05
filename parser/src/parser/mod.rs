@@ -374,7 +374,7 @@ fn fold_args<'a, T: Grammar>(
         if let Ok((_, unsigned_lit)) = T::parse_literal(unsigned_lit_input) {
             base = SpannedExpr::new(unsigned_lit_input, Expr::Literal(unsigned_lit));
 
-            // `nom::Slice` is not implemented for inclusive range types, so a Clippy warning
+            // `nom::Slice` is not implemented for inclusive range types, so the Clippy warning
             // cannot be fixed.
             let op_span = input.slice(lit_start..(lit_start + 1));
             Some(Spanned::new(op_span, reordered_op))

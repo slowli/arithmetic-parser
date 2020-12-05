@@ -25,7 +25,7 @@ pub use self::{
     variable_map::{Assertions, Comparisons, Prelude, VariableMap},
 };
 
-/// Opaque context for native calls.
+/// Context for native function calls.
 #[derive(Debug)]
 pub struct CallContext<'r, 'a, T> {
     call_span: CodeInModule<'a>,
@@ -35,10 +35,11 @@ pub struct CallContext<'r, 'a, T> {
 
 impl<'r, 'a, T> CallContext<'r, 'a, T> {
     /// Creates a mock call context with the specified module ID and call span.
-    pub fn mock<A>(module_id: &dyn ModuleId, call_span: MaybeSpanned<'a>, arithmetic: &'r A) -> Self
-    where
-        A: OrdArithmetic<T>,
-    {
+    pub fn mock(
+        module_id: &dyn ModuleId,
+        call_span: MaybeSpanned<'a>,
+        arithmetic: &'r dyn OrdArithmetic<T>,
+    ) -> Self {
         Self {
             call_span: CodeInModule::new(module_id, call_span),
             backtrace: None,
@@ -100,6 +101,9 @@ impl<'r, 'a, T> CallContext<'r, 'a, T> {
 }
 
 /// Function on zero or more [`Value`]s.
+///
+/// Native functions are defined in the Rust code and then can be used from the interpreted
+/// code. See [`fns`] module docs for different ways to define native functions.
 pub trait NativeFn<T> {
     /// Executes the function on the specified arguments.
     fn evaluate<'a>(
@@ -458,7 +462,7 @@ pub enum Value<'a, T> {
     Function(Function<'a, T>),
     /// Tuple of zero or more values.
     Tuple(Vec<Value<'a, T>>),
-    /// Opaque reference to a native variable.
+    /// Opaque reference to a native value.
     Ref(OpaqueRef),
 }
 

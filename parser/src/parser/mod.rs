@@ -18,7 +18,7 @@ use core::mem;
 
 use crate::{
     alloc::{vec, Box, Vec},
-    grammars::{BooleanOps, Features, Grammar, Parse, ParseLiteral},
+    grammars::{Features, Grammar, Parse, ParseLiteral},
     spans::{unite_spans, with_span},
     BinaryOp, Block, Context, Destructure, DestructureRest, Error, ErrorKind, Expr, FnDefinition,
     InputSpan, Lvalue, NomResult, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
@@ -87,15 +87,13 @@ impl BinaryOp {
         )
     }
 
-    fn is_supported(self, features: &Features) -> bool {
-        let boolean_ops = features.boolean_ops;
-
+    fn is_supported(self, features: Features) -> bool {
         match self {
             Self::Add | Self::Sub | Self::Mul | Self::Div | Self::Power => true,
-            Self::Eq | Self::NotEq | Self::And | Self::Or => boolean_ops >= BooleanOps::Basic,
-            Self::Gt | Self::Lt | Self::Ge | Self::Le => {
-                boolean_ops >= BooleanOps::OrderComparisons
+            Self::Eq | Self::NotEq | Self::And | Self::Or => {
+                features.contains(Features::BOOLEAN_OPS_BASIC)
             }
+            Self::Gt | Self::Lt | Self::Ge | Self::Le => features.contains(Features::BOOLEAN_OPS),
         }
     }
 }
@@ -189,7 +187,7 @@ where
             )),
 
             _ => {
-                if T::FEATURES.tuples {
+                if T::FEATURES.contains(Features::TUPLES) {
                     Ok((rest, terms.map_extra(Expr::Tuple)))
                 } else {
                     Err(NomErr::Failure(
@@ -211,7 +209,7 @@ where
     Ty: GrammarType,
 {
     let block_parser: Box<dyn FnMut(InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>> =
-        if T::FEATURES.blocks {
+        if T::FEATURES.contains(Features::BLOCKS) {
             let parser = map(with_span(block::<T, Ty>), |spanned| {
                 spanned.map_extra(Expr::Block)
             });
@@ -225,7 +223,7 @@ where
         };
 
     let fn_def_parser: Box<dyn FnMut(InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>> =
-        if T::FEATURES.fn_definitions {
+        if T::FEATURES.contains(Features::FN_DEFINITIONS) {
             let parser = map(with_span(fn_def::<T, Ty>), |span| {
                 span.map_extra(Expr::FnDefinition)
             });
@@ -289,7 +287,7 @@ where
     });
 
     let method_or_fn_call: Box<dyn FnMut(InputSpan<'a>) -> MethodParseResult<'a, T>> =
-        if T::FEATURES.methods {
+        if T::FEATURES.contains(Features::METHODS) {
             let method_parser = map(
                 tuple((var_name, fn_args::<T, Ty>)),
                 |(fn_name, (args, _))| MethodOrFnCall {
@@ -416,7 +414,7 @@ where
 
     let full_binary_ops = move |input| {
         let (rest, spanned_op) = binary_ops(input)?;
-        if spanned_op.extra.is_supported(&T::FEATURES) {
+        if spanned_op.extra.is_supported(T::FEATURES) {
             Ok((rest, spanned_op))
         } else {
             // Immediately drop parsing on an unsupported op, since there are no alternatives.
@@ -639,7 +637,7 @@ where
     Ty: GrammarType,
 {
     let mut simple_lvalue: Box<dyn FnMut(InputSpan<'a>) -> NomResult<'a, GrammarLvalue<'a, T>>> =
-        if T::FEATURES.type_annotations {
+        if T::FEATURES.contains(Features::TYPE_ANNOTATIONS) {
             let parser = map(
                 tuple((
                     var_name,
@@ -658,7 +656,7 @@ where
             Box::new(parser)
         };
 
-    if T::FEATURES.tuples {
+    if T::FEATURES.contains(Features::TUPLES) {
         alt((
             with_span(map(
                 delimited(

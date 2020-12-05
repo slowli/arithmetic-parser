@@ -21,7 +21,7 @@ use arithmetic_eval::{
     Prelude, SpannedValue, Value,
 };
 use arithmetic_parser::{
-    grammars::{BooleanOps, Features, NumGrammar, NumLiteral, Parse, Untyped},
+    grammars::{Features, NumGrammar, NumLiteral, Parse, Untyped},
     InputSpan, NomResult,
 };
 
@@ -360,12 +360,9 @@ impl Parse for GroupGrammar {
     type Base = Untyped<NumGrammar<GroupLiteral>>;
 
     // Disable comparisons in the parser.
-    const FEATURES: Features = {
-        let mut features = Features::all();
-        features.type_annotations = false;
-        features.boolean_ops = BooleanOps::Basic;
-        features
-    };
+    const FEATURES: Features = Features::all()
+        .without(Features::TYPE_ANNOTATIONS)
+        .without(Features::ORDER_COMPARISONS);
 }
 
 fn main() -> anyhow::Result<()> {

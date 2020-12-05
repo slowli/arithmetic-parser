@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use bitflags::bitflags;
 use nom::Err as NomErr;
 
 use core::{fmt, marker::PhantomData};
@@ -8,59 +9,33 @@ use crate::{
     Block, Error, ErrorKind, InputSpan, NomResult, SpannedError,
 };
 
-/// Level of support of Boolean operations.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum BooleanOps {
-    /// Do not support boolean operations at all.
-    None,
-    /// Basic operations (`==`, `!=`, `&&`, `||`).
-    Basic,
-    /// `Basic` + order comparison operations (`>`, `<`, `>=`, `<=`).
-    OrderComparisons,
-}
-
-/// Parsing features used to configure [`Parse`] implementations.
-#[derive(Debug, Clone)]
-#[allow(clippy::struct_excessive_bools)] // flags are independent
-#[non_exhaustive]
-pub struct Features {
-    /// Parse tuple types?
-    pub tuples: bool,
-    /// Parse type annotations?
-    pub type_annotations: bool,
-    /// Parse function definitions?
-    pub fn_definitions: bool,
-    /// Parse blocks?
-    pub blocks: bool,
-    /// Parse methods?
-    pub methods: bool,
-    /// Level of support of Boolean operations.
-    pub boolean_ops: BooleanOps,
+bitflags! {
+    /// Parsing features used to configure [`Parse`] implementations.
+    pub struct Features: u64 {
+        /// Enables parsing tuples.
+        const TUPLES = 1;
+        /// Enables parsing type annotations.
+        const TYPE_ANNOTATIONS = 2;
+        /// Enables parsing function definitions.
+        const FN_DEFINITIONS = 4;
+        /// Enables parsing blocks.
+        const BLOCKS = 8;
+        /// Enables parsing methods.
+        const METHODS = 16;
+        /// Enables parsing equality comparisons (`==`, `!=`), the `!` unary op and
+        /// `&&`, `||` binary ops.
+        const BOOLEAN_OPS_BASIC = 32;
+        /// Enables parsing order comparisons (`>`, `<`, `>=`, `<=`).
+        const ORDER_COMPARISONS = 64;
+        /// Enables all Boolean operations.
+        const BOOLEAN_OPS = Self::BOOLEAN_OPS_BASIC.bits | Self::ORDER_COMPARISONS.bits;
+    }
 }
 
 impl Features {
-    /// Returns the set of all available features.
-    pub const fn all() -> Self {
-        Self {
-            tuples: true,
-            type_annotations: true,
-            fn_definitions: true,
-            blocks: true,
-            methods: true,
-            boolean_ops: BooleanOps::OrderComparisons,
-        }
-    }
-
-    /// Returns the set with all features disabled.
-    pub const fn none() -> Self {
-        Self {
-            tuples: false,
-            type_annotations: false,
-            fn_definitions: false,
-            blocks: false,
-            methods: false,
-            boolean_ops: BooleanOps::None,
-        }
+    /// Creates a copy of these `Features` without any of the flags in `other`.
+    pub const fn without(self, other: Self) -> Self {
+        Self::from_bits_truncate(self.bits & !other.bits)
     }
 }
 
@@ -261,7 +236,7 @@ impl<'a> IntoInputSpan<'a> for &'a str {
 ///
 /// impl Parse for IntegerGrammar {
 ///     type Base = Untyped<Self>;
-///     const FEATURES: Features = Features::none();
+///     const FEATURES: Features = Features::empty();
 /// }
 ///
 /// // Here's how a grammar can be used.
@@ -332,10 +307,7 @@ impl<T: ParseLiteral> Grammar for Untyped<T> {
 impl<T: ParseLiteral> Parse for Untyped<T> {
     type Base = Self;
 
-    const FEATURES: Features = Features {
-        type_annotations: false,
-        ..Features::all()
-    };
+    const FEATURES: Features = Features::all().without(Features::TYPE_ANNOTATIONS);
 }
 
 /// Wrapper for [`Grammar`] types that allows to convert the type to a [`Parse`]r. The resulting

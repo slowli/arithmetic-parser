@@ -1437,10 +1437,7 @@ fn fn_defs_when_switched_off() {
     impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
-        const FEATURES: Features = Features {
-            fn_definitions: false,
-            ..Features::all()
-        };
+        const FEATURES: Features = Features::all().without(Features::FN_DEFINITIONS);
     }
 
     let input = InputSpan::new("foo = |x| { x + 3 }");
@@ -1456,10 +1453,7 @@ fn tuples_when_switched_off() {
     impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
-        const FEATURES: Features = Features {
-            tuples: false,
-            ..Features::all()
-        };
+        const FEATURES: Features = Features::all().without(Features::TUPLES);
     }
 
     let input = InputSpan::new("tup = (1 + 2, 3 + 5)");
@@ -1479,10 +1473,7 @@ fn blocks_when_switched_off() {
     impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
-        const FEATURES: Features = Features {
-            blocks: false,
-            ..Features::all()
-        };
+        const FEATURES: Features = Features::all().without(Features::BLOCKS);
     }
 
     let input = InputSpan::new("x = { y = 10; y * 2 }");
@@ -1502,10 +1493,7 @@ fn methods_when_switched_off() {
     impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
-        const FEATURES: Features = Features {
-            methods: false,
-            ..Features::all()
-        };
+        const FEATURES: Features = Features::all().without(Features::METHODS);
     }
 
     let input = InputSpan::new("foo.bar(1)");
@@ -1525,10 +1513,7 @@ fn order_comparisons_when_switched_off() {
     impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
-        const FEATURES: Features = Features {
-            boolean_ops: BooleanOps::Basic,
-            ..Features::all()
-        };
+        const FEATURES: Features = Features::all().without(Features::ORDER_COMPARISONS);
     }
 
     for &op in &[BinaryOp::Gt, BinaryOp::Lt, BinaryOp::Ge, BinaryOp::Le] {
@@ -1564,10 +1549,7 @@ fn boolean_ops_when_switched_off() {
     impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
-        const FEATURES: Features = Features {
-            boolean_ops: BooleanOps::None,
-            ..Features::all()
-        };
+        const FEATURES: Features = Features::all().without(Features::BOOLEAN_OPS);
     }
 
     for &op in &[

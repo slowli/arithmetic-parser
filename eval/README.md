@@ -28,7 +28,7 @@ Add this to your `Crate.toml`:
 
 ```toml
 [dependencies]
-arithmetic-eval = "0.2.0-beta.1"
+arithmetic-eval = "0.2.0"
 ```
 
 Please see the crate docs and [examples](examples) for the examples of usage.

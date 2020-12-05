@@ -1,6 +1,6 @@
 [package]
 name = "arithmetic-parser"
-version = "0.2.0-beta.1"
+version = "0.2.0"
 authors = ["Alex Ostrovski <ostrovski.alex@gmail.com>"]
 edition = "2018"
 readme = "README.md"
@@ -9,6 +9,9 @@ description = "Parser for arithmetic expressions with flexible literals and type
 repository = "https://github.com/slowli/arithmetic-parser"
 categories = ["parser-implementations", "mathematics"]
 keywords = ["parser", "arithmetic"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [dependencies]
 # Public dependencies (present in the public API).

@@ -61,6 +61,8 @@
 //!   to dependencies.
 //! - `num-complex`. Implements [`NumLiteral`](crate::grammars::NumLiteral) for floating-point
 //!   complex numbers (`Complex32` and `Complex64`).
+//! - `num-bigint`. Implements [`NumLiteral`](crate::grammars::NumLiteral) for `BigInt` and
+//!   `BigUint` from the `num-bigint` crate.
 //!
 //! # Examples
 //!

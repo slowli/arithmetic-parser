@@ -18,7 +18,7 @@ use core::mem;
 
 use crate::{
     alloc::{vec, Box, Vec},
-    grammars::{BooleanOps, Features, Grammar, Parse, ParseLiteral},
+    grammars::{Features, Grammar, Parse, ParseLiteral},
     spans::{unite_spans, with_span},
     BinaryOp, Block, Context, Destructure, DestructureRest, Error, ErrorKind, Expr, FnDefinition,
     InputSpan, Lvalue, NomResult, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
@@ -87,15 +87,13 @@ impl BinaryOp {
         )
     }
 
-    fn is_supported(self, features: &Features) -> bool {
-        let boolean_ops = features.boolean_ops;
-
+    fn is_supported(self, features: Features) -> bool {
         match self {
             Self::Add | Self::Sub | Self::Mul | Self::Div | Self::Power => true,
-            Self::Eq | Self::NotEq | Self::And | Self::Or => boolean_ops >= BooleanOps::Basic,
-            Self::Gt | Self::Lt | Self::Ge | Self::Le => {
-                boolean_ops >= BooleanOps::OrderComparisons
+            Self::Eq | Self::NotEq | Self::And | Self::Or => {
+                features.contains(Features::BOOLEAN_OPS_BASIC)
             }
+            Self::Gt | Self::Lt | Self::Ge | Self::Le => features.contains(Features::BOOLEAN_OPS),
         }
     }
 }
@@ -189,7 +187,7 @@ where
             )),
 
             _ => {
-                if T::FEATURES.tuples {
+                if T::FEATURES.contains(Features::TUPLES) {
                     Ok((rest, terms.map_extra(Expr::Tuple)))
                 } else {
                     Err(NomErr::Failure(
@@ -201,42 +199,53 @@ where
     })
 }
 
-/// Parses a simple expression, i.e., one not containing binary operations or function calls.
-///
-/// From the construction, the evaluation priorities within such an expression are always higher
-/// than for possible binary ops surrounding it.
-fn simplest_expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>
+/// Parses a block and wraps it into an `Expr`.
+fn block_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
 where
     T: Parse,
     Ty: GrammarType,
 {
-    let block_parser: Box<dyn FnMut(InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>> =
-        if T::FEATURES.blocks {
-            let parser = map(with_span(block::<T, Ty>), |spanned| {
-                spanned.map_extra(Expr::Block)
-            });
-            Box::new(parser)
-        } else {
-            // Always fail.
-            Box::new(|input| {
-                let e = ErrorKind::Leftovers.with_span(&input.into());
-                Err(NomErr::Error(e))
-            })
-        };
+    map(with_span(block::<T, Ty>), |spanned| {
+        spanned.map_extra(Expr::Block)
+    })(input)
+}
 
-    let fn_def_parser: Box<dyn FnMut(InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>> =
-        if T::FEATURES.fn_definitions {
-            let parser = map(with_span(fn_def::<T, Ty>), |span| {
-                span.map_extra(Expr::FnDefinition)
-            });
-            Box::new(parser)
-        } else {
-            // Always fail.
-            Box::new(|input| {
-                let e = ErrorKind::Leftovers.with_span(&input.into());
-                Err(NomErr::Error(e))
-            })
-        };
+/// Parses a function definition and wraps it into an `Expr`.
+fn fn_def_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
+where
+    T: Parse,
+    Ty: GrammarType,
+{
+    map(with_span(fn_def::<T, Ty>), |spanned| {
+        spanned.map_extra(Expr::FnDefinition)
+    })(input)
+}
+
+/// Parses a simple expression, i.e., one not containing binary operations or function calls.
+///
+/// From the construction, the evaluation priorities within such an expression are always higher
+/// than for possible binary ops surrounding it.
+fn simplest_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
+where
+    T: Parse,
+    Ty: GrammarType,
+{
+    fn error<T: Parse>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>> {
+        let e = ErrorKind::Leftovers.with_span(&input.into());
+        Err(NomErr::Error(e))
+    }
+
+    let block_parser = if T::FEATURES.contains(Features::BLOCKS) {
+        block_expr::<T, Ty>
+    } else {
+        error::<T>
+    };
+
+    let fn_def_parser = if T::FEATURES.contains(Features::FN_DEFINITIONS) {
+        fn_def_expr::<T, Ty>
+    } else {
+        error::<T>
+    };
 
     alt((
         map(with_span(<T::Base>::parse_literal), |span| {
@@ -275,37 +284,49 @@ impl<T: Grammar> MethodOrFnCall<'_, T> {
     }
 }
 
-/// Simple expression, which includes, besides `simplest_expr`s, function calls.
-fn simple_expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>
+type MethodParseResult<'a, T> = NomResult<'a, MethodOrFnCall<'a, <T as Parse>::Base>>;
+
+fn fn_call<T, Ty>(input: InputSpan<'_>) -> MethodParseResult<'_, T>
 where
     T: Parse,
     Ty: GrammarType,
 {
-    type MethodParseResult<'a, T> = NomResult<'a, MethodOrFnCall<'a, <T as Parse>::Base>>;
-
-    let fn_call_parser = map(fn_args::<T, Ty>, |(args, _)| MethodOrFnCall {
+    map(fn_args::<T, Ty>, |(args, _)| MethodOrFnCall {
         fn_name: None,
         args,
-    });
+    })(input)
+}
 
-    let method_or_fn_call: Box<dyn FnMut(InputSpan<'a>) -> MethodParseResult<'a, T>> =
-        if T::FEATURES.methods {
-            let method_parser = map(
-                tuple((var_name, fn_args::<T, Ty>)),
-                |(fn_name, (args, _))| MethodOrFnCall {
-                    fn_name: Some(fn_name),
-                    args,
-                },
-            );
+fn method_or_fn_call<T, Ty>(input: InputSpan<'_>) -> MethodParseResult<'_, T>
+where
+    T: Parse,
+    Ty: GrammarType,
+{
+    let method_parser = map(
+        tuple((var_name, fn_args::<T, Ty>)),
+        |(fn_name, (args, _))| MethodOrFnCall {
+            fn_name: Some(fn_name),
+            args,
+        },
+    );
 
-            let parser = alt((
-                preceded(tuple((tag_char('.'), ws::<Ty>)), cut(method_parser)),
-                fn_call_parser,
-            ));
-            Box::new(parser)
-        } else {
-            Box::new(fn_call_parser)
-        };
+    alt((
+        preceded(tuple((tag_char('.'), ws::<Ty>)), cut(method_parser)),
+        fn_call::<T, Ty>,
+    ))(input)
+}
+
+/// Simple expression, which includes, besides `simplest_expr`s, function calls.
+fn simple_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
+where
+    T: Parse,
+    Ty: GrammarType,
+{
+    let method_or_fn_call = if T::FEATURES.contains(Features::METHODS) {
+        method_or_fn_call::<T, Ty>
+    } else {
+        fn_call::<T, Ty>
+    };
 
     let mut parser = tuple((
         simplest_expr::<T, Ty>,
@@ -353,7 +374,7 @@ fn fold_args<'a, T: Grammar>(
         if let Ok((_, unsigned_lit)) = T::parse_literal(unsigned_lit_input) {
             base = SpannedExpr::new(unsigned_lit_input, Expr::Literal(unsigned_lit));
 
-            // `nom::Slice` is not implemented for inclusive range types, so a Clippy warning
+            // `nom::Slice` is not implemented for inclusive range types, so the Clippy warning
             // cannot be fixed.
             let op_span = input.slice(lit_start..(lit_start + 1));
             Some(Spanned::new(op_span, reordered_op))
@@ -416,7 +437,7 @@ where
 
     let full_binary_ops = move |input| {
         let (rest, spanned_op) = binary_ops(input)?;
-        if spanned_op.extra.is_supported(&T::FEATURES) {
+        if spanned_op.extra.is_supported(T::FEATURES) {
             Ok((rest, spanned_op))
         } else {
             // Immediately drop parsing on an unsupported op, since there are no alternatives.
@@ -632,33 +653,46 @@ where
 
 type GrammarLvalue<'a, T> = SpannedLvalue<'a, <<T as Parse>::Base as Grammar>::Type>;
 
-/// Parses an `Lvalue`.
-fn lvalue<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, GrammarLvalue<'a, T>>
+/// Simple lvalue with an optional type annotation, e.g., `x` or `x: Num`.
+fn simple_lvalue_with_type<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, GrammarLvalue<'_, T>>
 where
     T: Parse,
     Ty: GrammarType,
 {
-    let mut simple_lvalue: Box<dyn FnMut(InputSpan<'a>) -> NomResult<'a, GrammarLvalue<'a, T>>> =
-        if T::FEATURES.type_annotations {
-            let parser = map(
-                tuple((
-                    var_name,
-                    opt(preceded(
-                        delimited(ws::<Ty>, tag_char(':'), ws::<Ty>),
-                        cut(with_span(<T::Base>::parse_type)),
-                    )),
-                )),
-                |(name, ty)| Spanned::new(name, Lvalue::Variable { ty }),
-            );
-            Box::new(parser)
-        } else {
-            let parser = map(var_name, |name| {
-                Spanned::new(name, Lvalue::Variable { ty: None })
-            });
-            Box::new(parser)
-        };
+    map(
+        tuple((
+            var_name,
+            opt(preceded(
+                delimited(ws::<Ty>, tag_char(':'), ws::<Ty>),
+                cut(with_span(<T::Base>::parse_type)),
+            )),
+        )),
+        |(name, ty)| Spanned::new(name, Lvalue::Variable { ty }),
+    )(input)
+}
 
-    if T::FEATURES.tuples {
+fn simple_lvalue_without_type<T>(input: InputSpan<'_>) -> NomResult<'_, GrammarLvalue<'_, T>>
+where
+    T: Parse,
+{
+    map(var_name, |name| {
+        Spanned::new(name, Lvalue::Variable { ty: None })
+    })(input)
+}
+
+/// Parses an `Lvalue`.
+fn lvalue<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, GrammarLvalue<'_, T>>
+where
+    T: Parse,
+    Ty: GrammarType,
+{
+    let simple_lvalue = if T::FEATURES.contains(Features::TYPE_ANNOTATIONS) {
+        simple_lvalue_with_type::<T, Ty>
+    } else {
+        simple_lvalue_without_type::<T>
+    };
+
+    if T::FEATURES.contains(Features::TUPLES) {
         alt((
             with_span(map(
                 delimited(

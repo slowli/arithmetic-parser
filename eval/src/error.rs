@@ -578,13 +578,13 @@ impl<T: Clone + 'static> StripCode for CodeInModule<'_, T> {
     }
 }
 
-/// Function call.
+/// Element of a backtrace, i.e., a function / method call.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct BacktraceElement<'a> {
     /// Function name.
     pub fn_name: String,
-    /// Code span of the function definition.
+    /// Code span of the function definition. `None` for native functions.
     pub def_span: Option<CodeInModule<'a>>,
     /// Code span of the function call.
     pub call_span: CodeInModule<'a>,

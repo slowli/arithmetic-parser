@@ -49,6 +49,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Update dependencies. (#39)
 
+- Use the `bitflags` crate for parser `Features`. (#50)
+
 ### Fixed
 
 - Fix parsing of expressions like `1.abs()` for standard grammars. Previously,

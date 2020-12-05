@@ -106,6 +106,8 @@
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! More complex examples are available in the `examples` directory of the crate.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]

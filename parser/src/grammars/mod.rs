@@ -31,9 +31,7 @@ use core::{f32, f64, fmt, marker::PhantomData};
 
 mod traits;
 
-pub use self::traits::{
-    BooleanOps, Features, Grammar, IntoInputSpan, Parse, ParseLiteral, Typed, Untyped,
-};
+pub use self::traits::{Features, Grammar, IntoInputSpan, Parse, ParseLiteral, Typed, Untyped};
 
 use crate::{spans::NomResult, ErrorKind, InputSpan};
 

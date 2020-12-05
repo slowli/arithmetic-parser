@@ -17,7 +17,7 @@ Add this to your `Crate.toml`:
 
 ```toml
 [dependencies]
-arithmetic-parser = "0.2.0-beta.1"
+arithmetic-parser = "0.2.0"
 ```
 
 The parser is overall similar to Rust. It supports variables, literals, comments,

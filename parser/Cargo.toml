@@ -1,6 +1,6 @@
 [package]
 name = "arithmetic-parser"
-version = "0.2.0-beta.1"
+version = "0.2.0"
 authors = ["Alex Ostrovski <ostrovski.alex@gmail.com>"]
 edition = "2018"
 readme = "README.md"

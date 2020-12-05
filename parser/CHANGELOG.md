@@ -5,6 +5,10 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ## [Unreleased]
 
+## 0.2.0 - 2020-12-05
+
+*(All changes are relative compared to [the 0.2.0-beta.1 release](#020-beta1---2020-10-04))* 
+
 ### Added
 
 - Add infrastructure for stripping code fragments (such as `Code` enum and

@@ -1,0 +1,17 @@
+[package]
+name = "arithmetic-eval-typing"
+version = "0.2.0"
+authors = ["Alex Ostrovski <ostrovski.alex@gmail.com>"]
+edition = "2018"
+readme = "README.md"
+license = "Apache-2.0"
+description = "Hindley-Milner type inference for arithmetic expressions."
+repository = "https://github.com/slowli/arithmetic-parser"
+categories = ["mathematics"]
+keywords = ["typing", "arithmetic"]
+
+[dependencies]
+arithmetic-parser = { version = "0.2.0", path = "../parser" }
+
+[dev-dependencies]
+assert_matches = "1.5.0"

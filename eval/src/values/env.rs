@@ -212,7 +212,7 @@ where
             .into_iter()
             .map(|(var_name, value)| (var_name.into(), value.into()));
         Self {
-            variables: HashMap::from_iter(variables),
+            variables: variables.collect(),
         }
     }
 }

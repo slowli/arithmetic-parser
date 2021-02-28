@@ -16,6 +16,14 @@ struct TypeParamDescription {
     is_external: bool,
 }
 
+/// Quantity of type variable mentions.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum TypeVarQuantity {
+    UniqueVar,
+    UniqueFunction,
+    Repeated,
+}
+
 /// Functional type.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnType {
@@ -61,96 +69,32 @@ impl fmt::Display for FnType {
 }
 
 impl FnType {
-    pub(crate) fn new(
-        args: Vec<ValueType>,
-        return_type: ValueType,
-        var_count_in_outer_scope: usize,
-        linear_types: &HashSet<usize>,
-    ) -> Self {
-        fn extract_type_params(
-            type_params: &mut HashSet<usize>,
-            ty: &ValueType,
-            include_inner_fns: bool,
-        ) {
-            match ty {
-                ValueType::TypeVar(idx) => {
-                    type_params.insert(*idx);
-                }
-
-                ValueType::Tuple(fragments) => {
-                    for fragment in fragments {
-                        extract_type_params(type_params, fragment, include_inner_fns);
-                    }
-                }
-
-                ValueType::Function(fn_type) if include_inner_fns => {
-                    if let FnArgs::List(args) = &fn_type.args {
-                        for arg in args {
-                            extract_type_params(type_params, arg, include_inner_fns);
-                        }
-                    }
-                    extract_type_params(type_params, &fn_type.return_type, include_inner_fns);
-                }
-
-                _ => { /* Do nothing. */ }
-            }
-        }
-
-        let mut type_params = HashSet::new();
-        for ty in args.iter().chain(Some(&return_type)) {
-            // We intentionally do not recurse into functions; type vars only present in functions
-            // are type params for these functions, not for this function.
-            extract_type_params(&mut type_params, ty, false);
-        }
-
-        let reduction_mapping: Option<HashMap<usize, usize>> = if type_params
-            .iter()
-            .all(|&idx| idx >= var_count_in_outer_scope)
-        {
-            // Function signature has no type var dependencies. Correspondingly, we remap
-            // type params for this fn and all inner fns, so that they will be properly printed
-            // (param indexes will start from 0 and will not contain gaps).
-            let mut all_type_params = HashSet::new();
-            for ty in args.iter().chain(Some(&return_type)) {
-                extract_type_params(&mut all_type_params, ty, true);
-            }
-
-            let mut sorted_type_params: Vec<_> = all_type_params.into_iter().collect();
-            sorted_type_params.sort_unstable();
-            Some(
-                sorted_type_params
-                    .into_iter()
-                    .enumerate()
-                    .map(|(i, var_idx)| (var_idx, i))
-                    .collect(),
-            )
-        } else {
-            None
-        };
-
-        let type_params = type_params
-            .into_iter()
-            .map(|var_idx| {
-                let description = TypeParamDescription {
-                    maybe_non_linear: !linear_types.contains(&var_idx),
-                    is_external: var_idx < var_count_in_outer_scope,
-                };
-                (var_idx, description)
-            })
-            .collect();
-
-        let this = Self {
+    pub(crate) fn new(args: Vec<ValueType>, return_type: ValueType) -> Self {
+        Self {
             args: FnArgs::List(args),
             return_type,
-            type_params,
-        };
-
-        // FIXME: Can bugs occur if we remap type params for an inner fn?
-        if let Some(mapping) = reduction_mapping {
-            this.substitute_type_vars(&mapping, SubstitutionContext::VarsToParams)
-        } else {
-            this
+            type_params: BTreeMap::new(), // filled in later
         }
+    }
+
+    /// Performs final transformations on this type, transforming all of its type vars
+    /// into type params.
+    pub(crate) fn finalize(&mut self, linear_types: &HashSet<usize>) {
+        let mut tree = FnTypeTree::new(self);
+        tree.infer_type_params(&HashSet::new(), linear_types);
+
+        let mut sorted_type_params: Vec<_> = tree.all_type_vars.keys().copied().collect();
+        sorted_type_params.sort_unstable();
+
+        tree.merge_into(self);
+
+        let mapping: HashMap<usize, usize> = sorted_type_params
+            .into_iter()
+            .enumerate()
+            .map(|(i, var_idx)| (var_idx, i))
+            .collect();
+
+        *self = self.substitute_type_vars(&mapping, SubstitutionContext::VarsToParams);
     }
 
     /// Checks if a type variable with the specified index is linear.
@@ -206,6 +150,14 @@ impl FnType {
         args_slice.iter().chain(Some(&self.return_type))
     }
 
+    fn arg_and_return_types_mut(&mut self) -> impl Iterator<Item = &mut ValueType> + '_ {
+        let args_slice = match &mut self.args {
+            FnArgs::List(args) => args.as_mut_slice(),
+            FnArgs::Any => &mut [],
+        };
+        args_slice.iter_mut().chain(Some(&mut self.return_type))
+    }
+
     /// Maps argument and return types. The mapping function must not touch type params
     /// of the function.
     pub(crate) fn map_types<F>(&self, mut map_fn: F) -> Self
@@ -219,6 +171,123 @@ impl FnType {
             },
             return_type: map_fn(&self.return_type),
             type_params: self.type_params.clone(),
+        }
+    }
+}
+
+/// Helper type for inferring type parameters in functions.
+///
+/// The gist of the problem is that type params placement belongs which function in a tree
+/// (which is ultimately rooted in a function not defined within another function) has exclusive
+/// mention of a certain type var.
+#[derive(Debug)]
+struct FnTypeTree {
+    children: Vec<FnTypeTree>,
+    all_type_vars: HashMap<usize, TypeVarQuantity>,
+    type_params: BTreeMap<usize, TypeParamDescription>,
+}
+
+impl FnTypeTree {
+    fn new(base: &FnType) -> Self {
+        fn recurse(
+            children: &mut Vec<FnTypeTree>,
+            type_vars: &mut HashMap<usize, TypeVarQuantity>,
+            ty: &ValueType,
+        ) {
+            match ty {
+                ValueType::TypeVar(idx) => {
+                    type_vars
+                        .entry(*idx)
+                        .and_modify(|qty| *qty = TypeVarQuantity::Repeated)
+                        .or_insert(TypeVarQuantity::UniqueVar);
+                }
+
+                ValueType::Tuple(fragments) => {
+                    for fragment in fragments {
+                        recurse(children, type_vars, fragment);
+                    }
+                }
+
+                ValueType::Function(fn_type) => {
+                    let child_tree = FnTypeTree::new(fn_type);
+
+                    for &type_var in child_tree.all_type_vars.keys() {
+                        type_vars
+                            .entry(type_var)
+                            .and_modify(|qty| *qty = TypeVarQuantity::Repeated)
+                            .or_insert(TypeVarQuantity::UniqueFunction);
+                    }
+
+                    children.push(child_tree);
+                }
+
+                _ => { /* Do nothing. */ }
+            }
+        }
+
+        let mut children = vec![];
+        let mut all_type_vars = HashMap::new();
+        for ty in base.arg_and_return_types() {
+            recurse(&mut children, &mut all_type_vars, ty);
+        }
+
+        Self {
+            children,
+            all_type_vars,
+            type_params: BTreeMap::new(),
+        }
+    }
+
+    /// Recursively infers type params for the function and all child functions.
+    fn infer_type_params(&mut self, parent_vars: &HashSet<usize>, linear_types: &HashSet<usize>) {
+        self.type_params = self
+            .all_type_vars
+            .iter()
+            .filter_map(|(idx, qty)| {
+                if *qty != TypeVarQuantity::UniqueFunction {
+                    let description = TypeParamDescription {
+                        maybe_non_linear: !linear_types.contains(idx),
+                        is_external: parent_vars.contains(idx),
+                    };
+                    Some((*idx, description))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let parent_and_self_vars: HashSet<_> = self.type_params.keys().copied().collect();
+        for child_tree in &mut self.children {
+            child_tree.infer_type_params(&parent_and_self_vars, linear_types);
+        }
+    }
+
+    /// Recursively sets `type_params` for `base`.
+    fn merge_into(self, base: &mut FnType) {
+        fn recurse(reversed_children: &mut Vec<FnTypeTree>, ty: &mut ValueType) {
+            match ty {
+                ValueType::Tuple(fragments) => {
+                    for fragment in fragments {
+                        recurse(reversed_children, fragment);
+                    }
+                }
+
+                ValueType::Function(fn_type) => {
+                    reversed_children
+                        .pop()
+                        .expect("Missing child")
+                        .merge_into(fn_type);
+                }
+
+                _ => { /* Do nothing. */ }
+            }
+        }
+
+        base.type_params = self.type_params;
+        let mut reversed_children = self.children;
+        reversed_children.reverse();
+        for ty in base.arg_and_return_types_mut() {
+            recurse(&mut reversed_children, ty);
         }
     }
 }

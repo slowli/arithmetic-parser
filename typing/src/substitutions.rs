@@ -1,6 +1,6 @@
 //! Substitutions type and dependencies.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 use crate::{FnArgs, FnType, SubstitutionContext, TypeError, ValueType};
 use arithmetic_parser::{grammars::Grammar, Spanned, SpannedExpr};
@@ -102,6 +102,7 @@ impl Substitutions {
 
             (Function(fn_l), Function(fn_r)) => self.unify_fn_types(fn_l, fn_r),
 
+            // FIXME: resolve types
             (x, y) => Err(TypeError::IncompatibleTypes(x.clone(), y.clone())),
         }
     }
@@ -290,11 +291,7 @@ impl Substitutions {
         let mut return_type = ValueType::Any;
         self.assign_new_type(&mut return_type);
 
-        let called_fn_type = FnType {
-            args: FnArgs::List(arg_types),
-            return_type: return_type.clone(),
-            type_params: BTreeMap::new(),
-        };
+        let called_fn_type = FnType::new(arg_types, return_type.clone());
         self.unify(definition, &ValueType::Function(Box::new(called_fn_type)))
             .map(|()| return_type)
     }

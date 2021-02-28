@@ -1,6 +1,6 @@
 //! `TypeContext` and related types.
 
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, mem};
 
 use crate::{substitutions::Substitutions, FnType, TypeError, ValueType};
 use arithmetic_parser::{
@@ -17,6 +17,7 @@ pub struct TypeScope<'a> {
 /// Context for deriving type information.
 pub struct TypeContext<'a> {
     scopes: Vec<TypeScope<'a>>,
+    is_in_function: bool,
 }
 
 impl fmt::Debug for TypeContext<'_> {
@@ -33,6 +34,7 @@ impl<'a> TypeContext<'a> {
     pub fn new() -> Self {
         TypeContext {
             scopes: vec![TypeScope::default()],
+            is_in_function: false,
         }
     }
 
@@ -268,9 +270,6 @@ impl<'a> TypeContext<'a> {
     where
         T: Grammar<Type = ValueType>,
     {
-        // Remember number of type vars to determine which types in the function signature
-        // are type params, and which ones are determined by the outer scopes.
-        let var_count_in_outer_scope = substitutions.type_var_count();
         self.scopes.push(TypeScope::default());
 
         let args = &def.args.extra;
@@ -282,6 +281,7 @@ impl<'a> TypeContext<'a> {
             .map(|arg| self.process_lvalue(substitutions, arg))
             .collect();
 
+        let was_in_function = mem::replace(&mut self.is_in_function, true);
         for statement in &def.body.statements {
             self.process_statement(substitutions, statement)?;
         }
@@ -292,6 +292,7 @@ impl<'a> TypeContext<'a> {
         };
         // TODO: do we need to pop a scope on error?
         self.scopes.pop();
+        self.is_in_function = was_in_function;
 
         let arg_types = arg_types
             .iter()
@@ -299,12 +300,12 @@ impl<'a> TypeContext<'a> {
             .collect();
         let return_type = substitutions.resolve(&return_type);
 
-        Ok(FnType::new(
-            arg_types,
-            return_type,
-            var_count_in_outer_scope,
-            substitutions.linear_types(),
-        ))
+        let mut fn_type = FnType::new(arg_types, return_type);
+        if !self.is_in_function {
+            fn_type.finalize(substitutions.linear_types());
+        }
+
+        Ok(fn_type)
     }
 
     fn process_statement<T>(
@@ -358,7 +359,7 @@ impl<'a> TypeContext<'a> {
 mod tests {
     use super::*;
     use crate::FnArgs;
-    use std::collections::{BTreeMap, HashSet};
+    use std::collections::BTreeMap;
 
     use arithmetic_parser::{
         grammars::{Grammar, NumLiteral, Parse, ParseLiteral, Typed},
@@ -556,16 +557,26 @@ mod tests {
             "(Num, Num)"
         );
         assert_eq!(
-            type_context.get_var_type("y").unwrap().to_string(),
-            "((Num, Num), (Num, (Num, Num)))"
-        );
-        assert_eq!(
             type_context.get_var_type("partial").unwrap().to_string(),
             "fn<U: ?Lin>(U) -> (Num, U)"
         );
+        assert_eq!(
+            type_context.get_var_type("y").unwrap().to_string(),
+            "((Num, Num), (Num, (Num, Num)))"
+        );
     }
 
-    // FIXME: test double = |x| { (x, || (x, x)) };
+    #[test]
+    fn attributing_type_vars_to_correct_fn() {
+        let code = "double = |x| { (x, || (x, x)) };";
+        let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+        let mut type_context = TypeContext::new();
+        type_context.process_statements(&block.statements).unwrap();
+        assert_eq!(
+            type_context.get_var_type("double").unwrap().to_string(),
+            "fn<T: ?Lin>(T) -> (T, fn() -> (T, T))"
+        );
+    }
 
     #[test]
     fn defining_and_calling_embedded_function() {
@@ -657,11 +668,203 @@ mod tests {
         let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
         let mut type_context = TypeContext::new();
         type_context.process_statements(&block.statements).unwrap();
+
         assert_eq!(
             type_context.get_var_type("test_fn").unwrap().to_string(),
             "fn<T>((fn(Num) -> T, Num), T) -> T"
         );
     }
 
-    // FIXME: more tests for fn as arg
+    #[test]
+    fn function_instantiations_are_independent() {
+        let code = r#"
+            identity = |x| x;
+            x = (identity(5), identity(1 == 2));
+        "#;
+        let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+        let mut type_context = TypeContext::new();
+        type_context.process_statements(&block.statements).unwrap();
+
+        assert_eq!(
+            type_context.get_var_type("x").unwrap().to_string(),
+            "(Num, Bool)"
+        );
+    }
+
+    #[test]
+    fn function_passed_as_arg() {
+        let code = r#"
+            mapper = |(x, y), map| (map(x), map(y));
+            tuple = mapper((1, 2), |x| x + 3);
+            create_fn = |x| { || x };
+            tuple_of_fns = mapper((1, 2), create_fn);
+        "#;
+        let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+        let mut type_context = TypeContext::new();
+        type_context.process_statements(&block.statements).unwrap();
+
+        assert_eq!(
+            type_context.get_var_type("tuple").unwrap().to_string(),
+            "(Num, Num)"
+        );
+        assert_eq!(
+            type_context
+                .get_var_type("tuple_of_fns")
+                .unwrap()
+                .to_string(),
+            "(fn() -> Num, fn() -> Num)"
+        );
+    }
+
+    #[test]
+    fn curried_function_passed_as_arg() {
+        let code = r#"
+            mapper = |(x, y), map| (map(x), map(y));
+            concat = |x| { |y| (x, y) };
+            r = mapper((1, 2), concat(1 == 1));
+        "#;
+        let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+        let mut type_context = TypeContext::new();
+        type_context.process_statements(&block.statements).unwrap();
+
+        assert_eq!(
+            type_context.get_var_type("r").unwrap().to_string(),
+            "((Bool, Num), (Bool, Num))"
+        );
+    }
+
+    #[test]
+    fn parametric_fn_passed_as_arg_with_different_constraints() {
+        let code = r#"
+            concat = |x| { |y| (x, y) };
+            partial = concat(3); // fn<U>(U) -> (Num, U)
+
+            first = |fun| fun(5);
+            r = first(partial); // (Num, Num)
+            second = |fun, b| fun(b) == (3, b);
+            second(partial, 1 == 1);
+        "#;
+        let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+        let mut type_context = TypeContext::new();
+        type_context.process_statements(&block.statements).unwrap();
+
+        assert_eq!(
+            type_context.get_var_type("r").unwrap().to_string(),
+            "(Num, Num)"
+        );
+    }
+
+    #[test]
+    fn parametric_fn_passed_as_arg_with_unsatisfiable_requirements() {
+        let code = r#"
+            concat = |x| { |y| (x, y) };
+            partial = concat(3); // fn<U>(U) -> (Num, U)
+
+            bogus = |fun| fun(1) == 4;
+            bogus(partial);
+        "#;
+
+        let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+        let mut type_context = TypeContext::new();
+        let err = type_context
+            .process_statements(&block.statements)
+            .unwrap_err();
+
+        assert_matches!(err.extra, TypeError::IncompatibleTypes(_, _));
+    }
+
+    #[test]
+    fn parametric_fn_passed_as_arg_with_recursive_requirements() {
+        let code = r#"
+            concat = |x| { |y| (x, y) };
+            partial = concat(3); // fn<U>(U) -> (Num, U)
+            bogus = |fun| { |x| fun(x) == x };
+            bogus(partial);
+        "#;
+
+        let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+        let mut type_context = TypeContext::new();
+        let err = type_context
+            .process_statements(&block.statements)
+            .unwrap_err();
+
+        assert_matches!(err.extra, TypeError::RecursiveType(_));
+    }
+
+    #[test]
+    fn type_param_is_placed_correctly_with_fn_arg() {
+        let code = "foo = |fun| { |x| fun(x) == x };";
+        let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+        let mut type_context = TypeContext::new();
+
+        type_context.process_statements(&block.statements).unwrap();
+        assert_eq!(
+            type_context.get_var_type("foo").unwrap().to_string(),
+            "fn<T: ?Lin>(fn(T) -> T) -> fn(T) -> Bool"
+        );
+    }
+
+    #[test]
+    fn type_params_in_fn_with_multiple_fn_args() {
+        let code = "test = |x, foo, bar| foo(x) == bar(x * x);";
+        let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+        let mut type_context = TypeContext::new();
+
+        type_context.process_statements(&block.statements).unwrap();
+        assert_eq!(
+            type_context.get_var_type("test").unwrap().to_string(),
+            "fn<T, U: ?Lin>(T, fn(T) -> U, fn(T) -> U) -> Bool"
+        );
+    }
+
+    #[test]
+    fn function_passed_as_arg_invalid_arity() {
+        let code = r#"
+            mapper = |(x, y), map| (map(x), map(y));
+            mapper((1, 2), |x, y| x + y);
+        "#;
+        let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+        let mut type_context = TypeContext::new();
+        let err = type_context
+            .process_statements(&block.statements)
+            .unwrap_err();
+
+        assert_matches!(
+            err.extra,
+            TypeError::ArgLenMismatch {
+                expected: 1,
+                actual: 2
+            }
+        );
+    }
+
+    #[test]
+    fn function_passed_as_arg_invalid_arg_type() {
+        let code = r#"
+            mapper = |(x, y), map| (map(x), map(y));
+            mapper((1, 2), |(x, _)| x);
+        "#;
+        let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+        let mut type_context = TypeContext::new();
+        let err = type_context
+            .process_statements(&block.statements)
+            .unwrap_err();
+
+        assert_matches!(err.extra, TypeError::IncompatibleTypes(..));
+    }
+
+    #[test]
+    fn function_passed_as_arg_invalid_input() {
+        let code = r#"
+            mapper = |(x, y), map| (map(x), map(y));
+            mapper((1, 2 != 3), |x| x + 2);
+        "#;
+        let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+        let mut type_context = TypeContext::new();
+        let err = type_context
+            .process_statements(&block.statements)
+            .unwrap_err();
+
+        assert_matches!(err.extra, TypeError::IncompatibleTypes(..));
+    }
 }

@@ -1,0 +1,392 @@
+//! `TypeContext` and related types.
+
+use std::{collections::HashMap, fmt, iter, mem};
+
+use crate::{substitutions::Substitutions, FnType, TypeError, ValueType};
+use arithmetic_parser::{
+    grammars::Grammar, BinaryOp, Block, Expr, FnDefinition, Lvalue, Spanned, SpannedExpr,
+    SpannedLvalue, SpannedStatement, Statement, UnaryOp,
+};
+
+#[cfg(test)]
+mod tests;
+
+/// Analogue of `Scope` for type information.
+#[derive(Debug, Default)]
+struct TypeScope {
+    variables: HashMap<String, ValueType>,
+}
+
+/// Context for deriving type information.
+pub struct TypeContext {
+    scopes: Vec<TypeScope>,
+    is_in_function: bool,
+}
+
+impl fmt::Debug for TypeContext {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("TypeContext")
+            .field("scopes", &self.scopes)
+            .finish()
+    }
+}
+
+impl Default for TypeContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TypeContext {
+    /// Creates a type context based on the interpreter context.
+    pub fn new() -> Self {
+        TypeContext {
+            scopes: vec![TypeScope::default()],
+            is_in_function: false,
+        }
+    }
+
+    /// Gets type of the specified variable.
+    pub fn get_type(&self, name: &str) -> Option<ValueType> {
+        self.scopes
+            .iter()
+            .rev()
+            .flat_map(|scope| scope.variables.get(name).cloned())
+            .next()
+    }
+
+    /// Sets type of a variable.
+    pub fn insert_type(&mut self, name: &str, value_type: ValueType) {
+        self.scopes
+            .last_mut()
+            .unwrap()
+            .variables
+            .insert(name.to_owned(), value_type);
+    }
+
+    fn process_expr_inner<'a, T>(
+        &mut self,
+        substitutions: &mut Substitutions,
+        expr: &SpannedExpr<'a, T>,
+    ) -> Result<ValueType, Spanned<'a, TypeError>>
+    where
+        T: Grammar<Type = ValueType>,
+    {
+        match &expr.extra {
+            Expr::Variable => self.get_type(expr.fragment()).ok_or_else(|| {
+                let e = TypeError::UndefinedVar((*expr.fragment()).to_owned());
+                expr.copy_with_extra(e)
+            }),
+
+            Expr::Literal(_) => Ok(ValueType::Number),
+
+            Expr::Tuple(ref terms) => {
+                let term_types: Result<Vec<_>, _> = terms
+                    .iter()
+                    .map(|term| self.process_expr_inner(substitutions, term))
+                    .collect();
+                term_types.map(ValueType::Tuple)
+            }
+
+            Expr::Function { name, args } => {
+                let fn_type = self.process_expr_inner(substitutions, name)?;
+                self.process_fn_call(substitutions, expr, fn_type, args.iter())
+            }
+
+            Expr::Method {
+                name,
+                receiver,
+                args,
+            } => {
+                let fn_type = self.get_type(name.fragment()).ok_or_else(|| {
+                    let e = TypeError::UndefinedVar((*expr.fragment()).to_owned());
+                    expr.copy_with_extra(e)
+                })?;
+                let all_args = iter::once(receiver.as_ref()).chain(args);
+                self.process_fn_call(substitutions, expr, fn_type, all_args)
+            }
+
+            Expr::Block(Block {
+                statements,
+                return_value,
+                ..
+            }) => {
+                self.scopes.push(TypeScope::default());
+                for statement in statements {
+                    self.process_statement(substitutions, statement)?;
+                }
+                let return_type = if let Some(return_value) = return_value {
+                    self.process_expr_inner(substitutions, return_value)?
+                } else {
+                    ValueType::void()
+                };
+
+                // TODO: do we need to pop a scope on error?
+                self.scopes.pop();
+                Ok(return_type)
+            }
+
+            Expr::FnDefinition(def) => self
+                .process_fn_def(substitutions, def)
+                .map(|fn_type| ValueType::Function(Box::new(fn_type))),
+
+            Expr::Unary { op, inner } => self.process_unary_op(substitutions, op, inner),
+
+            Expr::Binary { lhs, rhs, op } => {
+                self.process_binary_op(substitutions, expr, op.extra, lhs, rhs)
+            }
+
+            _ => {
+                let err = TypeError::unsupported(expr.extra.ty());
+                Err(expr.copy_with_extra(err))
+            }
+        }
+    }
+
+    /// Processes an isolated expression.
+    pub fn process_expr<'a, T>(
+        &mut self,
+        expr: &SpannedExpr<'a, T>,
+    ) -> Result<ValueType, Spanned<'a, TypeError>>
+    where
+        T: Grammar<Type = ValueType>,
+    {
+        let mut substitutions = Substitutions::default();
+        self.process_expr_inner(&mut substitutions, expr)
+    }
+
+    /// Processes an lvalue type by replacing `Any` types with newly created type vars.
+    fn process_lvalue<'a>(
+        &mut self,
+        substitutions: &mut Substitutions,
+        lvalue: &SpannedLvalue<'a, ValueType>,
+    ) -> Result<ValueType, Spanned<'a, TypeError>> {
+        match &lvalue.extra {
+            Lvalue::Variable { ref ty } => {
+                let mut value_type = if let Some(ty) = ty {
+                    // `ty` may contain `Any` elements, so we need to replace them with type vars.
+                    ty.extra.clone()
+                } else {
+                    ValueType::Any
+                };
+                substitutions.assign_new_type(&mut value_type);
+
+                self.scopes
+                    .last_mut()
+                    .unwrap()
+                    .variables
+                    .insert((*lvalue.fragment()).to_string(), value_type.clone());
+                Ok(value_type)
+            }
+
+            // FIXME: deal with middle
+            Lvalue::Tuple(destructure) => {
+                let element_types: Result<Vec<_>, _> = destructure
+                    .start
+                    .iter()
+                    .chain(&destructure.end)
+                    .map(|fragment| self.process_lvalue(substitutions, fragment))
+                    .collect();
+                Ok(ValueType::Tuple(element_types?))
+            }
+
+            _ => {
+                let err = TypeError::unsupported(lvalue.extra.ty());
+                Err(lvalue.copy_with_extra(err))
+            }
+        }
+    }
+
+    fn process_fn_call<'it, 'a: 'it, T>(
+        &mut self,
+        substitutions: &mut Substitutions,
+        call_expr: &SpannedExpr<'a, T>,
+        fn_type: ValueType,
+        args: impl Iterator<Item = &'it SpannedExpr<'a, T>>,
+    ) -> Result<ValueType, Spanned<'a, TypeError>>
+    where
+        T: Grammar<Type = ValueType>,
+    {
+        let arg_types: Result<Vec<_>, _> = args
+            .map(|arg| self.process_expr_inner(substitutions, arg))
+            .collect();
+        let arg_types = arg_types?;
+        let return_type = substitutions
+            .unify_fn_call(&fn_type, arg_types)
+            .map_err(|e| call_expr.copy_with_extra(e))?;
+
+        Ok(return_type)
+    }
+
+    #[inline]
+    fn process_unary_op<'a, T>(
+        &mut self,
+        substitutions: &mut Substitutions,
+        op: &Spanned<'a, UnaryOp>,
+        inner: &SpannedExpr<'a, T>,
+    ) -> Result<ValueType, Spanned<'a, TypeError>>
+    where
+        T: Grammar<Type = ValueType>,
+    {
+        let inner_type = self.process_expr_inner(substitutions, inner)?;
+        match op.extra {
+            UnaryOp::Not => {
+                substitutions.unify_spanned_expr(&inner_type, inner, ValueType::Bool)?;
+                Ok(ValueType::Bool)
+            }
+
+            UnaryOp::Neg => {
+                substitutions
+                    .mark_as_linear(&inner_type)
+                    .map_err(|e| inner.copy_with_extra(e))?;
+                Ok(inner_type)
+            }
+
+            _ => Err(op.copy_with_extra(TypeError::unsupported(op.extra))),
+        }
+    }
+
+    #[inline]
+    fn process_binary_op<'a, T>(
+        &mut self,
+        substitutions: &mut Substitutions,
+        binary_expr: &SpannedExpr<'a, T>,
+        op: BinaryOp,
+        lhs: &SpannedExpr<'a, T>,
+        rhs: &SpannedExpr<'a, T>,
+    ) -> Result<ValueType, Spanned<'a, TypeError>>
+    where
+        T: Grammar<Type = ValueType>,
+    {
+        let lhs_ty = self.process_expr_inner(substitutions, lhs)?;
+        let rhs_ty = self.process_expr_inner(substitutions, rhs)?;
+
+        match op {
+            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Power => {
+                // This only handles T op T == T.
+                // TODO: We should handle num op T == T and T op num == T as well!
+                substitutions.unify(&lhs_ty, &rhs_ty).map_err(|e| {
+                    let e = e.into_op_mismatch(substitutions, &lhs_ty, &rhs_ty, op);
+                    binary_expr.copy_with_extra(e)
+                })?;
+                substitutions
+                    .mark_as_linear(&lhs_ty)
+                    .map_err(|e| binary_expr.copy_with_extra(e))?;
+                Ok(rhs_ty)
+            }
+
+            BinaryOp::Eq | BinaryOp::NotEq => {
+                substitutions.unify(&lhs_ty, &rhs_ty).map_err(|e| {
+                    let e = e.into_op_mismatch(substitutions, &lhs_ty, &rhs_ty, op);
+                    binary_expr.copy_with_extra(e)
+                })?;
+                Ok(ValueType::Bool)
+            }
+
+            BinaryOp::And | BinaryOp::Or => {
+                substitutions.unify_spanned_expr(&lhs_ty, lhs, ValueType::Bool)?;
+                substitutions.unify_spanned_expr(&rhs_ty, rhs, ValueType::Bool)?;
+                Ok(ValueType::Bool)
+            }
+
+            _ => Err(binary_expr.copy_with_extra(TypeError::unsupported(op))),
+        }
+    }
+
+    fn process_fn_def<'a, T>(
+        &mut self,
+        substitutions: &mut Substitutions,
+        def: &FnDefinition<'a, T>,
+    ) -> Result<FnType, Spanned<'a, TypeError>>
+    where
+        T: Grammar<Type = ValueType>,
+    {
+        self.scopes.push(TypeScope::default());
+
+        let args = &def.args.extra;
+        // FIXME: deal with middle
+        let arg_types: Result<Vec<_>, _> = args
+            .start
+            .iter()
+            .chain(&args.end)
+            .map(|arg| self.process_lvalue(substitutions, arg))
+            .collect();
+        let arg_types = arg_types?;
+
+        let was_in_function = mem::replace(&mut self.is_in_function, true);
+        for statement in &def.body.statements {
+            self.process_statement(substitutions, statement)?;
+        }
+        let return_type = if let Some(ref return_value) = def.body.return_value {
+            self.process_expr_inner(substitutions, return_value)?
+        } else {
+            ValueType::void()
+        };
+        // TODO: do we need to pop a scope on error?
+        self.scopes.pop();
+        self.is_in_function = was_in_function;
+
+        let arg_types = arg_types
+            .iter()
+            .map(|arg| substitutions.resolve(arg))
+            .collect();
+        let return_type = substitutions.resolve(&return_type);
+
+        let mut fn_type = FnType::new(arg_types, return_type);
+        if !self.is_in_function {
+            fn_type.finalize(substitutions.linear_types());
+        }
+
+        Ok(fn_type)
+    }
+
+    fn process_statement<'a, T>(
+        &mut self,
+        substitutions: &mut Substitutions,
+        statement: &SpannedStatement<'a, T>,
+    ) -> Result<ValueType, Spanned<'a, TypeError>>
+    where
+        T: Grammar<Type = ValueType>,
+    {
+        match &statement.extra {
+            Statement::Expr(expr) => self.process_expr_inner(substitutions, expr),
+
+            Statement::Assignment { lhs, rhs } => {
+                let rhs_ty = self.process_expr_inner(substitutions, rhs)?;
+                let lhs_ty = self.process_lvalue(substitutions, lhs)?;
+                substitutions
+                    .unify(&lhs_ty, &rhs_ty)
+                    .map(|()| ValueType::void())
+                    .map_err(|e| statement.copy_with_extra(e))
+            }
+
+            _ => {
+                let err = TypeError::unsupported(statement.extra.ty());
+                Err(statement.copy_with_extra(err))
+            }
+        }
+    }
+
+    /// Processes statements. After processing, the context will contain type info
+    /// about newly declared vars / functions.
+    pub fn process_statements<'a, T>(
+        &mut self,
+        statements: &[SpannedStatement<'a, T>],
+    ) -> Result<(), Spanned<'a, TypeError>>
+    where
+        T: Grammar<Type = ValueType>,
+    {
+        let mut substitutions = Substitutions::default();
+        for statement in statements {
+            self.process_statement(&mut substitutions, statement)?;
+        }
+
+        let scope = self.scopes.last_mut().unwrap();
+        for var_type in scope.variables.values_mut() {
+            *var_type = substitutions.resolve(var_type);
+        }
+
+        Ok(())
+    }
+}

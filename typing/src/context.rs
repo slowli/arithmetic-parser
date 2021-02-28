@@ -1,6 +1,6 @@
 //! `TypeContext` and related types.
 
-use std::{collections::HashMap, fmt, mem};
+use std::{collections::HashMap, fmt, iter, mem};
 
 use crate::{substitutions::Substitutions, FnType, TypeError, ValueType};
 use arithmetic_parser::{
@@ -10,17 +10,17 @@ use arithmetic_parser::{
 
 /// Analogue of `Scope` for type information.
 #[derive(Debug, Default)]
-pub struct TypeScope<'a> {
-    variables: HashMap<&'a str, ValueType>,
+struct TypeScope {
+    variables: HashMap<String, ValueType>,
 }
 
 /// Context for deriving type information.
-pub struct TypeContext<'a> {
-    scopes: Vec<TypeScope<'a>>,
+pub struct TypeContext {
+    scopes: Vec<TypeScope>,
     is_in_function: bool,
 }
 
-impl fmt::Debug for TypeContext<'_> {
+impl fmt::Debug for TypeContext {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("TypeContext")
@@ -29,7 +29,13 @@ impl fmt::Debug for TypeContext<'_> {
     }
 }
 
-impl<'a> TypeContext<'a> {
+impl Default for TypeContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TypeContext {
     /// Creates a type context based on the interpreter context.
     pub fn new() -> Self {
         TypeContext {
@@ -39,21 +45,24 @@ impl<'a> TypeContext<'a> {
     }
 
     /// Gets type of the specified variable.
-    pub fn get_var_type(&self, name: &str) -> Option<ValueType> {
+    pub fn get_type(&self, name: &str) -> Option<ValueType> {
         self.scopes
             .iter()
             .rev()
             .flat_map(|scope| scope.variables.get(name).cloned())
             .next()
-        // FIXME: restore fallback to outer scope.
     }
 
-    /// Returns the innermost variable scope.
-    pub fn innermost_scope(&self) -> &TypeScope<'a> {
-        self.scopes.last().unwrap()
+    /// Sets type of a variable.
+    pub fn insert_type(&mut self, name: &str, value_type: ValueType) {
+        self.scopes
+            .last_mut()
+            .unwrap()
+            .variables
+            .insert(name.to_owned(), value_type);
     }
 
-    fn process_expr_inner<T>(
+    fn process_expr_inner<'a, T>(
         &mut self,
         substitutions: &mut Substitutions,
         expr: &SpannedExpr<'a, T>,
@@ -62,7 +71,7 @@ impl<'a> TypeContext<'a> {
         T: Grammar<Type = ValueType>,
     {
         match &expr.extra {
-            Expr::Variable => self.get_var_type(expr.fragment()).ok_or_else(|| {
+            Expr::Variable => self.get_type(expr.fragment()).ok_or_else(|| {
                 let e = TypeError::UndefinedVar((*expr.fragment()).to_owned());
                 expr.copy_with_extra(e)
             }),
@@ -77,7 +86,23 @@ impl<'a> TypeContext<'a> {
                 term_types.map(ValueType::Tuple)
             }
 
-            Expr::Function { name, args } => self.process_fn_call(substitutions, expr, name, args),
+            Expr::Function { name, args } => {
+                let fn_type = self.process_expr_inner(substitutions, name)?;
+                self.process_fn_call(substitutions, expr, fn_type, args.iter())
+            }
+
+            Expr::Method {
+                name,
+                receiver,
+                args,
+            } => {
+                let fn_type = self.get_type(name.fragment()).ok_or_else(|| {
+                    let e = TypeError::UndefinedVar((*expr.fragment()).to_owned());
+                    expr.copy_with_extra(e)
+                })?;
+                let all_args = iter::once(receiver.as_ref()).chain(args);
+                self.process_fn_call(substitutions, expr, fn_type, all_args)
+            }
 
             Expr::Block(Block {
                 statements,
@@ -103,18 +128,21 @@ impl<'a> TypeContext<'a> {
                 .process_fn_def(substitutions, def)
                 .map(|fn_type| ValueType::Function(Box::new(fn_type))),
 
-            Expr::Unary { op, inner } => self.process_unary_op(substitutions, op.extra, inner),
+            Expr::Unary { op, inner } => self.process_unary_op(substitutions, op, inner),
 
             Expr::Binary { lhs, rhs, op } => {
                 self.process_binary_op(substitutions, expr, op.extra, lhs, rhs)
             }
 
-            _ => todo!(),
+            _ => {
+                let err = TypeError::unsupported(expr.extra.ty());
+                Err(expr.copy_with_extra(err))
+            }
         }
     }
 
     /// Processes an isolated expression.
-    pub fn process_expr<T>(
+    pub fn process_expr<'a, T>(
         &mut self,
         expr: &SpannedExpr<'a, T>,
     ) -> Result<ValueType, Spanned<'a, TypeError>>
@@ -126,11 +154,11 @@ impl<'a> TypeContext<'a> {
     }
 
     /// Processes an lvalue type by replacing `Any` types with newly created type vars.
-    fn process_lvalue(
+    fn process_lvalue<'a>(
         &mut self,
         substitutions: &mut Substitutions,
         lvalue: &SpannedLvalue<'a, ValueType>,
-    ) -> ValueType {
+    ) -> Result<ValueType, Spanned<'a, TypeError>> {
         match &lvalue.extra {
             Lvalue::Variable { ref ty } => {
                 let mut value_type = if let Some(ty) = ty {
@@ -145,38 +173,39 @@ impl<'a> TypeContext<'a> {
                     .last_mut()
                     .unwrap()
                     .variables
-                    .insert(*lvalue.fragment(), value_type.clone());
-                value_type
+                    .insert((*lvalue.fragment()).to_string(), value_type.clone());
+                Ok(value_type)
             }
 
             // FIXME: deal with middle
-            Lvalue::Tuple(destructure) => ValueType::Tuple(
-                destructure
+            Lvalue::Tuple(destructure) => {
+                let element_types: Result<Vec<_>, _> = destructure
                     .start
                     .iter()
                     .chain(&destructure.end)
                     .map(|fragment| self.process_lvalue(substitutions, fragment))
-                    .collect(),
-            ),
+                    .collect();
+                Ok(ValueType::Tuple(element_types?))
+            }
 
-            _ => todo!(),
+            _ => {
+                let err = TypeError::unsupported(lvalue.extra.ty());
+                Err(lvalue.copy_with_extra(err))
+            }
         }
     }
 
-    fn process_fn_call<T>(
+    fn process_fn_call<'it, 'a: 'it, T>(
         &mut self,
         substitutions: &mut Substitutions,
         call_expr: &SpannedExpr<'a, T>,
-        name: &SpannedExpr<'a, T>,
-        args: &[SpannedExpr<'a, T>],
+        fn_type: ValueType,
+        args: impl Iterator<Item = &'it SpannedExpr<'a, T>>,
     ) -> Result<ValueType, Spanned<'a, TypeError>>
     where
         T: Grammar<Type = ValueType>,
     {
-        let fn_type = self.process_expr_inner(substitutions, name)?;
-
         let arg_types: Result<Vec<_>, _> = args
-            .iter()
             .map(|arg| self.process_expr_inner(substitutions, arg))
             .collect();
         let arg_types = arg_types?;
@@ -188,17 +217,17 @@ impl<'a> TypeContext<'a> {
     }
 
     #[inline]
-    fn process_unary_op<T>(
+    fn process_unary_op<'a, T>(
         &mut self,
         substitutions: &mut Substitutions,
-        op: UnaryOp,
+        op: &Spanned<'a, UnaryOp>,
         inner: &SpannedExpr<'a, T>,
     ) -> Result<ValueType, Spanned<'a, TypeError>>
     where
         T: Grammar<Type = ValueType>,
     {
         let inner_type = self.process_expr_inner(substitutions, inner)?;
-        match op {
+        match op.extra {
             UnaryOp::Not => {
                 substitutions.unify_spanned_expr(&inner_type, inner, ValueType::Bool)?;
                 Ok(ValueType::Bool)
@@ -211,12 +240,12 @@ impl<'a> TypeContext<'a> {
                 Ok(inner_type)
             }
 
-            _ => todo!(),
+            _ => Err(op.copy_with_extra(TypeError::unsupported(op.extra))),
         }
     }
 
     #[inline]
-    fn process_binary_op<T>(
+    fn process_binary_op<'a, T>(
         &mut self,
         substitutions: &mut Substitutions,
         binary_expr: &SpannedExpr<'a, T>,
@@ -258,11 +287,11 @@ impl<'a> TypeContext<'a> {
                 Ok(ValueType::Bool)
             }
 
-            _ => todo!(),
+            _ => Err(binary_expr.copy_with_extra(TypeError::unsupported(op))),
         }
     }
 
-    fn process_fn_def<T>(
+    fn process_fn_def<'a, T>(
         &mut self,
         substitutions: &mut Substitutions,
         def: &FnDefinition<'a, T>,
@@ -274,12 +303,13 @@ impl<'a> TypeContext<'a> {
 
         let args = &def.args.extra;
         // FIXME: deal with middle
-        let arg_types: Vec<_> = args
+        let arg_types: Result<Vec<_>, _> = args
             .start
             .iter()
             .chain(&args.end)
             .map(|arg| self.process_lvalue(substitutions, arg))
             .collect();
+        let arg_types = arg_types?;
 
         let was_in_function = mem::replace(&mut self.is_in_function, true);
         for statement in &def.body.statements {
@@ -308,7 +338,7 @@ impl<'a> TypeContext<'a> {
         Ok(fn_type)
     }
 
-    fn process_statement<T>(
+    fn process_statement<'a, T>(
         &mut self,
         substitutions: &mut Substitutions,
         statement: &SpannedStatement<'a, T>,
@@ -321,20 +351,23 @@ impl<'a> TypeContext<'a> {
 
             Statement::Assignment { lhs, rhs } => {
                 let rhs_ty = self.process_expr_inner(substitutions, rhs)?;
-                let lhs_ty = self.process_lvalue(substitutions, lhs);
+                let lhs_ty = self.process_lvalue(substitutions, lhs)?;
                 substitutions
                     .unify(&lhs_ty, &rhs_ty)
                     .map(|()| ValueType::void())
                     .map_err(|e| statement.copy_with_extra(e))
             }
 
-            _ => todo!(),
+            _ => {
+                let err = TypeError::unsupported(statement.extra.ty());
+                Err(statement.copy_with_extra(err))
+            }
         }
     }
 
     /// Processes statements. After processing, the context will contain type info
     /// about newly declared vars / functions.
-    pub fn process_statements<T>(
+    pub fn process_statements<'a, T>(
         &mut self,
         statements: &[SpannedStatement<'a, T>],
     ) -> Result<(), Spanned<'a, TypeError>>
@@ -400,11 +433,9 @@ mod tests {
         let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
 
         let mut type_context = TypeContext::new();
-        type_context.scopes[0]
-            .variables
-            .insert("x", ValueType::Number);
+        type_context.insert_type("x", ValueType::Number);
         type_context.process_statements(&block.statements).unwrap();
-        assert_eq!(type_context.get_var_type("y").unwrap(), ValueType::Number);
+        assert_eq!(type_context.get_type("y").unwrap(), ValueType::Number);
     }
 
     #[test]
@@ -413,11 +444,9 @@ mod tests {
         let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
 
         let mut type_context = TypeContext::new();
-        type_context.scopes[0]
-            .variables
-            .insert("x", ValueType::Number);
+        type_context.insert_type("x", ValueType::Number);
         type_context.process_statements(&block.statements).unwrap();
-        assert_eq!(type_context.get_var_type("y").unwrap(), ValueType::Bool);
+        assert_eq!(type_context.get_type("y").unwrap(), ValueType::Bool);
     }
 
     #[test]
@@ -435,13 +464,11 @@ mod tests {
         let mut type_context = TypeContext::new();
 
         let hash_type = hash_fn_type();
-        type_context.scopes[0]
-            .variables
-            .insert("hash", ValueType::Function(Box::new(hash_type)));
+        type_context.insert_type("hash", ValueType::Function(Box::new(hash_type)));
 
         type_context.process_statements(&block.statements).unwrap();
         assert_eq!(
-            type_context.get_var_type("sign").unwrap().to_string(),
+            type_context.get_type("sign").unwrap().to_string(),
             "fn<T: ?Lin>(Num, T) -> (Num, Num)"
         );
     }
@@ -458,24 +485,19 @@ mod tests {
         let mut type_context = TypeContext::new();
 
         let hash_type = hash_fn_type();
-        type_context.scopes[0]
-            .variables
-            .insert("hash", ValueType::Function(Box::new(hash_type)));
+        type_context.insert_type("hash", ValueType::Function(Box::new(hash_type)));
 
         type_context.process_statements(&block.statements).unwrap();
         assert_eq!(
-            type_context.get_var_type("compare").unwrap().to_string(),
+            type_context.get_type("compare").unwrap().to_string(),
             "fn<T: ?Lin>(T, T) -> Bool"
         );
         assert_eq!(
-            type_context
-                .get_var_type("compare_hash")
-                .unwrap()
-                .to_string(),
+            type_context.get_type("compare_hash").unwrap().to_string(),
             "fn<T: ?Lin>(Num, T) -> Bool"
         );
         assert_eq!(
-            type_context.get_var_type("add_hashes").unwrap().to_string(),
+            type_context.get_type("add_hashes").unwrap().to_string(),
             "fn<T: ?Lin, U: ?Lin>(T, U) -> Num"
         );
     }
@@ -531,7 +553,7 @@ mod tests {
         let mut type_context = TypeContext::new();
         type_context.process_statements(&block.statements).unwrap();
         assert_eq!(
-            type_context.get_var_type("double").unwrap().to_string(),
+            type_context.get_type("double").unwrap().to_string(),
             "fn(Num) -> (Num, fn() -> (Num, Num))"
         );
     }
@@ -549,19 +571,19 @@ mod tests {
         type_context.process_statements(&block.statements).unwrap();
 
         assert_eq!(
-            type_context.get_var_type("concat").unwrap().to_string(),
+            type_context.get_type("concat").unwrap().to_string(),
             "fn<T: ?Lin>(T) -> fn<U: ?Lin>(U) -> (T, U)"
         );
         assert_eq!(
-            type_context.get_var_type("x").unwrap().to_string(),
+            type_context.get_type("x").unwrap().to_string(),
             "(Num, Num)"
         );
         assert_eq!(
-            type_context.get_var_type("partial").unwrap().to_string(),
+            type_context.get_type("partial").unwrap().to_string(),
             "fn<U: ?Lin>(U) -> (Num, U)"
         );
         assert_eq!(
-            type_context.get_var_type("y").unwrap().to_string(),
+            type_context.get_type("y").unwrap().to_string(),
             "((Num, Num), (Num, (Num, Num)))"
         );
     }
@@ -573,7 +595,7 @@ mod tests {
         let mut type_context = TypeContext::new();
         type_context.process_statements(&block.statements).unwrap();
         assert_eq!(
-            type_context.get_var_type("double").unwrap().to_string(),
+            type_context.get_type("double").unwrap().to_string(),
             "fn<T: ?Lin>(T) -> (T, fn() -> (T, T))"
         );
     }
@@ -590,10 +612,7 @@ mod tests {
         let mut type_context = TypeContext::new();
         type_context.process_statements(&block.statements).unwrap();
         assert_eq!(
-            type_context
-                .get_var_type("call_double")
-                .unwrap()
-                .to_string(),
+            type_context.get_type("call_double").unwrap().to_string(),
             "fn(Num) -> Bool"
         );
     }
@@ -616,7 +635,7 @@ mod tests {
         let mut type_context = TypeContext::new();
         type_context.process_statements(&block.statements).unwrap();
         assert_eq!(
-            type_context.get_var_type("mapper").unwrap().to_string(),
+            type_context.get_type("mapper").unwrap().to_string(),
             "fn<T: ?Lin, U: ?Lin>((T, T), fn(T) -> U) -> (U, U)"
         );
     }
@@ -628,7 +647,7 @@ mod tests {
         let mut type_context = TypeContext::new();
         type_context.process_statements(&block.statements).unwrap();
         assert_eq!(
-            type_context.get_var_type("mapper").unwrap().to_string(),
+            type_context.get_type("mapper").unwrap().to_string(),
             "fn<T: ?Lin, U>((T, T), fn(T) -> U) -> U"
         );
     }
@@ -640,7 +659,7 @@ mod tests {
         let mut type_context = TypeContext::new();
         type_context.process_statements(&block.statements).unwrap();
         assert_eq!(
-            type_context.get_var_type("mapper").unwrap().to_string(),
+            type_context.get_type("mapper").unwrap().to_string(),
             "fn<T>((T, T), fn(T) -> T) -> T"
         );
     }
@@ -652,7 +671,7 @@ mod tests {
         let mut type_context = TypeContext::new();
         type_context.process_statements(&block.statements).unwrap();
         assert_eq!(
-            type_context.get_var_type("test_fn").unwrap().to_string(),
+            type_context.get_type("test_fn").unwrap().to_string(),
             "fn<T: ?Lin>(Num, fn(Num, Num) -> T) -> T"
         );
     }
@@ -670,7 +689,7 @@ mod tests {
         type_context.process_statements(&block.statements).unwrap();
 
         assert_eq!(
-            type_context.get_var_type("test_fn").unwrap().to_string(),
+            type_context.get_type("test_fn").unwrap().to_string(),
             "fn<T>((fn(Num) -> T, Num), T) -> T"
         );
     }
@@ -686,7 +705,7 @@ mod tests {
         type_context.process_statements(&block.statements).unwrap();
 
         assert_eq!(
-            type_context.get_var_type("x").unwrap().to_string(),
+            type_context.get_type("x").unwrap().to_string(),
             "(Num, Bool)"
         );
     }
@@ -704,14 +723,11 @@ mod tests {
         type_context.process_statements(&block.statements).unwrap();
 
         assert_eq!(
-            type_context.get_var_type("tuple").unwrap().to_string(),
+            type_context.get_type("tuple").unwrap().to_string(),
             "(Num, Num)"
         );
         assert_eq!(
-            type_context
-                .get_var_type("tuple_of_fns")
-                .unwrap()
-                .to_string(),
+            type_context.get_type("tuple_of_fns").unwrap().to_string(),
             "(fn() -> Num, fn() -> Num)"
         );
     }
@@ -728,7 +744,7 @@ mod tests {
         type_context.process_statements(&block.statements).unwrap();
 
         assert_eq!(
-            type_context.get_var_type("r").unwrap().to_string(),
+            type_context.get_type("r").unwrap().to_string(),
             "((Bool, Num), (Bool, Num))"
         );
     }
@@ -749,7 +765,7 @@ mod tests {
         type_context.process_statements(&block.statements).unwrap();
 
         assert_eq!(
-            type_context.get_var_type("r").unwrap().to_string(),
+            type_context.get_type("r").unwrap().to_string(),
             "(Num, Num)"
         );
     }
@@ -799,7 +815,7 @@ mod tests {
 
         type_context.process_statements(&block.statements).unwrap();
         assert_eq!(
-            type_context.get_var_type("foo").unwrap().to_string(),
+            type_context.get_type("foo").unwrap().to_string(),
             "fn<T: ?Lin>(fn(T) -> T) -> fn(T) -> Bool"
         );
     }
@@ -812,7 +828,7 @@ mod tests {
 
         type_context.process_statements(&block.statements).unwrap();
         assert_eq!(
-            type_context.get_var_type("test").unwrap().to_string(),
+            type_context.get_type("test").unwrap().to_string(),
             "fn<T, U: ?Lin>(T, fn(T) -> U, fn(T) -> U) -> Bool"
         );
     }

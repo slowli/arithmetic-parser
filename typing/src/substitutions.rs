@@ -17,10 +17,6 @@ pub(crate) struct Substitutions {
 }
 
 impl Substitutions {
-    pub fn type_var_count(&self) -> usize {
-        self.type_var_count
-    }
-
     pub fn linear_types(&self) -> &HashSet<usize> {
         &self.lin
     }

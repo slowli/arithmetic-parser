@@ -8,7 +8,7 @@ mod context;
 mod error;
 mod substitutions;
 
-pub use self::error::TypeError;
+pub use self::{context::TypeContext, error::TypeError};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct TypeParamDescription {

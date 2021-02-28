@@ -3,7 +3,7 @@
 use std::fmt;
 
 use crate::{substitutions::Substitutions, ValueType};
-use arithmetic_parser::BinaryOp;
+use arithmetic_parser::{BinaryOp, UnsupportedType};
 
 /// Errors that can occur during type inference.
 #[derive(Debug, Clone)]
@@ -44,6 +44,9 @@ pub enum TypeError {
 
     /// Non-linear type.
     NonLinearType(ValueType),
+
+    /// Language construct not supported by the type inference.
+    Unsupported(UnsupportedType),
 }
 
 impl fmt::Display for TypeError {
@@ -84,11 +87,18 @@ impl fmt::Display for TypeError {
             ),
 
             Self::NonLinearType(ty) => write!(formatter, "Non-linear type: {}", ty),
+
+            Self::Unsupported(ty) => write!(formatter, "Unsupported {}", ty),
         }
     }
 }
 
 impl TypeError {
+    /// Creates an error for an lvalue type not supported by the interpreter.
+    pub fn unsupported<T: Into<UnsupportedType>>(ty: T) -> Self {
+        Self::Unsupported(ty.into())
+    }
+
     pub(crate) fn into_op_mismatch(
         self,
         substitutions: &Substitutions,

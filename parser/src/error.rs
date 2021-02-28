@@ -7,7 +7,10 @@ use nom::{
 
 use core::fmt;
 
-use crate::{alloc::ToOwned, InputSpan, LocatedSpan, Op, Spanned, StripCode};
+use crate::{
+    alloc::ToOwned, BinaryOp, ExprType, InputSpan, LocatedSpan, LvalueType, Op, Spanned,
+    StatementType, StripCode, UnaryOp,
+};
 
 /// Parsing context.
 // TODO: Add more fine-grained contexts.
@@ -289,5 +292,64 @@ impl<'a> ContextError<InputSpan<'a>> for Error<'a> {
 impl<'a> FromExternalError<InputSpan<'a>, ErrorKind> for Error<'a> {
     fn from_external_error(input: InputSpan<'a>, _: NomErrorKind, err: ErrorKind) -> Self {
         Self::new(input, err)
+    }
+}
+
+/// Description of a construct not supported by a certain module (e.g., interpreter
+/// or type inference).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum UnsupportedType {
+    /// Unary operation.
+    UnaryOp(UnaryOp),
+    /// Binary operation.
+    BinaryOp(BinaryOp),
+    /// Expression.
+    Expr(ExprType),
+    /// Statement.
+    Statement(StatementType),
+    /// Lvalue.
+    Lvalue(LvalueType),
+}
+
+impl fmt::Display for UnsupportedType {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnaryOp(op) => write!(formatter, "unary op: {}", op),
+            Self::BinaryOp(op) => write!(formatter, "binary op: {}", op),
+            Self::Expr(expr) => write!(formatter, "expression: {}", expr),
+            Self::Statement(statement) => write!(formatter, "statement: {}", statement),
+            Self::Lvalue(lvalue) => write!(formatter, "lvalue: {}", lvalue),
+        }
+    }
+}
+
+impl From<UnaryOp> for UnsupportedType {
+    fn from(value: UnaryOp) -> Self {
+        Self::UnaryOp(value)
+    }
+}
+
+impl From<BinaryOp> for UnsupportedType {
+    fn from(value: BinaryOp) -> Self {
+        Self::BinaryOp(value)
+    }
+}
+
+impl From<ExprType> for UnsupportedType {
+    fn from(value: ExprType) -> Self {
+        Self::Expr(value)
+    }
+}
+
+impl From<StatementType> for UnsupportedType {
+    fn from(value: StatementType) -> Self {
+        Self::Statement(value)
+    }
+}
+
+impl From<LvalueType> for UnsupportedType {
+    fn from(value: LvalueType) -> Self {
+        Self::Lvalue(value)
     }
 }

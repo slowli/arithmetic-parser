@@ -135,7 +135,7 @@ mod alloc {
 }
 
 pub use crate::{
-    error::{Context, Error, ErrorKind, SpannedError},
+    error::{Context, Error, ErrorKind, SpannedError, UnsupportedType},
     ops::{BinaryOp, Op, OpPriority, UnaryOp},
     parser::is_valid_variable_name,
     spans::{

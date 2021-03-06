@@ -222,6 +222,32 @@ fn variable_scoping() {
 }
 
 #[test]
+fn unsupported_destructuring_for_tuple() {
+    let code = "(x, ...ys) = (1, 2, 3);";
+    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let mut type_context = TypeContext::new();
+    let err = type_context
+        .process_statements(&block.statements)
+        .unwrap_err();
+
+    assert_eq!(*err.fragment(), "...ys");
+    assert_matches!(err.extra, TypeError::UnsupportedDestructure);
+}
+
+#[test]
+fn unsupported_destructuring_for_fn_args() {
+    let code = "foo = |y, ...xs| xs + y;";
+    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let mut type_context = TypeContext::new();
+    let err = type_context
+        .process_statements(&block.statements)
+        .unwrap_err();
+
+    assert_eq!(*err.fragment(), "...xs");
+    assert_matches!(err.extra, TypeError::UnsupportedDestructure);
+}
+
+#[test]
 fn inferring_value_type_from_embedded_function() {
     let code = "double = |x| { (x, || (x, 2 * x)) };";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();

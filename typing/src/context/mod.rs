@@ -4,8 +4,8 @@ use std::{collections::HashMap, fmt, iter, mem};
 
 use crate::{substitutions::Substitutions, FnType, TypeError, ValueType};
 use arithmetic_parser::{
-    grammars::Grammar, BinaryOp, Block, Expr, FnDefinition, Lvalue, Spanned, SpannedExpr,
-    SpannedLvalue, SpannedStatement, Statement, UnaryOp,
+    grammars::Grammar, BinaryOp, Block, Destructure, Expr, FnDefinition, Lvalue, Spanned,
+    SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
 };
 
 #[cfg(test)]
@@ -74,10 +74,7 @@ impl TypeContext {
         T: Grammar<Type = ValueType>,
     {
         match &expr.extra {
-            Expr::Variable => self.get_type(expr.fragment()).ok_or_else(|| {
-                let e = TypeError::UndefinedVar((*expr.fragment()).to_owned());
-                expr.copy_with_extra(e)
-            }),
+            Expr::Variable => self.process_var(expr),
 
             Expr::Literal(_) => Ok(ValueType::Number),
 
@@ -99,10 +96,7 @@ impl TypeContext {
                 receiver,
                 args,
             } => {
-                let fn_type = self.get_type(name.fragment()).ok_or_else(|| {
-                    let e = TypeError::UndefinedVar((*expr.fragment()).to_owned());
-                    expr.copy_with_extra(e)
-                })?;
+                let fn_type = self.process_var(name)?;
                 let all_args = iter::once(receiver.as_ref()).chain(args);
                 self.process_fn_call(substitutions, expr, fn_type, all_args)
             }
@@ -144,6 +138,17 @@ impl TypeContext {
         }
     }
 
+    #[inline]
+    fn process_var<'a, T>(
+        &self,
+        name: &Spanned<'a, T>,
+    ) -> Result<ValueType, Spanned<'a, TypeError>> {
+        self.get_type(name.fragment()).ok_or_else(|| {
+            let e = TypeError::UndefinedVar((*name.fragment()).to_owned());
+            name.copy_with_extra(e)
+        })
+    }
+
     /// Processes an isolated expression.
     pub fn process_expr<'a, T>(
         &mut self,
@@ -180,15 +185,9 @@ impl TypeContext {
                 Ok(value_type)
             }
 
-            // FIXME: deal with middle
             Lvalue::Tuple(destructure) => {
-                let element_types: Result<Vec<_>, _> = destructure
-                    .start
-                    .iter()
-                    .chain(&destructure.end)
-                    .map(|fragment| self.process_lvalue(substitutions, fragment))
-                    .collect();
-                Ok(ValueType::Tuple(element_types?))
+                let element_types = self.process_destructure(substitutions, destructure)?;
+                Ok(ValueType::Tuple(element_types))
             }
 
             _ => {
@@ -196,6 +195,26 @@ impl TypeContext {
                 Err(lvalue.copy_with_extra(err))
             }
         }
+    }
+
+    #[inline]
+    fn process_destructure<'a>(
+        &mut self,
+        substitutions: &mut Substitutions,
+        destructure: &Destructure<'a, ValueType>,
+    ) -> Result<Vec<ValueType>, Spanned<'a, TypeError>> {
+        if let Some(middle) = &destructure.middle {
+            // TODO: allow middles with explicitly set type.
+            let err = middle.copy_with_extra(TypeError::UnsupportedDestructure);
+            return Err(err);
+        }
+
+        destructure
+            .start
+            .iter()
+            .chain(&destructure.end)
+            .map(|element| self.process_lvalue(substitutions, element))
+            .collect()
     }
 
     fn process_fn_call<'it, 'a: 'it, T>(
@@ -304,15 +323,7 @@ impl TypeContext {
     {
         self.scopes.push(TypeScope::default());
 
-        let args = &def.args.extra;
-        // FIXME: deal with middle
-        let arg_types: Result<Vec<_>, _> = args
-            .start
-            .iter()
-            .chain(&args.end)
-            .map(|arg| self.process_lvalue(substitutions, arg))
-            .collect();
-        let arg_types = arg_types?;
+        let arg_types = self.process_destructure(substitutions, &def.args.extra)?;
 
         let was_in_function = mem::replace(&mut self.is_in_function, true);
         for statement in &def.body.statements {

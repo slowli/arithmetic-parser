@@ -383,6 +383,12 @@ impl fmt::Display for ValueType {
     }
 }
 
+impl From<FnType> for ValueType {
+    fn from(fn_type: FnType) -> Self {
+        Self::Function(Box::new(fn_type))
+    }
+}
+
 impl ValueType {
     pub(crate) fn type_param(index: usize) -> Cow<'static, str> {
         const PARAM_NAMES: &str = "TUVXYZ";

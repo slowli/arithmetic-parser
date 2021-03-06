@@ -47,6 +47,8 @@ pub enum TypeError {
 
     /// Language construct not supported by the type inference.
     Unsupported(UnsupportedType),
+    /// Unsupported use of destructuring in an lvalue or function arguments.
+    UnsupportedDestructure,
 }
 
 impl fmt::Display for TypeError {
@@ -89,6 +91,9 @@ impl fmt::Display for TypeError {
             Self::NonLinearType(ty) => write!(formatter, "Non-linear type: {}", ty),
 
             Self::Unsupported(ty) => write!(formatter, "Unsupported {}", ty),
+            Self::UnsupportedDestructure => {
+                formatter.write_str("Destructuring is not supported yet")
+            }
         }
     }
 }

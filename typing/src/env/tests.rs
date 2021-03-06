@@ -40,10 +40,10 @@ fn statements_with_a_block() {
     let code = "y = { x = 3; 2 * x }; x ^ y == 6 * x;";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
 
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     type_context.insert_type("x", ValueType::Number);
     type_context.process_statements(&block.statements).unwrap();
-    assert_eq!(type_context.get_type("y").unwrap(), ValueType::Number);
+    assert_eq!(*type_context.get_type("y").unwrap(), ValueType::Number);
 }
 
 #[test]
@@ -51,10 +51,10 @@ fn boolean_statements() {
     let code = "y = x == x ^ 2; y = y || { x = 3; x != 7 };";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
 
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     type_context.insert_type("x", ValueType::Number);
     type_context.process_statements(&block.statements).unwrap();
-    assert_eq!(type_context.get_type("y").unwrap(), ValueType::Bool);
+    assert_eq!(*type_context.get_type("y").unwrap(), ValueType::Bool);
 }
 
 #[test]
@@ -69,7 +69,7 @@ fn function_definition() {
     "#;
 
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
 
     let hash_type = hash_fn_type();
     type_context.insert_type("hash", ValueType::Function(Box::new(hash_type)));
@@ -90,7 +90,7 @@ fn non_linear_types_in_function() {
     "#;
 
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
 
     let hash_type = hash_fn_type();
     type_context.insert_type("hash", ValueType::Function(Box::new(hash_type)));
@@ -114,7 +114,7 @@ fn non_linear_types_in_function() {
 fn type_recursion() {
     let code = "bog = |x| x + (x, 2);";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     let err = type_context
         .process_statements(&block.statements)
         .unwrap_err();
@@ -130,7 +130,7 @@ fn indirect_type_recursion() {
     "#;
 
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     let err = type_context
         .process_statements(&block.statements)
         .unwrap_err();
@@ -144,7 +144,7 @@ fn indirect_type_recursion() {
 fn recursion_via_fn() {
     let code = "func = |bog| bog(1, bog);";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     let err = type_context
         .process_statements(&block.statements)
         .unwrap_err();
@@ -162,7 +162,7 @@ fn method_basics() {
         bar = foo.do_something();
     "#;
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     let plus_type = FnType::new(
         vec![ValueType::Number, ValueType::Number],
         ValueType::Number,
@@ -170,14 +170,14 @@ fn method_basics() {
     type_context.insert_type("plus", plus_type.into());
     type_context.process_statements(&block.statements).unwrap();
 
-    assert_eq!(type_context.get_type("bar").unwrap(), ValueType::Number);
+    assert_eq!(*type_context.get_type("bar").unwrap(), ValueType::Number);
 }
 
 #[test]
 fn unknown_method() {
     let code = "bar = 3.do_something();";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     let err = type_context
         .process_statements(&block.statements)
         .unwrap_err();
@@ -190,17 +190,17 @@ fn unknown_method() {
 fn immediately_invoked_function() {
     let code = "flag = (|x| x + 3)(4) == 7;";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     type_context.process_statements(&block.statements).unwrap();
 
-    assert_eq!(type_context.get_type("flag").unwrap(), ValueType::Bool);
+    assert_eq!(*type_context.get_type("flag").unwrap(), ValueType::Bool);
 }
 
 #[test]
 fn immediately_invoked_function_with_invalid_arg() {
     let code = "flag = (|x| x + x)(4 == 7);";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     let err = type_context
         .process_statements(&block.statements)
         .unwrap_err();
@@ -212,11 +212,11 @@ fn immediately_invoked_function_with_invalid_arg() {
 fn variable_scoping() {
     let code = "x = 5; y = { x = (1, x); x * (2, 3) };";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     type_context.process_statements(&block.statements).unwrap();
 
     assert_eq!(
-        type_context.get_type("y").unwrap(),
+        *type_context.get_type("y").unwrap(),
         ValueType::Tuple(vec![ValueType::Number, ValueType::Number])
     );
 }
@@ -225,7 +225,7 @@ fn variable_scoping() {
 fn unsupported_destructuring_for_tuple() {
     let code = "(x, ...ys) = (1, 2, 3);";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     let err = type_context
         .process_statements(&block.statements)
         .unwrap_err();
@@ -238,7 +238,7 @@ fn unsupported_destructuring_for_tuple() {
 fn unsupported_destructuring_for_fn_args() {
     let code = "foo = |y, ...xs| xs + y;";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     let err = type_context
         .process_statements(&block.statements)
         .unwrap_err();
@@ -251,10 +251,10 @@ fn unsupported_destructuring_for_fn_args() {
 fn inferring_value_type_from_embedded_function() {
     let code = "double = |x| { (x, || (x, 2 * x)) };";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     type_context.process_statements(&block.statements).unwrap();
     assert_eq!(
-        type_context.get_type("double").unwrap().to_string(),
+        type_context["double"].to_string(),
         "fn(Num) -> (Num, fn() -> (Num, Num))"
     );
 }
@@ -268,7 +268,7 @@ fn free_and_bound_type_vars() {
         y = (partial(2), partial((1, 1)));
     "#;
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     type_context.process_statements(&block.statements).unwrap();
 
     assert_eq!(
@@ -293,10 +293,10 @@ fn free_and_bound_type_vars() {
 fn attributing_type_vars_to_correct_fn() {
     let code = "double = |x| { (x, || (x, x)) };";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     type_context.process_statements(&block.statements).unwrap();
     assert_eq!(
-        type_context.get_type("double").unwrap().to_string(),
+        type_context["double"].to_string(),
         "fn<T: ?Lin>(T) -> (T, fn() -> (T, T))"
     );
 }
@@ -310,19 +310,16 @@ fn defining_and_calling_embedded_function() {
         };
     "#;
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     type_context.process_statements(&block.statements).unwrap();
-    assert_eq!(
-        type_context.get_type("call_double").unwrap().to_string(),
-        "fn(Num) -> Bool"
-    );
+    assert_eq!(type_context["call_double"].to_string(), "fn(Num) -> Bool");
 }
 
 #[test]
 fn incorrect_function_arity() {
     let code = "double = |x| (x, x); (z,) = double(5);";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     let err = type_context
         .process_statements(&block.statements)
         .unwrap_err();
@@ -333,10 +330,10 @@ fn incorrect_function_arity() {
 fn function_as_arg() {
     let code = "mapper = |(x, y), map| (map(x), map(y));";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     type_context.process_statements(&block.statements).unwrap();
     assert_eq!(
-        type_context.get_type("mapper").unwrap().to_string(),
+        type_context["mapper"].to_string(),
         "fn<T: ?Lin, U: ?Lin>((T, T), fn(T) -> U) -> (U, U)"
     );
 }
@@ -345,10 +342,10 @@ fn function_as_arg() {
 fn function_as_arg_with_more_constraints() {
     let code = "mapper = |(x, y), map| map(x) + map(y);";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     type_context.process_statements(&block.statements).unwrap();
     assert_eq!(
-        type_context.get_type("mapper").unwrap().to_string(),
+        type_context["mapper"].to_string(),
         "fn<T: ?Lin, U>((T, T), fn(T) -> U) -> U"
     );
 }
@@ -357,10 +354,10 @@ fn function_as_arg_with_more_constraints() {
 fn function_as_arg_with_even_more_constraints() {
     let code = "mapper = |(x, y), map| map(x * map(y));";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     type_context.process_statements(&block.statements).unwrap();
     assert_eq!(
-        type_context.get_type("mapper").unwrap().to_string(),
+        type_context["mapper"].to_string(),
         "fn<T>((T, T), fn(T) -> T) -> T"
     );
 }
@@ -369,10 +366,10 @@ fn function_as_arg_with_even_more_constraints() {
 fn function_arg_with_multiple_args() {
     let code = "test_fn = |x, fun| fun(x, x * 3);";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     type_context.process_statements(&block.statements).unwrap();
     assert_eq!(
-        type_context.get_type("test_fn").unwrap().to_string(),
+        type_context["test_fn"].to_string(),
         "fn<T: ?Lin>(Num, fn(Num, Num) -> T) -> T"
     );
 }
@@ -386,7 +383,7 @@ fn function_as_arg_within_tuple() {
         };
     "#;
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     type_context.process_statements(&block.statements).unwrap();
 
     assert_eq!(
@@ -402,7 +399,7 @@ fn function_instantiations_are_independent() {
         x = (identity(5), identity(1 == 2));
     "#;
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     type_context.process_statements(&block.statements).unwrap();
 
     assert_eq!(
@@ -420,7 +417,7 @@ fn function_passed_as_arg() {
         tuple_of_fns = mapper((1, 2), create_fn);
     "#;
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     type_context.process_statements(&block.statements).unwrap();
 
     assert_eq!(
@@ -441,7 +438,7 @@ fn curried_function_passed_as_arg() {
         r = mapper((1, 2), concat(1 == 1));
     "#;
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     type_context.process_statements(&block.statements).unwrap();
 
     assert_eq!(
@@ -462,7 +459,7 @@ fn parametric_fn_passed_as_arg_with_different_constraints() {
         second(partial, 1 == 1);
     "#;
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     type_context.process_statements(&block.statements).unwrap();
 
     assert_eq!(
@@ -482,7 +479,7 @@ fn parametric_fn_passed_as_arg_with_unsatisfiable_requirements() {
     "#;
 
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     let err = type_context
         .process_statements(&block.statements)
         .unwrap_err();
@@ -500,7 +497,7 @@ fn parametric_fn_passed_as_arg_with_recursive_requirements() {
     "#;
 
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     let err = type_context
         .process_statements(&block.statements)
         .unwrap_err();
@@ -512,7 +509,7 @@ fn parametric_fn_passed_as_arg_with_recursive_requirements() {
 fn type_param_is_placed_correctly_with_fn_arg() {
     let code = "foo = |fun| { |x| fun(x) == x };";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
 
     type_context.process_statements(&block.statements).unwrap();
     assert_eq!(
@@ -525,7 +522,7 @@ fn type_param_is_placed_correctly_with_fn_arg() {
 fn type_params_in_fn_with_multiple_fn_args() {
     let code = "test = |x, foo, bar| foo(x) == bar(x * x);";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
 
     type_context.process_statements(&block.statements).unwrap();
     assert_eq!(
@@ -541,7 +538,7 @@ fn function_passed_as_arg_invalid_arity() {
         mapper((1, 2), |x, y| x + y);
     "#;
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     let err = type_context
         .process_statements(&block.statements)
         .unwrap_err();
@@ -562,7 +559,7 @@ fn function_passed_as_arg_invalid_arg_type() {
         mapper((1, 2), |(x, _)| x);
     "#;
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     let err = type_context
         .process_statements(&block.statements)
         .unwrap_err();
@@ -577,7 +574,7 @@ fn function_passed_as_arg_invalid_input() {
         mapper((1, 2 != 3), |x| x + 2);
     "#;
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_context = TypeContext::new();
+    let mut type_context = TypeEnvironment::new();
     let err = type_context
         .process_statements(&block.statements)
         .unwrap_err();

@@ -1,6 +1,6 @@
-//! `TypeContext` and related types.
+//! `TypeEnvironment` and related types.
 
-use std::{collections::HashMap, fmt, iter, mem};
+use std::{collections::HashMap, iter, mem, ops};
 
 use crate::{substitutions::Substitutions, FnType, TypeError, ValueType};
 use arithmetic_parser::{
@@ -17,42 +17,34 @@ struct TypeScope {
     variables: HashMap<String, ValueType>,
 }
 
-/// Context for deriving type information.
-pub struct TypeContext {
+/// Environment for deriving type information.
+#[derive(Debug)]
+pub struct TypeEnvironment {
     scopes: Vec<TypeScope>,
     is_in_function: bool,
 }
 
-impl fmt::Debug for TypeContext {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("TypeContext")
-            .field("scopes", &self.scopes)
-            .finish()
-    }
-}
-
-impl Default for TypeContext {
+impl Default for TypeEnvironment {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl TypeContext {
+impl TypeEnvironment {
     /// Creates a type context based on the interpreter context.
     pub fn new() -> Self {
-        TypeContext {
+        Self {
             scopes: vec![TypeScope::default()],
             is_in_function: false,
         }
     }
 
     /// Gets type of the specified variable.
-    pub fn get_type(&self, name: &str) -> Option<ValueType> {
+    pub fn get_type(&self, name: &str) -> Option<&ValueType> {
         self.scopes
             .iter()
             .rev()
-            .flat_map(|scope| scope.variables.get(name).cloned())
+            .flat_map(|scope| scope.variables.get(name))
             .next()
     }
 
@@ -143,7 +135,7 @@ impl TypeContext {
         &self,
         name: &Spanned<'a, T>,
     ) -> Result<ValueType, Spanned<'a, TypeError>> {
-        self.get_type(name.fragment()).ok_or_else(|| {
+        self.get_type(name.fragment()).cloned().ok_or_else(|| {
             let e = TypeError::UndefinedVar((*name.fragment()).to_owned());
             name.copy_with_extra(e)
         })
@@ -399,5 +391,14 @@ impl TypeContext {
         }
 
         Ok(())
+    }
+}
+
+impl ops::Index<&str> for TypeEnvironment {
+    type Output = ValueType;
+
+    fn index(&self, name: &str) -> &Self::Output {
+        self.get_type(name)
+            .unwrap_or_else(|| panic!("Variable `{}` is not defined", name))
     }
 }

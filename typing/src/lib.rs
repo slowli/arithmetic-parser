@@ -4,11 +4,11 @@ use std::{
     fmt,
 };
 
-mod context;
+mod env;
 mod error;
 mod substitutions;
 
-pub use self::{context::TypeContext, error::TypeError};
+pub use self::{env::TypeEnvironment, error::TypeError};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct TypeParamDescription {

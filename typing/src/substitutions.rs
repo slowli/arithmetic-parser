@@ -291,4 +291,31 @@ impl Substitutions {
         self.unify(definition, &ValueType::Function(Box::new(called_fn_type)))
             .map(|()| return_type)
     }
+
+    /// Handles a binary operation.
+    ///
+    /// Binary ops fall into 3 cases: `Num op T == T`, `T op Num == T`, or `T op T == T`.
+    /// We assume `T op T` by default, only falling into two other cases if one of operands
+    /// is known to be a number and the other is not a number.
+    pub fn unify_binary_op(
+        &mut self,
+        lhs_ty: &ValueType,
+        rhs_ty: &ValueType,
+    ) -> Result<ValueType, TypeError> {
+        self.mark_as_linear(lhs_ty)?;
+        self.mark_as_linear(rhs_ty)?;
+
+        // Try to determine the case right away.
+        let resolved_lhs_ty = self.fast_resolve(lhs_ty);
+        let resolved_rhs_ty = self.fast_resolve(rhs_ty);
+
+        match (resolved_lhs_ty.is_number(), resolved_rhs_ty.is_number()) {
+            (Some(true), Some(false)) => Ok(resolved_rhs_ty.to_owned()),
+            (Some(false), Some(true)) => Ok(resolved_lhs_ty.to_owned()),
+            _ => {
+                self.unify(lhs_ty, rhs_ty)?;
+                Ok(lhs_ty.to_owned())
+            }
+        }
+    }
 }

@@ -275,16 +275,9 @@ impl TypeEnvironment {
 
         match op {
             BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Power => {
-                // This only handles T op T == T.
-                // TODO: We should handle num op T == T and T op num == T as well!
-                substitutions.unify(&lhs_ty, &rhs_ty).map_err(|e| {
-                    let e = e.into_op_mismatch(substitutions, &lhs_ty, &rhs_ty, op);
-                    binary_expr.copy_with_extra(e)
-                })?;
                 substitutions
-                    .mark_as_linear(&lhs_ty)
-                    .map_err(|e| binary_expr.copy_with_extra(e))?;
-                Ok(rhs_ty)
+                    .unify_binary_op(&lhs_ty, &rhs_ty)
+                    .map_err(|e| binary_expr.copy_with_extra(e))
             }
 
             BinaryOp::Eq | BinaryOp::NotEq => {

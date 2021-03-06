@@ -441,6 +441,16 @@ impl ValueType {
             _ => self.clone(),
         }
     }
+
+    /// Returns `Some(true)` if this type is known to be a number, `Some(false)` if it's known
+    /// not to be a number, and `None` if either case is possible.
+    pub(crate) fn is_number(&self) -> Option<bool> {
+        match self {
+            Self::Number => Some(true),
+            Self::Tuple(_) | Self::Bool | Self::Function(_) => Some(false),
+            _ => None,
+        }
+    }
 }
 
 /// Context for mapping `TypeVar`s into `TypeParam`s or back.

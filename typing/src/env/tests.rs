@@ -54,15 +54,28 @@ fn boolean_statements() {
     let mut type_context = TypeEnvironment::new();
     type_context.insert_type("x", ValueType::Number);
     type_context.process_statements(&block.statements).unwrap();
-    assert_eq!(*type_context.get_type("y").unwrap(), ValueType::Bool);
+    assert_eq!(type_context["y"], ValueType::Bool);
+}
+
+#[test]
+fn spreading_binary_ops() {
+    let code = r#"
+        x = 3 * (1, 2);
+        y = (1, x, 3) * 4;
+    "#;
+    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let mut type_context = TypeEnvironment::new();
+    type_context.process_statements(&block.statements).unwrap();
+
+    assert_eq!(type_context["x"].to_string(), "(Num, Num)");
+    assert_eq!(type_context["y"].to_string(), "(Num, (Num, Num), Num)");
 }
 
 #[test]
 fn function_definition() {
-    // FIXME: revert to single `hash()`
     let code = r#"
         sign = |x, msg| {
-            (r, R) = (hash(), hash()) * (1, 3);
+            (r, R) = hash() * (1, 3);
             c = hash(R, msg);
             (R, r + c * x)
         };
@@ -70,9 +83,7 @@ fn function_definition() {
 
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
     let mut type_context = TypeEnvironment::new();
-
-    let hash_type = hash_fn_type();
-    type_context.insert_type("hash", ValueType::Function(Box::new(hash_type)));
+    type_context.insert_type("hash", hash_fn_type().into());
 
     type_context.process_statements(&block.statements).unwrap();
     assert_eq!(

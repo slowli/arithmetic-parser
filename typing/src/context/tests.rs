@@ -155,6 +155,73 @@ fn recursion_via_fn() {
 }
 
 #[test]
+fn method_basics() {
+    let code = r#"
+        foo = 3.plus(4);
+        do_something = |x| x - 5;
+        bar = foo.do_something();
+    "#;
+    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let mut type_context = TypeContext::new();
+    let plus_type = FnType::new(
+        vec![ValueType::Number, ValueType::Number],
+        ValueType::Number,
+    );
+    type_context.insert_type("plus", plus_type.into());
+    type_context.process_statements(&block.statements).unwrap();
+
+    assert_eq!(type_context.get_type("bar").unwrap(), ValueType::Number);
+}
+
+#[test]
+fn unknown_method() {
+    let code = "bar = 3.do_something();";
+    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let mut type_context = TypeContext::new();
+    let err = type_context
+        .process_statements(&block.statements)
+        .unwrap_err();
+
+    assert_eq!(*err.fragment(), "do_something");
+    assert_matches!(err.extra, TypeError::UndefinedVar(name) if name == "do_something");
+}
+
+#[test]
+fn immediately_invoked_function() {
+    let code = "flag = (|x| x + 3)(4) == 7;";
+    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let mut type_context = TypeContext::new();
+    type_context.process_statements(&block.statements).unwrap();
+
+    assert_eq!(type_context.get_type("flag").unwrap(), ValueType::Bool);
+}
+
+#[test]
+fn immediately_invoked_function_with_invalid_arg() {
+    let code = "flag = (|x| x + x)(4 == 7);";
+    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let mut type_context = TypeContext::new();
+    let err = type_context
+        .process_statements(&block.statements)
+        .unwrap_err();
+
+    assert_matches!(err.extra, TypeError::NonLinearType(ValueType::Bool));
+}
+
+#[test]
+fn variable_scoping() {
+    let code = "x = 5; y = { x = (1, x); x * (2, 3) };";
+    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let mut type_context = TypeContext::new();
+    type_context.process_statements(&block.statements).unwrap();
+
+    assert_eq!(
+        type_context.get_type("y").unwrap(),
+        ValueType::Tuple(vec![ValueType::Number, ValueType::Number])
+    );
+}
+
+#[test]
 fn inferring_value_type_from_embedded_function() {
     let code = "double = |x| { (x, || (x, 2 * x)) };";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();

@@ -9,6 +9,9 @@ use nom::{
     sequence::{delimited, preceded, terminated, tuple},
 };
 
+use std::collections::HashMap;
+
+use crate::{ConstParamDescription, FnArgs, FnType, TupleLength, TypeParamDescription, ValueType};
 use arithmetic_parser::{InputSpan, NomResult};
 
 #[cfg(test)]
@@ -28,9 +31,50 @@ pub enum RawValueType<'a> {
     },
 }
 
-impl RawValueType<'_> {
+impl<'a> RawValueType<'a> {
     fn void() -> Self {
         Self::Tuple(vec![])
+    }
+
+    fn try_convert(&self, state: &ConversionState<'a>) -> Result<ValueType, ConversionError<'a>> {
+        Ok(match self {
+            Self::Any => ValueType::Any,
+            Self::Bool => ValueType::Bool,
+            Self::Number => ValueType::Number,
+
+            Self::Ident(ident) => {
+                let idx = state
+                    .type_param_idx(ident.fragment())
+                    .ok_or_else(|| ConversionError::UndefinedTypeParam(*ident))?;
+                ValueType::TypeParam(idx)
+            }
+
+            Self::Function(fn_type) => {
+                let converted_fn = fn_type.try_convert_inner(state.clone())?;
+                ValueType::Function(Box::new(converted_fn))
+            },
+
+            Self::Tuple(elements) => {
+                let converted_elements: Result<Vec<_>, _> =
+                    elements.iter().map(|elt| elt.try_convert(state)).collect();
+                ValueType::Tuple(converted_elements?)
+            }
+
+            Self::Slice { element, length } => {
+                let converted_length = match length {
+                    RawTupleLength::Ident(ident) => TupleLength::Param(
+                        state
+                            .const_param_idx(ident.fragment())
+                            .ok_or_else(|| ConversionError::UndefinedConst(*ident))?,
+                    ),
+                    RawTupleLength::Dynamic => TupleLength::Dynamic,
+                };
+                ValueType::Slice {
+                    element: Box::new(element.try_convert(state)?),
+                    length: converted_length,
+                }
+            }
+        })
     }
 }
 
@@ -40,6 +84,120 @@ pub struct RawFnType<'a> {
     type_params: Vec<(InputSpan<'a>, RawTypeParamBounds)>,
     args: Vec<RawValueType<'a>>,
     return_type: RawValueType<'a>,
+}
+
+#[derive(Debug)]
+pub enum ConversionError<'a> {
+    DuplicateConst {
+        definition: InputSpan<'a>,
+        previous: InputSpan<'a>,
+    },
+    DuplicateTypeParam {
+        definition: InputSpan<'a>,
+        previous: InputSpan<'a>,
+    },
+    UndefinedTypeParam(InputSpan<'a>),
+    UndefinedConst(InputSpan<'a>),
+}
+
+/// Intermediate conversion state.
+#[derive(Debug, Default, Clone)]
+struct ConversionState<'a> {
+    const_params: HashMap<&'a str, (InputSpan<'a>, usize)>,
+    type_params: HashMap<&'a str, (InputSpan<'a>, usize)>,
+}
+
+impl<'a> ConversionState<'a> {
+    fn insert_const_param(&mut self, param: InputSpan<'a>) -> Result<(), ConversionError<'a>> {
+        let new_idx = self.const_params.len();
+        if let Some((previous, _)) = self
+            .const_params
+            .insert(*param.fragment(), (param, new_idx))
+        {
+            Err(ConversionError::DuplicateConst {
+                definition: param,
+                previous,
+            })
+        } else {
+            Ok(())
+        }
+    }
+
+    fn insert_type_param(&mut self, param: InputSpan<'a>) -> Result<(), ConversionError<'a>> {
+        let new_idx = self.type_params.len();
+        if let Some((previous, _)) = self.type_params.insert(*param.fragment(), (param, new_idx)) {
+            Err(ConversionError::DuplicateTypeParam {
+                definition: param,
+                previous,
+            })
+        } else {
+            Ok(())
+        }
+    }
+
+    fn type_param_idx(&self, param_name: &str) -> Option<usize> {
+        self.type_params.get(param_name).map(|(_, idx)| *idx)
+    }
+
+    fn const_param_idx(&self, param_name: &str) -> Option<usize> {
+        self.const_params.get(param_name).map(|(_, idx)| *idx)
+    }
+}
+
+impl<'a> RawFnType<'a> {
+    /// Tries to convert this into an `FnType`.
+    pub fn try_convert(&self) -> Result<FnType, ConversionError<'a>> {
+        self.try_convert_inner(ConversionState::default())
+    }
+
+    fn try_convert_inner(
+        &self,
+        mut state: ConversionState<'a>,
+    ) -> Result<FnType, ConversionError<'a>> {
+        // Check params for consistency.
+        for param in &self.const_params {
+            state.insert_const_param(*param)?;
+        }
+        for (param, _) in &self.type_params {
+            state.insert_type_param(*param)?;
+        }
+
+        let args: Result<Vec<_>, _> = self
+            .args
+            .iter()
+            .map(|arg| arg.try_convert(&state))
+            .collect();
+        Ok(FnType {
+            args: FnArgs::List(args?),
+            return_type: self.return_type.try_convert(&state)?,
+
+            // FIXME: do we need to record external type params here?
+            type_params: self
+                .type_params
+                .iter()
+                .map(|(name, bounds)| {
+                    (
+                        state.type_param_idx(name.fragment()).unwrap(),
+                        TypeParamDescription {
+                            maybe_non_linear: bounds.maybe_non_linear,
+                            is_external: false,
+                        },
+                    )
+                })
+                .collect(),
+
+            const_params: self
+                .const_params
+                .iter()
+                .map(|name| {
+                    (
+                        state.const_param_idx(name.fragment()).unwrap(),
+                        ConstParamDescription { is_external: false },
+                    )
+                })
+                .collect(),
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

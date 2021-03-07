@@ -216,3 +216,12 @@ fn fn_type_returning_fn_arg() {
     assert_eq!(returned_fn.args, vec![RawValueType::Bool]);
     assert_eq!(returned_fn.return_type, RawValueType::Number);
 }
+
+#[test]
+fn converting_raw_fn_type() {
+    let input = InputSpan::new("fn<const N; T>([T; N], fn(T) -> Bool) -> Bool");
+    let (_, fn_type) = fn_definition(input).unwrap();
+    let fn_type = fn_type.try_convert().unwrap();
+
+    assert_eq!(fn_type.to_string(), *input.fragment());
+}

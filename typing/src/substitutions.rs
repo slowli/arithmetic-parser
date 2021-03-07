@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{FnArgs, FnType, SubstitutionContext, TypeError, ValueType};
+use crate::{FnArgs, FnType, ParamMapping, SubstitutionContext, TupleLength, TypeError, ValueType};
 use arithmetic_parser::{grammars::Grammar, Spanned, SpannedExpr};
 
 /// Set of equations and constraints on type variables.
@@ -14,6 +14,10 @@ pub(crate) struct Substitutions {
     eqs: HashMap<usize, ValueType>,
     /// Set of type variables known to be linear.
     lin: HashSet<usize>,
+    /// Number of length variables.
+    const_var_count: usize,
+    /// Length variable equations.
+    length_eqs: HashMap<usize, TupleLength>,
 }
 
 impl Substitutions {
@@ -50,8 +54,25 @@ impl Substitutions {
                 ValueType::Function(Box::new(resolved_fn_type))
             }
 
+            ValueType::Slice { element, length } => ValueType::Slice {
+                element: Box::new(self.resolve(element)),
+                length: self.resolve_len(*length),
+            },
+
             _ => ty.clone(),
         }
+    }
+
+    fn resolve_len(&self, mut len: TupleLength) -> TupleLength {
+        while let TupleLength::Var(idx) = len {
+            let resolved = self.length_eqs.get(&idx).copied();
+            if let Some(resolved) = resolved {
+                len = resolved;
+            } else {
+                break;
+            }
+        }
+        len
     }
 
     pub fn assign_new_type(&mut self, ty: &mut ValueType) {
@@ -96,10 +117,49 @@ impl Substitutions {
                 Ok(())
             }
 
+            (Slice { element, length }, Tuple(tuple_elements))
+            | (Tuple(tuple_elements), Slice { element, length }) => {
+                self.unify_lengths(*length, TupleLength::Exact(tuple_elements.len()))?;
+                for tuple_element in tuple_elements {
+                    self.unify(tuple_element, element)?;
+                }
+                Ok(())
+            }
+
+            (
+                Slice { element, length },
+                Slice {
+                    element: rhs_element,
+                    length: rhs_length,
+                },
+            ) => {
+                self.unify_lengths(*length, *rhs_length)?;
+                self.unify(element, rhs_element)
+            }
+
             (Function(fn_l), Function(fn_r)) => self.unify_fn_types(fn_l, fn_r),
 
             // FIXME: resolve types
             (x, y) => Err(TypeError::IncompatibleTypes(x.clone(), y.clone())),
+        }
+    }
+
+    fn unify_lengths(&mut self, lhs: TupleLength, rhs: TupleLength) -> Result<(), TypeError> {
+        let resolved_lhs = self.resolve_len(lhs);
+        let resolved_rhs = self.resolve_len(rhs);
+
+        match (resolved_lhs, resolved_rhs) {
+            (TupleLength::Var(x), TupleLength::Var(y)) if x == y => {
+                // Lengths are already unified.
+                Ok(())
+            }
+
+            (TupleLength::Var(x), other) | (other, TupleLength::Var(x)) => {
+                self.length_eqs.insert(x, other);
+                Ok(())
+            }
+
+            _ => Err(TypeError::IncompatibleLengths(resolved_lhs, resolved_rhs)),
         }
     }
 
@@ -130,30 +190,39 @@ impl Substitutions {
 
     /// Instantiates a functional type by replacing all type arguments with new type vars.
     fn instantiate_function(&mut self, fn_type: &FnType) -> Result<FnType, TypeError> {
-        if fn_type.type_params.is_empty() {
+        if fn_type.type_params.is_empty() && fn_type.const_params.is_empty() {
             // Fast path: just clone the function type.
             return Ok(fn_type.clone());
         }
 
         // Map type vars in the function into newly created type vars.
-        let mapping: HashMap<_, _> = fn_type
-            .type_params
-            .iter()
-            .enumerate()
-            .map(|(i, (var_idx, _))| (*var_idx, self.type_var_count + i))
-            .collect();
+        let mapping = ParamMapping {
+            types: fn_type
+                .type_params
+                .iter()
+                .enumerate()
+                .map(|(i, (var_idx, _))| (*var_idx, self.type_var_count + i))
+                .collect(),
+            constants: fn_type
+                .const_params
+                .iter()
+                .enumerate()
+                .map(|(i, (var_idx, _))| (*var_idx, self.const_var_count + i))
+                .collect(),
+        };
 
         let instantiated_fn_type =
             fn_type.substitute_type_vars(&mapping, SubstitutionContext::ParamsToVars);
 
         // Copy constraints on the newly generated type vars from the function definition.
-        for (&original_idx, &new_idx) in &mapping {
+        for (&original_idx, &new_idx) in &mapping.types {
             if fn_type.is_linear(original_idx) {
                 self.mark_as_linear(&ValueType::TypeVar(new_idx))?;
             }
         }
 
         self.type_var_count += fn_type.type_params.len();
+        self.const_var_count += fn_type.const_params.len();
         Ok(instantiated_fn_type)
     }
 
@@ -179,6 +248,8 @@ impl Substitutions {
             ValueType::Function(fn_type) => fn_type
                 .arg_and_return_types()
                 .any(|ty| self.check_occurrence(var_idx, ty)),
+
+            ValueType::Slice { element, .. } => self.check_occurrence(var_idx, element),
 
             _ => false,
         }
@@ -257,14 +328,19 @@ impl Substitutions {
                 Ok(())
             }
 
-            ValueType::Tuple(ref fragments) => {
-                for fragment in fragments {
-                    let reported_ty = self.sanitize_type(None, ty);
-                    self.mark_as_linear(fragment)
-                        .map_err(|_| TypeError::NonLinearType(reported_ty))?;
+            ValueType::Tuple(elements) => {
+                for element in elements {
+                    self.mark_as_linear(element).map_err(|_| {
+                        let reported_ty = self.sanitize_type(None, ty);
+                        TypeError::NonLinearType(reported_ty)
+                    })?;
                 }
                 Ok(())
             }
+            ValueType::Slice { element, .. } => self.mark_as_linear(element).map_err(|_| {
+                let reported_ty = self.sanitize_type(None, ty);
+                TypeError::NonLinearType(reported_ty)
+            }),
         }
     }
 

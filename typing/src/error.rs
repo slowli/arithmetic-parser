@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::{substitutions::Substitutions, ValueType};
+use crate::{substitutions::Substitutions, TupleLength, ValueType};
 use arithmetic_parser::{BinaryOp, UnsupportedType};
 
 /// Errors that can occur during type inference.
@@ -24,6 +24,8 @@ pub enum TypeError {
 
     /// Trying to unify incompatible types.
     IncompatibleTypes(ValueType, ValueType),
+    /// Incompatible tuple lengths.
+    IncompatibleLengths(TupleLength, TupleLength),
 
     /// Trying to call a non-function type.
     NotCallable(ValueType),
@@ -69,6 +71,11 @@ impl fmt::Display for TypeError {
             Self::IncompatibleTypes(first, second) => write!(
                 formatter,
                 "Trying to unify incompatible types `{}` and `{}`",
+                first, second
+            ),
+            Self::IncompatibleLengths(first, second) => write!(
+                formatter,
+                "Trying to unify incompatible lengths {} and {}",
                 first, second
             ),
 

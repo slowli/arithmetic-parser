@@ -101,18 +101,6 @@ impl<Span: Copy, T> LocatedSpan<Span, T> {
     }
 }
 
-impl<Span: Copy, T: Clone> LocatedSpan<Span, T> {
-    pub(crate) fn with_mapped_span<U>(self, map_fn: impl FnOnce(Span) -> U) -> LocatedSpan<U, T> {
-        LocatedSpan {
-            offset: self.offset,
-            line: self.line,
-            column: self.column,
-            fragment: map_fn(self.fragment),
-            extra: self.extra,
-        }
-    }
-}
-
 impl<'a, T> From<nom_locate::LocatedSpan<&'a str, T>> for LocatedSpan<&'a str, T> {
     fn from(value: nom_locate::LocatedSpan<&'a str, T>) -> Self {
         Self {
@@ -250,7 +238,7 @@ impl<T: Clone + 'static> StripCode for MaybeSpanned<'_, T> {
     type Stripped = MaybeSpanned<'static, T>;
 
     fn strip_code(self) -> Self::Stripped {
-        self.with_mapped_span(CodeFragment::strip)
+        self.map_fragment(CodeFragment::strip)
     }
 }
 

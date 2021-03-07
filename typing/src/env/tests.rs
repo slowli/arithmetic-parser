@@ -23,19 +23,14 @@ fn hash_fn_type() -> FnType {
 /// fn<const N; T, U>([T; N], fn(T) -> U) -> [U; N]
 /// ```
 fn map_fn_type() -> FnType {
-    let ext_param_description = TypeParamDescription {
-        is_external: true,
-        maybe_non_linear: true,
-    };
     let map_fn = FnType {
         args: FnArgs::List(vec![ValueType::TypeParam(0)]),
         return_type: ValueType::TypeParam(1),
-        type_params: (0..2).map(|i| (i, ext_param_description)).collect(),
+        type_params: BTreeMap::new(),
         const_params: BTreeMap::new(),
     };
 
     let param_description = TypeParamDescription {
-        is_external: false,
         maybe_non_linear: true,
     };
 
@@ -52,9 +47,7 @@ fn map_fn_type() -> FnType {
             length: TupleLength::Param(0),
         },
         type_params: (0..2).map(|i| (i, param_description)).collect(),
-        const_params: vec![(0, ConstParamDescription { is_external: false })]
-            .into_iter()
-            .collect(),
+        const_params: vec![(0, ConstParamDescription)].into_iter().collect(),
     }
 }
 
@@ -74,7 +67,6 @@ fn map_fn_type_display() {
 /// ```
 fn zip_fn_type() -> FnType {
     let param_description = TypeParamDescription {
-        is_external: false,
         maybe_non_linear: true,
     };
 
@@ -97,9 +89,7 @@ fn zip_fn_type() -> FnType {
             length: TupleLength::Param(0),
         },
         type_params: (0..2).map(|i| (i, param_description)).collect(),
-        const_params: vec![(0, ConstParamDescription { is_external: false })]
-            .into_iter()
-            .collect(),
+        const_params: vec![(0, ConstParamDescription)].into_iter().collect(),
     }
 }
 
@@ -113,19 +103,14 @@ fn zip_fn_type_display() {
 }
 
 fn filter_fn_type() -> FnType {
-    let ext_param_description = TypeParamDescription {
-        is_external: true,
-        maybe_non_linear: true,
-    };
     let filter_fn_type = FnType {
         args: FnArgs::List(vec![ValueType::TypeParam(0)]),
         return_type: ValueType::Bool,
-        type_params: vec![(0, ext_param_description)].into_iter().collect(),
+        type_params: BTreeMap::new(),
         const_params: BTreeMap::new(),
     };
 
     let param_description = TypeParamDescription {
-        is_external: false,
         maybe_non_linear: true,
     };
     FnType {
@@ -141,9 +126,7 @@ fn filter_fn_type() -> FnType {
             length: TupleLength::Dynamic,
         },
         type_params: vec![(0, param_description)].into_iter().collect(),
-        const_params: vec![(0, ConstParamDescription { is_external: false })]
-            .into_iter()
-            .collect(),
+        const_params: vec![(0, ConstParamDescription)].into_iter().collect(),
     }
 }
 

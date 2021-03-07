@@ -11,16 +11,16 @@ mod substitutions;
 
 pub use self::{env::TypeEnvironment, error::TypeError};
 
+/// Description of a type parameter.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct TypeParamDescription {
+    /// Can this type param be non-linear?
     maybe_non_linear: bool,
-    is_external: bool,
 }
 
+/// Description of a constant parameter.
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct ConstParamDescription {
-    is_external: bool,
-}
+struct ConstParamDescription;
 
 /// Quantity of type variable mentions.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -37,8 +37,7 @@ pub struct FnType {
     args: FnArgs,
     /// Type of the value returned by the function.
     return_type: ValueType,
-    /// Indexes of type params associated with this function. The params can be either free
-    /// or bound by the parent scope.
+    /// Indexes of type params associated with this function.
     type_params: BTreeMap<usize, TypeParamDescription>,
     /// Indexes of const params associated with this function.
     const_params: BTreeMap<usize, ConstParamDescription>,
@@ -48,41 +47,29 @@ impl fmt::Display for FnType {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("fn")?;
 
-        let free_consts = self
-            .const_params
-            .iter()
-            .filter(|(_, description)| !description.is_external);
-        let free_consts_count = free_consts.clone().count();
-
-        let free_params = self
-            .type_params
-            .iter()
-            .filter(|(_, description)| !description.is_external);
-        let free_params_count = free_params.clone().count();
-
-        if free_consts_count + free_params_count > 0 {
+        if self.const_params.len() + self.type_params.len() > 0 {
             formatter.write_str("<")?;
 
-            if free_consts_count > 0 {
+            if !self.const_params.is_empty() {
                 formatter.write_str("const ")?;
-                for (i, (&var_idx, _)) in free_consts.enumerate() {
+                for (i, (&var_idx, _)) in self.const_params.iter().enumerate() {
                     formatter.write_str(TupleLength::const_param(var_idx).as_ref())?;
-                    if i + 1 < free_consts_count {
+                    if i + 1 < self.const_params.len() {
                         formatter.write_str(", ")?;
                     }
                 }
 
-                if free_params_count > 0 {
+                if !self.type_params.is_empty() {
                     formatter.write_str("; ")?;
                 }
             }
 
-            for (i, (&var_idx, description)) in free_params.enumerate() {
+            for (i, (&var_idx, description)) in self.type_params.iter().enumerate() {
                 formatter.write_str(ValueType::type_param(var_idx).as_ref())?;
                 if description.maybe_non_linear {
                     formatter.write_str(": ?Lin")?;
                 }
-                if i + 1 < free_params_count {
+                if i + 1 < self.type_params.len() {
                     formatter.write_str(", ")?;
                 }
             }
@@ -301,10 +288,9 @@ impl FnTypeTree {
             .all_type_vars
             .iter()
             .filter_map(|(idx, qty)| {
-                if *qty != VarQuantity::UniqueFunction {
+                if *qty != VarQuantity::UniqueFunction && !parent_types.contains(idx) {
                     let description = TypeParamDescription {
                         maybe_non_linear: !linear_types.contains(idx),
-                        is_external: parent_types.contains(idx),
                     };
                     Some((*idx, description))
                 } else {
@@ -317,11 +303,8 @@ impl FnTypeTree {
             .all_const_vars
             .iter()
             .filter_map(|(idx, qty)| {
-                if *qty != VarQuantity::UniqueFunction {
-                    let description = ConstParamDescription {
-                        is_external: parent_consts.contains(idx),
-                    };
-                    Some((*idx, description))
+                if *qty != VarQuantity::UniqueFunction && !parent_consts.contains(idx) {
+                    Some((*idx, ConstParamDescription))
                 } else {
                     None
                 }

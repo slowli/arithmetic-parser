@@ -52,7 +52,7 @@ impl<'a> RawValueType<'a> {
             Self::Function(fn_type) => {
                 let converted_fn = fn_type.try_convert_inner(state.clone())?;
                 ValueType::Function(Box::new(converted_fn))
-            },
+            }
 
             Self::Tuple(elements) => {
                 let converted_elements: Result<Vec<_>, _> =
@@ -171,7 +171,6 @@ impl<'a> RawFnType<'a> {
             args: FnArgs::List(args?),
             return_type: self.return_type.try_convert(&state)?,
 
-            // FIXME: do we need to record external type params here?
             type_params: self
                 .type_params
                 .iter()
@@ -180,7 +179,6 @@ impl<'a> RawFnType<'a> {
                         state.type_param_idx(name.fragment()).unwrap(),
                         TypeParamDescription {
                             maybe_non_linear: bounds.maybe_non_linear,
-                            is_external: false,
                         },
                     )
                 })
@@ -192,7 +190,7 @@ impl<'a> RawFnType<'a> {
                 .map(|name| {
                     (
                         state.const_param_idx(name.fragment()).unwrap(),
-                        ConstParamDescription { is_external: false },
+                        ConstParamDescription,
                     )
                 })
                 .collect(),

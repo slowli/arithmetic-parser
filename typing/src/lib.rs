@@ -419,23 +419,24 @@ impl fmt::Display for FnArgs {
     }
 }
 
+/// Tuple length.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TupleLength {
-    /// Arbitrary length that cannot be found from inference.
-    Arbitrary,
+    /// Dynamic length that cannot be found from inference.
+    Dynamic,
     /// Exact known length.
     Exact(usize),
-    /// Type variable. In contrast to `ConstParam`s, `ConstVar`s are used exclusively during
+    /// Length variable. In contrast to `Param`s, `Var`s are used exclusively during
     /// inference and cannot occur in standalone function signatures.
     Var(usize),
-    /// Type parameter in a function definition.
+    /// Length parameter in a function definition.
     Param(usize),
 }
 
 impl fmt::Display for TupleLength {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Arbitrary => formatter.write_str("*"),
+            Self::Dynamic => formatter.write_str("*"),
             Self::Exact(len) => fmt::Display::fmt(len, formatter),
             Self::Var(idx) | Self::Param(idx) => {
                 formatter.write_str(Self::const_param(*idx).as_ref())
@@ -559,7 +560,7 @@ impl fmt::Display for ValueType {
 
             Self::Slice {
                 element,
-                length: TupleLength::Arbitrary,
+                length: TupleLength::Dynamic,
             } => {
                 write!(formatter, "[{}]", element)
             }

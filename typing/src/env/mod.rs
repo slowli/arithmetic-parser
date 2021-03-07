@@ -294,6 +294,7 @@ impl TypeEnvironment {
                 Ok(ValueType::Bool)
             }
 
+            // FIXME: optionally support order comparisons
             _ => Err(binary_expr.copy_with_extra(TypeError::unsupported(op))),
         }
     }

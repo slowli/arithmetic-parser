@@ -1,5 +1,5 @@
 use super::*;
-use crate::FnArgs;
+use crate::{ConstParamDescription, FnArgs, TupleLength, TypeParamDescription};
 use std::collections::BTreeMap;
 
 use arithmetic_parser::{
@@ -13,7 +13,147 @@ fn hash_fn_type() -> FnType {
         args: FnArgs::Any,
         return_type: ValueType::Number,
         type_params: BTreeMap::new(),
+        const_params: BTreeMap::new(),
     }
+}
+
+/// `map` function signature:
+///
+/// ```text
+/// fn<const N; T, U>([T; N], fn(T) -> U) -> [U; N]
+/// ```
+fn map_fn_type() -> FnType {
+    let ext_param_description = TypeParamDescription {
+        is_external: true,
+        maybe_non_linear: true,
+    };
+    let map_fn = FnType {
+        args: FnArgs::List(vec![ValueType::TypeParam(0)]),
+        return_type: ValueType::TypeParam(1),
+        type_params: (0..2).map(|i| (i, ext_param_description)).collect(),
+        const_params: BTreeMap::new(),
+    };
+
+    let param_description = TypeParamDescription {
+        is_external: false,
+        maybe_non_linear: true,
+    };
+
+    FnType {
+        args: FnArgs::List(vec![
+            ValueType::Slice {
+                element: Box::new(ValueType::TypeParam(0)),
+                length: TupleLength::Param(0),
+            },
+            map_fn.into(),
+        ]),
+        return_type: ValueType::Slice {
+            element: Box::new(ValueType::TypeParam(1)),
+            length: TupleLength::Param(0),
+        },
+        type_params: (0..2).map(|i| (i, param_description)).collect(),
+        const_params: vec![(0, ConstParamDescription { is_external: false })]
+            .into_iter()
+            .collect(),
+    }
+}
+
+#[test]
+fn map_fn_type_display() {
+    let map_fn_string = map_fn_type().to_string();
+    assert_eq!(
+        map_fn_string,
+        "fn<const N; T: ?Lin, U: ?Lin>([T; N], fn(T) -> U) -> [U; N]"
+    );
+}
+
+/// `zip` function signature:
+///
+/// ```text
+/// fn<const N; T, U>([T; N], [U; N]) -> [(T, U); N]
+/// ```
+fn zip_fn_type() -> FnType {
+    let param_description = TypeParamDescription {
+        is_external: false,
+        maybe_non_linear: true,
+    };
+
+    FnType {
+        args: FnArgs::List(vec![
+            ValueType::Slice {
+                element: Box::new(ValueType::TypeParam(0)),
+                length: TupleLength::Param(0),
+            },
+            ValueType::Slice {
+                element: Box::new(ValueType::TypeParam(1)),
+                length: TupleLength::Param(0),
+            },
+        ]),
+        return_type: ValueType::Slice {
+            element: Box::new(ValueType::Tuple(vec![
+                ValueType::TypeParam(0),
+                ValueType::TypeParam(1),
+            ])),
+            length: TupleLength::Param(0),
+        },
+        type_params: (0..2).map(|i| (i, param_description)).collect(),
+        const_params: vec![(0, ConstParamDescription { is_external: false })]
+            .into_iter()
+            .collect(),
+    }
+}
+
+#[test]
+fn zip_fn_type_display() {
+    let zip_fn_string = zip_fn_type().to_string();
+    assert_eq!(
+        zip_fn_string,
+        "fn<const N; T: ?Lin, U: ?Lin>([T; N], [U; N]) -> [(T, U); N]"
+    );
+}
+
+fn filter_fn_type() -> FnType {
+    let ext_param_description = TypeParamDescription {
+        is_external: true,
+        maybe_non_linear: true,
+    };
+    let filter_fn_type = FnType {
+        args: FnArgs::List(vec![ValueType::TypeParam(0)]),
+        return_type: ValueType::Bool,
+        type_params: vec![(0, ext_param_description)].into_iter().collect(),
+        const_params: BTreeMap::new(),
+    };
+
+    let param_description = TypeParamDescription {
+        is_external: false,
+        maybe_non_linear: true,
+    };
+    FnType {
+        args: FnArgs::List(vec![
+            ValueType::Slice {
+                element: Box::new(ValueType::TypeParam(0)),
+                length: TupleLength::Param(0),
+            },
+            filter_fn_type.into(),
+        ]),
+        return_type: ValueType::Slice {
+            element: Box::new(ValueType::TypeParam(0)),
+            length: TupleLength::Dynamic,
+        },
+        type_params: vec![(0, param_description)].into_iter().collect(),
+        const_params: vec![(0, ConstParamDescription { is_external: false })]
+            .into_iter()
+            .collect(),
+    }
+}
+
+#[test]
+fn filter_fn_type_display() {
+    let filter_fn_string = filter_fn_type().to_string();
+    assert_eq!(
+        filter_fn_string,
+        "fn<const N; T: ?Lin>([T; N], fn(T) -> Bool) -> [T]"
+    );
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -591,4 +731,145 @@ fn function_passed_as_arg_invalid_input() {
         .unwrap_err();
 
     assert_matches!(err.extra, TypeError::IncompatibleTypes(..));
+}
+
+#[test]
+fn unifying_slice_and_tuple() {
+    let code = "xs = (1, 2).map(|x| x + 5);";
+    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let mut type_context = TypeEnvironment::new();
+    type_context.insert_type("map", map_fn_type().into());
+    type_context.process_statements(&block.statements).unwrap();
+
+    assert_eq!(
+        type_context["xs"],
+        ValueType::Tuple(vec![ValueType::Number, ValueType::Number])
+    );
+}
+
+#[test]
+fn function_accepting_slices() {
+    let code = "inc = |xs| xs.map(|x| x + 5); z = (1, 2, 3).inc();";
+    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let mut type_context = TypeEnvironment::new();
+    type_context.insert_type("map", map_fn_type().into());
+    type_context.process_statements(&block.statements).unwrap();
+
+    assert_eq!(
+        type_context["inc"].to_string(),
+        "fn<const N>([Num; N]) -> [Num; N]"
+    );
+    assert_eq!(
+        type_context["z"],
+        ValueType::Slice {
+            element: Box::new(ValueType::Number),
+            length: TupleLength::Exact(3)
+        }
+    );
+}
+
+#[test]
+fn incorrect_arg_in_slices() {
+    let code = "(1, 2 == 3).map(|x| x);";
+    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let mut type_context = TypeEnvironment::new();
+    type_context.insert_type("map", map_fn_type().into());
+
+    let err = type_context
+        .process_statements(&block.statements)
+        .unwrap_err();
+    // FIXME: error span is incorrect here; should be `(1, 2 == 3)`
+    assert_matches!(err.extra, TypeError::IncompatibleTypes(_, _));
+}
+
+#[test]
+fn slice_narrowed_to_tuple() {
+    let code = "foo = |xs, fn| { (x, y, _) = xs.map(fn); y - x };";
+    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let mut type_context = TypeEnvironment::new();
+    type_context.insert_type("map", map_fn_type().into());
+    type_context.process_statements(&block.statements).unwrap();
+
+    assert_eq!(
+        type_context["foo"].to_string(),
+        "fn<T: ?Lin, U>((T, T, T), fn(T) -> U) -> U"
+    );
+}
+
+#[test]
+fn unifying_length_vars_error() {
+    let code = "(1, 2).zip_with((3, 4, 5));";
+    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let mut type_context = TypeEnvironment::new();
+    type_context.insert_type("zip_with", zip_fn_type().into());
+
+    let err = type_context
+        .process_statements(&block.statements)
+        .unwrap_err();
+    assert_matches!(
+        err.extra,
+        TypeError::IncompatibleLengths(TupleLength::Exact(2), TupleLength::Exact(3))
+    );
+}
+
+#[test]
+fn unifying_length_vars() {
+    let code = "foo = |xs, ys| xs.zip_with(ys).map(|(x, y)| x + y);";
+    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let mut type_context = TypeEnvironment::new();
+    type_context.insert_type("map", map_fn_type().into());
+    type_context.insert_type("zip_with", zip_fn_type().into());
+    type_context.process_statements(&block.statements).unwrap();
+
+    assert_eq!(
+        type_context["foo"].to_string(),
+        "fn<const N; T>([T; N], [T; N]) -> [T; N]"
+    );
+}
+
+#[test]
+fn dynamically_sized_slices_basics() {
+    let code = "filtered = (1, 2, 3).filter(|x| x != 1);";
+    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let mut type_context = TypeEnvironment::new();
+    type_context.insert_type("filter", filter_fn_type().into());
+    type_context.process_statements(&block.statements).unwrap();
+
+    assert_eq!(type_context["filtered"].to_string(), "[Num]");
+}
+
+#[test]
+fn dynamically_sized_slices_with_map() {
+    let code = r#"
+        foo = |xs| xs.filter(|x| x != 1).map(|x| x / 2);
+        // `foo` must be callable both with tuples and dynamically sized slices.
+        (1, 2, 3).foo();
+        (5, 6, 7).filter(|x| x != 6 && x != 7).foo();
+    "#;
+    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let mut type_context = TypeEnvironment::new();
+    type_context.insert_type("filter", filter_fn_type().into());
+    type_context.insert_type("map", map_fn_type().into());
+    type_context.process_statements(&block.statements).unwrap();
+
+    assert_eq!(
+        type_context["foo"].to_string(),
+        "fn<const N>([Num; N]) -> [Num]"
+    );
+}
+
+#[test]
+fn cannot_destructure_dynamic_slice() {
+    let code = "(x, y) = (1, 2, 3).filter(|x| x != 1);";
+    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let mut type_context = TypeEnvironment::new();
+    type_context.insert_type("filter", filter_fn_type().into());
+    let err = type_context
+        .process_statements(&block.statements)
+        .unwrap_err();
+
+    assert_matches!(
+        err.extra,
+        TypeError::IncompatibleLengths(TupleLength::Dynamic, TupleLength::Exact(2))
+    );
 }

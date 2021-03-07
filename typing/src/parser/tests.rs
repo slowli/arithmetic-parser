@@ -225,3 +225,73 @@ fn converting_raw_fn_type() {
 
     assert_eq!(fn_type.to_string(), *input.fragment());
 }
+
+#[test]
+fn converting_raw_fn_type_duplicate_type() {
+    let input = InputSpan::new("fn<T, T>([T; N], fn(T) -> Bool) -> Bool");
+    let (_, fn_type) = fn_definition(input).unwrap();
+    let err = fn_type.try_convert().unwrap_err();
+    assert_matches!(
+        err,
+        ConversionError::DuplicateTypeParam { definition, previous }
+            if definition.location_offset() == 6 && previous.location_offset() == 3
+    );
+}
+
+#[test]
+fn converting_raw_fn_type_duplicate_type_in_embedded_fn() {
+    let input = InputSpan::new("fn<const N; T>([T; N], fn<T>(T) -> Bool) -> Bool");
+    let (_, fn_type) = fn_definition(input).unwrap();
+    let err = fn_type.try_convert().unwrap_err();
+    assert_matches!(
+        err,
+        ConversionError::DuplicateTypeParam { definition, previous }
+            if definition.location_offset() == 26 && previous.location_offset() == 12
+    );
+}
+
+#[test]
+fn converting_raw_fn_type_duplicate_const() {
+    let input = InputSpan::new("fn<const N, N; T>([T; N], fn(T) -> Bool) -> Bool");
+    let (_, fn_type) = fn_definition(input).unwrap();
+    let err = fn_type.try_convert().unwrap_err();
+    assert_matches!(
+        err,
+        ConversionError::DuplicateConst { definition, previous }
+            if definition.location_offset() == 12 && previous.location_offset() == 9
+    );
+}
+
+#[test]
+fn converting_raw_fn_type_duplicate_const_in_embedded_fn() {
+    let input = InputSpan::new("fn<const N; T>([T; N], fn<const N>(T) -> Bool) -> Bool");
+    let (_, fn_type) = fn_definition(input).unwrap();
+    let err = fn_type.try_convert().unwrap_err();
+    assert_matches!(
+        err,
+        ConversionError::DuplicateConst { definition, previous }
+            if definition.location_offset() == 32 && previous.location_offset() == 9
+    );
+}
+
+#[test]
+fn converting_raw_fn_type_undefined_type() {
+    let input = InputSpan::new("fn<const N>([T; N], fn(T) -> Bool) -> Bool");
+    let (_, fn_type) = fn_definition(input).unwrap();
+    let err = fn_type.try_convert().unwrap_err();
+    assert_matches!(
+        err,
+        ConversionError::UndefinedTypeParam(definition) if definition.location_offset() == 13
+    );
+}
+
+#[test]
+fn converting_raw_fn_type_undefined_const() {
+    let input = InputSpan::new("fn<T>([T; N], fn(T) -> Bool) -> Bool");
+    let (_, fn_type) = fn_definition(input).unwrap();
+    let err = fn_type.try_convert().unwrap_err();
+    assert_matches!(
+        err,
+        ConversionError::UndefinedConst(definition) if definition.location_offset() == 10
+    );
+}

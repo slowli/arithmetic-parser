@@ -2,8 +2,11 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{FnArgs, FnType, ParamMapping, SubstitutionContext, TupleLength, TypeError, ValueType};
+use crate::{FnArgs, FnType, TupleLength, TypeError, ValueType};
 use arithmetic_parser::{grammars::Grammar, Spanned, SpannedExpr};
+
+mod fns;
+use self::fns::{ParamMapping, SubstitutionContext};
 
 /// Set of equations and constraints on type variables.
 #[derive(Debug, Clone, Default)]

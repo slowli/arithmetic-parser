@@ -47,7 +47,11 @@ impl fmt::Display for FnType {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("fn")?;
 
-        // FIXME: output consts!
+        let free_consts = self
+            .const_params
+            .iter()
+            .filter(|(_, description)| !description.is_external);
+        let free_consts_count = free_consts.clone().count();
 
         let free_params = self
             .type_params
@@ -55,8 +59,23 @@ impl fmt::Display for FnType {
             .filter(|(_, description)| !description.is_external);
         let free_params_count = free_params.clone().count();
 
-        if free_params_count > 0 {
+        if free_consts_count + free_params_count > 0 {
             formatter.write_str("<")?;
+
+            if free_consts_count > 0 {
+                formatter.write_str("const ")?;
+                for (i, (&var_idx, _)) in free_consts.enumerate() {
+                    formatter.write_str(TupleLength::const_param(var_idx).as_ref())?;
+                    if i + 1 < free_consts_count {
+                        formatter.write_str(", ")?;
+                    }
+                }
+
+                if free_params_count > 0 {
+                    formatter.write_str("; ")?;
+                }
+            }
+
             for (i, (&var_idx, description)) in free_params.enumerate() {
                 formatter.write_str(ValueType::type_param(var_idx).as_ref())?;
                 if description.maybe_non_linear {
@@ -66,6 +85,7 @@ impl fmt::Display for FnType {
                     formatter.write_str(", ")?;
                 }
             }
+
             formatter.write_str(">")?;
         }
 
@@ -495,6 +515,19 @@ impl PartialEq for ValueType {
             (Self::TypeParam(x), Self::TypeParam(y)) => x == y,
             (Self::Tuple(xs), Self::Tuple(ys)) => xs == ys,
 
+            (
+                Self::Slice { element, length },
+                Self::Slice {
+                    element: other_element,
+                    length: other_length,
+                },
+            ) => length == other_length && element == other_element,
+
+            (Self::Tuple(xs), Self::Slice { element, length })
+            | (Self::Slice { element, length }, Self::Tuple(xs)) => {
+                *length == TupleLength::Exact(xs.len()) && xs.iter().all(|x| x == element.as_ref())
+            }
+
             // FIXME: function equality?
             _ => false,
         }
@@ -529,6 +562,20 @@ impl fmt::Display for ValueType {
                 length: TupleLength::Arbitrary,
             } => {
                 write!(formatter, "[{}]", element)
+            }
+            Self::Slice {
+                element,
+                length: TupleLength::Exact(len),
+            } => {
+                // Format slice as a tuple since its size is statically known.
+                formatter.write_str("(")?;
+                for i in 0..*len {
+                    fmt::Display::fmt(element, formatter)?;
+                    if i + 1 < *len {
+                        formatter.write_str(", ")?;
+                    }
+                }
+                formatter.write_str(")")
             }
             Self::Slice { element, length } => {
                 write!(formatter, "[{}; {}]", element, length)
@@ -624,5 +671,3 @@ pub(crate) enum SubstitutionContext {
     /// with type params.
     ParamsToVars,
 }
-
-// FIXME: test Display

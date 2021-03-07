@@ -6,6 +6,7 @@ use std::{
 
 mod env;
 mod error;
+mod parser;
 mod substitutions;
 
 pub use self::{env::TypeEnvironment, error::TypeError};

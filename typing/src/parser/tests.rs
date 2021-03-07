@@ -23,9 +23,25 @@ fn fn_type_params() {
     assert_eq!(
         type_params
             .iter()
-            .map(|param| *param.fragment())
+            .map(|(param, _)| *param.fragment())
             .collect::<Vec<_>>(),
         vec!["T", "U"]
+    );
+}
+
+#[test]
+fn fn_type_params_with_bounds() {
+    let input = InputSpan::new("<T: ?Lin, U>");
+    let (rest, (const_params, type_params)) = fn_params(input).unwrap();
+
+    assert!(rest.fragment().is_empty());
+    assert!(const_params.is_empty());
+    assert_eq!(
+        type_params
+            .iter()
+            .map(|(param, bounds)| (*param.fragment(), bounds.maybe_non_linear))
+            .collect::<Vec<_>>(),
+        vec![("T", true), ("U", false)]
     );
 }
 
@@ -40,7 +56,7 @@ fn fn_params_mixed() {
     assert_eq!(
         type_params
             .iter()
-            .map(|param| *param.fragment())
+            .map(|(param, _)| *param.fragment())
             .collect::<Vec<_>>(),
         vec!["T", "U"]
     );
@@ -151,7 +167,7 @@ fn fn_type_with_type_params() {
     assert!(rest.fragment().is_empty());
     assert!(fn_type.const_params.is_empty());
     assert_eq!(fn_type.type_params.len(), 1);
-    assert_eq!(*fn_type.type_params[0].fragment(), "T");
+    assert_eq!(*fn_type.type_params[0].0.fragment(), "T");
     assert_eq!(fn_type.args.len(), 3);
     assert_matches!(fn_type.args[1], RawValueType::Ident(ident) if *ident.fragment() == "T");
     assert_matches!(fn_type.return_type, RawValueType::Ident(ident) if *ident.fragment() == "T");

@@ -37,7 +37,7 @@ impl RawValueType<'_> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct RawFnType<'a> {
     const_params: Vec<InputSpan<'a>>,
-    type_params: Vec<InputSpan<'a>>,
+    type_params: Vec<(InputSpan<'a>, RawTypeParamBounds)>,
     args: Vec<RawValueType<'a>>,
     return_type: RawValueType<'a>,
 }
@@ -46,6 +46,11 @@ pub struct RawFnType<'a> {
 pub enum RawTupleLength<'a> {
     Dynamic,
     Ident(InputSpan<'a>),
+}
+
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct RawTypeParamBounds {
+    maybe_non_linear: bool,
 }
 
 /// Whitespace and comments.
@@ -115,23 +120,34 @@ fn slice_definition(input: InputSpan<'_>) -> NomResult<'_, (RawValueType<'_>, Ra
     )(input)
 }
 
+fn type_bounds(input: InputSpan<'_>) -> NomResult<'_, RawTypeParamBounds> {
+    map(terminated(tag("?Lin"), ws), |_| RawTypeParamBounds {
+        maybe_non_linear: true,
+    })(input)
+}
+
+fn type_params(input: InputSpan<'_>) -> NomResult<'_, Vec<(InputSpan<'_>, RawTypeParamBounds)>> {
+    let maybe_type_bounds = opt(preceded(tuple((ws, tag_char(':'), ws)), type_bounds));
+    let type_param = tuple((ident, map(maybe_type_bounds, Option::unwrap_or_default)));
+    separated_list1(comma_sep, type_param)(input)
+}
+
+type FnParams<'a> = (Vec<InputSpan<'a>>, Vec<(InputSpan<'a>, RawTypeParamBounds)>);
+
 /// Function params, including `<>` brackets.
-fn fn_params(input: InputSpan<'_>) -> NomResult<'_, (Vec<InputSpan<'_>>, Vec<InputSpan<'_>>)> {
+fn fn_params(input: InputSpan<'_>) -> NomResult<'_, FnParams> {
     let semicolon = tuple((ws, tag_char(';'), ws));
     let const_params = preceded(
         terminated(tag("const"), ws),
         separated_list1(comma_sep, ident),
     );
-    let type_params = separated_list1(comma_sep, ident);
 
     let params_parser = alt((
         map(
             tuple((const_params, opt(preceded(semicolon, type_params)))),
             |(const_params, type_params)| (const_params, type_params.unwrap_or_default()),
         ),
-        map(separated_list1(comma_sep, ident), |type_params| {
-            (vec![], type_params)
-        }),
+        map(type_params, |type_params| (vec![], type_params)),
     ));
 
     preceded(

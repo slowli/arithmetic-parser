@@ -10,6 +10,8 @@ use arithmetic_parser::{
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod type_hint_tests;
 
 /// Analogue of `Scope` for type information.
 #[derive(Debug, Default)]

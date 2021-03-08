@@ -22,7 +22,7 @@ fn hash_fn_type() -> FnType {
 /// ```text
 /// fn<const N; T, U>([T; N], fn(T) -> U) -> [U; N]
 /// ```
-fn map_fn_type() -> FnType {
+pub fn map_fn_type() -> FnType {
     let map_fn = FnType {
         args: FnArgs::List(vec![ValueType::TypeParam(0)]),
         return_type: ValueType::TypeParam(1),
@@ -140,7 +140,7 @@ fn filter_fn_type_display() {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct NumGrammar;
+pub struct NumGrammar;
 
 impl ParseLiteral for NumGrammar {
     type Lit = f32;
@@ -153,8 +153,8 @@ impl ParseLiteral for NumGrammar {
 impl Grammar for NumGrammar {
     type Type = ValueType;
 
-    fn parse_type(_input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
-        unimplemented!()
+    fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
+        ValueType::parse(input)
     }
 }
 

@@ -83,6 +83,11 @@ impl FnType {
         }
     }
 
+    /// Returns `true` iff the function has at least one const or type param.
+    pub fn is_parametric(&self) -> bool {
+        !self.const_params.is_empty() || !self.type_params.is_empty()
+    }
+
     /// Checks if a type variable with the specified index is linear.
     pub(crate) fn is_linear(&self, var_idx: usize) -> bool {
         !self.type_params[&var_idx].maybe_non_linear

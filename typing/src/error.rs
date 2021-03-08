@@ -51,6 +51,8 @@ pub enum TypeError {
     Unsupported(UnsupportedType),
     /// Unsupported use of destructuring in an lvalue or function arguments.
     UnsupportedDestructure,
+    /// Unsupported use of type or const params in function declaration.
+    UnsupportedParam,
 }
 
 impl fmt::Display for TypeError {
@@ -99,7 +101,10 @@ impl fmt::Display for TypeError {
 
             Self::Unsupported(ty) => write!(formatter, "Unsupported {}", ty),
             Self::UnsupportedDestructure => {
-                formatter.write_str("Destructuring is not supported yet")
+                formatter.write_str("Destructuring with middle is not supported yet")
+            }
+            Self::UnsupportedParam => {
+                formatter.write_str("Type params in declared function types is not supported yet")
             }
         }
     }

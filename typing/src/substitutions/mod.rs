@@ -189,7 +189,20 @@ impl Substitutions {
     }
 
     fn unify_fn_types(&mut self, lhs: &FnType, rhs: &FnType) -> Result<(), TypeError> {
-        // First, check if the argument number matches. If not, we can error immediately.
+        // Check if both functions are parametric.
+        // Can occur, for example, with function declarations:
+        //
+        // ```
+        // identity: fn<T>(T) -> T = |x| x;
+        // ```
+        //
+        // We don't handle such cases yet, because unifying functions with type params
+        // is quite difficult.
+        if lhs.is_parametric() && rhs.is_parametric() {
+            return Err(TypeError::UnsupportedParam);
+        }
+
+        // Check if the argument number matches. If not, we can error immediately.
         if let (FnArgs::List(lhs_list), FnArgs::List(rhs_list)) = (&lhs.args, &rhs.args) {
             if lhs_list.len() != rhs_list.len() {
                 return Err(TypeError::ArgLenMismatch {

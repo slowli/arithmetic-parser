@@ -9,9 +9,6 @@ use arithmetic_parser::{BinaryOp, UnsupportedType};
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum TypeError {
-    /// Trying to unify tuples of different sizes.
-    TupleLenMismatch(usize, usize),
-
     /// Error trying to unify operands of a binary operation.
     OperandMismatch {
         /// LHS type.
@@ -58,12 +55,6 @@ pub enum TypeError {
 impl fmt::Display for TypeError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::TupleLenMismatch(first, second) => write!(
-                formatter,
-                "Tuple with {} elements cannot be unified with a tuple with {} elements",
-                first, second
-            ),
-
             Self::OperandMismatch { op, .. } => write!(
                 formatter,
                 "Operands of {} operation must have the same type",
@@ -124,7 +115,7 @@ impl TypeError {
         op: BinaryOp,
     ) -> Self {
         match self {
-            TypeError::TupleLenMismatch(..) | TypeError::IncompatibleTypes(..) => {
+            TypeError::IncompatibleLengths(..) | TypeError::IncompatibleTypes(..) => {
                 TypeError::OperandMismatch {
                     lhs_ty: substitutions.sanitize_type(None, lhs_ty),
                     rhs_ty: substitutions.sanitize_type(None, rhs_ty),

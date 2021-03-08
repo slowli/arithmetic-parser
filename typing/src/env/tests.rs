@@ -457,7 +457,11 @@ fn incorrect_function_arity() {
     let err = type_context
         .process_statements(&block.statements)
         .unwrap_err();
-    assert_matches!(err.extra, TypeError::TupleLenMismatch(2, 1));
+
+    assert_matches!(
+        err.extra,
+        TypeError::IncompatibleLengths(TupleLength::Exact(2), TupleLength::Exact(1))
+    );
 }
 
 #[test]

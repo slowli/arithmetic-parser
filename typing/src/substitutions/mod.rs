@@ -134,7 +134,10 @@ impl Substitutions {
 
             (Tuple(types_l), Tuple(types_r)) => {
                 if types_l.len() != types_r.len() {
-                    return Err(TypeError::TupleLenMismatch(types_l.len(), types_r.len()));
+                    return Err(TypeError::IncompatibleLengths(
+                        TupleLength::Exact(types_l.len()),
+                        TupleLength::Exact(types_r.len()),
+                    ));
                 }
                 for (type_l, type_r) in types_l.iter().zip(types_r) {
                     self.unify(type_l, type_r)?;

@@ -180,6 +180,9 @@ fn unsupported_type_param_in_generic_fn() {
 }
 
 #[test]
+#[ignore]
+// TODO: type param indexes are assigned incorrectly.
+// TODO: to use such a function, it's necessary to know how to unify parametric fns
 fn widening_fn_arg_via_type_hint() {
     let code = r#"
         foo = |xs, map_fn: fn<Z>(Z) -> Z| {
@@ -191,7 +194,10 @@ fn widening_fn_arg_via_type_hint() {
     type_env.insert_type("map", map_fn_type().into());
     type_env.process_statements(&block.statements).unwrap();
 
-    assert_eq!(type_env["foo"].to_string(), "???");
+    assert_eq!(
+        type_env["foo"].to_string(),
+        "fn<const N; T>([T; N], fn<U>(U) -> U) -> [T; N]"
+    );
 }
 
 #[test]

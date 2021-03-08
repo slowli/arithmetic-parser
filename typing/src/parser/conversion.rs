@@ -183,6 +183,7 @@ impl<'a> ParsedValueType<'a> {
                         })?;
                         TupleLength::Param(const_param)
                     }
+                    ParsedTupleLength::Any => TupleLength::Any,
                     ParsedTupleLength::Dynamic => TupleLength::Dynamic,
                 };
                 ValueType::Slice {

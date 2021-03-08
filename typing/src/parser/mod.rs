@@ -80,6 +80,8 @@ impl<'a> ParsedFnType<'a> {
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum ParsedTupleLength<'a> {
+    /// Const placeholder (`_`).
+    Any,
     /// Dynamic tuple length. This length is *implicit*, as in `[Num]`.
     Dynamic,
     /// Reference to a const; for example, `N` in `[Num; N]`.
@@ -140,13 +142,14 @@ fn slice_definition(
     input: InputSpan<'_>,
 ) -> NomResult<'_, (ParsedValueType<'_>, ParsedTupleLength<'_>)> {
     let semicolon = tuple((ws, tag_char(';'), ws));
-    let tuple_len = map(opt(preceded(semicolon, ident)), |maybe_ident| {
-        if let Some(ident) = maybe_ident {
-            ParsedTupleLength::Ident(ident)
-        } else {
-            ParsedTupleLength::Dynamic
-        }
-    });
+    let tuple_len = map(
+        opt(preceded(semicolon, ident)),
+        |maybe_ident| match maybe_ident {
+            Some(ident) if *ident.fragment() == "_" => ParsedTupleLength::Any,
+            Some(ident) => ParsedTupleLength::Ident(ident),
+            None => ParsedTupleLength::Dynamic,
+        },
+    );
 
     preceded(
         terminated(tag_char('['), ws),

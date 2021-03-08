@@ -79,15 +79,37 @@ impl Substitutions {
     }
 
     pub fn assign_new_type(&mut self, ty: &mut ValueType) {
-        if let ValueType::Any = ty {
-            *ty = ValueType::TypeVar(self.type_var_count);
-            self.type_var_count += 1;
-        } else if let ValueType::Tuple(fragments) = ty {
-            for fragment in fragments {
-                self.assign_new_type(fragment);
+        match ty {
+            ValueType::Number
+            | ValueType::Bool
+            | ValueType::TypeVar(_)
+            | ValueType::TypeParam(_) => {
+                // Do nothing.
+            }
+
+            ValueType::Any => {
+                *ty = ValueType::TypeVar(self.type_var_count);
+                self.type_var_count += 1;
+            }
+
+            ValueType::Function(fn_type) => {
+                for referenced_ty in fn_type.arg_and_return_types_mut() {
+                    self.assign_new_type(referenced_ty);
+                }
+            }
+            ValueType::Tuple(elements) => {
+                for element in elements {
+                    self.assign_new_type(element);
+                }
+            }
+            ValueType::Slice { element, length } => {
+                if matches!(length, TupleLength::Any) {
+                    *length = TupleLength::Var(self.const_var_count);
+                    self.const_var_count += 1;
+                }
+                self.assign_new_type(element);
             }
         }
-        // FIXME: What about other types?
     }
 
     /// Unifies types in `lhs` and `rhs`.

@@ -153,6 +153,8 @@ impl fmt::Display for FnArgs {
 pub enum TupleLength {
     /// Dynamic length that cannot be found from inference.
     Dynamic,
+    /// Wildcard length.
+    Any,
     /// Exact known length.
     Exact(usize),
     /// Length variable. In contrast to `Param`s, `Var`s are used exclusively during
@@ -166,6 +168,7 @@ impl fmt::Display for TupleLength {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Dynamic => formatter.write_str("*"),
+            Self::Any => formatter.write_str("_"),
             Self::Exact(len) => fmt::Display::fmt(len, formatter),
             Self::Var(idx) | Self::Param(idx) => {
                 formatter.write_str(Self::const_param(*idx).as_ref())

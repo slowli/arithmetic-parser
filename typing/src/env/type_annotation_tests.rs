@@ -1,4 +1,4 @@
-//! Tests with explicit type hints.
+//! Tests with explicit type annotations.
 
 use assert_matches::assert_matches;
 
@@ -128,7 +128,7 @@ fn invalid_type_hint_with_fn_declaration() {
 
 #[test]
 fn widening_type_hint_with_generic_slice_arg() {
-    // Without type hint on `xs` it would be interpreted as a number.
+    // Without a type annotation on `xs` it would be interpreted as a number.
     let code = "foo = |xs: [_; _]| xs + 1;";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -143,7 +143,7 @@ fn widening_type_hint_with_generic_slice_arg() {
 
 #[test]
 fn widening_type_hint_with_slice_arg() {
-    // Without type hint on `xs` it would be interpreted as a number.
+    // Without a type annotation on `xs` it would be interpreted as a number.
     let code = "foo = |xs: [Num; _]| xs + 1;";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();

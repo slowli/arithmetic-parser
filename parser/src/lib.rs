@@ -53,7 +53,7 @@
 //!   keywords in general.
 //! - Functions are only defined via the closure syntax.
 //! - There is "rest" destructuting for tuples and function arguments.
-//! - Type hints are placed within tuple elements, for example, `(x: Num, _) = y`.
+//! - Type annotations are placed within tuple elements, for example, `(x: Num, _) = y`.
 //!
 //! # Crate features
 //!
@@ -157,7 +157,7 @@ mod ops;
 mod parser;
 mod spans;
 
-/// Arithmetic expression with an abstract types for type hints and literals.
+/// Arithmetic expression with an abstract types for type annotations and literals.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Expr<'a, T: Grammar> {

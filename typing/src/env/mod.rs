@@ -15,7 +15,7 @@ use arithmetic_parser::{
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
-mod type_hint_tests;
+mod type_annotation_tests;
 
 /// Environment containing type information on named variables.
 #[derive(Debug, Clone, Default)]
@@ -235,7 +235,7 @@ impl TypeProcessor<'_> {
                 substitutions
                     .assign_new_type(&mut value_type)
                     .map_err(|err| ty.as_ref().unwrap().copy_with_extra(err))?;
-                // `unwrap` is safe: an error can only occur with a type hint present.
+                // `unwrap` is safe: an error can only occur with a type annotation present.
 
                 self.insert_type(lvalue.fragment(), value_type.clone());
                 Ok(value_type)

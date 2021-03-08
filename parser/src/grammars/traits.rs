@@ -177,7 +177,7 @@ pub trait Grammar: ParseLiteral {
     /// Type of the type annotation used in the grammar.
     type Type: Clone + fmt::Debug;
 
-    /// Attempts to parse a type hint.
+    /// Attempts to parse a type annotation.
     ///
     /// # Return value
     ///

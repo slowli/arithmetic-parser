@@ -72,7 +72,7 @@ pub enum ErrorKind {
     /// An example of input triggering this error is `1(2, x)`; `1` is used as the function
     /// identifier.
     LiteralName,
-    /// Error parsing type hint.
+    /// Error parsing type annotation.
     Type(anyhow::Error),
     /// Unary or binary operation switched off in the parser features.
     UnsupportedOp(Op),
@@ -110,7 +110,7 @@ impl fmt::Display for ErrorKind {
             Self::Literal(e) => write!(formatter, "Invalid literal: {}", e),
             Self::LiteralName => formatter.write_str("Literal used in place of an identifier"),
 
-            Self::Type(e) => write!(formatter, "Invalid type hint: {}", e),
+            Self::Type(e) => write!(formatter, "Invalid type annotation: {}", e),
 
             Self::UnsupportedOp(op) => write!(
                 formatter,

@@ -165,7 +165,8 @@ impl ErrorKind {
         matches!(self, Self::Incomplete)
     }
 
-    pub(crate) fn with_span<'a, T>(self, span: &Spanned<'a, T>) -> Error<'a> {
+    #[doc(hidden)]
+    pub fn with_span<'a, T>(self, span: &Spanned<'a, T>) -> Error<'a> {
         Error {
             inner: span.copy_with_extra(self),
         }

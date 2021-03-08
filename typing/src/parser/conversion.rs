@@ -1,12 +1,14 @@
 //! Logic for converting `Parsed*` types into their "main" counterparts.
 
+use nom::Err as NomErr;
+
 use std::{collections::HashMap, convert::TryFrom, fmt};
 
 use crate::{
     parser::{ParsedFnType, ParsedTupleLength, ParsedValueType},
     ConstParamDescription, FnArgs, FnType, TupleLength, TypeParamDescription, ValueType,
 };
-use arithmetic_parser::{InputSpan, LocatedSpan};
+use arithmetic_parser::{ErrorKind as ParseErrorKind, InputSpan, LocatedSpan, NomResult};
 
 /// Kinds of errors that can occur when converting `Parsed*` types into their "main" counterparts.
 #[derive(Debug)]
@@ -59,6 +61,8 @@ impl fmt::Display for ConversionErrorKind {
     }
 }
 
+impl std::error::Error for ConversionErrorKind {}
+
 #[derive(Debug)]
 pub struct ConversionError<Span> {
     inner: LocatedSpan<Span, ConversionErrorKind>,
@@ -87,6 +91,12 @@ impl<Span> fmt::Display for ConversionError<Span> {
             self.inner.location_offset(),
             self.kind()
         )
+    }
+}
+
+impl<Span: fmt::Debug> std::error::Error for ConversionError<Span> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.inner.extra)
     }
 }
 
@@ -189,6 +199,18 @@ impl<'a> TryFrom<ParsedValueType<'a>> for ValueType {
 
     fn try_from(value: ParsedValueType<'a>) -> Result<Self, Self::Error> {
         value.try_convert(&ConversionState::default())
+    }
+}
+
+impl ValueType {
+    pub fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
+        let (rest, parsed) = ParsedValueType::parse(input)?;
+        let ty = ValueType::try_from(parsed).map_err(|err| {
+            let err_span = err.main_span();
+            let err = ParseErrorKind::Type(err.inner.extra.into()).with_span(&err_span);
+            NomErr::Failure(err)
+        })?;
+        Ok((rest, ty))
     }
 }
 

@@ -163,28 +163,8 @@ fn unsupported_type_param_in_generic_fn() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
+    assert_eq!(*err.fragment(), "fn<Arg>(Arg) -> Arg");
     assert_matches!(err.extra, TypeError::UnsupportedParam);
-}
-
-#[test]
-#[ignore]
-// TODO: type param indexes are assigned incorrectly.
-// TODO: to use such a function, it's necessary to know how to unify parametric fns
-fn widening_fn_arg_via_type_hint() {
-    let code = r#"
-        foo = |xs, map_fn: fn<Z>(Z) -> Z| {
-            map_fn(xs.map(map_fn))
-        };
-    "#;
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
-    let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("map", map_fn_type().into());
-    type_env.process_statements(&block.statements).unwrap();
-
-    assert_eq!(
-        type_env["foo"].to_string(),
-        "fn<const N; T>([T; N], fn<U>(U) -> U) -> [T; N]"
-    );
 }
 
 #[test]
@@ -194,6 +174,7 @@ fn unsupported_const_param_in_generic_fn() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
+    assert_eq!(*err.fragment(), "fn<const N>([Num; N]) -> [Num; N]");
     assert_matches!(err.extra, TypeError::UnsupportedParam);
 }
 

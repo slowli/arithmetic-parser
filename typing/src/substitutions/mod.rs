@@ -78,14 +78,14 @@ impl Substitutions {
         len
     }
 
-    pub fn assign_new_type(&mut self, ty: &mut ValueType) {
+    pub fn assign_new_type(&mut self, ty: &mut ValueType) -> Result<(), TypeError> {
         match ty {
-            ValueType::Number
-            | ValueType::Bool
-            | ValueType::TypeVar(_)
-            | ValueType::TypeParam(_) => {
+            ValueType::Number | ValueType::Bool | ValueType::TypeVar(_) => {
                 // Do nothing.
             }
+
+            // Checked previously when considering a function.
+            ValueType::TypeParam(_) => unreachable!(),
 
             ValueType::Any => {
                 *ty = ValueType::TypeVar(self.type_var_count);
@@ -93,13 +93,24 @@ impl Substitutions {
             }
 
             ValueType::Function(fn_type) => {
+                if fn_type.is_parametric() {
+                    // Can occur, for example, with function declarations:
+                    //
+                    // ```
+                    // identity: fn<T>(T) -> T = |x| x;
+                    // ```
+                    //
+                    // We don't handle such cases yet, because unifying functions with type params
+                    // is quite difficult.
+                    return Err(TypeError::UnsupportedParam);
+                }
                 for referenced_ty in fn_type.arg_and_return_types_mut() {
-                    self.assign_new_type(referenced_ty);
+                    self.assign_new_type(referenced_ty)?;
                 }
             }
             ValueType::Tuple(elements) => {
                 for element in elements {
-                    self.assign_new_type(element);
+                    self.assign_new_type(element)?;
                 }
             }
             ValueType::Slice { element, length } => {
@@ -107,12 +118,16 @@ impl Substitutions {
                     *length = TupleLength::Var(self.const_var_count);
                     self.const_var_count += 1;
                 }
-                self.assign_new_type(element);
+                self.assign_new_type(element)?;
             }
         }
+        Ok(())
     }
 
     /// Unifies types in `lhs` and `rhs`.
+    ///
+    /// - LHS corresponds to the lvalue in assignments and to called function signature in fn calls.
+    /// - RHS corresponds to the rvalue in assignments and to the type of the called function.
     ///
     /// # Errors
     ///
@@ -120,7 +135,13 @@ impl Substitutions {
     pub fn unify(&mut self, lhs: &ValueType, rhs: &ValueType) -> Result<(), TypeError> {
         use self::ValueType::*;
 
-        match (lhs, rhs) {
+        let resolved_lhs = self.fast_resolve(lhs).to_owned();
+        let resolved_rhs = self.fast_resolve(rhs).to_owned();
+
+        // **NB.** LHS and RHS should never switch sides; the side is important for
+        // accuracy of error reporting, and for some cases of type inference (e.g.,
+        // instantiation of parametric functions).
+        match (&resolved_lhs, &resolved_rhs) {
             (lhs, rhs) if lhs == rhs => {
                 // We already know that types are equal.
                 Ok(())
@@ -132,15 +153,15 @@ impl Substitutions {
                 unreachable!("Type params must be transformed into vars before unification")
             }
 
-            (Tuple(types_l), Tuple(types_r)) => {
-                if types_l.len() != types_r.len() {
+            (Tuple(lhs_types), Tuple(rhs_types)) => {
+                if lhs_types.len() != rhs_types.len() {
                     return Err(TypeError::IncompatibleLengths(
-                        TupleLength::Exact(types_l.len()),
-                        TupleLength::Exact(types_r.len()),
+                        TupleLength::Exact(lhs_types.len()),
+                        TupleLength::Exact(rhs_types.len()),
                     ));
                 }
-                for (type_l, type_r) in types_l.iter().zip(types_r) {
-                    self.unify(type_l, type_r)?;
+                for (lhs_type, rhs_type) in lhs_types.iter().zip(rhs_types) {
+                    self.unify(lhs_type, rhs_type)?;
                 }
                 Ok(())
             }
@@ -194,16 +215,7 @@ impl Substitutions {
     }
 
     fn unify_fn_types(&mut self, lhs: &FnType, rhs: &FnType) -> Result<(), TypeError> {
-        // Check if both functions are parametric.
-        // Can occur, for example, with function declarations:
-        //
-        // ```
-        // identity: fn<T>(T) -> T = |x| x;
-        // ```
-        //
-        // We don't handle such cases yet, because unifying functions with type params
-        // is quite difficult.
-        if lhs.is_parametric() && rhs.is_parametric() {
+        if lhs.is_parametric() {
             return Err(TypeError::UnsupportedParam);
         }
 
@@ -224,7 +236,13 @@ impl Substitutions {
             (&instantiated_lhs.args, &instantiated_rhs.args)
         {
             for (lhs_arg, rhs_arg) in lhs_list.iter().zip(rhs_list) {
-                self.unify(lhs_arg, rhs_arg)?;
+                // Swapping args is intentional. To see why, consider a function
+                // `fn(T, U) -> V` called as `fn(A, B) -> C` (`T`, ... `C` are types).
+                // In this case, the first arg of actual type `A` will be assigned to type `T`
+                // (i.e., `T` is LHS and `A` is RHS); same with `U` and `B`. In contrast,
+                // after function execution the return value of type `V` will be assigned
+                // to type `C`. (I.e., unification of return values is not swapped.)
+                self.unify(rhs_arg, lhs_arg)?;
             }
         }
 
@@ -233,7 +251,7 @@ impl Substitutions {
 
     /// Instantiates a functional type by replacing all type arguments with new type vars.
     fn instantiate_function(&mut self, fn_type: &FnType) -> Result<FnType, TypeError> {
-        if fn_type.type_params.is_empty() && fn_type.const_params.is_empty() {
+        if !fn_type.is_parametric() {
             // Fast path: just clone the function type.
             return Ok(fn_type.clone());
         }
@@ -335,14 +353,13 @@ impl Substitutions {
     ///
     /// Returns an error if the unification is impossible.
     fn unify_var(&mut self, var_idx: usize, ty: &ValueType) -> Result<(), TypeError> {
-        if let Some(subst) = self.eqs.get(&var_idx).cloned() {
-            return self.unify(&subst, ty);
-        }
-        if let ValueType::TypeVar(idx) = ty {
-            if let Some(subst) = self.eqs.get(&idx).cloned() {
-                return self.unify(&ValueType::TypeVar(var_idx), &subst);
-            }
-        }
+        // variables should be resolved in `unify`.
+        debug_assert!(!self.eqs.contains_key(&var_idx));
+        debug_assert!(if let ValueType::TypeVar(idx) = ty {
+            !self.eqs.contains_key(idx)
+        } else {
+            true
+        });
 
         if self.check_occurrence(var_idx, ty) {
             Err(TypeError::RecursiveType(
@@ -412,10 +429,10 @@ impl Substitutions {
         arg_types: Vec<ValueType>,
     ) -> Result<ValueType, TypeError> {
         let mut return_type = ValueType::Any;
-        self.assign_new_type(&mut return_type);
+        self.assign_new_type(&mut return_type)?;
 
         let called_fn_type = FnType::new(arg_types, return_type.clone());
-        self.unify(definition, &ValueType::Function(Box::new(called_fn_type)))
+        self.unify(&ValueType::Function(Box::new(called_fn_type)), definition)
             .map(|()| return_type)
     }
 
@@ -432,7 +449,6 @@ impl Substitutions {
         self.mark_as_linear(lhs_ty)?;
         self.mark_as_linear(rhs_ty)?;
 
-        // Try to determine the case right away.
         let resolved_lhs_ty = self.fast_resolve(lhs_ty);
         let resolved_rhs_ty = self.fast_resolve(rhs_ty);
 

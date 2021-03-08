@@ -169,7 +169,10 @@ impl TypeEnvironment {
                 } else {
                     ValueType::Any
                 };
-                substitutions.assign_new_type(&mut value_type);
+                substitutions
+                    .assign_new_type(&mut value_type)
+                    .map_err(|err| ty.as_ref().unwrap().copy_with_extra(err))?;
+                // `unwrap` is safe: an error can only occur with a type hint present.
 
                 self.scopes
                     .last_mut()

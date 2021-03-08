@@ -454,7 +454,7 @@ fn incorrect_function_arity() {
 
     assert_matches!(
         err.extra,
-        TypeError::IncompatibleLengths(TupleLength::Exact(2), TupleLength::Exact(1))
+        TypeError::IncompatibleLengths(TupleLength::Exact(1), TupleLength::Exact(2))
     );
 }
 

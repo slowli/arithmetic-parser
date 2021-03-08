@@ -19,9 +19,9 @@ pub enum TypeError {
         op: BinaryOp,
     },
 
-    /// Trying to unify incompatible types.
+    /// Trying to unify incompatible types. The first type is LHS, the second one is RHS.
     IncompatibleTypes(ValueType, ValueType),
-    /// Incompatible tuple lengths.
+    /// Incompatible tuple lengths. The first length is LHS, the second one is RHS.
     IncompatibleLengths(TupleLength, TupleLength),
 
     /// Trying to call a non-function type.
@@ -41,14 +41,22 @@ pub enum TypeError {
     /// Trying to unify a type with a type containing it.
     RecursiveType(ValueType),
 
-    /// Non-linear type.
+    /// Non-linear type encountered where linearity is required.
     NonLinearType(ValueType),
 
     /// Language construct not supported by the type inference.
     Unsupported(UnsupportedType),
     /// Unsupported use of destructuring in an lvalue or function arguments.
+    ///
+    /// Destructuring with a specified middle, such as `(x, ...ys)` are not supported yet.
     UnsupportedDestructure,
     /// Unsupported use of type or const params in function declaration.
+    ///
+    /// Type or const params are currently not supported in type annotations, such as
+    ///
+    /// ```text
+    /// identity: fn<T>(T) -> T = |x| x;
+    /// ```
     UnsupportedParam,
 }
 
@@ -100,6 +108,8 @@ impl fmt::Display for TypeError {
         }
     }
 }
+
+impl std::error::Error for TypeError {}
 
 impl TypeError {
     /// Creates an error for an lvalue type not supported by the interpreter.

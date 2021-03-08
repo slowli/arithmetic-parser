@@ -152,7 +152,7 @@ impl TypeProcessor<'_> {
 
             Expr::Function { name, args } => {
                 let fn_type = self.process_expr_inner(substitutions, name)?;
-                self.process_fn_call(substitutions, expr, fn_type, args.iter())
+                self.process_fn_call(substitutions, expr, &fn_type, args.iter())
             }
 
             Expr::Method {
@@ -162,7 +162,7 @@ impl TypeProcessor<'_> {
             } => {
                 let fn_type = self.process_var(name)?;
                 let all_args = iter::once(receiver.as_ref()).chain(args);
-                self.process_fn_call(substitutions, expr, fn_type, all_args)
+                self.process_fn_call(substitutions, expr, &fn_type, all_args)
             }
 
             Expr::Block(block) => {
@@ -211,11 +211,10 @@ impl TypeProcessor<'_> {
         for statement in &block.statements {
             self.process_statement(substitutions, statement)?;
         }
-        if let Some(return_value) = &block.return_value {
-            self.process_expr_inner(substitutions, return_value)
-        } else {
-            Ok(ValueType::void())
-        }
+        block.return_value.as_ref().map_or_else(
+            || Ok(ValueType::void()),
+            |return_value| self.process_expr_inner(substitutions, return_value),
+        )
     }
 
     /// Processes an lvalue type by replacing `Any` types with newly created type vars.
@@ -226,12 +225,7 @@ impl TypeProcessor<'_> {
     ) -> Result<ValueType, Spanned<'a, TypeError>> {
         match &lvalue.extra {
             Lvalue::Variable { ty } => {
-                let mut value_type = if let Some(ty) = ty {
-                    // `ty` may contain `Any` elements, so we need to replace them with type vars.
-                    ty.extra.clone()
-                } else {
-                    ValueType::Any
-                };
+                let mut value_type = ty.as_ref().map_or(ValueType::Any, |ty| ty.extra.clone());
                 substitutions
                     .assign_new_type(&mut value_type)
                     .map_err(|err| ty.as_ref().unwrap().copy_with_extra(err))?;
@@ -277,7 +271,7 @@ impl TypeProcessor<'_> {
         &mut self,
         substitutions: &mut Substitutions,
         call_expr: &SpannedExpr<'a, T>,
-        fn_type: ValueType,
+        fn_type: &ValueType,
         args: impl Iterator<Item = &'it SpannedExpr<'a, T>>,
     ) -> Result<ValueType, Spanned<'a, TypeError>>
     where
@@ -288,7 +282,7 @@ impl TypeProcessor<'_> {
             .collect();
         let arg_types = arg_types?;
         let return_type = substitutions
-            .unify_fn_call(&fn_type, arg_types)
+            .unify_fn_call(fn_type, arg_types)
             .map_err(|e| call_expr.copy_with_extra(e))?;
 
         Ok(return_type)
@@ -307,7 +301,7 @@ impl TypeProcessor<'_> {
         let inner_type = self.process_expr_inner(substitutions, inner)?;
         match op.extra {
             UnaryOp::Not => {
-                substitutions.unify_spanned_expr(&inner_type, inner, ValueType::Bool)?;
+                substitutions.unify_spanned_expr(&inner_type, inner, &ValueType::Bool)?;
                 Ok(ValueType::Bool)
             }
 
@@ -353,8 +347,8 @@ impl TypeProcessor<'_> {
             }
 
             BinaryOp::And | BinaryOp::Or => {
-                substitutions.unify_spanned_expr(&lhs_ty, lhs, ValueType::Bool)?;
-                substitutions.unify_spanned_expr(&rhs_ty, rhs, ValueType::Bool)?;
+                substitutions.unify_spanned_expr(&lhs_ty, lhs, &ValueType::Bool)?;
+                substitutions.unify_spanned_expr(&rhs_ty, rhs, &ValueType::Bool)?;
                 Ok(ValueType::Bool)
             }
 

@@ -31,17 +31,18 @@ impl FnType {
             params
                 .iter()
                 .filter_map(|(var_idx, description)| {
-                    if let Some(mapped_idx) = mapping.get(var_idx) {
-                        if context == SubstitutionContext::ParamsToVars {
-                            // The params in mapping got instantiated into vars; we must remove them
-                            // from the `type_params`.
-                            None
-                        } else {
-                            Some((*mapped_idx, *description))
-                        }
-                    } else {
-                        Some((*var_idx, *description))
-                    }
+                    mapping.get(var_idx).map_or_else(
+                        || Some((*var_idx, *description)),
+                        |mapped_idx| {
+                            if context == SubstitutionContext::ParamsToVars {
+                                // The params in mapping got instantiated into vars;
+                                // we must remove them from the `type_params`.
+                                None
+                            } else {
+                                Some((*mapped_idx, *description))
+                            }
+                        },
+                    )
                 })
                 .collect()
         }
@@ -264,13 +265,11 @@ impl TupleLength {
                 Self::Param(mapping.constants[&idx])
             }
 
-            Self::Param(idx) if context == SubstitutionContext::ParamsToVars => {
-                if let Some(mapped_idx) = mapping.constants.get(&idx) {
-                    Self::Var(*mapped_idx)
-                } else {
-                    Self::Param(idx)
-                }
-            }
+            Self::Param(idx) if context == SubstitutionContext::ParamsToVars => mapping
+                .constants
+                .get(&idx)
+                .copied()
+                .map_or(Self::Param(idx), Self::Var),
 
             _ => self,
         }
@@ -285,14 +284,11 @@ impl ValueType {
             Self::TypeVar(idx) if context == SubstitutionContext::VarsToParams => {
                 Self::TypeParam(mapping.types[idx])
             }
-            Self::TypeParam(idx) if context == SubstitutionContext::ParamsToVars => {
-                if let Some(mapped_idx) = mapping.types.get(idx) {
-                    Self::TypeVar(*mapped_idx)
-                } else {
-                    // This type param is not mapped; it is retained in the resulting function.
-                    Self::TypeParam(*idx)
-                }
-            }
+            Self::TypeParam(idx) if context == SubstitutionContext::ParamsToVars => mapping
+                .types
+                .get(idx)
+                .copied()
+                .map_or(Self::TypeParam(*idx), Self::TypeVar),
 
             Self::Slice { element, length } => Self::Slice {
                 element: Box::new(element.substitute_type_vars(mapping, context)),

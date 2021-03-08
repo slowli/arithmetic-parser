@@ -133,7 +133,7 @@ impl Substitutions {
     ///
     /// Returns an error if unification is impossible.
     pub fn unify(&mut self, lhs: &ValueType, rhs: &ValueType) -> Result<(), TypeError> {
-        use self::ValueType::*;
+        use self::ValueType::{Function, Slice, Tuple, TypeParam, TypeVar};
 
         let resolved_lhs = self.fast_resolve(lhs).to_owned();
         let resolved_rhs = self.fast_resolve(rhs).to_owned();
@@ -142,12 +142,12 @@ impl Substitutions {
         // accuracy of error reporting, and for some cases of type inference (e.g.,
         // instantiation of parametric functions).
         match (&resolved_lhs, &resolved_rhs) {
-            (lhs, rhs) if lhs == rhs => {
+            (ty, other_ty) if ty == other_ty => {
                 // We already know that types are equal.
                 Ok(())
             }
-            (TypeVar(idx), rhs) => self.unify_var(*idx, rhs),
-            (lhs, TypeVar(idx)) => self.unify_var(*idx, lhs),
+
+            (TypeVar(idx), ty) | (ty, TypeVar(idx)) => self.unify_var(*idx, ty),
 
             (TypeParam(_), _) | (_, TypeParam(_)) => {
                 unreachable!("Type params must be transformed into vars before unification")
@@ -186,11 +186,11 @@ impl Substitutions {
                 self.unify(element, rhs_element)
             }
 
-            (Function(fn_l), Function(fn_r)) => self.unify_fn_types(fn_l, fn_r),
+            (Function(lhs_fn), Function(rhs_fn)) => self.unify_fn_types(lhs_fn, rhs_fn),
 
-            (x, y) => Err(TypeError::IncompatibleTypes(
-                self.sanitize_type(None, x),
-                self.sanitize_type(None, y),
+            (ty, other_ty) => Err(TypeError::IncompatibleTypes(
+                self.sanitize_type(None, ty),
+                self.sanitize_type(None, other_ty),
             )),
         }
     }
@@ -293,14 +293,10 @@ impl Substitutions {
         match ty {
             ValueType::TypeVar(i) if *i == var_idx => true,
 
-            ValueType::TypeVar(i) => {
-                if let Some(subst) = self.eqs.get(i) {
-                    self.check_occurrence(var_idx, subst)
-                } else {
-                    // `ty` points to a different type variable
-                    false
-                }
-            }
+            ValueType::TypeVar(i) => self
+                .eqs
+                .get(i)
+                .map_or(false, |subst| self.check_occurrence(var_idx, subst)),
 
             ValueType::Tuple(elements) => elements
                 .iter()
@@ -375,16 +371,17 @@ impl Substitutions {
     }
 
     /// Recursively marks `ty` as a linear type.
+    #[allow(clippy::map_err_ignore)] // ignoring the original error is intentional
     pub fn mark_as_linear(&mut self, ty: &ValueType) -> Result<(), TypeError> {
         match ty {
             ValueType::TypeVar(idx) => {
                 self.lin.insert(*idx);
-                if let Some(subst) = self.eqs.get(idx).cloned() {
-                    self.mark_as_linear(&subst)
-                } else {
-                    Ok(())
-                }
+                self.eqs
+                    .get(idx)
+                    .cloned()
+                    .map_or(Ok(()), |subst| self.mark_as_linear(&subst))
             }
+
             ValueType::Any | ValueType::TypeParam(_) => unreachable!(),
 
             ValueType::Bool | ValueType::Function(_) => {
@@ -416,9 +413,10 @@ impl Substitutions {
         &mut self,
         expr: &ValueType,
         expr_span: &SpannedExpr<'a, T>,
-        expected: ValueType,
+        expected: &ValueType,
     ) -> Result<(), Spanned<'a, TypeError>> {
-        self.unify(&expr, &expected)
+        // FIXME: should switch LHS / RHS.
+        self.unify(&expr, expected)
             .map_err(|e| expr_span.copy_with_extra(e))
     }
 

@@ -1,3 +1,48 @@
+//! Hindley-Milner type inference for arithmetic expressions parsed
+//! by the [`arithmetic-parser`] crate.
+//!
+//! This crate allows to parse type annotations as a part of a [`Grammar`], and to infer
+//! and check types for expressions / statements produced by `arithmetic-parser`.
+//! Type inference is *partially* compatible with the interpreter from [`arithmetic-eval`];
+//! if the inference algorithm succeeds on a certain expression / statement / block,
+//! it will execute successfully, but not all successfully executing items pass type inference.
+//!
+//! # Type system
+//!
+//! The type system corresponds to types of `Value`s in `arithmetic-eval`:
+//!
+//! - There are 2 primitive types: Boolean (`Bool`) and number (`Num`).
+//! - There is only one container type - a tuple. It can be represented either
+//!   in the tuple form, such as `(Num, Bool)`, or as a slice, such as `[Num]` or `[Num; 3]`.
+//!   As in Rust, all slice elements must have the same type. Unlike Rust, tuple and slice
+//!   forms are equivalent; e.g., `[Num; 3]` and `(Num, Num, Num)` are the same type.
+//! - Functions are first-class types. Functions can have type and/or const params.
+//! - Type params can be constrained. The only currently supported constraint is type *linearity*.
+//!   Linear types are types that support binary arithmetic ops (e.g., `+`): numbers and
+//!   tuples consisting of linear elements.
+//! - Const params always specify tuple length.
+//!
+//! # Inference rules
+//!
+//! FIXME
+//!
+//! # Examples
+//!
+//! FIXME
+//!
+//! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
+//! [`Grammar`]: arithmetic_parser::grammars::Grammar
+//! [`arithmetic-eval`]: https://crates.io/crates/arithmetic-eval
+
+#![warn(missing_docs, missing_debug_implementations)]
+#![warn(clippy::all, clippy::pedantic)]
+#![allow(
+    clippy::missing_errors_doc,
+    clippy::must_use_candidate,
+    clippy::module_name_repetitions,
+    clippy::similar_names // too many false positives because of lhs / rhs
+)]
+
 use std::{borrow::Cow, collections::BTreeMap, fmt};
 
 mod env;
@@ -156,7 +201,7 @@ impl fmt::Display for FnArgs {
 /// Tuple length.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TupleLength {
-    /// Dynamic length that cannot be found from inference.
+    /// Dynamic length that can vary at runtime.
     Dynamic,
     /// Wildcard length.
     Any,
@@ -185,10 +230,10 @@ impl fmt::Display for TupleLength {
 impl TupleLength {
     fn const_param(index: usize) -> Cow<'static, str> {
         const PARAM_NAMES: &str = "NMLKJI";
-        PARAM_NAMES
-            .get(index..=index)
-            .map(Cow::from)
-            .unwrap_or_else(|| Cow::from(format!("N{}", index - PARAM_NAMES.len())))
+        PARAM_NAMES.get(index..=index).map_or_else(
+            || Cow::from(format!("N{}", index - PARAM_NAMES.len())),
+            Cow::from,
+        )
     }
 }
 
@@ -227,8 +272,10 @@ impl PartialEq for ValueType {
             | (Self::Bool, Self::Bool)
             | (Self::Number, Self::Number) => true,
 
-            (Self::TypeVar(x), Self::TypeVar(y)) => x == y,
-            (Self::TypeParam(x), Self::TypeParam(y)) => x == y,
+            (Self::TypeVar(x), Self::TypeVar(y)) | (Self::TypeParam(x), Self::TypeParam(y)) => {
+                x == y
+            }
+
             (Self::Tuple(xs), Self::Tuple(ys)) => xs == ys,
 
             (
@@ -309,10 +356,10 @@ impl From<FnType> for ValueType {
 impl ValueType {
     fn type_param(index: usize) -> Cow<'static, str> {
         const PARAM_NAMES: &str = "TUVXYZ";
-        PARAM_NAMES
-            .get(index..=index)
-            .map(Cow::from)
-            .unwrap_or_else(|| Cow::from(format!("T{}", index - PARAM_NAMES.len())))
+        PARAM_NAMES.get(index..=index).map_or_else(
+            || Cow::from(format!("T{}", index - PARAM_NAMES.len())),
+            Cow::from,
+        )
     }
 
     pub(crate) fn void() -> Self {

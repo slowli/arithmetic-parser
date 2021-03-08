@@ -32,6 +32,7 @@ pub enum ConversionErrorKind {
     UndefinedConst(String),
     /// Undefined type param.
     UndefinedTypeParam(String),
+    // TODO: unused params?
 }
 
 impl ConversionErrorKind {
@@ -204,6 +205,7 @@ impl<'a> TryFrom<ParsedValueType<'a>> for ValueType {
 }
 
 impl ValueType {
+    /// Parses type from `input`.
     pub fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
         let (rest, parsed) = ParsedValueType::parse(input)?;
         let ty = ValueType::try_from(parsed).map_err(|err| {

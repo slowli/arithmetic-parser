@@ -1,4 +1,10 @@
-//! Parsing type annotations.
+//! Logic for parsing type annotations.
+//!
+//! # Overview
+//!
+//! This module contains types representing AST for parsed type annotations; for example,
+//! [`ParsedValueType`] and [`ParsedFnType`]. These two types expose `parse` method which
+//! allows to integrate them into `nom` parsing.
 
 use nom::{
     branch::alt,
@@ -17,11 +23,36 @@ mod tests;
 
 /// Type annotation after parsing.
 ///
-/// Compared to [`ValueType`], this enum is structured correspondingly to the AST.
+/// Compared to [`ValueType`], this enum corresponds to AST, not to the logical presentation
+/// of a type.
+///
+/// [`ValueType`]: crate::ValueType
+///
+/// # Examples
+///
+/// ```
+/// use arithmetic_parser::InputSpan;
+/// # use arithmetic_typing::parser::ParsedValueType;
+/// # use assert_matches::assert_matches;
+///
+/// # fn main() -> anyhow::Result<()> {
+/// let input = InputSpan::new("(Num, fn<T>(T) -> (T, T))");
+/// let elements = match ParsedValueType::parse(input)?.1 {
+///     ParsedValueType::Tuple(elements) => elements,
+///     _ => unreachable!(),
+/// };
+/// assert_eq!(elements[0], ParsedValueType::Number);
+/// assert_matches!(
+///     &elements[1],
+///     ParsedValueType::Function(f) if f.type_params.len() == 1
+/// );
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum ParsedValueType<'a> {
-    /// Type placeholder (`_`).
+    /// Type placeholder (`_`). Corresponds to any single type.
     Any,
     /// Boolean type (`Bool`).
     Bool,
@@ -55,7 +86,29 @@ impl<'a> ParsedValueType<'a> {
 
 /// Parsed functional type.
 ///
-/// Compared to [`FnType`], this enum is structured correspondingly to the AST.
+/// In contrast to [`FnType`], this struct corresponds to AST, not to the logical representation
+/// of functional types.
+///
+/// [`FnType`]: crate::FnType
+///
+/// # Examples
+///
+/// ```
+/// use arithmetic_parser::InputSpan;
+/// # use assert_matches::assert_matches;
+/// # use arithmetic_typing::parser::{ParsedFnType, ParsedValueType};
+///
+/// # fn main() -> anyhow::Result<()> {
+/// let input = InputSpan::new("fn<const N>([Num; N]) -> Num");
+/// let (rest, ty) = ParsedFnType::parse(input)?;
+/// assert!(rest.fragment().is_empty());
+/// assert_eq!(ty.const_params.len(), 1);
+/// assert!(ty.type_params.is_empty());
+/// assert_matches!(ty.args.as_slice(), [ParsedValueType::Slice { .. }]);
+/// assert_eq!(ty.return_type, ParsedValueType::Number);
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct ParsedFnType<'a> {
@@ -80,7 +133,7 @@ impl<'a> ParsedFnType<'a> {
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum ParsedTupleLength<'a> {
-    /// Const placeholder (`_`).
+    /// Const placeholder (`_`). Corresponds to any single type.
     Any,
     /// Dynamic tuple length. This length is *implicit*, as in `[Num]`.
     Dynamic,

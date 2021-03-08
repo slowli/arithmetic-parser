@@ -8,6 +8,19 @@ use arithmetic_parser::{
 };
 use assert_matches::assert_matches;
 
+pub fn assert_incompatible_types(err: &TypeError, first: &ValueType, second: &ValueType) {
+    let (x, y) = match err {
+        TypeError::IncompatibleTypes(x, y) => (x, y),
+        _ => panic!("Unexpected error type: {:?}", err),
+    };
+    assert!(
+        (x == first && y == second) || (x == second && y == first),
+        "Unexpected incompatible types: {:?}, expected: {:?}",
+        (x, y),
+        (first, second)
+    );
+}
+
 fn hash_fn_type() -> FnType {
     FnType {
         args: FnArgs::Any,
@@ -622,7 +635,11 @@ fn parametric_fn_passed_as_arg_with_unsatisfiable_requirements() {
         .process_statements(&block.statements)
         .unwrap_err();
 
-    assert_matches!(err.extra, TypeError::IncompatibleTypes(_, _));
+    assert_incompatible_types(
+        &err.extra,
+        &ValueType::Number,
+        &ValueType::Tuple(vec![ValueType::Number; 2]),
+    );
 }
 
 #[test]
@@ -702,7 +719,11 @@ fn function_passed_as_arg_invalid_arg_type() {
         .process_statements(&block.statements)
         .unwrap_err();
 
-    assert_matches!(err.extra, TypeError::IncompatibleTypes(..));
+    assert_incompatible_types(
+        &err.extra,
+        &ValueType::Number,
+        &ValueType::Tuple(vec![ValueType::Any; 2]),
+    );
 }
 
 #[test]
@@ -717,7 +738,7 @@ fn function_passed_as_arg_invalid_input() {
         .process_statements(&block.statements)
         .unwrap_err();
 
-    assert_matches!(err.extra, TypeError::IncompatibleTypes(..));
+    assert_incompatible_types(&err.extra, &ValueType::Number, &ValueType::Bool);
 }
 
 #[test]
@@ -765,8 +786,9 @@ fn incorrect_arg_in_slices() {
     let err = type_context
         .process_statements(&block.statements)
         .unwrap_err();
+
     // FIXME: error span is incorrect here; should be `(1, 2 == 3)`
-    assert_matches!(err.extra, TypeError::IncompatibleTypes(_, _));
+    assert_incompatible_types(&err.extra, &ValueType::Number, &ValueType::Bool);
 }
 
 #[test]

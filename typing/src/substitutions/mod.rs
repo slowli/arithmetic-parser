@@ -167,8 +167,10 @@ impl Substitutions {
 
             (Function(fn_l), Function(fn_r)) => self.unify_fn_types(fn_l, fn_r),
 
-            // FIXME: resolve types
-            (x, y) => Err(TypeError::IncompatibleTypes(x.clone(), y.clone())),
+            (x, y) => Err(TypeError::IncompatibleTypes(
+                self.sanitize_type(None, x),
+                self.sanitize_type(None, y),
+            )),
         }
     }
 
@@ -309,6 +311,14 @@ impl Substitutions {
                     .map(|element| self.sanitize_type(fixed_idx, element))
                     .collect(),
             ),
+
+            ValueType::Slice { element, length } => ValueType::Slice {
+                element: Box::new(self.sanitize_type(fixed_idx, &element)),
+                length: match length {
+                    TupleLength::Var(_) => TupleLength::Any,
+                    _ => length,
+                },
+            },
 
             ValueType::Function(fn_type) => {
                 let sanitized_fn_type = fn_type.map_types(|ty| self.sanitize_type(fixed_idx, ty));

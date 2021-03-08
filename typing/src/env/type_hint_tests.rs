@@ -3,24 +3,11 @@
 use assert_matches::assert_matches;
 
 use super::{
-    tests::{map_fn_type, NumGrammar},
+    tests::{assert_incompatible_types, map_fn_type, NumGrammar},
     *,
 };
 use crate::TupleLength;
 use arithmetic_parser::grammars::{Parse, Typed};
-
-fn assert_incompatible_types(err: &TypeError, first: &ValueType, second: &ValueType) {
-    let (x, y) = match err {
-        TypeError::IncompatibleTypes(x, y) => (x, y),
-        _ => panic!("Unexpected error type: {:?}", err),
-    };
-    assert!(
-        (x == first && y == second) || (x == second && y == first),
-        "Unexpected incompatible types: {:?}, expected: {:?}",
-        (x, y),
-        (first, second)
-    );
-}
 
 #[test]
 fn type_hint_within_tuple() {

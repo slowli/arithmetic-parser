@@ -1,6 +1,10 @@
 //! `TypeEnvironment` and related types.
 
-use std::{collections::HashMap, iter, mem, ops};
+use std::{
+    collections::HashMap,
+    iter::{self, FromIterator},
+    mem, ops,
+};
 
 use crate::{substitutions::Substitutions, FnType, TypeError, ValueType};
 use arithmetic_parser::{
@@ -13,50 +17,116 @@ mod tests;
 #[cfg(test)]
 mod type_hint_tests;
 
-/// Analogue of `Scope` for type information.
-#[derive(Debug, Default)]
-struct TypeScope {
+/// Environment containing type information on named variables.
+#[derive(Debug, Clone, Default)]
+pub struct TypeEnvironment {
     variables: HashMap<String, ValueType>,
 }
 
-/// Environment for deriving type information.
-#[derive(Debug)]
-pub struct TypeEnvironment {
-    scopes: Vec<TypeScope>,
-    is_in_function: bool,
-}
-
-impl Default for TypeEnvironment {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl TypeEnvironment {
-    /// Creates a type context based on the interpreter context.
+    /// Creates an empty environment.
     pub fn new() -> Self {
-        Self {
-            scopes: vec![TypeScope::default()],
-            is_in_function: false,
-        }
+        Self::default()
     }
 
     /// Gets type of the specified variable.
     pub fn get_type(&self, name: &str) -> Option<&ValueType> {
-        self.scopes
+        self.variables.get(name)
+    }
+
+    /// Iterates over variables contained in this env.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &ValueType)> + '_ {
+        self.variables.iter().map(|(name, ty)| (name.as_str(), ty))
+    }
+
+    /// Sets type of a variable.
+    pub fn insert_type(&mut self, name: &str, value_type: ValueType) -> &mut Self {
+        self.variables.insert(name.to_owned(), value_type);
+        self
+    }
+
+    /// Processes statements. After processing, the context will contain type info
+    /// about newly declared vars.
+    pub fn process_statements<'a, T>(
+        &mut self,
+        statements: &[SpannedStatement<'a, T>],
+    ) -> Result<(), Spanned<'a, TypeError>>
+    where
+        T: Grammar<Type = ValueType>,
+    {
+        TypeProcessor::new(self).process_statements(statements)
+    }
+}
+
+impl ops::Index<&str> for TypeEnvironment {
+    type Output = ValueType;
+
+    fn index(&self, name: &str) -> &Self::Output {
+        self.get_type(name)
+            .unwrap_or_else(|| panic!("Variable `{}` is not defined", name))
+    }
+}
+
+impl<S, Ty> FromIterator<(S, Ty)> for TypeEnvironment
+where
+    S: Into<String>,
+    Ty: Into<ValueType>,
+{
+    fn from_iter<I: IntoIterator<Item = (S, Ty)>>(iter: I) -> Self {
+        Self {
+            variables: iter
+                .into_iter()
+                .map(|(name, ty)| (name.into(), ty.into()))
+                .collect(),
+        }
+    }
+}
+
+impl<S, Ty> Extend<(S, Ty)> for TypeEnvironment
+where
+    S: Into<String>,
+    Ty: Into<ValueType>,
+{
+    fn extend<I: IntoIterator<Item = (S, Ty)>>(&mut self, iter: I) {
+        self.variables
+            .extend(iter.into_iter().map(|(name, ty)| (name.into(), ty.into())))
+    }
+}
+
+/// Environment for deriving type information.
+#[derive(Debug)]
+struct TypeProcessor<'a> {
+    root_scope: &'a mut TypeEnvironment,
+    inner_scopes: Vec<TypeEnvironment>,
+    is_in_function: bool,
+}
+
+impl<'a> TypeProcessor<'a> {
+    fn new(env: &'a mut TypeEnvironment) -> Self {
+        Self {
+            root_scope: env,
+            inner_scopes: vec![],
+            is_in_function: false,
+        }
+    }
+}
+
+impl TypeProcessor<'_> {
+    fn get_type(&self, name: &str) -> Option<&ValueType> {
+        self.inner_scopes
             .iter()
             .rev()
             .flat_map(|scope| scope.variables.get(name))
             .next()
+            .or_else(|| self.root_scope.get_type(name))
     }
 
-    /// Sets type of a variable.
-    pub fn insert_type(&mut self, name: &str, value_type: ValueType) {
-        self.scopes
+    fn insert_type(&mut self, name: &str, ty: ValueType) {
+        let scope = self
+            .inner_scopes
             .last_mut()
-            .unwrap()
-            .variables
-            .insert(name.to_owned(), value_type);
+            .unwrap_or(&mut *self.root_scope);
+        scope.insert_type(name, ty);
     }
 
     fn process_expr_inner<'a, T>(
@@ -95,24 +165,11 @@ impl TypeEnvironment {
                 self.process_fn_call(substitutions, expr, fn_type, all_args)
             }
 
-            Expr::Block(Block {
-                statements,
-                return_value,
-                ..
-            }) => {
-                self.scopes.push(TypeScope::default());
-                for statement in statements {
-                    self.process_statement(substitutions, statement)?;
-                }
-                let return_type = if let Some(return_value) = return_value {
-                    self.process_expr_inner(substitutions, return_value)?
-                } else {
-                    ValueType::void()
-                };
-
-                // TODO: do we need to pop a scope on error?
-                self.scopes.pop();
-                Ok(return_type)
+            Expr::Block(block) => {
+                self.inner_scopes.push(TypeEnvironment::default());
+                let result = self.process_block(substitutions, block);
+                self.inner_scopes.pop(); // intentionally called even on failure
+                result
             }
 
             Expr::FnDefinition(def) => self
@@ -143,16 +200,22 @@ impl TypeEnvironment {
         })
     }
 
-    /// Processes an isolated expression.
-    pub fn process_expr<'a, T>(
+    fn process_block<'a, T>(
         &mut self,
-        expr: &SpannedExpr<'a, T>,
+        substitutions: &mut Substitutions,
+        block: &Block<'a, T>,
     ) -> Result<ValueType, Spanned<'a, TypeError>>
     where
         T: Grammar<Type = ValueType>,
     {
-        let mut substitutions = Substitutions::default();
-        self.process_expr_inner(&mut substitutions, expr)
+        for statement in &block.statements {
+            self.process_statement(substitutions, statement)?;
+        }
+        if let Some(return_value) = &block.return_value {
+            self.process_expr_inner(substitutions, return_value)
+        } else {
+            Ok(ValueType::void())
+        }
     }
 
     /// Processes an lvalue type by replacing `Any` types with newly created type vars.
@@ -174,11 +237,7 @@ impl TypeEnvironment {
                     .map_err(|err| ty.as_ref().unwrap().copy_with_extra(err))?;
                 // `unwrap` is safe: an error can only occur with a type hint present.
 
-                self.scopes
-                    .last_mut()
-                    .unwrap()
-                    .variables
-                    .insert((*lvalue.fragment()).to_string(), value_type.clone());
+                self.insert_type(lvalue.fragment(), value_type.clone());
                 Ok(value_type)
             }
 
@@ -312,23 +371,14 @@ impl TypeEnvironment {
     where
         T: Grammar<Type = ValueType>,
     {
-        self.scopes.push(TypeScope::default());
-
-        let arg_types = self.process_destructure(substitutions, &def.args.extra)?;
-
+        self.inner_scopes.push(TypeEnvironment::default());
         let was_in_function = mem::replace(&mut self.is_in_function, true);
-        for statement in &def.body.statements {
-            self.process_statement(substitutions, statement)?;
-        }
-        let return_type = if let Some(ref return_value) = def.body.return_value {
-            self.process_expr_inner(substitutions, return_value)?
-        } else {
-            ValueType::void()
-        };
-        // TODO: do we need to pop a scope on error?
-        self.scopes.pop();
+        let result = self.process_fn_def_inner(substitutions, def);
+        // Perform basic finalization in any case.
+        self.inner_scopes.pop();
         self.is_in_function = was_in_function;
 
+        let (arg_types, return_type) = result?;
         let arg_types = arg_types
             .iter()
             .map(|arg| substitutions.resolve(arg))
@@ -341,6 +391,20 @@ impl TypeEnvironment {
         }
 
         Ok(fn_type)
+    }
+
+    /// Fallible part of fn definition processing.
+    fn process_fn_def_inner<'a, T>(
+        &mut self,
+        substitutions: &mut Substitutions,
+        def: &FnDefinition<'a, T>,
+    ) -> Result<(Vec<ValueType>, ValueType), Spanned<'a, TypeError>>
+    where
+        T: Grammar<Type = ValueType>,
+    {
+        let arg_types = self.process_destructure(substitutions, &def.args.extra)?;
+        let return_type = self.process_block(substitutions, &def.body)?;
+        Ok((arg_types, return_type))
     }
 
     fn process_statement<'a, T>(
@@ -370,8 +434,6 @@ impl TypeEnvironment {
         }
     }
 
-    /// Processes statements. After processing, the context will contain type info
-    /// about newly declared vars.
     pub fn process_statements<'a, T>(
         &mut self,
         statements: &[SpannedStatement<'a, T>],
@@ -387,19 +449,10 @@ impl TypeEnvironment {
         });
 
         // We need to resolve vars even if an error occurred.
-        let scope = self.scopes.last_mut().unwrap();
-        for var_type in scope.variables.values_mut() {
+        debug_assert!(self.inner_scopes.is_empty());
+        for var_type in self.root_scope.variables.values_mut() {
             *var_type = substitutions.resolve(var_type);
         }
         result
-    }
-}
-
-impl ops::Index<&str> for TypeEnvironment {
-    type Output = ValueType;
-
-    fn index(&self, name: &str) -> &Self::Output {
-        self.get_type(name)
-            .unwrap_or_else(|| panic!("Variable `{}` is not defined", name))
     }
 }

@@ -176,8 +176,7 @@ fn statements_with_a_block() {
     let code = "y = { x = 3; 2 * x }; x ^ y == 6 * x;";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
 
-    let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("x", ValueType::Number);
+    let mut type_env: TypeEnvironment = vec![("x", ValueType::Number)].into_iter().collect();
     type_env.process_statements(&block.statements).unwrap();
     assert_eq!(*type_env.get_type("y").unwrap(), ValueType::Number);
 }
@@ -187,8 +186,7 @@ fn boolean_statements() {
     let code = "y = x == x ^ 2; y = y || { x = 3; x != 7 };";
     let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
 
-    let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("x", ValueType::Number);
+    let mut type_env: TypeEnvironment = vec![("x", ValueType::Number)].into_iter().collect();
     type_env.process_statements(&block.statements).unwrap();
     assert_eq!(type_env["y"], ValueType::Bool);
 }

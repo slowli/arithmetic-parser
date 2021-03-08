@@ -160,7 +160,7 @@ impl TypeEnvironment {
         lvalue: &SpannedLvalue<'a, ValueType>,
     ) -> Result<ValueType, Spanned<'a, TypeError>> {
         match &lvalue.extra {
-            Lvalue::Variable { ref ty } => {
+            Lvalue::Variable { ty } => {
                 let mut value_type = if let Some(ty) = ty {
                     // `ty` may contain `Any` elements, so we need to replace them with type vars.
                     ty.extra.clone()
@@ -366,7 +366,7 @@ impl TypeEnvironment {
     }
 
     /// Processes statements. After processing, the context will contain type info
-    /// about newly declared vars / functions.
+    /// about newly declared vars.
     pub fn process_statements<'a, T>(
         &mut self,
         statements: &[SpannedStatement<'a, T>],
@@ -375,16 +375,18 @@ impl TypeEnvironment {
         T: Grammar<Type = ValueType>,
     {
         let mut substitutions = Substitutions::default();
-        for statement in statements {
-            self.process_statement(&mut substitutions, statement)?;
-        }
 
+        let result = statements.iter().try_for_each(|statement| {
+            self.process_statement(&mut substitutions, statement)
+                .map(drop)
+        });
+
+        // We need to resolve vars even if an error occurred.
         let scope = self.scopes.last_mut().unwrap();
         for var_type in scope.variables.values_mut() {
             *var_type = substitutions.resolve(var_type);
         }
-
-        Ok(())
+        result
     }
 }
 

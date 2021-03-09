@@ -6,7 +6,7 @@ use std::{
     mem, ops,
 };
 
-use crate::{substitutions::Substitutions, FnType, TypeError, ValueType};
+use crate::{substitutions::Substitutions, FnType, TypeError, TypeErrorKind, ValueType};
 use arithmetic_parser::{
     grammars::Grammar, BinaryOp, Block, Destructure, Expr, FnDefinition, Lvalue, Spanned,
     SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
@@ -50,11 +50,13 @@ impl TypeEnvironment {
     pub fn process_statements<'a, T>(
         &mut self,
         statements: &[SpannedStatement<'a, T>],
-    ) -> Result<(), Spanned<'a, TypeError>>
+    ) -> Result<(), TypeError<'a>>
     where
         T: Grammar<Type = ValueType>,
     {
-        TypeProcessor::new(self).process_statements(statements)
+        TypeProcessor::new(self)
+            .process_statements(statements)
+            .map_err(TypeError::new)
     }
 }
 
@@ -133,7 +135,7 @@ impl TypeProcessor<'_> {
         &mut self,
         substitutions: &mut Substitutions,
         expr: &SpannedExpr<'a, T>,
-    ) -> Result<ValueType, Spanned<'a, TypeError>>
+    ) -> Result<ValueType, Spanned<'a, TypeErrorKind>>
     where
         T: Grammar<Type = ValueType>,
     {
@@ -183,7 +185,7 @@ impl TypeProcessor<'_> {
             }
 
             _ => {
-                let err = TypeError::unsupported(expr.extra.ty());
+                let err = TypeErrorKind::unsupported(expr.extra.ty());
                 Err(expr.copy_with_extra(err))
             }
         }
@@ -193,9 +195,9 @@ impl TypeProcessor<'_> {
     fn process_var<'a, T>(
         &self,
         name: &Spanned<'a, T>,
-    ) -> Result<ValueType, Spanned<'a, TypeError>> {
+    ) -> Result<ValueType, Spanned<'a, TypeErrorKind>> {
         self.get_type(name.fragment()).cloned().ok_or_else(|| {
-            let e = TypeError::UndefinedVar((*name.fragment()).to_owned());
+            let e = TypeErrorKind::UndefinedVar((*name.fragment()).to_owned());
             name.copy_with_extra(e)
         })
     }
@@ -204,7 +206,7 @@ impl TypeProcessor<'_> {
         &mut self,
         substitutions: &mut Substitutions,
         block: &Block<'a, T>,
-    ) -> Result<ValueType, Spanned<'a, TypeError>>
+    ) -> Result<ValueType, Spanned<'a, TypeErrorKind>>
     where
         T: Grammar<Type = ValueType>,
     {
@@ -222,7 +224,7 @@ impl TypeProcessor<'_> {
         &mut self,
         substitutions: &mut Substitutions,
         lvalue: &SpannedLvalue<'a, ValueType>,
-    ) -> Result<ValueType, Spanned<'a, TypeError>> {
+    ) -> Result<ValueType, Spanned<'a, TypeErrorKind>> {
         match &lvalue.extra {
             Lvalue::Variable { ty } => {
                 let mut value_type = ty.as_ref().map_or(ValueType::Any, |ty| ty.extra.clone());
@@ -241,7 +243,7 @@ impl TypeProcessor<'_> {
             }
 
             _ => {
-                let err = TypeError::unsupported(lvalue.extra.ty());
+                let err = TypeErrorKind::unsupported(lvalue.extra.ty());
                 Err(lvalue.copy_with_extra(err))
             }
         }
@@ -252,10 +254,10 @@ impl TypeProcessor<'_> {
         &mut self,
         substitutions: &mut Substitutions,
         destructure: &Destructure<'a, ValueType>,
-    ) -> Result<Vec<ValueType>, Spanned<'a, TypeError>> {
+    ) -> Result<Vec<ValueType>, Spanned<'a, TypeErrorKind>> {
         if let Some(middle) = &destructure.middle {
             // TODO: allow middles with explicitly set type.
-            let err = middle.copy_with_extra(TypeError::UnsupportedDestructure);
+            let err = middle.copy_with_extra(TypeErrorKind::UnsupportedDestructure);
             return Err(err);
         }
 
@@ -273,7 +275,7 @@ impl TypeProcessor<'_> {
         call_expr: &SpannedExpr<'a, T>,
         fn_type: &ValueType,
         args: impl Iterator<Item = &'it SpannedExpr<'a, T>>,
-    ) -> Result<ValueType, Spanned<'a, TypeError>>
+    ) -> Result<ValueType, Spanned<'a, TypeErrorKind>>
     where
         T: Grammar<Type = ValueType>,
     {
@@ -294,7 +296,7 @@ impl TypeProcessor<'_> {
         substitutions: &mut Substitutions,
         op: &Spanned<'a, UnaryOp>,
         inner: &SpannedExpr<'a, T>,
-    ) -> Result<ValueType, Spanned<'a, TypeError>>
+    ) -> Result<ValueType, Spanned<'a, TypeErrorKind>>
     where
         T: Grammar<Type = ValueType>,
     {
@@ -312,7 +314,7 @@ impl TypeProcessor<'_> {
                 Ok(inner_type)
             }
 
-            _ => Err(op.copy_with_extra(TypeError::unsupported(op.extra))),
+            _ => Err(op.copy_with_extra(TypeErrorKind::unsupported(op.extra))),
         }
     }
 
@@ -324,7 +326,7 @@ impl TypeProcessor<'_> {
         op: BinaryOp,
         lhs: &SpannedExpr<'a, T>,
         rhs: &SpannedExpr<'a, T>,
-    ) -> Result<ValueType, Spanned<'a, TypeError>>
+    ) -> Result<ValueType, Spanned<'a, TypeErrorKind>>
     where
         T: Grammar<Type = ValueType>,
     {
@@ -353,7 +355,7 @@ impl TypeProcessor<'_> {
             }
 
             // FIXME: optionally support order comparisons
-            _ => Err(binary_expr.copy_with_extra(TypeError::unsupported(op))),
+            _ => Err(binary_expr.copy_with_extra(TypeErrorKind::unsupported(op))),
         }
     }
 
@@ -361,7 +363,7 @@ impl TypeProcessor<'_> {
         &mut self,
         substitutions: &mut Substitutions,
         def: &FnDefinition<'a, T>,
-    ) -> Result<FnType, Spanned<'a, TypeError>>
+    ) -> Result<FnType, Spanned<'a, TypeErrorKind>>
     where
         T: Grammar<Type = ValueType>,
     {
@@ -392,7 +394,7 @@ impl TypeProcessor<'_> {
         &mut self,
         substitutions: &mut Substitutions,
         def: &FnDefinition<'a, T>,
-    ) -> Result<(Vec<ValueType>, ValueType), Spanned<'a, TypeError>>
+    ) -> Result<(Vec<ValueType>, ValueType), Spanned<'a, TypeErrorKind>>
     where
         T: Grammar<Type = ValueType>,
     {
@@ -405,7 +407,7 @@ impl TypeProcessor<'_> {
         &mut self,
         substitutions: &mut Substitutions,
         statement: &SpannedStatement<'a, T>,
-    ) -> Result<ValueType, Spanned<'a, TypeError>>
+    ) -> Result<ValueType, Spanned<'a, TypeErrorKind>>
     where
         T: Grammar<Type = ValueType>,
     {
@@ -422,7 +424,7 @@ impl TypeProcessor<'_> {
             }
 
             _ => {
-                let err = TypeError::unsupported(statement.extra.ty());
+                let err = TypeErrorKind::unsupported(statement.extra.ty());
                 Err(statement.copy_with_extra(err))
             }
         }
@@ -431,7 +433,7 @@ impl TypeProcessor<'_> {
     pub fn process_statements<'a, T>(
         &mut self,
         statements: &[SpannedStatement<'a, T>],
-    ) -> Result<(), Spanned<'a, TypeError>>
+    ) -> Result<(), Spanned<'a, TypeErrorKind>>
     where
         T: Grammar<Type = ValueType>,
     {

@@ -55,7 +55,10 @@ mod error;
 pub mod parser;
 mod substitutions;
 
-pub use self::{env::TypeEnvironment, error::TypeError};
+pub use self::{
+    env::TypeEnvironment,
+    error::{TypeError, TypeErrorKind},
+};
 
 /// Description of a type parameter.
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{FnArgs, FnType, TupleLength, TypeError, ValueType};
+use crate::{FnArgs, FnType, TupleLength, TypeErrorKind, ValueType};
 use arithmetic_parser::{grammars::Grammar, Spanned, SpannedExpr};
 
 mod fns;
@@ -78,7 +78,7 @@ impl Substitutions {
         len
     }
 
-    pub fn assign_new_type(&mut self, ty: &mut ValueType) -> Result<(), TypeError> {
+    pub fn assign_new_type(&mut self, ty: &mut ValueType) -> Result<(), TypeErrorKind> {
         match ty {
             ValueType::Number | ValueType::Bool | ValueType::TypeVar(_) => {
                 // Do nothing.
@@ -102,7 +102,7 @@ impl Substitutions {
                     //
                     // We don't handle such cases yet, because unifying functions with type params
                     // is quite difficult.
-                    return Err(TypeError::UnsupportedParam);
+                    return Err(TypeErrorKind::UnsupportedParam);
                 }
                 for referenced_ty in fn_type.arg_and_return_types_mut() {
                     self.assign_new_type(referenced_ty)?;
@@ -132,7 +132,7 @@ impl Substitutions {
     /// # Errors
     ///
     /// Returns an error if unification is impossible.
-    pub fn unify(&mut self, lhs: &ValueType, rhs: &ValueType) -> Result<(), TypeError> {
+    pub fn unify(&mut self, lhs: &ValueType, rhs: &ValueType) -> Result<(), TypeErrorKind> {
         use self::ValueType::{Function, Slice, Tuple, TypeParam, TypeVar};
 
         let resolved_lhs = self.fast_resolve(lhs).to_owned();
@@ -155,7 +155,7 @@ impl Substitutions {
 
             (Tuple(lhs_types), Tuple(rhs_types)) => {
                 if lhs_types.len() != rhs_types.len() {
-                    return Err(TypeError::IncompatibleLengths(
+                    return Err(TypeErrorKind::IncompatibleLengths(
                         TupleLength::Exact(lhs_types.len()),
                         TupleLength::Exact(rhs_types.len()),
                     ));
@@ -188,14 +188,14 @@ impl Substitutions {
 
             (Function(lhs_fn), Function(rhs_fn)) => self.unify_fn_types(lhs_fn, rhs_fn),
 
-            (ty, other_ty) => Err(TypeError::IncompatibleTypes(
+            (ty, other_ty) => Err(TypeErrorKind::IncompatibleTypes(
                 self.sanitize_type(None, ty),
                 self.sanitize_type(None, other_ty),
             )),
         }
     }
 
-    fn unify_lengths(&mut self, lhs: TupleLength, rhs: TupleLength) -> Result<(), TypeError> {
+    fn unify_lengths(&mut self, lhs: TupleLength, rhs: TupleLength) -> Result<(), TypeErrorKind> {
         let resolved_lhs = self.resolve_len(lhs);
         let resolved_rhs = self.resolve_len(rhs);
 
@@ -210,19 +210,22 @@ impl Substitutions {
                 Ok(())
             }
 
-            _ => Err(TypeError::IncompatibleLengths(resolved_lhs, resolved_rhs)),
+            _ => Err(TypeErrorKind::IncompatibleLengths(
+                resolved_lhs,
+                resolved_rhs,
+            )),
         }
     }
 
-    fn unify_fn_types(&mut self, lhs: &FnType, rhs: &FnType) -> Result<(), TypeError> {
+    fn unify_fn_types(&mut self, lhs: &FnType, rhs: &FnType) -> Result<(), TypeErrorKind> {
         if lhs.is_parametric() {
-            return Err(TypeError::UnsupportedParam);
+            return Err(TypeErrorKind::UnsupportedParam);
         }
 
         // Check if the argument number matches. If not, we can error immediately.
         if let (FnArgs::List(lhs_list), FnArgs::List(rhs_list)) = (&lhs.args, &rhs.args) {
             if lhs_list.len() != rhs_list.len() {
-                return Err(TypeError::ArgLenMismatch {
+                return Err(TypeErrorKind::ArgLenMismatch {
                     expected: lhs_list.len(),
                     actual: rhs_list.len(),
                 });
@@ -250,7 +253,7 @@ impl Substitutions {
     }
 
     /// Instantiates a functional type by replacing all type arguments with new type vars.
-    fn instantiate_function(&mut self, fn_type: &FnType) -> Result<FnType, TypeError> {
+    fn instantiate_function(&mut self, fn_type: &FnType) -> Result<FnType, TypeErrorKind> {
         if !fn_type.is_parametric() {
             // Fast path: just clone the function type.
             return Ok(fn_type.clone());
@@ -348,7 +351,7 @@ impl Substitutions {
     /// # Errors
     ///
     /// Returns an error if the unification is impossible.
-    fn unify_var(&mut self, var_idx: usize, ty: &ValueType) -> Result<(), TypeError> {
+    fn unify_var(&mut self, var_idx: usize, ty: &ValueType) -> Result<(), TypeErrorKind> {
         // variables should be resolved in `unify`.
         debug_assert!(!self.eqs.contains_key(&var_idx));
         debug_assert!(if let ValueType::TypeVar(idx) = ty {
@@ -358,7 +361,7 @@ impl Substitutions {
         });
 
         if self.check_occurrence(var_idx, ty) {
-            Err(TypeError::RecursiveType(
+            Err(TypeErrorKind::RecursiveType(
                 self.sanitize_type(Some(var_idx), ty),
             ))
         } else {
@@ -372,7 +375,7 @@ impl Substitutions {
 
     /// Recursively marks `ty` as a linear type.
     #[allow(clippy::map_err_ignore)] // ignoring the original error is intentional
-    pub fn mark_as_linear(&mut self, ty: &ValueType) -> Result<(), TypeError> {
+    pub fn mark_as_linear(&mut self, ty: &ValueType) -> Result<(), TypeErrorKind> {
         match ty {
             ValueType::TypeVar(idx) => {
                 self.lin.insert(*idx);
@@ -386,7 +389,7 @@ impl Substitutions {
 
             ValueType::Bool | ValueType::Function(_) => {
                 let reported_ty = self.sanitize_type(None, ty);
-                Err(TypeError::NonLinearType(reported_ty))
+                Err(TypeErrorKind::NonLinearType(reported_ty))
             }
             ValueType::Number => {
                 // This type is linear by definition.
@@ -397,14 +400,14 @@ impl Substitutions {
                 for element in elements {
                     self.mark_as_linear(element).map_err(|_| {
                         let reported_ty = self.sanitize_type(None, ty);
-                        TypeError::NonLinearType(reported_ty)
+                        TypeErrorKind::NonLinearType(reported_ty)
                     })?;
                 }
                 Ok(())
             }
             ValueType::Slice { element, .. } => self.mark_as_linear(element).map_err(|_| {
                 let reported_ty = self.sanitize_type(None, ty);
-                TypeError::NonLinearType(reported_ty)
+                TypeErrorKind::NonLinearType(reported_ty)
             }),
         }
     }
@@ -414,7 +417,7 @@ impl Substitutions {
         expr: &ValueType,
         expr_span: &SpannedExpr<'a, T>,
         expected: &ValueType,
-    ) -> Result<(), Spanned<'a, TypeError>> {
+    ) -> Result<(), Spanned<'a, TypeErrorKind>> {
         // FIXME: should switch LHS / RHS.
         self.unify(&expr, expected)
             .map_err(|e| expr_span.copy_with_extra(e))
@@ -425,7 +428,7 @@ impl Substitutions {
         &mut self,
         definition: &ValueType,
         arg_types: Vec<ValueType>,
-    ) -> Result<ValueType, TypeError> {
+    ) -> Result<ValueType, TypeErrorKind> {
         let mut return_type = ValueType::Any;
         self.assign_new_type(&mut return_type)?;
 
@@ -443,7 +446,7 @@ impl Substitutions {
         &mut self,
         lhs_ty: &ValueType,
         rhs_ty: &ValueType,
-    ) -> Result<ValueType, TypeError> {
+    ) -> Result<ValueType, TypeErrorKind> {
         self.mark_as_linear(lhs_ty)?;
         self.mark_as_linear(rhs_ty)?;
 

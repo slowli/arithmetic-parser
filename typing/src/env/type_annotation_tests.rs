@@ -48,8 +48,8 @@ fn contradicting_type_hint() {
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
     assert_matches!(
-        err.extra,
-        TypeError::IncompatibleLengths(TupleLength::Exact(2), TupleLength::Exact(3))
+        err.kind(),
+        TypeErrorKind::IncompatibleLengths(TupleLength::Exact(2), TupleLength::Exact(3))
     );
 }
 
@@ -70,7 +70,7 @@ fn contradicting_type_hint_with_slice() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
-    assert_incompatible_types(&err.extra, &ValueType::Number, &ValueType::Bool);
+    assert_incompatible_types(&err.kind(), &ValueType::Number, &ValueType::Bool);
 }
 
 #[test]
@@ -96,8 +96,8 @@ fn invalid_type_hint_with_fn_arg() {
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
     assert_matches!(
-        err.extra,
-        TypeError::ArgLenMismatch {
+        err.kind(),
+        TypeErrorKind::ArgLenMismatch {
             expected: 1,
             actual: 2
         }
@@ -123,7 +123,7 @@ fn invalid_type_hint_with_fn_declaration() {
     type_env.insert_type("map", map_fn_type().into());
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
-    assert_incompatible_types(&err.extra, &ValueType::Number, &ValueType::Bool);
+    assert_incompatible_types(&err.kind(), &ValueType::Number, &ValueType::Bool);
 }
 
 #[test]
@@ -163,8 +163,8 @@ fn unsupported_type_param_in_generic_fn() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
-    assert_eq!(*err.fragment(), "fn<Arg>(Arg) -> Arg");
-    assert_matches!(err.extra, TypeError::UnsupportedParam);
+    assert_eq!(*err.span().fragment(), "fn<Arg>(Arg) -> Arg");
+    assert_matches!(err.kind(), TypeErrorKind::UnsupportedParam);
 }
 
 #[test]
@@ -174,8 +174,8 @@ fn unsupported_const_param_in_generic_fn() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
-    assert_eq!(*err.fragment(), "fn<const N>([Num; N]) -> [Num; N]");
-    assert_matches!(err.extra, TypeError::UnsupportedParam);
+    assert_eq!(*err.span().fragment(), "fn<const N>([Num; N]) -> [Num; N]");
+    assert_matches!(err.kind(), TypeErrorKind::UnsupportedParam);
 }
 
 #[test]
@@ -190,7 +190,7 @@ fn fn_narrowed_via_type_hint() {
 
     assert_eq!(type_env["identity"].to_string(), "fn(Num) -> Num");
     assert_incompatible_types(
-        &err.extra,
+        &err.kind(),
         &ValueType::Number,
         &ValueType::Tuple(vec![ValueType::Number, ValueType::Number]),
     )
@@ -203,7 +203,7 @@ fn fn_incorrectly_narrowed_via_type_hint() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
-    assert_incompatible_types(&err.extra, &ValueType::Number, &ValueType::Bool);
+    assert_incompatible_types(&err.kind(), &ValueType::Number, &ValueType::Bool);
 }
 
 #[test]

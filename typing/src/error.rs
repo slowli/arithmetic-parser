@@ -3,12 +3,12 @@
 use std::fmt;
 
 use crate::{substitutions::Substitutions, TupleLength, ValueType};
-use arithmetic_parser::{BinaryOp, UnsupportedType};
+use arithmetic_parser::{BinaryOp, Spanned, UnsupportedType};
 
 /// Errors that can occur during type inference.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
-pub enum TypeError {
+pub enum TypeErrorKind {
     /// Error trying to unify operands of a binary operation.
     OperandMismatch {
         /// LHS type.
@@ -60,7 +60,7 @@ pub enum TypeError {
     UnsupportedParam,
 }
 
-impl fmt::Display for TypeError {
+impl fmt::Display for TypeErrorKind {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::OperandMismatch { op, .. } => write!(
@@ -109,9 +109,9 @@ impl fmt::Display for TypeError {
     }
 }
 
-impl std::error::Error for TypeError {}
+impl std::error::Error for TypeErrorKind {}
 
-impl TypeError {
+impl TypeErrorKind {
     /// Creates an error for an lvalue type not supported by the interpreter.
     pub fn unsupported<T: Into<UnsupportedType>>(ty: T) -> Self {
         Self::Unsupported(ty.into())
@@ -125,8 +125,8 @@ impl TypeError {
         op: BinaryOp,
     ) -> Self {
         match self {
-            TypeError::IncompatibleLengths(..) | TypeError::IncompatibleTypes(..) => {
-                TypeError::OperandMismatch {
+            TypeErrorKind::IncompatibleLengths(..) | TypeErrorKind::IncompatibleTypes(..) => {
+                TypeErrorKind::OperandMismatch {
                     lhs_ty: substitutions.sanitize_type(None, lhs_ty),
                     rhs_ty: substitutions.sanitize_type(None, rhs_ty),
                     op,
@@ -134,5 +134,45 @@ impl TypeError {
             }
             err => err,
         }
+    }
+}
+
+/// Type error together with the corresponding code span.
+#[derive(Debug, Clone)]
+pub struct TypeError<'a> {
+    inner: Spanned<'a, TypeErrorKind>,
+}
+
+impl fmt::Display for TypeError<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "{}:{}: {}",
+            self.span().location_line(),
+            self.span().location_offset(),
+            self.kind()
+        )
+    }
+}
+
+impl std::error::Error for TypeError<'_> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(self.kind())
+    }
+}
+
+impl<'a> TypeError<'a> {
+    pub(crate) fn new(inner: Spanned<'a, TypeErrorKind>) -> Self {
+        Self { inner }
+    }
+
+    /// Gets the kind of this error.
+    pub fn kind(&self) -> &TypeErrorKind {
+        &self.inner.extra
+    }
+
+    /// Gets the code span of this error.
+    pub fn span(&self) -> Spanned<'a> {
+        self.inner.with_no_extra()
     }
 }

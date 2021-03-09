@@ -7,9 +7,9 @@ use assert_matches::assert_matches;
 
 pub type F32Grammar = Typed<NumGrammar<f32>>;
 
-pub fn assert_incompatible_types(err: &TypeError, first: &ValueType, second: &ValueType) {
+pub fn assert_incompatible_types(err: &TypeErrorKind, first: &ValueType, second: &ValueType) {
     let (x, y) = match err {
-        TypeError::IncompatibleTypes(x, y) => (x, y),
+        TypeErrorKind::IncompatibleTypes(x, y) => (x, y),
         _ => panic!("Unexpected error type: {:?}", err),
     };
     assert!(
@@ -241,8 +241,8 @@ fn type_recursion() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
-    assert_eq!(*err.fragment(), "x + (x, 2)");
-    assert_matches!(err.extra, TypeError::RecursiveType(ref ty) if ty.to_string() == "(T, Num)");
+    assert_eq!(*err.span().fragment(), "x + (x, 2)");
+    assert_matches!(err.kind(), TypeErrorKind::RecursiveType(ref ty) if ty.to_string() == "(T, Num)");
 }
 
 #[test]
@@ -256,8 +256,8 @@ fn indirect_type_recursion() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
     assert_matches!(
-        err.extra,
-        TypeError::RecursiveType(ref ty) if ty.to_string() == "(Num, T)"
+        err.kind(),
+        TypeErrorKind::RecursiveType(ref ty) if ty.to_string() == "(Num, T)"
     );
 }
 
@@ -268,8 +268,8 @@ fn recursion_via_fn() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
     assert_matches!(
-        err.extra,
-        TypeError::RecursiveType(ref ty) if ty.to_string() == "fn(Num, T) -> _"
+        err.kind(),
+        TypeErrorKind::RecursiveType(ref ty) if ty.to_string() == "fn(Num, T) -> _"
     );
 }
 
@@ -299,8 +299,8 @@ fn unknown_method() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
-    assert_eq!(*err.fragment(), "do_something");
-    assert_matches!(err.extra, TypeError::UndefinedVar(name) if name == "do_something");
+    assert_eq!(*err.span().fragment(), "do_something");
+    assert_matches!(err.kind(), TypeErrorKind::UndefinedVar(name) if name == "do_something");
 }
 
 #[test]
@@ -320,7 +320,7 @@ fn immediately_invoked_function_with_invalid_arg() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
-    assert_matches!(err.extra, TypeError::NonLinearType(ValueType::Bool));
+    assert_matches!(err.kind(), TypeErrorKind::NonLinearType(ValueType::Bool));
 }
 
 #[test]
@@ -343,8 +343,8 @@ fn unsupported_destructuring_for_tuple() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
-    assert_eq!(*err.fragment(), "...ys");
-    assert_matches!(err.extra, TypeError::UnsupportedDestructure);
+    assert_eq!(*err.span().fragment(), "...ys");
+    assert_matches!(err.kind(), TypeErrorKind::UnsupportedDestructure);
 }
 
 #[test]
@@ -354,8 +354,8 @@ fn unsupported_destructuring_for_fn_args() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
-    assert_eq!(*err.fragment(), "...xs");
-    assert_matches!(err.extra, TypeError::UnsupportedDestructure);
+    assert_eq!(*err.span().fragment(), "...xs");
+    assert_matches!(err.kind(), TypeErrorKind::UnsupportedDestructure);
 }
 
 #[test]
@@ -431,8 +431,8 @@ fn incorrect_function_arity() {
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
     assert_matches!(
-        err.extra,
-        TypeError::IncompatibleLengths(TupleLength::Exact(1), TupleLength::Exact(2))
+        err.kind(),
+        TypeErrorKind::IncompatibleLengths(TupleLength::Exact(1), TupleLength::Exact(2))
     );
 }
 
@@ -587,7 +587,7 @@ fn parametric_fn_passed_as_arg_with_unsatisfiable_requirements() {
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
     assert_incompatible_types(
-        &err.extra,
+        &err.kind(),
         &ValueType::Number,
         &ValueType::Tuple(vec![ValueType::Number; 2]),
     );
@@ -606,7 +606,7 @@ fn parametric_fn_passed_as_arg_with_recursive_requirements() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
-    assert_matches!(err.extra, TypeError::RecursiveType(_));
+    assert_matches!(err.kind(), TypeErrorKind::RecursiveType(_));
 }
 
 #[test]
@@ -646,8 +646,8 @@ fn function_passed_as_arg_invalid_arity() {
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
     assert_matches!(
-        err.extra,
-        TypeError::ArgLenMismatch {
+        err.kind(),
+        TypeErrorKind::ArgLenMismatch {
             expected: 1,
             actual: 2
         }
@@ -665,7 +665,7 @@ fn function_passed_as_arg_invalid_arg_type() {
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
     assert_incompatible_types(
-        &err.extra,
+        &err.kind(),
         &ValueType::Number,
         &ValueType::Tuple(vec![ValueType::Any; 2]),
     );
@@ -681,7 +681,7 @@ fn function_passed_as_arg_invalid_input() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
-    assert_incompatible_types(&err.extra, &ValueType::Number, &ValueType::Bool);
+    assert_incompatible_types(&err.kind(), &ValueType::Number, &ValueType::Bool);
 }
 
 #[test]
@@ -729,7 +729,7 @@ fn incorrect_arg_in_slices() {
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
     // FIXME: error span is incorrect here; should be `(1, 2 == 3)`
-    assert_incompatible_types(&err.extra, &ValueType::Number, &ValueType::Bool);
+    assert_incompatible_types(&err.kind(), &ValueType::Number, &ValueType::Bool);
 }
 
 #[test]
@@ -755,8 +755,8 @@ fn unifying_length_vars_error() {
 
     let err = type_env.process_statements(&block.statements).unwrap_err();
     assert_matches!(
-        err.extra,
-        TypeError::IncompatibleLengths(TupleLength::Exact(2), TupleLength::Exact(3))
+        err.kind(),
+        TypeErrorKind::IncompatibleLengths(TupleLength::Exact(2), TupleLength::Exact(3))
     );
 }
 
@@ -815,7 +815,7 @@ fn cannot_destructure_dynamic_slice() {
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
     assert_matches!(
-        err.extra,
-        TypeError::IncompatibleLengths(TupleLength::Dynamic, TupleLength::Exact(2))
+        err.kind(),
+        TypeErrorKind::IncompatibleLengths(TupleLength::Dynamic, TupleLength::Exact(2))
     );
 }

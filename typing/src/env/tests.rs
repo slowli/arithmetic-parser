@@ -1,12 +1,11 @@
 use super::*;
-use crate::{ConstParamDescription, FnArgs, TupleLength, TypeParamDescription};
+use crate::{ConstParamDescription, FnArgs, NumGrammar, TupleLength, TypeParamDescription};
 use std::collections::BTreeMap;
 
-use arithmetic_parser::{
-    grammars::{Grammar, NumLiteral, Parse, ParseLiteral, Typed},
-    InputSpan, NomResult,
-};
+use arithmetic_parser::grammars::{Parse, Typed};
 use assert_matches::assert_matches;
+
+pub type F32Grammar = Typed<NumGrammar<f32>>;
 
 pub fn assert_incompatible_types(err: &TypeError, first: &ValueType, second: &ValueType) {
     let (x, y) = match err {
@@ -152,29 +151,10 @@ fn filter_fn_type_display() {
     );
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct NumGrammar;
-
-impl ParseLiteral for NumGrammar {
-    type Lit = f32;
-
-    fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
-        f32::parse(input)
-    }
-}
-
-impl Grammar for NumGrammar {
-    type Type = ValueType;
-
-    fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
-        ValueType::parse(input)
-    }
-}
-
 #[test]
 fn statements_with_a_block() {
     let code = "y = { x = 3; 2 * x }; x ^ y == 6 * x;";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
 
     let mut type_env: TypeEnvironment = vec![("x", ValueType::Number)].into_iter().collect();
     type_env.process_statements(&block.statements).unwrap();
@@ -184,7 +164,7 @@ fn statements_with_a_block() {
 #[test]
 fn boolean_statements() {
     let code = "y = x == x ^ 2; y = y || { x = 3; x != 7 };";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
 
     let mut type_env: TypeEnvironment = vec![("x", ValueType::Number)].into_iter().collect();
     type_env.process_statements(&block.statements).unwrap();
@@ -197,7 +177,7 @@ fn spreading_binary_ops() {
         x = 3 * (1, 2);
         y = (1, x, 3) * 4;
     "#;
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block.statements).unwrap();
 
@@ -215,7 +195,7 @@ fn function_definition() {
         };
     "#;
 
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert_type("hash", hash_fn_type().into());
 
@@ -234,7 +214,7 @@ fn non_linear_types_in_function() {
         add_hashes = |x, y| hash(x, y) + hash(y, x);
     "#;
 
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
 
     let hash_type = hash_fn_type();
@@ -258,7 +238,7 @@ fn non_linear_types_in_function() {
 #[test]
 fn type_recursion() {
     let code = "bog = |x| x + (x, 2);";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
     assert_eq!(*err.fragment(), "x + (x, 2)");
@@ -272,7 +252,7 @@ fn indirect_type_recursion() {
         bog = |x| add(x, (1, x)); // ...but its application is not
     "#;
 
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
     assert_matches!(
@@ -284,7 +264,7 @@ fn indirect_type_recursion() {
 #[test]
 fn recursion_via_fn() {
     let code = "func = |bog| bog(1, bog);";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
     assert_matches!(
@@ -300,7 +280,7 @@ fn method_basics() {
         do_something = |x| x - 5;
         bar = foo.do_something();
     "#;
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let plus_type = FnType::new(
         vec![ValueType::Number, ValueType::Number],
@@ -315,7 +295,7 @@ fn method_basics() {
 #[test]
 fn unknown_method() {
     let code = "bar = 3.do_something();";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
@@ -326,7 +306,7 @@ fn unknown_method() {
 #[test]
 fn immediately_invoked_function() {
     let code = "flag = (|x| x + 3)(4) == 7;";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block.statements).unwrap();
 
@@ -336,7 +316,7 @@ fn immediately_invoked_function() {
 #[test]
 fn immediately_invoked_function_with_invalid_arg() {
     let code = "flag = (|x| x + x)(4 == 7);";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
@@ -346,7 +326,7 @@ fn immediately_invoked_function_with_invalid_arg() {
 #[test]
 fn variable_scoping() {
     let code = "x = 5; y = { x = (1, x); x * (2, 3) };";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block.statements).unwrap();
 
@@ -359,7 +339,7 @@ fn variable_scoping() {
 #[test]
 fn unsupported_destructuring_for_tuple() {
     let code = "(x, ...ys) = (1, 2, 3);";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
@@ -370,7 +350,7 @@ fn unsupported_destructuring_for_tuple() {
 #[test]
 fn unsupported_destructuring_for_fn_args() {
     let code = "foo = |y, ...xs| xs + y;";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
@@ -381,7 +361,7 @@ fn unsupported_destructuring_for_fn_args() {
 #[test]
 fn inferring_value_type_from_embedded_function() {
     let code = "double = |x| { (x, || (x, 2 * x)) };";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block.statements).unwrap();
     assert_eq!(
@@ -398,7 +378,7 @@ fn free_and_bound_type_vars() {
         partial = concat(3);
         y = (partial(2), partial((1, 1)));
     "#;
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block.statements).unwrap();
 
@@ -420,7 +400,7 @@ fn free_and_bound_type_vars() {
 #[test]
 fn attributing_type_vars_to_correct_fn() {
     let code = "double = |x| { (x, || (x, x)) };";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block.statements).unwrap();
     assert_eq!(
@@ -437,7 +417,7 @@ fn defining_and_calling_embedded_function() {
             double(x) == (1, 3)
         };
     "#;
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block.statements).unwrap();
     assert_eq!(type_env["call_double"].to_string(), "fn(Num) -> Bool");
@@ -446,7 +426,7 @@ fn defining_and_calling_embedded_function() {
 #[test]
 fn incorrect_function_arity() {
     let code = "double = |x| (x, x); (z,) = double(5);";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
@@ -459,7 +439,7 @@ fn incorrect_function_arity() {
 #[test]
 fn function_as_arg() {
     let code = "mapper = |(x, y), map| (map(x), map(y));";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block.statements).unwrap();
     assert_eq!(
@@ -471,7 +451,7 @@ fn function_as_arg() {
 #[test]
 fn function_as_arg_with_more_constraints() {
     let code = "mapper = |(x, y), map| map(x) + map(y);";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block.statements).unwrap();
     assert_eq!(
@@ -483,7 +463,7 @@ fn function_as_arg_with_more_constraints() {
 #[test]
 fn function_as_arg_with_even_more_constraints() {
     let code = "mapper = |(x, y), map| map(x * map(y));";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block.statements).unwrap();
     assert_eq!(
@@ -495,7 +475,7 @@ fn function_as_arg_with_even_more_constraints() {
 #[test]
 fn function_arg_with_multiple_args() {
     let code = "test_fn = |x, fun| fun(x, x * 3);";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block.statements).unwrap();
     assert_eq!(
@@ -512,7 +492,7 @@ fn function_as_arg_within_tuple() {
             fn(x / 3) * y
         };
     "#;
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block.statements).unwrap();
 
@@ -528,7 +508,7 @@ fn function_instantiations_are_independent() {
         identity = |x| x;
         x = (identity(5), identity(1 == 2));
     "#;
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block.statements).unwrap();
 
@@ -543,7 +523,7 @@ fn function_passed_as_arg() {
         create_fn = |x| { || x };
         tuple_of_fns = mapper((1, 2), create_fn);
     "#;
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block.statements).unwrap();
 
@@ -564,7 +544,7 @@ fn curried_function_passed_as_arg() {
         concat = |x| { |y| (x, y) };
         r = mapper((1, 2), concat(1 == 1));
     "#;
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block.statements).unwrap();
 
@@ -585,7 +565,7 @@ fn parametric_fn_passed_as_arg_with_different_constraints() {
         second = |fun, b| fun(b) == (3, b);
         second(partial, 1 == 1);
     "#;
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block.statements).unwrap();
 
@@ -602,7 +582,7 @@ fn parametric_fn_passed_as_arg_with_unsatisfiable_requirements() {
         bogus(partial);
     "#;
 
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
@@ -622,7 +602,7 @@ fn parametric_fn_passed_as_arg_with_recursive_requirements() {
         bogus(partial);
     "#;
 
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
@@ -632,7 +612,7 @@ fn parametric_fn_passed_as_arg_with_recursive_requirements() {
 #[test]
 fn type_param_is_placed_correctly_with_fn_arg() {
     let code = "foo = |fun| { |x| fun(x) == x };";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
 
     type_env.process_statements(&block.statements).unwrap();
@@ -645,7 +625,7 @@ fn type_param_is_placed_correctly_with_fn_arg() {
 #[test]
 fn type_params_in_fn_with_multiple_fn_args() {
     let code = "test = |x, foo, bar| foo(x) == bar(x * x);";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
 
     type_env.process_statements(&block.statements).unwrap();
@@ -661,7 +641,7 @@ fn function_passed_as_arg_invalid_arity() {
         mapper = |(x, y), map| (map(x), map(y));
         mapper((1, 2), |x, y| x + y);
     "#;
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
@@ -680,7 +660,7 @@ fn function_passed_as_arg_invalid_arg_type() {
         mapper = |(x, y), map| (map(x), map(y));
         mapper((1, 2), |(x, _)| x);
     "#;
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
@@ -697,7 +677,7 @@ fn function_passed_as_arg_invalid_input() {
         mapper = |(x, y), map| (map(x), map(y));
         mapper((1, 2 != 3), |x| x + 2);
     "#;
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block.statements).unwrap_err();
 
@@ -707,7 +687,7 @@ fn function_passed_as_arg_invalid_input() {
 #[test]
 fn unifying_slice_and_tuple() {
     let code = "xs = (1, 2).map(|x| x + 5);";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert_type("map", map_fn_type().into());
     type_env.process_statements(&block.statements).unwrap();
@@ -721,7 +701,7 @@ fn unifying_slice_and_tuple() {
 #[test]
 fn function_accepting_slices() {
     let code = "inc = |xs| xs.map(|x| x + 5); z = (1, 2, 3).inc();";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert_type("map", map_fn_type().into());
     type_env.process_statements(&block.statements).unwrap();
@@ -742,7 +722,7 @@ fn function_accepting_slices() {
 #[test]
 fn incorrect_arg_in_slices() {
     let code = "(1, 2 == 3).map(|x| x);";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert_type("map", map_fn_type().into());
 
@@ -755,7 +735,7 @@ fn incorrect_arg_in_slices() {
 #[test]
 fn slice_narrowed_to_tuple() {
     let code = "foo = |xs, fn| { (x, y, _) = xs.map(fn); y - x };";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert_type("map", map_fn_type().into());
     type_env.process_statements(&block.statements).unwrap();
@@ -769,7 +749,7 @@ fn slice_narrowed_to_tuple() {
 #[test]
 fn unifying_length_vars_error() {
     let code = "(1, 2).zip_with((3, 4, 5));";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert_type("zip_with", zip_fn_type().into());
 
@@ -783,7 +763,7 @@ fn unifying_length_vars_error() {
 #[test]
 fn unifying_length_vars() {
     let code = "foo = |xs, ys| xs.zip_with(ys).map(|(x, y)| x + y);";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert_type("map", map_fn_type().into());
     type_env.insert_type("zip_with", zip_fn_type().into());
@@ -798,7 +778,7 @@ fn unifying_length_vars() {
 #[test]
 fn dynamically_sized_slices_basics() {
     let code = "filtered = (1, 2, 3).filter(|x| x != 1);";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert_type("filter", filter_fn_type().into());
     type_env.process_statements(&block.statements).unwrap();
@@ -814,7 +794,7 @@ fn dynamically_sized_slices_with_map() {
         (1, 2, 3).foo();
         (5, 6, 7).filter(|x| x != 6 && x != 7).foo();
     "#;
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert_type("filter", filter_fn_type().into());
     type_env.insert_type("map", map_fn_type().into());
@@ -829,7 +809,7 @@ fn dynamically_sized_slices_with_map() {
 #[test]
 fn cannot_destructure_dynamic_slice() {
     let code = "(x, y) = (1, 2, 3).filter(|x| x != 1);";
-    let block = Typed::<NumGrammar>::parse_statements(code).unwrap();
+    let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert_type("filter", filter_fn_type().into());
     let err = type_env.process_statements(&block.statements).unwrap_err();

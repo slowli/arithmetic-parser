@@ -43,7 +43,12 @@
     clippy::similar_names // too many false positives because of lhs / rhs
 )]
 
-use std::{borrow::Cow, collections::BTreeMap, fmt};
+use std::{borrow::Cow, collections::BTreeMap, fmt, marker::PhantomData};
+
+use arithmetic_parser::{
+    grammars::{Grammar, NumLiteral, ParseLiteral},
+    InputSpan, NomResult,
+};
 
 mod env;
 mod error;
@@ -379,5 +384,39 @@ impl ValueType {
             Self::Tuple(_) | Self::Slice { .. } | Self::Bool | Self::Function(_) => Some(false),
             _ => None,
         }
+    }
+}
+
+/// Grammar with support of type annotations.
+#[derive(Debug)]
+pub struct NumGrammar<T>(PhantomData<T>);
+
+impl<T> Default for NumGrammar<T> {
+    fn default() -> Self {
+        Self(PhantomData)
+    }
+}
+
+impl<T> Clone for NumGrammar<T> {
+    fn clone(&self) -> Self {
+        Self(PhantomData)
+    }
+}
+
+impl<T> Copy for NumGrammar<T> {}
+
+impl<T: NumLiteral> ParseLiteral for NumGrammar<T> {
+    type Lit = T;
+
+    fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
+        <T as NumLiteral>::parse(input)
+    }
+}
+
+impl<T: NumLiteral> Grammar for NumGrammar<T> {
+    type Type = ValueType;
+
+    fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
+        ValueType::parse(input)
     }
 }

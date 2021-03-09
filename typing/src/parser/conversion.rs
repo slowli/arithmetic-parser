@@ -2,13 +2,15 @@
 
 use nom::Err as NomErr;
 
-use std::{collections::HashMap, convert::TryFrom, fmt};
+use std::{collections::HashMap, convert::TryFrom, fmt, str::FromStr};
 
 use crate::{
     parser::{ParsedFnType, ParsedTupleLength, ParsedValueType},
     ConstParamDescription, FnArgs, FnType, TupleLength, TypeParamDescription, ValueType,
 };
-use arithmetic_parser::{ErrorKind as ParseErrorKind, InputSpan, LocatedSpan, NomResult};
+use arithmetic_parser::{
+    ErrorKind as ParseErrorKind, InputSpan, LocatedSpan, NomResult, SpannedError, StripCode,
+};
 
 /// Kinds of errors that can occur when converting `Parsed*` types into their "main" counterparts.
 #[derive(Debug)]
@@ -207,13 +209,38 @@ impl<'a> TryFrom<ParsedValueType<'a>> for ValueType {
 impl ValueType {
     /// Parses type from `input`.
     pub fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
+        Self::parse_inner(input, false)
+    }
+
+    fn parse_inner(input: InputSpan<'_>, consume_all_input: bool) -> NomResult<'_, Self> {
         let (rest, parsed) = ParsedValueType::parse(input)?;
+        if consume_all_input && !rest.fragment().is_empty() {
+            let err = ParseErrorKind::Leftovers.with_span(&rest.into());
+            return Err(NomErr::Failure(err));
+        }
+
         let ty = ValueType::try_from(parsed).map_err(|err| {
             let err_span = err.main_span();
             let err = ParseErrorKind::Type(err.inner.extra.into()).with_span(&err_span);
             NomErr::Failure(err)
         })?;
         Ok((rest, ty))
+    }
+}
+
+impl FromStr for ValueType {
+    type Err = SpannedError<usize>;
+
+    fn from_str(def: &str) -> Result<Self, Self::Err> {
+        let input = InputSpan::new(def);
+        let (_, ty) = Self::parse_inner(input, true).map_err(|err| match err {
+            NomErr::Incomplete(_) => ParseErrorKind::Incomplete
+                .with_span(&input.into())
+                .strip_code(),
+            NomErr::Error(e) | NomErr::Failure(e) => e.strip_code(),
+        })?;
+
+        Ok(ty)
     }
 }
 
@@ -369,5 +396,84 @@ mod tests {
             err.kind(),
             ConversionErrorKind::UndefinedConst(name) if name == "N"
         );
+    }
+
+    #[test]
+    fn parsing_basic_value_types() {
+        let num_type: ValueType = "Num".parse().unwrap();
+        assert_eq!(num_type, ValueType::Number);
+
+        let bool_type: ValueType = "Bool".parse().unwrap();
+        assert_eq!(bool_type, ValueType::Bool);
+
+        let tuple_type: ValueType = "(Num, (Bool, _))".parse().unwrap();
+        assert_eq!(
+            tuple_type,
+            ValueType::Tuple(vec![
+                ValueType::Number,
+                ValueType::Tuple(vec![ValueType::Bool, ValueType::Any]),
+            ])
+        );
+
+        let slice_type: ValueType = "[(Num, _); _]".parse().unwrap();
+        let (element_ty, length) = match slice_type {
+            ValueType::Slice { element, length } => (*element, length),
+            _ => panic!("Unexpected type: {:?}", slice_type),
+        };
+        assert_eq!(
+            element_ty,
+            ValueType::Tuple(vec![ValueType::Number, ValueType::Any])
+        );
+        assert_matches!(length, TupleLength::Any);
+    }
+
+    #[test]
+    fn parsing_functional_value_type() {
+        let ty: ValueType = "fn<const N; T, U>([T; N], fn(T) -> U) -> U"
+            .parse()
+            .unwrap();
+        let ty = match ty {
+            ValueType::Function(fn_type) => *fn_type,
+            _ => panic!("Unexpected type: {:?}", ty),
+        };
+        assert_eq!(ty.const_params.len(), 1);
+        assert_eq!(ty.type_params.len(), 2);
+        assert_eq!(ty.return_type, ValueType::TypeParam(1));
+    }
+
+    #[test]
+    fn parsing_incomplete_value_type() {
+        const INCOMPLETE_TYPES: &[&str] = &[
+            "fn<",
+            "fn<co",
+            "fn<const N;",
+            "fn<const N; T",
+            "fn<const N; T,",
+            "fn<const N; T, U>",
+            "fn<const N; T, U>(",
+            "fn<const N; T, U>([T; ",
+            "fn<const N; T, U>([T; N], fn(",
+            "fn<const N; T, U>([T; N], fn(T)",
+            "fn<const N; T, U>([T; N], fn(T)",
+            "fn<const N; T, U>([T; N], fn(T)) -",
+            "fn<const N; T, U>([T; N], fn(T)) ->",
+        ];
+
+        for &input in INCOMPLETE_TYPES {
+            // TODO: some of reported errors are difficult to interpret; should clarify.
+            input.parse::<ValueType>().unwrap_err();
+        }
+    }
+
+    #[test]
+    fn parsing_value_type_with_conversion_error() {
+        let input = "[T; _]";
+        let err = input.parse::<ValueType>().unwrap_err();
+        assert_eq!(err.span().location_offset(), 1);
+        let err = match err.kind() {
+            ParseErrorKind::Type(err) => err.downcast_ref::<ConversionErrorKind>().unwrap(),
+            _ => panic!("Unexpected error type: {:?}", err),
+        };
+        assert_matches!(err, ConversionErrorKind::UndefinedTypeParam(name) if name == "T");
     }
 }

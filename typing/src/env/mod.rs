@@ -49,13 +49,13 @@ impl TypeEnvironment {
     /// about newly declared vars.
     pub fn process_statements<'a, T>(
         &mut self,
-        statements: &[SpannedStatement<'a, T>],
-    ) -> Result<(), TypeError<'a>>
+        block: &Block<'a, T>,
+    ) -> Result<ValueType, TypeError<'a>>
     where
         T: Grammar<Type = ValueType>,
     {
         TypeProcessor::new(self)
-            .process_statements(statements)
+            .process_statements(block)
             .map_err(TypeError::new)
     }
 }
@@ -430,19 +430,16 @@ impl TypeProcessor<'_> {
         }
     }
 
-    pub fn process_statements<'a, T>(
+    fn process_statements<'a, T>(
         &mut self,
-        statements: &[SpannedStatement<'a, T>],
-    ) -> Result<(), Spanned<'a, TypeErrorKind>>
+        block: &Block<'a, T>,
+    ) -> Result<ValueType, Spanned<'a, TypeErrorKind>>
     where
         T: Grammar<Type = ValueType>,
     {
         let mut substitutions = Substitutions::default();
 
-        let result = statements.iter().try_for_each(|statement| {
-            self.process_statement(&mut substitutions, statement)
-                .map(drop)
-        });
+        let result = self.process_block(&mut substitutions, block);
 
         // We need to resolve vars even if an error occurred.
         debug_assert!(self.inner_scopes.is_empty());

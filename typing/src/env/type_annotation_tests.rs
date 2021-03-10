@@ -14,7 +14,7 @@ fn type_hint_within_tuple() {
     let code = "foo = |x, fun| { (y: Num, z) = x; fun(y + z) };";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.process_statements(&block.statements).unwrap();
+    type_env.process_statements(&block).unwrap();
 
     assert_eq!(
         type_env["foo"].to_string(),
@@ -32,7 +32,7 @@ fn type_hint_in_fn_arg() {
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.process_statements(&block.statements).unwrap();
+    type_env.process_statements(&block).unwrap();
 
     assert_eq!(
         type_env["foo"].to_string(),
@@ -45,7 +45,7 @@ fn contradicting_type_hint() {
     let code = "x: (Num, _) = (1, 2, 3);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block.statements).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err();
 
     assert_matches!(
         err.kind(),
@@ -58,7 +58,7 @@ fn valid_type_hint_with_slice() {
     let code = "x: [Num; _] = (1, 2, 3);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.process_statements(&block.statements).unwrap();
+    type_env.process_statements(&block).unwrap();
 
     assert_eq!(type_env["x"].to_string(), "(Num, Num, Num)");
 }
@@ -68,7 +68,7 @@ fn contradicting_type_hint_with_slice() {
     let code = "x: [Num; _] = (1, 2 == 3);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block.statements).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err();
 
     assert_incompatible_types(&err.kind(), &ValueType::Number, &ValueType::Bool);
 }
@@ -79,7 +79,7 @@ fn valid_type_hint_with_fn_arg() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert_type("map", map_fn_type().into());
-    type_env.process_statements(&block.statements).unwrap();
+    type_env.process_statements(&block).unwrap();
 
     assert_eq!(
         type_env["foo"].to_string(),
@@ -93,7 +93,7 @@ fn invalid_type_hint_with_fn_arg() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert_type("map", map_fn_type().into());
-    let err = type_env.process_statements(&block.statements).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err();
 
     assert_matches!(
         err.kind(),
@@ -110,7 +110,7 @@ fn valid_type_hint_with_fn_declaration() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert_type("map", map_fn_type().into());
-    type_env.process_statements(&block.statements).unwrap();
+    type_env.process_statements(&block).unwrap();
 
     assert_eq!(type_env["foo"].to_string(), "fn(Num) -> Num");
 }
@@ -121,7 +121,7 @@ fn invalid_type_hint_with_fn_declaration() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert_type("map", map_fn_type().into());
-    let err = type_env.process_statements(&block.statements).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err();
 
     assert_incompatible_types(&err.kind(), &ValueType::Number, &ValueType::Bool);
 }
@@ -133,7 +133,7 @@ fn widening_type_hint_with_generic_slice_arg() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert_type("map", map_fn_type().into());
-    type_env.process_statements(&block.statements).unwrap();
+    type_env.process_statements(&block).unwrap();
 
     assert_eq!(
         type_env["foo"].to_string(),
@@ -148,7 +148,7 @@ fn widening_type_hint_with_slice_arg() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert_type("map", map_fn_type().into());
-    type_env.process_statements(&block.statements).unwrap();
+    type_env.process_statements(&block).unwrap();
 
     assert_eq!(
         type_env["foo"].to_string(),
@@ -161,7 +161,7 @@ fn unsupported_type_param_in_generic_fn() {
     let code = "identity: fn<Arg>(Arg) -> Arg = |x| x;";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block.statements).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err();
 
     assert_eq!(*err.span().fragment(), "fn<Arg>(Arg) -> Arg");
     assert_matches!(err.kind(), TypeErrorKind::UnsupportedParam);
@@ -172,7 +172,7 @@ fn unsupported_const_param_in_generic_fn() {
     let code = "identity: fn<const N>([Num; N]) -> [Num; N] = |x| x;";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block.statements).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err();
 
     assert_eq!(*err.span().fragment(), "fn<const N>([Num; N]) -> [Num; N]");
     assert_matches!(err.kind(), TypeErrorKind::UnsupportedParam);
@@ -186,7 +186,7 @@ fn fn_narrowed_via_type_hint() {
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block.statements).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err();
 
     assert_eq!(type_env["identity"].to_string(), "fn(Num) -> Num");
     assert_incompatible_types(
@@ -201,7 +201,7 @@ fn fn_incorrectly_narrowed_via_type_hint() {
     let code = "identity: fn(Num) -> Bool = |x| x;";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block.statements).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err();
 
     assert_incompatible_types(&err.kind(), &ValueType::Number, &ValueType::Bool);
 }
@@ -214,7 +214,7 @@ fn fn_instantiated_via_type_hint() {
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.process_statements(&block.statements).unwrap();
+    type_env.process_statements(&block).unwrap();
 
     assert_eq!(type_env["identity"].to_string(), "fn(Num) -> Num");
 }

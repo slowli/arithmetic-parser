@@ -3,7 +3,7 @@
 //! # Overview
 //!
 //! This module contains types representing AST for parsed type annotations; for example,
-//! [`ParsedValueType`] and [`ParsedFnType`]. These two types expose `parse` method which
+//! [`ValueTypeAst`] and [`FnTypeAst`]. These two types expose `parse` method which
 //! allows to integrate them into `nom` parsing.
 
 use nom::{
@@ -32,26 +32,26 @@ mod tests;
 ///
 /// ```
 /// use arithmetic_parser::InputSpan;
-/// # use arithmetic_typing::parser::ParsedValueType;
+/// # use arithmetic_typing::ast::ValueTypeAst;
 /// # use assert_matches::assert_matches;
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let input = InputSpan::new("(Num, fn<T>(T) -> (T, T))");
-/// let elements = match ParsedValueType::parse(input)?.1 {
-///     ParsedValueType::Tuple(elements) => elements,
+/// let elements = match ValueTypeAst::parse(input)?.1 {
+///     ValueTypeAst::Tuple(elements) => elements,
 ///     _ => unreachable!(),
 /// };
-/// assert_eq!(elements[0], ParsedValueType::Number);
+/// assert_eq!(elements[0], ValueTypeAst::Number);
 /// assert_matches!(
 ///     &elements[1],
-///     ParsedValueType::Function(f) if f.type_params.len() == 1
+///     ValueTypeAst::Function(f) if f.type_params.len() == 1
 /// );
 /// # Ok(())
 /// # }
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-pub enum ParsedValueType<'a> {
+pub enum ValueTypeAst<'a> {
     /// Type placeholder (`_`). Corresponds to any single type.
     Any,
     /// Boolean type (`Bool`).
@@ -61,19 +61,19 @@ pub enum ParsedValueType<'a> {
     /// Reference to a type param.
     Ident(InputSpan<'a>),
     /// Functional type.
-    Function(Box<ParsedFnType<'a>>),
+    Function(Box<FnTypeAst<'a>>),
     /// Tuple type; for example, `(Num, Bool)`.
-    Tuple(Vec<ParsedValueType<'a>>),
+    Tuple(Vec<ValueTypeAst<'a>>),
     /// Slice type; for example, `[Num]` or `[(Num, T); N]`.
     Slice {
         /// Element of this slice; for example, `Num` in `[Num; N]`.
-        element: Box<ParsedValueType<'a>>,
+        element: Box<ValueTypeAst<'a>>,
         /// Length of this slice; for example, `N` in `[Num; N]`.
-        length: ParsedTupleLength<'a>,
+        length: TupleLengthAst<'a>,
     },
 }
 
-impl<'a> ParsedValueType<'a> {
+impl<'a> ValueTypeAst<'a> {
     fn void() -> Self {
         Self::Tuple(vec![])
     }
@@ -96,33 +96,33 @@ impl<'a> ParsedValueType<'a> {
 /// ```
 /// use arithmetic_parser::InputSpan;
 /// # use assert_matches::assert_matches;
-/// # use arithmetic_typing::parser::{ParsedFnType, ParsedValueType};
+/// # use arithmetic_typing::ast::{FnTypeAst, ValueTypeAst};
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let input = InputSpan::new("fn<const N>([Num; N]) -> Num");
-/// let (rest, ty) = ParsedFnType::parse(input)?;
+/// let (rest, ty) = FnTypeAst::parse(input)?;
 /// assert!(rest.fragment().is_empty());
 /// assert_eq!(ty.const_params.len(), 1);
 /// assert!(ty.type_params.is_empty());
-/// assert_matches!(ty.args.as_slice(), [ParsedValueType::Slice { .. }]);
-/// assert_eq!(ty.return_type, ParsedValueType::Number);
+/// assert_matches!(ty.args.as_slice(), [ValueTypeAst::Slice { .. }]);
+/// assert_eq!(ty.return_type, ValueTypeAst::Number);
 /// # Ok(())
 /// # }
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-pub struct ParsedFnType<'a> {
+pub struct FnTypeAst<'a> {
     /// Constant params; e.g., `N` in `fn<const N>([Num; N]) -> Num`.
     pub const_params: Vec<InputSpan<'a>>,
     /// Type params together with their bounds. E.g., `T` in `fn<T>(T, T) -> T`.
-    pub type_params: Vec<(InputSpan<'a>, ParsedTypeParamBounds)>,
+    pub type_params: Vec<(InputSpan<'a>, TypeParamBoundsAst)>,
     /// Function arguments.
-    pub args: Vec<ParsedValueType<'a>>,
+    pub args: Vec<ValueTypeAst<'a>>,
     /// Return type of the function. Will be set to void if not declared.
-    pub return_type: ParsedValueType<'a>,
+    pub return_type: ValueTypeAst<'a>,
 }
 
-impl<'a> ParsedFnType<'a> {
+impl<'a> FnTypeAst<'a> {
     /// Parses `input` as a functional type. This parser can be composed using `nom` infrastructure.
     pub fn parse(input: InputSpan<'a>) -> NomResult<'a, Self> {
         fn_definition(input)
@@ -132,7 +132,7 @@ impl<'a> ParsedFnType<'a> {
 /// Parsed tuple length.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-pub enum ParsedTupleLength<'a> {
+pub enum TupleLengthAst<'a> {
     /// Const placeholder (`_`). Corresponds to any single type.
     Any,
     /// Dynamic tuple length. This length is *implicit*, as in `[Num]`.
@@ -144,7 +144,7 @@ pub enum ParsedTupleLength<'a> {
 /// Bounds that can be placed on a type param.
 #[derive(Debug, Default, Clone, PartialEq)]
 #[non_exhaustive]
-pub struct ParsedTypeParamBounds {
+pub struct TypeParamBoundsAst {
     /// Can the type param be non-linear?
     pub maybe_non_linear: bool,
 }
@@ -179,7 +179,7 @@ fn ident(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
     )(input)
 }
 
-fn tuple_definition(input: InputSpan<'_>) -> NomResult<'_, Vec<ParsedValueType<'_>>> {
+fn tuple_definition(input: InputSpan<'_>) -> NomResult<'_, Vec<ValueTypeAst<'_>>> {
     let maybe_comma = opt(preceded(ws, tag_char(',')));
     preceded(
         terminated(tag_char('('), ws),
@@ -191,16 +191,14 @@ fn tuple_definition(input: InputSpan<'_>) -> NomResult<'_, Vec<ParsedValueType<'
     )(input)
 }
 
-fn slice_definition(
-    input: InputSpan<'_>,
-) -> NomResult<'_, (ParsedValueType<'_>, ParsedTupleLength<'_>)> {
+fn slice_definition(input: InputSpan<'_>) -> NomResult<'_, (ValueTypeAst<'_>, TupleLengthAst<'_>)> {
     let semicolon = tuple((ws, tag_char(';'), ws));
     let tuple_len = map(
         opt(preceded(semicolon, ident)),
         |maybe_ident| match maybe_ident {
-            Some(ident) if *ident.fragment() == "_" => ParsedTupleLength::Any,
-            Some(ident) => ParsedTupleLength::Ident(ident),
-            None => ParsedTupleLength::Dynamic,
+            Some(ident) if *ident.fragment() == "_" => TupleLengthAst::Any,
+            Some(ident) => TupleLengthAst::Ident(ident),
+            None => TupleLengthAst::Dynamic,
         },
     );
 
@@ -214,22 +212,19 @@ fn slice_definition(
     )(input)
 }
 
-fn type_bounds(input: InputSpan<'_>) -> NomResult<'_, ParsedTypeParamBounds> {
-    map(terminated(tag("?Lin"), ws), |_| ParsedTypeParamBounds {
+fn type_bounds(input: InputSpan<'_>) -> NomResult<'_, TypeParamBoundsAst> {
+    map(terminated(tag("?Lin"), ws), |_| TypeParamBoundsAst {
         maybe_non_linear: true,
     })(input)
 }
 
-fn type_params(input: InputSpan<'_>) -> NomResult<'_, Vec<(InputSpan<'_>, ParsedTypeParamBounds)>> {
+fn type_params(input: InputSpan<'_>) -> NomResult<'_, Vec<(InputSpan<'_>, TypeParamBoundsAst)>> {
     let maybe_type_bounds = opt(preceded(tuple((ws, tag_char(':'), ws)), type_bounds));
     let type_param = tuple((ident, map(maybe_type_bounds, Option::unwrap_or_default)));
     separated_list1(comma_sep, type_param)(input)
 }
 
-type FnParams<'a> = (
-    Vec<InputSpan<'a>>,
-    Vec<(InputSpan<'a>, ParsedTypeParamBounds)>,
-);
+type FnParams<'a> = (Vec<InputSpan<'a>>, Vec<(InputSpan<'a>, TypeParamBoundsAst)>);
 
 /// Function params, including `<>` brackets.
 fn fn_params(input: InputSpan<'_>) -> NomResult<'_, FnParams> {
@@ -253,21 +248,19 @@ fn fn_params(input: InputSpan<'_>) -> NomResult<'_, FnParams> {
     )(input)
 }
 
-fn fn_definition(input: InputSpan<'_>) -> NomResult<'_, ParsedFnType<'_>> {
+fn fn_definition(input: InputSpan<'_>) -> NomResult<'_, FnTypeAst<'_>> {
     let return_type = preceded(tuple((ws, tag("->"), ws)), type_definition);
     let fn_parser = tuple((
         opt(fn_params),
         tuple_definition,
-        map(opt(return_type), |ty| {
-            ty.unwrap_or_else(ParsedValueType::void)
-        }),
+        map(opt(return_type), |ty| ty.unwrap_or_else(ValueTypeAst::void)),
     ));
 
     preceded(
         terminated(tag("fn"), ws),
         map(fn_parser, |(params, args, return_type)| {
             let (const_params, type_params) = params.unwrap_or_default();
-            ParsedFnType {
+            FnTypeAst {
                 const_params,
                 type_params,
                 args,
@@ -277,23 +270,21 @@ fn fn_definition(input: InputSpan<'_>) -> NomResult<'_, ParsedFnType<'_>> {
     )(input)
 }
 
-fn type_definition(input: InputSpan<'_>) -> NomResult<'_, ParsedValueType<'_>> {
+fn type_definition(input: InputSpan<'_>) -> NomResult<'_, ValueTypeAst<'_>> {
     alt((
         map(fn_definition, |fn_type| {
-            ParsedValueType::Function(Box::new(fn_type))
+            ValueTypeAst::Function(Box::new(fn_type))
         }),
         map(ident, |ident| match *ident.fragment() {
-            "Num" => ParsedValueType::Number,
-            "Bool" => ParsedValueType::Bool,
-            "_" => ParsedValueType::Any,
-            _ => ParsedValueType::Ident(ident),
+            "Num" => ValueTypeAst::Number,
+            "Bool" => ValueTypeAst::Bool,
+            "_" => ValueTypeAst::Any,
+            _ => ValueTypeAst::Ident(ident),
         }),
-        map(tuple_definition, ParsedValueType::Tuple),
-        map(slice_definition, |(element, length)| {
-            ParsedValueType::Slice {
-                element: Box::new(element),
-                length,
-            }
+        map(tuple_definition, ValueTypeAst::Tuple),
+        map(slice_definition, |(element, length)| ValueTypeAst::Slice {
+            element: Box::new(element),
+            length,
         }),
     ))(input)
 }

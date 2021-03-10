@@ -71,10 +71,10 @@ fn simple_tuple() {
     assert_eq!(
         elements,
         vec![
-            ParsedValueType::Number,
-            ParsedValueType::Any,
-            ParsedValueType::Bool,
-            ParsedValueType::Any,
+            ValueTypeAst::Number,
+            ValueTypeAst::Any,
+            ValueTypeAst::Bool,
+            ValueTypeAst::Any,
         ]
     );
 }
@@ -85,8 +85,8 @@ fn simple_slice_with_length() {
     let (rest, (element, len)) = slice_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_eq!(element, ParsedValueType::Number);
-    assert_matches!(len, ParsedTupleLength::Ident(ident) if *ident.fragment() == "N");
+    assert_eq!(element, ValueTypeAst::Number);
+    assert_matches!(len, TupleLengthAst::Ident(ident) if *ident.fragment() == "N");
 }
 
 #[test]
@@ -95,8 +95,8 @@ fn simple_slice_without_length() {
     let (rest, (element, len)) = slice_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_matches!(element, ParsedValueType::Ident(ident) if *ident.fragment() == "T");
-    assert_eq!(len, ParsedTupleLength::Dynamic);
+    assert_matches!(element, ValueTypeAst::Ident(ident) if *ident.fragment() == "T");
+    assert_eq!(len, TupleLengthAst::Dynamic);
 }
 
 #[test]
@@ -107,9 +107,9 @@ fn complex_slice_type() {
     assert!(rest.fragment().is_empty());
     assert_eq!(
         element,
-        ParsedValueType::Tuple(vec![ParsedValueType::Number, ParsedValueType::Bool])
+        ValueTypeAst::Tuple(vec![ValueTypeAst::Number, ValueTypeAst::Bool])
     );
-    assert_matches!(len, ParsedTupleLength::Ident(ident) if *ident.fragment() == "M");
+    assert_matches!(len, TupleLengthAst::Ident(ident) if *ident.fragment() == "M");
 }
 
 #[test]
@@ -118,15 +118,15 @@ fn embedded_slice_type() {
     let (rest, (element, len)) = slice_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_matches!(len, ParsedTupleLength::Ident(ident) if *ident.fragment() == "M");
+    assert_matches!(len, TupleLengthAst::Ident(ident) if *ident.fragment() == "M");
     let first_element = match &element {
-        ParsedValueType::Tuple(elements) => &elements[1],
+        ValueTypeAst::Tuple(elements) => &elements[1],
         _ => panic!("Unexpected slice element: {:?}", element),
     };
     assert_matches!(
         first_element,
-        ParsedValueType::Slice { element, length: ParsedTupleLength::Dynamic }
-            if **element == ParsedValueType::Bool
+        ValueTypeAst::Slice { element, length: TupleLengthAst::Dynamic }
+            if **element == ValueTypeAst::Bool
     );
 }
 
@@ -139,7 +139,7 @@ fn simple_fn_type() {
     assert!(fn_type.const_params.is_empty());
     assert!(fn_type.type_params.is_empty());
     assert!(fn_type.args.is_empty());
-    assert_eq!(fn_type.return_type, ParsedValueType::Number);
+    assert_eq!(fn_type.return_type, ValueTypeAst::Number);
 }
 
 #[test]
@@ -153,10 +153,10 @@ fn simple_fn_type_with_args() {
     assert_eq!(fn_type.args.len(), 2);
     assert_eq!(
         fn_type.args[0],
-        ParsedValueType::Tuple(vec![ParsedValueType::Number; 2])
+        ValueTypeAst::Tuple(vec![ValueTypeAst::Number; 2])
     );
-    assert_eq!(fn_type.args[1], ParsedValueType::Bool);
-    assert_eq!(fn_type.return_type, ParsedValueType::Number);
+    assert_eq!(fn_type.args[1], ValueTypeAst::Bool);
+    assert_eq!(fn_type.return_type, ValueTypeAst::Number);
 }
 
 #[test]
@@ -169,8 +169,8 @@ fn fn_type_with_type_params() {
     assert_eq!(fn_type.type_params.len(), 1);
     assert_eq!(*fn_type.type_params[0].0.fragment(), "T");
     assert_eq!(fn_type.args.len(), 3);
-    assert_matches!(fn_type.args[1], ParsedValueType::Ident(ident) if *ident.fragment() == "T");
-    assert_matches!(fn_type.return_type, ParsedValueType::Ident(ident) if *ident.fragment() == "T");
+    assert_matches!(fn_type.args[1], ValueTypeAst::Ident(ident) if *ident.fragment() == "T");
+    assert_matches!(fn_type.return_type, ValueTypeAst::Ident(ident) if *ident.fragment() == "T");
 }
 
 #[test]
@@ -182,19 +182,19 @@ fn fn_type_accepting_fn_arg() {
     assert_eq!(fn_type.const_params.len(), 1);
     assert_eq!(fn_type.type_params.len(), 1);
     assert_eq!(fn_type.args.len(), 2);
-    assert_eq!(fn_type.return_type, ParsedValueType::Bool);
+    assert_eq!(fn_type.return_type, ValueTypeAst::Bool);
 
     let inner_fn = match &fn_type.args[1] {
-        ParsedValueType::Function(inner_fn) => inner_fn.as_ref(),
+        ValueTypeAst::Function(inner_fn) => inner_fn.as_ref(),
         ty => panic!("Unexpected arg type: {:?}", ty),
     };
     assert!(inner_fn.const_params.is_empty());
     assert!(inner_fn.type_params.is_empty());
     assert_matches!(
         inner_fn.args.as_slice(),
-        [ParsedValueType::Ident(ident)] if *ident.fragment() == "T"
+        [ValueTypeAst::Ident(ident)] if *ident.fragment() == "T"
     );
-    assert_eq!(inner_fn.return_type, ParsedValueType::Bool);
+    assert_eq!(inner_fn.return_type, ValueTypeAst::Bool);
 }
 
 #[test]
@@ -205,14 +205,14 @@ fn fn_type_returning_fn_arg() {
     assert!(rest.fragment().is_empty());
     assert!(fn_type.const_params.is_empty());
     assert!(fn_type.type_params.is_empty());
-    assert_eq!(fn_type.args, vec![ParsedValueType::Number]);
+    assert_eq!(fn_type.args, vec![ValueTypeAst::Number]);
 
     let returned_fn = match fn_type.return_type {
-        ParsedValueType::Function(returned_fn) => *returned_fn,
+        ValueTypeAst::Function(returned_fn) => *returned_fn,
         ty => panic!("Unexpected return type: {:?}", ty),
     };
     assert!(returned_fn.const_params.is_empty());
     assert!(returned_fn.type_params.is_empty());
-    assert_eq!(returned_fn.args, vec![ParsedValueType::Bool]);
-    assert_eq!(returned_fn.return_type, ParsedValueType::Number);
+    assert_eq!(returned_fn.args, vec![ValueTypeAst::Bool]);
+    assert_eq!(returned_fn.return_type, ValueTypeAst::Number);
 }

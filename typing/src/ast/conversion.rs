@@ -1,18 +1,20 @@
-//! Logic for converting `Parsed*` types into their "main" counterparts.
+//! Logic for converting `*Ast` types into their "main" counterparts.
 
 use nom::Err as NomErr;
 
 use std::{collections::HashMap, convert::TryFrom, fmt, str::FromStr};
 
 use crate::{
-    parser::{ParsedFnType, ParsedTupleLength, ParsedValueType},
+    ast::{FnTypeAst, TupleLengthAst, ValueTypeAst},
     ConstParamDescription, FnArgs, FnType, TupleLength, TypeParamDescription, ValueType,
 };
 use arithmetic_parser::{
     ErrorKind as ParseErrorKind, InputSpan, LocatedSpan, NomResult, SpannedError, StripCode,
 };
 
-/// Kinds of errors that can occur when converting `Parsed*` types into their "main" counterparts.
+/// Kinds of errors that can occur when converting `*Ast` types into their "main" counterparts.
+///
+/// FIXME: example
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum ConversionErrorKind {
@@ -148,7 +150,7 @@ impl<'a> ConversionState<'a> {
     }
 }
 
-impl<'a> ParsedValueType<'a> {
+impl<'a> ValueTypeAst<'a> {
     fn try_convert(
         &self,
         state: &ConversionState<'a>,
@@ -179,15 +181,15 @@ impl<'a> ParsedValueType<'a> {
 
             Self::Slice { element, length } => {
                 let converted_length = match length {
-                    ParsedTupleLength::Ident(ident) => {
+                    TupleLengthAst::Ident(ident) => {
                         let name = *ident.fragment();
                         let const_param = state.const_param_idx(name).ok_or_else(|| {
                             ConversionErrorKind::UndefinedConst(name.to_owned()).with_span(*ident)
                         })?;
                         TupleLength::Param(const_param)
                     }
-                    ParsedTupleLength::Any => TupleLength::Any,
-                    ParsedTupleLength::Dynamic => TupleLength::Dynamic,
+                    TupleLengthAst::Any => TupleLength::Any,
+                    TupleLengthAst::Dynamic => TupleLength::Dynamic,
                 };
                 ValueType::Slice {
                     element: Box::new(element.try_convert(state)?),
@@ -198,10 +200,10 @@ impl<'a> ParsedValueType<'a> {
     }
 }
 
-impl<'a> TryFrom<ParsedValueType<'a>> for ValueType {
+impl<'a> TryFrom<ValueTypeAst<'a>> for ValueType {
     type Error = ConversionError<&'a str>;
 
-    fn try_from(value: ParsedValueType<'a>) -> Result<Self, Self::Error> {
+    fn try_from(value: ValueTypeAst<'a>) -> Result<Self, Self::Error> {
         value.try_convert(&ConversionState::default())
     }
 }
@@ -213,7 +215,7 @@ impl ValueType {
     }
 
     fn parse_inner(input: InputSpan<'_>, consume_all_input: bool) -> NomResult<'_, Self> {
-        let (rest, parsed) = ParsedValueType::parse(input)?;
+        let (rest, parsed) = ValueTypeAst::parse(input)?;
         if consume_all_input && !rest.fragment().is_empty() {
             let err = ParseErrorKind::Leftovers.with_span(&rest.into());
             return Err(NomErr::Failure(err));
@@ -244,7 +246,7 @@ impl FromStr for ValueType {
     }
 }
 
-impl<'a> ParsedFnType<'a> {
+impl<'a> FnTypeAst<'a> {
     fn try_convert(
         &self,
         mut state: ConversionState<'a>,
@@ -293,10 +295,10 @@ impl<'a> ParsedFnType<'a> {
     }
 }
 
-impl<'a> TryFrom<ParsedFnType<'a>> for FnType {
+impl<'a> TryFrom<FnTypeAst<'a>> for FnType {
     type Error = ConversionError<&'a str>;
 
-    fn try_from(value: ParsedFnType<'a>) -> Result<Self, Self::Error> {
+    fn try_from(value: FnTypeAst<'a>) -> Result<Self, Self::Error> {
         value.try_convert(ConversionState::default())
     }
 }
@@ -310,7 +312,7 @@ mod tests {
     #[test]
     fn converting_raw_fn_type() {
         let input = InputSpan::new("fn<const N; T>([T; N], fn(T) -> Bool) -> Bool");
-        let (_, fn_type) = ParsedFnType::parse(input).unwrap();
+        let (_, fn_type) = FnTypeAst::parse(input).unwrap();
         let fn_type = FnType::try_from(fn_type).unwrap();
 
         assert_eq!(fn_type.to_string(), *input.fragment());
@@ -319,7 +321,7 @@ mod tests {
     #[test]
     fn converting_raw_fn_type_duplicate_type() {
         let input = InputSpan::new("fn<T, T>([T; N], fn(T) -> Bool) -> Bool");
-        let (_, fn_type) = ParsedFnType::parse(input).unwrap();
+        let (_, fn_type) = FnTypeAst::parse(input).unwrap();
         let err = FnType::try_from(fn_type).unwrap_err();
 
         assert_eq!(err.main_span().location_offset(), 6);
@@ -333,7 +335,7 @@ mod tests {
     #[test]
     fn converting_raw_fn_type_duplicate_type_in_embedded_fn() {
         let input = InputSpan::new("fn<const N; T>([T; N], fn<T>(T) -> Bool) -> Bool");
-        let (_, fn_type) = ParsedFnType::parse(input).unwrap();
+        let (_, fn_type) = FnTypeAst::parse(input).unwrap();
         let err = FnType::try_from(fn_type).unwrap_err();
 
         assert_eq!(err.main_span().location_offset(), 26);
@@ -347,7 +349,7 @@ mod tests {
     #[test]
     fn converting_raw_fn_type_duplicate_const() {
         let input = InputSpan::new("fn<const N, N; T>([T; N], fn(T) -> Bool) -> Bool");
-        let (_, fn_type) = ParsedFnType::parse(input).unwrap();
+        let (_, fn_type) = FnTypeAst::parse(input).unwrap();
         let err = FnType::try_from(fn_type).unwrap_err();
 
         assert_eq!(err.main_span().location_offset(), 12);
@@ -361,7 +363,7 @@ mod tests {
     #[test]
     fn converting_raw_fn_type_duplicate_const_in_embedded_fn() {
         let input = InputSpan::new("fn<const N; T>([T; N], fn<const N>(T) -> Bool) -> Bool");
-        let (_, fn_type) = ParsedFnType::parse(input).unwrap();
+        let (_, fn_type) = FnTypeAst::parse(input).unwrap();
         let err = FnType::try_from(fn_type).unwrap_err();
 
         assert_eq!(err.main_span().location_offset(), 32);
@@ -375,7 +377,7 @@ mod tests {
     #[test]
     fn converting_raw_fn_type_undefined_type() {
         let input = InputSpan::new("fn<const N>([T; N], fn(T) -> Bool) -> Bool");
-        let (_, fn_type) = ParsedFnType::parse(input).unwrap();
+        let (_, fn_type) = FnTypeAst::parse(input).unwrap();
         let err = FnType::try_from(fn_type).unwrap_err();
 
         assert_eq!(err.main_span().location_offset(), 13);
@@ -388,7 +390,7 @@ mod tests {
     #[test]
     fn converting_raw_fn_type_undefined_const() {
         let input = InputSpan::new("fn<T>([T; N], fn(T) -> Bool) -> Bool");
-        let (_, fn_type) = ParsedFnType::parse(input).unwrap();
+        let (_, fn_type) = FnTypeAst::parse(input).unwrap();
         let err = FnType::try_from(fn_type).unwrap_err();
 
         assert_eq!(err.main_span().location_offset(), 10);

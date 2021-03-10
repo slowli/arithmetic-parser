@@ -50,9 +50,9 @@ use arithmetic_parser::{
     InputSpan, NomResult,
 };
 
+pub mod ast;
 mod env;
 mod error;
-pub mod parser;
 mod substitutions;
 
 pub use self::{

@@ -1,4 +1,4 @@
-//! Logic for parsing type annotations.
+//! ASTs for type annotations and their parsing logic.
 //!
 //! # Overview
 //!
@@ -20,6 +20,8 @@ use arithmetic_parser::{InputSpan, NomResult};
 mod conversion;
 #[cfg(test)]
 mod tests;
+
+pub use self::conversion::{ConversionError, ConversionErrorKind};
 
 /// Type annotation after parsing.
 ///

@@ -14,7 +14,31 @@ use arithmetic_parser::{
 
 /// Kinds of errors that can occur when converting `*Ast` types into their "main" counterparts.
 ///
-/// FIXME: example
+/// During parsing, errors of this type are wrapped into the [`Type`](ParseErrorKind::Type)
+/// variant of parsing errors.
+///
+/// # Examples
+///
+/// ```
+/// use arithmetic_parser::{grammars::{Parse, Typed}, ErrorKind};
+/// use arithmetic_typing::{ast::ConversionErrorKind, NumGrammar};
+/// # use assert_matches::assert_matches;
+///
+/// let code = "bogus_slice: [T; _] = (1, 2, 3);";
+/// let err = Typed::<NumGrammar<f32>>::parse_statements(code).unwrap_err();
+///
+/// assert_eq!(*err.span().fragment(), "T");
+/// let err = match err.kind() {
+///     ErrorKind::Type(type_err) => type_err
+///         .downcast_ref::<ConversionErrorKind>()
+///         .unwrap(),
+///     _ => unreachable!(),
+/// };
+/// assert_matches!(
+///     err,
+///     ConversionErrorKind::UndefinedTypeParam(t) if t == "T"
+/// );
+/// ```
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum ConversionErrorKind {
@@ -68,6 +92,8 @@ impl fmt::Display for ConversionErrorKind {
 
 impl std::error::Error for ConversionErrorKind {}
 
+/// Errors that can occur when converting `*Ast` types into their "main" counterparts, together
+/// with an error span.
 #[derive(Debug)]
 pub struct ConversionError<Span> {
     inner: LocatedSpan<Span, ConversionErrorKind>,

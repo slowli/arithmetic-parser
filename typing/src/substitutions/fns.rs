@@ -96,7 +96,7 @@ impl FnTypeTree {
             ty: &ValueType,
         ) {
             match ty {
-                ValueType::TypeVar(idx) => {
+                ValueType::Var(idx) => {
                     type_vars
                         .entry(*idx)
                         .and_modify(|qty| *qty = VarQuantity::Repeated)
@@ -281,14 +281,14 @@ impl ValueType {
     /// Returns the type with substituted vars.
     fn substitute_type_vars(&self, mapping: &ParamMapping, context: SubstitutionContext) -> Self {
         match self {
-            Self::TypeVar(idx) if context == SubstitutionContext::VarsToParams => {
-                Self::TypeParam(mapping.types[idx])
+            Self::Var(idx) if context == SubstitutionContext::VarsToParams => {
+                Self::Param(mapping.types[idx])
             }
-            Self::TypeParam(idx) if context == SubstitutionContext::ParamsToVars => mapping
+            Self::Param(idx) if context == SubstitutionContext::ParamsToVars => mapping
                 .types
                 .get(idx)
                 .copied()
-                .map_or(Self::TypeParam(*idx), Self::TypeVar),
+                .map_or(Self::Param(*idx), Self::Var),
 
             Self::Slice { element, length } => Self::Slice {
                 element: Box::new(element.substitute_type_vars(mapping, context)),
@@ -317,13 +317,13 @@ pub(super) struct ParamMapping {
     pub constants: HashMap<usize, usize>,
 }
 
-/// Context for mapping `TypeVar`s into `TypeParam`s or back.
+/// Context for mapping `Var`s into `Param`s or back.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) enum SubstitutionContext {
-    /// Mapping `TypeVar`s to `TypeParam`s. This occurs for top-level functions once
+    /// Mapping `Var`s to `Param`s. This occurs for top-level functions once
     /// their signature is established.
     VarsToParams,
-    /// Mapping `TypeParam`s to `TypeVar`s. This occurs when instantiating a function type
+    /// Mapping `Param`s to `Var`s. This occurs when instantiating a function type
     /// with type params.
     ParamsToVars,
 }

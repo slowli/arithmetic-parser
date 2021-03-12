@@ -184,6 +184,7 @@ impl FnType {
 #[derive(Debug, Clone, PartialEq)]
 pub enum FnArgs {
     /// Any arguments are accepted.
+    // TODO: allow to parse any args
     Any,
     /// Lists accepted arguments.
     List(Vec<ValueType>),
@@ -206,7 +207,7 @@ impl fmt::Display for FnArgs {
     }
 }
 
-/// Tuple length.
+/// Length of a tuple.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TupleLength {
     /// Dynamic length that can vary at runtime.
@@ -215,11 +216,12 @@ pub enum TupleLength {
     Any,
     /// Exact known length.
     Exact(usize),
+    /// Length parameter in a function definition.
+    Param(usize),
+
     /// Length variable. In contrast to `Param`s, `Var`s are used exclusively during
     /// inference and cannot occur in standalone function signatures.
     Var(usize),
-    /// Length parameter in a function definition.
-    Param(usize),
 }
 
 impl fmt::Display for TupleLength {
@@ -265,11 +267,12 @@ pub enum ValueType {
         /// Slice length.
         length: TupleLength,
     },
-    /// Type variable. In contrast to `TypeParam`s, `TypeVar`s are used exclusively during
-    /// inference and cannot occur in standalone function signatures.
-    TypeVar(usize),
     /// Type parameter in a function definition.
-    TypeParam(usize),
+    Param(usize),
+
+    /// Type variable. In contrast to `Param`s, `Var`s are used exclusively during
+    /// inference and cannot occur in standalone function signatures.
+    Var(usize),
 }
 
 impl PartialEq for ValueType {
@@ -280,9 +283,7 @@ impl PartialEq for ValueType {
             | (Self::Bool, Self::Bool)
             | (Self::Number, Self::Number) => true,
 
-            (Self::TypeVar(x), Self::TypeVar(y)) | (Self::TypeParam(x), Self::TypeParam(y)) => {
-                x == y
-            }
+            (Self::Var(x), Self::Var(y)) | (Self::Param(x), Self::Param(y)) => x == y,
 
             (Self::Tuple(xs), Self::Tuple(ys)) => xs == ys,
 
@@ -309,7 +310,7 @@ impl fmt::Display for ValueType {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Any => formatter.write_str("_"),
-            Self::TypeVar(idx) | Self::TypeParam(idx) => {
+            Self::Var(idx) | Self::Param(idx) => {
                 formatter.write_str(Self::type_param(*idx).as_ref())
             }
 
@@ -361,6 +362,29 @@ impl From<FnType> for ValueType {
     }
 }
 
+macro_rules! impl_from_tuple_for_value_type {
+    ($($var:tt : $ty:ident),*) => {
+        impl<$($ty : Into<ValueType>,)*> From<($($ty,)*)> for ValueType {
+            #[allow(unused_variables)] // `tuple` is unused for empty tuple
+            fn from(tuple: ($($ty,)*)) -> Self {
+                Self::Tuple(vec![$(tuple.$var.into(),)*])
+            }
+        }
+    };
+}
+
+impl_from_tuple_for_value_type!();
+impl_from_tuple_for_value_type!(0: T);
+impl_from_tuple_for_value_type!(0: T, 1: U);
+impl_from_tuple_for_value_type!(0: T, 1: U, 2: V);
+impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W);
+impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W, 4: X);
+impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y);
+impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z);
+impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A);
+impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A, 8: B);
+impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A, 8: B, 9: C);
+
 impl ValueType {
     fn type_param(index: usize) -> Cow<'static, str> {
         const PARAM_NAMES: &str = "TUVXYZ";
@@ -370,8 +394,17 @@ impl ValueType {
         )
     }
 
-    pub(crate) fn void() -> Self {
+    /// Returns a void type (an empty tuple).
+    pub const fn void() -> Self {
         Self::Tuple(Vec::new())
+    }
+
+    /// Creates a slice type.
+    pub fn slice(element: impl Into<ValueType>, length: TupleLength) -> Self {
+        Self::Slice {
+            element: Box::new(element.into()),
+            length,
+        }
     }
 
     /// Checks if this type is void (i.e., an empty tuple).

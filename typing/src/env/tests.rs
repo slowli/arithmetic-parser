@@ -36,8 +36,8 @@ fn hash_fn_type() -> FnType {
 /// ```
 pub fn map_fn_type() -> FnType {
     let map_fn = FnType {
-        args: FnArgs::List(vec![ValueType::TypeParam(0)]),
-        return_type: ValueType::TypeParam(1),
+        args: FnArgs::List(vec![ValueType::Param(0)]),
+        return_type: ValueType::Param(1),
         type_params: BTreeMap::new(),
         const_params: BTreeMap::new(),
     };
@@ -48,16 +48,10 @@ pub fn map_fn_type() -> FnType {
 
     FnType {
         args: FnArgs::List(vec![
-            ValueType::Slice {
-                element: Box::new(ValueType::TypeParam(0)),
-                length: TupleLength::Param(0),
-            },
+            ValueType::slice(ValueType::Param(0), TupleLength::Param(0)),
             map_fn.into(),
         ]),
-        return_type: ValueType::Slice {
-            element: Box::new(ValueType::TypeParam(1)),
-            length: TupleLength::Param(0),
-        },
+        return_type: ValueType::slice(ValueType::Param(1), TupleLength::Param(0)),
         type_params: (0..2).map(|i| (i, param_description)).collect(),
         const_params: vec![(0, ConstParamDescription)].into_iter().collect(),
     }
@@ -84,22 +78,13 @@ fn zip_fn_type() -> FnType {
 
     FnType {
         args: FnArgs::List(vec![
-            ValueType::Slice {
-                element: Box::new(ValueType::TypeParam(0)),
-                length: TupleLength::Param(0),
-            },
-            ValueType::Slice {
-                element: Box::new(ValueType::TypeParam(1)),
-                length: TupleLength::Param(0),
-            },
+            ValueType::slice(ValueType::Param(0), TupleLength::Param(0)),
+            ValueType::slice(ValueType::Param(1), TupleLength::Param(0)),
         ]),
-        return_type: ValueType::Slice {
-            element: Box::new(ValueType::Tuple(vec![
-                ValueType::TypeParam(0),
-                ValueType::TypeParam(1),
-            ])),
-            length: TupleLength::Param(0),
-        },
+        return_type: ValueType::slice(
+            (ValueType::Param(0), ValueType::Param(1)),
+            TupleLength::Param(0),
+        ),
         type_params: (0..2).map(|i| (i, param_description)).collect(),
         const_params: vec![(0, ConstParamDescription)].into_iter().collect(),
     }
@@ -116,7 +101,7 @@ fn zip_fn_type_display() {
 
 fn filter_fn_type() -> FnType {
     let filter_fn_type = FnType {
-        args: FnArgs::List(vec![ValueType::TypeParam(0)]),
+        args: FnArgs::List(vec![ValueType::Param(0)]),
         return_type: ValueType::Bool,
         type_params: BTreeMap::new(),
         const_params: BTreeMap::new(),
@@ -127,16 +112,10 @@ fn filter_fn_type() -> FnType {
     };
     FnType {
         args: FnArgs::List(vec![
-            ValueType::Slice {
-                element: Box::new(ValueType::TypeParam(0)),
-                length: TupleLength::Param(0),
-            },
+            ValueType::slice(ValueType::Param(0), TupleLength::Param(0)),
             filter_fn_type.into(),
         ]),
-        return_type: ValueType::Slice {
-            element: Box::new(ValueType::TypeParam(0)),
-            length: TupleLength::Dynamic,
-        },
+        return_type: ValueType::slice(ValueType::Param(0), TupleLength::Dynamic),
         type_params: vec![(0, param_description)].into_iter().collect(),
         const_params: vec![(0, ConstParamDescription)].into_iter().collect(),
     }

@@ -30,7 +30,7 @@ impl Substitutions {
 
     /// Resolves the type by following established equality links between type variables.
     fn fast_resolve<'a>(&'a self, mut ty: &'a ValueType) -> &'a ValueType {
-        while let ValueType::TypeVar(idx) = ty {
+        while let ValueType::Var(idx) = ty {
             let resolved = self.eqs.get(&idx);
             if let Some(resolved) = resolved {
                 ty = resolved;
@@ -80,15 +80,15 @@ impl Substitutions {
 
     pub fn assign_new_type(&mut self, ty: &mut ValueType) -> Result<(), TypeErrorKind> {
         match ty {
-            ValueType::Number | ValueType::Bool | ValueType::TypeVar(_) => {
+            ValueType::Number | ValueType::Bool | ValueType::Var(_) => {
                 // Do nothing.
             }
 
             // Checked previously when considering a function.
-            ValueType::TypeParam(_) => unreachable!(),
+            ValueType::Param(_) => unreachable!(),
 
             ValueType::Any => {
-                *ty = ValueType::TypeVar(self.type_var_count);
+                *ty = ValueType::Var(self.type_var_count);
                 self.type_var_count += 1;
             }
 
@@ -133,7 +133,7 @@ impl Substitutions {
     ///
     /// Returns an error if unification is impossible.
     pub fn unify(&mut self, lhs: &ValueType, rhs: &ValueType) -> Result<(), TypeErrorKind> {
-        use self::ValueType::{Function, Slice, Tuple, TypeParam, TypeVar};
+        use self::ValueType::{Function, Param, Slice, Tuple, Var};
 
         let resolved_lhs = self.fast_resolve(lhs).to_owned();
         let resolved_rhs = self.fast_resolve(rhs).to_owned();
@@ -147,9 +147,9 @@ impl Substitutions {
                 Ok(())
             }
 
-            (TypeVar(idx), ty) | (ty, TypeVar(idx)) => self.unify_var(*idx, ty),
+            (Var(idx), ty) | (ty, Var(idx)) => self.unify_var(*idx, ty),
 
-            (TypeParam(_), _) | (_, TypeParam(_)) => {
+            (Param(_), _) | (_, Param(_)) => {
                 unreachable!("Type params must be transformed into vars before unification")
             }
 
@@ -281,7 +281,7 @@ impl Substitutions {
         // Copy constraints on the newly generated type vars from the function definition.
         for (&original_idx, &new_idx) in &mapping.types {
             if fn_type.is_linear(original_idx) {
-                self.mark_as_linear(&ValueType::TypeVar(new_idx))?;
+                self.mark_as_linear(&ValueType::Var(new_idx))?;
             }
         }
 
@@ -294,9 +294,9 @@ impl Substitutions {
     /// is used to check that types are not recursive.
     fn check_occurrence(&self, var_idx: usize, ty: &ValueType) -> bool {
         match ty {
-            ValueType::TypeVar(i) if *i == var_idx => true,
+            ValueType::Var(i) if *i == var_idx => true,
 
-            ValueType::TypeVar(i) => self
+            ValueType::Var(i) => self
                 .eqs
                 .get(i)
                 .map_or(false, |subst| self.check_occurrence(var_idx, subst)),
@@ -319,8 +319,8 @@ impl Substitutions {
     /// provided to `TypeError`.
     pub fn sanitize_type(&self, fixed_idx: Option<usize>, ty: &ValueType) -> ValueType {
         match self.resolve(ty) {
-            ValueType::TypeVar(i) if Some(i) == fixed_idx => ValueType::TypeVar(0),
-            ValueType::TypeVar(_) => ValueType::Any,
+            ValueType::Var(i) if Some(i) == fixed_idx => ValueType::Var(0),
+            ValueType::Var(_) => ValueType::Any,
 
             ValueType::Tuple(elements) => ValueType::Tuple(
                 elements
@@ -354,7 +354,7 @@ impl Substitutions {
     fn unify_var(&mut self, var_idx: usize, ty: &ValueType) -> Result<(), TypeErrorKind> {
         // variables should be resolved in `unify`.
         debug_assert!(!self.eqs.contains_key(&var_idx));
-        debug_assert!(if let ValueType::TypeVar(idx) = ty {
+        debug_assert!(if let ValueType::Var(idx) = ty {
             !self.eqs.contains_key(idx)
         } else {
             true
@@ -377,7 +377,7 @@ impl Substitutions {
     #[allow(clippy::map_err_ignore)] // ignoring the original error is intentional
     pub fn mark_as_linear(&mut self, ty: &ValueType) -> Result<(), TypeErrorKind> {
         match ty {
-            ValueType::TypeVar(idx) => {
+            ValueType::Var(idx) => {
                 self.lin.insert(*idx);
                 self.eqs
                     .get(idx)
@@ -385,7 +385,7 @@ impl Substitutions {
                     .map_or(Ok(()), |subst| self.mark_as_linear(&subst))
             }
 
-            ValueType::Any | ValueType::TypeParam(_) => unreachable!(),
+            ValueType::Any | ValueType::Param(_) => unreachable!(),
 
             ValueType::Bool | ValueType::Function(_) => {
                 let reported_ty = self.sanitize_type(None, ty);

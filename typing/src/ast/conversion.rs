@@ -191,7 +191,7 @@ impl<'a> ValueTypeAst<'a> {
                 let idx = state.type_param_idx(name).ok_or_else(|| {
                     ConversionErrorKind::UndefinedTypeParam(name.to_owned()).with_span(*ident)
                 })?;
-                ValueType::TypeParam(idx)
+                ValueType::Param(idx)
             }
 
             Self::Function(fn_type) => {
@@ -466,7 +466,7 @@ mod tests {
         };
         assert_eq!(ty.const_params.len(), 1);
         assert_eq!(ty.type_params.len(), 2);
-        assert_eq!(ty.return_type, ValueType::TypeParam(1));
+        assert_eq!(ty.return_type, ValueType::Param(1));
     }
 
     #[test]

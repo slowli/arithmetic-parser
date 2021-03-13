@@ -30,18 +30,14 @@
 //!
 //! ```
 //! use arithmetic_parser::grammars::{Parse, Typed};
-//! use arithmetic_typing::{NumGrammar, TypeEnvironment, ValueType};
+//! use arithmetic_typing::{NumGrammar, Prelude, TypeEnvironment, ValueType};
 //!
 //! # fn main() -> anyhow::Result<()> {
 //! let code = "sum = |xs| xs.fold(0, |acc, x| acc + x);";
 //! let ast = Typed::<NumGrammar<f32>>::parse_statements(code)?;
 //!
 //! let mut env = TypeEnvironment::new();
-//! // Insert `fold` function definition.
-//! let fold_fn =
-//!     "fn<const N; T, Acc>([T; N], Acc, fn(Acc, T) -> Acc) -> Acc";
-//! let fold_fn: ValueType = fold_fn.parse()?;
-//! env.insert_type("fold", fold_fn);
+//! env.insert_type("fold", Prelude::fold_type().into());
 //!
 //! // Evaluate `code` to get the inferred `sum` function signature.
 //! let output_type = env.process_statements(&ast)?;
@@ -75,10 +71,12 @@ pub mod ast;
 mod env;
 mod error;
 mod substitutions;
+mod type_map;
 
 pub use self::{
     env::TypeEnvironment,
     error::{TypeError, TypeErrorKind},
+    type_map::{Assertions, Prelude},
 };
 
 /// Description of a type parameter.
@@ -247,7 +245,7 @@ impl FnType {
 ///     .with_type_params(0..=1, false)
 ///     .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
 ///     .with_arg(map_fn_arg)
-///     .returning(ValueType::Param(0).repeat(TupleLength::Param(1)));
+///     .returning(ValueType::Param(1).repeat(TupleLength::Param(0)));
 /// assert_eq!(
 ///     map_fn_type.to_string(),
 ///     "fn<const N; T: ?Lin, U: ?Lin>([T; N], fn(T) -> U) -> [U; N]"

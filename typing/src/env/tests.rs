@@ -1,9 +1,10 @@
-use super::*;
-use crate::{ConstParamDescription, FnArgs, NumGrammar, TupleLength, TypeParamDescription};
-use std::collections::BTreeMap;
-
 use arithmetic_parser::grammars::{Parse, Typed};
 use assert_matches::assert_matches;
+
+use std::collections::BTreeMap;
+
+use super::*;
+use crate::{FnArgs, NumGrammar, Prelude, TupleLength};
 
 pub type F32Grammar = Typed<NumGrammar<f32>>;
 
@@ -29,65 +30,21 @@ fn hash_fn_type() -> FnType {
     }
 }
 
-/// `map` function signature:
-///
-/// ```text
-/// fn<const N; T, U>([T; N], fn(T) -> U) -> [U; N]
-/// ```
-pub fn map_fn_type() -> FnType {
-    let map_fn = FnType {
-        args: FnArgs::List(vec![ValueType::Param(0)]),
-        return_type: ValueType::Param(1),
-        type_params: BTreeMap::new(),
-        const_params: BTreeMap::new(),
-    };
-
-    let param_description = TypeParamDescription {
-        maybe_non_linear: true,
-    };
-
-    FnType {
-        args: FnArgs::List(vec![
-            ValueType::slice(ValueType::Param(0), TupleLength::Param(0)),
-            map_fn.into(),
-        ]),
-        return_type: ValueType::slice(ValueType::Param(1), TupleLength::Param(0)),
-        type_params: (0..2).map(|i| (i, param_description)).collect(),
-        const_params: vec![(0, ConstParamDescription)].into_iter().collect(),
-    }
-}
-
-#[test]
-fn map_fn_type_display() {
-    let map_fn_string = map_fn_type().to_string();
-    assert_eq!(
-        map_fn_string,
-        "fn<const N; T: ?Lin, U: ?Lin>([T; N], fn(T) -> U) -> [U; N]"
-    );
-}
-
 /// `zip` function signature:
 ///
 /// ```text
 /// fn<const N; T, U>([T; N], [U; N]) -> [(T, U); N]
 /// ```
 fn zip_fn_type() -> FnType {
-    let param_description = TypeParamDescription {
-        maybe_non_linear: true,
-    };
-
-    FnType {
-        args: FnArgs::List(vec![
-            ValueType::slice(ValueType::Param(0), TupleLength::Param(0)),
-            ValueType::slice(ValueType::Param(1), TupleLength::Param(0)),
-        ]),
-        return_type: ValueType::slice(
+    FnType::builder()
+        .with_const_params(iter::once(0))
+        .with_type_params(0..=1, false)
+        .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
+        .with_arg(ValueType::Param(1).repeat(TupleLength::Param(0)))
+        .returning(ValueType::slice(
             (ValueType::Param(0), ValueType::Param(1)),
             TupleLength::Param(0),
-        ),
-        type_params: (0..2).map(|i| (i, param_description)).collect(),
-        const_params: vec![(0, ConstParamDescription)].into_iter().collect(),
-    }
+        ))
 }
 
 #[test]
@@ -96,37 +53,6 @@ fn zip_fn_type_display() {
     assert_eq!(
         zip_fn_string,
         "fn<const N; T: ?Lin, U: ?Lin>([T; N], [U; N]) -> [(T, U); N]"
-    );
-}
-
-fn filter_fn_type() -> FnType {
-    let filter_fn_type = FnType {
-        args: FnArgs::List(vec![ValueType::Param(0)]),
-        return_type: ValueType::Bool,
-        type_params: BTreeMap::new(),
-        const_params: BTreeMap::new(),
-    };
-
-    let param_description = TypeParamDescription {
-        maybe_non_linear: true,
-    };
-    FnType {
-        args: FnArgs::List(vec![
-            ValueType::slice(ValueType::Param(0), TupleLength::Param(0)),
-            filter_fn_type.into(),
-        ]),
-        return_type: ValueType::slice(ValueType::Param(0), TupleLength::Dynamic),
-        type_params: vec![(0, param_description)].into_iter().collect(),
-        const_params: vec![(0, ConstParamDescription)].into_iter().collect(),
-    }
-}
-
-#[test]
-fn filter_fn_type_display() {
-    let filter_fn_string = filter_fn_type().to_string();
-    assert_eq!(
-        filter_fn_string,
-        "fn<const N; T: ?Lin>([T; N], fn(T) -> Bool) -> [T]"
     );
 }
 
@@ -668,7 +594,7 @@ fn unifying_slice_and_tuple() {
     let code = "xs = (1, 2).map(|x| x + 5);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("map", map_fn_type().into());
+    type_env.insert_type("map", Prelude::map_type().into());
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
@@ -682,7 +608,7 @@ fn function_accepting_slices() {
     let code = "inc = |xs| xs.map(|x| x + 5); z = (1, 2, 3).inc();";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("map", map_fn_type().into());
+    type_env.insert_type("map", Prelude::map_type().into());
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
@@ -703,7 +629,7 @@ fn incorrect_arg_in_slices() {
     let code = "(1, 2 == 3).map(|x| x);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("map", map_fn_type().into());
+    type_env.insert_type("map", Prelude::map_type().into());
 
     let err = type_env.process_statements(&block).unwrap_err();
 
@@ -716,7 +642,7 @@ fn slice_narrowed_to_tuple() {
     let code = "foo = |xs, fn| { (x, y, _) = xs.map(fn); y - x };";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("map", map_fn_type().into());
+    type_env.insert_type("map", Prelude::map_type().into());
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
@@ -744,7 +670,7 @@ fn unifying_length_vars() {
     let code = "foo = |xs, ys| xs.zip_with(ys).map(|(x, y)| x + y);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("map", map_fn_type().into());
+    type_env.insert_type("map", Prelude::map_type().into());
     type_env.insert_type("zip_with", zip_fn_type().into());
     type_env.process_statements(&block).unwrap();
 
@@ -759,7 +685,7 @@ fn dynamically_sized_slices_basics() {
     let code = "filtered = (1, 2, 3).filter(|x| x != 1);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("filter", filter_fn_type().into());
+    type_env.insert_type("filter", Prelude::filter_type().into());
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(type_env["filtered"].to_string(), "[Num]");
@@ -775,8 +701,8 @@ fn dynamically_sized_slices_with_map() {
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("filter", filter_fn_type().into());
-    type_env.insert_type("map", map_fn_type().into());
+    type_env.insert_type("filter", Prelude::filter_type().into());
+    type_env.insert_type("map", Prelude::map_type().into());
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
@@ -790,7 +716,7 @@ fn cannot_destructure_dynamic_slice() {
     let code = "(x, y) = (1, 2, 3).filter(|x| x != 1);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("filter", filter_fn_type().into());
+    type_env.insert_type("filter", Prelude::filter_type().into());
     let err = type_env.process_statements(&block).unwrap_err();
 
     assert_matches!(

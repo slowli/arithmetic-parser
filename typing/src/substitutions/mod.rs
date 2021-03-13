@@ -3,14 +3,14 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{FnArgs, FnType, LiteralType, TupleLength, TypeErrorKind, ValueType};
-use arithmetic_parser::{grammars::Grammar, Spanned, SpannedExpr};
+use arithmetic_parser::Spanned;
 
 mod fns;
 use self::fns::{ParamMapping, SubstitutionContext};
 
 /// Set of equations and constraints on type variables.
 #[derive(Debug, Clone)]
-pub(crate) struct Substitutions<Lit> {
+pub struct Substitutions<Lit> {
     /// Number of type variables.
     type_var_count: usize,
     /// Type variable equations, encoded as `type_var[key] = value`.
@@ -41,7 +41,7 @@ impl<Lit: LiteralType> Substitutions<Lit> {
     }
 
     /// Resolves the type by following established equality links between type variables.
-    fn fast_resolve<'a>(&'a self, mut ty: &'a ValueType<Lit>) -> &'a ValueType<Lit> {
+    pub fn fast_resolve<'a>(&'a self, mut ty: &'a ValueType<Lit>) -> &'a ValueType<Lit> {
         while let ValueType::Var(idx) = ty {
             let resolved = self.eqs.get(&idx);
             if let Some(resolved) = resolved {
@@ -90,7 +90,10 @@ impl<Lit: LiteralType> Substitutions<Lit> {
         len
     }
 
-    pub fn assign_new_type(&mut self, ty: &mut ValueType<Lit>) -> Result<(), TypeErrorKind<Lit>> {
+    pub(crate) fn assign_new_type(
+        &mut self,
+        ty: &mut ValueType<Lit>,
+    ) -> Result<(), TypeErrorKind<Lit>> {
         match ty {
             ValueType::Lit(_) | ValueType::Bool | ValueType::Var(_) => {
                 // Do nothing.
@@ -355,7 +358,11 @@ impl<Lit: LiteralType> Substitutions<Lit> {
 
     /// Removes excessive information about type vars. This method is used when types are
     /// provided to `TypeError`.
-    pub fn sanitize_type(&self, fixed_idx: Option<usize>, ty: &ValueType<Lit>) -> ValueType<Lit> {
+    pub(crate) fn sanitize_type(
+        &self,
+        fixed_idx: Option<usize>,
+        ty: &ValueType<Lit>,
+    ) -> ValueType<Lit> {
         match self.resolve(ty) {
             ValueType::Var(i) if Some(i) == fixed_idx => ValueType::Var(0),
             ValueType::Var(_) => ValueType::Any,
@@ -450,10 +457,10 @@ impl<Lit: LiteralType> Substitutions<Lit> {
         }
     }
 
-    pub fn unify_spanned_expr<'a, T: Grammar>(
+    pub fn unify_spanned_expr<'a, T>(
         &mut self,
         expr: &ValueType<Lit>,
-        expr_span: &SpannedExpr<'a, T>,
+        expr_span: &Spanned<'a, T>,
         expected: &ValueType<Lit>,
     ) -> Result<(), Spanned<'a, TypeErrorKind<Lit>>> {
         // FIXME: should switch LHS / RHS.
@@ -473,31 +480,5 @@ impl<Lit: LiteralType> Substitutions<Lit> {
         let called_fn_type = FnType::new(arg_types, return_type.clone());
         self.unify(&ValueType::Function(Box::new(called_fn_type)), definition)
             .map(|()| return_type)
-    }
-
-    /// Handles a binary operation.
-    ///
-    /// Binary ops fall into 3 cases: `Num op T == T`, `T op Num == T`, or `T op T == T`.
-    /// We assume `T op T` by default, only falling into two other cases if one of operands
-    /// is known to be a number and the other is not a number.
-    pub fn unify_binary_op(
-        &mut self,
-        lhs_ty: &ValueType<Lit>,
-        rhs_ty: &ValueType<Lit>,
-    ) -> Result<ValueType<Lit>, TypeErrorKind<Lit>> {
-        self.mark_as_linear(lhs_ty)?;
-        self.mark_as_linear(rhs_ty)?;
-
-        let resolved_lhs_ty = self.fast_resolve(lhs_ty);
-        let resolved_rhs_ty = self.fast_resolve(rhs_ty);
-
-        match (resolved_lhs_ty.is_number(), resolved_rhs_ty.is_number()) {
-            (Some(true), Some(false)) => Ok(resolved_rhs_ty.to_owned()),
-            (Some(false), Some(true)) => Ok(resolved_lhs_ty.to_owned()),
-            _ => {
-                self.unify(lhs_ty, rhs_ty)?;
-                Ok(lhs_ty.to_owned())
-            }
-        }
     }
 }

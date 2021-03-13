@@ -725,6 +725,43 @@ fn cannot_destructure_dynamic_slice() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::IncompatibleLengths(TupleLength::Dynamic, TupleLength::Exact(2))
+        TypeErrorKind::IncompatibleLengths(TupleLength::Exact(2), TupleLength::Dynamic)
     );
+}
+
+#[test]
+fn comparisons_when_switched_off() {
+    let code = "(1, 2, 3).filter(|x| x > 1)";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.insert_type("filter", Prelude::filter_type().into());
+    let err = type_env.process_statements(&block).unwrap_err();
+
+    assert_eq!(*err.span().fragment(), "x > 1");
+    assert_matches!(err.kind(), TypeErrorKind::Unsupported(_));
+}
+
+#[test]
+fn comparisons_when_switched_on() {
+    let code = "(1, 2, 3).filter(|x| x > 1)";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.insert_type("filter", Prelude::filter_type().into());
+    let output = type_env
+        .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
+        .unwrap();
+
+    assert_eq!(output, ValueType::Lit(Num).repeat(TupleLength::Dynamic));
+}
+
+#[test]
+fn comparison_type_error() {
+    let code = "(2 <= 1) + 3";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env
+        .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
+        .unwrap_err();
+
+    assert_matches!(err.kind(), TypeErrorKind::NonLinearType(ValueType::Bool));
 }

@@ -166,9 +166,15 @@ impl Substitutions {
                 Ok(())
             }
 
-            (Slice { element, length }, Tuple(tuple_elements))
-            | (Tuple(tuple_elements), Slice { element, length }) => {
+            (Slice { element, length }, Tuple(tuple_elements)) => {
                 self.unify_lengths(*length, TupleLength::Exact(tuple_elements.len()))?;
+                for tuple_element in tuple_elements {
+                    self.unify(element, tuple_element)?;
+                }
+                Ok(())
+            }
+            (Tuple(tuple_elements), Slice { element, length }) => {
+                self.unify_lengths(TupleLength::Exact(tuple_elements.len()), *length)?;
                 for tuple_element in tuple_elements {
                     self.unify(tuple_element, element)?;
                 }
@@ -207,6 +213,11 @@ impl Substitutions {
 
             (TupleLength::Var(x), other) | (other, TupleLength::Var(x)) => {
                 self.length_eqs.insert(x, other);
+                Ok(())
+            }
+
+            (TupleLength::Dynamic, _) => {
+                // Any length can be interpreted as a dynamic length, but not the other way around.
                 Ok(())
             }
 

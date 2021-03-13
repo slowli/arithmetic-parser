@@ -218,3 +218,13 @@ fn fn_instantiated_via_type_hint() {
 
     assert_eq!(type_env["identity"].to_string(), "fn(Num) -> Num");
 }
+
+#[test]
+fn assigning_to_dynamically_sized_slice() {
+    let code = "slice: [Num] = (1, 2, 3);";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.process_statements(&block).unwrap();
+
+    assert_eq!(type_env["slice"].to_string(), "[Num]");
+}

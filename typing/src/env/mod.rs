@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    substitutions::Substitutions, FnType, LiteralType, TypeError, TypeErrorKind, ValueType,
+    substitutions::Substitutions, FnType, LiteralType, Num, TypeError, TypeErrorKind, ValueType,
 };
 use arithmetic_parser::{
     grammars::Grammar, BinaryOp, Block, Destructure, Expr, FnDefinition, Lvalue, Spanned,
@@ -18,6 +18,27 @@ use arithmetic_parser::{
 mod tests;
 #[cfg(test)]
 mod type_annotation_tests;
+
+/// FIXME
+pub trait TypeArithmetic<Lit> {
+    /// FIXME
+    type LitType: LiteralType;
+
+    /// FIXME
+    fn type_of_literal(&self, lit: &Lit) -> Self::LitType;
+}
+
+/// FIXME
+#[derive(Debug, Clone, Default)]
+pub struct NumArithmetic;
+
+impl<Lit> TypeArithmetic<Lit> for NumArithmetic {
+    type LitType = Num;
+
+    fn type_of_literal(&self, _: &Lit) -> Self::LitType {
+        Num
+    }
+}
 
 /// Environment containing type information on named variables.
 #[derive(Debug, Clone)]
@@ -63,8 +84,9 @@ impl<Lit: LiteralType> TypeEnvironment<Lit> {
     ) -> Result<ValueType<Lit>, TypeError<'a, Lit>>
     where
         T: Grammar<Type = ValueType<Lit>>,
+        NumArithmetic: TypeArithmetic<T::Lit, LitType = Lit>,
     {
-        TypeProcessor::new(self)
+        TypeProcessor::new(self, &NumArithmetic::default())
             .process_statements(block)
             .map_err(TypeError::new)
     }
@@ -106,24 +128,28 @@ where
 }
 
 /// Processor for deriving type information.
-#[derive(Debug)]
-struct TypeProcessor<'a, Lit> {
+struct TypeProcessor<'a, L, Lit: LiteralType> {
     root_scope: &'a mut TypeEnvironment<Lit>,
     inner_scopes: Vec<TypeEnvironment<Lit>>,
+    arithmetic: &'a dyn TypeArithmetic<L, LitType = Lit>,
     is_in_function: bool,
 }
 
-impl<'a, Lit: LiteralType> TypeProcessor<'a, Lit> {
-    fn new(env: &'a mut TypeEnvironment<Lit>) -> Self {
+impl<'a, L, Lit: LiteralType> TypeProcessor<'a, L, Lit> {
+    fn new(
+        env: &'a mut TypeEnvironment<Lit>,
+        arithmetic: &'a dyn TypeArithmetic<L, LitType = Lit>,
+    ) -> Self {
         Self {
             root_scope: env,
             inner_scopes: vec![],
+            arithmetic,
             is_in_function: false,
         }
     }
 }
 
-impl<Lit: LiteralType> TypeProcessor<'_, Lit> {
+impl<L, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
     fn get_type(&self, name: &str) -> Option<&ValueType<Lit>> {
         self.inner_scopes
             .iter()
@@ -147,12 +173,12 @@ impl<Lit: LiteralType> TypeProcessor<'_, Lit> {
         expr: &SpannedExpr<'a, T>,
     ) -> Result<ValueType<Lit>, Spanned<'a, TypeErrorKind<Lit>>>
     where
-        T: Grammar<Type = ValueType<Lit>>,
+        T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {
         match &expr.extra {
             Expr::Variable => self.process_var(expr),
 
-            Expr::Literal(_) => unimplemented!(),
+            Expr::Literal(lit) => Ok(ValueType::Lit(self.arithmetic.type_of_literal(lit))),
 
             Expr::Tuple(ref terms) => {
                 let term_types: Result<Vec<_>, _> = terms
@@ -218,7 +244,7 @@ impl<Lit: LiteralType> TypeProcessor<'_, Lit> {
         block: &Block<'a, T>,
     ) -> Result<ValueType<Lit>, Spanned<'a, TypeErrorKind<Lit>>>
     where
-        T: Grammar<Type = ValueType<Lit>>,
+        T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {
         for statement in &block.statements {
             self.process_statement(substitutions, statement)?;
@@ -287,7 +313,7 @@ impl<Lit: LiteralType> TypeProcessor<'_, Lit> {
         args: impl Iterator<Item = &'it SpannedExpr<'a, T>>,
     ) -> Result<ValueType<Lit>, Spanned<'a, TypeErrorKind<Lit>>>
     where
-        T: Grammar<Type = ValueType<Lit>>,
+        T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {
         let arg_types: Result<Vec<_>, _> = args
             .map(|arg| self.process_expr_inner(substitutions, arg))
@@ -308,7 +334,7 @@ impl<Lit: LiteralType> TypeProcessor<'_, Lit> {
         inner: &SpannedExpr<'a, T>,
     ) -> Result<ValueType<Lit>, Spanned<'a, TypeErrorKind<Lit>>>
     where
-        T: Grammar<Type = ValueType<Lit>>,
+        T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {
         let inner_type = self.process_expr_inner(substitutions, inner)?;
         match op.extra {
@@ -338,7 +364,7 @@ impl<Lit: LiteralType> TypeProcessor<'_, Lit> {
         rhs: &SpannedExpr<'a, T>,
     ) -> Result<ValueType<Lit>, Spanned<'a, TypeErrorKind<Lit>>>
     where
-        T: Grammar<Type = ValueType<Lit>>,
+        T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {
         let lhs_ty = self.process_expr_inner(substitutions, lhs)?;
         let rhs_ty = self.process_expr_inner(substitutions, rhs)?;
@@ -375,7 +401,7 @@ impl<Lit: LiteralType> TypeProcessor<'_, Lit> {
         def: &FnDefinition<'a, T>,
     ) -> Result<FnType<Lit>, Spanned<'a, TypeErrorKind<Lit>>>
     where
-        T: Grammar<Type = ValueType<Lit>>,
+        T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {
         self.inner_scopes.push(TypeEnvironment::default());
         let was_in_function = mem::replace(&mut self.is_in_function, true);
@@ -407,7 +433,7 @@ impl<Lit: LiteralType> TypeProcessor<'_, Lit> {
         def: &FnDefinition<'a, T>,
     ) -> Result<(Vec<ValueType<Lit>>, ValueType<Lit>), Spanned<'a, TypeErrorKind<Lit>>>
     where
-        T: Grammar<Type = ValueType<Lit>>,
+        T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {
         let arg_types = self.process_destructure(substitutions, &def.args.extra)?;
         let return_type = self.process_block(substitutions, &def.body)?;
@@ -420,7 +446,7 @@ impl<Lit: LiteralType> TypeProcessor<'_, Lit> {
         statement: &SpannedStatement<'a, T>,
     ) -> Result<ValueType<Lit>, Spanned<'a, TypeErrorKind<Lit>>>
     where
-        T: Grammar<Type = ValueType<Lit>>,
+        T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {
         match &statement.extra {
             Statement::Expr(expr) => self.process_expr_inner(substitutions, expr),
@@ -446,7 +472,7 @@ impl<Lit: LiteralType> TypeProcessor<'_, Lit> {
         block: &Block<'a, T>,
     ) -> Result<ValueType<Lit>, Spanned<'a, TypeErrorKind<Lit>>>
     where
-        T: Grammar<Type = ValueType<Lit>>,
+        T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {
         let mut substitutions = Substitutions::default();
 

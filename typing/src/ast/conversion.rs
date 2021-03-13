@@ -6,7 +6,8 @@ use std::{collections::HashMap, convert::TryFrom, fmt, str::FromStr};
 
 use crate::{
     ast::{FnTypeAst, TupleLengthAst, ValueTypeAst},
-    ConstParamDescription, FnArgs, FnType, TupleLength, TypeParamDescription, ValueType,
+    ConstParamDescription, FnArgs, FnType, LiteralType, TupleLength, TypeParamDescription,
+    ValueType,
 };
 use arithmetic_parser::{
     ErrorKind as ParseErrorKind, InputSpan, LocatedSpan, NomResult, SpannedError, StripCode,
@@ -176,15 +177,15 @@ impl<'a> ConversionState<'a> {
     }
 }
 
-impl<'a> ValueTypeAst<'a> {
+impl<'a, Lit: LiteralType> ValueTypeAst<'a, Lit> {
     fn try_convert(
         &self,
         state: &ConversionState<'a>,
-    ) -> Result<ValueType, ConversionError<&'a str>> {
+    ) -> Result<ValueType<Lit>, ConversionError<&'a str>> {
         Ok(match self {
             Self::Any => ValueType::Any,
             Self::Bool => ValueType::Bool,
-            Self::Number => ValueType::Number,
+            Self::Lit(num) => ValueType::Lit(num.to_owned()),
 
             Self::Ident(ident) => {
                 let name = *ident.fragment();
@@ -226,15 +227,15 @@ impl<'a> ValueTypeAst<'a> {
     }
 }
 
-impl<'a> TryFrom<ValueTypeAst<'a>> for ValueType {
+impl<'a, Lit: LiteralType> TryFrom<ValueTypeAst<'a, Lit>> for ValueType<Lit> {
     type Error = ConversionError<&'a str>;
 
-    fn try_from(value: ValueTypeAst<'a>) -> Result<Self, Self::Error> {
+    fn try_from(value: ValueTypeAst<'a, Lit>) -> Result<Self, Self::Error> {
         value.try_convert(&ConversionState::default())
     }
 }
 
-impl ValueType {
+impl<Lit: LiteralType> ValueType<Lit> {
     /// Parses type from `input`.
     pub fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
         Self::parse_inner(input, false)
@@ -256,7 +257,7 @@ impl ValueType {
     }
 }
 
-impl FromStr for ValueType {
+impl<Lit: LiteralType> FromStr for ValueType<Lit> {
     type Err = SpannedError<usize>;
 
     fn from_str(def: &str) -> Result<Self, Self::Err> {
@@ -272,11 +273,11 @@ impl FromStr for ValueType {
     }
 }
 
-impl<'a> FnTypeAst<'a> {
+impl<'a, Lit: LiteralType> FnTypeAst<'a, Lit> {
     fn try_convert(
         &self,
         mut state: ConversionState<'a>,
-    ) -> Result<FnType, ConversionError<&'a str>> {
+    ) -> Result<FnType<Lit>, ConversionError<&'a str>> {
         // Check params for consistency.
         for param in &self.const_params {
             state.insert_const_param(*param)?;
@@ -321,24 +322,25 @@ impl<'a> FnTypeAst<'a> {
     }
 }
 
-impl<'a> TryFrom<FnTypeAst<'a>> for FnType {
+impl<'a, Lit: LiteralType> TryFrom<FnTypeAst<'a, Lit>> for FnType<Lit> {
     type Error = ConversionError<&'a str>;
 
-    fn try_from(value: FnTypeAst<'a>) -> Result<Self, Self::Error> {
+    fn try_from(value: FnTypeAst<'a, Lit>) -> Result<Self, Self::Error> {
         value.try_convert(ConversionState::default())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use assert_matches::assert_matches;
+
+    use super::*;
+    use crate::Num;
 
     #[test]
     fn converting_raw_fn_type() {
         let input = InputSpan::new("fn<const N; T>([T; N], fn(T) -> Bool) -> Bool");
-        let (_, fn_type) = FnTypeAst::parse(input).unwrap();
+        let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
         let fn_type = FnType::try_from(fn_type).unwrap();
 
         assert_eq!(fn_type.to_string(), *input.fragment());
@@ -347,7 +349,7 @@ mod tests {
     #[test]
     fn converting_raw_fn_type_duplicate_type() {
         let input = InputSpan::new("fn<T, T>([T; N], fn(T) -> Bool) -> Bool");
-        let (_, fn_type) = FnTypeAst::parse(input).unwrap();
+        let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
         let err = FnType::try_from(fn_type).unwrap_err();
 
         assert_eq!(err.main_span().location_offset(), 6);
@@ -361,7 +363,7 @@ mod tests {
     #[test]
     fn converting_raw_fn_type_duplicate_type_in_embedded_fn() {
         let input = InputSpan::new("fn<const N; T>([T; N], fn<T>(T) -> Bool) -> Bool");
-        let (_, fn_type) = FnTypeAst::parse(input).unwrap();
+        let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
         let err = FnType::try_from(fn_type).unwrap_err();
 
         assert_eq!(err.main_span().location_offset(), 26);
@@ -375,7 +377,7 @@ mod tests {
     #[test]
     fn converting_raw_fn_type_duplicate_const() {
         let input = InputSpan::new("fn<const N, N; T>([T; N], fn(T) -> Bool) -> Bool");
-        let (_, fn_type) = FnTypeAst::parse(input).unwrap();
+        let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
         let err = FnType::try_from(fn_type).unwrap_err();
 
         assert_eq!(err.main_span().location_offset(), 12);
@@ -389,7 +391,7 @@ mod tests {
     #[test]
     fn converting_raw_fn_type_duplicate_const_in_embedded_fn() {
         let input = InputSpan::new("fn<const N; T>([T; N], fn<const N>(T) -> Bool) -> Bool");
-        let (_, fn_type) = FnTypeAst::parse(input).unwrap();
+        let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
         let err = FnType::try_from(fn_type).unwrap_err();
 
         assert_eq!(err.main_span().location_offset(), 32);
@@ -403,7 +405,7 @@ mod tests {
     #[test]
     fn converting_raw_fn_type_undefined_type() {
         let input = InputSpan::new("fn<const N>([T; N], fn(T) -> Bool) -> Bool");
-        let (_, fn_type) = FnTypeAst::parse(input).unwrap();
+        let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
         let err = FnType::try_from(fn_type).unwrap_err();
 
         assert_eq!(err.main_span().location_offset(), 13);
@@ -416,7 +418,7 @@ mod tests {
     #[test]
     fn converting_raw_fn_type_undefined_const() {
         let input = InputSpan::new("fn<T>([T; N], fn(T) -> Bool) -> Bool");
-        let (_, fn_type) = FnTypeAst::parse(input).unwrap();
+        let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
         let err = FnType::try_from(fn_type).unwrap_err();
 
         assert_eq!(err.main_span().location_offset(), 10);
@@ -429,7 +431,7 @@ mod tests {
     #[test]
     fn parsing_basic_value_types() {
         let num_type: ValueType = "Num".parse().unwrap();
-        assert_eq!(num_type, ValueType::Number);
+        assert_eq!(num_type, ValueType::Lit(Num));
 
         let bool_type: ValueType = "Bool".parse().unwrap();
         assert_eq!(bool_type, ValueType::Bool);
@@ -438,7 +440,7 @@ mod tests {
         assert_eq!(
             tuple_type,
             ValueType::Tuple(vec![
-                ValueType::Number,
+                ValueType::Lit(Num),
                 ValueType::Tuple(vec![ValueType::Bool, ValueType::Any]),
             ])
         );
@@ -450,7 +452,7 @@ mod tests {
         };
         assert_eq!(
             element_ty,
-            ValueType::Tuple(vec![ValueType::Number, ValueType::Any])
+            ValueType::Tuple(vec![ValueType::Lit(Num), ValueType::Any])
         );
         assert_matches!(length, TupleLength::Any);
     }

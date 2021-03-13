@@ -2,30 +2,30 @@
 
 use std::fmt;
 
-use crate::{substitutions::Substitutions, TupleLength, ValueType};
+use crate::{substitutions::Substitutions, LiteralType, TupleLength, ValueType};
 use arithmetic_parser::{BinaryOp, Spanned, UnsupportedType};
 
 /// Errors that can occur during type inference.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
-pub enum TypeErrorKind {
+pub enum TypeErrorKind<Lit> {
     /// Error trying to unify operands of a binary operation.
     OperandMismatch {
         /// LHS type.
-        lhs_ty: ValueType,
+        lhs_ty: ValueType<Lit>,
         /// RHS type.
-        rhs_ty: ValueType,
+        rhs_ty: ValueType<Lit>,
         /// Operator.
         op: BinaryOp,
     },
 
     /// Trying to unify incompatible types. The first type is LHS, the second one is RHS.
-    IncompatibleTypes(ValueType, ValueType),
+    IncompatibleTypes(ValueType<Lit>, ValueType<Lit>),
     /// Incompatible tuple lengths. The first length is LHS, the second one is RHS.
     IncompatibleLengths(TupleLength, TupleLength),
 
     /// Trying to call a non-function type.
-    NotCallable(ValueType),
+    NotCallable(ValueType<Lit>),
 
     /// Undefined variable occurrence.
     UndefinedVar(String),
@@ -39,10 +39,10 @@ pub enum TypeErrorKind {
     },
 
     /// Trying to unify a type with a type containing it.
-    RecursiveType(ValueType),
+    RecursiveType(ValueType<Lit>),
 
     /// Non-linear type encountered where linearity is required.
-    NonLinearType(ValueType),
+    NonLinearType(ValueType<Lit>),
 
     /// Language construct not supported by the type inference.
     Unsupported(UnsupportedType),
@@ -60,7 +60,7 @@ pub enum TypeErrorKind {
     UnsupportedParam,
 }
 
-impl fmt::Display for TypeErrorKind {
+impl<Lit: fmt::Display> fmt::Display for TypeErrorKind<Lit> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::OperandMismatch { op, .. } => write!(
@@ -109,9 +109,9 @@ impl fmt::Display for TypeErrorKind {
     }
 }
 
-impl std::error::Error for TypeErrorKind {}
+impl<Lit: LiteralType> std::error::Error for TypeErrorKind<Lit> {}
 
-impl TypeErrorKind {
+impl<Lit: LiteralType> TypeErrorKind<Lit> {
     /// Creates an error for an lvalue type not supported by the interpreter.
     pub fn unsupported<T: Into<UnsupportedType>>(ty: T) -> Self {
         Self::Unsupported(ty.into())
@@ -119,9 +119,9 @@ impl TypeErrorKind {
 
     pub(crate) fn into_op_mismatch(
         self,
-        substitutions: &Substitutions,
-        lhs_ty: &ValueType,
-        rhs_ty: &ValueType,
+        substitutions: &Substitutions<Lit>,
+        lhs_ty: &ValueType<Lit>,
+        rhs_ty: &ValueType<Lit>,
         op: BinaryOp,
     ) -> Self {
         match self {
@@ -139,11 +139,11 @@ impl TypeErrorKind {
 
 /// Type error together with the corresponding code span.
 #[derive(Debug, Clone)]
-pub struct TypeError<'a> {
-    inner: Spanned<'a, TypeErrorKind>,
+pub struct TypeError<'a, Lit> {
+    inner: Spanned<'a, TypeErrorKind<Lit>>,
 }
 
-impl fmt::Display for TypeError<'_> {
+impl<Lit: fmt::Display> fmt::Display for TypeError<'_, Lit> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
@@ -155,19 +155,19 @@ impl fmt::Display for TypeError<'_> {
     }
 }
 
-impl std::error::Error for TypeError<'_> {
+impl<Lit: LiteralType> std::error::Error for TypeError<'_, Lit> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(self.kind())
     }
 }
 
-impl<'a> TypeError<'a> {
-    pub(crate) fn new(inner: Spanned<'a, TypeErrorKind>) -> Self {
+impl<'a, Lit> TypeError<'a, Lit> {
+    pub(crate) fn new(inner: Spanned<'a, TypeErrorKind<Lit>>) -> Self {
         Self { inner }
     }
 
     /// Gets the kind of this error.
-    pub fn kind(&self) -> &TypeErrorKind {
+    pub fn kind(&self) -> &TypeErrorKind<Lit> {
         &self.inner.extra
     }
 

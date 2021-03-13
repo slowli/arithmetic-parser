@@ -6,7 +6,9 @@ use std::{
     mem, ops,
 };
 
-use crate::{substitutions::Substitutions, FnType, TypeError, TypeErrorKind, ValueType};
+use crate::{
+    substitutions::Substitutions, FnType, LiteralType, TypeError, TypeErrorKind, ValueType,
+};
 use arithmetic_parser::{
     grammars::Grammar, BinaryOp, Block, Destructure, Expr, FnDefinition, Lvalue, Spanned,
     SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
@@ -18,29 +20,37 @@ mod tests;
 mod type_annotation_tests;
 
 /// Environment containing type information on named variables.
-#[derive(Debug, Clone, Default)]
-pub struct TypeEnvironment {
-    variables: HashMap<String, ValueType>,
+#[derive(Debug, Clone)]
+pub struct TypeEnvironment<Lit> {
+    variables: HashMap<String, ValueType<Lit>>,
 }
 
-impl TypeEnvironment {
+impl<Lit: LiteralType> Default for TypeEnvironment<Lit> {
+    fn default() -> Self {
+        Self {
+            variables: HashMap::new(),
+        }
+    }
+}
+
+impl<Lit: LiteralType> TypeEnvironment<Lit> {
     /// Creates an empty environment.
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Gets type of the specified variable.
-    pub fn get_type(&self, name: &str) -> Option<&ValueType> {
+    pub fn get_type(&self, name: &str) -> Option<&ValueType<Lit>> {
         self.variables.get(name)
     }
 
     /// Iterates over variables contained in this env.
-    pub fn iter(&self) -> impl Iterator<Item = (&str, &ValueType)> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &ValueType<Lit>)> + '_ {
         self.variables.iter().map(|(name, ty)| (name.as_str(), ty))
     }
 
     /// Sets type of a variable.
-    pub fn insert_type(&mut self, name: &str, value_type: ValueType) -> &mut Self {
+    pub fn insert_type(&mut self, name: &str, value_type: ValueType<Lit>) -> &mut Self {
         self.variables.insert(name.to_owned(), value_type);
         self
     }
@@ -50,9 +60,9 @@ impl TypeEnvironment {
     pub fn process_statements<'a, T>(
         &mut self,
         block: &Block<'a, T>,
-    ) -> Result<ValueType, TypeError<'a>>
+    ) -> Result<ValueType<Lit>, TypeError<'a, Lit>>
     where
-        T: Grammar<Type = ValueType>,
+        T: Grammar<Type = ValueType<Lit>>,
     {
         TypeProcessor::new(self)
             .process_statements(block)
@@ -60,8 +70,8 @@ impl TypeEnvironment {
     }
 }
 
-impl ops::Index<&str> for TypeEnvironment {
-    type Output = ValueType;
+impl<Lit: LiteralType> ops::Index<&str> for TypeEnvironment<Lit> {
+    type Output = ValueType<Lit>;
 
     fn index(&self, name: &str) -> &Self::Output {
         self.get_type(name)
@@ -69,10 +79,10 @@ impl ops::Index<&str> for TypeEnvironment {
     }
 }
 
-impl<S, Ty> FromIterator<(S, Ty)> for TypeEnvironment
+impl<Lit: LiteralType, S, Ty> FromIterator<(S, Ty)> for TypeEnvironment<Lit>
 where
     S: Into<String>,
-    Ty: Into<ValueType>,
+    Ty: Into<ValueType<Lit>>,
 {
     fn from_iter<I: IntoIterator<Item = (S, Ty)>>(iter: I) -> Self {
         Self {
@@ -84,10 +94,10 @@ where
     }
 }
 
-impl<S, Ty> Extend<(S, Ty)> for TypeEnvironment
+impl<Lit: LiteralType, S, Ty> Extend<(S, Ty)> for TypeEnvironment<Lit>
 where
     S: Into<String>,
-    Ty: Into<ValueType>,
+    Ty: Into<ValueType<Lit>>,
 {
     fn extend<I: IntoIterator<Item = (S, Ty)>>(&mut self, iter: I) {
         self.variables
@@ -95,16 +105,16 @@ where
     }
 }
 
-/// Environment for deriving type information.
+/// Processor for deriving type information.
 #[derive(Debug)]
-struct TypeProcessor<'a> {
-    root_scope: &'a mut TypeEnvironment,
-    inner_scopes: Vec<TypeEnvironment>,
+struct TypeProcessor<'a, Lit> {
+    root_scope: &'a mut TypeEnvironment<Lit>,
+    inner_scopes: Vec<TypeEnvironment<Lit>>,
     is_in_function: bool,
 }
 
-impl<'a> TypeProcessor<'a> {
-    fn new(env: &'a mut TypeEnvironment) -> Self {
+impl<'a, Lit: LiteralType> TypeProcessor<'a, Lit> {
+    fn new(env: &'a mut TypeEnvironment<Lit>) -> Self {
         Self {
             root_scope: env,
             inner_scopes: vec![],
@@ -113,8 +123,8 @@ impl<'a> TypeProcessor<'a> {
     }
 }
 
-impl TypeProcessor<'_> {
-    fn get_type(&self, name: &str) -> Option<&ValueType> {
+impl<Lit: LiteralType> TypeProcessor<'_, Lit> {
+    fn get_type(&self, name: &str) -> Option<&ValueType<Lit>> {
         self.inner_scopes
             .iter()
             .rev()
@@ -123,7 +133,7 @@ impl TypeProcessor<'_> {
             .or_else(|| self.root_scope.get_type(name))
     }
 
-    fn insert_type(&mut self, name: &str, ty: ValueType) {
+    fn insert_type(&mut self, name: &str, ty: ValueType<Lit>) {
         let scope = self
             .inner_scopes
             .last_mut()
@@ -133,16 +143,16 @@ impl TypeProcessor<'_> {
 
     fn process_expr_inner<'a, T>(
         &mut self,
-        substitutions: &mut Substitutions,
+        substitutions: &mut Substitutions<Lit>,
         expr: &SpannedExpr<'a, T>,
-    ) -> Result<ValueType, Spanned<'a, TypeErrorKind>>
+    ) -> Result<ValueType<Lit>, Spanned<'a, TypeErrorKind<Lit>>>
     where
-        T: Grammar<Type = ValueType>,
+        T: Grammar<Type = ValueType<Lit>>,
     {
         match &expr.extra {
             Expr::Variable => self.process_var(expr),
 
-            Expr::Literal(_) => Ok(ValueType::Number),
+            Expr::Literal(_) => unimplemented!(),
 
             Expr::Tuple(ref terms) => {
                 let term_types: Result<Vec<_>, _> = terms
@@ -195,7 +205,7 @@ impl TypeProcessor<'_> {
     fn process_var<'a, T>(
         &self,
         name: &Spanned<'a, T>,
-    ) -> Result<ValueType, Spanned<'a, TypeErrorKind>> {
+    ) -> Result<ValueType<Lit>, Spanned<'a, TypeErrorKind<Lit>>> {
         self.get_type(name.fragment()).cloned().ok_or_else(|| {
             let e = TypeErrorKind::UndefinedVar((*name.fragment()).to_owned());
             name.copy_with_extra(e)
@@ -204,11 +214,11 @@ impl TypeProcessor<'_> {
 
     fn process_block<'a, T>(
         &mut self,
-        substitutions: &mut Substitutions,
+        substitutions: &mut Substitutions<Lit>,
         block: &Block<'a, T>,
-    ) -> Result<ValueType, Spanned<'a, TypeErrorKind>>
+    ) -> Result<ValueType<Lit>, Spanned<'a, TypeErrorKind<Lit>>>
     where
-        T: Grammar<Type = ValueType>,
+        T: Grammar<Type = ValueType<Lit>>,
     {
         for statement in &block.statements {
             self.process_statement(substitutions, statement)?;
@@ -222,9 +232,9 @@ impl TypeProcessor<'_> {
     /// Processes an lvalue type by replacing `Any` types with newly created type vars.
     fn process_lvalue<'a>(
         &mut self,
-        substitutions: &mut Substitutions,
-        lvalue: &SpannedLvalue<'a, ValueType>,
-    ) -> Result<ValueType, Spanned<'a, TypeErrorKind>> {
+        substitutions: &mut Substitutions<Lit>,
+        lvalue: &SpannedLvalue<'a, ValueType<Lit>>,
+    ) -> Result<ValueType<Lit>, Spanned<'a, TypeErrorKind<Lit>>> {
         match &lvalue.extra {
             Lvalue::Variable { ty } => {
                 let mut value_type = ty.as_ref().map_or(ValueType::Any, |ty| ty.extra.clone());
@@ -252,9 +262,9 @@ impl TypeProcessor<'_> {
     #[inline]
     fn process_destructure<'a>(
         &mut self,
-        substitutions: &mut Substitutions,
-        destructure: &Destructure<'a, ValueType>,
-    ) -> Result<Vec<ValueType>, Spanned<'a, TypeErrorKind>> {
+        substitutions: &mut Substitutions<Lit>,
+        destructure: &Destructure<'a, ValueType<Lit>>,
+    ) -> Result<Vec<ValueType<Lit>>, Spanned<'a, TypeErrorKind<Lit>>> {
         if let Some(middle) = &destructure.middle {
             // TODO: allow middles with explicitly set type.
             let err = middle.copy_with_extra(TypeErrorKind::UnsupportedDestructure);
@@ -271,13 +281,13 @@ impl TypeProcessor<'_> {
 
     fn process_fn_call<'it, 'a: 'it, T>(
         &mut self,
-        substitutions: &mut Substitutions,
+        substitutions: &mut Substitutions<Lit>,
         call_expr: &SpannedExpr<'a, T>,
-        fn_type: &ValueType,
+        fn_type: &ValueType<Lit>,
         args: impl Iterator<Item = &'it SpannedExpr<'a, T>>,
-    ) -> Result<ValueType, Spanned<'a, TypeErrorKind>>
+    ) -> Result<ValueType<Lit>, Spanned<'a, TypeErrorKind<Lit>>>
     where
-        T: Grammar<Type = ValueType>,
+        T: Grammar<Type = ValueType<Lit>>,
     {
         let arg_types: Result<Vec<_>, _> = args
             .map(|arg| self.process_expr_inner(substitutions, arg))
@@ -293,12 +303,12 @@ impl TypeProcessor<'_> {
     #[inline]
     fn process_unary_op<'a, T>(
         &mut self,
-        substitutions: &mut Substitutions,
+        substitutions: &mut Substitutions<Lit>,
         op: &Spanned<'a, UnaryOp>,
         inner: &SpannedExpr<'a, T>,
-    ) -> Result<ValueType, Spanned<'a, TypeErrorKind>>
+    ) -> Result<ValueType<Lit>, Spanned<'a, TypeErrorKind<Lit>>>
     where
-        T: Grammar<Type = ValueType>,
+        T: Grammar<Type = ValueType<Lit>>,
     {
         let inner_type = self.process_expr_inner(substitutions, inner)?;
         match op.extra {
@@ -321,14 +331,14 @@ impl TypeProcessor<'_> {
     #[inline]
     fn process_binary_op<'a, T>(
         &mut self,
-        substitutions: &mut Substitutions,
+        substitutions: &mut Substitutions<Lit>,
         binary_expr: &SpannedExpr<'a, T>,
         op: BinaryOp,
         lhs: &SpannedExpr<'a, T>,
         rhs: &SpannedExpr<'a, T>,
-    ) -> Result<ValueType, Spanned<'a, TypeErrorKind>>
+    ) -> Result<ValueType<Lit>, Spanned<'a, TypeErrorKind<Lit>>>
     where
-        T: Grammar<Type = ValueType>,
+        T: Grammar<Type = ValueType<Lit>>,
     {
         let lhs_ty = self.process_expr_inner(substitutions, lhs)?;
         let rhs_ty = self.process_expr_inner(substitutions, rhs)?;
@@ -361,11 +371,11 @@ impl TypeProcessor<'_> {
 
     fn process_fn_def<'a, T>(
         &mut self,
-        substitutions: &mut Substitutions,
+        substitutions: &mut Substitutions<Lit>,
         def: &FnDefinition<'a, T>,
-    ) -> Result<FnType, Spanned<'a, TypeErrorKind>>
+    ) -> Result<FnType<Lit>, Spanned<'a, TypeErrorKind<Lit>>>
     where
-        T: Grammar<Type = ValueType>,
+        T: Grammar<Type = ValueType<Lit>>,
     {
         self.inner_scopes.push(TypeEnvironment::default());
         let was_in_function = mem::replace(&mut self.is_in_function, true);
@@ -390,13 +400,14 @@ impl TypeProcessor<'_> {
     }
 
     /// Fallible part of fn definition processing.
+    #[allow(clippy::type_complexity)] // FIXME
     fn process_fn_def_inner<'a, T>(
         &mut self,
-        substitutions: &mut Substitutions,
+        substitutions: &mut Substitutions<Lit>,
         def: &FnDefinition<'a, T>,
-    ) -> Result<(Vec<ValueType>, ValueType), Spanned<'a, TypeErrorKind>>
+    ) -> Result<(Vec<ValueType<Lit>>, ValueType<Lit>), Spanned<'a, TypeErrorKind<Lit>>>
     where
-        T: Grammar<Type = ValueType>,
+        T: Grammar<Type = ValueType<Lit>>,
     {
         let arg_types = self.process_destructure(substitutions, &def.args.extra)?;
         let return_type = self.process_block(substitutions, &def.body)?;
@@ -405,11 +416,11 @@ impl TypeProcessor<'_> {
 
     fn process_statement<'a, T>(
         &mut self,
-        substitutions: &mut Substitutions,
+        substitutions: &mut Substitutions<Lit>,
         statement: &SpannedStatement<'a, T>,
-    ) -> Result<ValueType, Spanned<'a, TypeErrorKind>>
+    ) -> Result<ValueType<Lit>, Spanned<'a, TypeErrorKind<Lit>>>
     where
-        T: Grammar<Type = ValueType>,
+        T: Grammar<Type = ValueType<Lit>>,
     {
         match &statement.extra {
             Statement::Expr(expr) => self.process_expr_inner(substitutions, expr),
@@ -433,9 +444,9 @@ impl TypeProcessor<'_> {
     fn process_statements<'a, T>(
         &mut self,
         block: &Block<'a, T>,
-    ) -> Result<ValueType, Spanned<'a, TypeErrorKind>>
+    ) -> Result<ValueType<Lit>, Spanned<'a, TypeErrorKind<Lit>>>
     where
-        T: Grammar<Type = ValueType>,
+        T: Grammar<Type = ValueType<Lit>>,
     {
         let mut substitutions = Substitutions::default();
 

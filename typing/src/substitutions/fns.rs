@@ -2,9 +2,12 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use crate::{ConstParamDescription, FnArgs, FnType, TupleLength, TypeParamDescription, ValueType};
+use crate::{
+    ConstParamDescription, FnArgs, FnType, LiteralType, TupleLength, TypeParamDescription,
+    ValueType,
+};
 
-impl FnType {
+impl<Lit: LiteralType> FnType<Lit> {
     /// Performs final transformations on this type, transforming all of its type vars
     /// into type params.
     pub(crate) fn finalize(&mut self, linear_types: &HashSet<usize>) {
@@ -88,12 +91,12 @@ struct FnTypeTree {
 }
 
 impl FnTypeTree {
-    fn new(base: &FnType) -> Self {
-        fn recurse(
+    fn new<Lit: LiteralType>(base: &FnType<Lit>) -> Self {
+        fn recurse<L: LiteralType>(
             children: &mut Vec<FnTypeTree>,
             type_vars: &mut HashMap<usize, VarQuantity>,
             const_vars: &mut HashMap<usize, VarQuantity>,
-            ty: &ValueType,
+            ty: &ValueType<L>,
         ) {
             match ty {
                 ValueType::Var(idx) => {
@@ -224,8 +227,8 @@ impl FnTypeTree {
     }
 
     /// Recursively sets `type_params` for `base`.
-    fn merge_into(self, base: &mut FnType) {
-        fn recurse(reversed_children: &mut Vec<FnTypeTree>, ty: &mut ValueType) {
+    fn merge_into<Lit: LiteralType>(self, base: &mut FnType<Lit>) {
+        fn recurse<L: LiteralType>(reversed_children: &mut Vec<FnTypeTree>, ty: &mut ValueType<L>) {
             match ty {
                 ValueType::Tuple(elements) => {
                     for element in elements {
@@ -276,7 +279,7 @@ impl TupleLength {
     }
 }
 
-impl ValueType {
+impl<Lit: LiteralType> ValueType<Lit> {
     /// Recursively substitutes type vars in this type according to `type_var_mapping`.
     /// Returns the type with substituted vars.
     fn substitute_type_vars(&self, mapping: &ParamMapping, context: SubstitutionContext) -> Self {

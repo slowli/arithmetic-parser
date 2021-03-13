@@ -15,6 +15,7 @@ use nom::{
     sequence::{delimited, preceded, terminated, tuple},
 };
 
+use crate::{LiteralType, Num};
 use arithmetic_parser::{InputSpan, NomResult};
 
 mod conversion;
@@ -43,7 +44,7 @@ pub use self::conversion::{ConversionError, ConversionErrorKind};
 ///     ValueTypeAst::Tuple(elements) => elements,
 ///     _ => unreachable!(),
 /// };
-/// assert_eq!(elements[0], ValueTypeAst::Number);
+/// assert_eq!(elements[0], ValueTypeAst::Lit);
 /// assert_matches!(
 ///     &elements[1],
 ///     ValueTypeAst::Function(f) if f.type_params.len() == 1
@@ -53,29 +54,29 @@ pub use self::conversion::{ConversionError, ConversionErrorKind};
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-pub enum ValueTypeAst<'a> {
+pub enum ValueTypeAst<'a, Lit = Num> {
     /// Type placeholder (`_`). Corresponds to any single type.
     Any,
     /// Boolean type (`Bool`).
     Bool,
-    /// Number type (`Num`).
-    Number,
+    /// Literal types.
+    Lit(Lit),
     /// Reference to a type param.
     Ident(InputSpan<'a>),
     /// Functional type.
-    Function(Box<FnTypeAst<'a>>),
+    Function(Box<FnTypeAst<'a, Lit>>),
     /// Tuple type; for example, `(Num, Bool)`.
-    Tuple(Vec<ValueTypeAst<'a>>),
+    Tuple(Vec<ValueTypeAst<'a, Lit>>),
     /// Slice type; for example, `[Num]` or `[(Num, T); N]`.
     Slice {
         /// Element of this slice; for example, `Num` in `[Num; N]`.
-        element: Box<ValueTypeAst<'a>>,
+        element: Box<ValueTypeAst<'a, Lit>>,
         /// Length of this slice; for example, `N` in `[Num; N]`.
         length: TupleLengthAst<'a>,
     },
 }
 
-impl<'a> ValueTypeAst<'a> {
+impl<'a, Lit: LiteralType> ValueTypeAst<'a, Lit> {
     fn void() -> Self {
         Self::Tuple(vec![])
     }
@@ -107,24 +108,24 @@ impl<'a> ValueTypeAst<'a> {
 /// assert_eq!(ty.const_params.len(), 1);
 /// assert!(ty.type_params.is_empty());
 /// assert_matches!(ty.args.as_slice(), [ValueTypeAst::Slice { .. }]);
-/// assert_eq!(ty.return_type, ValueTypeAst::Number);
+/// assert_eq!(ty.return_type, ValueTypeAst::Lit);
 /// # Ok(())
 /// # }
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-pub struct FnTypeAst<'a> {
+pub struct FnTypeAst<'a, Lit = Num> {
     /// Constant params; e.g., `N` in `fn<const N>([Num; N]) -> Num`.
     pub const_params: Vec<InputSpan<'a>>,
     /// Type params together with their bounds. E.g., `T` in `fn<T>(T, T) -> T`.
     pub type_params: Vec<(InputSpan<'a>, TypeParamBoundsAst)>,
     /// Function arguments.
-    pub args: Vec<ValueTypeAst<'a>>,
+    pub args: Vec<ValueTypeAst<'a, Lit>>,
     /// Return type of the function. Will be set to void if not declared.
-    pub return_type: ValueTypeAst<'a>,
+    pub return_type: ValueTypeAst<'a, Lit>,
 }
 
-impl<'a> FnTypeAst<'a> {
+impl<'a, Lit: LiteralType> FnTypeAst<'a, Lit> {
     /// Parses `input` as a functional type. This parser can be composed using `nom` infrastructure.
     pub fn parse(input: InputSpan<'a>) -> NomResult<'a, Self> {
         fn_definition(input)
@@ -181,7 +182,9 @@ fn ident(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
     )(input)
 }
 
-fn tuple_definition(input: InputSpan<'_>) -> NomResult<'_, Vec<ValueTypeAst<'_>>> {
+fn tuple_definition<Lit: LiteralType>(
+    input: InputSpan<'_>,
+) -> NomResult<'_, Vec<ValueTypeAst<'_, Lit>>> {
     let maybe_comma = opt(preceded(ws, tag_char(',')));
     preceded(
         terminated(tag_char('('), ws),
@@ -193,7 +196,9 @@ fn tuple_definition(input: InputSpan<'_>) -> NomResult<'_, Vec<ValueTypeAst<'_>>
     )(input)
 }
 
-fn slice_definition(input: InputSpan<'_>) -> NomResult<'_, (ValueTypeAst<'_>, TupleLengthAst<'_>)> {
+fn slice_definition<Lit: LiteralType>(
+    input: InputSpan<'_>,
+) -> NomResult<'_, (ValueTypeAst<'_, Lit>, TupleLengthAst<'_>)> {
     let semicolon = tuple((ws, tag_char(';'), ws));
     let tuple_len = map(
         opt(preceded(semicolon, ident)),
@@ -250,7 +255,7 @@ fn fn_params(input: InputSpan<'_>) -> NomResult<'_, FnParams> {
     )(input)
 }
 
-fn fn_definition(input: InputSpan<'_>) -> NomResult<'_, FnTypeAst<'_>> {
+fn fn_definition<Lit: LiteralType>(input: InputSpan<'_>) -> NomResult<'_, FnTypeAst<'_, Lit>> {
     let return_type = preceded(tuple((ws, tag("->"), ws)), type_definition);
     let fn_parser = tuple((
         opt(fn_params),
@@ -272,16 +277,20 @@ fn fn_definition(input: InputSpan<'_>) -> NomResult<'_, FnTypeAst<'_>> {
     )(input)
 }
 
-fn type_definition(input: InputSpan<'_>) -> NomResult<'_, ValueTypeAst<'_>> {
+fn type_definition<Lit: LiteralType>(input: InputSpan<'_>) -> NomResult<'_, ValueTypeAst<'_, Lit>> {
     alt((
         map(fn_definition, |fn_type| {
             ValueTypeAst::Function(Box::new(fn_type))
         }),
-        map(ident, |ident| match *ident.fragment() {
-            "Num" => ValueTypeAst::Number,
-            "Bool" => ValueTypeAst::Bool,
-            "_" => ValueTypeAst::Any,
-            _ => ValueTypeAst::Ident(ident),
+        map(ident, |ident| {
+            if let Ok(res) = ident.fragment().parse::<Lit>() {
+                return ValueTypeAst::Lit(res);
+            }
+            match *ident.fragment() {
+                "Bool" => ValueTypeAst::Bool,
+                "_" => ValueTypeAst::Any,
+                _ => ValueTypeAst::Ident(ident),
+            }
         }),
         map(tuple_definition, ValueTypeAst::Tuple),
         map(slice_definition, |(element, length)| ValueTypeAst::Slice {

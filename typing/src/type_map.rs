@@ -2,7 +2,7 @@
 
 use std::iter;
 
-use crate::{FnType, TupleLength, ValueType};
+use crate::{FnType, LiteralType, TupleLength, ValueType};
 
 /// Map containing type definitions for all variables from `Prelude` in the eval crate,
 /// except for `loop` function.
@@ -81,7 +81,7 @@ pub struct Prelude;
 
 impl Prelude {
     /// Gets type definition by `name`.
-    pub fn get_type(name: &str) -> Option<ValueType> {
+    pub fn get_type<Lit: LiteralType>(name: &str) -> Option<ValueType<Lit>> {
         Some(match name {
             "false" | "true" => ValueType::Bool,
             "if" => Self::if_type().into(),
@@ -106,7 +106,7 @@ impl Prelude {
     ///     "fn<T: ?Lin>(Bool, T, T) -> T"
     /// );
     /// ```
-    pub fn if_type() -> FnType {
+    pub fn if_type<Lit: LiteralType>() -> FnType<Lit> {
         FnType::builder()
             .with_type_params(iter::once(0), false)
             .with_arg(ValueType::Bool)
@@ -126,7 +126,7 @@ impl Prelude {
     ///     "fn<T: ?Lin>(T, fn(T) -> Bool, fn(T) -> T) -> T"
     /// );
     /// ```
-    pub fn while_type() -> FnType {
+    pub fn while_type<Lit: LiteralType>() -> FnType<Lit> {
         let condition_fn = FnType::builder()
             .with_arg(ValueType::Param(0))
             .returning(ValueType::Bool);
@@ -153,7 +153,7 @@ impl Prelude {
     ///     "fn<const N; T: ?Lin, U: ?Lin>([T; N], fn(T) -> U) -> [U; N]"
     /// );
     /// ```
-    pub fn map_type() -> FnType {
+    pub fn map_type<Lit: LiteralType>() -> FnType<Lit> {
         let map_arg = FnType::builder()
             .with_arg(ValueType::Param(0))
             .returning(ValueType::Param(1));
@@ -177,7 +177,7 @@ impl Prelude {
     ///     "fn<const N; T: ?Lin>([T; N], fn(T) -> Bool) -> [T]"
     /// );
     /// ```
-    pub fn filter_type() -> FnType {
+    pub fn filter_type<Lit: LiteralType>() -> FnType<Lit> {
         let predicate_arg = FnType::builder()
             .with_arg(ValueType::Param(0))
             .returning(ValueType::Bool);
@@ -201,7 +201,7 @@ impl Prelude {
     ///     "fn<const N; T: ?Lin, U: ?Lin>([T; N], U, fn(U, T) -> U) -> U"
     /// );
     /// ```
-    pub fn fold_type() -> FnType {
+    pub fn fold_type<Lit: LiteralType>() -> FnType<Lit> {
         // 0th type param is slice element, 1st is accumulator
         let fold_arg = FnType::builder()
             .with_arg(ValueType::Param(1))
@@ -228,7 +228,7 @@ impl Prelude {
     ///     "fn<const N; T: ?Lin>([T; N], T) -> [T]"
     /// );
     /// ```
-    pub fn push_type() -> FnType {
+    pub fn push_type<Lit: LiteralType>() -> FnType<Lit> {
         FnType::builder()
             .with_const_params(iter::once(0))
             .with_type_params(iter::once(0), false)
@@ -248,7 +248,7 @@ impl Prelude {
     ///     "fn<const N, M; T: ?Lin>([T; N], [T; M]) -> [T]"
     /// );
     /// ```
-    pub fn merge_type() -> FnType {
+    pub fn merge_type<Lit: LiteralType>() -> FnType<Lit> {
         FnType::builder()
             .with_const_params(0..=1)
             .with_type_params(iter::once(0), false)
@@ -258,7 +258,7 @@ impl Prelude {
     }
 
     /// Returns an iterator over all type definitions in the `Prelude`.
-    pub fn iter() -> impl Iterator<Item = (&'static str, ValueType)> {
+    pub fn iter<Lit: LiteralType>() -> impl Iterator<Item = (&'static str, ValueType<Lit>)> {
         const VAR_NAMES: &[&str] = &[
             "false", "true", "if", "while", "map", "filter", "fold", "push", "merge",
         ];
@@ -275,7 +275,7 @@ pub struct Assertions;
 
 impl Assertions {
     /// Gets type definition by `name`.
-    pub fn get_type(name: &str) -> Option<ValueType> {
+    pub fn get_type<Lit: LiteralType>(name: &str) -> Option<ValueType<Lit>> {
         Some(match name {
             "assert" => Self::assert_type().into(),
             "assert_eq" => Self::assert_eq_type().into(),
@@ -294,7 +294,7 @@ impl Assertions {
     ///     "fn(Bool)"
     /// );
     /// ```
-    pub fn assert_type() -> FnType {
+    pub fn assert_type<Lit: LiteralType>() -> FnType<Lit> {
         FnType::builder()
             .with_arg(ValueType::Bool)
             .returning(ValueType::void())
@@ -311,7 +311,7 @@ impl Assertions {
     ///     "fn<T: ?Lin>(T, T)"
     /// );
     /// ```
-    pub fn assert_eq_type() -> FnType {
+    pub fn assert_eq_type<Lit: LiteralType>() -> FnType<Lit> {
         FnType::builder()
             .with_type_params(iter::once(0), false)
             .with_arg(ValueType::Param(0))
@@ -320,7 +320,7 @@ impl Assertions {
     }
 
     /// Returns an iterator over all type definitions in `Assertions`.
-    pub fn iter() -> impl Iterator<Item = (&'static str, ValueType)> {
+    pub fn iter<Lit: LiteralType>() -> impl Iterator<Item = (&'static str, ValueType<Lit>)> {
         const VAR_NAMES: &[&str] = &["assert", "assert_eq"];
 
         VAR_NAMES
@@ -332,6 +332,7 @@ impl Assertions {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Num;
 
     use std::collections::HashSet;
 
@@ -360,7 +361,7 @@ mod tests {
     fn string_presentations_of_prelude_types() {
         for &(name, str_presentation) in EXPECTED_PRELUDE_TYPES {
             assert_eq!(
-                Prelude::get_type(name).unwrap().to_string(),
+                Prelude::get_type::<Num>(name).unwrap().to_string(),
                 str_presentation
             );
         }
@@ -369,7 +370,7 @@ mod tests {
             .map(|(name, _)| *name)
             .collect();
         assert_eq!(
-            Prelude::iter()
+            Prelude::iter::<Num>()
                 .map(|(name, _)| name)
                 .collect::<HashSet<_>>(),
             expected_names

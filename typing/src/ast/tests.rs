@@ -1,6 +1,7 @@
-use super::*;
-
 use assert_matches::assert_matches;
+
+use super::*;
+use crate::Num;
 
 #[test]
 fn fn_const_params() {
@@ -71,7 +72,7 @@ fn simple_tuple() {
     assert_eq!(
         elements,
         vec![
-            ValueTypeAst::Number,
+            ValueTypeAst::Lit(Num),
             ValueTypeAst::Any,
             ValueTypeAst::Bool,
             ValueTypeAst::Any,
@@ -85,14 +86,14 @@ fn simple_slice_with_length() {
     let (rest, (element, len)) = slice_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_eq!(element, ValueTypeAst::Number);
+    assert_eq!(element, ValueTypeAst::Lit(Num));
     assert_matches!(len, TupleLengthAst::Ident(ident) if *ident.fragment() == "N");
 }
 
 #[test]
 fn simple_slice_without_length() {
     let input = InputSpan::new("[T]");
-    let (rest, (element, len)) = slice_definition(input).unwrap();
+    let (rest, (element, len)) = slice_definition::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
     assert_matches!(element, ValueTypeAst::Ident(ident) if *ident.fragment() == "T");
@@ -107,7 +108,7 @@ fn complex_slice_type() {
     assert!(rest.fragment().is_empty());
     assert_eq!(
         element,
-        ValueTypeAst::Tuple(vec![ValueTypeAst::Number, ValueTypeAst::Bool])
+        ValueTypeAst::Tuple(vec![ValueTypeAst::Lit(Num), ValueTypeAst::Bool])
     );
     assert_matches!(len, TupleLengthAst::Ident(ident) if *ident.fragment() == "M");
 }
@@ -115,7 +116,7 @@ fn complex_slice_type() {
 #[test]
 fn embedded_slice_type() {
     let input = InputSpan::new("[(Num, [Bool]); M]");
-    let (rest, (element, len)) = slice_definition(input).unwrap();
+    let (rest, (element, len)) = slice_definition::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
     assert_matches!(len, TupleLengthAst::Ident(ident) if *ident.fragment() == "M");
@@ -139,7 +140,7 @@ fn simple_fn_type() {
     assert!(fn_type.const_params.is_empty());
     assert!(fn_type.type_params.is_empty());
     assert!(fn_type.args.is_empty());
-    assert_eq!(fn_type.return_type, ValueTypeAst::Number);
+    assert_eq!(fn_type.return_type, ValueTypeAst::Lit(Num));
 }
 
 #[test]
@@ -153,16 +154,16 @@ fn simple_fn_type_with_args() {
     assert_eq!(fn_type.args.len(), 2);
     assert_eq!(
         fn_type.args[0],
-        ValueTypeAst::Tuple(vec![ValueTypeAst::Number; 2])
+        ValueTypeAst::Tuple(vec![ValueTypeAst::Lit(Num); 2])
     );
     assert_eq!(fn_type.args[1], ValueTypeAst::Bool);
-    assert_eq!(fn_type.return_type, ValueTypeAst::Number);
+    assert_eq!(fn_type.return_type, ValueTypeAst::Lit(Num));
 }
 
 #[test]
 fn fn_type_with_type_params() {
     let input = InputSpan::new("fn<T>(Bool, T, T) -> T");
-    let (rest, fn_type) = fn_definition(input).unwrap();
+    let (rest, fn_type) = fn_definition::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
     assert!(fn_type.const_params.is_empty());
@@ -176,7 +177,7 @@ fn fn_type_with_type_params() {
 #[test]
 fn fn_type_accepting_fn_arg() {
     let input = InputSpan::new("fn<const N; T>([T; N], fn(T) -> Bool) -> Bool");
-    let (rest, fn_type) = fn_definition(input).unwrap();
+    let (rest, fn_type) = fn_definition::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
     assert_eq!(fn_type.const_params.len(), 1);
@@ -205,7 +206,7 @@ fn fn_type_returning_fn_arg() {
     assert!(rest.fragment().is_empty());
     assert!(fn_type.const_params.is_empty());
     assert!(fn_type.type_params.is_empty());
-    assert_eq!(fn_type.args, vec![ValueTypeAst::Number]);
+    assert_eq!(fn_type.args, vec![ValueTypeAst::Lit(Num)]);
 
     let returned_fn = match fn_type.return_type {
         ValueTypeAst::Function(returned_fn) => *returned_fn,
@@ -214,5 +215,5 @@ fn fn_type_returning_fn_arg() {
     assert!(returned_fn.const_params.is_empty());
     assert!(returned_fn.type_params.is_empty());
     assert_eq!(returned_fn.args, vec![ValueTypeAst::Bool]);
-    assert_eq!(returned_fn.return_type, ValueTypeAst::Number);
+    assert_eq!(returned_fn.return_type, ValueTypeAst::Lit(Num));
 }

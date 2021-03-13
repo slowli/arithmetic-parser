@@ -60,7 +60,7 @@
     clippy::similar_names // too many false positives because of lhs / rhs
 )]
 
-use std::{borrow::Cow, collections::BTreeMap, fmt, marker::PhantomData};
+use std::{borrow::Cow, collections::BTreeMap, fmt, marker::PhantomData, str::FromStr};
 
 use arithmetic_parser::{
     grammars::{Grammar, NumLiteral, ParseLiteral},
@@ -90,20 +90,50 @@ struct TypeParamDescription {
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct ConstParamDescription;
 
+/// FIXME
+pub trait LiteralType:
+    Clone + PartialEq + fmt::Debug + fmt::Display + FromStr + Send + Sync + 'static
+{
+}
+
+/// FIXME
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Num;
+
+impl fmt::Display for Num {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("Num")
+    }
+}
+
+impl FromStr for Num {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == "Num" {
+            Ok(Num)
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl LiteralType for Num {}
+
 /// Functional type.
 #[derive(Debug, Clone, PartialEq)]
-pub struct FnType {
+pub struct FnType<Lit = Num> {
     /// Type of function arguments.
-    args: FnArgs,
+    args: FnArgs<Lit>,
     /// Type of the value returned by the function.
-    return_type: ValueType,
+    return_type: ValueType<Lit>,
     /// Indexes of type params associated with this function.
     type_params: BTreeMap<usize, TypeParamDescription>,
     /// Indexes of const params associated with this function.
     const_params: BTreeMap<usize, ConstParamDescription>,
 }
 
-impl fmt::Display for FnType {
+impl<Lit: fmt::Display> fmt::Display for FnType<Lit> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("fn")?;
 
@@ -125,7 +155,7 @@ impl fmt::Display for FnType {
             }
 
             for (i, (&var_idx, description)) in self.type_params.iter().enumerate() {
-                formatter.write_str(ValueType::type_param(var_idx).as_ref())?;
+                formatter.write_str(type_param(var_idx).as_ref())?;
                 if description.maybe_non_linear {
                     formatter.write_str(": ?Lin")?;
                 }
@@ -145,8 +175,8 @@ impl fmt::Display for FnType {
     }
 }
 
-impl FnType {
-    pub(crate) fn new(args: Vec<ValueType>, return_type: ValueType) -> Self {
+impl<Lit: LiteralType> FnType<Lit> {
+    pub(crate) fn new(args: Vec<ValueType<Lit>>, return_type: ValueType<Lit>) -> Self {
         Self {
             args: FnArgs::List(args),
             return_type,
@@ -156,7 +186,7 @@ impl FnType {
     }
 
     /// Returns a builder for `FnType`s.
-    pub fn builder() -> FnTypeBuilder {
+    pub fn builder() -> FnTypeBuilder<Lit> {
         FnTypeBuilder::default()
     }
 
@@ -170,7 +200,7 @@ impl FnType {
         !self.type_params[&var_idx].maybe_non_linear
     }
 
-    pub(crate) fn arg_and_return_types(&self) -> impl Iterator<Item = &ValueType> + '_ {
+    pub(crate) fn arg_and_return_types(&self) -> impl Iterator<Item = &ValueType<Lit>> + '_ {
         let args_slice = match &self.args {
             FnArgs::List(args) => args.as_slice(),
             FnArgs::Any => &[],
@@ -178,7 +208,7 @@ impl FnType {
         args_slice.iter().chain(Some(&self.return_type))
     }
 
-    fn arg_and_return_types_mut(&mut self) -> impl Iterator<Item = &mut ValueType> + '_ {
+    fn arg_and_return_types_mut(&mut self) -> impl Iterator<Item = &mut ValueType<Lit>> + '_ {
         let args_slice = match &mut self.args {
             FnArgs::List(args) => args.as_mut_slice(),
             FnArgs::Any => &mut [],
@@ -190,7 +220,7 @@ impl FnType {
     /// of the function.
     pub(crate) fn map_types<F>(&self, mut map_fn: F) -> Self
     where
-        F: FnMut(&ValueType) -> ValueType,
+        F: FnMut(&ValueType<Lit>) -> ValueType<Lit>,
     {
         Self {
             args: match &self.args {
@@ -221,8 +251,8 @@ impl FnType {
 /// # use std::iter;
 /// let sum_fn_type = FnType::builder()
 ///     .with_const_params(iter::once(0))
-///     .with_arg(ValueType::Number.repeat(TupleLength::Param(0)))
-///     .returning(ValueType::Number);
+///     .with_arg(ValueType::Lit(Num).repeat(TupleLength::Param(0)))
+///     .returning(ValueType::Lit(Num));
 /// assert_eq!(
 ///     sum_fn_type.to_string(),
 ///     "fn<const N>([Num; N]) -> Num"
@@ -252,11 +282,11 @@ impl FnType {
 /// );
 /// ```
 #[derive(Debug)]
-pub struct FnTypeBuilder {
-    inner: FnType,
+pub struct FnTypeBuilder<Lit = Num> {
+    inner: FnType<Lit>,
 }
 
-impl Default for FnTypeBuilder {
+impl<Lit> Default for FnTypeBuilder<Lit> {
     fn default() -> Self {
         Self {
             inner: FnType {
@@ -269,7 +299,8 @@ impl Default for FnTypeBuilder {
     }
 }
 
-impl FnTypeBuilder {
+// TODO: support validation similarly to AST conversions.
+impl<Lit: LiteralType> FnTypeBuilder<Lit> {
     /// Adds the const params with the specified `indexes` to the function definition.
     pub fn with_const_params(mut self, indexes: impl Iterator<Item = usize>) -> Self {
         self.inner
@@ -292,7 +323,7 @@ impl FnTypeBuilder {
     }
 
     /// Adds a new argument to the function definition.
-    pub fn with_arg(mut self, arg: impl Into<ValueType>) -> Self {
+    pub fn with_arg(mut self, arg: impl Into<ValueType<Lit>>) -> Self {
         match &mut self.inner.args {
             FnArgs::List(args) => {
                 args.push(arg.into());
@@ -303,7 +334,7 @@ impl FnTypeBuilder {
     }
 
     /// Declares the return type of the function and builds it.
-    pub fn returning(mut self, return_type: ValueType) -> FnType {
+    pub fn returning(mut self, return_type: ValueType<Lit>) -> FnType<Lit> {
         self.inner.return_type = return_type;
         self.inner
     }
@@ -311,15 +342,15 @@ impl FnTypeBuilder {
 
 /// Type of function arguments.
 #[derive(Debug, Clone, PartialEq)]
-pub enum FnArgs {
+pub enum FnArgs<Lit> {
     /// Any arguments are accepted.
     // TODO: allow to parse any args
     Any,
     /// Lists accepted arguments.
-    List(Vec<ValueType>),
+    List(Vec<ValueType<Lit>>),
 }
 
-impl fmt::Display for FnArgs {
+impl<Lit: fmt::Display> fmt::Display for FnArgs<Lit> {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         match self {
             FnArgs::Any => formatter.write_str("..."),
@@ -378,21 +409,21 @@ impl TupleLength {
 
 /// Possible value type.
 #[derive(Debug, Clone)]
-pub enum ValueType {
+pub enum ValueType<Lit = Num> {
     /// Any type.
     Any,
     /// Boolean.
     Bool,
-    /// Number.
-    Number,
+    /// Literal.
+    Lit(Lit),
     /// Function.
-    Function(Box<FnType>),
+    Function(Box<FnType<Lit>>),
     /// Tuple.
-    Tuple(Vec<ValueType>),
+    Tuple(Vec<ValueType<Lit>>),
     /// Slice.
     Slice {
         /// Type of slice elements.
-        element: Box<ValueType>,
+        element: Box<ValueType<Lit>>,
         /// Slice length.
         length: TupleLength,
     },
@@ -404,13 +435,12 @@ pub enum ValueType {
     Var(usize),
 }
 
-impl PartialEq for ValueType {
+impl<Num: PartialEq> PartialEq for ValueType<Num> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Any, _)
-            | (_, Self::Any)
-            | (Self::Bool, Self::Bool)
-            | (Self::Number, Self::Number) => true,
+            (Self::Any, _) | (_, Self::Any) | (Self::Bool, Self::Bool) => true,
+
+            (Self::Lit(x), Self::Lit(y)) => x == y,
 
             (Self::Var(x), Self::Var(y)) | (Self::Param(x), Self::Param(y)) => x == y,
 
@@ -435,16 +465,14 @@ impl PartialEq for ValueType {
     }
 }
 
-impl fmt::Display for ValueType {
+impl<Num: fmt::Display> fmt::Display for ValueType<Num> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Any => formatter.write_str("_"),
-            Self::Var(idx) | Self::Param(idx) => {
-                formatter.write_str(Self::type_param(*idx).as_ref())
-            }
+            Self::Var(idx) | Self::Param(idx) => formatter.write_str(type_param(*idx).as_ref()),
 
             Self::Bool => formatter.write_str("Bool"),
-            Self::Number => formatter.write_str("Num"),
+            Self::Lit(num) => fmt::Display::fmt(num, formatter),
             Self::Function(fn_type) => fmt::Display::fmt(fn_type, formatter),
 
             Self::Tuple(fragments) => {
@@ -485,15 +513,15 @@ impl fmt::Display for ValueType {
     }
 }
 
-impl From<FnType> for ValueType {
-    fn from(fn_type: FnType) -> Self {
+impl<Num> From<FnType<Num>> for ValueType<Num> {
+    fn from(fn_type: FnType<Num>) -> Self {
         Self::Function(Box::new(fn_type))
     }
 }
 
 macro_rules! impl_from_tuple_for_value_type {
     ($($var:tt : $ty:ident),*) => {
-        impl<$($ty : Into<ValueType>,)*> From<($($ty,)*)> for ValueType {
+        impl<Num, $($ty : Into<ValueType<Num>>,)*> From<($($ty,)*)> for ValueType<Num> {
             #[allow(unused_variables)] // `tuple` is unused for empty tuple
             fn from(tuple: ($($ty,)*)) -> Self {
                 Self::Tuple(vec![$(tuple.$var.into(),)*])
@@ -514,22 +542,22 @@ impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A);
 impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A, 8: B);
 impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A, 8: B, 9: C);
 
-impl ValueType {
-    fn type_param(index: usize) -> Cow<'static, str> {
-        const PARAM_NAMES: &str = "TUVXYZ";
-        PARAM_NAMES.get(index..=index).map_or_else(
-            || Cow::from(format!("T{}", index - PARAM_NAMES.len())),
-            Cow::from,
-        )
-    }
+fn type_param(index: usize) -> Cow<'static, str> {
+    const PARAM_NAMES: &str = "TUVXYZ";
+    PARAM_NAMES.get(index..=index).map_or_else(
+        || Cow::from(format!("T{}", index - PARAM_NAMES.len())),
+        Cow::from,
+    )
+}
 
+impl<Num> ValueType<Num> {
     /// Returns a void type (an empty tuple).
     pub const fn void() -> Self {
         Self::Tuple(Vec::new())
     }
 
     /// Creates a slice type.
-    pub fn slice(element: impl Into<ValueType>, length: TupleLength) -> Self {
+    pub fn slice(element: impl Into<ValueType<Num>>, length: TupleLength) -> Self {
         Self::Slice {
             element: Box::new(element.into()),
             length,
@@ -553,7 +581,7 @@ impl ValueType {
     /// not to be a number, and `None` if either case is possible.
     pub(crate) fn is_number(&self) -> Option<bool> {
         match self {
-            Self::Number => Some(true),
+            Self::Lit(_) => Some(true),
             Self::Tuple(_) | Self::Slice { .. } | Self::Bool | Self::Function(_) => Some(false),
             _ => None,
         }
@@ -587,7 +615,7 @@ impl<T: NumLiteral> ParseLiteral for NumGrammar<T> {
 }
 
 impl<T: NumLiteral> Grammar for NumGrammar<T> {
-    type Type = ValueType;
+    type Type = ValueType<Num>;
 
     fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
         ValueType::parse(input)

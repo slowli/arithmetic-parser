@@ -2,19 +2,19 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{FnArgs, FnType, TupleLength, TypeErrorKind, ValueType};
+use crate::{FnArgs, FnType, LiteralType, TupleLength, TypeErrorKind, ValueType};
 use arithmetic_parser::{grammars::Grammar, Spanned, SpannedExpr};
 
 mod fns;
 use self::fns::{ParamMapping, SubstitutionContext};
 
 /// Set of equations and constraints on type variables.
-#[derive(Debug, Clone, Default)]
-pub(crate) struct Substitutions {
+#[derive(Debug, Clone)]
+pub(crate) struct Substitutions<Lit> {
     /// Number of type variables.
     type_var_count: usize,
     /// Type variable equations, encoded as `type_var[key] = value`.
-    eqs: HashMap<usize, ValueType>,
+    eqs: HashMap<usize, ValueType<Lit>>,
     /// Set of type variables known to be linear.
     lin: HashSet<usize>,
     /// Number of length variables.
@@ -23,13 +23,25 @@ pub(crate) struct Substitutions {
     length_eqs: HashMap<usize, TupleLength>,
 }
 
-impl Substitutions {
+impl<Lit> Default for Substitutions<Lit> {
+    fn default() -> Self {
+        Self {
+            type_var_count: 0,
+            eqs: HashMap::new(),
+            lin: HashSet::new(),
+            const_var_count: 0,
+            length_eqs: HashMap::new(),
+        }
+    }
+}
+
+impl<Lit: LiteralType> Substitutions<Lit> {
     pub fn linear_types(&self) -> &HashSet<usize> {
         &self.lin
     }
 
     /// Resolves the type by following established equality links between type variables.
-    fn fast_resolve<'a>(&'a self, mut ty: &'a ValueType) -> &'a ValueType {
+    fn fast_resolve<'a>(&'a self, mut ty: &'a ValueType<Lit>) -> &'a ValueType<Lit> {
         while let ValueType::Var(idx) = ty {
             let resolved = self.eqs.get(&idx);
             if let Some(resolved) = resolved {
@@ -45,7 +57,7 @@ impl Substitutions {
     ///
     /// Compared to `fast_resolve`, this method will also recursively resolve tuples
     /// and function types.
-    pub fn resolve<'a>(&'a self, ty: &'a ValueType) -> ValueType {
+    pub fn resolve<'a>(&'a self, ty: &'a ValueType<Lit>) -> ValueType<Lit> {
         let ty = self.fast_resolve(ty);
         match ty {
             ValueType::Tuple(fragments) => {
@@ -78,9 +90,9 @@ impl Substitutions {
         len
     }
 
-    pub fn assign_new_type(&mut self, ty: &mut ValueType) -> Result<(), TypeErrorKind> {
+    pub fn assign_new_type(&mut self, ty: &mut ValueType<Lit>) -> Result<(), TypeErrorKind<Lit>> {
         match ty {
-            ValueType::Number | ValueType::Bool | ValueType::Var(_) => {
+            ValueType::Lit(_) | ValueType::Bool | ValueType::Var(_) => {
                 // Do nothing.
             }
 
@@ -132,7 +144,11 @@ impl Substitutions {
     /// # Errors
     ///
     /// Returns an error if unification is impossible.
-    pub fn unify(&mut self, lhs: &ValueType, rhs: &ValueType) -> Result<(), TypeErrorKind> {
+    pub fn unify(
+        &mut self,
+        lhs: &ValueType<Lit>,
+        rhs: &ValueType<Lit>,
+    ) -> Result<(), TypeErrorKind<Lit>> {
         use self::ValueType::{Function, Param, Slice, Tuple, Var};
 
         let resolved_lhs = self.fast_resolve(lhs).to_owned();
@@ -201,7 +217,11 @@ impl Substitutions {
         }
     }
 
-    fn unify_lengths(&mut self, lhs: TupleLength, rhs: TupleLength) -> Result<(), TypeErrorKind> {
+    fn unify_lengths(
+        &mut self,
+        lhs: TupleLength,
+        rhs: TupleLength,
+    ) -> Result<(), TypeErrorKind<Lit>> {
         let resolved_lhs = self.resolve_len(lhs);
         let resolved_rhs = self.resolve_len(rhs);
 
@@ -228,7 +248,11 @@ impl Substitutions {
         }
     }
 
-    fn unify_fn_types(&mut self, lhs: &FnType, rhs: &FnType) -> Result<(), TypeErrorKind> {
+    fn unify_fn_types(
+        &mut self,
+        lhs: &FnType<Lit>,
+        rhs: &FnType<Lit>,
+    ) -> Result<(), TypeErrorKind<Lit>> {
         if lhs.is_parametric() {
             return Err(TypeErrorKind::UnsupportedParam);
         }
@@ -264,7 +288,10 @@ impl Substitutions {
     }
 
     /// Instantiates a functional type by replacing all type arguments with new type vars.
-    fn instantiate_function(&mut self, fn_type: &FnType) -> Result<FnType, TypeErrorKind> {
+    fn instantiate_function(
+        &mut self,
+        fn_type: &FnType<Lit>,
+    ) -> Result<FnType<Lit>, TypeErrorKind<Lit>> {
         if !fn_type.is_parametric() {
             // Fast path: just clone the function type.
             return Ok(fn_type.clone());
@@ -303,7 +330,7 @@ impl Substitutions {
 
     /// Checks if a type variable with the specified index is present in `ty`. This method
     /// is used to check that types are not recursive.
-    fn check_occurrence(&self, var_idx: usize, ty: &ValueType) -> bool {
+    fn check_occurrence(&self, var_idx: usize, ty: &ValueType<Lit>) -> bool {
         match ty {
             ValueType::Var(i) if *i == var_idx => true,
 
@@ -328,7 +355,7 @@ impl Substitutions {
 
     /// Removes excessive information about type vars. This method is used when types are
     /// provided to `TypeError`.
-    pub fn sanitize_type(&self, fixed_idx: Option<usize>, ty: &ValueType) -> ValueType {
+    pub fn sanitize_type(&self, fixed_idx: Option<usize>, ty: &ValueType<Lit>) -> ValueType<Lit> {
         match self.resolve(ty) {
             ValueType::Var(i) if Some(i) == fixed_idx => ValueType::Var(0),
             ValueType::Var(_) => ValueType::Any,
@@ -362,7 +389,7 @@ impl Substitutions {
     /// # Errors
     ///
     /// Returns an error if the unification is impossible.
-    fn unify_var(&mut self, var_idx: usize, ty: &ValueType) -> Result<(), TypeErrorKind> {
+    fn unify_var(&mut self, var_idx: usize, ty: &ValueType<Lit>) -> Result<(), TypeErrorKind<Lit>> {
         // variables should be resolved in `unify`.
         debug_assert!(!self.eqs.contains_key(&var_idx));
         debug_assert!(if let ValueType::Var(idx) = ty {
@@ -386,7 +413,7 @@ impl Substitutions {
 
     /// Recursively marks `ty` as a linear type.
     #[allow(clippy::map_err_ignore)] // ignoring the original error is intentional
-    pub fn mark_as_linear(&mut self, ty: &ValueType) -> Result<(), TypeErrorKind> {
+    pub fn mark_as_linear(&mut self, ty: &ValueType<Lit>) -> Result<(), TypeErrorKind<Lit>> {
         match ty {
             ValueType::Var(idx) => {
                 self.lin.insert(*idx);
@@ -402,7 +429,7 @@ impl Substitutions {
                 let reported_ty = self.sanitize_type(None, ty);
                 Err(TypeErrorKind::NonLinearType(reported_ty))
             }
-            ValueType::Number => {
+            ValueType::Lit(_) => {
                 // This type is linear by definition.
                 Ok(())
             }
@@ -425,10 +452,10 @@ impl Substitutions {
 
     pub fn unify_spanned_expr<'a, T: Grammar>(
         &mut self,
-        expr: &ValueType,
+        expr: &ValueType<Lit>,
         expr_span: &SpannedExpr<'a, T>,
-        expected: &ValueType,
-    ) -> Result<(), Spanned<'a, TypeErrorKind>> {
+        expected: &ValueType<Lit>,
+    ) -> Result<(), Spanned<'a, TypeErrorKind<Lit>>> {
         // FIXME: should switch LHS / RHS.
         self.unify(&expr, expected)
             .map_err(|e| expr_span.copy_with_extra(e))
@@ -437,9 +464,9 @@ impl Substitutions {
     /// Returns the return type of the function.
     pub fn unify_fn_call(
         &mut self,
-        definition: &ValueType,
-        arg_types: Vec<ValueType>,
-    ) -> Result<ValueType, TypeErrorKind> {
+        definition: &ValueType<Lit>,
+        arg_types: Vec<ValueType<Lit>>,
+    ) -> Result<ValueType<Lit>, TypeErrorKind<Lit>> {
         let mut return_type = ValueType::Any;
         self.assign_new_type(&mut return_type)?;
 
@@ -455,9 +482,9 @@ impl Substitutions {
     /// is known to be a number and the other is not a number.
     pub fn unify_binary_op(
         &mut self,
-        lhs_ty: &ValueType,
-        rhs_ty: &ValueType,
-    ) -> Result<ValueType, TypeErrorKind> {
+        lhs_ty: &ValueType<Lit>,
+        rhs_ty: &ValueType<Lit>,
+    ) -> Result<ValueType<Lit>, TypeErrorKind<Lit>> {
         self.mark_as_linear(lhs_ty)?;
         self.mark_as_linear(rhs_ty)?;
 

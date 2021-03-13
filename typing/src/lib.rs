@@ -28,7 +28,28 @@
 //!
 //! # Examples
 //!
-//! FIXME
+//! ```
+//! use arithmetic_parser::grammars::{Parse, Typed};
+//! use arithmetic_typing::{NumGrammar, TypeEnvironment, ValueType};
+//!
+//! # fn main() -> anyhow::Result<()> {
+//! let code = "sum = |xs| xs.fold(0, |acc, x| acc + x);";
+//! let ast = Typed::<NumGrammar<f32>>::parse_statements(code)?;
+//!
+//! let mut env = TypeEnvironment::new();
+//! // Insert `fold` function definition.
+//! let fold_fn =
+//!     "fn<const N; T, Acc>([T; N], Acc, fn(Acc, T) -> Acc) -> Acc";
+//! let fold_fn: ValueType = fold_fn.parse()?;
+//! env.insert_type("fold", fold_fn);
+//!
+//! // Evaluate `code` to get the inferred `sum` function signature.
+//! let output_type = env.process_statements(&ast)?;
+//! assert!(output_type.is_void());
+//! assert_eq!(env["sum"].to_string(), "fn<const N>([Num; N]) -> Num");
+//! # Ok(())
+//! # }
+//! ```
 //!
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
 //! [`Grammar`]: arithmetic_parser::grammars::Grammar
@@ -136,6 +157,11 @@ impl FnType {
         }
     }
 
+    /// Returns a builder for `FnType`s.
+    pub fn builder() -> FnTypeBuilder {
+        FnTypeBuilder::default()
+    }
+
     /// Returns `true` iff the function has at least one const or type param.
     pub fn is_parametric(&self) -> bool {
         !self.const_params.is_empty() || !self.type_params.is_empty()
@@ -177,6 +203,111 @@ impl FnType {
             type_params: self.type_params.clone(),
             const_params: self.const_params.clone(),
         }
+    }
+}
+
+/// Builder for functional types.
+///
+/// The builder does not check well-formedness of the function, such as that all referenced
+/// const / type params are declared.
+///
+/// **Tip.** You may also use [`FromStr`](core::str::FromStr) implementation to parse
+/// functional types.
+///
+/// # Examples
+///
+/// Signature for a function summing a slice of numbers:
+///
+/// ```
+/// # use arithmetic_typing::{FnType, TupleLength, ValueType};
+/// # use std::iter;
+/// let sum_fn_type = FnType::builder()
+///     .with_const_params(iter::once(0))
+///     .with_arg(ValueType::Number.repeat(TupleLength::Param(0)))
+///     .returning(ValueType::Number);
+/// assert_eq!(
+///     sum_fn_type.to_string(),
+///     "fn<const N>([Num; N]) -> Num"
+/// );
+/// ```
+///
+/// Signature for a slice mapping function:
+///
+/// ```
+/// # use arithmetic_typing::{FnType, TupleLength, ValueType};
+/// # use std::iter;
+/// // Definition of the mapping arg. Note that the definition uses type params,
+/// // but does not declare them (they are bound to the parent function).
+/// let map_fn_arg = FnType::builder()
+///     .with_arg(ValueType::Param(0))
+///     .returning(ValueType::Param(1));
+///
+/// let map_fn_type = FnType::builder()
+///     .with_const_params(iter::once(0))
+///     .with_type_params(0..=1, false)
+///     .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
+///     .with_arg(map_fn_arg)
+///     .returning(ValueType::Param(0).repeat(TupleLength::Param(1)));
+/// assert_eq!(
+///     map_fn_type.to_string(),
+///     "fn<const N; T: ?Lin, U: ?Lin>([T; N], fn(T) -> U) -> [U; N]"
+/// );
+/// ```
+#[derive(Debug)]
+pub struct FnTypeBuilder {
+    inner: FnType,
+}
+
+impl Default for FnTypeBuilder {
+    fn default() -> Self {
+        Self {
+            inner: FnType {
+                args: FnArgs::List(vec![]),
+                return_type: ValueType::void(),
+                type_params: BTreeMap::default(),
+                const_params: BTreeMap::default(),
+            },
+        }
+    }
+}
+
+impl FnTypeBuilder {
+    /// Adds the const params with the specified `indexes` to the function definition.
+    pub fn with_const_params(mut self, indexes: impl Iterator<Item = usize>) -> Self {
+        self.inner
+            .const_params
+            .extend(indexes.map(|i| (i, ConstParamDescription)));
+        self
+    }
+
+    /// Adds the type params with the specified `indexes` to the function definition.
+    /// `linear` determines if the type params are linear (i.e., can be used as arguments
+    /// in binary ops).
+    pub fn with_type_params(mut self, indexes: impl Iterator<Item = usize>, linear: bool) -> Self {
+        let description = TypeParamDescription {
+            maybe_non_linear: !linear,
+        };
+        self.inner
+            .type_params
+            .extend(indexes.map(|i| (i, description)));
+        self
+    }
+
+    /// Adds a new argument to the function definition.
+    pub fn with_arg(mut self, arg: impl Into<ValueType>) -> Self {
+        match &mut self.inner.args {
+            FnArgs::List(args) => {
+                args.push(arg.into());
+            }
+            FnArgs::Any => unreachable!(),
+        }
+        self
+    }
+
+    /// Declares the return type of the function and builds it.
+    pub fn returning(mut self, return_type: ValueType) -> FnType {
+        self.inner.return_type = return_type;
+        self.inner
     }
 }
 
@@ -403,6 +534,14 @@ impl ValueType {
     pub fn slice(element: impl Into<ValueType>, length: TupleLength) -> Self {
         Self::Slice {
             element: Box::new(element.into()),
+            length,
+        }
+    }
+
+    /// Creates a slice type by repeating this type.
+    pub fn repeat(self, length: TupleLength) -> Self {
+        Self::Slice {
+            element: Box::new(self),
             length,
         }
     }

@@ -74,8 +74,9 @@ mod substitutions;
 mod type_map;
 
 pub use self::{
-    env::TypeEnvironment,
+    env::{NumArithmetic, TypeArithmetic, TypeEnvironment},
     error::{TypeError, TypeErrorKind},
+    substitutions::Substitutions,
     type_map::{Assertions, Prelude},
 };
 
@@ -90,13 +91,13 @@ struct TypeParamDescription {
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct ConstParamDescription;
 
-/// FIXME
+/// Types that a literals can assume in a certain grammar.
 pub trait LiteralType:
     Clone + PartialEq + fmt::Debug + fmt::Display + FromStr + Send + Sync + 'static
 {
 }
 
-/// FIXME
+/// Generic numeric type.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Num;
 
@@ -107,7 +108,7 @@ impl fmt::Display for Num {
 }
 
 impl FromStr for Num {
-    type Err = ();
+    type Err = (); // FIXME
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s == "Num" {

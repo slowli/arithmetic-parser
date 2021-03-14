@@ -117,6 +117,13 @@ impl<Lit: LiteralType> TypeErrorKind<Lit> {
         Self::Unsupported(ty.into())
     }
 
+    /// Creates an error from this error kind and the specified span.
+    pub fn with_span<'a, T>(self, span: &Spanned<'a, T>) -> TypeError<'a, Lit> {
+        TypeError {
+            inner: span.copy_with_extra(self),
+        }
+    }
+
     pub(crate) fn into_op_mismatch(
         self,
         substitutions: &Substitutions<Lit>,
@@ -162,10 +169,6 @@ impl<Lit: LiteralType> std::error::Error for TypeError<'_, Lit> {
 }
 
 impl<'a, Lit> TypeError<'a, Lit> {
-    pub(crate) fn new(inner: Spanned<'a, TypeErrorKind<Lit>>) -> Self {
-        Self { inner }
-    }
-
     /// Gets the kind of this error.
     pub fn kind(&self) -> &TypeErrorKind<Lit> {
         &self.inner.extra

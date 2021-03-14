@@ -3,7 +3,6 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{FnArgs, FnType, LiteralType, TupleLength, TypeErrorKind, ValueType};
-use arithmetic_parser::Spanned;
 
 mod fns;
 use self::fns::{ParamMapping, SubstitutionContext};
@@ -36,7 +35,7 @@ impl<Lit> Default for Substitutions<Lit> {
 }
 
 impl<Lit: LiteralType> Substitutions<Lit> {
-    pub fn linear_types(&self) -> &HashSet<usize> {
+    pub(crate) fn linear_types(&self) -> &HashSet<usize> {
         &self.lin
     }
 
@@ -57,7 +56,7 @@ impl<Lit: LiteralType> Substitutions<Lit> {
     ///
     /// Compared to `fast_resolve`, this method will also recursively resolve tuples
     /// and function types.
-    pub fn resolve<'a>(&'a self, ty: &'a ValueType<Lit>) -> ValueType<Lit> {
+    pub fn resolve(&self, ty: &ValueType<Lit>) -> ValueType<Lit> {
         let ty = self.fast_resolve(ty);
         match ty {
             ValueType::Tuple(fragments) => {
@@ -457,19 +456,8 @@ impl<Lit: LiteralType> Substitutions<Lit> {
         }
     }
 
-    pub fn unify_spanned_expr<'a, T>(
-        &mut self,
-        expr: &ValueType<Lit>,
-        expr_span: &Spanned<'a, T>,
-        expected: &ValueType<Lit>,
-    ) -> Result<(), Spanned<'a, TypeErrorKind<Lit>>> {
-        // FIXME: should switch LHS / RHS.
-        self.unify(&expr, expected)
-            .map_err(|e| expr_span.copy_with_extra(e))
-    }
-
     /// Returns the return type of the function.
-    pub fn unify_fn_call(
+    pub(crate) fn unify_fn_call(
         &mut self,
         definition: &ValueType<Lit>,
         arg_types: Vec<ValueType<Lit>>,

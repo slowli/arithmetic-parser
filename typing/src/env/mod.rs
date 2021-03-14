@@ -19,18 +19,18 @@ mod tests;
 #[cfg(test)]
 mod type_annotation_tests;
 
-/// FIXME
-pub type TypeResult<'a, Lit> = Result<ValueType<Lit>, Spanned<'a, TypeErrorKind<Lit>>>;
+/// Result of inferring type for a certain expression.
+pub type TypeResult<'a, Lit> = Result<ValueType<Lit>, TypeError<'a, Lit>>;
 
-/// FIXME
+/// Arithmetic allowing to customize how binary operations are handled during type inference.
 pub trait TypeArithmetic<Lit> {
-    /// FIXME
+    /// Types of literals that this arithmetic operates on.
     type LitType: LiteralType;
 
-    /// FIXME
+    /// Gets the type of the provided literal.
     fn type_of_literal(&self, lit: &Lit) -> Self::LitType;
 
-    /// FIXME
+    /// Handles a binary operation.
     fn process_binary_op<'a>(
         &self,
         substitutions: &mut Substitutions<Self::LitType>,
@@ -41,36 +41,43 @@ pub trait TypeArithmetic<Lit> {
     ) -> TypeResult<'a, Self::LitType>;
 }
 
-/// FIXME
+/// Spans related to a binary operation.
 #[derive(Debug, Clone, Copy)]
 pub struct BinaryOpSpans<'a> {
-    /// FIXME
+    /// Total span of the operation.
     pub total: Spanned<'a>,
-    /// FIXME
+    /// Span of the left-hand side.
     pub lhs: Spanned<'a>,
-    /// FIXME
+    /// Span of the right-hand side.
     pub rhs: Spanned<'a>,
 }
 
-/// FIXME
+/// Arithmetic on [`Num`]bers.
+///
+/// # Binary ops
+///
+/// Binary ops fall into 3 cases: `Num op T == T`, `T op Num == T`, or `T op T == T`.
+/// `T op T` is assumed by default, only falling into two other cases if one of operands
+/// is known to be a number and the other is not a number.
+///
+/// # Comparisons
+///
+/// Order comparisons (`>`, `<`, `>=`, `<=`) are switched off by default. Use
+/// [`Self::with_comparisons()`] constructor to switch them on. If switch on, both arguments
+/// of the order comparison must be numbers.
 #[derive(Debug, Clone, Default)]
 pub struct NumArithmetic {
     comparisons_enabled: bool,
 }
 
 impl NumArithmetic {
-    /// FIXME
+    /// Creates an instance of arithmetic that supports order comparisons.
     pub const fn with_comparisons() -> Self {
         Self {
             comparisons_enabled: true,
         }
     }
 
-    /// Handles a binary operation.
-    ///
-    /// Binary ops fall into 3 cases: `Num op T == T`, `T op Num == T`, or `T op T == T`.
-    /// We assume `T op T` by default, only falling into two other cases if one of operands
-    /// is known to be a number and the other is not a number.
     fn unify_binary_op<Lit: LiteralType>(
         substitutions: &mut Substitutions<Lit>,
         lhs_ty: &ValueType<Lit>,
@@ -111,34 +118,42 @@ impl<Lit> TypeArithmetic<Lit> for NumArithmetic {
         match op {
             BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Power => {
                 Self::unify_binary_op(substitutions, lhs_ty, rhs_ty)
-                    .map_err(|e| spans.total.copy_with_extra(e))
+                    .map_err(|err| err.with_span(&spans.total))
             }
 
             BinaryOp::Eq | BinaryOp::NotEq => {
-                substitutions.unify(&lhs_ty, &rhs_ty).map_err(|e| {
-                    let e = e.into_op_mismatch(substitutions, lhs_ty, rhs_ty, op);
-                    spans.total.copy_with_extra(e)
+                substitutions.unify(&lhs_ty, &rhs_ty).map_err(|err| {
+                    err.into_op_mismatch(substitutions, lhs_ty, rhs_ty, op)
+                        .with_span(&spans.total)
                 })?;
                 Ok(ValueType::Bool)
             }
 
             BinaryOp::And | BinaryOp::Or => {
-                substitutions.unify_spanned_expr(lhs_ty, &spans.lhs, &ValueType::Bool)?;
-                substitutions.unify_spanned_expr(rhs_ty, &spans.rhs, &ValueType::Bool)?;
+                substitutions
+                    .unify(&ValueType::Bool, lhs_ty)
+                    .map_err(|err| err.with_span(&spans.lhs))?;
+                substitutions
+                    .unify(&ValueType::Bool, rhs_ty)
+                    .map_err(|err| err.with_span(&spans.rhs))?;
                 Ok(ValueType::Bool)
             }
 
             BinaryOp::Ge | BinaryOp::Le | BinaryOp::Lt | BinaryOp::Gt => {
                 if self.comparisons_enabled {
-                    substitutions.unify_spanned_expr(lhs_ty, &spans.lhs, &ValueType::Lit(Num))?;
-                    substitutions.unify_spanned_expr(rhs_ty, &spans.rhs, &ValueType::Lit(Num))?;
+                    substitutions
+                        .unify(&ValueType::Lit(Num), lhs_ty)
+                        .map_err(|err| err.with_span(&spans.lhs))?;
+                    substitutions
+                        .unify(&ValueType::Lit(Num), rhs_ty)
+                        .map_err(|err| err.with_span(&spans.rhs))?;
                     Ok(ValueType::Bool)
                 } else {
-                    Err(spans.total.copy_with_extra(TypeErrorKind::unsupported(op)))
+                    Err(TypeErrorKind::unsupported(op).with_span(&spans.total))
                 }
             }
 
-            _ => Err(spans.total.copy_with_extra(TypeErrorKind::unsupported(op))),
+            _ => Err(TypeErrorKind::unsupported(op).with_span(&spans.total)),
         }
     }
 }
@@ -203,9 +218,7 @@ impl<Lit: LiteralType> TypeEnvironment<Lit> {
         T: Grammar<Type = ValueType<Lit>>,
         A: TypeArithmetic<T::Lit, LitType = Lit>,
     {
-        TypeProcessor::new(self, arithmetic)
-            .process_statements(block)
-            .map_err(TypeError::new)
+        TypeProcessor::new(self, arithmetic).process_statements(block)
     }
 }
 
@@ -337,18 +350,14 @@ impl<L, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
                 self.process_binary_op(substitutions, expr, op.extra, lhs, rhs)
             }
 
-            _ => {
-                let err = TypeErrorKind::unsupported(expr.extra.ty());
-                Err(expr.copy_with_extra(err))
-            }
+            _ => Err(TypeErrorKind::unsupported(expr.extra.ty()).with_span(expr)),
         }
     }
 
     #[inline]
     fn process_var<'a, T>(&self, name: &Spanned<'a, T>) -> TypeResult<'a, Lit> {
         self.get_type(name.fragment()).cloned().ok_or_else(|| {
-            let e = TypeErrorKind::UndefinedVar((*name.fragment()).to_owned());
-            name.copy_with_extra(e)
+            TypeErrorKind::UndefinedVar((*name.fragment()).to_owned()).with_span(name)
         })
     }
 
@@ -380,7 +389,7 @@ impl<L, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
                 let mut value_type = ty.as_ref().map_or(ValueType::Any, |ty| ty.extra.clone());
                 substitutions
                     .assign_new_type(&mut value_type)
-                    .map_err(|err| ty.as_ref().unwrap().copy_with_extra(err))?;
+                    .map_err(|err| err.with_span(ty.as_ref().unwrap()))?;
                 // `unwrap` is safe: an error can only occur with a type annotation present.
 
                 self.insert_type(lvalue.fragment(), value_type.clone());
@@ -392,10 +401,7 @@ impl<L, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
                 Ok(ValueType::Tuple(element_types))
             }
 
-            _ => {
-                let err = TypeErrorKind::unsupported(lvalue.extra.ty());
-                Err(lvalue.copy_with_extra(err))
-            }
+            _ => Err(TypeErrorKind::unsupported(lvalue.extra.ty()).with_span(lvalue)),
         }
     }
 
@@ -404,11 +410,10 @@ impl<L, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
         &mut self,
         substitutions: &mut Substitutions<Lit>,
         destructure: &Destructure<'a, ValueType<Lit>>,
-    ) -> Result<Vec<ValueType<Lit>>, Spanned<'a, TypeErrorKind<Lit>>> {
+    ) -> Result<Vec<ValueType<Lit>>, TypeError<'a, Lit>> {
         if let Some(middle) = &destructure.middle {
             // TODO: allow middles with explicitly set type.
-            let err = middle.copy_with_extra(TypeErrorKind::UnsupportedDestructure);
-            return Err(err);
+            return Err(TypeErrorKind::UnsupportedDestructure.with_span(middle));
         }
 
         destructure
@@ -435,7 +440,7 @@ impl<L, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
         let arg_types = arg_types?;
         let return_type = substitutions
             .unify_fn_call(fn_type, arg_types)
-            .map_err(|e| call_expr.copy_with_extra(e))?;
+            .map_err(|err| err.with_span(call_expr))?;
 
         Ok(return_type)
     }
@@ -453,18 +458,20 @@ impl<L, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
         let inner_type = self.process_expr_inner(substitutions, inner)?;
         match op.extra {
             UnaryOp::Not => {
-                substitutions.unify_spanned_expr(&inner_type, inner, &ValueType::Bool)?;
+                substitutions
+                    .unify(&ValueType::Bool, &inner_type)
+                    .map_err(|err| err.with_span(inner))?;
                 Ok(ValueType::Bool)
             }
 
             UnaryOp::Neg => {
                 substitutions
                     .mark_as_linear(&inner_type)
-                    .map_err(|e| inner.copy_with_extra(e))?;
+                    .map_err(|err| err.with_span(inner))?;
                 Ok(inner_type)
             }
 
-            _ => Err(op.copy_with_extra(TypeErrorKind::unsupported(op.extra))),
+            _ => Err(TypeErrorKind::unsupported(op.extra).with_span(op)),
         }
     }
 
@@ -495,7 +502,7 @@ impl<L, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
         &mut self,
         substitutions: &mut Substitutions<Lit>,
         def: &FnDefinition<'a, T>,
-    ) -> Result<FnType<Lit>, Spanned<'a, TypeErrorKind<Lit>>>
+    ) -> Result<FnType<Lit>, TypeError<'a, Lit>>
     where
         T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {
@@ -527,7 +534,7 @@ impl<L, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
         &mut self,
         substitutions: &mut Substitutions<Lit>,
         def: &FnDefinition<'a, T>,
-    ) -> Result<(Vec<ValueType<Lit>>, ValueType<Lit>), Spanned<'a, TypeErrorKind<Lit>>>
+    ) -> Result<(Vec<ValueType<Lit>>, ValueType<Lit>), TypeError<'a, Lit>>
     where
         T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {
@@ -553,13 +560,10 @@ impl<L, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
                 substitutions
                     .unify(&lhs_ty, &rhs_ty)
                     .map(|()| ValueType::void())
-                    .map_err(|e| statement.copy_with_extra(e))
+                    .map_err(|err| err.with_span(statement))
             }
 
-            _ => {
-                let err = TypeErrorKind::unsupported(statement.extra.ty());
-                Err(statement.copy_with_extra(err))
-            }
+            _ => Err(TypeErrorKind::unsupported(statement.extra.ty()).with_span(statement)),
         }
     }
 

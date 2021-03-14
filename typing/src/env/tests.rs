@@ -737,7 +737,7 @@ fn comparisons_when_switched_off() {
     type_env.insert_type("filter", Prelude::filter_type().into());
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_eq!(*err.span().fragment(), "x > 1");
+    assert_eq!(*err.span().fragment(), ">");
     assert_matches!(err.kind(), TypeErrorKind::Unsupported(_));
 }
 

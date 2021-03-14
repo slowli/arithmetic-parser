@@ -1,5 +1,7 @@
 //! `TypeEnvironment` and related types.
 
+use num_traits::{NumOps, Pow};
+
 use std::{
     collections::HashMap,
     iter::{self, FromIterator},
@@ -22,55 +24,94 @@ mod type_annotation_tests;
 /// Result of inferring type for a certain expression.
 pub type TypeResult<'a, Lit> = Result<ValueType<Lit>, TypeError<'a, Lit>>;
 
-/// Arithmetic allowing to customize how binary operations are handled during type inference.
-pub trait TypeArithmetic<Lit> {
+/// Arithmetic allowing to customize literal types and how unary and binary operations are handled
+/// during type inference.
+pub trait TypeArithmetic<Val> {
     /// Types of literals that this arithmetic operates on.
-    type LitType: LiteralType;
+    type Lit: LiteralType;
 
     /// Gets the type of the provided literal.
-    fn type_of_literal(&self, lit: &Lit) -> Self::LitType;
+    fn type_of_literal(&self, lit: &Val) -> Self::Lit;
+
+    /// Handles a unary operation.
+    fn process_unary_op<'a>(
+        &self,
+        substitutions: &mut Substitutions<Self::Lit>,
+        spans: UnaryOpSpans<'a, Self::Lit>,
+    ) -> TypeResult<'a, Self::Lit>;
 
     /// Handles a binary operation.
     fn process_binary_op<'a>(
         &self,
-        substitutions: &mut Substitutions<Self::LitType>,
-        spans: BinaryOpSpans<'a>,
-        op: BinaryOp,
-        lhs_ty: &ValueType<Self::LitType>,
-        rhs_ty: &ValueType<Self::LitType>,
-    ) -> TypeResult<'a, Self::LitType>;
+        substitutions: &mut Substitutions<Self::Lit>,
+        spans: BinaryOpSpans<'a, Self::Lit>,
+    ) -> TypeResult<'a, Self::Lit>;
 }
 
-/// Spans related to a binary operation.
-#[derive(Debug, Clone, Copy)]
-pub struct BinaryOpSpans<'a> {
-    /// Total span of the operation.
+/// Code spans related to a unary operation.
+///
+/// Used in [`TypeArithmetic::process_unary_op()`].
+#[derive(Debug, Clone)]
+pub struct UnaryOpSpans<'a, Lit> {
+    /// Total span of the operation call.
     pub total: Spanned<'a>,
-    /// Span of the left-hand side.
-    pub lhs: Spanned<'a>,
-    /// Span of the right-hand side.
-    pub rhs: Spanned<'a>,
+    /// Spanned unary operation.
+    pub op: Spanned<'a, UnaryOp>,
+    /// Span of the inner operation.
+    pub inner: Spanned<'a, ValueType<Lit>>,
+}
+
+/// Code spans related to a binary operation.
+///
+/// Used in [`TypeArithmetic::process_binary_op()`].
+#[derive(Debug, Clone)]
+pub struct BinaryOpSpans<'a, Lit> {
+    /// Total span of the operation call.
+    pub total: Spanned<'a>,
+    /// Spanned binary operation.
+    pub op: Spanned<'a, BinaryOp>,
+    /// Spanned left-hand side.
+    pub lhs: Spanned<'a, ValueType<Lit>>,
+    /// Spanned right-hand side.
+    pub rhs: Spanned<'a, ValueType<Lit>>,
 }
 
 /// Arithmetic on [`Num`]bers.
 ///
+/// # Type inference for literals
+///
+/// All literals have a single type, [`Num`].
+///
+/// # Unary ops
+///
+/// - Unary minus is follows the equation `-T == T`, where `T` is any linear type.
+/// - Unary negation is only defined for `Bool`s.
+///
 /// # Binary ops
 ///
-/// Binary ops fall into 3 cases: `Num op T == T`, `T op Num == T`, or `T op T == T`.
+/// Binary ops fall into 3 cases: `Num op T == T`, `T op Num == T`, or `T op T == T`,
+/// where `T` is any linear type.
 /// `T op T` is assumed by default, only falling into two other cases if one of operands
 /// is known to be a number and the other is not a number.
 ///
 /// # Comparisons
 ///
-/// Order comparisons (`>`, `<`, `>=`, `<=`) are switched off by default. Use
-/// [`Self::with_comparisons()`] constructor to switch them on. If switch on, both arguments
+/// Order comparisons (`>`, `<`, `>=`, `<=`) can be switched on or off. Use
+/// [`Self::with_comparisons()`] constructor to switch them on. If switched on, both arguments
 /// of the order comparison must be numbers.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct NumArithmetic {
     comparisons_enabled: bool,
 }
 
 impl NumArithmetic {
+    /// Creates an instance of arithmetic that does not support order comparisons.
+    pub const fn without_comparisons() -> Self {
+        Self {
+            comparisons_enabled: false,
+        }
+    }
+
     /// Creates an instance of arithmetic that supports order comparisons.
     pub const fn with_comparisons() -> Self {
         Self {
@@ -100,21 +141,52 @@ impl NumArithmetic {
     }
 }
 
-impl<Lit> TypeArithmetic<Lit> for NumArithmetic {
-    type LitType = Num;
+impl<Val> TypeArithmetic<Val> for NumArithmetic
+where
+    Val: Clone + NumOps + PartialEq + ops::Neg<Output = Val> + Pow<Val, Output = Val>,
+{
+    type Lit = Num;
 
-    fn type_of_literal(&self, _: &Lit) -> Self::LitType {
+    fn type_of_literal(&self, _: &Val) -> Self::Lit {
         Num
+    }
+
+    fn process_unary_op<'a>(
+        &self,
+        substitutions: &mut Substitutions<Self::Lit>,
+        spans: UnaryOpSpans<'a, Self::Lit>,
+    ) -> TypeResult<'a, Self::Lit> {
+        let op = spans.op.extra;
+        let inner_ty = &spans.inner.extra;
+
+        match op {
+            UnaryOp::Not => {
+                substitutions
+                    .unify(&ValueType::Bool, inner_ty)
+                    .map_err(|err| err.with_span(&spans.inner))?;
+                Ok(ValueType::Bool)
+            }
+
+            UnaryOp::Neg => {
+                substitutions
+                    .mark_as_linear(inner_ty)
+                    .map_err(|err| err.with_span(&spans.inner))?;
+                Ok(spans.inner.extra)
+            }
+
+            _ => Err(TypeErrorKind::unsupported(op).with_span(&spans.op)),
+        }
     }
 
     fn process_binary_op<'a>(
         &self,
-        substitutions: &mut Substitutions<Self::LitType>,
-        spans: BinaryOpSpans<'a>,
-        op: BinaryOp,
-        lhs_ty: &ValueType<Self::LitType>,
-        rhs_ty: &ValueType<Self::LitType>,
-    ) -> TypeResult<'a, Self::LitType> {
+        substitutions: &mut Substitutions<Self::Lit>,
+        spans: BinaryOpSpans<'a, Self::Lit>,
+    ) -> TypeResult<'a, Self::Lit> {
+        let op = spans.op.extra;
+        let lhs_ty = &spans.lhs.extra;
+        let rhs_ty = &spans.rhs.extra;
+
         match op {
             BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Power => {
                 Self::unify_binary_op(substitutions, lhs_ty, rhs_ty)
@@ -149,11 +221,11 @@ impl<Lit> TypeArithmetic<Lit> for NumArithmetic {
                         .map_err(|err| err.with_span(&spans.rhs))?;
                     Ok(ValueType::Bool)
                 } else {
-                    Err(TypeErrorKind::unsupported(op).with_span(&spans.total))
+                    Err(TypeErrorKind::unsupported(op).with_span(&spans.op))
                 }
             }
 
-            _ => Err(TypeErrorKind::unsupported(op).with_span(&spans.total)),
+            _ => Err(TypeErrorKind::unsupported(op).with_span(&spans.op)),
         }
     }
 }
@@ -194,17 +266,20 @@ impl<Lit: LiteralType> TypeEnvironment<Lit> {
         self
     }
 
-    /// Processes statements. After processing, the context will contain type info
-    /// about newly declared vars.
+    /// Processes statements with the default type arithmetic. After processing, the context
+    /// will contain type info about newly declared vars.
+    ///
+    /// This method is a shortcut for calling `process_with_arithmetic` with
+    /// [`NumArithmetic::without_comparisons()`].
     pub fn process_statements<'a, T>(
         &mut self,
         block: &Block<'a, T>,
     ) -> Result<ValueType<Lit>, TypeError<'a, Lit>>
     where
         T: Grammar<Type = ValueType<Lit>>,
-        NumArithmetic: TypeArithmetic<T::Lit, LitType = Lit>,
+        NumArithmetic: TypeArithmetic<T::Lit, Lit = Lit>,
     {
-        self.process_with_arithmetic(&NumArithmetic::default(), block)
+        self.process_with_arithmetic(&NumArithmetic::without_comparisons(), block)
     }
 
     /// Processes statements with a given `arithmetic`. After processing, the context will contain
@@ -216,7 +291,7 @@ impl<Lit: LiteralType> TypeEnvironment<Lit> {
     ) -> Result<ValueType<Lit>, TypeError<'a, Lit>>
     where
         T: Grammar<Type = ValueType<Lit>>,
-        A: TypeArithmetic<T::Lit, LitType = Lit>,
+        A: TypeArithmetic<T::Lit, Lit = Lit>,
     {
         TypeProcessor::new(self, arithmetic).process_statements(block)
     }
@@ -261,14 +336,14 @@ where
 struct TypeProcessor<'a, L, Lit: LiteralType> {
     root_scope: &'a mut TypeEnvironment<Lit>,
     inner_scopes: Vec<TypeEnvironment<Lit>>,
-    arithmetic: &'a dyn TypeArithmetic<L, LitType = Lit>,
+    arithmetic: &'a dyn TypeArithmetic<L, Lit = Lit>,
     is_in_function: bool,
 }
 
 impl<'a, L, Lit: LiteralType> TypeProcessor<'a, L, Lit> {
     fn new(
         env: &'a mut TypeEnvironment<Lit>,
-        arithmetic: &'a dyn TypeArithmetic<L, LitType = Lit>,
+        arithmetic: &'a dyn TypeArithmetic<L, Lit = Lit>,
     ) -> Self {
         Self {
             root_scope: env,
@@ -344,10 +419,10 @@ impl<L, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
                 .process_fn_def(substitutions, def)
                 .map(|fn_type| ValueType::Function(Box::new(fn_type))),
 
-            Expr::Unary { op, inner } => self.process_unary_op(substitutions, op, inner),
+            Expr::Unary { op, inner } => self.process_unary_op(substitutions, expr, *op, inner),
 
             Expr::Binary { lhs, rhs, op } => {
-                self.process_binary_op(substitutions, expr, op.extra, lhs, rhs)
+                self.process_binary_op(substitutions, expr, *op, lhs, rhs)
             }
 
             _ => Err(TypeErrorKind::unsupported(expr.extra.ty()).with_span(expr)),
@@ -449,30 +524,20 @@ impl<L, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
     fn process_unary_op<'a, T>(
         &mut self,
         substitutions: &mut Substitutions<Lit>,
-        op: &Spanned<'a, UnaryOp>,
+        unary_expr: &SpannedExpr<'a, T>,
+        op: Spanned<'a, UnaryOp>,
         inner: &SpannedExpr<'a, T>,
     ) -> TypeResult<'a, Lit>
     where
         T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {
-        let inner_type = self.process_expr_inner(substitutions, inner)?;
-        match op.extra {
-            UnaryOp::Not => {
-                substitutions
-                    .unify(&ValueType::Bool, &inner_type)
-                    .map_err(|err| err.with_span(inner))?;
-                Ok(ValueType::Bool)
-            }
-
-            UnaryOp::Neg => {
-                substitutions
-                    .mark_as_linear(&inner_type)
-                    .map_err(|err| err.with_span(inner))?;
-                Ok(inner_type)
-            }
-
-            _ => Err(TypeErrorKind::unsupported(op.extra).with_span(op)),
-        }
+        let inner_ty = self.process_expr_inner(substitutions, inner)?;
+        let spans = UnaryOpSpans {
+            total: unary_expr.with_no_extra(),
+            op,
+            inner: inner.copy_with_extra(inner_ty),
+        };
+        self.arithmetic.process_unary_op(substitutions, spans)
     }
 
     #[inline]
@@ -480,7 +545,7 @@ impl<L, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
         &mut self,
         substitutions: &mut Substitutions<Lit>,
         binary_expr: &SpannedExpr<'a, T>,
-        op: BinaryOp,
+        op: Spanned<'a, BinaryOp>,
         lhs: &SpannedExpr<'a, T>,
         rhs: &SpannedExpr<'a, T>,
     ) -> TypeResult<'a, Lit>
@@ -491,11 +556,11 @@ impl<L, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
         let rhs_ty = self.process_expr_inner(substitutions, rhs)?;
         let spans = BinaryOpSpans {
             total: binary_expr.with_no_extra(),
-            lhs: lhs.with_no_extra(),
-            rhs: rhs.with_no_extra(),
+            op,
+            lhs: lhs.copy_with_extra(lhs_ty),
+            rhs: rhs.copy_with_extra(rhs_ty),
         };
-        self.arithmetic
-            .process_binary_op(substitutions, spans, op, &lhs_ty, &rhs_ty)
+        self.arithmetic.process_binary_op(substitutions, spans)
     }
 
     fn process_fn_def<'a, T>(

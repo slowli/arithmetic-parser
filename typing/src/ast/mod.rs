@@ -35,7 +35,7 @@ pub use self::conversion::{ConversionError, ConversionErrorKind};
 ///
 /// ```
 /// use arithmetic_parser::InputSpan;
-/// # use arithmetic_typing::ast::ValueTypeAst;
+/// # use arithmetic_typing::{ast::ValueTypeAst, Num};
 /// # use assert_matches::assert_matches;
 ///
 /// # fn main() -> anyhow::Result<()> {
@@ -44,7 +44,7 @@ pub use self::conversion::{ConversionError, ConversionErrorKind};
 ///     ValueTypeAst::Tuple(elements) => elements,
 ///     _ => unreachable!(),
 /// };
-/// assert_eq!(elements[0], ValueTypeAst::Lit);
+/// assert_eq!(elements[0], ValueTypeAst::Lit(Num));
 /// assert_matches!(
 ///     &elements[1],
 ///     ValueTypeAst::Function(f) if f.type_params.len() == 1
@@ -99,7 +99,7 @@ impl<'a, Lit: LiteralType> ValueTypeAst<'a, Lit> {
 /// ```
 /// use arithmetic_parser::InputSpan;
 /// # use assert_matches::assert_matches;
-/// # use arithmetic_typing::ast::{FnTypeAst, ValueTypeAst};
+/// # use arithmetic_typing::{ast::{FnTypeAst, ValueTypeAst}, Num};
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let input = InputSpan::new("fn<const N>([Num; N]) -> Num");
@@ -108,7 +108,7 @@ impl<'a, Lit: LiteralType> ValueTypeAst<'a, Lit> {
 /// assert_eq!(ty.const_params.len(), 1);
 /// assert!(ty.type_params.is_empty());
 /// assert_matches!(ty.args.as_slice(), [ValueTypeAst::Slice { .. }]);
-/// assert_eq!(ty.return_type, ValueTypeAst::Lit);
+/// assert_eq!(ty.return_type, ValueTypeAst::Lit(Num));
 /// # Ok(())
 /// # }
 /// ```

@@ -252,8 +252,8 @@ impl<Lit: LiteralType> FnType<Lit> {
 /// # use std::iter;
 /// let sum_fn_type = FnType::builder()
 ///     .with_const_params(iter::once(0))
-///     .with_arg(ValueType::Lit(Num).repeat(TupleLength::Param(0)))
-///     .returning(ValueType::Lit(Num));
+///     .with_arg(ValueType::NUM.repeat(TupleLength::Param(0)))
+///     .returning(ValueType::NUM);
 /// assert_eq!(
 ///     sum_fn_type.to_string(),
 ///     "fn<const N>([Num; N]) -> Num"
@@ -267,11 +267,11 @@ impl<Lit: LiteralType> FnType<Lit> {
 /// # use std::iter;
 /// // Definition of the mapping arg. Note that the definition uses type params,
 /// // but does not declare them (they are bound to the parent function).
-/// let map_fn_arg = FnType::builder()
+/// let map_fn_arg = <FnType>::builder()
 ///     .with_arg(ValueType::Param(0))
 ///     .returning(ValueType::Param(1));
 ///
-/// let map_fn_type = FnType::builder()
+/// let map_fn_type = <FnType>::builder()
 ///     .with_const_params(iter::once(0))
 ///     .with_type_params(0..=1, false)
 ///     .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
@@ -549,6 +549,11 @@ fn type_param(index: usize) -> Cow<'static, str> {
         || Cow::from(format!("T{}", index - PARAM_NAMES.len())),
         Cow::from,
     )
+}
+
+impl ValueType {
+    /// Numeric literal type.
+    pub const NUM: Self = ValueType::Lit(Num);
 }
 
 impl<Num> ValueType<Num> {

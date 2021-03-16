@@ -100,9 +100,9 @@ impl Prelude {
     /// # Examples
     ///
     /// ```
-    /// # use arithmetic_typing::Prelude;
+    /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
-    ///     Prelude::if_type().to_string(),
+    ///     Prelude::if_type::<Num>().to_string(),
     ///     "fn<T: ?Lin>(Bool, T, T) -> T"
     /// );
     /// ```
@@ -120,9 +120,9 @@ impl Prelude {
     /// # Examples
     ///
     /// ```
-    /// # use arithmetic_typing::Prelude;
+    /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
-    ///     Prelude::while_type().to_string(),
+    ///     Prelude::while_type::<Num>().to_string(),
     ///     "fn<T: ?Lin>(T, fn(T) -> Bool, fn(T) -> T) -> T"
     /// );
     /// ```
@@ -147,9 +147,9 @@ impl Prelude {
     /// # Examples
     ///
     /// ```
-    /// # use arithmetic_typing::Prelude;
+    /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
-    ///     Prelude::map_type().to_string(),
+    ///     Prelude::map_type::<Num>().to_string(),
     ///     "fn<const N; T: ?Lin, U: ?Lin>([T; N], fn(T) -> U) -> [U; N]"
     /// );
     /// ```
@@ -171,9 +171,9 @@ impl Prelude {
     /// # Examples
     ///
     /// ```
-    /// # use arithmetic_typing::Prelude;
+    /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
-    ///     Prelude::filter_type().to_string(),
+    ///     Prelude::filter_type::<Num>().to_string(),
     ///     "fn<const N; T: ?Lin>([T; N], fn(T) -> Bool) -> [T]"
     /// );
     /// ```
@@ -195,9 +195,9 @@ impl Prelude {
     /// # Examples
     ///
     /// ```
-    /// # use arithmetic_typing::Prelude;
+    /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
-    ///     Prelude::fold_type().to_string(),
+    ///     Prelude::fold_type::<Num>().to_string(),
     ///     "fn<const N; T: ?Lin, U: ?Lin>([T; N], U, fn(U, T) -> U) -> U"
     /// );
     /// ```
@@ -222,9 +222,9 @@ impl Prelude {
     /// # Examples
     ///
     /// ```
-    /// # use arithmetic_typing::Prelude;
+    /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
-    ///     Prelude::push_type().to_string(),
+    ///     Prelude::push_type::<Num>().to_string(),
     ///     "fn<const N; T: ?Lin>([T; N], T) -> [T]"
     /// );
     /// ```
@@ -242,9 +242,9 @@ impl Prelude {
     /// # Examples
     ///
     /// ```
-    /// # use arithmetic_typing::Prelude;
+    /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
-    ///     Prelude::merge_type().to_string(),
+    ///     Prelude::merge_type::<Num>().to_string(),
     ///     "fn<const N, M; T: ?Lin>([T; N], [T; M]) -> [T]"
     /// );
     /// ```
@@ -288,9 +288,9 @@ impl Assertions {
     /// # Examples
     ///
     /// ```
-    /// # use arithmetic_typing::Assertions;
+    /// # use arithmetic_typing::{Assertions, Num};
     /// assert_eq!(
-    ///     Assertions::assert_type().to_string(),
+    ///     Assertions::assert_type::<Num>().to_string(),
     ///     "fn(Bool)"
     /// );
     /// ```
@@ -305,9 +305,9 @@ impl Assertions {
     /// # Examples
     ///
     /// ```
-    /// # use arithmetic_typing::Assertions;
+    /// # use arithmetic_typing::{Assertions, Num};
     /// assert_eq!(
-    ///     Assertions::assert_eq_type().to_string(),
+    ///     Assertions::assert_eq_type::<Num>().to_string(),
     ///     "fn<T: ?Lin>(T, T)"
     /// );
     /// ```

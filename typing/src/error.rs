@@ -179,3 +179,6 @@ impl<'a, Lit> TypeError<'a, Lit> {
         self.inner.with_no_extra()
     }
 }
+
+/// Result of inferring type for a certain expression.
+pub type TypeResult<'a, Lit> = Result<ValueType<Lit>, TypeError<'a, Lit>>;

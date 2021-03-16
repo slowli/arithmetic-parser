@@ -67,6 +67,7 @@ use arithmetic_parser::{
     InputSpan, NomResult,
 };
 
+pub mod arith;
 pub mod ast;
 mod env;
 mod error;
@@ -74,8 +75,8 @@ mod substitutions;
 mod type_map;
 
 pub use self::{
-    env::{NumArithmetic, TypeArithmetic, TypeEnvironment},
-    error::{TypeError, TypeErrorKind},
+    env::TypeEnvironment,
+    error::{TypeError, TypeErrorKind, TypeResult},
     substitutions::Substitutions,
     type_map::{Assertions, Prelude},
 };
@@ -585,7 +586,7 @@ impl<Num> ValueType<Num> {
 
     /// Returns `Some(true)` if this type is known to be a number, `Some(false)` if it's known
     /// not to be a number, and `None` if either case is possible.
-    pub(crate) fn is_number(&self) -> Option<bool> {
+    pub(crate) fn is_literal(&self) -> Option<bool> {
         match self {
             Self::Lit(_) => Some(true),
             Self::Tuple(_) | Self::Slice { .. } | Self::Bool | Self::Function(_) => Some(false),

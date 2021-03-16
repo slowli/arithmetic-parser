@@ -600,7 +600,11 @@ fn tuple_len_mismatch_error() {
     assert_eq!(*err.main_span().code().fragment(), "(1, 2)");
     assert_matches!(
         err.kind(),
-        ErrorKind::TupleLenMismatch { lhs: LvalueLen::Exact(2), rhs: 3, .. }
+        ErrorKind::TupleLenMismatch {
+            lhs: LvalueLen::Exact(2),
+            rhs: 3,
+            ..
+        }
     );
 }
 

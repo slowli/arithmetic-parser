@@ -204,7 +204,7 @@ fn error_with_call_trace() {
     "#;
     const EXPECTED_ERR: &str = r#"
         error[EVAL]: Value is not comparable
-          ┌─ Snippet #1:1:15
+          ┌─ Snippet #1:1:19
           │
         1 │ is_positive = |x| x > 0;
           │               ----^----
@@ -233,7 +233,7 @@ fn error_with_call_complex_call_trace() {
     "#;
     const EXPECTED_ERR: &str = r#"
         error[EVAL]: Unexpected operand type for multiplication
-          ┌─ Snippet #1:1:10
+          ┌─ Snippet #1:1:14
           │
         1 │ double = |x| x * 2;
           │          ----^----
@@ -263,7 +263,7 @@ fn error_with_call_complex_call_trace_and_native_fns() {
     "#;
     const EXPECTED_ERR: &str = r#"
         error[EVAL]: Value is not comparable
-          ┌─ Snippet #1:1:26
+          ┌─ Snippet #1:2:25
           │
         1 │ all = |array, predicate| array.fold(true, |acc, x| acc && predicate(x));
           │                          ----------------------------------------------

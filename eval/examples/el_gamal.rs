@@ -82,8 +82,12 @@ fn main() -> anyhow::Result<()> {
     // Run the compiled module with different groups.
     for i in 0..5 {
         println!("\nRunning sample #{}", i);
-        let modulus = safe_prime::new(BIT_LENGTH)?;
+
+        // `BigUint::new` is required because `glass_pumpkin` produces `BigUint`s
+        // with an incompatible package version (0.3 vs 0.4).
+        let modulus = BigUint::new(safe_prime::new(BIT_LENGTH)?.to_u32_digits());
         println!("Generated safe prime: {}", modulus);
+
         let prime_subgroup_order: BigUint = &modulus >> 1;
         let generator = find_generator(&modulus);
         let arithmetic = ModularArithmetic::new(modulus).without_comparisons();

@@ -907,7 +907,7 @@ mod tests {
             let wide_x = u128::from(x);
 
             // Check a random small exponent.
-            let exp = rng.gen_range(1_u64, 1_000);
+            let exp = rng.gen_range(1_u64..1_000);
             let expected_pow = (0..exp).fold(1_u128, |acc, _| (acc * wide_x) % unsigned_wide_mod);
             assert_eq!(u128::from(arithmetic.pow(x, exp).unwrap()), expected_pow);
 

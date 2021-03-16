@@ -26,7 +26,7 @@ fn bench_mul_native(bencher: &mut Bencher<'_>) {
     bencher.iter_batched(
         || {
             (0..ELEMENTS)
-                .map(|_| rng.gen_range(0.5_f32, 1.5))
+                .map(|_| rng.gen_range(0.5_f32..1.5))
                 .collect::<Vec<_>>()
         },
         |values| values.into_iter().product::<f32>(),
@@ -40,7 +40,7 @@ fn bench_mul_native_with_value(bencher: &mut Bencher<'_>) {
     bencher.iter_batched(
         || {
             (0..ELEMENTS)
-                .map(|_| rng.gen_range(0.5_f32, 1.5))
+                .map(|_| rng.gen_range(0.5_f32..1.5))
                 .map(Value::Number)
                 .collect::<Vec<_>>()
         },
@@ -63,7 +63,7 @@ fn bench_mul(bencher: &mut Bencher<'_>) {
     bencher.iter_batched(
         || {
             let values: Vec<_> = (0..ELEMENTS)
-                .map(|_| rng.gen_range(0.5_f32, 1.5).to_string())
+                .map(|_| rng.gen_range(0.5_f32..1.5).to_string())
                 .collect();
             let program = arena.alloc(values.join(" * "));
             let program = Untyped::<F32Grammar>::parse_statements(program.as_str()).unwrap();
@@ -91,7 +91,7 @@ fn bench_mul_fold(bencher: &mut Bencher<'_>) {
                 .build();
 
             let values: Vec<_> = (0..ELEMENTS)
-                .map(|_| rng.gen_range(0.5_f32, 1.5))
+                .map(|_| rng.gen_range(0.5_f32..1.5))
                 .map(Value::Number)
                 .collect();
             module.set_import("xs", Value::Tuple(values));
@@ -113,7 +113,7 @@ fn bench_fold_fn(bencher: &mut Bencher<'_>) {
     bencher.iter_batched(
         || {
             (0..ELEMENTS)
-                .map(|_| rng.gen_range(0.5_f32, 1.5))
+                .map(|_| rng.gen_range(0.5_f32..1.5))
                 .map(Value::Number)
                 .collect::<Vec<_>>()
         },
@@ -145,7 +145,7 @@ fn bench_interpreted_fn(bencher: &mut Bencher<'_>) {
     bencher.iter_batched(
         || {
             (0..ELEMENTS)
-                .map(|_| rng.gen_range(0.5_f32, 1.5))
+                .map(|_| rng.gen_range(0.5_f32..1.5))
                 .map(Value::Number)
                 .collect::<Vec<_>>()
         },
@@ -169,7 +169,7 @@ fn bench_reverse_native(bencher: &mut Bencher<'_>) {
     bencher.iter_batched(
         || {
             (0..ELEMENTS)
-                .map(|_| rng.gen_range(0.5_f32, 1.5))
+                .map(|_| rng.gen_range(0.5_f32..1.5))
                 .collect::<Vec<_>>()
         },
         |values| {
@@ -207,7 +207,7 @@ fn bench_reverse(bencher: &mut Bencher<'_>) {
     bencher.iter_batched(
         || {
             (0..ELEMENTS)
-                .map(|_| rng.gen_range(0.5_f32, 1.5))
+                .map(|_| rng.gen_range(0.5_f32..1.5))
                 .map(Value::Number)
                 .collect::<Vec<_>>()
         },

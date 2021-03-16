@@ -57,11 +57,15 @@ pub struct BinaryOpSpans<'a, Lit> {
 
 /// Simplest [`TypeArithmetic`] implementation that defines unary / binary ops only on
 /// the Boolean type. Useful as a building block for more complex arithmetics.
+// TODO: should actually implement `TypeArithmetic`?
 #[derive(Debug, Clone, Copy, Default)]
 pub struct BoolArithmetic;
 
 impl BoolArithmetic {
-    /// FIXME
+    /// Processes a unary operation.
+    ///
+    /// - `!` requires a Boolean input and outputs a Boolean.
+    /// - Other operations fail with [`TypeErrorKind::Unsupported`].
     pub fn process_unary_op<'a, Lit: LiteralType>(
         substitutions: &mut Substitutions<Lit>,
         spans: &UnaryOpSpans<'a, Lit>,
@@ -79,7 +83,12 @@ impl BoolArithmetic {
         }
     }
 
-    /// FIXME
+    /// Processes a binary operation.
+    ///
+    /// - `==` and `!=` require LHS and RHS to have the same type (no matter which one).
+    ///   These ops return `Bool`.
+    /// - `&&` and `||` require LHS and RHS to have `Bool` type. These ops return `Bool`.
+    /// - Other operations fail with [`TypeErrorKind::Unsupported`].
     pub fn process_binary_op<'a, Lit: LiteralType>(
         substitutions: &mut Substitutions<Lit>,
         spans: &BinaryOpSpans<'a, Lit>,
@@ -126,7 +135,7 @@ impl BoolArithmetic {
 /// # Binary ops
 ///
 /// Binary ops fall into 3 cases: `Num op T == T`, `T op Num == T`, or `T op T == T`,
-/// where `T` is any linear type.
+/// where `T` is any linear type (that is, `Num` or tuple of linear types).
 /// `T op T` is assumed by default, only falling into two other cases if one of operands
 /// is known to be a number and the other is not a number.
 ///
@@ -155,7 +164,10 @@ impl NumArithmetic {
         }
     }
 
-    /// FIXME
+    /// Applies [binary ops](#binary-ops) logic to the given LHS and RHS types.
+    /// Returns the result type of the binary operation.
+    ///
+    /// This logic can be reused by other [`TypeArithmetic`] implementations.
     pub fn unify_binary_op<Lit: LiteralType>(
         substitutions: &mut Substitutions<Lit>,
         lhs_ty: &ValueType<Lit>,

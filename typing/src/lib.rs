@@ -164,7 +164,19 @@ pub trait LiteralType:
 {
 }
 
-/// FIXME
+/// Implements [`Display`](fmt::Display), [`FromStr`] and [`LiteralType`] for the provided type,
+/// which must be a no-field struct.
+///
+/// # Examples
+///
+/// ```
+/// use arithmetic_typing::impl_singleton_literal_type;
+///
+/// #[derive(Debug, Clone, Copy, PartialEq)]
+/// pub struct SomeType;
+///
+/// impl_singleton_literal_type!(SomeType, "Some");
+/// ```
 #[macro_export]
 macro_rules! impl_singleton_literal_type {
     ($ty:ident, $name:tt) => {
@@ -673,8 +685,8 @@ impl<Num> ValueType<Num> {
         matches!(self, Self::Tuple(elements) if elements.is_empty())
     }
 
-    /// Returns `Some(true)` if this type is known to be a number, `Some(false)` if it's known
-    /// not to be a number, and `None` if either case is possible.
+    /// Returns `Some(true)` if this type is known to be a literal, `Some(false)` if it's known
+    /// not to be a literal, and `None` if either case is possible.
     pub(crate) fn is_literal(&self) -> Option<bool> {
         match self {
             Self::Lit(_) => Some(true),

@@ -73,9 +73,12 @@ struct CyclicGroupArithmetic {
 
 impl CyclicGroupArithmetic {
     fn new(bits: usize) -> Self {
-        let safe_prime = safe_prime::new(bits).unwrap();
+        // `BigUint::new` is required because `glass_pumpkin` produces `BigUint`s
+        // with an incompatible package version (0.3 vs 0.4).
+        let safe_prime = BigUint::new(safe_prime::new(bits).unwrap().to_u32_digits());
         let prime_subgroup_order = &safe_prime >> 1;
         let two = BigUint::from(2_u32);
+
         // Generator search uses the DSA approach: generate a random element in Z/(2q + 1)Z,
         // and then square it so it falls into the prime-order subgroup.
         let generator = thread_rng()

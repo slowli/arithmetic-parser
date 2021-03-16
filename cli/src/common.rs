@@ -3,6 +3,7 @@
 use codespan::{FileId, Files};
 use codespan_reporting::{
     diagnostic::{Diagnostic, Label, Severity},
+    files::Error as FilesError,
     term::termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor},
     term::{emit, Config as ReportingConfig},
 };
@@ -187,12 +188,7 @@ impl<T: ReplLiteral> Env<T> {
             .with_code("PARSE")
             .with_labels(vec![label]);
 
-        emit(
-            &mut self.writer.lock(),
-            &self.config,
-            &self.code_map.files,
-            &diagnostic,
-        )
+        self.report_error(&diagnostic)
     }
 
     fn create_diagnostic(&self, e: &EvalError<'_>) -> Diagnostic<FileId> {
@@ -222,13 +218,17 @@ impl<T: ReplLiteral> Env<T> {
         diagnostic
     }
 
-    pub fn report_compile_error(&self, e: &EvalError<'_>) -> io::Result<()> {
+    pub fn report_error(&self, diagnostic: &Diagnostic<FileId>) -> io::Result<()> {
         emit(
             &mut self.writer.lock(),
             &self.config,
             &self.code_map.files,
-            &self.create_diagnostic(e),
+            diagnostic,
         )
+        .map_err(|err| match err {
+            FilesError::Io(err) => err,
+            _ => io::Error::new(io::ErrorKind::Other, err),
+        })
     }
 
     pub fn report_eval_error(&self, e: &ErrorWithBacktrace<'_>) -> io::Result<()> {
@@ -263,12 +263,7 @@ impl<T: ReplLiteral> Env<T> {
             }
         }
 
-        emit(
-            &mut self.writer.lock(),
-            &self.config,
-            &self.code_map.files,
-            &diagnostic,
-        )
+        self.report_error(&diagnostic)
     }
 
     fn spans_are_equal(span: &CodeInModule<'_>, other: &CodeInModule<'_>) -> bool {
@@ -424,12 +419,7 @@ impl<T: ReplLiteral> Env<T> {
                     .with_code("CMD")
                     .with_labels(vec![label]);
 
-                emit(
-                    &mut self.writer.lock(),
-                    &self.config,
-                    &self.code_map.files,
-                    &diagnostic,
-                )?;
+                self.report_error(&diagnostic)?;
             }
         }
 
@@ -447,7 +437,7 @@ impl<T: ReplLiteral> Env<T> {
         let module = match self.env.compile_module(module_id, statements) {
             Ok(builder) => builder,
             Err(err) => {
-                self.report_compile_error(&err)?;
+                self.report_error(&self.create_diagnostic(&err))?;
                 return Ok(ParseAndEvalResult::Errored);
             }
         };

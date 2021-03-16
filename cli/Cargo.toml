@@ -10,8 +10,8 @@ repository = "https://github.com/slowli/arithmetic-parser"
 
 [dependencies]
 anyhow = "1.0.27"
-codespan = "0.9.0"
-codespan-reporting = "0.9.0"
+codespan = "0.11.1"
+codespan-reporting = "0.11.1"
 num-complex = "0.3.0"
 num-traits = "0.2.14"
 rustyline = "7.0.0"

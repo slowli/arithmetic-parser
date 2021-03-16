@@ -12,9 +12,10 @@ keywords = ["typing", "arithmetic"]
 
 [dependencies]
 arithmetic-parser = { version = "0.2.0", path = "../parser" }
-nom = { version = "6.0.0" }
+
+anyhow = "1.0.27"
+nom = "6.0.0"
 num-traits = "0.2.11"
 
 [dev-dependencies]
 assert_matches = "1.5.0"
-anyhow = "1.0.27"

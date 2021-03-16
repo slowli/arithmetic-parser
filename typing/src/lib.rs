@@ -81,6 +81,12 @@ pub use self::{
     type_map::{Assertions, Prelude},
 };
 
+// Reexports for the macros.
+#[doc(hidden)]
+pub mod _reexports {
+    pub use anyhow::{anyhow, Error};
+}
+
 /// Description of a type parameter.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct TypeParamDescription {
@@ -92,35 +98,118 @@ struct TypeParamDescription {
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct ConstParamDescription;
 
-/// Types that a literals can assume in a certain grammar.
+/// Types of literals in a certain grammar.
+///
+/// More complex types, like [`ValueType`] and [`FnType`], are defined with a type param
+/// which determines the literal type. This type param must implement [`LiteralType`].
+///
+/// [`TypeArithmetic`] has a `LiteralType` impl as an associated type, and one of the required
+/// operations of this trait is to be able to infer type for literal values from a [`Grammar`].
+///
+/// # Implementation Requirements
+///
+/// - [`Display`](fmt::Display) and [`FromStr`] implementations must be consistent; i.e.,
+///   `Display` should produce output parseable by `FromStr`. `Display` will be used in
+///   `Display` impls for `ValueType` etc. `FromStr` will be used to read type annotations.
+/// - `Display` presentations must be identifiers, such as `Num`.
+///
+/// [`Grammar`]: arithmetic_parser::grammars::Grammar
+///
+/// # Examples
+///
+/// ```
+/// # use std::{fmt, str::FromStr};
+/// use arithmetic_typing::LiteralType;
+///
+/// #[derive(Debug, Clone, Copy, PartialEq)]
+/// enum NumOrBytes {
+///     /// Numeric value, such as 1.
+///     Num,
+///     /// Bytes value, such as 0x1234 or "hello".
+///     Bytes,
+/// }
+///
+/// // `NumOrBytes` should correspond to a "value" type in the `Grammar`,
+/// // for example:
+/// enum NumOrBytesValue {
+///     Num(f64),
+///     Bytes(Vec<u8>),
+/// }
+///
+/// impl fmt::Display for NumOrBytes {
+///     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+///         match self {
+///             Self::Num => formatter.write_str("Num"),
+///             Self::Bytes => formatter.write_str("Bytes"),
+///         }
+///     }
+/// }
+///
+/// impl FromStr for NumOrBytes {
+///     type Err = anyhow::Error;
+///
+///     fn from_str(s: &str) -> Result<Self, Self::Err> {
+///         match s {
+///             "Num" => Ok(Self::Num),
+///             "Bytes" => Ok(Self::Bytes),
+///             _ => Err(anyhow::anyhow!("expected `Num` or `Bytes`")),
+///         }
+///     }
+/// }
+///
+/// impl LiteralType for NumOrBytes {}
+/// ```
 pub trait LiteralType:
     Clone + PartialEq + fmt::Debug + fmt::Display + FromStr + Send + Sync + 'static
 {
+}
+
+/// FIXME
+#[macro_export]
+macro_rules! impl_singleton_literal_type {
+    ($ty:ident, $name:tt) => {
+        impl core::fmt::Display for $ty {
+            fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                formatter.write_str($name)
+            }
+        }
+
+        impl core::str::FromStr for $ty {
+            type Err = $crate::_reexports::Error;
+
+            fn from_str(s: &str) -> core::result::Result<Self, Self::Err> {
+                if s == $name {
+                    core::result::Result::Ok($ty)
+                } else {
+                    core::result::Result::Err($crate::_reexports::anyhow!(concat!(
+                        "Expected `",
+                        $name,
+                        "`"
+                    )))
+                }
+            }
+        }
+
+        impl $crate::LiteralType for $ty {}
+    };
 }
 
 /// Generic numeric type.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Num;
 
-impl fmt::Display for Num {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("Num")
-    }
+impl_singleton_literal_type!(Num, "Num");
+
+/// Maps a literal value from a certain [`Grammar`] to its type.
+///
+/// [`Grammar`]: arithmetic_parser::grammars::Grammar
+pub trait MapLiteralType<Val> {
+    /// Types of literals output by this mapper.
+    type Lit: LiteralType;
+
+    /// Gets the type of the provided literal value.
+    fn type_of_literal(&self, lit: &Val) -> Self::Lit;
 }
-
-impl FromStr for Num {
-    type Err = (); // FIXME
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s == "Num" {
-            Ok(Num)
-        } else {
-            Err(())
-        }
-    }
-}
-
-impl LiteralType for Num {}
 
 /// Functional type.
 #[derive(Debug, Clone, PartialEq)]

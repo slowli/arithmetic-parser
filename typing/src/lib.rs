@@ -60,7 +60,13 @@
     clippy::similar_names // too many false positives because of lhs / rhs
 )]
 
-use std::{borrow::Cow, collections::BTreeMap, fmt, marker::PhantomData, str::FromStr};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+    fmt,
+    marker::PhantomData,
+    str::FromStr,
+};
 
 use arithmetic_parser::{
     grammars::{Grammar, NumLiteral, ParseLiteral},
@@ -93,10 +99,6 @@ struct TypeParamDescription {
     /// Can this type param be non-linear?
     maybe_non_linear: bool,
 }
-
-/// Description of a constant parameter.
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct ConstParamDescription;
 
 /// Types of literals in a certain grammar.
 ///
@@ -230,10 +232,12 @@ pub struct FnType<Lit = Num> {
     args: FnArgs<Lit>,
     /// Type of the value returned by the function.
     return_type: ValueType<Lit>,
-    /// Indexes of type params associated with this function.
-    type_params: BTreeMap<usize, TypeParamDescription>,
-    /// Indexes of const params associated with this function.
-    const_params: BTreeMap<usize, ConstParamDescription>,
+    /// Type params associated with this function. The indexes of params should
+    /// monotonically increase (necessary for correct display) and must be distinct.
+    type_params: Vec<(usize, TypeParamDescription)>,
+    /// Indexes of const params associated with this function. The indexes should
+    /// monotonically increase (necessary for correct display) and must be distinct.
+    const_params: Vec<usize>,
 }
 
 impl<Lit: fmt::Display> fmt::Display for FnType<Lit> {
@@ -245,7 +249,7 @@ impl<Lit: fmt::Display> fmt::Display for FnType<Lit> {
 
             if !self.const_params.is_empty() {
                 formatter.write_str("const ")?;
-                for (i, (&var_idx, _)) in self.const_params.iter().enumerate() {
+                for (i, &var_idx) in self.const_params.iter().enumerate() {
                     formatter.write_str(TupleLength::const_param(var_idx).as_ref())?;
                     if i + 1 < self.const_params.len() {
                         formatter.write_str(", ")?;
@@ -257,8 +261,8 @@ impl<Lit: fmt::Display> fmt::Display for FnType<Lit> {
                 }
             }
 
-            for (i, (&var_idx, description)) in self.type_params.iter().enumerate() {
-                formatter.write_str(type_param(var_idx).as_ref())?;
+            for (i, (var_idx, description)) in self.type_params.iter().enumerate() {
+                formatter.write_str(type_param(*var_idx).as_ref())?;
                 if description.maybe_non_linear {
                     formatter.write_str(": ?Lin")?;
                 }
@@ -279,13 +283,28 @@ impl<Lit: fmt::Display> fmt::Display for FnType<Lit> {
 }
 
 impl<Lit: LiteralType> FnType<Lit> {
-    pub(crate) fn new(args: Vec<ValueType<Lit>>, return_type: ValueType<Lit>) -> Self {
+    pub(crate) fn new(args: FnArgs<Lit>, return_type: ValueType<Lit>) -> Self {
         Self {
-            args: FnArgs::List(args),
+            args,
             return_type,
-            type_params: BTreeMap::new(),  // filled in later
-            const_params: BTreeMap::new(), // filled in later
+            type_params: Vec::new(),  // filled in later
+            const_params: Vec::new(), // filled in later
         }
+    }
+
+    pub(crate) fn with_const_params(mut self, mut params: Vec<usize>) -> Self {
+        params.sort_unstable();
+        self.const_params = params;
+        self
+    }
+
+    pub(crate) fn with_type_params(
+        mut self,
+        mut params: Vec<(usize, TypeParamDescription)>,
+    ) -> Self {
+        params.sort_unstable_by_key(|(idx, _)| *idx);
+        self.type_params = params;
+        self
     }
 
     /// Returns a builder for `FnType`s.
@@ -299,8 +318,14 @@ impl<Lit: LiteralType> FnType<Lit> {
     }
 
     /// Checks if a type variable with the specified index is linear.
-    pub(crate) fn is_linear(&self, var_idx: usize) -> bool {
-        !self.type_params[&var_idx].maybe_non_linear
+    pub(crate) fn linear_type_params(&self) -> impl Iterator<Item = usize> + '_ {
+        self.type_params.iter().filter_map(|(idx, description)| {
+            if description.maybe_non_linear {
+                None
+            } else {
+                Some(*idx)
+            }
+        })
     }
 
     pub(crate) fn arg_and_return_types(&self) -> impl Iterator<Item = &ValueType<Lit>> + '_ {
@@ -386,18 +411,17 @@ impl<Lit: LiteralType> FnType<Lit> {
 /// ```
 #[derive(Debug)]
 pub struct FnTypeBuilder<Lit = Num> {
-    inner: FnType<Lit>,
+    args: FnArgs<Lit>,
+    type_params: HashMap<usize, TypeParamDescription>,
+    const_params: HashSet<usize>,
 }
 
 impl<Lit> Default for FnTypeBuilder<Lit> {
     fn default() -> Self {
         Self {
-            inner: FnType {
-                args: FnArgs::List(vec![]),
-                return_type: ValueType::void(),
-                type_params: BTreeMap::default(),
-                const_params: BTreeMap::default(),
-            },
+            args: FnArgs::List(Vec::new()),
+            type_params: HashMap::new(),
+            const_params: HashSet::new(),
         }
     }
 }
@@ -406,9 +430,7 @@ impl<Lit> Default for FnTypeBuilder<Lit> {
 impl<Lit: LiteralType> FnTypeBuilder<Lit> {
     /// Adds the const params with the specified `indexes` to the function definition.
     pub fn with_const_params(mut self, indexes: impl Iterator<Item = usize>) -> Self {
-        self.inner
-            .const_params
-            .extend(indexes.map(|i| (i, ConstParamDescription)));
+        self.const_params.extend(indexes);
         self
     }
 
@@ -419,15 +441,13 @@ impl<Lit: LiteralType> FnTypeBuilder<Lit> {
         let description = TypeParamDescription {
             maybe_non_linear: !linear,
         };
-        self.inner
-            .type_params
-            .extend(indexes.map(|i| (i, description)));
+        self.type_params.extend(indexes.map(|i| (i, description)));
         self
     }
 
     /// Adds a new argument to the function definition.
     pub fn with_arg(mut self, arg: impl Into<ValueType<Lit>>) -> Self {
-        match &mut self.inner.args {
+        match &mut self.args {
             FnArgs::List(args) => {
                 args.push(arg.into());
             }
@@ -437,9 +457,10 @@ impl<Lit: LiteralType> FnTypeBuilder<Lit> {
     }
 
     /// Declares the return type of the function and builds it.
-    pub fn returning(mut self, return_type: ValueType<Lit>) -> FnType<Lit> {
-        self.inner.return_type = return_type;
-        self.inner
+    pub fn returning(self, return_type: ValueType<Lit>) -> FnType<Lit> {
+        FnType::new(self.args, return_type)
+            .with_const_params(self.const_params.into_iter().collect())
+            .with_type_params(self.type_params.into_iter().collect())
     }
 }
 

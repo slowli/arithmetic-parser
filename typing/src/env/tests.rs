@@ -1,8 +1,6 @@
 use arithmetic_parser::grammars::{Parse, Typed};
 use assert_matches::assert_matches;
 
-use std::collections::BTreeMap;
-
 use super::*;
 use crate::{FnArgs, Num, NumGrammar, Prelude, TupleLength};
 
@@ -29,8 +27,8 @@ fn hash_fn_type() -> FnType<Num> {
     FnType {
         args: FnArgs::Any,
         return_type: ValueType::Lit(Num),
-        type_params: BTreeMap::new(),
-        const_params: BTreeMap::new(),
+        type_params: Vec::new(),
+        const_params: Vec::new(),
     }
 }
 
@@ -192,7 +190,7 @@ fn method_basics() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let plus_type = FnType::new(
-        vec![ValueType::Lit(Num), ValueType::Lit(Num)],
+        FnArgs::List(vec![ValueType::Lit(Num), ValueType::Lit(Num)]),
         ValueType::Lit(Num),
     );
     type_env.insert_type("plus", plus_type.into());

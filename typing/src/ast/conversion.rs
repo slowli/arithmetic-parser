@@ -6,8 +6,7 @@ use std::{collections::HashMap, convert::TryFrom, fmt, str::FromStr};
 
 use crate::{
     ast::{FnTypeAst, TupleLengthAst, ValueTypeAst},
-    ConstParamDescription, FnArgs, FnType, LiteralType, TupleLength, TypeParamDescription,
-    ValueType,
+    FnArgs, FnType, LiteralType, TupleLength, TypeParamDescription, ValueType,
 };
 use arithmetic_parser::{
     ErrorKind as ParseErrorKind, InputSpan, LocatedSpan, NomResult, SpannedError, StripCode,
@@ -291,34 +290,29 @@ impl<'a, Lit: LiteralType> FnTypeAst<'a, Lit> {
             .iter()
             .map(|arg| arg.try_convert(&state))
             .collect();
-        Ok(FnType {
-            args: FnArgs::List(args?),
-            return_type: self.return_type.try_convert(&state)?,
 
-            type_params: self
-                .type_params
-                .iter()
-                .map(|(name, bounds)| {
-                    (
-                        state.type_param_idx(name.fragment()).unwrap(),
-                        TypeParamDescription {
-                            maybe_non_linear: bounds.maybe_non_linear,
-                        },
-                    )
-                })
-                .collect(),
+        let const_params = self
+            .const_params
+            .iter()
+            .map(|name| state.const_param_idx(name.fragment()).unwrap())
+            .collect();
+        let type_params = self
+            .type_params
+            .iter()
+            .map(|(name, bounds)| {
+                (
+                    state.type_param_idx(name.fragment()).unwrap(),
+                    TypeParamDescription {
+                        maybe_non_linear: bounds.maybe_non_linear,
+                    },
+                )
+            })
+            .collect();
 
-            const_params: self
-                .const_params
-                .iter()
-                .map(|name| {
-                    (
-                        state.const_param_idx(name.fragment()).unwrap(),
-                        ConstParamDescription,
-                    )
-                })
-                .collect(),
-        })
+        let fn_type = FnType::new(FnArgs::List(args?), self.return_type.try_convert(&state)?)
+            .with_const_params(const_params)
+            .with_type_params(type_params);
+        Ok(fn_type)
     }
 }
 

@@ -1,11 +1,8 @@
 //! Functional type substitutions.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
-use crate::{
-    ConstParamDescription, FnArgs, FnType, LiteralType, TupleLength, TypeParamDescription,
-    ValueType,
-};
+use crate::{FnArgs, FnType, LiteralType, TupleLength, TypeParamDescription, ValueType};
 
 impl<Lit: LiteralType> FnType<Lit> {
     /// Performs final transformations on this type, transforming all of its type vars
@@ -26,28 +23,25 @@ impl<Lit: LiteralType> FnType<Lit> {
         mapping: &ParamMapping,
         context: SubstitutionContext,
     ) -> Self {
-        fn map_params<T: Copy>(
-            params: &BTreeMap<usize, T>,
-            mapping: &HashMap<usize, usize>,
+        fn map_params<'a, T: 'static + Copy>(
+            params: impl Iterator<Item = (usize, T)> + 'a,
+            mapping: &'a HashMap<usize, usize>,
             context: SubstitutionContext,
-        ) -> BTreeMap<usize, T> {
-            params
-                .iter()
-                .filter_map(|(var_idx, description)| {
-                    mapping.get(var_idx).map_or_else(
-                        || Some((*var_idx, *description)),
-                        |mapped_idx| {
-                            if context == SubstitutionContext::ParamsToVars {
-                                // The params in mapping got instantiated into vars;
-                                // we must remove them from the `type_params`.
-                                None
-                            } else {
-                                Some((*mapped_idx, *description))
-                            }
-                        },
-                    )
-                })
-                .collect()
+        ) -> impl Iterator<Item = (usize, T)> + 'a {
+            params.filter_map(move |(var_idx, description)| {
+                mapping.get(&var_idx).map_or_else(
+                    || Some((var_idx, description)),
+                    |mapped_idx| {
+                        if context == SubstitutionContext::ParamsToVars {
+                            // The params in mapping got instantiated into vars;
+                            // we must remove them from the `type_params`.
+                            None
+                        } else {
+                            Some((*mapped_idx, description))
+                        }
+                    },
+                )
+            })
         }
 
         let substituted_args = match &self.args {
@@ -58,13 +52,17 @@ impl<Lit: LiteralType> FnType<Lit> {
             ),
             FnArgs::Any => FnArgs::Any,
         };
+        let return_type = self.return_type.substitute_type_vars(mapping, context);
 
-        FnType {
-            args: substituted_args,
-            return_type: self.return_type.substitute_type_vars(mapping, context),
-            type_params: map_params(&self.type_params, &mapping.types, context),
-            const_params: map_params(&self.const_params, &mapping.constants, context),
-        }
+        let const_params = self.const_params.iter().map(|idx| (*idx, ()));
+        let const_params =
+            map_params(const_params, &mapping.constants, context).map(|(idx, _)| idx);
+        let type_params = self.type_params.iter().copied();
+        let type_params = map_params(type_params, &mapping.types, context);
+
+        FnType::new(substituted_args, return_type)
+            .with_const_params(const_params.collect())
+            .with_type_params(type_params.collect())
     }
 }
 
@@ -86,10 +84,11 @@ struct FnTypeTree {
     children: Vec<FnTypeTree>,
     all_type_vars: HashMap<usize, VarQuantity>,
     all_const_vars: HashMap<usize, VarQuantity>,
-    type_params: BTreeMap<usize, TypeParamDescription>,
-    const_params: BTreeMap<usize, ConstParamDescription>,
+    type_params: HashMap<usize, TypeParamDescription>,
+    const_params: HashSet<usize>,
 }
 
+// TODO: add unit tests covering main methods
 impl FnTypeTree {
     fn new<Lit: LiteralType>(base: &FnType<Lit>) -> Self {
         fn recurse<L: LiteralType>(
@@ -156,8 +155,8 @@ impl FnTypeTree {
             children,
             all_type_vars,
             all_const_vars,
-            type_params: BTreeMap::new(),
-            const_params: BTreeMap::new(),
+            type_params: HashMap::new(),
+            const_params: HashSet::new(),
         }
     }
 
@@ -188,15 +187,18 @@ impl FnTypeTree {
             .iter()
             .filter_map(|(idx, qty)| {
                 if *qty != VarQuantity::UniqueFunction && !parent_consts.contains(idx) {
-                    Some((*idx, ConstParamDescription))
+                    Some(*idx)
                 } else {
                     None
                 }
             })
             .collect();
 
-        let parent_and_self_types: HashSet<_> = self.type_params.keys().copied().collect();
-        let parent_and_self_consts: HashSet<_> = self.const_params.keys().copied().collect();
+        let mut parent_and_self_types = parent_types.clone();
+        parent_and_self_types.extend(self.type_params.keys().copied());
+        let mut parent_and_self_consts = parent_consts.clone();
+        parent_and_self_consts.extend(self.const_params.iter().copied());
+
         for child_tree in &mut self.children {
             child_tree.infer_type_params(
                 &parent_and_self_types,
@@ -251,8 +253,11 @@ impl FnTypeTree {
             }
         }
 
-        base.type_params = self.type_params;
-        base.const_params = self.const_params;
+        base.type_params = self.type_params.into_iter().collect();
+        base.type_params.sort_unstable_by_key(|(idx, _)| *idx);
+        base.const_params = self.const_params.into_iter().collect();
+        base.const_params.sort_unstable();
+
         let mut reversed_children = self.children;
         reversed_children.reverse();
         for ty in base.arg_and_return_types_mut() {

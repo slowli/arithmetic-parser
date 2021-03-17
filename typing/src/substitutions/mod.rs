@@ -311,7 +311,7 @@ impl<Lit: LiteralType> Substitutions<Lit> {
                 .const_params
                 .iter()
                 .enumerate()
-                .map(|(i, (var_idx, _))| (*var_idx, self.const_var_count + i))
+                .map(|(i, var_idx)| (*var_idx, self.const_var_count + i))
                 .collect(),
         };
 
@@ -319,10 +319,9 @@ impl<Lit: LiteralType> Substitutions<Lit> {
             fn_type.substitute_type_vars(&mapping, SubstitutionContext::ParamsToVars);
 
         // Copy constraints on the newly generated type vars from the function definition.
-        for (&original_idx, &new_idx) in &mapping.types {
-            if fn_type.is_linear(original_idx) {
-                self.mark_as_linear(&ValueType::Var(new_idx))?;
-            }
+        for original_idx in fn_type.linear_type_params() {
+            let new_idx = mapping.types[&original_idx];
+            self.mark_as_linear(&ValueType::Var(new_idx))?;
         }
 
         self.type_var_count += fn_type.type_params.len();
@@ -465,7 +464,7 @@ impl<Lit: LiteralType> Substitutions<Lit> {
         let mut return_type = ValueType::Any;
         self.assign_new_type(&mut return_type)?;
 
-        let called_fn_type = FnType::new(arg_types, return_type.clone());
+        let called_fn_type = FnType::new(FnArgs::List(arg_types), return_type.clone());
         self.unify(&ValueType::Function(Box::new(called_fn_type)), definition)
             .map(|()| return_type)
     }

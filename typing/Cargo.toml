@@ -15,7 +15,7 @@ arithmetic-parser = { version = "0.2.0", path = "../parser" }
 
 anyhow = "1.0.27"
 nom = "6.0.0"
-num-traits = "0.2.11"
+num-traits = "0.2.14"
 
 [dev-dependencies]
 assert_matches = "1.5.0"

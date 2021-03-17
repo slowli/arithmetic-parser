@@ -21,6 +21,8 @@ mod tests;
 #[cfg(test)]
 mod type_annotation_tests;
 
+type FnArgsAndOutput<Lit> = (Vec<ValueType<Lit>>, ValueType<Lit>);
+
 /// Environment containing type information on named variables.
 #[derive(Debug, Clone)]
 pub struct TypeEnvironment<Lit = Num> {
@@ -385,12 +387,11 @@ impl<L, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
     }
 
     /// Fallible part of fn definition processing.
-    #[allow(clippy::type_complexity)] // FIXME
     fn process_fn_def_inner<'a, T>(
         &mut self,
         substitutions: &mut Substitutions<Lit>,
         def: &FnDefinition<'a, T>,
-    ) -> Result<(Vec<ValueType<Lit>>, ValueType<Lit>), TypeError<'a, Lit>>
+    ) -> Result<FnArgsAndOutput<Lit>, TypeError<'a, Lit>>
     where
         T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {

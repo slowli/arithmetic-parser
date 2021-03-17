@@ -97,6 +97,7 @@ pub mod _reexports {
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct TypeParamDescription {
     /// Can this type param be non-linear?
+    // TODO: Change linearity to opt-in, rather than opt-out
     maybe_non_linear: bool,
 }
 
@@ -543,6 +544,7 @@ pub enum ValueType<Lit = Num> {
     /// Function.
     Function(Box<FnType<Lit>>),
     /// Tuple.
+    // TODO: support start / middle / end structuring
     Tuple(Vec<ValueType<Lit>>),
     /// Slice.
     Slice {
@@ -559,7 +561,7 @@ pub enum ValueType<Lit = Num> {
     Var(usize),
 }
 
-impl<Num: PartialEq> PartialEq for ValueType<Num> {
+impl<Lit: PartialEq> PartialEq for ValueType<Lit> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Any, _) | (_, Self::Any) | (Self::Bool, Self::Bool) => true,
@@ -583,13 +585,13 @@ impl<Num: PartialEq> PartialEq for ValueType<Num> {
                 *length == TupleLength::Exact(xs.len()) && xs.iter().all(|x| x == element.as_ref())
             }
 
-            // FIXME: function equality?
+            // TODO: function equality?
             _ => false,
         }
     }
 }
 
-impl<Num: fmt::Display> fmt::Display for ValueType<Num> {
+impl<Lit: fmt::Display> fmt::Display for ValueType<Lit> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Any => formatter.write_str("_"),
@@ -637,8 +639,8 @@ impl<Num: fmt::Display> fmt::Display for ValueType<Num> {
     }
 }
 
-impl<Num> From<FnType<Num>> for ValueType<Num> {
-    fn from(fn_type: FnType<Num>) -> Self {
+impl<Lit> From<FnType<Lit>> for ValueType<Lit> {
+    fn from(fn_type: FnType<Lit>) -> Self {
         Self::Function(Box::new(fn_type))
     }
 }
@@ -679,14 +681,14 @@ impl ValueType {
     pub const NUM: Self = ValueType::Lit(Num);
 }
 
-impl<Num> ValueType<Num> {
+impl<Lit> ValueType<Lit> {
     /// Returns a void type (an empty tuple).
     pub const fn void() -> Self {
         Self::Tuple(Vec::new())
     }
 
     /// Creates a slice type.
-    pub fn slice(element: impl Into<ValueType<Num>>, length: TupleLength) -> Self {
+    pub fn slice(element: impl Into<ValueType<Lit>>, length: TupleLength) -> Self {
         Self::Slice {
             element: Box::new(element.into()),
             length,

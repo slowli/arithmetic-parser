@@ -1,7 +1,7 @@
-//! Hindley-Milner type inference for arithmetic expressions parsed
+//! Hindley–Milner type inference for arithmetic expressions parsed
 //! by the [`arithmetic-parser`] crate.
 //!
-//! This crate allows to parse type annotations as a part of a [`Grammar`], and to infer
+//! This crate allows parsing type annotations as a part of a [`Grammar`], and to infer
 //! and check types for expressions / statements produced by `arithmetic-parser`.
 //! Type inference is *partially* compatible with the interpreter from [`arithmetic-eval`];
 //! if the inference algorithm succeeds on a certain expression / statement / block,

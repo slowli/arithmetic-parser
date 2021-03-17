@@ -2,6 +2,7 @@
 
 use std::{
     collections::HashMap,
+    fmt,
     iter::{self, FromIterator},
     mem, ops,
 };
@@ -147,7 +148,7 @@ impl<'a, L, Lit: LiteralType> TypeProcessor<'a, L, Lit> {
     }
 }
 
-impl<L, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
+impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
     fn get_type(&self, name: &str) -> Option<&ValueType<Lit>> {
         self.inner_scopes
             .iter()

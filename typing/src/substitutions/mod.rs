@@ -7,6 +7,9 @@ use crate::{FnArgs, FnType, LiteralType, TupleLength, TypeErrorKind, ValueType};
 mod fns;
 use self::fns::{ParamMapping, SubstitutionContext};
 
+#[cfg(test)]
+mod tests;
+
 /// Set of equations and constraints on type variables.
 #[derive(Debug, Clone)]
 pub struct Substitutions<Lit> {
@@ -233,14 +236,19 @@ impl<Lit: LiteralType> Substitutions<Lit> {
                 // Lengths are already unified.
                 Ok(())
             }
-            // FIXME: Handle (Exact, Exact) + test it
-            (TupleLength::Var(x), other) | (other, TupleLength::Var(x)) => {
-                self.length_eqs.insert(x, other);
+            (TupleLength::Exact(x), TupleLength::Exact(y)) if x == y => {
+                // Lengths are known to be the same.
                 Ok(())
             }
 
             (TupleLength::Dynamic, _) => {
                 // Any length can be interpreted as a dynamic length, but not the other way around.
+                // We intentionally skip creating an equation if RHS is a `Var`.
+                Ok(())
+            }
+
+            (TupleLength::Var(x), other) | (other, TupleLength::Var(x)) => {
+                self.length_eqs.insert(x, other);
                 Ok(())
             }
 

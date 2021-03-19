@@ -228,3 +228,25 @@ fn assigning_to_dynamically_sized_slice() {
 
     assert_eq!(type_env["slice"].to_string(), "[Num]");
 }
+
+#[test]
+fn assigning_to_a_slice_and_then_narrowing() {
+    // TODO: maybe should work without arg type annotation
+    let code = r#"
+        // The arg type annotation is required because otherwise `xs` type will be set
+        // to `[Num]` by unifying it with the type var.
+        slice_fn = |xs: [Num; _]| {
+            _unused: [Num] = xs;
+            (x, y, z) = xs;
+            x + y * z
+        };
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.process_statements(&block).unwrap();
+
+    assert_eq!(
+        type_env["slice_fn"].to_string(),
+        "fn((Num, Num, Num)) -> Num"
+    );
+}

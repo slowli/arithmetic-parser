@@ -1,7 +1,7 @@
 //! `TypeEnvironment` and related types.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt,
     iter::{self, FromIterator},
     mem, ops,
@@ -129,6 +129,7 @@ where
 /// Processor for deriving type information.
 struct TypeProcessor<'a, L, Lit: LiteralType> {
     root_scope: &'a mut TypeEnvironment<Lit>,
+    unresolved_root_vars: HashSet<String>,
     inner_scopes: Vec<TypeEnvironment<Lit>>,
     arithmetic: &'a dyn TypeArithmetic<L, Lit = Lit>,
     is_in_function: bool,
@@ -141,6 +142,7 @@ impl<'a, L, Lit: LiteralType> TypeProcessor<'a, L, Lit> {
     ) -> Self {
         Self {
             root_scope: env,
+            unresolved_root_vars: HashSet::new(),
             inner_scopes: vec![],
             arithmetic,
             is_in_function: false,
@@ -164,6 +166,10 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
             .last_mut()
             .unwrap_or(&mut *self.root_scope);
         scope.insert_type(name, ty);
+
+        if self.inner_scopes.is_empty() {
+            self.unresolved_root_vars.insert(name.to_owned());
+        }
     }
 
     fn process_expr_inner<'a, T>(
@@ -435,9 +441,10 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
 
         // We need to resolve vars even if an error occurred.
         debug_assert!(self.inner_scopes.is_empty());
-        // FIXME: store "is_resolved" flag for vars for efficiency
-        for var_type in self.root_scope.variables.values_mut() {
-            *var_type = substitutions.resolve(var_type);
+        for (name, var_type) in &mut self.root_scope.variables {
+            if self.unresolved_root_vars.contains(name) {
+                *var_type = substitutions.resolve(var_type);
+            }
         }
         result.map(|ty| substitutions.resolve(&ty))
     }

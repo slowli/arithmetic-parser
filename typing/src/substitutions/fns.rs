@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{FnArgs, FnType, LiteralType, TupleLength, TypeParamDescription, ValueType};
+use crate::{types::TypeParamDescription, FnArgs, FnType, LiteralType, TupleLength, ValueType};
 
 impl<Lit: LiteralType> FnType<Lit> {
     /// Performs final transformations on this type, transforming all of its type vars

@@ -6,7 +6,8 @@ use std::{collections::HashMap, convert::TryFrom, fmt, str::FromStr};
 
 use crate::{
     ast::{FnTypeAst, TupleLengthAst, ValueTypeAst},
-    FnArgs, FnType, LiteralType, TupleLength, TypeParamDescription, ValueType,
+    types::TypeParamDescription,
+    FnArgs, FnType, LiteralType, TupleLength, ValueType,
 };
 use arithmetic_parser::{
     ErrorKind as ParseErrorKind, InputSpan, LocatedSpan, NomResult, SpannedError, StripCode,

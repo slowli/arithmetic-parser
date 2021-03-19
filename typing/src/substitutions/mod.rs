@@ -234,7 +234,6 @@ impl<Lit: LiteralType> Substitutions<Lit> {
                 Ok(())
             }
             // FIXME: Handle (Exact, Exact) + test it
-
             (TupleLength::Var(x), other) | (other, TupleLength::Var(x)) => {
                 self.length_eqs.insert(x, other);
                 Ok(())

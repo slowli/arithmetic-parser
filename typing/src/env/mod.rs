@@ -435,6 +435,7 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
 
         // We need to resolve vars even if an error occurred.
         debug_assert!(self.inner_scopes.is_empty());
+        // FIXME: store "is_resolved" flag for vars for efficiency
         for var_type in self.root_scope.variables.values_mut() {
             *var_type = substitutions.resolve(var_type);
         }

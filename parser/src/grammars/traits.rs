@@ -317,6 +317,7 @@ impl<T: ParseLiteral> Parse for Untyped<T> {
 ///
 /// See [`Grammar`] docs for an example of usage.
 #[derive(Debug)]
+// TODO: consider name change (`Parser`?)
 pub struct Typed<T>(PhantomData<T>);
 
 impl<T: Grammar> Parse for Typed<T> {

@@ -29,12 +29,13 @@
 //! # Examples
 //!
 //! ```
-//! use arithmetic_parser::grammars::{Parse, Typed};
-//! use arithmetic_typing::{NumGrammar, Prelude, TypeEnvironment, ValueType};
+//! use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+//! use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, ValueType};
 //!
+//! type Parser = Typed<Annotated<NumGrammar<f32>>>;
 //! # fn main() -> anyhow::Result<()> {
 //! let code = "sum = |xs| xs.fold(0, |acc, x| acc + x);";
-//! let ast = Typed::<NumGrammar<f32>>::parse_statements(code)?;
+//! let ast = Parser::parse_statements(code)?;
 //!
 //! let mut env = TypeEnvironment::new();
 //! env.insert_type("fold", Prelude::fold_type().into());
@@ -50,6 +51,8 @@
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
 //! [`Grammar`]: arithmetic_parser::grammars::Grammar
 //! [`arithmetic-eval`]: https://crates.io/crates/arithmetic-eval
+
+// FIXME: move `ValueType` and `FnType` to separate module(s)
 
 #![warn(missing_docs, missing_debug_implementations)]
 #![warn(clippy::all, clippy::pedantic)]
@@ -69,7 +72,7 @@ use std::{
 };
 
 use arithmetic_parser::{
-    grammars::{Grammar, NumLiteral, ParseLiteral},
+    grammars::{Grammar, ParseLiteral},
     InputSpan, NomResult,
 };
 
@@ -538,6 +541,7 @@ pub enum ValueType<Lit = Num> {
     /// Any type.
     Any,
     /// Boolean.
+    // TODO: consider uniting literals and `Bool` as primitive types
     Bool,
     /// Literal.
     Lit(Lit),
@@ -719,36 +723,38 @@ impl<Lit> ValueType<Lit> {
     }
 }
 
-/// Grammar with support of type annotations.
+/// Grammar with support of type annotations. Works as a decorator.
+///
+/// # Examples
+///
+/// ```
+/// use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// use arithmetic_typing::Annotated;
+///
+/// type F32Grammar = Annotated<NumGrammar<f32>>;
+///
+/// # fn main() -> anyhow::Result<()> {
+/// let code = "x: [Num] = (1, 2, 3);";
+/// let ast = Typed::<F32Grammar>::parse_statements(code)?;
+/// # assert_eq!(ast.statements.len(), 1);
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug)]
-pub struct NumGrammar<T>(PhantomData<T>);
+pub struct Annotated<T, Lit = Num>(PhantomData<(T, Lit)>);
 
-impl<T> Default for NumGrammar<T> {
-    fn default() -> Self {
-        Self(PhantomData)
-    }
-}
-
-impl<T> Clone for NumGrammar<T> {
-    fn clone(&self) -> Self {
-        Self(PhantomData)
-    }
-}
-
-impl<T> Copy for NumGrammar<T> {}
-
-impl<T: NumLiteral> ParseLiteral for NumGrammar<T> {
-    type Lit = T;
+impl<T: ParseLiteral, Lit: LiteralType> ParseLiteral for Annotated<T, Lit> {
+    type Lit = T::Lit;
 
     fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
-        <T as NumLiteral>::parse(input)
+        <T as ParseLiteral>::parse_literal(input)
     }
 }
 
-impl<T: NumLiteral> Grammar for NumGrammar<T> {
-    type Type = ValueType<Num>;
+impl<T: ParseLiteral, Lit: LiteralType> Grammar for Annotated<T, Lit> {
+    type Type = ValueType<Lit>;
 
     fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
-        ValueType::parse(input)
+        ValueType::<Lit>::parse(input)
     }
 }

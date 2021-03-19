@@ -20,12 +20,14 @@ use arithmetic_parser::{
 /// # Examples
 ///
 /// ```
-/// use arithmetic_parser::{grammars::{Parse, Typed}, ErrorKind};
-/// use arithmetic_typing::{ast::ConversionErrorKind, NumGrammar};
+/// use arithmetic_parser::{grammars::{Parse, NumGrammar, Typed}, ErrorKind};
+/// use arithmetic_typing::{ast::ConversionErrorKind, Annotated};
 /// # use assert_matches::assert_matches;
 ///
+/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
+///
 /// let code = "bogus_slice: [T; _] = (1, 2, 3);";
-/// let err = Typed::<NumGrammar<f32>>::parse_statements(code).unwrap_err();
+/// let err = Parser::parse_statements(code).unwrap_err();
 ///
 /// assert_eq!(*err.span().fragment(), "T");
 /// let err = match err.kind() {

@@ -20,12 +20,13 @@ use crate::{FnType, LiteralType, TupleLength, ValueType};
 /// Function counting number of zeros in a slice:
 ///
 /// ```
-/// use arithmetic_parser::grammars::{Parse, Typed};
-/// use arithmetic_typing::{NumGrammar, Prelude, TypeEnvironment, ValueType};
+/// use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, ValueType};
 ///
 /// # fn main() -> anyhow::Result<()> {
+/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// let code = "|xs| xs.fold(0, |acc, x| if(x == 0, acc + 1, acc))";
-/// let ast = Typed::<NumGrammar<f32>>::parse_statements(code)?;
+/// let ast = Parser::parse_statements(code)?;
 ///
 /// let mut env: TypeEnvironment = Prelude::iter().collect();
 /// let count_zeros_fn = env.process_statements(&ast)?;
@@ -37,15 +38,16 @@ use crate::{FnType, LiteralType, TupleLength, ValueType};
 /// Function that reverses a slice:
 ///
 /// ```
-/// # use arithmetic_parser::grammars::{Parse, Typed};
-/// # use arithmetic_typing::{NumGrammar, Prelude, TypeEnvironment, ValueType};
+/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// # use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, ValueType};
 /// # fn main() -> anyhow::Result<()> {
+/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// let code = r#"
 ///     empty: [Num] = ();
 ///     // ^ necessary to infer accumulator type as [Num], not as `()`
 ///     |xs| xs.fold(empty, |acc, x| (x,).merge(acc))
 /// "#;
-/// let ast = Typed::<NumGrammar<f32>>::parse_statements(code)?;
+/// let ast = Parser::parse_statements(code)?;
 ///
 /// let mut env: TypeEnvironment = Prelude::iter().collect();
 /// let reverse_fn = env.process_statements(&ast)?;
@@ -57,17 +59,18 @@ use crate::{FnType, LiteralType, TupleLength, ValueType};
 /// Limitations of `push` / `merge`:
 ///
 /// ```
-/// # use arithmetic_parser::grammars::{Parse, Typed};
-/// # use arithmetic_typing::{NumGrammar, Prelude, TypeEnvironment, ValueType, TypeErrorKind};
+/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// # use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, ValueType, TypeErrorKind};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
+/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// let code = r#"
 ///     len = |xs| xs.fold(0, |acc, _| acc + 1);
 ///     slice = (1, 2).push(3);
 ///     slice.len(); // methods working on slices are applicable
 ///     (_, _, z) = slice; // but destructring is not
 /// "#;
-/// let ast = Typed::<NumGrammar<f32>>::parse_statements(code)?;
+/// let ast = Parser::parse_statements(code)?;
 ///
 /// let mut env: TypeEnvironment = Prelude::iter().collect();
 /// let err = env.process_statements(&ast).unwrap_err();

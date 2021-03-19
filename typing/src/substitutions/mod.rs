@@ -15,6 +15,7 @@ pub struct Substitutions<Lit> {
     /// Type variable equations, encoded as `type_var[key] = value`.
     eqs: HashMap<usize, ValueType<Lit>>,
     /// Set of type variables known to be linear.
+    // TODO: Use generic constraints container based on `Lit`?
     lin: HashSet<usize>,
     /// Number of length variables.
     const_var_count: usize,
@@ -232,6 +233,7 @@ impl<Lit: LiteralType> Substitutions<Lit> {
                 // Lengths are already unified.
                 Ok(())
             }
+            // FIXME: Handle (Exact, Exact) + test it
 
             (TupleLength::Var(x), other) | (other, TupleLength::Var(x)) => {
                 self.length_eqs.insert(x, other);
@@ -324,6 +326,7 @@ impl<Lit: LiteralType> Substitutions<Lit> {
             self.mark_as_linear(&ValueType::Var(new_idx))?;
         }
 
+        // FIXME: move upper (should be atomic w/ assignment)
         self.type_var_count += fn_type.type_params.len();
         self.const_var_count += fn_type.const_params.len();
         Ok(instantiated_fn_type)
@@ -417,6 +420,7 @@ impl<Lit: LiteralType> Substitutions<Lit> {
     }
 
     /// Recursively marks `ty` as a linear type.
+    // FIXME: narrow to `Lit = Num`
     #[allow(clippy::map_err_ignore)] // ignoring the original error is intentional
     pub fn mark_as_linear(&mut self, ty: &ValueType<Lit>) -> Result<(), TypeErrorKind<Lit>> {
         match ty {

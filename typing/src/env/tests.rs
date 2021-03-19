@@ -1,10 +1,10 @@
-use arithmetic_parser::grammars::{Parse, Typed};
+use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
 use assert_matches::assert_matches;
 
 use super::*;
-use crate::{FnArgs, Num, NumGrammar, Prelude, TupleLength};
+use crate::{Annotated, FnArgs, Num, Prelude, TupleLength};
 
-pub type F32Grammar = Typed<NumGrammar<f32>>;
+pub type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
 
 pub fn assert_incompatible_types<Lit: LiteralType>(
     err: &TypeErrorKind<Lit>,

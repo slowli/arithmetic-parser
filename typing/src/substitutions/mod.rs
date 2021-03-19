@@ -323,6 +323,8 @@ impl<Lit: LiteralType> Substitutions<Lit> {
                 .map(|(i, var_idx)| (*var_idx, self.const_var_count + i))
                 .collect(),
         };
+        self.type_var_count += fn_type.type_params.len();
+        self.const_var_count += fn_type.const_params.len();
 
         let instantiated_fn_type =
             fn_type.substitute_type_vars(&mapping, SubstitutionContext::ParamsToVars);
@@ -333,9 +335,6 @@ impl<Lit: LiteralType> Substitutions<Lit> {
             self.mark_as_linear(&ValueType::Var(new_idx))?;
         }
 
-        // FIXME: move upper (should be atomic w/ assignment)
-        self.type_var_count += fn_type.type_params.len();
-        self.const_var_count += fn_type.const_params.len();
         Ok(instantiated_fn_type)
     }
 

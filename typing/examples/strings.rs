@@ -7,7 +7,7 @@ use arithmetic_parser::{
 };
 
 use arithmetic_typing::{
-    arith::*, impl_singleton_literal_type, Assertions, MapLiteralType, NumConstraints,
+    arith::*, impl_singleton_literal_type, Assertions, LinConstraints, MapLiteralType,
     Substitutions, TypeEnvironment, TypeResult, ValueType,
 };
 
@@ -16,7 +16,7 @@ use arithmetic_typing::{
 struct StrType;
 
 // FIXME: `NumConstraints` makes little sense here
-impl_singleton_literal_type!(StrType, "Str", NumConstraints);
+impl_singleton_literal_type!(StrType, "Str", LinConstraints);
 
 /// Grammar parsing strings as literals.
 #[derive(Debug, Clone, Copy)]

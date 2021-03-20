@@ -2,7 +2,7 @@ use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
 use assert_matches::assert_matches;
 
 use super::*;
-use crate::{Annotated, FnArgs, Num, NumConstraints, Prelude, TupleLength};
+use crate::{Annotated, FnArgs, LinConstraints, Num, Prelude, TupleLength};
 
 pub type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
 
@@ -789,7 +789,7 @@ fn constraint_error() {
         err.kind(),
         TypeErrorKind::FailedConstraint {
             ty: ValueType::Bool,
-            constraint: NumConstraints::LIN,
+            constraint: LinConstraints::LIN,
         }
     );
 }

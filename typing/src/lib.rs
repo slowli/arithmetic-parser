@@ -112,7 +112,7 @@ pub mod _reexports {
 ///
 /// ```
 /// # use std::{fmt, str::FromStr};
-/// use arithmetic_typing::{LiteralType, NumConstraints};
+/// use arithmetic_typing::{LiteralType, LinConstraints};
 ///
 /// #[derive(Debug, Clone, Copy, PartialEq)]
 /// enum NumOrBytes {
@@ -151,7 +151,7 @@ pub mod _reexports {
 /// }
 ///
 /// impl LiteralType for NumOrBytes {
-///     type Constraints = NumConstraints;
+///     type Constraints = LinConstraints;
 /// }
 /// ```
 pub trait LiteralType:
@@ -259,17 +259,18 @@ macro_rules! impl_singleton_literal_type {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Num;
 
-/// Constraints associated with the [`Num`] literal.
+/// Linearity constraints. In particular, this is [`TypeConstraints`] associated
+/// with the [`Num`] literal.
 ///
 /// There is only one supported constraint: [linearity](Self::LIN). Linear types are types
 /// that can be used as arguments of arithmetic ops. They are recursively defined as [`Num`]
 /// and tuples in which all elements are linear.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct NumConstraints {
+pub struct LinConstraints {
     is_linear: bool,
 }
 
-impl fmt::Display for NumConstraints {
+impl fmt::Display for LinConstraints {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.is_linear {
             formatter.write_str("Lin")
@@ -279,7 +280,7 @@ impl fmt::Display for NumConstraints {
     }
 }
 
-impl FromStr for NumConstraints {
+impl FromStr for LinConstraints {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -291,19 +292,19 @@ impl FromStr for NumConstraints {
     }
 }
 
-impl ops::BitAndAssign<&Self> for NumConstraints {
+impl ops::BitAndAssign<&Self> for LinConstraints {
     #[allow(clippy::suspicious_op_assign_impl)] // "logical or" is intentional
     fn bitand_assign(&mut self, rhs: &Self) {
         self.is_linear = self.is_linear || rhs.is_linear;
     }
 }
 
-impl NumConstraints {
+impl LinConstraints {
     /// Linearity constraint.
     pub const LIN: Self = Self { is_linear: true };
 }
 
-impl TypeConstraints for NumConstraints {
+impl TypeConstraints for LinConstraints {
     fn apply<Lit>(
         &self,
         ty: &ValueType<Lit>,
@@ -346,7 +347,7 @@ impl TypeConstraints for NumConstraints {
     }
 }
 
-impl_singleton_literal_type!(Num, "Num", NumConstraints);
+impl_singleton_literal_type!(Num, "Num", LinConstraints);
 
 /// Maps a literal value from a certain [`Grammar`] to its type.
 ///

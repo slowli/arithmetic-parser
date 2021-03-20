@@ -5,7 +5,7 @@ use num_traits::{NumOps, Pow};
 use std::ops;
 
 use crate::{
-    LiteralType, MapLiteralType, Num, NumConstraints, Substitutions, TypeConstraints,
+    LinConstraints, LiteralType, MapLiteralType, Num, Substitutions, TypeConstraints,
     TypeErrorKind, TypeResult, ValueType,
 };
 use arithmetic_parser::{BinaryOp, Spanned, UnaryOp};
@@ -175,10 +175,10 @@ impl NumArithmetic {
         rhs_ty: &ValueType<Lit>,
     ) -> Result<ValueType<Lit>, TypeErrorKind<Lit>>
     where
-        Lit: LiteralType<Constraints = NumConstraints>,
+        Lit: LiteralType<Constraints = LinConstraints>,
     {
-        NumConstraints::LIN.apply(lhs_ty, substitutions)?;
-        NumConstraints::LIN.apply(rhs_ty, substitutions)?;
+        LinConstraints::LIN.apply(lhs_ty, substitutions)?;
+        LinConstraints::LIN.apply(rhs_ty, substitutions)?;
 
         let resolved_lhs_ty = substitutions.fast_resolve(lhs_ty);
         let resolved_rhs_ty = substitutions.fast_resolve(rhs_ty);
@@ -221,7 +221,7 @@ where
             UnaryOp::Not => BoolArithmetic::process_unary_op(substitutions, &spans),
 
             UnaryOp::Neg => {
-                NumConstraints::LIN
+                LinConstraints::LIN
                     .apply(inner_ty, substitutions)
                     .map_err(|err| err.with_span(&spans.inner))?;
                 Ok(spans.inner.extra)

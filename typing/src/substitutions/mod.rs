@@ -43,11 +43,10 @@ impl<Lit: LiteralType> Substitutions<Lit> {
 
     /// Inserts `constraints` for a type var with the specified index and all vars
     /// it is equivalent to.
-    #[allow(clippy::needless_pass_by_value)] // For future compatibility
-    pub fn insert_constraint(&mut self, var_idx: usize, constraints: Lit::Constraints) {
-        // FIXME: what if some constraints are already present?
+    pub fn insert_constraint(&mut self, var_idx: usize, constraints: &Lit::Constraints) {
         for idx in self.equivalent_vars(var_idx) {
-            self.constraints.insert(idx, constraints.clone());
+            let current_constraints = self.constraints.entry(idx).or_default();
+            *current_constraints &= constraints;
         }
     }
 

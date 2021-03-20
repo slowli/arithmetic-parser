@@ -5,9 +5,9 @@ use nom::Err as NomErr;
 use std::{collections::HashMap, convert::TryFrom, fmt, str::FromStr};
 
 use crate::{
-    ast::{FnTypeAst, TupleLengthAst, ValueTypeAst},
+    ast::{FnTypeAst, TupleLengthAst, TypeConstraintsAst, ValueTypeAst},
     types::TypeParamDescription,
-    FnArgs, FnType, LiteralType, TupleLength, ValueType,
+    FnArgs, FnType, LiteralType, TupleLength, TypeConstraints, ValueType,
 };
 use arithmetic_parser::{
     ErrorKind as ParseErrorKind, InputSpan, LocatedSpan, NomResult, SpannedError, StripCode,
@@ -63,6 +63,8 @@ pub enum ConversionErrorKind {
     UndefinedConst(String),
     /// Undefined type param.
     UndefinedTypeParam(String),
+    /// Invalid type constraint.
+    InvalidConstraint(String),
     // TODO: unused params?
 }
 
@@ -88,6 +90,9 @@ impl fmt::Display for ConversionErrorKind {
             }
             Self::UndefinedTypeParam(name) => {
                 write!(formatter, "Undefined type param `{}`", name)
+            }
+            Self::InvalidConstraint(name) => {
+                write!(formatter, "Invalid type constraint: `{}`", name)
             }
         }
     }
@@ -131,6 +136,21 @@ impl<Span> fmt::Display for ConversionError<Span> {
 impl<Span: fmt::Debug> std::error::Error for ConversionError<Span> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(&self.inner.extra)
+    }
+}
+
+impl<'a> TypeConstraintsAst<'a> {
+    fn try_convert<C: TypeConstraints>(&self) -> Result<C, ConversionError<&'a str>> {
+        self.constraints
+            .iter()
+            .try_fold(C::default(), |mut acc, input| {
+                let input_str = *input.fragment();
+                let partial = C::from_str(input_str).map_err(|_| {
+                    ConversionErrorKind::InvalidConstraint(input_str.to_owned()).with_span(*input)
+                })?;
+                acc &= &partial;
+                Ok(acc)
+            })
     }
 }
 
@@ -297,24 +317,18 @@ impl<'a, Lit: LiteralType> FnTypeAst<'a, Lit> {
         let const_params = self
             .const_params
             .iter()
-            .map(|name| state.const_param_idx(name.fragment()).unwrap())
-            .collect();
-        let type_params = self
-            .type_params
-            .iter()
-            .map(|(name, _)| {
-                (
-                    state.type_param_idx(name.fragment()).unwrap(),
-                    TypeParamDescription {
-                        constraints: Lit::Constraints::default(), // FIXME
-                    },
-                )
-            })
-            .collect();
+            .map(|name| state.const_param_idx(name.fragment()).unwrap());
+        let type_params = self.type_params.iter().map(|(name, constraints)| {
+            let constraints = constraints.try_convert::<Lit::Constraints>()?;
+            Ok((
+                state.type_param_idx(name.fragment()).unwrap(),
+                TypeParamDescription::new(constraints),
+            ))
+        });
 
         let fn_type = FnType::new(FnArgs::List(args?), self.return_type.try_convert(&state)?)
-            .with_const_params(const_params)
-            .with_type_params(type_params);
+            .with_const_params(const_params.collect())
+            .with_type_params(type_params.collect::<Result<Vec<_>, _>>()?);
         Ok(fn_type)
     }
 }
@@ -337,6 +351,15 @@ mod tests {
     #[test]
     fn converting_raw_fn_type() {
         let input = InputSpan::new("fn<const N; T>([T; N], fn(T) -> Bool) -> Bool");
+        let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
+        let fn_type = FnType::try_from(fn_type).unwrap();
+
+        assert_eq!(fn_type.to_string(), *input.fragment());
+    }
+
+    #[test]
+    fn converting_raw_fn_type_with_constraint() {
+        let input = InputSpan::new("fn<const N; T: Lin>([T; N], fn(T) -> Bool) -> Bool");
         let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
         let fn_type = FnType::try_from(fn_type).unwrap();
 
@@ -422,6 +445,19 @@ mod tests {
         assert_matches!(
             err.kind(),
             ConversionErrorKind::UndefinedConst(name) if name == "N"
+        );
+    }
+
+    #[test]
+    fn converting_raw_fn_type_invalid_constraint() {
+        let input = InputSpan::new("fn<T: Bug>([T; _]) -> Bool");
+        let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
+        let err = FnType::try_from(fn_type).unwrap_err();
+
+        assert_eq!(err.main_span().location_offset(), 6);
+        assert_matches!(
+            err.kind(),
+            ConversionErrorKind::InvalidConstraint(name) if name == "Bug"
         );
     }
 

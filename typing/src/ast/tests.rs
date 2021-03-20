@@ -32,7 +32,7 @@ fn fn_type_params() {
 
 #[test]
 fn fn_type_params_with_bounds() {
-    let input = InputSpan::new("<T: ?Lin, U>");
+    let input = InputSpan::new("<T: Lin, U>");
     let (rest, (const_params, type_params)) = fn_params(input).unwrap();
 
     assert!(rest.fragment().is_empty());
@@ -40,9 +40,9 @@ fn fn_type_params_with_bounds() {
     assert_eq!(
         type_params
             .iter()
-            .map(|(param, bounds)| (*param.fragment(), bounds.maybe_non_linear))
+            .map(|(param, constraints)| (*param.fragment(), constraints.constraints.is_empty()))
             .collect::<Vec<_>>(),
-        vec![("T", true), ("U", false)]
+        vec![("T", false), ("U", true)]
     );
 }
 

@@ -61,7 +61,7 @@
     clippy::similar_names // too many false positives because of lhs / rhs
 )]
 
-use std::{fmt, marker::PhantomData, str::FromStr};
+use std::{fmt, marker::PhantomData, ops, str::FromStr};
 
 use arithmetic_parser::{
     grammars::{Grammar, ParseLiteral},
@@ -160,7 +160,16 @@ pub trait LiteralType:
 
 /// FIXME: `Default` is empty
 pub trait TypeConstraints:
-    Clone + Default + PartialEq + fmt::Debug + fmt::Display + FromStr + Send + Sync + 'static
+    Clone
+    + Default
+    + PartialEq
+    + fmt::Debug
+    + fmt::Display
+    + FromStr
+    + for<'op> ops::BitAndAssign<&'op Self>
+    + Send
+    + Sync
+    + 'static
 {
     /// FIXME: describe
     fn apply<Lit>(
@@ -249,6 +258,13 @@ impl FromStr for NumConstraints {
     }
 }
 
+impl ops::BitAndAssign<&Self> for NumConstraints {
+    #[allow(clippy::suspicious_op_assign_impl)] // "logical or" is intentional
+    fn bitand_assign(&mut self, rhs: &Self) {
+        self.is_linear = self.is_linear || rhs.is_linear;
+    }
+}
+
 impl NumConstraints {
     /// Linearity constraint.
     pub const LIN: Self = Self { is_linear: true };
@@ -269,14 +285,14 @@ impl TypeConstraints for NumConstraints {
         }
 
         let resolved_ty = if let ValueType::Var(idx) = ty {
-            substitutions.insert_constraint(*idx, self.to_owned());
+            substitutions.insert_constraint(*idx, self);
             substitutions.fast_resolve(ty)
         } else {
             ty
         };
 
         match resolved_ty {
-            // `Var`s are taken care of previously.
+            // `Var`s are taken care of previously. `Lit`s are always linear.
             ValueType::Var(_) | ValueType::Lit(_) => Ok(()),
 
             ValueType::Any | ValueType::Param(_) => unreachable!(),

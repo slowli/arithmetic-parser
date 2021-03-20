@@ -118,7 +118,7 @@ pub struct FnTypeAst<'a, Lit = Num> {
     /// Constant params; e.g., `N` in `fn<const N>([Num; N]) -> Num`.
     pub const_params: Vec<InputSpan<'a>>,
     /// Type params together with their bounds. E.g., `T` in `fn<T>(T, T) -> T`.
-    pub type_params: Vec<(InputSpan<'a>, TypeParamBoundsAst)>,
+    pub type_params: Vec<(InputSpan<'a>, TypeConstraintsAst<'a>)>,
     /// Function arguments.
     pub args: Vec<ValueTypeAst<'a, Lit>>,
     /// Return type of the function. Will be set to void if not declared.
@@ -147,9 +147,9 @@ pub enum TupleLengthAst<'a> {
 /// Bounds that can be placed on a type param.
 #[derive(Debug, Default, Clone, PartialEq)]
 #[non_exhaustive]
-pub struct TypeParamBoundsAst {
-    /// Can the type param be non-linear?
-    pub maybe_non_linear: bool,
+pub struct TypeConstraintsAst<'a> {
+    /// Spans corresponding to constraints, e.g. `Foo` and `Bar` in `Foo + Bar`.
+    pub constraints: Vec<InputSpan<'a>>,
 }
 
 /// Whitespace and comments.
@@ -219,19 +219,23 @@ fn slice_definition<Lit: LiteralType>(
     )(input)
 }
 
-fn type_bounds(input: InputSpan<'_>) -> NomResult<'_, TypeParamBoundsAst> {
-    map(terminated(tag("?Lin"), ws), |_| TypeParamBoundsAst {
-        maybe_non_linear: true,
+fn type_bounds(input: InputSpan<'_>) -> NomResult<'_, TypeConstraintsAst<'_>> {
+    let constraint_sep = tuple((ws, tag_char('+'), ws));
+    map(separated_list1(constraint_sep, ident), |constraints| {
+        TypeConstraintsAst { constraints }
     })(input)
 }
 
-fn type_params(input: InputSpan<'_>) -> NomResult<'_, Vec<(InputSpan<'_>, TypeParamBoundsAst)>> {
+fn type_params(input: InputSpan<'_>) -> NomResult<'_, Vec<(InputSpan<'_>, TypeConstraintsAst)>> {
     let maybe_type_bounds = opt(preceded(tuple((ws, tag_char(':'), ws)), type_bounds));
     let type_param = tuple((ident, map(maybe_type_bounds, Option::unwrap_or_default)));
     separated_list1(comma_sep, type_param)(input)
 }
 
-type FnParams<'a> = (Vec<InputSpan<'a>>, Vec<(InputSpan<'a>, TypeParamBoundsAst)>);
+type FnParams<'a> = (
+    Vec<InputSpan<'a>>,
+    Vec<(InputSpan<'a>, TypeConstraintsAst<'a>)>,
+);
 
 /// Function params, including `<>` brackets.
 fn fn_params(input: InputSpan<'_>) -> NomResult<'_, FnParams> {

@@ -106,12 +106,13 @@ pub mod _reexports {
 /// - `Display` presentations must be identifiers, such as `Num`.
 ///
 /// [`Grammar`]: arithmetic_parser::grammars::Grammar
+/// [`TypeArithmetic`]: crate::arith::TypeArithmetic
 ///
 /// # Examples
 ///
 /// ```
 /// # use std::{fmt, str::FromStr};
-/// use arithmetic_typing::LiteralType;
+/// use arithmetic_typing::{LiteralType, NumConstraints};
 ///
 /// #[derive(Debug, Clone, Copy, PartialEq)]
 /// enum NumOrBytes {
@@ -149,7 +150,9 @@ pub mod _reexports {
 ///     }
 /// }
 ///
-/// impl LiteralType for NumOrBytes {}
+/// impl LiteralType for NumOrBytes {
+///     type Constraints = NumConstraints;
+/// }
 /// ```
 pub trait LiteralType:
     Clone + PartialEq + fmt::Debug + fmt::Display + FromStr + Send + Sync + 'static
@@ -158,7 +161,29 @@ pub trait LiteralType:
     type Constraints: TypeConstraints;
 }
 
-/// FIXME: `Default` is empty
+/// Container for constraints that can be placed on type parameters / variables.
+///
+/// Constraints can be placed on [function](FnType) type params, and can be applied to types
+/// in [`TypeArithmetic`] impls. For example, [`NumArithmetic`] places
+/// a [linearity constraint](NumConstraints::LIN) on types involved in arithmetic ops.
+///
+/// # Implementation rules
+///
+/// Usually, this trait should be implemented with something akin to [`bitflags`].
+///
+/// [`bitflags`]: https://docs.rs/bitflags/
+///
+/// - [`Default`] must return a container with no restrictions.
+/// - [`BitAndAssign`](ops::BitAndAssign) must perform the union of the provided constraints.
+/// - [`Display`](fmt::Display) must display constraints in the form `Foo + Bar + Quux`,
+///   where `Foo`, `Bar` and `Quux` are *primitive* constraints (i.e., ones not reduced
+///   to a combination of other constraints). The primitive constraints must be represented
+///   as identifiers (i.e., consist of alphanumeric chars and start with an alphabetic char
+///   or `_`).
+/// - [`FromStr`] must parse primitive constraints.
+///
+/// [`TypeArithmetic`]: crate::arith::TypeArithmetic
+/// [`NumArithmetic`]: crate::arith::NumArithmetic
 pub trait TypeConstraints:
     Clone
     + Default
@@ -171,7 +196,12 @@ pub trait TypeConstraints:
     + Sync
     + 'static
 {
-    /// FIXME: describe
+    /// Applies these constraints to the provided `ty`pe. Returns an error if the type
+    /// contradicts the constraints.
+    ///
+    /// A typical implementation will use `substitutions` to
+    /// [place constraints on type vars](Substitutions::insert_constraint()), e.g.,
+    /// by recursively traversing and resolving the provided type.
     fn apply<Lit>(
         &self,
         ty: &ValueType<Lit>,
@@ -229,11 +259,14 @@ macro_rules! impl_singleton_literal_type {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Num;
 
-/// FIXME
+/// Constraints associated with the [`Num`] literal.
+///
+/// There is only one supported constraint: [linearity](Self::LIN). Linear types are types
+/// that can be used as arguments of arithmetic ops. They are recursively defined as [`Num`]
+/// and tuples in which all elements are linear.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct NumConstraints {
-    /// FIXME
-    pub is_linear: bool,
+    is_linear: bool,
 }
 
 impl fmt::Display for NumConstraints {

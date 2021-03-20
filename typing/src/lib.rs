@@ -154,6 +154,22 @@ pub mod _reexports {
 pub trait LiteralType:
     Clone + PartialEq + fmt::Debug + fmt::Display + FromStr + Send + Sync + 'static
 {
+    /// Constraints that can be placed on type parameters.
+    type Constraints: TypeConstraints;
+}
+
+/// FIXME: `Default` is empty
+pub trait TypeConstraints:
+    Clone + Default + PartialEq + fmt::Debug + fmt::Display + FromStr + Send + Sync + 'static
+{
+    /// FIXME: describe
+    fn apply<Lit>(
+        &self,
+        ty: &ValueType<Lit>,
+        substitutions: &mut Substitutions<Lit>,
+    ) -> Result<(), TypeErrorKind<Lit>>
+    where
+        Lit: LiteralType<Constraints = Self>;
 }
 
 /// Implements [`Display`](fmt::Display), [`FromStr`] and [`LiteralType`] for the provided type,
@@ -171,7 +187,7 @@ pub trait LiteralType:
 /// ```
 #[macro_export]
 macro_rules! impl_singleton_literal_type {
-    ($ty:ident, $name:tt) => {
+    ($ty:ident, $name:tt, $constraints:ty) => {
         impl core::fmt::Display for $ty {
             fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 formatter.write_str($name)
@@ -194,7 +210,9 @@ macro_rules! impl_singleton_literal_type {
             }
         }
 
-        impl $crate::LiteralType for $ty {}
+        impl $crate::LiteralType for $ty {
+            type Constraints = $constraints;
+        }
     };
 }
 
@@ -202,7 +220,84 @@ macro_rules! impl_singleton_literal_type {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Num;
 
-impl_singleton_literal_type!(Num, "Num");
+/// FIXME
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct NumConstraints {
+    /// FIXME
+    pub is_linear: bool,
+}
+
+impl fmt::Display for NumConstraints {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_linear {
+            formatter.write_str("Lin")
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl FromStr for NumConstraints {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "" => Ok(Self { is_linear: false }),
+            "Lin" => Ok(Self { is_linear: true }),
+            _ => Err(anyhow::anyhow!("Expected empty string or `Lin`")),
+        }
+    }
+}
+
+impl NumConstraints {
+    /// Linearity constraint.
+    pub const LIN: Self = Self { is_linear: true };
+}
+
+impl TypeConstraints for NumConstraints {
+    fn apply<Lit>(
+        &self,
+        ty: &ValueType<Lit>,
+        substitutions: &mut Substitutions<Lit>,
+    ) -> Result<(), TypeErrorKind<Lit>>
+    where
+        Lit: LiteralType<Constraints = Self>,
+    {
+        if !self.is_linear {
+            // The default constraint: does nothing.
+            return Ok(());
+        }
+
+        let resolved_ty = if let ValueType::Var(idx) = ty {
+            substitutions.insert_constraint(*idx, self.to_owned());
+            substitutions.fast_resolve(ty)
+        } else {
+            ty
+        };
+
+        match resolved_ty {
+            // `Var`s are taken care of previously.
+            ValueType::Var(_) | ValueType::Lit(_) => Ok(()),
+
+            ValueType::Any | ValueType::Param(_) => unreachable!(),
+
+            ValueType::Bool | ValueType::Function(_) => Err(TypeErrorKind::failed_constraint(
+                ty.to_owned(),
+                self.to_owned(),
+            )),
+
+            ValueType::Tuple(elements) => {
+                for element in elements.to_owned() {
+                    self.apply(&element, substitutions)?;
+                }
+                Ok(())
+            }
+            ValueType::Slice { element, .. } => self.apply(&element.to_owned(), substitutions),
+        }
+    }
+}
+
+impl_singleton_literal_type!(Num, "Num", NumConstraints);
 
 /// Maps a literal value from a certain [`Grammar`] to its type.
 ///

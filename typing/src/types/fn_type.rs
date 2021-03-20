@@ -10,28 +10,32 @@ use crate::{LiteralType, Num, TupleLength, ValueType};
 
 /// Description of a type parameter.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct TypeParamDescription {
-    /// Can this type param be non-linear?
-    // TODO: Change linearity to opt-in, rather than opt-out
-    pub maybe_non_linear: bool,
+pub(crate) struct TypeParamDescription<C> {
+    pub constraints: C,
+}
+
+impl<C> TypeParamDescription<C> {
+    pub fn new(constraints: C) -> Self {
+        Self { constraints }
+    }
 }
 
 /// Functional type.
 #[derive(Debug, Clone, PartialEq)]
-pub struct FnType<Lit = Num> {
+pub struct FnType<Lit: LiteralType = Num> {
     /// Type of function arguments.
     pub(crate) args: FnArgs<Lit>,
     /// Type of the value returned by the function.
     pub(crate) return_type: ValueType<Lit>,
     /// Type params associated with this function. The indexes of params should
     /// monotonically increase (necessary for correct display) and must be distinct.
-    pub(crate) type_params: Vec<(usize, TypeParamDescription)>,
+    pub(crate) type_params: Vec<(usize, TypeParamDescription<Lit::Constraints>)>,
     /// Indexes of const params associated with this function. The indexes should
     /// monotonically increase (necessary for correct display) and must be distinct.
     pub(crate) const_params: Vec<usize>,
 }
 
-impl<Lit: fmt::Display> fmt::Display for FnType<Lit> {
+impl<Lit: fmt::Display + LiteralType> fmt::Display for FnType<Lit> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("fn")?;
 
@@ -54,8 +58,8 @@ impl<Lit: fmt::Display> fmt::Display for FnType<Lit> {
 
             for (i, (var_idx, description)) in self.type_params.iter().enumerate() {
                 formatter.write_str(type_param(*var_idx).as_ref())?;
-                if description.maybe_non_linear {
-                    formatter.write_str(": ?Lin")?;
+                if description.constraints != Lit::Constraints::default() {
+                    write!(formatter, ": {}", description.constraints)?;
                 }
                 if i + 1 < self.type_params.len() {
                     formatter.write_str(", ")?;
@@ -91,7 +95,7 @@ impl<Lit: LiteralType> FnType<Lit> {
 
     pub(crate) fn with_type_params(
         mut self,
-        mut params: Vec<(usize, TypeParamDescription)>,
+        mut params: Vec<(usize, TypeParamDescription<Lit::Constraints>)>,
     ) -> Self {
         params.sort_unstable_by_key(|(idx, _)| *idx);
         self.type_params = params;
@@ -106,17 +110,6 @@ impl<Lit: LiteralType> FnType<Lit> {
     /// Returns `true` iff the function has at least one const or type param.
     pub fn is_parametric(&self) -> bool {
         !self.const_params.is_empty() || !self.type_params.is_empty()
-    }
-
-    /// Checks if a type variable with the specified index is linear.
-    pub(crate) fn linear_type_params(&self) -> impl Iterator<Item = usize> + '_ {
-        self.type_params.iter().filter_map(|(idx, description)| {
-            if description.maybe_non_linear {
-                None
-            } else {
-                Some(*idx)
-            }
-        })
     }
 
     pub(crate) fn arg_and_return_types(&self) -> impl Iterator<Item = &ValueType<Lit>> + '_ {
@@ -203,13 +196,13 @@ impl<Lit: LiteralType> FnType<Lit> {
 /// );
 /// ```
 #[derive(Debug)]
-pub struct FnTypeBuilder<Lit = Num> {
+pub struct FnTypeBuilder<Lit: LiteralType = Num> {
     args: FnArgs<Lit>,
-    type_params: HashMap<usize, TypeParamDescription>,
+    type_params: HashMap<usize, TypeParamDescription<Lit::Constraints>>,
     const_params: HashSet<usize>,
 }
 
-impl<Lit> Default for FnTypeBuilder<Lit> {
+impl<Lit: LiteralType> Default for FnTypeBuilder<Lit> {
     fn default() -> Self {
         Self {
             args: FnArgs::List(Vec::new()),
@@ -230,11 +223,12 @@ impl<Lit: LiteralType> FnTypeBuilder<Lit> {
     /// Adds the type params with the specified `indexes` to the function definition.
     /// `linear` determines if the type params are linear (i.e., can be used as arguments
     /// in binary ops).
-    pub fn with_type_params(mut self, indexes: impl Iterator<Item = usize>, linear: bool) -> Self {
+    pub fn with_type_params(mut self, indexes: impl Iterator<Item = usize>) -> Self {
         let description = TypeParamDescription {
-            maybe_non_linear: !linear,
+            constraints: Lit::Constraints::default(),
         };
-        self.type_params.extend(indexes.map(|i| (i, description)));
+        self.type_params
+            .extend(indexes.map(|i| (i, description.clone())));
         self
     }
 
@@ -259,7 +253,7 @@ impl<Lit: LiteralType> FnTypeBuilder<Lit> {
 
 /// Type of function arguments.
 #[derive(Debug, Clone, PartialEq)]
-pub enum FnArgs<Lit> {
+pub enum FnArgs<Lit: LiteralType> {
     /// Any arguments are accepted.
     // TODO: allow to parse any args
     Any,
@@ -267,7 +261,7 @@ pub enum FnArgs<Lit> {
     List(Vec<ValueType<Lit>>),
 }
 
-impl<Lit: fmt::Display> fmt::Display for FnArgs<Lit> {
+impl<Lit: LiteralType> fmt::Display for FnArgs<Lit> {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         match self {
             FnArgs::Any => formatter.write_str("..."),

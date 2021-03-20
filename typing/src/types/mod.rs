@@ -2,7 +2,7 @@
 
 use std::{borrow::Cow, fmt};
 
-use crate::Num;
+use crate::{LiteralType, Num};
 
 mod fn_type;
 
@@ -51,7 +51,7 @@ impl TupleLength {
 
 /// Possible value type.
 #[derive(Debug, Clone)]
-pub enum ValueType<Lit = Num> {
+pub enum ValueType<Lit: LiteralType = Num> {
     /// Any type.
     Any,
     /// Boolean.
@@ -79,7 +79,7 @@ pub enum ValueType<Lit = Num> {
     Var(usize),
 }
 
-impl<Lit: PartialEq> PartialEq for ValueType<Lit> {
+impl<Lit: LiteralType> PartialEq for ValueType<Lit> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Any, _) | (_, Self::Any) | (Self::Bool, Self::Bool) => true,
@@ -109,7 +109,7 @@ impl<Lit: PartialEq> PartialEq for ValueType<Lit> {
     }
 }
 
-impl<Lit: fmt::Display> fmt::Display for ValueType<Lit> {
+impl<Lit: LiteralType> fmt::Display for ValueType<Lit> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Any => formatter.write_str("_"),
@@ -157,7 +157,7 @@ impl<Lit: fmt::Display> fmt::Display for ValueType<Lit> {
     }
 }
 
-impl<Lit> From<FnType<Lit>> for ValueType<Lit> {
+impl<Lit: LiteralType> From<FnType<Lit>> for ValueType<Lit> {
     fn from(fn_type: FnType<Lit>) -> Self {
         Self::Function(Box::new(fn_type))
     }
@@ -165,7 +165,10 @@ impl<Lit> From<FnType<Lit>> for ValueType<Lit> {
 
 macro_rules! impl_from_tuple_for_value_type {
     ($($var:tt : $ty:ident),*) => {
-        impl<Num, $($ty : Into<ValueType<Num>>,)*> From<($($ty,)*)> for ValueType<Num> {
+        impl<Lit, $($ty : Into<ValueType<Lit>>,)*> From<($($ty,)*)> for ValueType<Lit>
+        where
+            Lit: LiteralType,
+        {
             #[allow(unused_variables)] // `tuple` is unused for empty tuple
             fn from(tuple: ($($ty,)*)) -> Self {
                 Self::Tuple(vec![$(tuple.$var.into(),)*])
@@ -199,9 +202,9 @@ impl ValueType {
     pub const NUM: Self = ValueType::Lit(Num);
 }
 
-impl<Lit> ValueType<Lit> {
+impl<Lit: LiteralType> ValueType<Lit> {
     /// Returns a void type (an empty tuple).
-    pub const fn void() -> Self {
+    pub fn void() -> Self {
         Self::Tuple(Vec::new())
     }
 

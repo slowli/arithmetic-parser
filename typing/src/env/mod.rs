@@ -26,7 +26,7 @@ type FnArgsAndOutput<Lit> = (Vec<ValueType<Lit>>, ValueType<Lit>);
 
 /// Environment containing type information on named variables.
 #[derive(Debug, Clone)]
-pub struct TypeEnvironment<Lit = Num> {
+pub struct TypeEnvironment<Lit: LiteralType = Num> {
     variables: HashMap<String, ValueType<Lit>>,
 }
 
@@ -387,7 +387,7 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
 
         let mut fn_type = FnType::new(FnArgs::List(arg_types), return_type);
         if !self.is_in_function {
-            fn_type.finalize(substitutions.linear_types());
+            fn_type.finalize(substitutions.constraints());
         }
 
         Ok(fn_type)

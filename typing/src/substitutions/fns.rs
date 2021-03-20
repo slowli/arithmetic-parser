@@ -7,11 +7,11 @@ use crate::{types::TypeParamDescription, FnArgs, FnType, LiteralType, TupleLengt
 impl<Lit: LiteralType> FnType<Lit> {
     /// Performs final transformations on this type, transforming all of its type vars
     /// into type params.
-    pub(crate) fn finalize(&mut self, linear_types: &HashSet<usize>) {
+    pub(crate) fn finalize(&mut self, constraints: &HashMap<usize, Lit::Constraints>) {
         let mut tree = FnTypeTree::new(self);
-        tree.infer_type_params(&HashSet::new(), &HashSet::new(), linear_types);
+        tree.infer_type_params(&HashSet::new(), &HashSet::new());
         let mapping = tree.create_param_mapping();
-        tree.merge_into(self);
+        tree.merge_into(self, constraints);
 
         *self = self.substitute_type_vars(&mapping, SubstitutionContext::VarsToParams);
     }
@@ -23,24 +23,24 @@ impl<Lit: LiteralType> FnType<Lit> {
         mapping: &ParamMapping,
         context: SubstitutionContext,
     ) -> Self {
-        fn map_params<'a, T: 'static + Copy>(
+        #[allow(clippy::option_if_let_else)] // false positive
+        fn map_params<'a, T: 'static>(
             params: impl Iterator<Item = (usize, T)> + 'a,
             mapping: &'a HashMap<usize, usize>,
             context: SubstitutionContext,
         ) -> impl Iterator<Item = (usize, T)> + 'a {
             params.filter_map(move |(var_idx, description)| {
-                mapping.get(&var_idx).map_or_else(
-                    || Some((var_idx, description)),
-                    |mapped_idx| {
-                        if context == SubstitutionContext::ParamsToVars {
-                            // The params in mapping got instantiated into vars;
-                            // we must remove them from the `type_params`.
-                            None
-                        } else {
-                            Some((*mapped_idx, description))
-                        }
-                    },
-                )
+                if let Some(mapped_idx) = mapping.get(&var_idx) {
+                    if context == SubstitutionContext::ParamsToVars {
+                        // The params in mapping got instantiated into vars;
+                        // we must remove them from the `type_params`.
+                        None
+                    } else {
+                        Some((*mapped_idx, description))
+                    }
+                } else {
+                    Some((var_idx, description))
+                }
             })
         }
 
@@ -57,7 +57,7 @@ impl<Lit: LiteralType> FnType<Lit> {
         let const_params = self.const_params.iter().map(|idx| (*idx, ()));
         let const_params =
             map_params(const_params, &mapping.constants, context).map(|(idx, _)| idx);
-        let type_params = self.type_params.iter().copied();
+        let type_params = self.type_params.iter().cloned();
         let type_params = map_params(type_params, &mapping.types, context);
 
         FnType::new(substituted_args, return_type)
@@ -84,7 +84,7 @@ struct FnTypeTree {
     children: Vec<FnTypeTree>,
     all_type_vars: HashMap<usize, VarQuantity>,
     all_const_vars: HashMap<usize, VarQuantity>,
-    type_params: HashMap<usize, TypeParamDescription>,
+    type_params: HashSet<usize>,
     const_params: HashSet<usize>,
 }
 
@@ -155,27 +155,19 @@ impl FnTypeTree {
             children,
             all_type_vars,
             all_const_vars,
-            type_params: HashMap::new(),
+            type_params: HashSet::new(),
             const_params: HashSet::new(),
         }
     }
 
     /// Recursively infers type params for the function and all child functions.
-    fn infer_type_params(
-        &mut self,
-        parent_types: &HashSet<usize>,
-        parent_consts: &HashSet<usize>,
-        linear_types: &HashSet<usize>,
-    ) {
+    fn infer_type_params(&mut self, parent_types: &HashSet<usize>, parent_consts: &HashSet<usize>) {
         self.type_params = self
             .all_type_vars
             .iter()
             .filter_map(|(idx, qty)| {
                 if *qty != VarQuantity::UniqueFunction && !parent_types.contains(idx) {
-                    let description = TypeParamDescription {
-                        maybe_non_linear: !linear_types.contains(idx),
-                    };
-                    Some((*idx, description))
+                    Some(*idx)
                 } else {
                     None
                 }
@@ -195,16 +187,12 @@ impl FnTypeTree {
             .collect();
 
         let mut parent_and_self_types = parent_types.clone();
-        parent_and_self_types.extend(self.type_params.keys().copied());
+        parent_and_self_types.extend(self.type_params.iter().copied());
         let mut parent_and_self_consts = parent_consts.clone();
         parent_and_self_consts.extend(self.const_params.iter().copied());
 
         for child_tree in &mut self.children {
-            child_tree.infer_type_params(
-                &parent_and_self_types,
-                &parent_and_self_consts,
-                linear_types,
-            );
+            child_tree.infer_type_params(&parent_and_self_types, &parent_and_self_consts);
         }
     }
 
@@ -229,31 +217,46 @@ impl FnTypeTree {
     }
 
     /// Recursively sets `type_params` for `base`.
-    fn merge_into<Lit: LiteralType>(self, base: &mut FnType<Lit>) {
-        fn recurse<L: LiteralType>(reversed_children: &mut Vec<FnTypeTree>, ty: &mut ValueType<L>) {
+    fn merge_into<Lit: LiteralType>(
+        self,
+        base: &mut FnType<Lit>,
+        constraints: &HashMap<usize, Lit::Constraints>,
+    ) {
+        fn recurse<L: LiteralType>(
+            reversed_children: &mut Vec<FnTypeTree>,
+            ty: &mut ValueType<L>,
+            constraints: &HashMap<usize, L::Constraints>,
+        ) {
             match ty {
                 ValueType::Tuple(elements) => {
                     for element in elements {
-                        recurse(reversed_children, element);
+                        recurse(reversed_children, element, constraints);
                     }
                 }
 
                 ValueType::Slice { element, .. } => {
-                    recurse(reversed_children, element);
+                    recurse(reversed_children, element, constraints);
                 }
 
                 ValueType::Function(fn_type) => {
                     reversed_children
                         .pop()
                         .expect("Missing child")
-                        .merge_into(fn_type);
+                        .merge_into(fn_type, constraints);
                 }
 
                 _ => { /* Do nothing. */ }
             }
         }
 
-        base.type_params = self.type_params.into_iter().collect();
+        base.type_params = self
+            .type_params
+            .into_iter()
+            .map(|idx| {
+                let type_constraints = constraints.get(&idx).cloned().unwrap_or_default();
+                (idx, TypeParamDescription::new(type_constraints))
+            })
+            .collect();
         base.type_params.sort_unstable_by_key(|(idx, _)| *idx);
         base.const_params = self.const_params.into_iter().collect();
         base.const_params.sort_unstable();
@@ -261,7 +264,7 @@ impl FnTypeTree {
         let mut reversed_children = self.children;
         reversed_children.reverse();
         for ty in base.arg_and_return_types_mut() {
-            recurse(&mut reversed_children, ty);
+            recurse(&mut reversed_children, ty, constraints);
         }
     }
 }

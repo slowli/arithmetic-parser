@@ -111,7 +111,7 @@ impl Prelude {
     /// ```
     pub fn if_type<Lit: LiteralType>() -> FnType<Lit> {
         FnType::builder()
-            .with_type_params(iter::once(0), false)
+            .with_type_params(iter::once(0))
             .with_arg(ValueType::Bool)
             .with_arg(ValueType::Param(0))
             .with_arg(ValueType::Param(0))
@@ -138,7 +138,7 @@ impl Prelude {
             .returning(ValueType::Param(0));
 
         FnType::builder()
-            .with_type_params(iter::once(0), false)
+            .with_type_params(iter::once(0))
             .with_arg(ValueType::Param(0)) // state
             .with_arg(condition_fn)
             .with_arg(iter_fn)
@@ -163,7 +163,7 @@ impl Prelude {
 
         FnType::builder()
             .with_const_params(iter::once(0))
-            .with_type_params(0..=1, false)
+            .with_type_params(0..=1)
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
             .with_arg(map_arg)
             .returning(ValueType::Param(1).repeat(TupleLength::Param(0)))
@@ -187,7 +187,7 @@ impl Prelude {
 
         FnType::builder()
             .with_const_params(iter::once(0))
-            .with_type_params(iter::once(0), false)
+            .with_type_params(iter::once(0))
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
             .with_arg(predicate_arg)
             .returning(ValueType::Param(0).repeat(TupleLength::Dynamic))
@@ -213,7 +213,7 @@ impl Prelude {
 
         FnType::builder()
             .with_const_params(iter::once(0))
-            .with_type_params(0..=1, false)
+            .with_type_params(0..=1)
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
             .with_arg(ValueType::Param(1))
             .with_arg(fold_arg)
@@ -234,7 +234,7 @@ impl Prelude {
     pub fn push_type<Lit: LiteralType>() -> FnType<Lit> {
         FnType::builder()
             .with_const_params(iter::once(0))
-            .with_type_params(iter::once(0), false)
+            .with_type_params(iter::once(0))
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
             .with_arg(ValueType::Param(0))
             .returning(ValueType::Param(0).repeat(TupleLength::Dynamic))
@@ -254,7 +254,7 @@ impl Prelude {
     pub fn merge_type<Lit: LiteralType>() -> FnType<Lit> {
         FnType::builder()
             .with_const_params(0..=1)
-            .with_type_params(iter::once(0), false)
+            .with_type_params(iter::once(0))
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(1)))
             .returning(ValueType::Param(0).repeat(TupleLength::Dynamic))
@@ -316,7 +316,7 @@ impl Assertions {
     /// ```
     pub fn assert_eq_type<Lit: LiteralType>() -> FnType<Lit> {
         FnType::builder()
-            .with_type_params(iter::once(0), false)
+            .with_type_params(iter::once(0))
             .with_arg(ValueType::Param(0))
             .with_arg(ValueType::Param(0))
             .returning(ValueType::void())
@@ -342,22 +342,13 @@ mod tests {
     const EXPECTED_PRELUDE_TYPES: &[(&str, &str)] = &[
         ("false", "Bool"),
         ("true", "Bool"),
-        ("if", "fn<T: ?Lin>(Bool, T, T) -> T"),
-        ("while", "fn<T: ?Lin>(T, fn(T) -> Bool, fn(T) -> T) -> T"),
-        (
-            "map",
-            "fn<const N; T: ?Lin, U: ?Lin>([T; N], fn(T) -> U) -> [U; N]",
-        ),
-        (
-            "filter",
-            "fn<const N; T: ?Lin>([T; N], fn(T) -> Bool) -> [T]",
-        ),
-        (
-            "fold",
-            "fn<const N; T: ?Lin, U: ?Lin>([T; N], U, fn(U, T) -> U) -> U",
-        ),
-        ("push", "fn<const N; T: ?Lin>([T; N], T) -> [T]"),
-        ("merge", "fn<const N, M; T: ?Lin>([T; N], [T; M]) -> [T]"),
+        ("if", "fn<T>(Bool, T, T) -> T"),
+        ("while", "fn<T>(T, fn(T) -> Bool, fn(T) -> T) -> T"),
+        ("map", "fn<const N; T, U>([T; N], fn(T) -> U) -> [U; N]"),
+        ("filter", "fn<const N; T>([T; N], fn(T) -> Bool) -> [T]"),
+        ("fold", "fn<const N; T, U>([T; N], U, fn(U, T) -> U) -> U"),
+        ("push", "fn<const N; T>([T; N], T) -> [T]"),
+        ("merge", "fn<const N, M; T>([T; N], [T; M]) -> [T]"),
     ];
 
     #[test]

@@ -302,11 +302,11 @@ impl<'a, Lit: LiteralType> FnTypeAst<'a, Lit> {
         let type_params = self
             .type_params
             .iter()
-            .map(|(name, bounds)| {
+            .map(|(name, _)| {
                 (
                     state.type_param_idx(name.fragment()).unwrap(),
                     TypeParamDescription {
-                        maybe_non_linear: bounds.maybe_non_linear,
+                        constraints: Lit::Constraints::default(), // FIXME
                     },
                 )
             })

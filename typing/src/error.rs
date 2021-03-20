@@ -8,7 +8,7 @@ use arithmetic_parser::{BinaryOp, Spanned, UnsupportedType};
 /// Errors that can occur during type inference.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
-pub enum TypeErrorKind<Lit> {
+pub enum TypeErrorKind<Lit: LiteralType> {
     /// Error trying to unify operands of a binary operation.
     OperandMismatch {
         /// LHS type.
@@ -41,8 +41,13 @@ pub enum TypeErrorKind<Lit> {
     /// Trying to unify a type with a type containing it.
     RecursiveType(ValueType<Lit>),
 
-    /// Non-linear type encountered where linearity is required.
-    NonLinearType(ValueType<Lit>),
+    /// Failure when applying constraint to a type.
+    FailedConstraint {
+        /// Type that fails constraint requirement.
+        ty: ValueType<Lit>,
+        /// Failing constraint(s).
+        constraint: Lit::Constraints,
+    },
 
     /// Language construct not supported by the type inference.
     Unsupported(UnsupportedType),
@@ -60,7 +65,7 @@ pub enum TypeErrorKind<Lit> {
     UnsupportedParam,
 }
 
-impl<Lit: fmt::Display> fmt::Display for TypeErrorKind<Lit> {
+impl<Lit: LiteralType> fmt::Display for TypeErrorKind<Lit> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::OperandMismatch { op, .. } => write!(
@@ -96,7 +101,9 @@ impl<Lit: fmt::Display> fmt::Display for TypeErrorKind<Lit> {
                 ty
             ),
 
-            Self::NonLinearType(ty) => write!(formatter, "Non-linear type: {}", ty),
+            Self::FailedConstraint { ty, constraint } => {
+                write!(formatter, "Type `{}` fails constraint {}", ty, constraint)
+            }
 
             Self::Unsupported(ty) => write!(formatter, "Unsupported {}", ty),
             Self::UnsupportedDestructure => {
@@ -115,6 +122,11 @@ impl<Lit: LiteralType> TypeErrorKind<Lit> {
     /// Creates an error for an lvalue type not supported by the interpreter.
     pub fn unsupported<T: Into<UnsupportedType>>(ty: T) -> Self {
         Self::Unsupported(ty.into())
+    }
+
+    /// Creates a "failed constraint" error.
+    pub fn failed_constraint(ty: ValueType<Lit>, constraint: Lit::Constraints) -> Self {
+        Self::FailedConstraint { ty, constraint }
     }
 
     /// Creates an error from this error kind and the specified span.
@@ -146,11 +158,11 @@ impl<Lit: LiteralType> TypeErrorKind<Lit> {
 
 /// Type error together with the corresponding code span.
 #[derive(Debug, Clone)]
-pub struct TypeError<'a, Lit> {
+pub struct TypeError<'a, Lit: LiteralType> {
     inner: Spanned<'a, TypeErrorKind<Lit>>,
 }
 
-impl<Lit: fmt::Display> fmt::Display for TypeError<'_, Lit> {
+impl<Lit: LiteralType> fmt::Display for TypeError<'_, Lit> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
@@ -168,7 +180,7 @@ impl<Lit: LiteralType> std::error::Error for TypeError<'_, Lit> {
     }
 }
 
-impl<'a, Lit> TypeError<'a, Lit> {
+impl<'a, Lit: LiteralType> TypeError<'a, Lit> {
     /// Gets the kind of this error.
     pub fn kind(&self) -> &TypeErrorKind<Lit> {
         &self.inner.extra

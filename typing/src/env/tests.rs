@@ -2,7 +2,7 @@ use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
 use assert_matches::assert_matches;
 
 use super::*;
-use crate::{Annotated, FnArgs, Num, Prelude, TupleLength};
+use crate::{Annotated, FnArgs, Num, NumConstraints, Prelude, TupleLength};
 
 pub type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
 
@@ -40,7 +40,7 @@ fn hash_fn_type() -> FnType<Num> {
 fn zip_fn_type() -> FnType<Num> {
     FnType::builder()
         .with_const_params(iter::once(0))
-        .with_type_params(0..=1, false)
+        .with_type_params(0..=1)
         .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
         .with_arg(ValueType::Param(1).repeat(TupleLength::Param(0)))
         .returning(ValueType::slice(
@@ -54,7 +54,7 @@ fn zip_fn_type_display() {
     let zip_fn_string = zip_fn_type().to_string();
     assert_eq!(
         zip_fn_string,
-        "fn<const N; T: ?Lin, U: ?Lin>([T; N], [U; N]) -> [(T, U); N]"
+        "fn<const N; T, U>([T; N], [U; N]) -> [(T, U); N]"
     );
 }
 
@@ -109,7 +109,7 @@ fn function_definition() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env.get_type("sign").unwrap().to_string(),
-        "fn<T: ?Lin>(Num, T) -> (Num, Num)"
+        "fn<T>(Num, T) -> (Num, Num)"
     );
 }
 
@@ -130,15 +130,15 @@ fn non_linear_types_in_function() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env.get_type("compare").unwrap().to_string(),
-        "fn<T: ?Lin>(T, T) -> Bool"
+        "fn<T>(T, T) -> Bool"
     );
     assert_eq!(
         type_env.get_type("compare_hash").unwrap().to_string(),
-        "fn<T: ?Lin>(Num, T) -> Bool"
+        "fn<T>(Num, T) -> Bool"
     );
     assert_eq!(
         type_env.get_type("add_hashes").unwrap().to_string(),
-        "fn<T: ?Lin, U: ?Lin>(T, U) -> Num"
+        "fn<T, U>(T, U) -> Num"
     );
 }
 
@@ -227,7 +227,13 @@ fn immediately_invoked_function_with_invalid_arg() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_matches!(err.kind(), TypeErrorKind::NonLinearType(ValueType::Bool));
+    assert_matches!(
+        err.kind(),
+        TypeErrorKind::FailedConstraint {
+            ty: ValueType::Bool,
+            ..
+        }
+    );
 }
 
 #[test]
@@ -291,12 +297,12 @@ fn free_and_bound_type_vars() {
 
     assert_eq!(
         type_env.get_type("concat").unwrap().to_string(),
-        "fn<T: ?Lin>(T) -> fn<U: ?Lin>(U) -> (T, U)"
+        "fn<T>(T) -> fn<U>(U) -> (T, U)"
     );
     assert_eq!(type_env.get_type("x").unwrap().to_string(), "(Num, Num)");
     assert_eq!(
         type_env.get_type("partial").unwrap().to_string(),
-        "fn<U: ?Lin>(U) -> (Num, U)"
+        "fn<U>(U) -> (Num, U)"
     );
     assert_eq!(
         type_env.get_type("y").unwrap().to_string(),
@@ -312,7 +318,7 @@ fn attributing_type_vars_to_correct_fn() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env["double"].to_string(),
-        "fn<T: ?Lin>(T) -> (T, fn() -> (T, T))"
+        "fn<T>(T) -> (T, fn() -> (T, T))"
     );
 }
 
@@ -351,7 +357,7 @@ fn function_as_arg() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env["mapper"].to_string(),
-        "fn<T: ?Lin, U: ?Lin>((T, T), fn(T) -> U) -> (U, U)"
+        "fn<T, U>((T, T), fn(T) -> U) -> (U, U)"
     );
 }
 
@@ -363,7 +369,7 @@ fn function_as_arg_with_more_constraints() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env["mapper"].to_string(),
-        "fn<T: ?Lin, U>((T, T), fn(T) -> U) -> U"
+        "fn<T, U: Lin>((T, T), fn(T) -> U) -> U"
     );
 }
 
@@ -375,7 +381,7 @@ fn function_as_arg_with_even_more_constraints() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env["mapper"].to_string(),
-        "fn<T>((T, T), fn(T) -> T) -> T"
+        "fn<T: Lin>((T, T), fn(T) -> T) -> T"
     );
 }
 
@@ -387,7 +393,7 @@ fn function_arg_with_multiple_args() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env["test_fn"].to_string(),
-        "fn<T: ?Lin>(Num, fn(Num, Num) -> T) -> T"
+        "fn<T>(Num, fn(Num, Num) -> T) -> T"
     );
 }
 
@@ -405,7 +411,7 @@ fn function_as_arg_within_tuple() {
 
     assert_eq!(
         type_env.get_type("test_fn").unwrap().to_string(),
-        "fn<T>((fn(Num) -> T, Num), T) -> T"
+        "fn<T: Lin>((fn(Num) -> T, Num), T) -> T"
     );
 }
 
@@ -525,7 +531,7 @@ fn type_param_is_placed_correctly_with_fn_arg() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env.get_type("foo").unwrap().to_string(),
-        "fn<T: ?Lin>(fn(T) -> T) -> fn(T) -> Bool"
+        "fn<T>(fn(T) -> T) -> fn(T) -> Bool"
     );
 }
 
@@ -538,7 +544,7 @@ fn type_params_in_fn_with_multiple_fn_args() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env.get_type("test").unwrap().to_string(),
-        "fn<T, U: ?Lin>(T, fn(T) -> U, fn(T) -> U) -> Bool"
+        "fn<T: Lin, U>(T, fn(T) -> U, fn(T) -> U) -> Bool"
     );
 }
 
@@ -649,7 +655,7 @@ fn slice_narrowed_to_tuple() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<T: ?Lin, U>((T, T, T), fn(T) -> U) -> U"
+        "fn<T, U: Lin>((T, T, T), fn(T) -> U) -> U"
     );
 }
 
@@ -678,7 +684,7 @@ fn unifying_length_vars() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<const N; T>([T; N], [T; N]) -> [T; N]"
+        "fn<const N; T: Lin>([T; N], [T; N]) -> [T; N]"
     );
 }
 
@@ -761,5 +767,41 @@ fn comparison_type_error() {
         .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
         .unwrap_err();
 
-    assert_matches!(err.kind(), TypeErrorKind::NonLinearType(ValueType::Bool));
+    assert_matches!(
+        err.kind(),
+        TypeErrorKind::FailedConstraint {
+            ty: ValueType::Bool,
+            ..
+        }
+    );
+}
+
+#[test]
+fn constraint_error() {
+    let code = "add = |x, y| x + y; add(1 == 2, 1 == 3)";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env
+        .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
+        .unwrap_err();
+
+    assert_matches!(
+        err.kind(),
+        TypeErrorKind::FailedConstraint {
+            ty: ValueType::Bool,
+            constraint: NumConstraints::LIN,
+        }
+    );
+}
+
+#[test]
+fn constraint_passed_to_wrapping_fn() {
+    let code = "add = |x, y| x + y; |x| add(x, x)";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let double_fn = type_env
+        .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
+        .unwrap();
+
+    assert_eq!(double_fn.to_string(), "fn<T: Lin>(T) -> T");
 }

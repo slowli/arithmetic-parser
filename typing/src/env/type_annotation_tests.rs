@@ -18,7 +18,7 @@ fn type_hint_within_tuple() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<T: ?Lin>((Num, Num), fn(Num) -> T) -> T"
+        "fn<T>((Num, Num), fn(Num) -> T) -> T"
     );
 }
 
@@ -83,7 +83,7 @@ fn valid_type_hint_with_fn_arg() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<const N; T: ?Lin>([Num; N], fn(Num) -> T) -> [T; N]"
+        "fn<const N; T>([Num; N], fn(Num) -> T) -> [T; N]"
     );
 }
 
@@ -137,7 +137,7 @@ fn widening_type_hint_with_generic_slice_arg() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<const N; T>([T; N]) -> [T; N]"
+        "fn<const N; T: Lin>([T; N]) -> [T; N]"
     );
 }
 

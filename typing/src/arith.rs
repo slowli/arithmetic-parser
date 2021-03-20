@@ -5,7 +5,8 @@ use num_traits::{NumOps, Pow};
 use std::ops;
 
 use crate::{
-    LiteralType, MapLiteralType, Num, Substitutions, TypeErrorKind, TypeResult, ValueType,
+    LiteralType, MapLiteralType, Num, NumConstraints, Substitutions, TypeConstraints,
+    TypeErrorKind, TypeResult, ValueType,
 };
 use arithmetic_parser::{BinaryOp, Spanned, UnaryOp};
 
@@ -31,7 +32,7 @@ pub trait TypeArithmetic<Val>: MapLiteralType<Val> {
 ///
 /// Used in [`TypeArithmetic::process_unary_op()`].
 #[derive(Debug, Clone)]
-pub struct UnaryOpSpans<'a, Lit> {
+pub struct UnaryOpSpans<'a, Lit: LiteralType> {
     /// Total span of the operation call.
     pub total: Spanned<'a>,
     /// Spanned unary operation.
@@ -44,7 +45,7 @@ pub struct UnaryOpSpans<'a, Lit> {
 ///
 /// Used in [`TypeArithmetic::process_binary_op()`].
 #[derive(Debug, Clone)]
-pub struct BinaryOpSpans<'a, Lit> {
+pub struct BinaryOpSpans<'a, Lit: LiteralType> {
     /// Total span of the operation call.
     pub total: Spanned<'a>,
     /// Spanned binary operation.
@@ -168,13 +169,16 @@ impl NumArithmetic {
     /// Returns the result type of the binary operation.
     ///
     /// This logic can be reused by other [`TypeArithmetic`] implementations.
-    pub fn unify_binary_op<Lit: LiteralType>(
+    pub fn unify_binary_op<Lit>(
         substitutions: &mut Substitutions<Lit>,
         lhs_ty: &ValueType<Lit>,
         rhs_ty: &ValueType<Lit>,
-    ) -> Result<ValueType<Lit>, TypeErrorKind<Lit>> {
-        substitutions.mark_as_linear(lhs_ty)?;
-        substitutions.mark_as_linear(rhs_ty)?;
+    ) -> Result<ValueType<Lit>, TypeErrorKind<Lit>>
+    where
+        Lit: LiteralType<Constraints = NumConstraints>,
+    {
+        NumConstraints::LIN.apply(lhs_ty, substitutions)?;
+        NumConstraints::LIN.apply(rhs_ty, substitutions)?;
 
         let resolved_lhs_ty = substitutions.fast_resolve(lhs_ty);
         let resolved_rhs_ty = substitutions.fast_resolve(rhs_ty);
@@ -217,8 +221,8 @@ where
             UnaryOp::Not => BoolArithmetic::process_unary_op(substitutions, &spans),
 
             UnaryOp::Neg => {
-                substitutions
-                    .mark_as_linear(inner_ty)
+                NumConstraints::LIN
+                    .apply(inner_ty, substitutions)
                     .map_err(|err| err.with_span(&spans.inner))?;
                 Ok(spans.inner.extra)
             }

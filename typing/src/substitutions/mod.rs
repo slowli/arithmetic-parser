@@ -1,8 +1,8 @@
 //! Substitutions type and dependencies.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-use crate::{FnArgs, FnType, LiteralType, TupleLength, TypeErrorKind, ValueType};
+use crate::{FnArgs, FnType, LiteralType, TupleLength, TypeConstraints, TypeErrorKind, ValueType};
 
 mod fns;
 use self::fns::{ParamMapping, SubstitutionContext};
@@ -12,26 +12,24 @@ mod tests;
 
 /// Set of equations and constraints on type variables.
 #[derive(Debug, Clone)]
-pub struct Substitutions<Lit> {
+pub struct Substitutions<Lit: LiteralType> {
     /// Number of type variables.
     type_var_count: usize,
     /// Type variable equations, encoded as `type_var[key] = value`.
     eqs: HashMap<usize, ValueType<Lit>>,
-    /// Set of type variables known to be linear.
-    // TODO: Use generic constraints container based on `Lit`?
-    lin: HashSet<usize>,
+    constraints: HashMap<usize, Lit::Constraints>,
     /// Number of length variables.
     const_var_count: usize,
     /// Length variable equations.
     length_eqs: HashMap<usize, TupleLength>,
 }
 
-impl<Lit> Default for Substitutions<Lit> {
+impl<Lit: LiteralType> Default for Substitutions<Lit> {
     fn default() -> Self {
         Self {
             type_var_count: 0,
             eqs: HashMap::new(),
-            lin: HashSet::new(),
+            constraints: HashMap::new(),
             const_var_count: 0,
             length_eqs: HashMap::new(),
         }
@@ -39,15 +37,42 @@ impl<Lit> Default for Substitutions<Lit> {
 }
 
 impl<Lit: LiteralType> Substitutions<Lit> {
-    pub(crate) fn linear_types(&self) -> &HashSet<usize> {
-        &self.lin
+    pub(crate) fn constraints(&self) -> &HashMap<usize, Lit::Constraints> {
+        &self.constraints
+    }
+
+    /// Inserts `constraints` for a type var with the specified index and all vars
+    /// it is equivalent to.
+    #[allow(clippy::needless_pass_by_value)] // For future compatibility
+    pub fn insert_constraint(&mut self, var_idx: usize, constraints: Lit::Constraints) {
+        // FIXME: what if some constraints are already present?
+        for idx in self.equivalent_vars(var_idx) {
+            self.constraints.insert(idx, constraints.clone());
+        }
+    }
+
+    /// Returns type var indexes that are equivalent to the provided `var_idx`,
+    /// including `var_idx` itself.
+    fn equivalent_vars(&self, var_idx: usize) -> Vec<usize> {
+        let ty = ValueType::Var(var_idx);
+        let mut ty = &ty;
+        let mut equivalent_vars = vec![];
+
+        while let ValueType::Var(idx) = ty {
+            equivalent_vars.push(*idx);
+            if let Some(resolved) = self.eqs.get(idx) {
+                ty = resolved;
+            } else {
+                break;
+            }
+        }
+        equivalent_vars
     }
 
     /// Resolves the type by following established equality links between type variables.
     pub fn fast_resolve<'a>(&'a self, mut ty: &'a ValueType<Lit>) -> &'a ValueType<Lit> {
         while let ValueType::Var(idx) = ty {
-            let resolved = self.eqs.get(&idx);
-            if let Some(resolved) = resolved {
+            if let Some(resolved) = self.eqs.get(idx) {
                 ty = resolved;
             } else {
                 break;
@@ -278,8 +303,8 @@ impl<Lit: LiteralType> Substitutions<Lit> {
             }
         }
 
-        let instantiated_lhs = self.instantiate_function(lhs)?;
-        let instantiated_rhs = self.instantiate_function(rhs)?;
+        let instantiated_lhs = self.instantiate_function(lhs);
+        let instantiated_rhs = self.instantiate_function(rhs);
 
         if let (FnArgs::List(lhs_list), FnArgs::List(rhs_list)) =
             (&instantiated_lhs.args, &instantiated_rhs.args)
@@ -299,13 +324,10 @@ impl<Lit: LiteralType> Substitutions<Lit> {
     }
 
     /// Instantiates a functional type by replacing all type arguments with new type vars.
-    fn instantiate_function(
-        &mut self,
-        fn_type: &FnType<Lit>,
-    ) -> Result<FnType<Lit>, TypeErrorKind<Lit>> {
+    fn instantiate_function(&mut self, fn_type: &FnType<Lit>) -> FnType<Lit> {
         if !fn_type.is_parametric() {
             // Fast path: just clone the function type.
-            return Ok(fn_type.clone());
+            return fn_type.clone();
         }
 
         // Map type vars in the function into newly created type vars.
@@ -330,12 +352,13 @@ impl<Lit: LiteralType> Substitutions<Lit> {
             fn_type.substitute_type_vars(&mapping, SubstitutionContext::ParamsToVars);
 
         // Copy constraints on the newly generated type vars from the function definition.
-        for original_idx in fn_type.linear_type_params() {
+        for (original_idx, description) in &fn_type.type_params {
             let new_idx = mapping.types[&original_idx];
-            self.mark_as_linear(&ValueType::Var(new_idx))?;
+            self.constraints
+                .insert(new_idx, description.constraints.to_owned());
         }
 
-        Ok(instantiated_fn_type)
+        instantiated_fn_type
     }
 
     /// Checks if a type variable with the specified index is present in `ty`. This method
@@ -417,51 +440,11 @@ impl<Lit: LiteralType> Substitutions<Lit> {
                 self.sanitize_type(Some(var_idx), ty),
             ))
         } else {
-            if self.lin.contains(&var_idx) {
-                self.mark_as_linear(ty)?;
+            if let Some(constraints) = self.constraints.get(&var_idx).cloned() {
+                constraints.apply(ty, self)?;
             }
             self.eqs.insert(var_idx, ty.clone());
             Ok(())
-        }
-    }
-
-    /// Recursively marks `ty` as a linear type.
-    // FIXME: narrow to `Lit = Num`
-    #[allow(clippy::map_err_ignore)] // ignoring the original error is intentional
-    pub fn mark_as_linear(&mut self, ty: &ValueType<Lit>) -> Result<(), TypeErrorKind<Lit>> {
-        match ty {
-            ValueType::Var(idx) => {
-                self.lin.insert(*idx);
-                self.eqs
-                    .get(idx)
-                    .cloned()
-                    .map_or(Ok(()), |subst| self.mark_as_linear(&subst))
-            }
-
-            ValueType::Any | ValueType::Param(_) => unreachable!(),
-
-            ValueType::Bool | ValueType::Function(_) => {
-                let reported_ty = self.sanitize_type(None, ty);
-                Err(TypeErrorKind::NonLinearType(reported_ty))
-            }
-            ValueType::Lit(_) => {
-                // This type is linear by definition.
-                Ok(())
-            }
-
-            ValueType::Tuple(elements) => {
-                for element in elements {
-                    self.mark_as_linear(element).map_err(|_| {
-                        let reported_ty = self.sanitize_type(None, ty);
-                        TypeErrorKind::NonLinearType(reported_ty)
-                    })?;
-                }
-                Ok(())
-            }
-            ValueType::Slice { element, .. } => self.mark_as_linear(element).map_err(|_| {
-                let reported_ty = self.sanitize_type(None, ty);
-                TypeErrorKind::NonLinearType(reported_ty)
-            }),
         }
     }
 

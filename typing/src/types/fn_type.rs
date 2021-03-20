@@ -176,7 +176,7 @@ impl<Lit: LiteralType> FnType<Lit> {
 /// Signature for a slice mapping function:
 ///
 /// ```
-/// # use arithmetic_typing::{FnType, TupleLength, ValueType};
+/// # use arithmetic_typing::{FnType, TupleLength, ValueType, LinConstraints};
 /// # use std::iter;
 /// // Definition of the mapping arg. Note that the definition uses type params,
 /// // but does not declare them (they are bound to the parent function).
@@ -186,13 +186,14 @@ impl<Lit: LiteralType> FnType<Lit> {
 ///
 /// let map_fn_type = <FnType>::builder()
 ///     .with_const_params(iter::once(0))
-///     .with_type_params(0..=1, false)
+///     .with_type_params(iter::once(0))
+///     .with_constrained_type_params(iter::once(1), LinConstraints::LIN)
 ///     .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
 ///     .with_arg(map_fn_arg)
 ///     .returning(ValueType::Param(1).repeat(TupleLength::Param(0)));
 /// assert_eq!(
 ///     map_fn_type.to_string(),
-///     "fn<const N; T: ?Lin, U: ?Lin>([T; N], fn(T) -> U) -> [U; N]"
+///     "fn<const N; T, U: Lin>([T; N], fn(T) -> U) -> [U; N]"
 /// );
 /// ```
 #[derive(Debug)]
@@ -221,12 +222,19 @@ impl<Lit: LiteralType> FnTypeBuilder<Lit> {
     }
 
     /// Adds the type params with the specified `indexes` to the function definition.
-    /// `linear` determines if the type params are linear (i.e., can be used as arguments
-    /// in binary ops).
-    pub fn with_type_params(mut self, indexes: impl Iterator<Item = usize>) -> Self {
-        let description = TypeParamDescription {
-            constraints: Lit::Constraints::default(),
-        };
+    /// The params are unconstrained.
+    pub fn with_type_params(self, indexes: impl Iterator<Item = usize>) -> Self {
+        self.with_constrained_type_params(indexes, Lit::Constraints::default())
+    }
+
+    /// Adds the type params with the specified `indexes` and `constraints`
+    /// to the function definition.
+    pub fn with_constrained_type_params(
+        mut self,
+        indexes: impl Iterator<Item = usize>,
+        constraints: Lit::Constraints,
+    ) -> Self {
+        let description = TypeParamDescription { constraints };
         self.type_params
             .extend(indexes.map(|i| (i, description.clone())));
         self

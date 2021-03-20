@@ -217,12 +217,12 @@ pub trait TypeConstraints:
 /// # Examples
 ///
 /// ```
-/// use arithmetic_typing::impl_singleton_literal_type;
+/// use arithmetic_typing::{impl_singleton_literal_type, LinConstraints};
 ///
 /// #[derive(Debug, Clone, Copy, PartialEq)]
 /// pub struct SomeType;
 ///
-/// impl_singleton_literal_type!(SomeType, "Some");
+/// impl_singleton_literal_type!(SomeType, "Some", LinConstraints);
 /// ```
 #[macro_export]
 macro_rules! impl_singleton_literal_type {

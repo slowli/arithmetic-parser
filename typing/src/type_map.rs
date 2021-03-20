@@ -106,7 +106,7 @@ impl Prelude {
     /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
     ///     Prelude::if_type::<Num>().to_string(),
-    ///     "fn<T: ?Lin>(Bool, T, T) -> T"
+    ///     "fn<T>(Bool, T, T) -> T"
     /// );
     /// ```
     pub fn if_type<Lit: LiteralType>() -> FnType<Lit> {
@@ -126,7 +126,7 @@ impl Prelude {
     /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
     ///     Prelude::while_type::<Num>().to_string(),
-    ///     "fn<T: ?Lin>(T, fn(T) -> Bool, fn(T) -> T) -> T"
+    ///     "fn<T>(T, fn(T) -> Bool, fn(T) -> T) -> T"
     /// );
     /// ```
     pub fn while_type<Lit: LiteralType>() -> FnType<Lit> {
@@ -153,7 +153,7 @@ impl Prelude {
     /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
     ///     Prelude::map_type::<Num>().to_string(),
-    ///     "fn<const N; T: ?Lin, U: ?Lin>([T; N], fn(T) -> U) -> [U; N]"
+    ///     "fn<const N; T, U>([T; N], fn(T) -> U) -> [U; N]"
     /// );
     /// ```
     pub fn map_type<Lit: LiteralType>() -> FnType<Lit> {
@@ -177,7 +177,7 @@ impl Prelude {
     /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
     ///     Prelude::filter_type::<Num>().to_string(),
-    ///     "fn<const N; T: ?Lin>([T; N], fn(T) -> Bool) -> [T]"
+    ///     "fn<const N; T>([T; N], fn(T) -> Bool) -> [T]"
     /// );
     /// ```
     pub fn filter_type<Lit: LiteralType>() -> FnType<Lit> {
@@ -201,7 +201,7 @@ impl Prelude {
     /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
     ///     Prelude::fold_type::<Num>().to_string(),
-    ///     "fn<const N; T: ?Lin, U: ?Lin>([T; N], U, fn(U, T) -> U) -> U"
+    ///     "fn<const N; T, U>([T; N], U, fn(U, T) -> U) -> U"
     /// );
     /// ```
     pub fn fold_type<Lit: LiteralType>() -> FnType<Lit> {
@@ -228,7 +228,7 @@ impl Prelude {
     /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
     ///     Prelude::push_type::<Num>().to_string(),
-    ///     "fn<const N; T: ?Lin>([T; N], T) -> [T]"
+    ///     "fn<const N; T>([T; N], T) -> [T]"
     /// );
     /// ```
     pub fn push_type<Lit: LiteralType>() -> FnType<Lit> {
@@ -248,7 +248,7 @@ impl Prelude {
     /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
     ///     Prelude::merge_type::<Num>().to_string(),
-    ///     "fn<const N, M; T: ?Lin>([T; N], [T; M]) -> [T]"
+    ///     "fn<const N, M; T>([T; N], [T; M]) -> [T]"
     /// );
     /// ```
     pub fn merge_type<Lit: LiteralType>() -> FnType<Lit> {
@@ -311,7 +311,7 @@ impl Assertions {
     /// # use arithmetic_typing::{Assertions, Num};
     /// assert_eq!(
     ///     Assertions::assert_eq_type::<Num>().to_string(),
-    ///     "fn<T: ?Lin>(T, T)"
+    ///     "fn<T>(T, T)"
     /// );
     /// ```
     pub fn assert_eq_type<Lit: LiteralType>() -> FnType<Lit> {

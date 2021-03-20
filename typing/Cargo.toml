@@ -19,3 +19,4 @@ num-traits = "0.2.14"
 
 [dev-dependencies]
 assert_matches = "1.5.0"
+version-sync = "0.9"

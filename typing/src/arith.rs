@@ -5,7 +5,7 @@ use num_traits::{NumOps, Pow};
 use std::ops;
 
 use crate::{
-    LinConstraints, LiteralType, MapLiteralType, Num, Substitutions, TypeConstraints,
+    LinConstraints, LinearType, LiteralType, MapLiteralType, Num, Substitutions, TypeConstraints,
     TypeErrorKind, TypeResult, ValueType,
 };
 use arithmetic_parser::{BinaryOp, Spanned, UnaryOp};
@@ -175,7 +175,7 @@ impl NumArithmetic {
         rhs_ty: &ValueType<Lit>,
     ) -> Result<ValueType<Lit>, TypeErrorKind<Lit>>
     where
-        Lit: LiteralType<Constraints = LinConstraints>,
+        Lit: LinearType,
     {
         LinConstraints::LIN.apply(lhs_ty, substitutions)?;
         LinConstraints::LIN.apply(rhs_ty, substitutions)?;

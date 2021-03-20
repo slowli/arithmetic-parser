@@ -46,7 +46,7 @@ impl<Lit: LiteralType> Substitutions<Lit> {
     pub fn insert_constraint(&mut self, var_idx: usize, constraints: &Lit::Constraints) {
         for idx in self.equivalent_vars(var_idx) {
             let current_constraints = self.constraints.entry(idx).or_default();
-            *current_constraints &= constraints;
+            *current_constraints |= constraints;
         }
     }
 

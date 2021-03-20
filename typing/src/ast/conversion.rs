@@ -7,7 +7,7 @@ use std::{collections::HashMap, convert::TryFrom, fmt, str::FromStr};
 use crate::{
     ast::{FnTypeAst, TupleLengthAst, TypeConstraintsAst, ValueTypeAst},
     types::TypeParamDescription,
-    FnArgs, FnType, LiteralType, TupleLength, TypeConstraints, ValueType,
+    FnArgs, FnType, LiteralType, TupleLength, ValueType,
 };
 use arithmetic_parser::{
     ErrorKind as ParseErrorKind, InputSpan, LocatedSpan, NomResult, SpannedError, StripCode,
@@ -140,15 +140,18 @@ impl<Span: fmt::Debug> std::error::Error for ConversionError<Span> {
 }
 
 impl<'a> TypeConstraintsAst<'a> {
-    fn try_convert<C: TypeConstraints>(&self) -> Result<C, ConversionError<&'a str>> {
+    fn try_convert<Lit>(&self) -> Result<Lit::Constraints, ConversionError<&'a str>>
+    where
+        Lit: LiteralType,
+    {
         self.constraints
             .iter()
-            .try_fold(C::default(), |mut acc, input| {
+            .try_fold(Lit::Constraints::default(), |mut acc, input| {
                 let input_str = *input.fragment();
-                let partial = C::from_str(input_str).map_err(|_| {
+                let partial = Lit::Constraints::from_str(input_str).map_err(|_| {
                     ConversionErrorKind::InvalidConstraint(input_str.to_owned()).with_span(*input)
                 })?;
-                acc &= &partial;
+                acc |= &partial;
                 Ok(acc)
             })
     }
@@ -319,7 +322,7 @@ impl<'a, Lit: LiteralType> FnTypeAst<'a, Lit> {
             .iter()
             .map(|name| state.const_param_idx(name.fragment()).unwrap());
         let type_params = self.type_params.iter().map(|(name, constraints)| {
-            let constraints = constraints.try_convert::<Lit::Constraints>()?;
+            let constraints = constraints.try_convert::<Lit>()?;
             Ok((
                 state.type_param_idx(name.fragment()).unwrap(),
                 TypeParamDescription::new(constraints),

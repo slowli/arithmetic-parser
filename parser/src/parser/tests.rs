@@ -1389,7 +1389,7 @@ fn separated_statements_parse() {
 fn type_hints_when_switched_off() {
     type SimpleGrammar = Untyped<FieldGrammarBase>;
 
-    // Check that expressions without type hints are parsed fine.
+    // Check that expressions without type annotations are parsed fine.
     let input = InputSpan::new("x = 1 + y");
     let (_, stmt) = statement::<SimpleGrammar, Complete>(input).unwrap();
     assert_eq!(

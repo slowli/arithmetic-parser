@@ -7,7 +7,10 @@ use nom::{
 
 use core::fmt;
 
-use crate::{alloc::ToOwned, InputSpan, LocatedSpan, Op, Spanned, StripCode};
+use crate::{
+    alloc::ToOwned, BinaryOp, ExprType, InputSpan, LocatedSpan, LvalueType, Op, Spanned,
+    StatementType, StripCode, UnaryOp,
+};
 
 /// Parsing context.
 // TODO: Add more fine-grained contexts.
@@ -69,7 +72,7 @@ pub enum ErrorKind {
     /// An example of input triggering this error is `1(2, x)`; `1` is used as the function
     /// identifier.
     LiteralName,
-    /// Error parsing type hint.
+    /// Error parsing type annotation.
     Type(anyhow::Error),
     /// Unary or binary operation switched off in the parser features.
     UnsupportedOp(Op),
@@ -107,7 +110,7 @@ impl fmt::Display for ErrorKind {
             Self::Literal(e) => write!(formatter, "Invalid literal: {}", e),
             Self::LiteralName => formatter.write_str("Literal used in place of an identifier"),
 
-            Self::Type(e) => write!(formatter, "Invalid type hint: {}", e),
+            Self::Type(e) => write!(formatter, "Invalid type annotation: {}", e),
 
             Self::UnsupportedOp(op) => write!(
                 formatter,
@@ -162,7 +165,8 @@ impl ErrorKind {
         matches!(self, Self::Incomplete)
     }
 
-    pub(crate) fn with_span<'a, T>(self, span: &Spanned<'a, T>) -> Error<'a> {
+    #[doc(hidden)]
+    pub fn with_span<'a, T>(self, span: &Spanned<'a, T>) -> Error<'a> {
         Error {
             inner: span.copy_with_extra(self),
         }
@@ -289,5 +293,64 @@ impl<'a> ContextError<InputSpan<'a>> for Error<'a> {
 impl<'a> FromExternalError<InputSpan<'a>, ErrorKind> for Error<'a> {
     fn from_external_error(input: InputSpan<'a>, _: NomErrorKind, err: ErrorKind) -> Self {
         Self::new(input, err)
+    }
+}
+
+/// Description of a construct not supported by a certain module (e.g., interpreter
+/// or type inference).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum UnsupportedType {
+    /// Unary operation.
+    UnaryOp(UnaryOp),
+    /// Binary operation.
+    BinaryOp(BinaryOp),
+    /// Expression.
+    Expr(ExprType),
+    /// Statement.
+    Statement(StatementType),
+    /// Lvalue.
+    Lvalue(LvalueType),
+}
+
+impl fmt::Display for UnsupportedType {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnaryOp(op) => write!(formatter, "unary op: {}", op),
+            Self::BinaryOp(op) => write!(formatter, "binary op: {}", op),
+            Self::Expr(expr) => write!(formatter, "expression: {}", expr),
+            Self::Statement(statement) => write!(formatter, "statement: {}", statement),
+            Self::Lvalue(lvalue) => write!(formatter, "lvalue: {}", lvalue),
+        }
+    }
+}
+
+impl From<UnaryOp> for UnsupportedType {
+    fn from(value: UnaryOp) -> Self {
+        Self::UnaryOp(value)
+    }
+}
+
+impl From<BinaryOp> for UnsupportedType {
+    fn from(value: BinaryOp) -> Self {
+        Self::BinaryOp(value)
+    }
+}
+
+impl From<ExprType> for UnsupportedType {
+    fn from(value: ExprType) -> Self {
+        Self::Expr(value)
+    }
+}
+
+impl From<StatementType> for UnsupportedType {
+    fn from(value: StatementType) -> Self {
+        Self::Statement(value)
+    }
+}
+
+impl From<LvalueType> for UnsupportedType {
+    fn from(value: LvalueType) -> Self {
+        Self::Lvalue(value)
     }
 }

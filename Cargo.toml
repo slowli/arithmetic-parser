@@ -1,5 +1,5 @@
 [workspace]
-members = ["parser", "eval", "cli", "test-wasm"]
+members = ["parser", "eval", "cli", "test-wasm", "typing"]
 
 # Speed up big integer crates.
 [profile.dev.package.num-bigint]

@@ -1,5 +1,7 @@
 //! Evaluation errors.
 
+pub use arithmetic_parser::UnsupportedType;
+
 use derive_more::Display;
 
 use core::fmt;
@@ -10,8 +12,7 @@ use crate::{
     ModuleId, Value,
 };
 use arithmetic_parser::{
-    BinaryOp, CodeFragment, ExprType, LocatedSpan, LvalueLen, LvalueType, MaybeSpanned, Op,
-    StatementType, StripCode, UnaryOp,
+    BinaryOp, CodeFragment, LocatedSpan, LvalueLen, MaybeSpanned, Op, StripCode, UnaryOp,
 };
 
 /// Arithmetic errors raised by [`Arithmetic`] operations on numbers.
@@ -303,64 +304,6 @@ impl std::error::Error for ErrorKind {
             Self::Arithmetic(error) => Some(error),
             _ => None,
         }
-    }
-}
-
-/// Description of a construct not supported by the interpreter.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum UnsupportedType {
-    /// Unary operation.
-    UnaryOp(UnaryOp),
-    /// Binary operation.
-    BinaryOp(BinaryOp),
-    /// Expression.
-    Expr(ExprType),
-    /// Statement.
-    Statement(StatementType),
-    /// Lvalue.
-    Lvalue(LvalueType),
-}
-
-impl fmt::Display for UnsupportedType {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::UnaryOp(op) => write!(formatter, "unary op: {}", op),
-            Self::BinaryOp(op) => write!(formatter, "binary op: {}", op),
-            Self::Expr(expr) => write!(formatter, "expression: {}", expr),
-            Self::Statement(statement) => write!(formatter, "statement: {}", statement),
-            Self::Lvalue(lvalue) => write!(formatter, "lvalue: {}", lvalue),
-        }
-    }
-}
-
-impl From<UnaryOp> for UnsupportedType {
-    fn from(value: UnaryOp) -> Self {
-        Self::UnaryOp(value)
-    }
-}
-
-impl From<BinaryOp> for UnsupportedType {
-    fn from(value: BinaryOp) -> Self {
-        Self::BinaryOp(value)
-    }
-}
-
-impl From<ExprType> for UnsupportedType {
-    fn from(value: ExprType) -> Self {
-        Self::Expr(value)
-    }
-}
-
-impl From<StatementType> for UnsupportedType {
-    fn from(value: StatementType) -> Self {
-        Self::Statement(value)
-    }
-}
-
-impl From<LvalueType> for UnsupportedType {
-    fn from(value: LvalueType) -> Self {
-        Self::Lvalue(value)
     }
 }
 

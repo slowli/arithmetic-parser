@@ -62,6 +62,11 @@ jobs:
         with:
           command: run
           args: --manifest-path eval/Cargo.toml --example cyclic_group --features bigint,num-bigint/rand
+      - name: Run typing example
+        uses: actions-rs/cargo@v1
+        with:
+          command: run
+          args: -p arithmetic-typing --example strings
 
   build:
     runs-on: ubuntu-latest
@@ -132,6 +137,11 @@ jobs:
         with:
           command: run
           args: --manifest-path eval/Cargo.toml --example cyclic_group --features bigint,num-bigint/rand
+      - name: Run typing example
+        uses: actions-rs/cargo@v1
+        with:
+          command: run
+          args: -p arithmetic-typing --example strings
 
       - name: Compile WASM
         run: (cd test-wasm; wasm-pack build --target nodejs)
@@ -179,6 +189,7 @@ jobs:
             --extern-html-root-url nom=https://docs.rs/nom/~6.0.0 \
             --extern-html-root-url nom_locate=https://docs.rs/nom_locate/~3.0.0 && \
           cargo rustdoc -p arithmetic-eval --all-features -- --cfg docsrs
+          cargo rustdoc -p arithmetic-typing --all-features -- --cfg docsrs
 
       - name: Check dead links
         run: cargo deadlinks --dir target/doc

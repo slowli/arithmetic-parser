@@ -697,7 +697,26 @@ fn dynamically_sized_slices_basics() {
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(type_env["filtered"].to_string(), "[Num; _]");
-    // FIXME: test that `filtered` works afterwards (doesn't rn)
+
+    let new_code = r#"
+        mapped = filtered.map(|x| x + 3);
+        filtered + mapped; // check that `map` preserves type
+        sum = mapped.fold(0, |acc, x| acc + x);
+    "#;
+    type_env
+        .insert_type("map", Prelude::map_type().into())
+        .insert_type("fold", Prelude::fold_type().into());
+    for line in new_code.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let block = F32Grammar::parse_statements(line).unwrap();
+        type_env.process_statements(&block).unwrap();
+    }
+
+    assert_eq!(type_env["mapped"], type_env["filtered"]);
+    assert_eq!(type_env["sum"], ValueType::NUM);
 }
 
 #[test]

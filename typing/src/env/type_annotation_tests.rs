@@ -227,15 +227,14 @@ fn assigning_to_dynamically_sized_slice() {
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
 
-    // FIXME: we lose dyn constraint on length!
     assert_eq!(type_env["slice"].to_string(), "[Num; _]");
     assert!(!type_env["slice"].is_concrete());
 
-    /*
     let bogus_code = "(x, y) = slice;";
     let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
     let err = type_env.process_statements(&bogus_block).unwrap_err();
-    */
+
+    assert_matches!(err.kind(), TypeErrorKind::IncompatibleLengths(..));
 }
 
 #[test]

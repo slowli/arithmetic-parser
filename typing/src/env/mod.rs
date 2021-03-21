@@ -28,12 +28,14 @@ type FnArgsAndOutput<Lit> = (Vec<ValueType<Lit>>, ValueType<Lit>);
 #[derive(Debug, Clone)]
 pub struct TypeEnvironment<Lit: LiteralType = Num> {
     variables: HashMap<String, ValueType<Lit>>,
+    substitutions: Substitutions<Lit>,
 }
 
 impl<Lit: LiteralType> Default for TypeEnvironment<Lit> {
     fn default() -> Self {
         Self {
             variables: HashMap::new(),
+            substitutions: Substitutions::default(),
         }
     }
 }
@@ -111,6 +113,7 @@ where
                 .into_iter()
                 .map(|(name, ty)| (name.into(), ty.into()))
                 .collect(),
+            substitutions: Substitutions::default(),
         }
     }
 }
@@ -141,7 +144,7 @@ impl<Val, Lit: LiteralType, T> FullArithmetic<Val, Lit> for T where
 struct TypeProcessor<'a, Val, Lit: LiteralType> {
     root_scope: &'a mut TypeEnvironment<Lit>,
     unresolved_root_vars: HashSet<String>,
-    inner_scopes: Vec<TypeEnvironment<Lit>>,
+    inner_scopes: Vec<HashMap<String, ValueType<Lit>>>,
     arithmetic: &'a dyn FullArithmetic<Val, Lit>,
     is_in_function: bool,
 }
@@ -166,7 +169,7 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
         self.inner_scopes
             .iter()
             .rev()
-            .flat_map(|scope| scope.variables.get(name))
+            .flat_map(|scope| scope.get(name))
             .next()
             .or_else(|| self.root_scope.get_type(name))
     }
@@ -175,19 +178,15 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
         let scope = self
             .inner_scopes
             .last_mut()
-            .unwrap_or(&mut *self.root_scope);
-        scope.insert_type(name, ty);
+            .unwrap_or(&mut self.root_scope.variables);
+        scope.insert(name.to_owned(), ty);
 
         if self.inner_scopes.is_empty() {
             self.unresolved_root_vars.insert(name.to_owned());
         }
     }
 
-    fn process_expr_inner<'a, T>(
-        &mut self,
-        substitutions: &mut Substitutions<Lit>,
-        expr: &SpannedExpr<'a, T>,
-    ) -> TypeResult<'a, Lit>
+    fn process_expr_inner<'a, T>(&mut self, expr: &SpannedExpr<'a, T>) -> TypeResult<'a, Lit>
     where
         T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {
@@ -199,14 +198,14 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
             Expr::Tuple(ref terms) => {
                 let term_types: Result<Vec<_>, _> = terms
                     .iter()
-                    .map(|term| self.process_expr_inner(substitutions, term))
+                    .map(|term| self.process_expr_inner(term))
                     .collect();
                 term_types.map(ValueType::Tuple)
             }
 
             Expr::Function { name, args } => {
-                let fn_type = self.process_expr_inner(substitutions, name)?;
-                self.process_fn_call(substitutions, expr, &fn_type, args.iter())
+                let fn_type = self.process_expr_inner(name)?;
+                self.process_fn_call(expr, &fn_type, args.iter())
             }
 
             Expr::Method {
@@ -216,25 +215,23 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
             } => {
                 let fn_type = self.process_var(name)?;
                 let all_args = iter::once(receiver.as_ref()).chain(args);
-                self.process_fn_call(substitutions, expr, &fn_type, all_args)
+                self.process_fn_call(expr, &fn_type, all_args)
             }
 
             Expr::Block(block) => {
-                self.inner_scopes.push(TypeEnvironment::default());
-                let result = self.process_block(substitutions, block);
+                self.inner_scopes.push(HashMap::new());
+                let result = self.process_block(block);
                 self.inner_scopes.pop(); // intentionally called even on failure
                 result
             }
 
             Expr::FnDefinition(def) => self
-                .process_fn_def(substitutions, def)
+                .process_fn_def(def)
                 .map(|fn_type| ValueType::Function(Box::new(fn_type))),
 
-            Expr::Unary { op, inner } => self.process_unary_op(substitutions, expr, *op, inner),
+            Expr::Unary { op, inner } => self.process_unary_op(expr, *op, inner),
 
-            Expr::Binary { lhs, rhs, op } => {
-                self.process_binary_op(substitutions, expr, *op, lhs, rhs)
-            }
+            Expr::Binary { lhs, rhs, op } => self.process_binary_op(expr, *op, lhs, rhs),
 
             _ => Err(TypeErrorKind::unsupported(expr.extra.ty()).with_span(expr)),
         }
@@ -247,33 +244,29 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
         })
     }
 
-    fn process_block<'a, T>(
-        &mut self,
-        substitutions: &mut Substitutions<Lit>,
-        block: &Block<'a, T>,
-    ) -> TypeResult<'a, Lit>
+    fn process_block<'a, T>(&mut self, block: &Block<'a, T>) -> TypeResult<'a, Lit>
     where
         T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {
         for statement in &block.statements {
-            self.process_statement(substitutions, statement)?;
+            self.process_statement(statement)?;
         }
         block.return_value.as_ref().map_or_else(
             || Ok(ValueType::void()),
-            |return_value| self.process_expr_inner(substitutions, return_value),
+            |return_value| self.process_expr_inner(return_value),
         )
     }
 
     /// Processes an lvalue type by replacing `Any` types with newly created type vars.
     fn process_lvalue<'a>(
         &mut self,
-        substitutions: &mut Substitutions<Lit>,
         lvalue: &SpannedLvalue<'a, ValueType<Lit>>,
     ) -> TypeResult<'a, Lit> {
         match &lvalue.extra {
             Lvalue::Variable { ty } => {
                 let mut value_type = ty.as_ref().map_or(ValueType::Some, |ty| ty.extra.clone());
-                substitutions
+                self.root_scope
+                    .substitutions
                     .assign_new_type(&mut value_type)
                     .map_err(|err| err.with_span(ty.as_ref().unwrap()))?;
                 // `unwrap` is safe: an error can only occur with a type annotation present.
@@ -283,7 +276,7 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
             }
 
             Lvalue::Tuple(destructure) => {
-                let element_types = self.process_destructure(substitutions, destructure)?;
+                let element_types = self.process_destructure(destructure)?;
                 Ok(ValueType::Tuple(element_types))
             }
 
@@ -294,7 +287,6 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
     #[inline]
     fn process_destructure<'a>(
         &mut self,
-        substitutions: &mut Substitutions<Lit>,
         destructure: &Destructure<'a, ValueType<Lit>>,
     ) -> Result<Vec<ValueType<Lit>>, TypeError<'a, Lit>> {
         if let Some(middle) = &destructure.middle {
@@ -306,13 +298,12 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
             .start
             .iter()
             .chain(&destructure.end)
-            .map(|element| self.process_lvalue(substitutions, element))
+            .map(|element| self.process_lvalue(element))
             .collect()
     }
 
     fn process_fn_call<'it, 'a: 'it, T>(
         &mut self,
-        substitutions: &mut Substitutions<Lit>,
         call_expr: &SpannedExpr<'a, T>,
         fn_type: &ValueType<Lit>,
         args: impl Iterator<Item = &'it SpannedExpr<'a, T>>,
@@ -320,11 +311,11 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
     where
         T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {
-        let arg_types: Result<Vec<_>, _> = args
-            .map(|arg| self.process_expr_inner(substitutions, arg))
-            .collect();
+        let arg_types: Result<Vec<_>, _> = args.map(|arg| self.process_expr_inner(arg)).collect();
         let arg_types = arg_types?;
-        let return_type = substitutions
+        let return_type = self
+            .root_scope
+            .substitutions
             .unify_fn_call(fn_type, arg_types)
             .map_err(|err| err.with_span(call_expr))?;
 
@@ -334,7 +325,6 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
     #[inline]
     fn process_unary_op<'a, T>(
         &mut self,
-        substitutions: &mut Substitutions<Lit>,
         unary_expr: &SpannedExpr<'a, T>,
         op: Spanned<'a, UnaryOp>,
         inner: &SpannedExpr<'a, T>,
@@ -342,19 +332,19 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
     where
         T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {
-        let inner_ty = self.process_expr_inner(substitutions, inner)?;
+        let inner_ty = self.process_expr_inner(inner)?;
         let spans = UnaryOpSpans {
             total: unary_expr.with_no_extra(),
             op,
             inner: inner.copy_with_extra(inner_ty),
         };
-        self.arithmetic.process_unary_op(substitutions, spans)
+        self.arithmetic
+            .process_unary_op(&mut self.root_scope.substitutions, spans)
     }
 
     #[inline]
     fn process_binary_op<'a, T>(
         &mut self,
-        substitutions: &mut Substitutions<Lit>,
         binary_expr: &SpannedExpr<'a, T>,
         op: Spanned<'a, BinaryOp>,
         lhs: &SpannedExpr<'a, T>,
@@ -363,33 +353,34 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
     where
         T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {
-        let lhs_ty = self.process_expr_inner(substitutions, lhs)?;
-        let rhs_ty = self.process_expr_inner(substitutions, rhs)?;
+        let lhs_ty = self.process_expr_inner(lhs)?;
+        let rhs_ty = self.process_expr_inner(rhs)?;
         let spans = BinaryOpSpans {
             total: binary_expr.with_no_extra(),
             op,
             lhs: lhs.copy_with_extra(lhs_ty),
             rhs: rhs.copy_with_extra(rhs_ty),
         };
-        self.arithmetic.process_binary_op(substitutions, spans)
+        self.arithmetic
+            .process_binary_op(&mut self.root_scope.substitutions, spans)
     }
 
     fn process_fn_def<'a, T>(
         &mut self,
-        substitutions: &mut Substitutions<Lit>,
         def: &FnDefinition<'a, T>,
     ) -> Result<FnType<Lit>, TypeError<'a, Lit>>
     where
         T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {
-        self.inner_scopes.push(TypeEnvironment::default());
+        self.inner_scopes.push(HashMap::new());
         let was_in_function = mem::replace(&mut self.is_in_function, true);
-        let result = self.process_fn_def_inner(substitutions, def);
+        let result = self.process_fn_def_inner(def);
         // Perform basic finalization in any case.
         self.inner_scopes.pop();
         self.is_in_function = was_in_function;
 
         let (arg_types, return_type) = result?;
+        let substitutions = &self.root_scope.substitutions;
         let arg_types = arg_types
             .iter()
             .map(|arg| substitutions.resolve(arg))
@@ -407,32 +398,31 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
     /// Fallible part of fn definition processing.
     fn process_fn_def_inner<'a, T>(
         &mut self,
-        substitutions: &mut Substitutions<Lit>,
         def: &FnDefinition<'a, T>,
     ) -> Result<FnArgsAndOutput<Lit>, TypeError<'a, Lit>>
     where
         T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {
-        let arg_types = self.process_destructure(substitutions, &def.args.extra)?;
-        let return_type = self.process_block(substitutions, &def.body)?;
+        let arg_types = self.process_destructure(&def.args.extra)?;
+        let return_type = self.process_block(&def.body)?;
         Ok((arg_types, return_type))
     }
 
     fn process_statement<'a, T>(
         &mut self,
-        substitutions: &mut Substitutions<Lit>,
         statement: &SpannedStatement<'a, T>,
     ) -> TypeResult<'a, Lit>
     where
         T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {
         match &statement.extra {
-            Statement::Expr(expr) => self.process_expr_inner(substitutions, expr),
+            Statement::Expr(expr) => self.process_expr_inner(expr),
 
             Statement::Assignment { lhs, rhs } => {
-                let rhs_ty = self.process_expr_inner(substitutions, rhs)?;
-                let lhs_ty = self.process_lvalue(substitutions, lhs)?;
-                substitutions
+                let rhs_ty = self.process_expr_inner(rhs)?;
+                let lhs_ty = self.process_lvalue(lhs)?;
+                self.root_scope
+                    .substitutions
                     .unify(&lhs_ty, &rhs_ty)
                     .map(|()| ValueType::void())
                     .map_err(|err| err.with_span(statement))
@@ -446,12 +436,11 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
     where
         T: Grammar<Lit = L, Type = ValueType<Lit>>,
     {
-        let mut substitutions = Substitutions::default();
-
-        let result = self.process_block(&mut substitutions, block);
+        let result = self.process_block(block);
 
         // We need to resolve vars even if an error occurred.
         debug_assert!(self.inner_scopes.is_empty());
+        let substitutions = &self.root_scope.substitutions;
         for (name, var_type) in &mut self.root_scope.variables {
             if self.unresolved_root_vars.contains(name) {
                 *var_type = substitutions.resolve(var_type);

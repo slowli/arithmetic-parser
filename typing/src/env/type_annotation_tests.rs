@@ -227,7 +227,7 @@ fn assigning_to_dynamically_sized_slice() {
     type_env.process_statements(&block).unwrap();
 
     // FIXME: we lose dyn constraint on length!
-    assert_eq!(type_env["slice"].to_string(), "[Num; N]");
+    assert_eq!(type_env["slice"].to_string(), "[Num; _]");
 
     /*
     let bogus_code = "(x, y) = slice;";

@@ -250,8 +250,8 @@ impl<Lit: LiteralType> Substitutions<Lit> {
             (Function(lhs_fn), Function(rhs_fn)) => self.unify_fn_types(lhs_fn, rhs_fn),
 
             (ty, other_ty) => Err(TypeErrorKind::IncompatibleTypes(
-                self.sanitize_type(None, ty),
-                self.sanitize_type(None, other_ty),
+                self.resolve(ty),
+                self.resolve(other_ty),
             )),
         }
     }
@@ -413,14 +413,9 @@ impl<Lit: LiteralType> Substitutions<Lit> {
 
     /// Removes excessive information about type vars. This method is used when types are
     /// provided to `TypeError`.
-    pub(crate) fn sanitize_type(
-        &self,
-        fixed_idx: Option<usize>,
-        ty: &ValueType<Lit>,
-    ) -> ValueType<Lit> {
+    pub(crate) fn sanitize_type(&self, fixed_idx: usize, ty: &ValueType<Lit>) -> ValueType<Lit> {
         match self.resolve(ty) {
-            ValueType::Var(i) if Some(i) == fixed_idx => ValueType::Var(0),
-            ValueType::Var(_) => ValueType::Any,
+            ValueType::Var(i) if i == fixed_idx => ValueType::Param(0),
 
             ValueType::Tuple(elements) => ValueType::Tuple(
                 elements
@@ -464,7 +459,7 @@ impl<Lit: LiteralType> Substitutions<Lit> {
 
         if self.check_occurrence(var_idx, ty) {
             Err(TypeErrorKind::RecursiveType(
-                self.sanitize_type(Some(var_idx), ty),
+                self.sanitize_type(var_idx, ty),
             ))
         } else {
             if let Some(constraints) = self.constraints.get(&var_idx).cloned() {

@@ -102,7 +102,7 @@ impl<Lit: LiteralType> TypeArithmetic<Lit> for BoolArithmetic {
         match op {
             BinaryOp::Eq | BinaryOp::NotEq => {
                 substitutions.unify(&lhs_ty, &rhs_ty).map_err(|err| {
-                    err.into_op_mismatch(substitutions, lhs_ty, rhs_ty, op)
+                    err.into_op_mismatch(spans.lhs.extra, spans.rhs.extra, op)
                         .with_span(&spans.total)
                 })?;
                 Ok(ValueType::Bool)

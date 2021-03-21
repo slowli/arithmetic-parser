@@ -30,12 +30,10 @@ pub enum TupleLength {
 impl fmt::Display for TupleLength {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Some { is_dynamic: false } => formatter.write_str("_"),
+            Self::Some { is_dynamic: false } | Self::Var(_) => formatter.write_str("_"),
             Self::Some { is_dynamic: true } => formatter.write_str("*"),
             Self::Exact(len) => fmt::Display::fmt(len, formatter),
-            Self::Var(idx) | Self::Param(idx) => {
-                formatter.write_str(Self::const_param(*idx).as_ref())
-            }
+            Self::Param(idx) => formatter.write_str(Self::const_param(*idx).as_ref()),
         }
     }
 }
@@ -114,8 +112,8 @@ impl<Lit: LiteralType> PartialEq for ValueType<Lit> {
 impl<Lit: LiteralType> fmt::Display for ValueType<Lit> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Any => formatter.write_str("_"),
-            Self::Var(idx) | Self::Param(idx) => formatter.write_str(type_param(*idx).as_ref()),
+            Self::Any | Self::Var(_) => formatter.write_str("_"),
+            Self::Param(idx) => formatter.write_str(type_param(*idx).as_ref()),
 
             Self::Bool => formatter.write_str("Bool"),
             Self::Lit(num) => fmt::Display::fmt(num, formatter),

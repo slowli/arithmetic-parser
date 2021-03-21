@@ -696,7 +696,7 @@ fn dynamically_sized_slices_basics() {
     type_env.insert_type("filter", Prelude::filter_type().into());
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(type_env["filtered"].to_string(), "[Num; M]");
+    assert_eq!(type_env["filtered"].to_string(), "[Num; _]");
     // FIXME: test that `filtered` works afterwards (doesn't rn)
 }
 

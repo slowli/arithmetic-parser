@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::{substitutions::Substitutions, LiteralType, TupleLength, ValueType};
+use crate::{LiteralType, TupleLength, ValueType};
 use arithmetic_parser::{BinaryOp, Spanned, UnsupportedType};
 
 /// Errors that can occur during type inference.
@@ -138,18 +138,13 @@ impl<Lit: LiteralType> TypeErrorKind<Lit> {
 
     pub(crate) fn into_op_mismatch(
         self,
-        substitutions: &Substitutions<Lit>,
-        lhs_ty: &ValueType<Lit>,
-        rhs_ty: &ValueType<Lit>,
+        lhs_ty: ValueType<Lit>,
+        rhs_ty: ValueType<Lit>,
         op: BinaryOp,
     ) -> Self {
         match self {
             TypeErrorKind::IncompatibleLengths(..) | TypeErrorKind::IncompatibleTypes(..) => {
-                TypeErrorKind::OperandMismatch {
-                    lhs_ty: substitutions.sanitize_type(None, lhs_ty),
-                    rhs_ty: substitutions.sanitize_type(None, rhs_ty),
-                    op,
-                }
+                TypeErrorKind::OperandMismatch { lhs_ty, rhs_ty, op }
             }
             err => err,
         }

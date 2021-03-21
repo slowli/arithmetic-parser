@@ -79,25 +79,27 @@ impl MapLiteralType<String> for StrArithmetic {
     }
 }
 
-impl TypeArithmetic<String> for StrArithmetic {
+impl TypeArithmetic<StrType> for StrArithmetic {
     fn process_unary_op<'a>(
         &self,
-        substitutions: &mut Substitutions<Self::Lit>,
-        spans: UnaryOpSpans<'a, Self::Lit>,
-    ) -> TypeResult<'a, Self::Lit> {
-        BoolArithmetic::process_unary_op(substitutions, &spans)
+        substitutions: &mut Substitutions<StrType>,
+        spans: UnaryOpSpans<'a, StrType>,
+    ) -> TypeResult<'a, StrType> {
+        BoolArithmetic.process_unary_op(substitutions, spans)
     }
 
     fn process_binary_op<'a>(
         &self,
-        substitutions: &mut Substitutions<Self::Lit>,
-        spans: BinaryOpSpans<'a, Self::Lit>,
-    ) -> TypeResult<'a, Self::Lit> {
+        substitutions: &mut Substitutions<StrType>,
+        spans: BinaryOpSpans<'a, StrType>,
+    ) -> TypeResult<'a, StrType> {
         let lhs_ty = &spans.lhs.extra;
         let rhs_ty = &spans.rhs.extra;
         match spans.op.extra {
-            BinaryOp::Add => NumArithmetic::unify_binary_op(substitutions, lhs_ty, rhs_ty)
-                .map_err(|err| err.with_span(&spans.total)),
+            BinaryOp::Add => {
+                NumArithmetic::unify_binary_op(substitutions, lhs_ty, rhs_ty, &LinConstraints::LIN)
+                    .map_err(|err| err.with_span(&spans.total))
+            }
 
             BinaryOp::Gt | BinaryOp::Lt | BinaryOp::Ge | BinaryOp::Le => {
                 substitutions
@@ -109,7 +111,7 @@ impl TypeArithmetic<String> for StrArithmetic {
                 Ok(ValueType::Bool)
             }
 
-            _ => BoolArithmetic::process_binary_op(substitutions, &spans),
+            _ => BoolArithmetic.process_binary_op(substitutions, spans),
         }
     }
 }

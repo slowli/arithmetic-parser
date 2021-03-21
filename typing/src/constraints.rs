@@ -116,6 +116,7 @@ pub trait LinearType: LiteralType<Constraints = LinConstraints> {
 }
 
 impl<Lit: LinearType> TypeConstraints<Lit> for LinConstraints {
+    // TODO: extract common logic for it to be reusable?
     fn apply(
         &self,
         ty: &ValueType<Lit>,

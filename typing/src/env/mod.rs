@@ -9,8 +9,8 @@ use std::{
 
 use crate::{
     arith::{BinaryOpSpans, NumArithmetic, TypeArithmetic, UnaryOpSpans},
-    FnArgs, FnType, LiteralType, Num, Substitutions, TypeError, TypeErrorKind, TypeResult,
-    ValueType,
+    FnArgs, FnType, LiteralType, MapLiteralType, Num, Substitutions, TypeError, TypeErrorKind,
+    TypeResult, ValueType,
 };
 use arithmetic_parser::{
     grammars::Grammar, BinaryOp, Block, Destructure, Expr, FnDefinition, Lvalue, Spanned,
@@ -71,7 +71,7 @@ impl<Lit: LiteralType> TypeEnvironment<Lit> {
     ) -> Result<ValueType<Lit>, TypeError<'a, Lit>>
     where
         T: Grammar<Type = ValueType<Lit>>,
-        NumArithmetic: TypeArithmetic<T::Lit, Lit = Lit>,
+        NumArithmetic: MapLiteralType<T::Lit, Lit = Lit> + TypeArithmetic<Lit>,
     {
         self.process_with_arithmetic(&NumArithmetic::without_comparisons(), block)
     }
@@ -85,7 +85,7 @@ impl<Lit: LiteralType> TypeEnvironment<Lit> {
     ) -> Result<ValueType<Lit>, TypeError<'a, Lit>>
     where
         T: Grammar<Type = ValueType<Lit>>,
-        A: TypeArithmetic<T::Lit, Lit = Lit>,
+        A: MapLiteralType<T::Lit, Lit = Lit> + TypeArithmetic<Lit>,
     {
         TypeProcessor::new(self, arithmetic).process_statements(block)
     }
@@ -126,19 +126,30 @@ where
     }
 }
 
+// Helper trait to wrap type mapper and arithmetic.
+trait FullArithmetic<Val, Lit: LiteralType>:
+    MapLiteralType<Val, Lit = Lit> + TypeArithmetic<Lit>
+{
+}
+
+impl<Val, Lit: LiteralType, T> FullArithmetic<Val, Lit> for T where
+    T: MapLiteralType<Val, Lit = Lit> + TypeArithmetic<Lit>
+{
+}
+
 /// Processor for deriving type information.
-struct TypeProcessor<'a, L, Lit: LiteralType> {
+struct TypeProcessor<'a, Val, Lit: LiteralType> {
     root_scope: &'a mut TypeEnvironment<Lit>,
     unresolved_root_vars: HashSet<String>,
     inner_scopes: Vec<TypeEnvironment<Lit>>,
-    arithmetic: &'a dyn TypeArithmetic<L, Lit = Lit>,
+    arithmetic: &'a dyn FullArithmetic<Val, Lit>,
     is_in_function: bool,
 }
 
-impl<'a, L, Lit: LiteralType> TypeProcessor<'a, L, Lit> {
+impl<'a, Val, Lit: LiteralType> TypeProcessor<'a, Val, Lit> {
     fn new(
         env: &'a mut TypeEnvironment<Lit>,
-        arithmetic: &'a dyn TypeArithmetic<L, Lit = Lit>,
+        arithmetic: &'a dyn FullArithmetic<Val, Lit>,
     ) -> Self {
         Self {
             root_scope: env,

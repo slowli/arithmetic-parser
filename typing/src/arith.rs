@@ -5,27 +5,27 @@ use num_traits::{NumOps, Pow};
 use std::ops;
 
 use crate::{
-    LinConstraints, LinearType, LiteralType, MapLiteralType, Num, Substitutions, TypeConstraints,
+    LinConstraints, LiteralType, MapLiteralType, Num, Substitutions, TypeConstraints,
     TypeErrorKind, TypeResult, ValueType,
 };
 use arithmetic_parser::{BinaryOp, Spanned, UnaryOp};
 
 /// Arithmetic allowing to customize literal types and how unary and binary operations are handled
 /// during type inference.
-pub trait TypeArithmetic<Val>: MapLiteralType<Val> {
+pub trait TypeArithmetic<Lit: LiteralType> {
     /// Handles a unary operation.
     fn process_unary_op<'a>(
         &self,
-        substitutions: &mut Substitutions<Self::Lit>,
-        spans: UnaryOpSpans<'a, Self::Lit>,
-    ) -> TypeResult<'a, Self::Lit>;
+        substitutions: &mut Substitutions<Lit>,
+        spans: UnaryOpSpans<'a, Lit>,
+    ) -> TypeResult<'a, Lit>;
 
     /// Handles a binary operation.
     fn process_binary_op<'a>(
         &self,
-        substitutions: &mut Substitutions<Self::Lit>,
-        spans: BinaryOpSpans<'a, Self::Lit>,
-    ) -> TypeResult<'a, Self::Lit>;
+        substitutions: &mut Substitutions<Lit>,
+        spans: BinaryOpSpans<'a, Lit>,
+    ) -> TypeResult<'a, Lit>;
 }
 
 /// Code spans related to a unary operation.
@@ -58,18 +58,18 @@ pub struct BinaryOpSpans<'a, Lit: LiteralType> {
 
 /// Simplest [`TypeArithmetic`] implementation that defines unary / binary ops only on
 /// the Boolean type. Useful as a building block for more complex arithmetics.
-// TODO: should actually implement `TypeArithmetic`?
 #[derive(Debug, Clone, Copy, Default)]
 pub struct BoolArithmetic;
 
-impl BoolArithmetic {
+impl<Lit: LiteralType> TypeArithmetic<Lit> for BoolArithmetic {
     /// Processes a unary operation.
     ///
     /// - `!` requires a Boolean input and outputs a Boolean.
     /// - Other operations fail with [`TypeErrorKind::Unsupported`].
-    pub fn process_unary_op<'a, Lit: LiteralType>(
+    fn process_unary_op<'a>(
+        &self,
         substitutions: &mut Substitutions<Lit>,
-        spans: &UnaryOpSpans<'a, Lit>,
+        spans: UnaryOpSpans<'a, Lit>,
     ) -> TypeResult<'a, Lit> {
         let op = spans.op.extra;
         match op {
@@ -90,9 +90,10 @@ impl BoolArithmetic {
     ///   These ops return `Bool`.
     /// - `&&` and `||` require LHS and RHS to have `Bool` type. These ops return `Bool`.
     /// - Other operations fail with [`TypeErrorKind::Unsupported`].
-    pub fn process_binary_op<'a, Lit: LiteralType>(
+    fn process_binary_op<'a>(
+        &self,
         substitutions: &mut Substitutions<Lit>,
-        spans: &BinaryOpSpans<'a, Lit>,
+        spans: BinaryOpSpans<'a, Lit>,
     ) -> TypeResult<'a, Lit> {
         let op = spans.op.extra;
         let lhs_ty = &spans.lhs.extra;
@@ -165,20 +166,18 @@ impl NumArithmetic {
         }
     }
 
-    /// Applies [binary ops](#binary-ops) logic to the given LHS and RHS types.
+    /// Applies [binary ops](#binary-ops) logic to unify the given LHS and RHS types.
     /// Returns the result type of the binary operation.
     ///
     /// This logic can be reused by other [`TypeArithmetic`] implementations.
-    pub fn unify_binary_op<Lit>(
+    pub fn unify_binary_op<Lit: LiteralType>(
         substitutions: &mut Substitutions<Lit>,
         lhs_ty: &ValueType<Lit>,
         rhs_ty: &ValueType<Lit>,
-    ) -> Result<ValueType<Lit>, TypeErrorKind<Lit>>
-    where
-        Lit: LinearType,
-    {
-        LinConstraints::LIN.apply(lhs_ty, substitutions)?;
-        LinConstraints::LIN.apply(rhs_ty, substitutions)?;
+        constraints: &Lit::Constraints,
+    ) -> Result<ValueType<Lit>, TypeErrorKind<Lit>> {
+        constraints.apply(lhs_ty, substitutions)?;
+        constraints.apply(rhs_ty, substitutions)?;
 
         let resolved_lhs_ty = substitutions.fast_resolve(lhs_ty);
         let resolved_rhs_ty = substitutions.fast_resolve(rhs_ty);
@@ -190,6 +189,69 @@ impl NumArithmetic {
                 substitutions.unify(lhs_ty, rhs_ty)?;
                 Ok(lhs_ty.to_owned())
             }
+        }
+    }
+
+    /// FIXME
+    pub fn process_unary_op<'a, Lit: LiteralType>(
+        substitutions: &mut Substitutions<Lit>,
+        spans: UnaryOpSpans<'a, Lit>,
+        constraints: &Lit::Constraints,
+    ) -> TypeResult<'a, Lit> {
+        let op = spans.op.extra;
+        let inner_ty = &spans.inner.extra;
+
+        match op {
+            UnaryOp::Not => BoolArithmetic.process_unary_op(substitutions, spans),
+
+            UnaryOp::Neg => {
+                constraints
+                    .apply(inner_ty, substitutions)
+                    .map_err(|err| err.with_span(&spans.inner))?;
+                Ok(spans.inner.extra)
+            }
+
+            _ => Err(TypeErrorKind::unsupported(op).with_span(&spans.op)),
+        }
+    }
+
+    /// FIXME
+    pub fn process_binary_op<'a, Lit: LiteralType>(
+        substitutions: &mut Substitutions<Lit>,
+        spans: BinaryOpSpans<'a, Lit>,
+        comparable_type: Option<Lit>,
+        constraints: &Lit::Constraints,
+    ) -> TypeResult<'a, Lit> {
+        let op = spans.op.extra;
+        let lhs_ty = &spans.lhs.extra;
+        let rhs_ty = &spans.rhs.extra;
+
+        match op {
+            BinaryOp::And | BinaryOp::Or | BinaryOp::Eq | BinaryOp::NotEq => {
+                BoolArithmetic.process_binary_op(substitutions, spans)
+            }
+
+            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Power => {
+                Self::unify_binary_op(substitutions, lhs_ty, rhs_ty, constraints)
+                    .map_err(|err| err.with_span(&spans.total))
+            }
+
+            BinaryOp::Ge | BinaryOp::Le | BinaryOp::Lt | BinaryOp::Gt => {
+                if let Some(ty) = comparable_type {
+                    let ty = ValueType::Lit(ty);
+                    substitutions
+                        .unify(&ty, lhs_ty)
+                        .map_err(|err| err.with_span(&spans.lhs))?;
+                    substitutions
+                        .unify(&ty, rhs_ty)
+                        .map_err(|err| err.with_span(&spans.rhs))?;
+                    Ok(ValueType::Bool)
+                } else {
+                    Err(TypeErrorKind::unsupported(op).with_span(&spans.op))
+                }
+            }
+
+            _ => Err(TypeErrorKind::unsupported(op).with_span(&spans.op)),
         }
     }
 }
@@ -205,66 +267,25 @@ where
     }
 }
 
-impl<Val> TypeArithmetic<Val> for NumArithmetic
-where
-    Val: Clone + NumOps + PartialEq + ops::Neg<Output = Val> + Pow<Val, Output = Val>,
-{
+impl TypeArithmetic<Num> for NumArithmetic {
     fn process_unary_op<'a>(
         &self,
-        substitutions: &mut Substitutions<Self::Lit>,
-        spans: UnaryOpSpans<'a, Self::Lit>,
-    ) -> TypeResult<'a, Self::Lit> {
-        let op = spans.op.extra;
-        let inner_ty = &spans.inner.extra;
-
-        match op {
-            UnaryOp::Not => BoolArithmetic::process_unary_op(substitutions, &spans),
-
-            UnaryOp::Neg => {
-                LinConstraints::LIN
-                    .apply(inner_ty, substitutions)
-                    .map_err(|err| err.with_span(&spans.inner))?;
-                Ok(spans.inner.extra)
-            }
-
-            _ => Err(TypeErrorKind::unsupported(op).with_span(&spans.op)),
-        }
+        substitutions: &mut Substitutions<Num>,
+        spans: UnaryOpSpans<'a, Num>,
+    ) -> TypeResult<'a, Num> {
+        Self::process_unary_op(substitutions, spans, &LinConstraints::LIN)
     }
 
     fn process_binary_op<'a>(
         &self,
-        substitutions: &mut Substitutions<Self::Lit>,
-        spans: BinaryOpSpans<'a, Self::Lit>,
-    ) -> TypeResult<'a, Self::Lit> {
-        let op = spans.op.extra;
-        let lhs_ty = &spans.lhs.extra;
-        let rhs_ty = &spans.rhs.extra;
-
-        match op {
-            BinaryOp::And | BinaryOp::Or | BinaryOp::Eq | BinaryOp::NotEq => {
-                BoolArithmetic::process_binary_op(substitutions, &spans)
-            }
-
-            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Power => {
-                Self::unify_binary_op(substitutions, lhs_ty, rhs_ty)
-                    .map_err(|err| err.with_span(&spans.total))
-            }
-
-            BinaryOp::Ge | BinaryOp::Le | BinaryOp::Lt | BinaryOp::Gt => {
-                if self.comparisons_enabled {
-                    substitutions
-                        .unify(&ValueType::Lit(Num), lhs_ty)
-                        .map_err(|err| err.with_span(&spans.lhs))?;
-                    substitutions
-                        .unify(&ValueType::Lit(Num), rhs_ty)
-                        .map_err(|err| err.with_span(&spans.rhs))?;
-                    Ok(ValueType::Bool)
-                } else {
-                    Err(TypeErrorKind::unsupported(op).with_span(&spans.op))
-                }
-            }
-
-            _ => Err(TypeErrorKind::unsupported(op).with_span(&spans.op)),
-        }
+        substitutions: &mut Substitutions<Num>,
+        spans: BinaryOpSpans<'a, Num>,
+    ) -> TypeResult<'a, Num> {
+        let comparable_type = if self.comparisons_enabled {
+            Some(Num)
+        } else {
+            None
+        };
+        Self::process_binary_op(substitutions, spans, comparable_type, &LinConstraints::LIN)
     }
 }

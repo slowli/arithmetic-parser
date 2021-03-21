@@ -142,7 +142,7 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
             // `Var`s are taken care of previously.
             ValueType::Var(_) | ValueType::Lit(NumOrBytesType::Num) => Ok(()),
 
-            ValueType::Any | ValueType::Param(_) => unreachable!(),
+            ValueType::Some | ValueType::Param(_) => unreachable!(),
 
             ValueType::Bool | ValueType::Function(_) => Err(TypeErrorKind::failed_constraint(
                 ty.to_owned(),

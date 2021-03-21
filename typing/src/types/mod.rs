@@ -51,9 +51,8 @@ impl TupleLength {
 /// Possible value type.
 #[derive(Debug, Clone)]
 pub enum ValueType<Lit: LiteralType = Num> {
-    /// Any type.
-    // TODO: rename to `Some`
-    Any,
+    /// Wildcard type.
+    Some,
     /// Boolean.
     // TODO: consider uniting literals and `Bool` as primitive types
     Bool,
@@ -82,7 +81,7 @@ pub enum ValueType<Lit: LiteralType = Num> {
 impl<Lit: LiteralType> PartialEq for ValueType<Lit> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Any, _) | (_, Self::Any) | (Self::Bool, Self::Bool) => true,
+            (Self::Some, _) | (_, Self::Some) | (Self::Bool, Self::Bool) => true,
 
             (Self::Lit(x), Self::Lit(y)) => x == y,
 
@@ -112,7 +111,7 @@ impl<Lit: LiteralType> PartialEq for ValueType<Lit> {
 impl<Lit: LiteralType> fmt::Display for ValueType<Lit> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Any | Self::Var(_) => formatter.write_str("_"),
+            Self::Some | Self::Var(_) => formatter.write_str("_"),
             Self::Param(idx) => formatter.write_str(type_param(*idx).as_ref()),
 
             Self::Bool => formatter.write_str("Bool"),

@@ -580,7 +580,7 @@ fn function_passed_as_arg_invalid_arg_type() {
     assert_incompatible_types(
         &err.kind(),
         &ValueType::Lit(Num),
-        &ValueType::Tuple(vec![ValueType::Any; 2]),
+        &ValueType::Tuple(vec![ValueType::Some; 2]),
     );
 }
 

@@ -140,7 +140,7 @@ impl<Lit: LinearType> TypeConstraints<Lit> for LinConstraints {
 
             ValueType::Lit(lit) if lit.is_linear() => Ok(()),
 
-            ValueType::Any | ValueType::Param(_) => unreachable!(),
+            ValueType::Some | ValueType::Param(_) => unreachable!(),
 
             ValueType::Bool | ValueType::Function(_) | ValueType::Lit(_) => Err(
                 TypeErrorKind::failed_constraint(ty.to_owned(), self.to_owned()),

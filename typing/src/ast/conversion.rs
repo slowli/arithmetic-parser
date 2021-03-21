@@ -208,7 +208,7 @@ impl<'a, Lit: LiteralType> ValueTypeAst<'a, Lit> {
         state: &ConversionState<'a>,
     ) -> Result<ValueType<Lit>, ConversionError<&'a str>> {
         Ok(match self {
-            Self::Any => ValueType::Any,
+            Self::Any => ValueType::Some,
             Self::Bool => ValueType::Bool,
             Self::Lit(num) => ValueType::Lit(num.to_owned()),
 
@@ -480,7 +480,7 @@ mod tests {
             tuple_type,
             ValueType::Tuple(vec![
                 ValueType::Lit(Num),
-                ValueType::Tuple(vec![ValueType::Bool, ValueType::Any]),
+                ValueType::Tuple(vec![ValueType::Bool, ValueType::Some]),
             ])
         );
 
@@ -491,7 +491,7 @@ mod tests {
         };
         assert_eq!(
             element_ty,
-            ValueType::Tuple(vec![ValueType::Lit(Num), ValueType::Any])
+            ValueType::Tuple(vec![ValueType::Lit(Num), ValueType::Some])
         );
         assert_matches!(length, TupleLength::Some { is_dynamic: false });
     }

@@ -272,7 +272,7 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
     ) -> TypeResult<'a, Lit> {
         match &lvalue.extra {
             Lvalue::Variable { ty } => {
-                let mut value_type = ty.as_ref().map_or(ValueType::Any, |ty| ty.extra.clone());
+                let mut value_type = ty.as_ref().map_or(ValueType::Some, |ty| ty.extra.clone());
                 substitutions
                     .assign_new_type(&mut value_type)
                     .map_err(|err| err.with_span(ty.as_ref().unwrap()))?;

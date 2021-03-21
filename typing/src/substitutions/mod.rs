@@ -135,7 +135,7 @@ impl<Lit: LiteralType> Substitutions<Lit> {
             // Checked previously when considering a function.
             ValueType::Param(_) => unreachable!(),
 
-            ValueType::Any => {
+            ValueType::Some => {
                 *ty = ValueType::Var(self.type_var_count);
                 self.type_var_count += 1;
             }
@@ -476,7 +476,7 @@ impl<Lit: LiteralType> Substitutions<Lit> {
         definition: &ValueType<Lit>,
         arg_types: Vec<ValueType<Lit>>,
     ) -> Result<ValueType<Lit>, TypeErrorKind<Lit>> {
-        let mut return_type = ValueType::Any;
+        let mut return_type = ValueType::Some;
         self.assign_new_type(&mut return_type)?;
 
         let called_fn_type = FnType::new(FnArgs::List(arg_types), return_type.clone());

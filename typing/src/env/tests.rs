@@ -65,7 +65,7 @@ fn statements_with_a_block() {
 
     let mut type_env: TypeEnvironment<Num> = vec![("x", ValueType::Lit(Num))].into_iter().collect();
     type_env.process_statements(&block).unwrap();
-    assert_eq!(*type_env.get_type("y").unwrap(), ValueType::Lit(Num));
+    assert_eq!(*type_env.get("y").unwrap(), ValueType::Lit(Num));
 }
 
 #[test]
@@ -104,11 +104,11 @@ fn function_definition() {
 
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("hash", hash_fn_type().into());
+    type_env.insert("hash", hash_fn_type().into());
 
     type_env.process_statements(&block).unwrap();
     assert_eq!(
-        type_env.get_type("sign").unwrap().to_string(),
+        type_env.get("sign").unwrap().to_string(),
         "fn<T>(Num, T) -> (Num, Num)"
     );
 }
@@ -125,19 +125,19 @@ fn non_linear_types_in_function() {
     let mut type_env = TypeEnvironment::new();
 
     let hash_type = hash_fn_type();
-    type_env.insert_type("hash", ValueType::Function(Box::new(hash_type)));
+    type_env.insert("hash", ValueType::Function(Box::new(hash_type)));
 
     type_env.process_statements(&block).unwrap();
     assert_eq!(
-        type_env.get_type("compare").unwrap().to_string(),
+        type_env.get("compare").unwrap().to_string(),
         "fn<T>(T, T) -> Bool"
     );
     assert_eq!(
-        type_env.get_type("compare_hash").unwrap().to_string(),
+        type_env.get("compare_hash").unwrap().to_string(),
         "fn<T>(Num, T) -> Bool"
     );
     assert_eq!(
-        type_env.get_type("add_hashes").unwrap().to_string(),
+        type_env.get("add_hashes").unwrap().to_string(),
         "fn<T, U>(T, U) -> Num"
     );
 }
@@ -193,10 +193,10 @@ fn method_basics() {
         FnArgs::List(vec![ValueType::Lit(Num), ValueType::Lit(Num)]),
         ValueType::Lit(Num),
     );
-    type_env.insert_type("plus", plus_type.into());
+    type_env.insert("plus", plus_type.into());
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(*type_env.get_type("bar").unwrap(), ValueType::Lit(Num));
+    assert_eq!(*type_env.get("bar").unwrap(), ValueType::Lit(Num));
 }
 
 #[test]
@@ -217,7 +217,7 @@ fn immediately_invoked_function() {
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(*type_env.get_type("flag").unwrap(), ValueType::Bool);
+    assert_eq!(*type_env.get("flag").unwrap(), ValueType::Bool);
 }
 
 #[test]
@@ -244,7 +244,7 @@ fn variable_scoping() {
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
-        *type_env.get_type("y").unwrap(),
+        *type_env.get("y").unwrap(),
         ValueType::Tuple(vec![ValueType::Lit(Num), ValueType::Lit(Num)])
     );
 }
@@ -296,16 +296,16 @@ fn free_and_bound_type_vars() {
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
-        type_env.get_type("concat").unwrap().to_string(),
+        type_env.get("concat").unwrap().to_string(),
         "fn<T>(T) -> fn<U>(U) -> (T, U)"
     );
-    assert_eq!(type_env.get_type("x").unwrap().to_string(), "(Num, Num)");
+    assert_eq!(type_env.get("x").unwrap().to_string(), "(Num, Num)");
     assert_eq!(
-        type_env.get_type("partial").unwrap().to_string(),
+        type_env.get("partial").unwrap().to_string(),
         "fn<U>(U) -> (Num, U)"
     );
     assert_eq!(
-        type_env.get_type("y").unwrap().to_string(),
+        type_env.get("y").unwrap().to_string(),
         "((Num, Num), (Num, (Num, Num)))"
     );
 }
@@ -410,7 +410,7 @@ fn function_as_arg_within_tuple() {
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
-        type_env.get_type("test_fn").unwrap().to_string(),
+        type_env.get("test_fn").unwrap().to_string(),
         "fn<T: Lin>((fn(Num) -> T, Num), T) -> T"
     );
 }
@@ -425,7 +425,7 @@ fn function_instantiations_are_independent() {
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(type_env.get_type("x").unwrap().to_string(), "(Num, Bool)");
+    assert_eq!(type_env.get("x").unwrap().to_string(), "(Num, Bool)");
 }
 
 #[test]
@@ -441,11 +441,11 @@ fn function_passed_as_arg() {
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
-        type_env.get_type("tuple").unwrap().to_string(),
+        type_env.get("tuple").unwrap().to_string(),
         "(Num, Num)"
     );
     assert_eq!(
-        type_env.get_type("tuple_of_fns").unwrap().to_string(),
+        type_env.get("tuple_of_fns").unwrap().to_string(),
         "(fn() -> Num, fn() -> Num)"
     );
 }
@@ -462,7 +462,7 @@ fn curried_function_passed_as_arg() {
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
-        type_env.get_type("r").unwrap().to_string(),
+        type_env.get("r").unwrap().to_string(),
         "((Bool, Num), (Bool, Num))"
     );
 }
@@ -482,7 +482,7 @@ fn parametric_fn_passed_as_arg_with_different_constraints() {
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(type_env.get_type("r").unwrap().to_string(), "(Num, Num)");
+    assert_eq!(type_env.get("r").unwrap().to_string(), "(Num, Num)");
 }
 
 #[test]
@@ -530,7 +530,7 @@ fn type_param_is_placed_correctly_with_fn_arg() {
 
     type_env.process_statements(&block).unwrap();
     assert_eq!(
-        type_env.get_type("foo").unwrap().to_string(),
+        type_env.get("foo").unwrap().to_string(),
         "fn<T>(fn(T) -> T) -> fn(T) -> Bool"
     );
 }
@@ -543,7 +543,7 @@ fn type_params_in_fn_with_multiple_fn_args() {
 
     type_env.process_statements(&block).unwrap();
     assert_eq!(
-        type_env.get_type("test").unwrap().to_string(),
+        type_env.get("test").unwrap().to_string(),
         "fn<T: Lin, U>(T, fn(T) -> U, fn(T) -> U) -> Bool"
     );
 }
@@ -602,7 +602,7 @@ fn unifying_slice_and_tuple() {
     let code = "xs = (1, 2).map(|x| x + 5);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("map", Prelude::map_type().into());
+    type_env.insert("map", Prelude::map_type().into());
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
@@ -616,7 +616,7 @@ fn function_accepting_slices() {
     let code = "inc = |xs| xs.map(|x| x + 5); z = (1, 2, 3).inc();";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("map", Prelude::map_type().into());
+    type_env.insert("map", Prelude::map_type().into());
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
@@ -637,7 +637,7 @@ fn incorrect_arg_in_slices() {
     let code = "(1, 2 == 3).map(|x| x);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("map", Prelude::map_type().into());
+    type_env.insert("map", Prelude::map_type().into());
 
     let err = type_env.process_statements(&block).unwrap_err();
 
@@ -650,7 +650,7 @@ fn slice_narrowed_to_tuple() {
     let code = "foo = |xs, fn| { (x, y, _) = xs.map(fn); y - x };";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("map", Prelude::map_type().into());
+    type_env.insert("map", Prelude::map_type().into());
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
@@ -664,7 +664,7 @@ fn unifying_length_vars_error() {
     let code = "(1, 2).zip_with((3, 4, 5));";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("zip_with", zip_fn_type().into());
+    type_env.insert("zip_with", zip_fn_type().into());
 
     let err = type_env.process_statements(&block).unwrap_err();
     assert_matches!(
@@ -678,8 +678,8 @@ fn unifying_length_vars() {
     let code = "foo = |xs, ys| xs.zip_with(ys).map(|(x, y)| x + y);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("map", Prelude::map_type().into());
-    type_env.insert_type("zip_with", zip_fn_type().into());
+    type_env.insert("map", Prelude::map_type().into());
+    type_env.insert("zip_with", zip_fn_type().into());
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
@@ -693,7 +693,7 @@ fn dynamically_sized_slices_basics() {
     let code = "filtered = (1, 2, 3).filter(|x| x != 1);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("filter", Prelude::filter_type().into());
+    type_env.insert("filter", Prelude::filter_type().into());
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(type_env["filtered"].to_string(), "[Num; _]");
@@ -704,8 +704,8 @@ fn dynamically_sized_slices_basics() {
         sum = mapped.fold(0, |acc, x| acc + x);
     "#;
     type_env
-        .insert_type("map", Prelude::map_type().into())
-        .insert_type("fold", Prelude::fold_type().into());
+        .insert("map", Prelude::map_type().into())
+        .insert("fold", Prelude::fold_type().into());
     for line in new_code.lines() {
         let line = line.trim();
         if line.is_empty() {
@@ -729,8 +729,8 @@ fn dynamically_sized_slices_with_map() {
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("filter", Prelude::filter_type().into());
-    type_env.insert_type("map", Prelude::map_type().into());
+    type_env.insert("filter", Prelude::filter_type().into());
+    type_env.insert("map", Prelude::map_type().into());
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
@@ -744,7 +744,7 @@ fn cannot_destructure_dynamic_slice() {
     let code = "(x, y) = (1, 2, 3).filter(|x| x != 1);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("filter", Prelude::filter_type().into());
+    type_env.insert("filter", Prelude::filter_type().into());
     let err = type_env.process_statements(&block).unwrap_err();
 
     assert_matches!(
@@ -758,7 +758,7 @@ fn comparisons_when_switched_off() {
     let code = "(1, 2, 3).filter(|x| x > 1)";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("filter", Prelude::filter_type().into());
+    type_env.insert("filter", Prelude::filter_type().into());
     let err = type_env.process_statements(&block).unwrap_err();
 
     assert_eq!(*err.span().fragment(), ">");
@@ -770,7 +770,7 @@ fn comparisons_when_switched_on() {
     let code = "(1, 2, 3).filter(|x| x > 1)";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("filter", Prelude::filter_type().into());
+    type_env.insert("filter", Prelude::filter_type().into());
     let output = type_env
         .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
         .unwrap();

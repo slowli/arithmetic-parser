@@ -232,7 +232,7 @@ fn main() -> anyhow::Result<()> {
     let ast = Parser::parse_statements(code)?;
 
     let mut env = TypeEnvironment::<NumOrBytesType>::new();
-    env.insert_type("fold", Prelude::fold_type().into());
+    env.insert("fold", Prelude::fold_type().into());
     env.process_with_arithmetic(&NumOrBytesArithmetic, &ast)?;
 
     assert_eq!(env["x"], ValueType::Lit(NumOrBytesType::Num));
@@ -269,7 +269,7 @@ fn main() -> anyhow::Result<()> {
         "1:0: Type `fn(Num) -> Num` fails constraint Sum"
     );
 
-    env.insert_type("true", ValueType::Bool);
+    env.insert("true", ValueType::Bool);
     let bogus_code = "((1, true), (2, true)).sum((3, true))";
     let bogus_ast = Parser::parse_statements(bogus_code)?;
     let err = env

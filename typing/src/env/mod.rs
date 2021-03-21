@@ -47,7 +47,7 @@ impl<Lit: LiteralType> TypeEnvironment<Lit> {
     }
 
     /// Gets type of the specified variable.
-    pub fn get_type(&self, name: &str) -> Option<&ValueType<Lit>> {
+    pub fn get(&self, name: &str) -> Option<&ValueType<Lit>> {
         self.variables.get(name)
     }
 
@@ -57,7 +57,17 @@ impl<Lit: LiteralType> TypeEnvironment<Lit> {
     }
 
     /// Sets type of a variable.
-    pub fn insert_type(&mut self, name: &str, value_type: ValueType<Lit>) -> &mut Self {
+    ///
+    /// # Panics
+    ///
+    /// - Will panic if `value_type` is not [concrete](ValueType::is_concrete()). Non-concrete
+    ///   types are tied to the environment; inserting them into an env is a logical error.
+    pub fn insert(&mut self, name: &str, value_type: ValueType<Lit>) -> &mut Self {
+        assert!(
+            value_type.is_concrete(),
+            "Type {} is not concrete",
+            value_type
+        );
         self.variables.insert(name.to_owned(), value_type);
         self
     }
@@ -97,9 +107,24 @@ impl<Lit: LiteralType> ops::Index<&str> for TypeEnvironment<Lit> {
     type Output = ValueType<Lit>;
 
     fn index(&self, name: &str) -> &Self::Output {
-        self.get_type(name)
+        self.get(name)
             .unwrap_or_else(|| panic!("Variable `{}` is not defined", name))
     }
+}
+
+fn convert_iter<Lit: LiteralType, S, Ty, I>(
+    iter: I,
+) -> impl Iterator<Item = (String, ValueType<Lit>)>
+where
+    I: IntoIterator<Item = (S, Ty)>,
+    S: Into<String>,
+    Ty: Into<ValueType<Lit>>,
+{
+    iter.into_iter().map(|(name, ty)| {
+        let ty: ValueType<Lit> = ty.into();
+        assert!(ty.is_concrete(), "Type {} is not concrete", ty);
+        (name.into(), ty)
+    })
 }
 
 impl<Lit: LiteralType, S, Ty> FromIterator<(S, Ty)> for TypeEnvironment<Lit>
@@ -109,10 +134,7 @@ where
 {
     fn from_iter<I: IntoIterator<Item = (S, Ty)>>(iter: I) -> Self {
         Self {
-            variables: iter
-                .into_iter()
-                .map(|(name, ty)| (name.into(), ty.into()))
-                .collect(),
+            variables: convert_iter(iter).collect(),
             substitutions: Substitutions::default(),
         }
     }
@@ -124,8 +146,7 @@ where
     Ty: Into<ValueType<Lit>>,
 {
     fn extend<I: IntoIterator<Item = (S, Ty)>>(&mut self, iter: I) {
-        self.variables
-            .extend(iter.into_iter().map(|(name, ty)| (name.into(), ty.into())))
+        self.variables.extend(convert_iter(iter))
     }
 }
 
@@ -171,7 +192,7 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
             .rev()
             .flat_map(|scope| scope.get(name))
             .next()
-            .or_else(|| self.root_scope.get_type(name))
+            .or_else(|| self.root_scope.get(name))
     }
 
     fn insert_type(&mut self, name: &str, ty: ValueType<Lit>) {

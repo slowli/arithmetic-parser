@@ -39,7 +39,7 @@
 //! let ast = Parser::parse_statements(code)?;
 //!
 //! let mut env = TypeEnvironment::new();
-//! env.insert_type("fold", Prelude::fold_type().into());
+//! env.insert("fold", Prelude::fold_type().into());
 //!
 //! // Evaluate `code` to get the inferred `sum` function signature.
 //! let output_type = env.process_statements(&ast)?;

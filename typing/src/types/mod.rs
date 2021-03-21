@@ -6,16 +6,17 @@ use crate::{LiteralType, Num};
 
 mod fn_type;
 
-pub(crate) use self::fn_type::TypeParamDescription;
+pub(crate) use self::fn_type::{ConstParamDescription, TypeParamDescription};
 pub use self::fn_type::{FnArgs, FnType, FnTypeBuilder};
 
 /// Length of a tuple.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TupleLength {
-    /// Dynamic length that can vary at runtime.
-    Dynamic,
     /// Wildcard length.
-    Any,
+    Some {
+        /// Is this length dynamic (can vary at runtime)?
+        is_dynamic: bool,
+    },
     /// Exact known length.
     Exact(usize),
     /// Length parameter in a function definition.
@@ -29,8 +30,8 @@ pub enum TupleLength {
 impl fmt::Display for TupleLength {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Dynamic => formatter.write_str("*"),
-            Self::Any => formatter.write_str("_"),
+            Self::Some { is_dynamic: false } => formatter.write_str("_"),
+            Self::Some { is_dynamic: true } => formatter.write_str("*"),
             Self::Exact(len) => fmt::Display::fmt(len, formatter),
             Self::Var(idx) | Self::Param(idx) => {
                 formatter.write_str(Self::const_param(*idx).as_ref())
@@ -53,6 +54,7 @@ impl TupleLength {
 #[derive(Debug, Clone)]
 pub enum ValueType<Lit: LiteralType = Num> {
     /// Any type.
+    // TODO: rename to `Some`
     Any,
     /// Boolean.
     // TODO: consider uniting literals and `Bool` as primitive types
@@ -130,12 +132,6 @@ impl<Lit: LiteralType> fmt::Display for ValueType<Lit> {
                 formatter.write_str(")")
             }
 
-            Self::Slice {
-                element,
-                length: TupleLength::Dynamic,
-            } => {
-                write!(formatter, "[{}]", element)
-            }
             Self::Slice {
                 element,
                 length: TupleLength::Exact(len),

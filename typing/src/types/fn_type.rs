@@ -1,12 +1,15 @@
 //! Functional type (`FnType`) and closely related types.
 
-use std::{
-    collections::{HashMap, HashSet},
-    fmt,
-};
+use std::{collections::HashMap, fmt};
 
 use super::type_param;
 use crate::{LiteralType, Num, TupleLength, ValueType};
+
+/// Description of a constant parameter.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct ConstParamDescription {
+    pub is_dynamic: bool,
+}
 
 /// Description of a type parameter.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -32,7 +35,7 @@ pub struct FnType<Lit: LiteralType = Num> {
     pub(crate) type_params: Vec<(usize, TypeParamDescription<Lit::Constraints>)>,
     /// Indexes of const params associated with this function. The indexes should
     /// monotonically increase (necessary for correct display) and must be distinct.
-    pub(crate) const_params: Vec<usize>,
+    pub(crate) const_params: Vec<(usize, ConstParamDescription)>,
 }
 
 impl<Lit: fmt::Display + LiteralType> fmt::Display for FnType<Lit> {
@@ -44,8 +47,11 @@ impl<Lit: fmt::Display + LiteralType> fmt::Display for FnType<Lit> {
 
             if !self.const_params.is_empty() {
                 formatter.write_str("const ")?;
-                for (i, &var_idx) in self.const_params.iter().enumerate() {
-                    formatter.write_str(TupleLength::const_param(var_idx).as_ref())?;
+                for (i, (var_idx, description)) in self.const_params.iter().enumerate() {
+                    formatter.write_str(TupleLength::const_param(*var_idx).as_ref())?;
+                    if description.is_dynamic {
+                        formatter.write_str("*")?;
+                    }
                     if i + 1 < self.const_params.len() {
                         formatter.write_str(", ")?;
                     }
@@ -87,8 +93,11 @@ impl<Lit: LiteralType> FnType<Lit> {
         }
     }
 
-    pub(crate) fn with_const_params(mut self, mut params: Vec<usize>) -> Self {
-        params.sort_unstable();
+    pub(crate) fn with_const_params(
+        mut self,
+        mut params: Vec<(usize, ConstParamDescription)>,
+    ) -> Self {
+        params.sort_unstable_by_key(|(idx, _)| *idx);
         self.const_params = params;
         self
     }
@@ -200,7 +209,7 @@ impl<Lit: LiteralType> FnType<Lit> {
 pub struct FnTypeBuilder<Lit: LiteralType = Num> {
     args: FnArgs<Lit>,
     type_params: HashMap<usize, TypeParamDescription<Lit::Constraints>>,
-    const_params: HashSet<usize>,
+    const_params: HashMap<usize, ConstParamDescription>,
 }
 
 impl<Lit: LiteralType> Default for FnTypeBuilder<Lit> {
@@ -208,7 +217,7 @@ impl<Lit: LiteralType> Default for FnTypeBuilder<Lit> {
         Self {
             args: FnArgs::List(Vec::new()),
             type_params: HashMap::new(),
-            const_params: HashSet::new(),
+            const_params: HashMap::new(),
         }
     }
 }
@@ -217,7 +226,17 @@ impl<Lit: LiteralType> Default for FnTypeBuilder<Lit> {
 impl<Lit: LiteralType> FnTypeBuilder<Lit> {
     /// Adds the const params with the specified `indexes` to the function definition.
     pub fn with_const_params(mut self, indexes: impl Iterator<Item = usize>) -> Self {
-        self.const_params.extend(indexes);
+        let static_description = ConstParamDescription { is_dynamic: false };
+        self.const_params
+            .extend(indexes.map(|idx| (idx, static_description)));
+        self
+    }
+
+    /// FIXME
+    pub fn with_dynamic_len_params(mut self, indexes: impl Iterator<Item = usize>) -> Self {
+        let dyn_description = ConstParamDescription { is_dynamic: true };
+        self.const_params
+            .extend(indexes.map(|idx| (idx, dyn_description)));
         self
     }
 

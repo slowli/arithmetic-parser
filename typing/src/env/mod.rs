@@ -398,7 +398,7 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
 
         let mut fn_type = FnType::new(FnArgs::List(arg_types), return_type);
         if !self.is_in_function {
-            fn_type.finalize(substitutions.constraints());
+            fn_type.finalize(substitutions);
         }
 
         Ok(fn_type)

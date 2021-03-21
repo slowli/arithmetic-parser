@@ -2,16 +2,19 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{types::TypeParamDescription, FnArgs, FnType, LiteralType, TupleLength, ValueType};
+use crate::types::ConstParamDescription;
+use crate::{
+    types::TypeParamDescription, FnArgs, FnType, LiteralType, Substitutions, TupleLength, ValueType,
+};
 
 impl<Lit: LiteralType> FnType<Lit> {
     /// Performs final transformations on this type, transforming all of its type vars
     /// into type params.
-    pub(crate) fn finalize(&mut self, constraints: &HashMap<usize, Lit::Constraints>) {
+    pub(crate) fn finalize(&mut self, substitutions: &Substitutions<Lit>) {
         let mut tree = FnTypeTree::new(self);
         tree.infer_type_params(&HashSet::new(), &HashSet::new());
         let mapping = tree.create_param_mapping();
-        tree.merge_into(self, constraints);
+        tree.merge_into(self, substitutions);
 
         *self = self.substitute_type_vars(&mapping, SubstitutionContext::VarsToParams);
     }
@@ -54,9 +57,8 @@ impl<Lit: LiteralType> FnType<Lit> {
         };
         let return_type = self.return_type.substitute_type_vars(mapping, context);
 
-        let const_params = self.const_params.iter().map(|idx| (*idx, ()));
-        let const_params =
-            map_params(const_params, &mapping.constants, context).map(|(idx, _)| idx);
+        let const_params = self.const_params.iter().copied();
+        let const_params = map_params(const_params, &mapping.constants, context);
         let type_params = self.type_params.iter().cloned();
         let type_params = map_params(type_params, &mapping.types, context);
 
@@ -220,35 +222,36 @@ impl FnTypeTree {
     fn merge_into<Lit: LiteralType>(
         self,
         base: &mut FnType<Lit>,
-        constraints: &HashMap<usize, Lit::Constraints>,
+        substitutions: &Substitutions<Lit>,
     ) {
         fn recurse<L: LiteralType>(
             reversed_children: &mut Vec<FnTypeTree>,
             ty: &mut ValueType<L>,
-            constraints: &HashMap<usize, L::Constraints>,
+            substitutions: &Substitutions<L>,
         ) {
             match ty {
                 ValueType::Tuple(elements) => {
                     for element in elements {
-                        recurse(reversed_children, element, constraints);
+                        recurse(reversed_children, element, substitutions);
                     }
                 }
 
                 ValueType::Slice { element, .. } => {
-                    recurse(reversed_children, element, constraints);
+                    recurse(reversed_children, element, substitutions);
                 }
 
                 ValueType::Function(fn_type) => {
                     reversed_children
                         .pop()
                         .expect("Missing child")
-                        .merge_into(fn_type, constraints);
+                        .merge_into(fn_type, substitutions);
                 }
 
                 _ => { /* Do nothing. */ }
             }
         }
 
+        let constraints = substitutions.type_constraints();
         base.type_params = self
             .type_params
             .into_iter()
@@ -258,13 +261,22 @@ impl FnTypeTree {
             })
             .collect();
         base.type_params.sort_unstable_by_key(|(idx, _)| *idx);
-        base.const_params = self.const_params.into_iter().collect();
-        base.const_params.sort_unstable();
+
+        let dynamic_lengths = substitutions.dyn_lengths();
+        base.const_params = self
+            .const_params
+            .into_iter()
+            .map(|idx| {
+                let is_dynamic = dynamic_lengths.contains(&idx);
+                (idx, ConstParamDescription { is_dynamic })
+            })
+            .collect();
+        base.const_params.sort_unstable_by_key(|(idx, _)| *idx);
 
         let mut reversed_children = self.children;
         reversed_children.reverse();
         for ty in base.arg_and_return_types_mut() {
-            recurse(&mut reversed_children, ty, constraints);
+            recurse(&mut reversed_children, ty, substitutions);
         }
     }
 }

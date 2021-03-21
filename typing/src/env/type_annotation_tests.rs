@@ -3,7 +3,7 @@
 use assert_matches::assert_matches;
 
 use super::{
-    tests::{assert_incompatible_types, F32Grammar},
+    tests::{assert_incompatible_types, zip_fn_type, F32Grammar},
     *,
 };
 use crate::{Num, Prelude, TupleLength};
@@ -226,7 +226,14 @@ fn assigning_to_dynamically_sized_slice() {
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(type_env["slice"].to_string(), "[Num]");
+    // FIXME: we lose dyn constraint on length!
+    assert_eq!(type_env["slice"].to_string(), "[Num; N]");
+
+    /*
+    let bogus_code = "(x, y) = slice;";
+    let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
+    let err = type_env.process_statements(&bogus_block).unwrap_err();
+    */
 }
 
 #[test]
@@ -249,4 +256,73 @@ fn assigning_to_a_slice_and_then_narrowing() {
         type_env["slice_fn"].to_string(),
         "fn((Num, Num, Num)) -> Num"
     );
+}
+
+#[test]
+fn adding_dynamically_typed_slices() {
+    let code = r#"
+        x: [Num] = (1, 2);
+        y: [Num] = (3, 4, 5);
+        x + y
+    "#;
+
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env.process_statements(&block).unwrap_err();
+
+    assert_matches!(err.kind(), TypeErrorKind::IncompatibleLengths(..));
+}
+
+#[test]
+fn unifying_dynamic_slices_error() {
+    let code = r#"
+        x: [Num] = (1, 2);
+        y: [Num] = (3, 4, 5);
+        x.zip_with(y)
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.insert_type("zip_with", zip_fn_type().into());
+    let err = type_env.process_statements(&block).unwrap_err();
+
+    assert_matches!(err.kind(), TypeErrorKind::IncompatibleLengths(..));
+}
+
+#[test]
+fn unifying_dynamic_slices_in_arithmetic_op_error() {
+    let code = r#"
+        xs: [Num] = (1, 2);
+        ys: [Num] = (3, 4, 5);
+        xs + xs; // should work (dyn lengths are the same)
+        xs + xs.map(|x| x - 1); // should work (`map` retains length)
+        xs + ys
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.insert_type("map", Prelude::map_type().into());
+    let err = type_env.process_statements(&block).unwrap_err();
+
+    assert_eq!(*err.span().fragment(), "xs + ys");
+    assert_matches!(err.kind(), TypeErrorKind::IncompatibleLengths(..));
+}
+
+#[test]
+fn unifying_dynamic_slices_in_fn_error() {
+    let code = r#"
+        // This should work because the dynamic length is the same.
+        xs = (1, 2, 3).filter(|x| x != 2);
+        xs.zip_with(xs);
+        // This one shouldn't because dynamic lengths are different.
+        xs.zip_with(xs.filter(|x| x == 1));
+    "#;
+
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env
+        .insert_type("zip_with", zip_fn_type().into())
+        .insert_type("filter", Prelude::filter_type().into());
+    let err = type_env.process_statements(&block).unwrap_err();
+
+    assert_eq!(*err.span().fragment(), "xs.zip_with(xs.filter(|x| x == 1))");
+    assert_matches!(err.kind(), TypeErrorKind::IncompatibleLengths(..));
 }

@@ -187,10 +187,11 @@ impl Prelude {
 
         FnType::builder()
             .with_const_params(iter::once(0))
+            .with_dynamic_len_params(iter::once(1))
             .with_type_params(iter::once(0))
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
             .with_arg(predicate_arg)
-            .returning(ValueType::Param(0).repeat(TupleLength::Dynamic))
+            .returning(ValueType::Param(0).repeat(TupleLength::Param(1)))
     }
 
     /// Returns type of the `fold` function.
@@ -234,10 +235,11 @@ impl Prelude {
     pub fn push_type<Lit: LiteralType>() -> FnType<Lit> {
         FnType::builder()
             .with_const_params(iter::once(0))
+            .with_dynamic_len_params(iter::once(1))
             .with_type_params(iter::once(0))
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
             .with_arg(ValueType::Param(0))
-            .returning(ValueType::Param(0).repeat(TupleLength::Dynamic))
+            .returning(ValueType::Param(0).repeat(TupleLength::Param(1)))
     }
 
     /// Returns type of the `merge` function.
@@ -254,10 +256,11 @@ impl Prelude {
     pub fn merge_type<Lit: LiteralType>() -> FnType<Lit> {
         FnType::builder()
             .with_const_params(0..=1)
+            .with_dynamic_len_params(iter::once(2))
             .with_type_params(iter::once(0))
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(1)))
-            .returning(ValueType::Param(0).repeat(TupleLength::Dynamic))
+            .returning(ValueType::Param(0).repeat(TupleLength::Param(2)))
     }
 
     /// Returns an iterator over all type definitions in the `Prelude`.
@@ -345,10 +348,13 @@ mod tests {
         ("if", "fn<T>(Bool, T, T) -> T"),
         ("while", "fn<T>(T, fn(T) -> Bool, fn(T) -> T) -> T"),
         ("map", "fn<const N; T, U>([T; N], fn(T) -> U) -> [U; N]"),
-        ("filter", "fn<const N; T>([T; N], fn(T) -> Bool) -> [T]"),
+        (
+            "filter",
+            "fn<const N, M*; T>([T; N], fn(T) -> Bool) -> [T; M]",
+        ),
         ("fold", "fn<const N; T, U>([T; N], U, fn(U, T) -> U) -> U"),
-        ("push", "fn<const N; T>([T; N], T) -> [T]"),
-        ("merge", "fn<const N, M; T>([T; N], [T; M]) -> [T]"),
+        ("push", "fn<const N, M*; T>([T; N], T) -> [T; M]"),
+        ("merge", "fn<const N, M, L*; T>([T; N], [T; M]) -> [T; L]"),
     ];
 
     #[test]

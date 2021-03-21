@@ -11,7 +11,20 @@ fn fn_const_params() {
     assert!(rest.fragment().is_empty());
     assert!(type_params.is_empty());
     assert_eq!(const_params.len(), 1);
-    assert_eq!(*const_params[0].fragment(), "N");
+    assert_eq!(*const_params[0].0.fragment(), "N");
+    assert_eq!(const_params[0].1, ConstType::Static);
+}
+
+#[test]
+fn fn_const_dyn_params() {
+    let input = InputSpan::new("<const N, M*>");
+    let (rest, (const_params, type_params)) = fn_params(input).unwrap();
+
+    assert!(rest.fragment().is_empty());
+    assert!(type_params.is_empty());
+    assert_eq!(const_params.len(), 2);
+    assert_eq!(*const_params[1].0.fragment(), "M");
+    assert_eq!(const_params[1].1, ConstType::Dynamic);
 }
 
 #[test]
@@ -53,7 +66,7 @@ fn fn_params_mixed() {
 
     assert!(rest.fragment().is_empty());
     assert_eq!(const_params.len(), 1);
-    assert_eq!(*const_params[0].fragment(), "N");
+    assert_eq!(*const_params[0].0.fragment(), "N");
     assert_eq!(
         type_params
             .iter()

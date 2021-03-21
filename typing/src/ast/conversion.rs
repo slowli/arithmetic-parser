@@ -240,8 +240,8 @@ impl<'a, Lit: LiteralType> ValueTypeAst<'a, Lit> {
                         })?;
                         TupleLength::Param(const_param)
                     }
-                    TupleLengthAst::Any => TupleLength::Any,
-                    TupleLengthAst::Dynamic => TupleLength::Dynamic,
+                    TupleLengthAst::Any => TupleLength::Some { is_dynamic: false },
+                    TupleLengthAst::Dynamic => TupleLength::Some { is_dynamic: true },
                 };
                 ValueType::Slice {
                     element: Box::new(element.try_convert(state)?),
@@ -304,7 +304,7 @@ impl<'a, Lit: LiteralType> FnTypeAst<'a, Lit> {
         mut state: ConversionState<'a>,
     ) -> Result<FnType<Lit>, ConversionError<&'a str>> {
         // Check params for consistency.
-        for param in &self.const_params {
+        for (param, _) in &self.const_params {
             state.insert_const_param(*param)?;
         }
         for (param, _) in &self.type_params {
@@ -317,10 +317,13 @@ impl<'a, Lit: LiteralType> FnTypeAst<'a, Lit> {
             .map(|arg| arg.try_convert(&state))
             .collect();
 
-        let const_params = self
-            .const_params
-            .iter()
-            .map(|name| state.const_param_idx(name.fragment()).unwrap());
+        let const_params = self.const_params.iter().map(|(name, ty)| {
+            (
+                state.const_param_idx(name.fragment()).unwrap(),
+                (*ty).into(),
+            )
+        });
+
         let type_params = self.type_params.iter().map(|(name, constraints)| {
             let constraints = constraints.try_convert::<Lit>()?;
             Ok((
@@ -490,7 +493,7 @@ mod tests {
             element_ty,
             ValueType::Tuple(vec![ValueType::Lit(Num), ValueType::Any])
         );
-        assert_matches!(length, TupleLength::Any);
+        assert_matches!(length, TupleLength::Some { is_dynamic: false });
     }
 
     #[test]

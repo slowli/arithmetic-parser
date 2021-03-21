@@ -15,7 +15,7 @@ use nom::{
     sequence::{delimited, preceded, terminated, tuple},
 };
 
-use crate::{LiteralType, Num};
+use crate::{types::ConstParamDescription, LiteralType, Num};
 use arithmetic_parser::{InputSpan, NomResult};
 
 mod conversion;
@@ -23,6 +23,23 @@ mod conversion;
 mod tests;
 
 pub use self::conversion::{ConversionError, ConversionErrorKind};
+
+/// FIXME
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ConstType {
+    /// FIXME
+    Static,
+    /// FIXME
+    Dynamic,
+}
+
+impl From<ConstType> for ConstParamDescription {
+    fn from(value: ConstType) -> Self {
+        Self {
+            is_dynamic: value == ConstType::Dynamic,
+        }
+    }
+}
 
 /// Type annotation after parsing.
 ///
@@ -116,7 +133,7 @@ impl<'a, Lit: LiteralType> ValueTypeAst<'a, Lit> {
 #[non_exhaustive]
 pub struct FnTypeAst<'a, Lit = Num> {
     /// Constant params; e.g., `N` in `fn<const N>([Num; N]) -> Num`.
-    pub const_params: Vec<InputSpan<'a>>,
+    pub const_params: Vec<(InputSpan<'a>, ConstType)>,
     /// Type params together with their bounds. E.g., `T` in `fn<T>(T, T) -> T`.
     pub type_params: Vec<(InputSpan<'a>, TypeConstraintsAst<'a>)>,
     /// Function arguments.
@@ -233,16 +250,27 @@ fn type_params(input: InputSpan<'_>) -> NomResult<'_, Vec<(InputSpan<'_>, TypeCo
 }
 
 type FnParams<'a> = (
-    Vec<InputSpan<'a>>,
+    Vec<(InputSpan<'a>, ConstType)>,
     Vec<(InputSpan<'a>, TypeConstraintsAst<'a>)>,
 );
 
 /// Function params, including `<>` brackets.
 fn fn_params(input: InputSpan<'_>) -> NomResult<'_, FnParams> {
     let semicolon = tuple((ws, tag_char(';'), ws));
+
+    let const_param = tuple((
+        ident,
+        map(opt(tag_char('*')), |ty| {
+            if ty.is_some() {
+                ConstType::Dynamic
+            } else {
+                ConstType::Static
+            }
+        }),
+    ));
     let const_params = preceded(
         terminated(tag("const"), ws),
-        separated_list1(comma_sep, ident),
+        separated_list1(comma_sep, const_param),
     );
 
     let params_parser = alt((

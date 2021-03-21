@@ -37,7 +37,7 @@ fn hash_fn_type() -> FnType<Num> {
 /// ```text
 /// fn<const N; T, U>([T; N], [U; N]) -> [(T, U); N]
 /// ```
-fn zip_fn_type() -> FnType<Num> {
+pub fn zip_fn_type() -> FnType<Num> {
     FnType::builder()
         .with_const_params(iter::once(0))
         .with_type_params(0..=1)
@@ -696,7 +696,8 @@ fn dynamically_sized_slices_basics() {
     type_env.insert_type("filter", Prelude::filter_type().into());
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(type_env["filtered"].to_string(), "[Num]");
+    assert_eq!(type_env["filtered"].to_string(), "[Num; M]");
+    // FIXME: test that `filtered` works afterwards (doesn't rn)
 }
 
 #[test]
@@ -715,7 +716,7 @@ fn dynamically_sized_slices_with_map() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<const N>([Num; N]) -> [Num]"
+        "fn<const N, M*>([Num; N]) -> [Num; M]"
     );
 }
 
@@ -729,7 +730,7 @@ fn cannot_destructure_dynamic_slice() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::IncompatibleLengths(TupleLength::Exact(2), TupleLength::Dynamic)
+        TypeErrorKind::IncompatibleLengths(TupleLength::Exact(2), TupleLength::Var(_))
     );
 }
 
@@ -755,7 +756,10 @@ fn comparisons_when_switched_on() {
         .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
         .unwrap();
 
-    assert_eq!(output, ValueType::Lit(Num).repeat(TupleLength::Dynamic));
+    assert_matches!(
+        output,
+        ValueType::Slice { element, length: TupleLength::Var(_) } if *element == ValueType::NUM
+    );
 }
 
 #[test]

@@ -1,6 +1,6 @@
 //! Substitutions type and dependencies.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{FnArgs, FnType, LiteralType, TupleLength, TypeConstraints, TypeErrorKind, ValueType};
 
@@ -22,6 +22,7 @@ pub struct Substitutions<Lit: LiteralType> {
     const_var_count: usize,
     /// Length variable equations.
     length_eqs: HashMap<usize, TupleLength>,
+    dyn_lengths: HashSet<usize>,
 }
 
 impl<Lit: LiteralType> Default for Substitutions<Lit> {
@@ -32,13 +33,18 @@ impl<Lit: LiteralType> Default for Substitutions<Lit> {
             constraints: HashMap::new(),
             const_var_count: 0,
             length_eqs: HashMap::new(),
+            dyn_lengths: HashSet::new(),
         }
     }
 }
 
 impl<Lit: LiteralType> Substitutions<Lit> {
-    pub(crate) fn constraints(&self) -> &HashMap<usize, Lit::Constraints> {
+    pub(crate) fn type_constraints(&self) -> &HashMap<usize, Lit::Constraints> {
         &self.constraints
+    }
+
+    pub(crate) fn dyn_lengths(&self) -> &HashSet<usize> {
+        &self.dyn_lengths
     }
 
     /// Inserts `constraints` for a type var with the specified index and all vars
@@ -156,7 +162,10 @@ impl<Lit: LiteralType> Substitutions<Lit> {
                 }
             }
             ValueType::Slice { element, length } => {
-                if matches!(length, TupleLength::Any) {
+                if let TupleLength::Some { is_dynamic } = length {
+                    if *is_dynamic {
+                        self.dyn_lengths.insert(self.const_var_count);
+                    }
                     *length = TupleLength::Var(self.const_var_count);
                     self.const_var_count += 1;
                 }
@@ -260,18 +269,29 @@ impl<Lit: LiteralType> Substitutions<Lit> {
                 // Lengths are already unified.
                 Ok(())
             }
+
+            // Different dyn lengths cannot be unified.
+            (TupleLength::Var(x), TupleLength::Var(y))
+                if self.dyn_lengths.contains(&x) && self.dyn_lengths.contains(&y) =>
+            {
+                Err(TypeErrorKind::IncompatibleLengths(
+                    resolved_lhs,
+                    resolved_rhs,
+                ))
+            }
+
             (TupleLength::Exact(x), TupleLength::Exact(y)) if x == y => {
                 // Lengths are known to be the same.
                 Ok(())
             }
 
-            (TupleLength::Dynamic, _) => {
-                // Any length can be interpreted as a dynamic length, but not the other way around.
-                // We intentionally skip creating an equation if RHS is a `Var`.
-                Ok(())
-            }
+            // Dynamic length can be unified at LHS position with anything other than other
+            // dynamic lengths, which we've checked previously.
+            (TupleLength::Var(x), _) if self.dyn_lengths.contains(&x) => Ok(()),
 
-            (TupleLength::Var(x), other) | (other, TupleLength::Var(x)) => {
+            (TupleLength::Var(x), other) | (other, TupleLength::Var(x))
+                if !self.dyn_lengths.contains(&x) =>
+            {
                 self.length_eqs.insert(x, other);
                 Ok(())
             }
@@ -341,7 +361,7 @@ impl<Lit: LiteralType> Substitutions<Lit> {
                 .const_params
                 .iter()
                 .enumerate()
-                .map(|(i, var_idx)| (*var_idx, self.const_var_count + i))
+                .map(|(i, (var_idx, _))| (*var_idx, self.const_var_count + i))
                 .collect(),
         };
         self.type_var_count += fn_type.type_params.len();
@@ -350,9 +370,15 @@ impl<Lit: LiteralType> Substitutions<Lit> {
         let instantiated_fn_type =
             fn_type.substitute_type_vars(&mapping, SubstitutionContext::ParamsToVars);
 
-        // Copy constraints on the newly generated type vars from the function definition.
+        // Copy constraints on the newly generated const and type vars from the function definition.
+        for (original_idx, description) in &fn_type.const_params {
+            if description.is_dynamic {
+                let new_idx = mapping.constants[original_idx];
+                self.dyn_lengths.insert(new_idx);
+            }
+        }
         for (original_idx, description) in &fn_type.type_params {
-            let new_idx = mapping.types[&original_idx];
+            let new_idx = mapping.types[original_idx];
             self.constraints
                 .insert(new_idx, description.constraints.to_owned());
         }
@@ -406,7 +432,9 @@ impl<Lit: LiteralType> Substitutions<Lit> {
             ValueType::Slice { element, length } => ValueType::Slice {
                 element: Box::new(self.sanitize_type(fixed_idx, &element)),
                 length: match length {
-                    TupleLength::Var(_) => TupleLength::Any,
+                    TupleLength::Var(idx) => TupleLength::Some {
+                        is_dynamic: self.dyn_lengths.contains(&idx),
+                    },
                     _ => length,
                 },
             },

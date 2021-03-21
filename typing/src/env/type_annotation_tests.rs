@@ -217,6 +217,7 @@ fn fn_instantiated_via_type_hint() {
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(type_env["identity"].to_string(), "fn(Num) -> Num");
+    assert!(type_env["identity"].is_concrete());
 }
 
 #[test]
@@ -228,6 +229,7 @@ fn assigning_to_dynamically_sized_slice() {
 
     // FIXME: we lose dyn constraint on length!
     assert_eq!(type_env["slice"].to_string(), "[Num; _]");
+    assert!(!type_env["slice"].is_concrete());
 
     /*
     let bogus_code = "(x, y) = slice;";

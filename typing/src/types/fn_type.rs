@@ -121,6 +121,14 @@ impl<Lit: LiteralType> FnType<Lit> {
         !self.const_params.is_empty() || !self.type_params.is_empty()
     }
 
+    /// Returns `true` iff this type does not contain type / length variables.
+    ///
+    /// See [`TypeEnvironment`](crate::TypeEnvironment) for caveats of dealing with
+    /// non-concrete types.
+    pub fn is_concrete(&self) -> bool {
+        self.arg_and_return_types().all(ValueType::is_concrete)
+    }
+
     pub(crate) fn arg_and_return_types(&self) -> impl Iterator<Item = &ValueType<Lit>> + '_ {
         let args_slice = match &self.args {
             FnArgs::List(args) => args.as_slice(),

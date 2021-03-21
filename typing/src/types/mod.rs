@@ -46,6 +46,10 @@ impl TupleLength {
             Cow::from,
         )
     }
+
+    fn is_concrete(&self) -> bool {
+        matches!(self, Self::Param(_) | Self::Exact(_))
+    }
 }
 
 /// Possible value type.
@@ -230,6 +234,21 @@ impl<Lit: LiteralType> ValueType<Lit> {
             Self::Lit(_) => Some(true),
             Self::Tuple(_) | Self::Slice { .. } | Self::Bool | Self::Function(_) => Some(false),
             _ => None,
+        }
+    }
+
+    /// Returns `true` iff this type does not contain type / length variables.
+    ///
+    /// See [`TypeEnvironment`](crate::TypeEnvironment) for caveats of dealing with
+    /// non-concrete types.
+    pub fn is_concrete(&self) -> bool {
+        match self {
+            Self::Var(_) | Self::Some => false,
+            Self::Param(_) | Self::Bool | Self::Lit(_) => true,
+
+            Self::Function(fn_type) => fn_type.is_concrete(),
+            Self::Tuple(elements) => elements.iter().all(Self::is_concrete),
+            Self::Slice { element, length } => length.is_concrete() && element.is_concrete(),
         }
     }
 }

@@ -52,6 +52,16 @@ impl TupleLength {
     }
 }
 
+/// Kind of a length parameter.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub enum LengthKind {
+    /// Parameter is static (can be found during type inference / "in compile time").
+    Static,
+    /// Parameter is dynamic (can vary at runtime).
+    Dynamic,
+}
+
 /// Enumeration encompassing all types supported by the type system.
 ///
 /// Parametric by the [`LiteralType`] (i.e., primitive types besides Booleans).

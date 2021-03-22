@@ -12,7 +12,7 @@ fn fn_const_params() {
     assert!(type_params.is_empty());
     assert_eq!(const_params.len(), 1);
     assert_eq!(*const_params[0].0.fragment(), "N");
-    assert_eq!(const_params[0].1, LengthType::Static);
+    assert_eq!(const_params[0].1, LengthKind::Static);
 }
 
 #[test]
@@ -24,7 +24,7 @@ fn fn_const_dyn_params() {
     assert!(type_params.is_empty());
     assert_eq!(const_params.len(), 2);
     assert_eq!(*const_params[1].0.fragment(), "M");
-    assert_eq!(const_params[1].1, LengthType::Dynamic);
+    assert_eq!(const_params[1].1, LengthKind::Dynamic);
 }
 
 #[test]

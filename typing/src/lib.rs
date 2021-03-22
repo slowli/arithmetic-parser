@@ -85,7 +85,7 @@ pub use self::{
     error::{TypeError, TypeErrorKind, TypeResult},
     substitutions::Substitutions,
     type_map::{Assertions, Prelude},
-    types::{FnArgs, FnType, FnTypeBuilder, TupleLength, ValueType},
+    types::{FnArgs, FnType, FnTypeBuilder, LengthKind, TupleLength, ValueType},
 };
 
 // Reexports for the macros.

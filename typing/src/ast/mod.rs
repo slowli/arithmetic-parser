@@ -15,7 +15,7 @@ use nom::{
     sequence::{delimited, preceded, terminated, tuple},
 };
 
-use crate::{types::LenParamDescription, LiteralType, Num};
+use crate::{LengthKind, LiteralType, Num};
 use arithmetic_parser::{InputSpan, NomResult};
 
 mod conversion;
@@ -23,24 +23,6 @@ mod conversion;
 mod tests;
 
 pub use self::conversion::{ConversionError, ConversionErrorKind};
-
-/// Type of a length parameter.
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[non_exhaustive]
-pub enum LengthType {
-    /// Parameter is static (can be found during type inference / "in compile time").
-    Static,
-    /// Parameter is dynamic (can very at runtime).
-    Dynamic,
-}
-
-impl From<LengthType> for LenParamDescription {
-    fn from(value: LengthType) -> Self {
-        Self {
-            is_dynamic: value == LengthType::Dynamic,
-        }
-    }
-}
 
 /// Type annotation after parsing.
 ///
@@ -134,7 +116,7 @@ impl<'a, Lit: LiteralType> ValueTypeAst<'a, Lit> {
 #[non_exhaustive]
 pub struct FnTypeAst<'a, Lit = Num> {
     /// Length params; e.g., `N` in `fn<len N>([Num; N]) -> Num`.
-    pub len_params: Vec<(InputSpan<'a>, LengthType)>,
+    pub len_params: Vec<(InputSpan<'a>, LengthKind)>,
     /// Type params together with their bounds. E.g., `T` in `fn<T>(T, T) -> T`.
     pub type_params: Vec<(InputSpan<'a>, TypeConstraintsAst<'a>)>,
     /// Function arguments.
@@ -251,7 +233,7 @@ fn type_params(input: InputSpan<'_>) -> NomResult<'_, Vec<(InputSpan<'_>, TypeCo
 }
 
 type FnParams<'a> = (
-    Vec<(InputSpan<'a>, LengthType)>,
+    Vec<(InputSpan<'a>, LengthKind)>,
     Vec<(InputSpan<'a>, TypeConstraintsAst<'a>)>,
 );
 
@@ -263,9 +245,9 @@ fn fn_params(input: InputSpan<'_>) -> NomResult<'_, FnParams> {
         ident,
         map(opt(tag_char('*')), |ty| {
             if ty.is_some() {
-                LengthType::Dynamic
+                LengthKind::Dynamic
             } else {
-                LengthType::Static
+                LengthKind::Static
             }
         }),
     ));

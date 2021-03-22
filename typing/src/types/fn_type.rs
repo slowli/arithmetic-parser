@@ -3,12 +3,20 @@
 use std::{collections::HashMap, fmt};
 
 use super::type_param;
-use crate::{ast::LengthType, LiteralType, Num, TupleLength, ValueType};
+use crate::{LengthKind, LiteralType, Num, TupleLength, ValueType};
 
 /// Description of a constant parameter.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct LenParamDescription {
     pub is_dynamic: bool,
+}
+
+impl From<LengthKind> for LenParamDescription {
+    fn from(value: LengthKind) -> Self {
+        Self {
+            is_dynamic: value == LengthKind::Dynamic,
+        }
+    }
 }
 
 /// Description of a type parameter.
@@ -30,14 +38,14 @@ impl<C> TypeParamDescription<C> {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_typing::{ast::LengthType, FnArgs, FnType, ValueType};
+/// # use arithmetic_typing::{ast::LengthKind, FnArgs, FnType, ValueType};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// let fn_type: FnType = "fn<len N>([Num; N]) -> Num".parse()?;
 /// assert_eq!(*fn_type.return_type(), ValueType::NUM);
 /// assert_eq!(
 ///     fn_type.len_params().collect::<Vec<_>>(),
-///     vec![(0, LengthType::Static)]
+///     vec![(0, LengthKind::Static)]
 /// );
 ///
 /// let args = match fn_type.args() {
@@ -158,12 +166,12 @@ impl<Lit: LiteralType> FnType<Lit> {
     }
 
     /// Iterates over length params of this function together with their type.
-    pub fn len_params(&self) -> impl Iterator<Item = (usize, LengthType)> + '_ {
+    pub fn len_params(&self) -> impl Iterator<Item = (usize, LengthKind)> + '_ {
         self.len_params.iter().map(|(idx, description)| {
             let length_type = if description.is_dynamic {
-                LengthType::Dynamic
+                LengthKind::Dynamic
             } else {
-                LengthType::Static
+                LengthKind::Static
             };
             (*idx, length_type)
         })

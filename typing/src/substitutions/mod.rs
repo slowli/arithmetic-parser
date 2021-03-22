@@ -130,7 +130,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         ty: &mut ValueType<Prim>,
     ) -> Result<(), TypeErrorKind<Prim>> {
         match ty {
-            ValueType::Prim(_) | ValueType::Bool | ValueType::Var(_) => {
+            ValueType::Prim(_) | ValueType::Var(_) => {
                 // Do nothing.
             }
 

@@ -143,9 +143,10 @@ impl<Prim: LinearType> TypeConstraints<Prim> for LinConstraints {
 
             ValueType::Some | ValueType::Param(_) => unreachable!(),
 
-            ValueType::Bool | ValueType::Function(_) | ValueType::Prim(_) => Err(
-                TypeErrorKind::failed_constraint(ty.to_owned(), self.to_owned()),
-            ),
+            ValueType::Function(_) | ValueType::Prim(_) => Err(TypeErrorKind::failed_constraint(
+                ty.to_owned(),
+                self.to_owned(),
+            )),
 
             ValueType::Tuple(elements) => {
                 for element in elements.to_owned() {

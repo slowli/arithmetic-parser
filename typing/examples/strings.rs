@@ -1,29 +1,55 @@
 //! A somewhat contrived arithmetic that parses string literals and only allows to add them
 //! and compare strings.
 
+use std::{fmt, str::FromStr};
+
 use arithmetic_parser::{
     grammars::{Grammar, Parse, ParseLiteral, Typed},
     BinaryOp, InputSpan, NomResult,
 };
-
 use arithmetic_typing::{
-    arith::*, impl_display_for_singleton_type, Assertions, PrimitiveType, Substitutions,
-    TypeEnvironment, TypeResult, ValueType,
+    arith::*, Assertions, PrimitiveType, Substitutions, TypeEnvironment, TypeResult, ValueType,
 };
 
-/// Type of our literals: a string.
+/// Primitive type: string or boolean.
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct StrType;
+enum StrType {
+    Str,
+    Bool,
+}
 
-impl_display_for_singleton_type!(StrType, "Str");
+impl fmt::Display for StrType {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Str => "Str",
+            Self::Bool => "Bool",
+        })
+    }
+}
+
+impl FromStr for StrType {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Str" => Ok(Self::Str),
+            "Bool" => Ok(Self::Bool),
+            _ => Err(anyhow::anyhow!("Expected `Str` or `Bool`")),
+        }
+    }
+}
 
 impl PrimitiveType for StrType {
     type Constraints = LinConstraints;
 }
 
+impl WithBoolean for StrType {
+    const BOOL: Self = Self::Bool;
+}
+
 impl LinearType for StrType {
     fn is_linear(&self) -> bool {
-        true
+        matches!(self, Self::Str)
     }
 }
 
@@ -75,7 +101,7 @@ impl MapPrimitiveType<String> for StrArithmetic {
     type Prim = StrType;
 
     fn type_of_literal(&self, _lit: &String) -> Self::Prim {
-        StrType
+        StrType::Str
     }
 }
 
@@ -103,12 +129,12 @@ impl TypeArithmetic<StrType> for StrArithmetic {
 
             BinaryOp::Gt | BinaryOp::Lt | BinaryOp::Ge | BinaryOp::Le => {
                 substitutions
-                    .unify(&ValueType::Prim(StrType), lhs_ty)
+                    .unify(&ValueType::Prim(StrType::Str), lhs_ty)
                     .map_err(|err| err.with_span(&spans.lhs))?;
                 substitutions
-                    .unify(&ValueType::Prim(StrType), rhs_ty)
+                    .unify(&ValueType::Prim(StrType::Str), rhs_ty)
                     .map_err(|err| err.with_span(&spans.rhs))?;
-                Ok(ValueType::Bool)
+                Ok(ValueType::BOOL)
             }
 
             _ => BoolArithmetic.process_binary_op(substitutions, spans),
@@ -130,7 +156,7 @@ fn main() -> anyhow::Result<()> {
     let mut env = TypeEnvironment::<StrType>::new();
     env.insert("assert", Assertions::assert_type().into());
     env.process_with_arithmetic(&StrArithmetic, &ast)?;
-    assert_eq!(env["x"], ValueType::Prim(StrType));
+    assert_eq!(env["x"], ValueType::Prim(StrType::Str));
     assert_eq!(env["y"].to_string(), "(Str, Str)");
 
     let bogus_code = r#""foo" - "bar""#;

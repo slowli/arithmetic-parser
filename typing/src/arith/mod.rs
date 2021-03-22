@@ -68,12 +68,18 @@ pub struct BinaryOpSpans<'a, Prim: PrimitiveType> {
     pub rhs: Spanned<'a, ValueType<Prim>>,
 }
 
+/// [`PrimitiveType`] that has Boolean type as one of its variants.
+pub trait WithBoolean: PrimitiveType {
+    /// Boolean type.
+    const BOOL: Self;
+}
+
 /// Simplest [`TypeArithmetic`] implementation that defines unary / binary ops only on
 /// the Boolean type. Useful as a building block for more complex arithmetics.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct BoolArithmetic;
 
-impl<Prim: PrimitiveType> TypeArithmetic<Prim> for BoolArithmetic {
+impl<Prim: WithBoolean> TypeArithmetic<Prim> for BoolArithmetic {
     /// Processes a unary operation.
     ///
     /// - `!` requires a Boolean input and outputs a Boolean.
@@ -87,9 +93,9 @@ impl<Prim: PrimitiveType> TypeArithmetic<Prim> for BoolArithmetic {
         match op {
             UnaryOp::Not => {
                 substitutions
-                    .unify(&ValueType::Bool, &spans.inner.extra)
+                    .unify(&ValueType::BOOL, &spans.inner.extra)
                     .map_err(|err| err.with_span(&spans.inner))?;
-                Ok(ValueType::Bool)
+                Ok(ValueType::BOOL)
             }
 
             _ => Err(TypeErrorKind::unsupported(op).with_span(&spans.op)),
@@ -117,17 +123,17 @@ impl<Prim: PrimitiveType> TypeArithmetic<Prim> for BoolArithmetic {
                     err.into_op_mismatch(spans.lhs.extra, spans.rhs.extra, op)
                         .with_span(&spans.total)
                 })?;
-                Ok(ValueType::Bool)
+                Ok(ValueType::BOOL)
             }
 
             BinaryOp::And | BinaryOp::Or => {
                 substitutions
-                    .unify(&ValueType::Bool, lhs_ty)
+                    .unify(&ValueType::BOOL, lhs_ty)
                     .map_err(|err| err.with_span(&spans.lhs))?;
                 substitutions
-                    .unify(&ValueType::Bool, rhs_ty)
+                    .unify(&ValueType::BOOL, rhs_ty)
                     .map_err(|err| err.with_span(&spans.rhs))?;
-                Ok(ValueType::Bool)
+                Ok(ValueType::BOOL)
             }
 
             _ => Err(TypeErrorKind::unsupported(op).with_span(&spans.op)),
@@ -215,7 +221,7 @@ impl NumArithmetic {
     /// Returns the result type of the unary operation.
     ///
     /// This logic can be reused by other [`TypeArithmetic`] implementations.
-    pub fn process_unary_op<'a, Prim: PrimitiveType>(
+    pub fn process_unary_op<'a, Prim: WithBoolean>(
         substitutions: &mut Substitutions<Prim>,
         spans: UnaryOpSpans<'a, Prim>,
         constraints: &Prim::Constraints,
@@ -247,7 +253,7 @@ impl NumArithmetic {
     /// - If `comparable_type` is set to `Some(_)`, it will be used to unify arguments of
     ///   order comparisons. If `comparable_type` is `None`, order comparisons are not supported.
     /// - `constraints` are applied to arguments of arithmetic ops.
-    pub fn process_binary_op<'a, Prim: PrimitiveType>(
+    pub fn process_binary_op<'a, Prim: WithBoolean>(
         substitutions: &mut Substitutions<Prim>,
         spans: BinaryOpSpans<'a, Prim>,
         comparable_type: Option<Prim>,
@@ -276,7 +282,7 @@ impl NumArithmetic {
                     substitutions
                         .unify(&ty, rhs_ty)
                         .map_err(|err| err.with_span(&spans.rhs))?;
-                    Ok(ValueType::Bool)
+                    Ok(ValueType::BOOL)
                 } else {
                     Err(TypeErrorKind::unsupported(op).with_span(&spans.op))
                 }
@@ -294,7 +300,7 @@ where
     type Prim = Num;
 
     fn type_of_literal(&self, _: &Val) -> Self::Prim {
-        Num
+        Num::Num
     }
 }
 
@@ -313,7 +319,7 @@ impl TypeArithmetic<Num> for NumArithmetic {
         spans: BinaryOpSpans<'a, Num>,
     ) -> TypeResult<'a, Num> {
         let comparable_type = if self.comparisons_enabled {
-            Some(Num)
+            Some(Num::Num)
         } else {
             None
         };

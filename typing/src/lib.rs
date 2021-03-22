@@ -11,8 +11,9 @@
 //!
 //! The type system corresponds to types of `Value`s in `arithmetic-eval`:
 //!
-//! - There are 2 primitive types: Boolean (`Bool`) and other literals. In the simplest case,
-//!   there can be a single [`PrimitiveType`], such as a [`Num`]ber.
+//! - Primitive types are customizeable via [`PrimitiveType`] impl. In the simplest case,
+//!   there can be 2 primitive types: Booleans (`Bool`) and numbers (`Num`), which
+//!   is ecapsulated in [`Num`].
 //! - There is only one container type - a tuple. It can be represented either
 //!   in the tuple form, such as `(Num, Bool)`, or as a slice, such as `[Num]` or `[Num; 3]`.
 //!   As in Rust, all slice elements must have the same type. Unlike Rust, tuple and slice
@@ -86,7 +87,7 @@ pub use self::{
     types::{FnArgs, FnType, FnTypeBuilder, LengthKind, TupleLength, ValueType},
 };
 
-use self::arith::{LinConstraints, LinearType, TypeConstraints};
+use self::arith::{LinConstraints, LinearType, TypeConstraints, WithBoolean};
 
 // Reexports for the macros.
 #[doc(hidden)]
@@ -211,19 +212,47 @@ macro_rules! impl_display_for_singleton_type {
     };
 }
 
-/// Generic numeric type.
+/// Primitive types for numeric arithmetic.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Num;
+pub enum Num {
+    /// Numeric type (e.g., 1).
+    Num,
+    /// Boolean value (true or false).
+    Bool,
+}
 
-impl_display_for_singleton_type!(Num, "Num");
+impl fmt::Display for Num {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Num => "Num",
+            Self::Bool => "Bool",
+        })
+    }
+}
+
+impl FromStr for Num {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Num" => Ok(Self::Num),
+            "Bool" => Ok(Self::Bool),
+            _ => Err(anyhow::anyhow!("Expected `Num` or `Bool`")),
+        }
+    }
+}
 
 impl PrimitiveType for Num {
     type Constraints = LinConstraints;
 }
 
+impl WithBoolean for Num {
+    const BOOL: Self = Self::Bool;
+}
+
 impl LinearType for Num {
     fn is_linear(&self) -> bool {
-        true // all numbers are linear
+        matches!(self, Self::Num) // numbers are linear, booleans are not
     }
 }
 

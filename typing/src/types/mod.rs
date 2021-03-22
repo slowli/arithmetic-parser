@@ -2,7 +2,7 @@
 
 use std::{borrow::Cow, fmt};
 
-use crate::{Num, PrimitiveType};
+use crate::{arith::WithBoolean, Num, PrimitiveType};
 
 mod fn_type;
 
@@ -64,7 +64,7 @@ pub enum LengthKind {
 
 /// Enumeration encompassing all types supported by the type system.
 ///
-/// Parametric by the [`PrimitiveType`] (i.e., primitive types besides Booleans).
+/// Parametric by the [`PrimitiveType`].
 ///
 /// # Examples
 ///
@@ -72,7 +72,7 @@ pub enum LengthKind {
 ///
 /// ```
 /// # use arithmetic_typing::{FnType, TupleLength, ValueType};
-/// let tuple: ValueType = (ValueType::Bool, ValueType::NUM).into();
+/// let tuple: ValueType = (ValueType::BOOL, ValueType::NUM).into();
 /// assert_eq!(tuple.to_string(), "(Bool, Num)");
 /// let slice: ValueType = tuple.repeat(TupleLength::Param(0));
 /// assert_eq!(slice.to_string(), "[(Bool, Num); N]");
@@ -102,10 +102,7 @@ pub enum ValueType<Prim: PrimitiveType = Num> {
     /// Wildcard type, i.e. some type that is not specified. Similar to `_` in type annotations
     /// in Rust.
     Some,
-    /// Boolean type.
-    // TODO: consider uniting literals and `Bool` as primitive types
-    Bool,
-    /// Primitive type excluding Booleans.
+    /// Primitive type.
     Prim(Prim),
     /// Functional type.
     Function(Box<FnType<Prim>>),
@@ -132,7 +129,7 @@ pub enum ValueType<Prim: PrimitiveType = Num> {
 impl<Prim: PrimitiveType> PartialEq for ValueType<Prim> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Some, _) | (_, Self::Some) | (Self::Bool, Self::Bool) => true,
+            (Self::Some, _) | (_, Self::Some) => true,
 
             (Self::Prim(x), Self::Prim(y)) => x == y,
 
@@ -165,7 +162,6 @@ impl<Prim: PrimitiveType> fmt::Display for ValueType<Prim> {
             Self::Some | Self::Var(_) => formatter.write_str("_"),
             Self::Param(idx) => formatter.write_str(type_param(*idx).as_ref()),
 
-            Self::Bool => formatter.write_str("Bool"),
             Self::Prim(num) => fmt::Display::fmt(num, formatter),
             Self::Function(fn_type) => fmt::Display::fmt(fn_type, formatter),
 
@@ -243,7 +239,12 @@ fn type_param(index: usize) -> Cow<'static, str> {
 
 impl ValueType {
     /// Numeric primitive type.
-    pub const NUM: Self = ValueType::Prim(Num);
+    pub const NUM: Self = ValueType::Prim(Num::Num);
+}
+
+impl<Prim: WithBoolean> ValueType<Prim> {
+    /// Boolean primitive type.
+    pub const BOOL: Self = ValueType::Prim(Prim::BOOL);
 }
 
 impl<Prim: PrimitiveType> ValueType<Prim> {
@@ -274,12 +275,12 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
             || matches!(self, Self::Slice { length, .. } if *length == TupleLength::Exact(0))
     }
 
-    /// Returns `Some(true)` if this type is known to be primitive (except for Booleans),
+    /// Returns `Some(true)` if this type is known to be primitive,
     /// `Some(false)` if it's known not to be primitive, and `None` if either case is possible.
     pub(crate) fn is_primitive(&self) -> Option<bool> {
         match self {
             Self::Prim(_) => Some(true),
-            Self::Tuple(_) | Self::Slice { .. } | Self::Bool | Self::Function(_) => Some(false),
+            Self::Tuple(_) | Self::Slice { .. } | Self::Function(_) => Some(false),
             _ => None,
         }
     }
@@ -291,7 +292,7 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
     pub fn is_concrete(&self) -> bool {
         match self {
             Self::Var(_) | Self::Some => false,
-            Self::Param(_) | Self::Bool | Self::Prim(_) => true,
+            Self::Param(_) | Self::Prim(_) => true,
 
             Self::Function(fn_type) => fn_type.is_concrete(),
             Self::Tuple(elements) => elements.iter().all(Self::is_concrete),

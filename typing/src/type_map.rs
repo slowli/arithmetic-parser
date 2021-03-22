@@ -2,7 +2,7 @@
 
 use std::iter;
 
-use crate::{FnType, PrimitiveType, TupleLength, ValueType};
+use crate::{arith::WithBoolean, FnType, PrimitiveType, TupleLength, ValueType};
 
 /// Map containing type definitions for all variables from `Prelude` in the eval crate,
 /// except for `loop` function.
@@ -63,9 +63,9 @@ pub struct Prelude;
 
 impl Prelude {
     /// Gets type definition by `name`.
-    pub fn get_type<Prim: PrimitiveType>(name: &str) -> Option<ValueType<Prim>> {
+    pub fn get_type<Prim: WithBoolean>(name: &str) -> Option<ValueType<Prim>> {
         Some(match name {
-            "false" | "true" => ValueType::Bool,
+            "false" | "true" => ValueType::BOOL,
             "if" => Self::if_type().into(),
             "while" => Self::while_type().into(),
             "map" => Self::map_type().into(),
@@ -88,10 +88,10 @@ impl Prelude {
     ///     "fn<T>(Bool, T, T) -> T"
     /// );
     /// ```
-    pub fn if_type<Prim: PrimitiveType>() -> FnType<Prim> {
+    pub fn if_type<Prim: WithBoolean>() -> FnType<Prim> {
         FnType::builder()
             .with_type_params(iter::once(0))
-            .with_arg(ValueType::Bool)
+            .with_arg(ValueType::BOOL)
             .with_arg(ValueType::Param(0))
             .with_arg(ValueType::Param(0))
             .returning(ValueType::Param(0))
@@ -108,10 +108,10 @@ impl Prelude {
     ///     "fn<T>(T, fn(T) -> Bool, fn(T) -> T) -> T"
     /// );
     /// ```
-    pub fn while_type<Prim: PrimitiveType>() -> FnType<Prim> {
+    pub fn while_type<Prim: WithBoolean>() -> FnType<Prim> {
         let condition_fn = FnType::builder()
             .with_arg(ValueType::Param(0))
-            .returning(ValueType::Bool);
+            .returning(ValueType::BOOL);
         let iter_fn = FnType::builder()
             .with_arg(ValueType::Param(0))
             .returning(ValueType::Param(0));
@@ -159,10 +159,10 @@ impl Prelude {
     ///     "fn<len N, M*; T>([T; N], fn(T) -> Bool) -> [T; M]"
     /// );
     /// ```
-    pub fn filter_type<Prim: PrimitiveType>() -> FnType<Prim> {
+    pub fn filter_type<Prim: WithBoolean>() -> FnType<Prim> {
         let predicate_arg = FnType::builder()
             .with_arg(ValueType::Param(0))
-            .returning(ValueType::Bool);
+            .returning(ValueType::BOOL);
 
         FnType::builder()
             .with_len_params(iter::once(0))
@@ -243,7 +243,7 @@ impl Prelude {
     }
 
     /// Returns an iterator over all type definitions in the `Prelude`.
-    pub fn iter<Prim: PrimitiveType>() -> impl Iterator<Item = (&'static str, ValueType<Prim>)> {
+    pub fn iter<Prim: WithBoolean>() -> impl Iterator<Item = (&'static str, ValueType<Prim>)> {
         const VAR_NAMES: &[&str] = &[
             "false", "true", "if", "while", "map", "filter", "fold", "push", "merge",
         ];
@@ -260,7 +260,7 @@ pub struct Assertions;
 
 impl Assertions {
     /// Gets type definition by `name`.
-    pub fn get_type<Prim: PrimitiveType>(name: &str) -> Option<ValueType<Prim>> {
+    pub fn get_type<Prim: WithBoolean>(name: &str) -> Option<ValueType<Prim>> {
         Some(match name {
             "assert" => Self::assert_type().into(),
             "assert_eq" => Self::assert_eq_type().into(),
@@ -279,9 +279,9 @@ impl Assertions {
     ///     "fn(Bool)"
     /// );
     /// ```
-    pub fn assert_type<Prim: PrimitiveType>() -> FnType<Prim> {
+    pub fn assert_type<Prim: WithBoolean>() -> FnType<Prim> {
         FnType::builder()
-            .with_arg(ValueType::Bool)
+            .with_arg(ValueType::BOOL)
             .returning(ValueType::void())
     }
 
@@ -305,7 +305,7 @@ impl Assertions {
     }
 
     /// Returns an iterator over all type definitions in `Assertions`.
-    pub fn iter<Prim: PrimitiveType>() -> impl Iterator<Item = (&'static str, ValueType<Prim>)> {
+    pub fn iter<Prim: WithBoolean>() -> impl Iterator<Item = (&'static str, ValueType<Prim>)> {
         const VAR_NAMES: &[&str] = &["assert", "assert_eq"];
 
         VAR_NAMES

@@ -209,8 +209,7 @@ impl<'a, Prim: PrimitiveType> ValueTypeAst<'a, Prim> {
     ) -> Result<ValueType<Prim>, ConversionError<&'a str>> {
         Ok(match self {
             Self::Any => ValueType::Some,
-            Self::Bool => ValueType::Bool,
-            Self::Prim(num) => ValueType::Prim(num.to_owned()),
+            Self::Prim(prim) => ValueType::Prim(prim.to_owned()),
 
             Self::Ident(ident) => {
                 let name = *ident.fragment();
@@ -386,7 +385,6 @@ mod tests {
     use assert_matches::assert_matches;
 
     use super::*;
-    use crate::Num;
 
     #[test]
     fn converting_raw_fn_type() {
@@ -504,17 +502,17 @@ mod tests {
     #[test]
     fn parsing_basic_value_types() {
         let num_type: ValueType = "Num".parse().unwrap();
-        assert_eq!(num_type, ValueType::Prim(Num));
+        assert_eq!(num_type, ValueType::NUM);
 
         let bool_type: ValueType = "Bool".parse().unwrap();
-        assert_eq!(bool_type, ValueType::Bool);
+        assert_eq!(bool_type, ValueType::BOOL);
 
         let tuple_type: ValueType = "(Num, (Bool, _))".parse().unwrap();
         assert_eq!(
             tuple_type,
             ValueType::Tuple(vec![
-                ValueType::Prim(Num),
-                ValueType::Tuple(vec![ValueType::Bool, ValueType::Some]),
+                ValueType::NUM,
+                ValueType::Tuple(vec![ValueType::BOOL, ValueType::Some]),
             ])
         );
 
@@ -525,7 +523,7 @@ mod tests {
         };
         assert_eq!(
             element_ty,
-            ValueType::Tuple(vec![ValueType::Prim(Num), ValueType::Some])
+            ValueType::Tuple(vec![ValueType::NUM, ValueType::Some])
         );
         assert_matches!(length, TupleLength::Some { is_dynamic: false });
     }

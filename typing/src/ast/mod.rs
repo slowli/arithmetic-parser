@@ -44,7 +44,7 @@ pub use self::conversion::{ConversionError, ConversionErrorKind};
 ///     ValueTypeAst::Tuple(elements) => elements,
 ///     _ => unreachable!(),
 /// };
-/// assert_eq!(elements[0], ValueTypeAst::Prim(Num));
+/// assert_eq!(elements[0], ValueTypeAst::Prim(Num::Num));
 /// assert_matches!(
 ///     &elements[1],
 ///     ValueTypeAst::Function(f) if f.type_params.len() == 1
@@ -57,9 +57,7 @@ pub use self::conversion::{ConversionError, ConversionErrorKind};
 pub enum ValueTypeAst<'a, Prim = Num> {
     /// Type placeholder (`_`). Corresponds to any single type.
     Any,
-    /// Boolean type (`Bool`).
-    Bool,
-    /// Primitive types exception for Booleans.
+    /// Primitive types.
     Prim(Prim),
     /// Reference to a type param.
     Ident(InputSpan<'a>),
@@ -108,7 +106,7 @@ impl<'a, Prim: PrimitiveType> ValueTypeAst<'a, Prim> {
 /// assert_eq!(ty.len_params.len(), 1);
 /// assert!(ty.type_params.is_empty());
 /// assert_matches!(ty.args.as_slice(), [ValueTypeAst::Slice { .. }]);
-/// assert_eq!(ty.return_type, ValueTypeAst::Prim(Num));
+/// assert_eq!(ty.return_type, ValueTypeAst::Prim(Num::Num));
 /// # Ok(())
 /// # }
 /// ```
@@ -304,7 +302,6 @@ fn type_definition<Prim: PrimitiveType>(
                 return ValueTypeAst::Prim(res);
             }
             match *ident.fragment() {
-                "Bool" => ValueTypeAst::Bool,
                 "_" => ValueTypeAst::Any,
                 _ => ValueTypeAst::Ident(ident),
             }

@@ -42,11 +42,12 @@ impl NumLiteral for NumOrBytes {
     }
 }
 
-/// Types of `NumOrBytes` literals.
+/// Primitive types for `NumOrBytes`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NumOrBytesType {
     Num,
     Bytes,
+    Bool,
 }
 
 impl fmt::Display for NumOrBytesType {
@@ -54,6 +55,7 @@ impl fmt::Display for NumOrBytesType {
         formatter.write_str(match self {
             Self::Num => "Num",
             Self::Bytes => "Bytes",
+            Self::Bool => "Bool",
         })
     }
 }
@@ -65,9 +67,14 @@ impl FromStr for NumOrBytesType {
         match s {
             "Num" => Ok(Self::Num),
             "Bytes" => Ok(Self::Bytes),
-            _ => Err(anyhow::anyhow!("Expected `Num` or `Bytes`")),
+            "Bool" => Ok(Self::Bool),
+            _ => Err(anyhow::anyhow!("Expected `Num`, `Bytes` or `Bool`")),
         }
     }
+}
+
+impl WithBoolean for NumOrBytesType {
+    const BOOL: Self = Self::Bool;
 }
 
 /// Constraints imposed on `ValueType<NumOrBytesType>`. Besides linearity,
@@ -144,10 +151,9 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
 
             ValueType::Some | ValueType::Param(_) => unreachable!(),
 
-            ValueType::Bool | ValueType::Function(_) => Err(TypeErrorKind::failed_constraint(
-                ty.to_owned(),
-                self.to_owned(),
-            )),
+            ValueType::Prim(NumOrBytesType::Bool) | ValueType::Function(_) => Err(
+                TypeErrorKind::failed_constraint(ty.to_owned(), self.to_owned()),
+            ),
 
             // Bytes are summable, but not linear.
             ValueType::Prim(NumOrBytesType::Bytes) => {
@@ -266,7 +272,7 @@ fn main() -> anyhow::Result<()> {
         "1:0: Type `fn(Num) -> Num` fails constraint Sum"
     );
 
-    env.insert("true", ValueType::Bool);
+    env.insert("true", ValueType::BOOL);
     let bogus_code = "((1, true), (2, true)).sum((3, true))";
     let bogus_ast = Parser::parse_statements(bogus_code)?;
     let err = env

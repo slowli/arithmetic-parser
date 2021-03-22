@@ -440,10 +440,7 @@ fn function_passed_as_arg() {
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(
-        type_env.get("tuple").unwrap().to_string(),
-        "(Num, Num)"
-    );
+    assert_eq!(type_env.get("tuple").unwrap().to_string(), "(Num, Num)");
     assert_eq!(
         type_env.get("tuple_of_fns").unwrap().to_string(),
         "(fn() -> Num, fn() -> Num)"

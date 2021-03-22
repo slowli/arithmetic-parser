@@ -25,6 +25,46 @@ mod type_annotation_tests;
 type FnArgsAndOutput<Lit> = (Vec<ValueType<Lit>>, ValueType<Lit>);
 
 /// Environment containing type information on named variables.
+///
+/// # Concrete and partially specified types
+///
+/// The environment retains full info on the types even if the type is not
+/// [concrete](ValueType::is_concrete()). Consider the following example:
+///
+/// ```
+/// # use arithmetic_parser::grammars::{NumGrammar, Typed, Parse};
+/// # use arithmetic_typing::{arith::NumArithmetic, Annotated, Prelude, TypeEnvironment};
+/// # fn main() -> anyhow::Result<()> {
+/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
+/// let code = r#"
+///     xs = (1, 2, 3, 4, 5);
+///     filtered = xs.filter(|x| x > 1);
+///     mapped = filtered.map(|x| x * 2);
+///     (filtered, mapped)
+/// "#;
+///
+/// let mut env: TypeEnvironment = Prelude::iter().collect();
+/// let output = env.process_with_arithmetic(
+///     &NumArithmetic::with_comparisons(),
+///     &Parser::parse_statements(code)?,
+/// )?;
+/// assert_eq!(output.to_string(), "([Num; _], [Num; _])");
+///
+/// // We have additional information in `env` that both elements
+/// // of the tuple have the same length (albeit a dynamic one).
+/// assert_eq!(env["filtered"], env["mapped"]);
+/// // This means that the following code works.
+/// let output = env.process_with_arithmetic(
+///     &NumArithmetic::with_comparisons(),
+///     &Parser::parse_statements("filtered + mapped")?,
+/// )?;
+/// assert_eq!(output.to_string(), "[Num; _]");
+/// # Ok(())
+/// # }
+/// ```
+///
+/// Non-concrete types are tied to an environment. An environment will panic
+/// on inserting a non-concrete type via [`Self::insert()`] or other methods.
 #[derive(Debug, Clone)]
 pub struct TypeEnvironment<Lit: LiteralType = Num> {
     variables: HashMap<String, ValueType<Lit>>,

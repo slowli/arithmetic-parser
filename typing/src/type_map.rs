@@ -35,27 +35,6 @@ use crate::{FnType, LiteralType, TupleLength, ValueType};
 /// # }
 /// ```
 ///
-/// Function that reverses a slice:
-///
-/// ```
-/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-/// # use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, ValueType};
-/// # fn main() -> anyhow::Result<()> {
-/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
-/// let code = r#"
-///     empty: [Num] = ();
-///     // ^ necessary to infer accumulator type as [Num], not as `()`
-///     |xs| xs.fold(empty, |acc, x| (x,).merge(acc))
-/// "#;
-/// let ast = Parser::parse_statements(code)?;
-///
-/// let mut env: TypeEnvironment = Prelude::iter().collect();
-/// let reverse_fn = env.process_statements(&ast)?;
-/// assert_eq!(reverse_fn.to_string(), "fn<const N>([Num; N]) -> [Num]");
-/// # Ok(())
-/// # }
-/// ```
-///
 /// Limitations of `push` / `merge`:
 ///
 /// ```
@@ -177,7 +156,7 @@ impl Prelude {
     /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
     ///     Prelude::filter_type::<Num>().to_string(),
-    ///     "fn<const N; T>([T; N], fn(T) -> Bool) -> [T]"
+    ///     "fn<const N, M*; T>([T; N], fn(T) -> Bool) -> [T; M]"
     /// );
     /// ```
     pub fn filter_type<Lit: LiteralType>() -> FnType<Lit> {
@@ -229,7 +208,7 @@ impl Prelude {
     /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
     ///     Prelude::push_type::<Num>().to_string(),
-    ///     "fn<const N; T>([T; N], T) -> [T]"
+    ///     "fn<const N, M*; T>([T; N], T) -> [T; M]"
     /// );
     /// ```
     pub fn push_type<Lit: LiteralType>() -> FnType<Lit> {
@@ -250,7 +229,7 @@ impl Prelude {
     /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
     ///     Prelude::merge_type::<Num>().to_string(),
-    ///     "fn<const N, M; T>([T; N], [T; M]) -> [T]"
+    ///     "fn<const N, M, L*; T>([T; N], [T; M]) -> [T; L]"
     /// );
     /// ```
     pub fn merge_type<Lit: LiteralType>() -> FnType<Lit> {

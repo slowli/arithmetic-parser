@@ -5,26 +5,26 @@ use crate::Num;
 
 #[test]
 fn fn_const_params() {
-    let input = InputSpan::new("<const N>");
+    let input = InputSpan::new("<len N>");
     let (rest, (const_params, type_params)) = fn_params(input).unwrap();
 
     assert!(rest.fragment().is_empty());
     assert!(type_params.is_empty());
     assert_eq!(const_params.len(), 1);
     assert_eq!(*const_params[0].0.fragment(), "N");
-    assert_eq!(const_params[0].1, ConstType::Static);
+    assert_eq!(const_params[0].1, LengthType::Static);
 }
 
 #[test]
 fn fn_const_dyn_params() {
-    let input = InputSpan::new("<const N, M*>");
+    let input = InputSpan::new("<len N, M*>");
     let (rest, (const_params, type_params)) = fn_params(input).unwrap();
 
     assert!(rest.fragment().is_empty());
     assert!(type_params.is_empty());
     assert_eq!(const_params.len(), 2);
     assert_eq!(*const_params[1].0.fragment(), "M");
-    assert_eq!(const_params[1].1, ConstType::Dynamic);
+    assert_eq!(const_params[1].1, LengthType::Dynamic);
 }
 
 #[test]
@@ -61,7 +61,7 @@ fn fn_type_params_with_bounds() {
 
 #[test]
 fn fn_params_mixed() {
-    let input = InputSpan::new("<const N; T, U>");
+    let input = InputSpan::new("<len N; T, U>");
     let (rest, (const_params, type_params)) = fn_params(input).unwrap();
 
     assert!(rest.fragment().is_empty());
@@ -150,7 +150,7 @@ fn simple_fn_type() {
     let (rest, fn_type) = fn_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert!(fn_type.const_params.is_empty());
+    assert!(fn_type.len_params.is_empty());
     assert!(fn_type.type_params.is_empty());
     assert!(fn_type.args.is_empty());
     assert_eq!(fn_type.return_type, ValueTypeAst::Lit(Num));
@@ -162,7 +162,7 @@ fn simple_fn_type_with_args() {
     let (rest, fn_type) = fn_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert!(fn_type.const_params.is_empty());
+    assert!(fn_type.len_params.is_empty());
     assert!(fn_type.type_params.is_empty());
     assert_eq!(fn_type.args.len(), 2);
     assert_eq!(
@@ -179,7 +179,7 @@ fn fn_type_with_type_params() {
     let (rest, fn_type) = fn_definition::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert!(fn_type.const_params.is_empty());
+    assert!(fn_type.len_params.is_empty());
     assert_eq!(fn_type.type_params.len(), 1);
     assert_eq!(*fn_type.type_params[0].0.fragment(), "T");
     assert_eq!(fn_type.args.len(), 3);
@@ -189,11 +189,11 @@ fn fn_type_with_type_params() {
 
 #[test]
 fn fn_type_accepting_fn_arg() {
-    let input = InputSpan::new("fn<const N; T>([T; N], fn(T) -> Bool) -> Bool");
+    let input = InputSpan::new("fn<len N; T>([T; N], fn(T) -> Bool) -> Bool");
     let (rest, fn_type) = fn_definition::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_eq!(fn_type.const_params.len(), 1);
+    assert_eq!(fn_type.len_params.len(), 1);
     assert_eq!(fn_type.type_params.len(), 1);
     assert_eq!(fn_type.args.len(), 2);
     assert_eq!(fn_type.return_type, ValueTypeAst::Bool);
@@ -202,7 +202,7 @@ fn fn_type_accepting_fn_arg() {
         ValueTypeAst::Function(inner_fn) => inner_fn.as_ref(),
         ty => panic!("Unexpected arg type: {:?}", ty),
     };
-    assert!(inner_fn.const_params.is_empty());
+    assert!(inner_fn.len_params.is_empty());
     assert!(inner_fn.type_params.is_empty());
     assert_matches!(
         inner_fn.args.as_slice(),
@@ -217,7 +217,7 @@ fn fn_type_returning_fn_arg() {
     let (rest, fn_type) = fn_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert!(fn_type.const_params.is_empty());
+    assert!(fn_type.len_params.is_empty());
     assert!(fn_type.type_params.is_empty());
     assert_eq!(fn_type.args, vec![ValueTypeAst::Lit(Num)]);
 
@@ -225,7 +225,7 @@ fn fn_type_returning_fn_arg() {
         ValueTypeAst::Function(returned_fn) => *returned_fn,
         ty => panic!("Unexpected return type: {:?}", ty),
     };
-    assert!(returned_fn.const_params.is_empty());
+    assert!(returned_fn.len_params.is_empty());
     assert!(returned_fn.type_params.is_empty());
     assert_eq!(returned_fn.args, vec![ValueTypeAst::Bool]);
     assert_eq!(returned_fn.return_type, ValueTypeAst::Lit(Num));

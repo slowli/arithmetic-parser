@@ -28,18 +28,18 @@ fn hash_fn_type() -> FnType<Num> {
         args: FnArgs::Any,
         return_type: ValueType::Lit(Num),
         type_params: Vec::new(),
-        const_params: Vec::new(),
+        len_params: Vec::new(),
     }
 }
 
 /// `zip` function signature:
 ///
 /// ```text
-/// fn<const N; T, U>([T; N], [U; N]) -> [(T, U); N]
+/// fn<len N; T, U>([T; N], [U; N]) -> [(T, U); N]
 /// ```
 pub fn zip_fn_type() -> FnType<Num> {
     FnType::builder()
-        .with_const_params(iter::once(0))
+        .with_len_params(iter::once(0))
         .with_type_params(0..=1)
         .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
         .with_arg(ValueType::Param(1).repeat(TupleLength::Param(0)))
@@ -54,7 +54,7 @@ fn zip_fn_type_display() {
     let zip_fn_string = zip_fn_type().to_string();
     assert_eq!(
         zip_fn_string,
-        "fn<const N; T, U>([T; N], [U; N]) -> [(T, U); N]"
+        "fn<len N; T, U>([T; N], [U; N]) -> [(T, U); N]"
     );
 }
 
@@ -618,7 +618,7 @@ fn function_accepting_slices() {
 
     assert_eq!(
         type_env["inc"].to_string(),
-        "fn<const N>([Num; N]) -> [Num; N]"
+        "fn<len N>([Num; N]) -> [Num; N]"
     );
     assert_eq!(
         type_env["z"],
@@ -681,7 +681,7 @@ fn unifying_length_vars() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<const N; T: Lin>([T; N], [T; N]) -> [T; N]"
+        "fn<len N; T: Lin>([T; N], [T; N]) -> [T; N]"
     );
 }
 
@@ -732,7 +732,7 @@ fn dynamically_sized_slices_with_map() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<const N, M*>([Num; N]) -> [Num; M]"
+        "fn<len N, M*>([Num; N]) -> [Num; M]"
     );
 }
 

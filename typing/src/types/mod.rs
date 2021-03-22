@@ -6,8 +6,8 @@ use crate::{LiteralType, Num};
 
 mod fn_type;
 
-pub(crate) use self::fn_type::{ConstParamDescription, TypeParamDescription};
 pub use self::fn_type::{FnArgs, FnType, FnTypeBuilder};
+pub(crate) use self::fn_type::{LenParamDescription, TypeParamDescription};
 
 /// Length of a tuple.
 #[derive(Debug, Clone, Copy, PartialEq)]

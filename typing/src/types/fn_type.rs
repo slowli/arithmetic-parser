@@ -7,7 +7,7 @@ use crate::{LiteralType, Num, TupleLength, ValueType};
 
 /// Description of a constant parameter.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct ConstParamDescription {
+pub(crate) struct LenParamDescription {
     pub is_dynamic: bool,
 }
 
@@ -33,26 +33,26 @@ pub struct FnType<Lit: LiteralType = Num> {
     /// Type params associated with this function. The indexes of params should
     /// monotonically increase (necessary for correct display) and must be distinct.
     pub(crate) type_params: Vec<(usize, TypeParamDescription<Lit::Constraints>)>,
-    /// Indexes of const params associated with this function. The indexes should
+    /// Indexes of length params associated with this function. The indexes should
     /// monotonically increase (necessary for correct display) and must be distinct.
-    pub(crate) const_params: Vec<(usize, ConstParamDescription)>,
+    pub(crate) len_params: Vec<(usize, LenParamDescription)>,
 }
 
 impl<Lit: fmt::Display + LiteralType> fmt::Display for FnType<Lit> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("fn")?;
 
-        if self.const_params.len() + self.type_params.len() > 0 {
+        if self.len_params.len() + self.type_params.len() > 0 {
             formatter.write_str("<")?;
 
-            if !self.const_params.is_empty() {
-                formatter.write_str("const ")?;
-                for (i, (var_idx, description)) in self.const_params.iter().enumerate() {
+            if !self.len_params.is_empty() {
+                formatter.write_str("len ")?;
+                for (i, (var_idx, description)) in self.len_params.iter().enumerate() {
                     formatter.write_str(TupleLength::const_param(*var_idx).as_ref())?;
                     if description.is_dynamic {
                         formatter.write_str("*")?;
                     }
-                    if i + 1 < self.const_params.len() {
+                    if i + 1 < self.len_params.len() {
                         formatter.write_str(", ")?;
                     }
                 }
@@ -88,17 +88,14 @@ impl<Lit: LiteralType> FnType<Lit> {
         Self {
             args,
             return_type,
-            type_params: Vec::new(),  // filled in later
-            const_params: Vec::new(), // filled in later
+            type_params: Vec::new(), // filled in by `Self::with_type_params()`
+            len_params: Vec::new(),  // filled in by `Self::with_len_params()`
         }
     }
 
-    pub(crate) fn with_const_params(
-        mut self,
-        mut params: Vec<(usize, ConstParamDescription)>,
-    ) -> Self {
+    pub(crate) fn with_len_params(mut self, mut params: Vec<(usize, LenParamDescription)>) -> Self {
         params.sort_unstable_by_key(|(idx, _)| *idx);
-        self.const_params = params;
+        self.len_params = params;
         self
     }
 
@@ -116,9 +113,9 @@ impl<Lit: LiteralType> FnType<Lit> {
         FnTypeBuilder::default()
     }
 
-    /// Returns `true` iff the function has at least one const or type param.
+    /// Returns `true` iff the function has at least one length or type param.
     pub fn is_parametric(&self) -> bool {
-        !self.const_params.is_empty() || !self.type_params.is_empty()
+        !self.len_params.is_empty() || !self.type_params.is_empty()
     }
 
     /// Returns `true` iff this type does not contain type / length variables.
@@ -160,7 +157,7 @@ impl<Lit: LiteralType> FnType<Lit> {
             },
             return_type: map_fn(&self.return_type),
             type_params: self.type_params.clone(),
-            const_params: self.const_params.clone(),
+            len_params: self.len_params.clone(),
         }
     }
 }
@@ -168,7 +165,7 @@ impl<Lit: LiteralType> FnType<Lit> {
 /// Builder for functional types.
 ///
 /// The builder does not check well-formedness of the function, such as that all referenced
-/// const / type params are declared.
+/// length / type params are declared.
 ///
 /// **Tip.** You may also use [`FromStr`](core::str::FromStr) implementation to parse
 /// functional types.
@@ -181,12 +178,12 @@ impl<Lit: LiteralType> FnType<Lit> {
 /// # use arithmetic_typing::{FnType, TupleLength, ValueType};
 /// # use std::iter;
 /// let sum_fn_type = FnType::builder()
-///     .with_const_params(iter::once(0))
+///     .with_len_params(iter::once(0))
 ///     .with_arg(ValueType::NUM.repeat(TupleLength::Param(0)))
 ///     .returning(ValueType::NUM);
 /// assert_eq!(
 ///     sum_fn_type.to_string(),
-///     "fn<const N>([Num; N]) -> Num"
+///     "fn<len N>([Num; N]) -> Num"
 /// );
 /// ```
 ///
@@ -202,7 +199,7 @@ impl<Lit: LiteralType> FnType<Lit> {
 ///     .returning(ValueType::Param(1));
 ///
 /// let map_fn_type = <FnType>::builder()
-///     .with_const_params(iter::once(0))
+///     .with_len_params(iter::once(0))
 ///     .with_type_params(iter::once(0))
 ///     .with_constrained_type_params(iter::once(1), LinConstraints::LIN)
 ///     .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
@@ -210,14 +207,14 @@ impl<Lit: LiteralType> FnType<Lit> {
 ///     .returning(ValueType::Param(1).repeat(TupleLength::Param(0)));
 /// assert_eq!(
 ///     map_fn_type.to_string(),
-///     "fn<const N; T, U: Lin>([T; N], fn(T) -> U) -> [U; N]"
+///     "fn<len N; T, U: Lin>([T; N], fn(T) -> U) -> [U; N]"
 /// );
 /// ```
 #[derive(Debug)]
 pub struct FnTypeBuilder<Lit: LiteralType = Num> {
     args: FnArgs<Lit>,
     type_params: HashMap<usize, TypeParamDescription<Lit::Constraints>>,
-    const_params: HashMap<usize, ConstParamDescription>,
+    const_params: HashMap<usize, LenParamDescription>,
 }
 
 impl<Lit: LiteralType> Default for FnTypeBuilder<Lit> {
@@ -232,17 +229,17 @@ impl<Lit: LiteralType> Default for FnTypeBuilder<Lit> {
 
 // TODO: support validation similarly to AST conversions.
 impl<Lit: LiteralType> FnTypeBuilder<Lit> {
-    /// Adds the const params with the specified `indexes` to the function definition.
-    pub fn with_const_params(mut self, indexes: impl Iterator<Item = usize>) -> Self {
-        let static_description = ConstParamDescription { is_dynamic: false };
+    /// Adds the length params with the specified `indexes` to the function definition.
+    pub fn with_len_params(mut self, indexes: impl Iterator<Item = usize>) -> Self {
+        let static_description = LenParamDescription { is_dynamic: false };
         self.const_params
             .extend(indexes.map(|idx| (idx, static_description)));
         self
     }
 
-    /// FIXME
-    pub fn with_dynamic_len_params(mut self, indexes: impl Iterator<Item = usize>) -> Self {
-        let dyn_description = ConstParamDescription { is_dynamic: true };
+    /// Adds the dynamic length params with the specified `indexes` to the function definition.
+    pub fn with_dyn_len_params(mut self, indexes: impl Iterator<Item = usize>) -> Self {
+        let dyn_description = LenParamDescription { is_dynamic: true };
         self.const_params
             .extend(indexes.map(|idx| (idx, dyn_description)));
         self
@@ -281,7 +278,7 @@ impl<Lit: LiteralType> FnTypeBuilder<Lit> {
     /// Declares the return type of the function and builds it.
     pub fn returning(self, return_type: ValueType<Lit>) -> FnType<Lit> {
         FnType::new(self.args, return_type)
-            .with_const_params(self.const_params.into_iter().collect())
+            .with_len_params(self.const_params.into_iter().collect())
             .with_type_params(self.type_params.into_iter().collect())
     }
 }

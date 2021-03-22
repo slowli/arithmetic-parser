@@ -44,7 +44,7 @@
 //! // Evaluate `code` to get the inferred `sum` function signature.
 //! let output_type = env.process_statements(&ast)?;
 //! assert!(output_type.is_void());
-//! assert_eq!(env["sum"].to_string(), "fn<const N>([Num; N]) -> Num");
+//! assert_eq!(env["sum"].to_string(), "fn<len N>([Num; N]) -> Num");
 //! # Ok(())
 //! # }
 //! ```

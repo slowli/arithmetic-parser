@@ -15,7 +15,7 @@ use nom::{
     sequence::{delimited, preceded, terminated, tuple},
 };
 
-use crate::{types::ConstParamDescription, LiteralType, Num};
+use crate::{types::LenParamDescription, LiteralType, Num};
 use arithmetic_parser::{InputSpan, NomResult};
 
 mod conversion;
@@ -26,17 +26,17 @@ pub use self::conversion::{ConversionError, ConversionErrorKind};
 
 /// FIXME
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum ConstType {
+pub enum LengthType {
     /// FIXME
     Static,
     /// FIXME
     Dynamic,
 }
 
-impl From<ConstType> for ConstParamDescription {
-    fn from(value: ConstType) -> Self {
+impl From<LengthType> for LenParamDescription {
+    fn from(value: LengthType) -> Self {
         Self {
-            is_dynamic: value == ConstType::Dynamic,
+            is_dynamic: value == LengthType::Dynamic,
         }
     }
 }
@@ -119,10 +119,10 @@ impl<'a, Lit: LiteralType> ValueTypeAst<'a, Lit> {
 /// # use arithmetic_typing::{ast::{FnTypeAst, ValueTypeAst}, Num};
 ///
 /// # fn main() -> anyhow::Result<()> {
-/// let input = InputSpan::new("fn<const N>([Num; N]) -> Num");
+/// let input = InputSpan::new("fn<len N>([Num; N]) -> Num");
 /// let (rest, ty) = FnTypeAst::parse(input)?;
 /// assert!(rest.fragment().is_empty());
-/// assert_eq!(ty.const_params.len(), 1);
+/// assert_eq!(ty.len_params.len(), 1);
 /// assert!(ty.type_params.is_empty());
 /// assert_matches!(ty.args.as_slice(), [ValueTypeAst::Slice { .. }]);
 /// assert_eq!(ty.return_type, ValueTypeAst::Lit(Num));
@@ -132,8 +132,8 @@ impl<'a, Lit: LiteralType> ValueTypeAst<'a, Lit> {
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct FnTypeAst<'a, Lit = Num> {
-    /// Constant params; e.g., `N` in `fn<const N>([Num; N]) -> Num`.
-    pub const_params: Vec<(InputSpan<'a>, ConstType)>,
+    /// Length params; e.g., `N` in `fn<len N>([Num; N]) -> Num`.
+    pub len_params: Vec<(InputSpan<'a>, LengthType)>,
     /// Type params together with their bounds. E.g., `T` in `fn<T>(T, T) -> T`.
     pub type_params: Vec<(InputSpan<'a>, TypeConstraintsAst<'a>)>,
     /// Function arguments.
@@ -153,11 +153,11 @@ impl<'a, Lit: LiteralType> FnTypeAst<'a, Lit> {
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum TupleLengthAst<'a> {
-    /// Const placeholder (`_`). Corresponds to any single type.
+    /// Length placeholder (`_`). Corresponds to any single length.
     Any,
     /// Dynamic tuple length. This length is *implicit*, as in `[Num]`.
     Dynamic,
-    /// Reference to a const; for example, `N` in `[Num; N]`.
+    /// Reference to a length; for example, `N` in `[Num; N]`.
     Ident(InputSpan<'a>),
 }
 
@@ -250,7 +250,7 @@ fn type_params(input: InputSpan<'_>) -> NomResult<'_, Vec<(InputSpan<'_>, TypeCo
 }
 
 type FnParams<'a> = (
-    Vec<(InputSpan<'a>, ConstType)>,
+    Vec<(InputSpan<'a>, LengthType)>,
     Vec<(InputSpan<'a>, TypeConstraintsAst<'a>)>,
 );
 
@@ -258,25 +258,25 @@ type FnParams<'a> = (
 fn fn_params(input: InputSpan<'_>) -> NomResult<'_, FnParams> {
     let semicolon = tuple((ws, tag_char(';'), ws));
 
-    let const_param = tuple((
+    let len_param = tuple((
         ident,
         map(opt(tag_char('*')), |ty| {
             if ty.is_some() {
-                ConstType::Dynamic
+                LengthType::Dynamic
             } else {
-                ConstType::Static
+                LengthType::Static
             }
         }),
     ));
-    let const_params = preceded(
-        terminated(tag("const"), ws),
-        separated_list1(comma_sep, const_param),
+    let len_params = preceded(
+        terminated(tag("len"), ws),
+        separated_list1(comma_sep, len_param),
     );
 
     let params_parser = alt((
         map(
-            tuple((const_params, opt(preceded(semicolon, type_params)))),
-            |(const_params, type_params)| (const_params, type_params.unwrap_or_default()),
+            tuple((len_params, opt(preceded(semicolon, type_params)))),
+            |(len_params, type_params)| (len_params, type_params.unwrap_or_default()),
         ),
         map(type_params, |type_params| (vec![], type_params)),
     ));
@@ -298,9 +298,9 @@ fn fn_definition<Lit: LiteralType>(input: InputSpan<'_>) -> NomResult<'_, FnType
     preceded(
         terminated(tag("fn"), ws),
         map(fn_parser, |(params, args, return_type)| {
-            let (const_params, type_params) = params.unwrap_or_default();
+            let (len_params, type_params) = params.unwrap_or_default();
             FnTypeAst {
-                const_params,
+                len_params,
                 type_params,
                 args,
                 return_type,

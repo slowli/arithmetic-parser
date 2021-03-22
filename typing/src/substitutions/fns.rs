@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::types::ConstParamDescription;
+use crate::types::LenParamDescription;
 use crate::{
     types::TypeParamDescription, FnArgs, FnType, LiteralType, Substitutions, TupleLength, ValueType,
 };
@@ -57,13 +57,13 @@ impl<Lit: LiteralType> FnType<Lit> {
         };
         let return_type = self.return_type.substitute_type_vars(mapping, context);
 
-        let const_params = self.const_params.iter().copied();
+        let const_params = self.len_params.iter().copied();
         let const_params = map_params(const_params, &mapping.constants, context);
         let type_params = self.type_params.iter().cloned();
         let type_params = map_params(type_params, &mapping.types, context);
 
         FnType::new(substituted_args, return_type)
-            .with_const_params(const_params.collect())
+            .with_len_params(const_params.collect())
             .with_type_params(type_params.collect())
     }
 }
@@ -263,15 +263,15 @@ impl FnTypeTree {
         base.type_params.sort_unstable_by_key(|(idx, _)| *idx);
 
         let dynamic_lengths = substitutions.dyn_lengths();
-        base.const_params = self
+        base.len_params = self
             .const_params
             .into_iter()
             .map(|idx| {
                 let is_dynamic = dynamic_lengths.contains(&idx);
-                (idx, ConstParamDescription { is_dynamic })
+                (idx, LenParamDescription { is_dynamic })
             })
             .collect();
-        base.const_params.sort_unstable_by_key(|(idx, _)| *idx);
+        base.len_params.sort_unstable_by_key(|(idx, _)| *idx);
 
         let mut reversed_children = self.children;
         reversed_children.reverse();

@@ -304,7 +304,7 @@ impl<'a, Lit: LiteralType> FnTypeAst<'a, Lit> {
         mut state: ConversionState<'a>,
     ) -> Result<FnType<Lit>, ConversionError<&'a str>> {
         // Check params for consistency.
-        for (param, _) in &self.const_params {
+        for (param, _) in &self.len_params {
             state.insert_const_param(*param)?;
         }
         for (param, _) in &self.type_params {
@@ -317,7 +317,7 @@ impl<'a, Lit: LiteralType> FnTypeAst<'a, Lit> {
             .map(|arg| arg.try_convert(&state))
             .collect();
 
-        let const_params = self.const_params.iter().map(|(name, ty)| {
+        let const_params = self.len_params.iter().map(|(name, ty)| {
             (
                 state.const_param_idx(name.fragment()).unwrap(),
                 (*ty).into(),
@@ -333,7 +333,7 @@ impl<'a, Lit: LiteralType> FnTypeAst<'a, Lit> {
         });
 
         let fn_type = FnType::new(FnArgs::List(args?), self.return_type.try_convert(&state)?)
-            .with_const_params(const_params.collect())
+            .with_len_params(const_params.collect())
             .with_type_params(type_params.collect::<Result<Vec<_>, _>>()?);
         Ok(fn_type)
     }
@@ -356,7 +356,7 @@ mod tests {
 
     #[test]
     fn converting_raw_fn_type() {
-        let input = InputSpan::new("fn<const N; T>([T; N], fn(T) -> Bool) -> Bool");
+        let input = InputSpan::new("fn<len N; T>([T; N], fn(T) -> Bool) -> Bool");
         let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
         let fn_type = FnType::try_from(fn_type).unwrap();
 
@@ -365,7 +365,7 @@ mod tests {
 
     #[test]
     fn converting_raw_fn_type_with_constraint() {
-        let input = InputSpan::new("fn<const N; T: Lin>([T; N], fn(T) -> Bool) -> Bool");
+        let input = InputSpan::new("fn<len N; T: Lin>([T; N], fn(T) -> Bool) -> Bool");
         let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
         let fn_type = FnType::try_from(fn_type).unwrap();
 
@@ -388,53 +388,53 @@ mod tests {
 
     #[test]
     fn converting_raw_fn_type_duplicate_type_in_embedded_fn() {
-        let input = InputSpan::new("fn<const N; T>([T; N], fn<T>(T) -> Bool) -> Bool");
+        let input = InputSpan::new("fn<len N; T>([T; N], fn<T>(T) -> Bool) -> Bool");
         let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
         let err = FnType::try_from(fn_type).unwrap_err();
 
-        assert_eq!(err.main_span().location_offset(), 26);
+        assert_eq!(err.main_span().location_offset(), 24);
         assert_matches!(
             err.kind(),
             ConversionErrorKind::DuplicateTypeParam { name, previous }
-                if name == "T" && previous.location_offset() == 12
+                if name == "T" && previous.location_offset() == 10
         );
     }
 
     #[test]
     fn converting_raw_fn_type_duplicate_const() {
-        let input = InputSpan::new("fn<const N, N; T>([T; N], fn(T) -> Bool) -> Bool");
+        let input = InputSpan::new("fn<len N, N; T>([T; N], fn(T) -> Bool) -> Bool");
         let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
         let err = FnType::try_from(fn_type).unwrap_err();
 
-        assert_eq!(err.main_span().location_offset(), 12);
+        assert_eq!(err.main_span().location_offset(), 10);
         assert_matches!(
             err.kind(),
             ConversionErrorKind::DuplicateConst { name, previous }
-                if name == "N" && previous.location_offset() == 9
+                if name == "N" && previous.location_offset() == 7
         );
     }
 
     #[test]
     fn converting_raw_fn_type_duplicate_const_in_embedded_fn() {
-        let input = InputSpan::new("fn<const N; T>([T; N], fn<const N>(T) -> Bool) -> Bool");
+        let input = InputSpan::new("fn<len N; T>([T; N], fn<len N>(T) -> Bool) -> Bool");
         let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
         let err = FnType::try_from(fn_type).unwrap_err();
 
-        assert_eq!(err.main_span().location_offset(), 32);
+        assert_eq!(err.main_span().location_offset(), 28);
         assert_matches!(
             err.kind(),
             ConversionErrorKind::DuplicateConst { name, previous }
-                if name == "N" && previous.location_offset() == 9
+                if name == "N" && previous.location_offset() == 7
         );
     }
 
     #[test]
     fn converting_raw_fn_type_undefined_type() {
-        let input = InputSpan::new("fn<const N>([T; N], fn(T) -> Bool) -> Bool");
+        let input = InputSpan::new("fn<len N>([T; N], fn(T) -> Bool) -> Bool");
         let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
         let err = FnType::try_from(fn_type).unwrap_err();
 
-        assert_eq!(err.main_span().location_offset(), 13);
+        assert_eq!(err.main_span().location_offset(), 11);
         assert_matches!(
             err.kind(),
             ConversionErrorKind::UndefinedTypeParam(name) if name == "T"
@@ -498,14 +498,12 @@ mod tests {
 
     #[test]
     fn parsing_functional_value_type() {
-        let ty: ValueType = "fn<const N; T, U>([T; N], fn(T) -> U) -> U"
-            .parse()
-            .unwrap();
+        let ty: ValueType = "fn<len N; T, U>([T; N], fn(T) -> U) -> U".parse().unwrap();
         let ty = match ty {
             ValueType::Function(fn_type) => *fn_type,
             _ => panic!("Unexpected type: {:?}", ty),
         };
-        assert_eq!(ty.const_params.len(), 1);
+        assert_eq!(ty.len_params.len(), 1);
         assert_eq!(ty.type_params.len(), 2);
         assert_eq!(ty.return_type, ValueType::Param(1));
     }
@@ -515,17 +513,17 @@ mod tests {
         const INCOMPLETE_TYPES: &[&str] = &[
             "fn<",
             "fn<co",
-            "fn<const N;",
-            "fn<const N; T",
-            "fn<const N; T,",
-            "fn<const N; T, U>",
-            "fn<const N; T, U>(",
-            "fn<const N; T, U>([T; ",
-            "fn<const N; T, U>([T; N], fn(",
-            "fn<const N; T, U>([T; N], fn(T)",
-            "fn<const N; T, U>([T; N], fn(T)",
-            "fn<const N; T, U>([T; N], fn(T)) -",
-            "fn<const N; T, U>([T; N], fn(T)) ->",
+            "fn<len N;",
+            "fn<len N; T",
+            "fn<len N; T,",
+            "fn<len N; T, U>",
+            "fn<len N; T, U>(",
+            "fn<len N; T, U>([T; ",
+            "fn<len N; T, U>([T; N], fn(",
+            "fn<len N; T, U>([T; N], fn(T)",
+            "fn<len N; T, U>([T; N], fn(T)",
+            "fn<len N; T, U>([T; N], fn(T)) -",
+            "fn<len N; T, U>([T; N], fn(T)) ->",
         ];
 
         for &input in INCOMPLETE_TYPES {

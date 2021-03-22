@@ -83,7 +83,7 @@ fn valid_type_hint_with_fn_arg() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<const N; T>([Num; N], fn(Num) -> T) -> [T; N]"
+        "fn<len N; T>([Num; N], fn(Num) -> T) -> [T; N]"
     );
 }
 
@@ -137,7 +137,7 @@ fn widening_type_hint_with_generic_slice_arg() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<const N; T: Lin>([T; N]) -> [T; N]"
+        "fn<len N; T: Lin>([T; N]) -> [T; N]"
     );
 }
 
@@ -152,7 +152,7 @@ fn widening_type_hint_with_slice_arg() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<const N>([Num; N]) -> [Num; N]"
+        "fn<len N>([Num; N]) -> [Num; N]"
     );
 }
 
@@ -169,12 +169,12 @@ fn unsupported_type_param_in_generic_fn() {
 
 #[test]
 fn unsupported_const_param_in_generic_fn() {
-    let code = "identity: fn<const N>([Num; N]) -> [Num; N] = |x| x;";
+    let code = "identity: fn<len N>([Num; N]) -> [Num; N] = |x| x;";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_eq!(*err.span().fragment(), "fn<const N>([Num; N]) -> [Num; N]");
+    assert_eq!(*err.span().fragment(), "fn<len N>([Num; N]) -> [Num; N]");
     assert_matches!(err.kind(), TypeErrorKind::UnsupportedParam);
 }
 

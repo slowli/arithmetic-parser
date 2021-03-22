@@ -238,15 +238,12 @@ fn main() -> anyhow::Result<()> {
     assert_eq!(env["x"], ValueType::Lit(NumOrBytesType::Num));
     assert_eq!(env["y"].to_string(), "Bytes");
     assert_eq!(env["z"].to_string(), "(Num, Bytes)");
-    assert_eq!(
-        env["sum"].to_string(),
-        "fn<const N; T: Sum>([T; N], T) -> T"
-    );
+    assert_eq!(env["sum"].to_string(), "fn<len N; T: Sum>([T; N], T) -> T");
     assert_eq!(env["sum_of_bytes"].to_string(), "Bytes");
     assert_eq!(env["sum_of_tuples"].to_string(), "(Num, Num)");
     assert_eq!(
         env["product"].to_string(),
-        "fn<const N; T: Lin>([T; N], T) -> T"
+        "fn<len N; T: Lin>([T; N], T) -> T"
     );
     assert_eq!(env["product_of_ints"].to_string(), "Num");
 

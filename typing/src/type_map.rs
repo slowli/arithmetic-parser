@@ -30,7 +30,7 @@ use crate::{FnType, LiteralType, TupleLength, ValueType};
 ///
 /// let mut env: TypeEnvironment = Prelude::iter().collect();
 /// let count_zeros_fn = env.process_statements(&ast)?;
-/// assert_eq!(count_zeros_fn.to_string(), "fn<const N>([Num; N]) -> Num");
+/// assert_eq!(count_zeros_fn.to_string(), "fn<len N>([Num; N]) -> Num");
 /// # Ok(())
 /// # }
 /// ```
@@ -132,7 +132,7 @@ impl Prelude {
     /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
     ///     Prelude::map_type::<Num>().to_string(),
-    ///     "fn<const N; T, U>([T; N], fn(T) -> U) -> [U; N]"
+    ///     "fn<len N; T, U>([T; N], fn(T) -> U) -> [U; N]"
     /// );
     /// ```
     pub fn map_type<Lit: LiteralType>() -> FnType<Lit> {
@@ -141,7 +141,7 @@ impl Prelude {
             .returning(ValueType::Param(1));
 
         FnType::builder()
-            .with_const_params(iter::once(0))
+            .with_len_params(iter::once(0))
             .with_type_params(0..=1)
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
             .with_arg(map_arg)
@@ -156,7 +156,7 @@ impl Prelude {
     /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
     ///     Prelude::filter_type::<Num>().to_string(),
-    ///     "fn<const N, M*; T>([T; N], fn(T) -> Bool) -> [T; M]"
+    ///     "fn<len N, M*; T>([T; N], fn(T) -> Bool) -> [T; M]"
     /// );
     /// ```
     pub fn filter_type<Lit: LiteralType>() -> FnType<Lit> {
@@ -165,8 +165,8 @@ impl Prelude {
             .returning(ValueType::Bool);
 
         FnType::builder()
-            .with_const_params(iter::once(0))
-            .with_dynamic_len_params(iter::once(1))
+            .with_len_params(iter::once(0))
+            .with_dyn_len_params(iter::once(1))
             .with_type_params(iter::once(0))
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
             .with_arg(predicate_arg)
@@ -181,7 +181,7 @@ impl Prelude {
     /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
     ///     Prelude::fold_type::<Num>().to_string(),
-    ///     "fn<const N; T, U>([T; N], U, fn(U, T) -> U) -> U"
+    ///     "fn<len N; T, U>([T; N], U, fn(U, T) -> U) -> U"
     /// );
     /// ```
     pub fn fold_type<Lit: LiteralType>() -> FnType<Lit> {
@@ -192,7 +192,7 @@ impl Prelude {
             .returning(ValueType::Param(1));
 
         FnType::builder()
-            .with_const_params(iter::once(0))
+            .with_len_params(iter::once(0))
             .with_type_params(0..=1)
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
             .with_arg(ValueType::Param(1))
@@ -208,13 +208,13 @@ impl Prelude {
     /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
     ///     Prelude::push_type::<Num>().to_string(),
-    ///     "fn<const N, M*; T>([T; N], T) -> [T; M]"
+    ///     "fn<len N, M*; T>([T; N], T) -> [T; M]"
     /// );
     /// ```
     pub fn push_type<Lit: LiteralType>() -> FnType<Lit> {
         FnType::builder()
-            .with_const_params(iter::once(0))
-            .with_dynamic_len_params(iter::once(1))
+            .with_len_params(iter::once(0))
+            .with_dyn_len_params(iter::once(1))
             .with_type_params(iter::once(0))
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
             .with_arg(ValueType::Param(0))
@@ -229,13 +229,13 @@ impl Prelude {
     /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
     ///     Prelude::merge_type::<Num>().to_string(),
-    ///     "fn<const N, M, L*; T>([T; N], [T; M]) -> [T; L]"
+    ///     "fn<len N, M, L*; T>([T; N], [T; M]) -> [T; L]"
     /// );
     /// ```
     pub fn merge_type<Lit: LiteralType>() -> FnType<Lit> {
         FnType::builder()
-            .with_const_params(0..=1)
-            .with_dynamic_len_params(iter::once(2))
+            .with_len_params(0..=1)
+            .with_dyn_len_params(iter::once(2))
             .with_type_params(iter::once(0))
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(1)))
@@ -326,14 +326,14 @@ mod tests {
         ("true", "Bool"),
         ("if", "fn<T>(Bool, T, T) -> T"),
         ("while", "fn<T>(T, fn(T) -> Bool, fn(T) -> T) -> T"),
-        ("map", "fn<const N; T, U>([T; N], fn(T) -> U) -> [U; N]"),
+        ("map", "fn<len N; T, U>([T; N], fn(T) -> U) -> [U; N]"),
         (
             "filter",
-            "fn<const N, M*; T>([T; N], fn(T) -> Bool) -> [T; M]",
+            "fn<len N, M*; T>([T; N], fn(T) -> Bool) -> [T; M]",
         ),
-        ("fold", "fn<const N; T, U>([T; N], U, fn(U, T) -> U) -> U"),
-        ("push", "fn<const N, M*; T>([T; N], T) -> [T; M]"),
-        ("merge", "fn<const N, M, L*; T>([T; N], [T; M]) -> [T; L]"),
+        ("fold", "fn<len N; T, U>([T; N], U, fn(U, T) -> U) -> U"),
+        ("push", "fn<len N, M*; T>([T; N], T) -> [T; M]"),
+        ("merge", "fn<len N, M, L*; T>([T; N], [T; M]) -> [T; L]"),
     ];
 
     #[test]

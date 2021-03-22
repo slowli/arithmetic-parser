@@ -358,20 +358,20 @@ impl<Lit: LiteralType> Substitutions<Lit> {
                 .map(|(i, (var_idx, _))| (*var_idx, self.type_var_count + i))
                 .collect(),
             constants: fn_type
-                .const_params
+                .len_params
                 .iter()
                 .enumerate()
                 .map(|(i, (var_idx, _))| (*var_idx, self.const_var_count + i))
                 .collect(),
         };
         self.type_var_count += fn_type.type_params.len();
-        self.const_var_count += fn_type.const_params.len();
+        self.const_var_count += fn_type.len_params.len();
 
         let instantiated_fn_type =
             fn_type.substitute_type_vars(&mapping, SubstitutionContext::ParamsToVars);
 
         // Copy constraints on the newly generated const and type vars from the function definition.
-        for (original_idx, description) in &fn_type.const_params {
+        for (original_idx, description) in &fn_type.len_params {
             if description.is_dynamic {
                 let new_idx = mapping.constants[original_idx];
                 self.dyn_lengths.insert(new_idx);

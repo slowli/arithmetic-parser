@@ -3,7 +3,7 @@
 use std::{collections::HashMap, fmt};
 
 use super::type_param;
-use crate::{LiteralType, Num, TupleLength, ValueType};
+use crate::{ast::LengthType, LiteralType, Num, TupleLength, ValueType};
 
 /// Description of a constant parameter.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -24,6 +24,33 @@ impl<C> TypeParamDescription<C> {
 }
 
 /// Functional type.
+///
+/// Functional types can be constructed via [`Self::builder()`] or parsed from a string.
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_typing::{ast::LengthType, FnArgs, FnType, ValueType};
+/// # use assert_matches::assert_matches;
+/// # fn main() -> anyhow::Result<()> {
+/// let fn_type: FnType = "fn<len N>([Num; N]) -> Num".parse()?;
+/// assert_eq!(*fn_type.return_type(), ValueType::NUM);
+/// assert_eq!(
+///     fn_type.len_params().collect::<Vec<_>>(),
+///     vec![(0, LengthType::Static)]
+/// );
+///
+/// let args = match fn_type.args() {
+///     FnArgs::List(args) => args,
+///     _ => unreachable!(),
+/// };
+/// assert_matches!(
+///     args.as_slice(),
+///     [ValueType::Slice { element, .. }] if **element == ValueType::NUM
+/// );
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnType<Lit: LiteralType = Num> {
     /// Type of function arguments.
@@ -111,6 +138,35 @@ impl<Lit: LiteralType> FnType<Lit> {
     /// Returns a builder for `FnType`s.
     pub fn builder() -> FnTypeBuilder<Lit> {
         FnTypeBuilder::default()
+    }
+
+    /// Gets the argument types of this function.
+    pub fn args(&self) -> &FnArgs<Lit> {
+        &self.args
+    }
+
+    /// Gets the return type of this function.
+    pub fn return_type(&self) -> &ValueType<Lit> {
+        &self.return_type
+    }
+
+    /// Iterates over type params of this function together with their constraints.
+    pub fn type_params(&self) -> impl Iterator<Item = (usize, &Lit::Constraints)> + '_ {
+        self.type_params
+            .iter()
+            .map(|(idx, description)| (*idx, &description.constraints))
+    }
+
+    /// Iterates over length params of this function together with their type.
+    pub fn len_params(&self) -> impl Iterator<Item = (usize, LengthType)> + '_ {
+        self.len_params.iter().map(|(idx, description)| {
+            let length_type = if description.is_dynamic {
+                LengthType::Dynamic
+            } else {
+                LengthType::Static
+            };
+            (*idx, length_type)
+        })
     }
 
     /// Returns `true` iff the function has at least one length or type param.

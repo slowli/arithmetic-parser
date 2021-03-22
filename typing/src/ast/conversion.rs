@@ -263,38 +263,57 @@ impl<'a, Lit: LiteralType> TryFrom<ValueTypeAst<'a, Lit>> for ValueType<Lit> {
 impl<Lit: LiteralType> ValueType<Lit> {
     /// Parses type from `input`.
     pub fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
-        Self::parse_inner(input, false)
+        parse_inner(ValueTypeAst::parse, input, false)
+    }
+}
+
+/// Shared parsing code for `ValueType` and `FnType`.
+fn parse_inner<'a, Ast, T>(
+    parser: fn(InputSpan<'a>) -> NomResult<'a, Ast>,
+    input: InputSpan<'a>,
+    consume_all_input: bool,
+) -> NomResult<'a, T>
+where
+    T: TryFrom<Ast, Error = ConversionError<&'a str>>,
+{
+    let (rest, parsed) = parser(input)?;
+    if consume_all_input && !rest.fragment().is_empty() {
+        let err = ParseErrorKind::Leftovers.with_span(&rest.into());
+        return Err(NomErr::Failure(err));
     }
 
-    fn parse_inner(input: InputSpan<'_>, consume_all_input: bool) -> NomResult<'_, Self> {
-        let (rest, parsed) = ValueTypeAst::parse(input)?;
-        if consume_all_input && !rest.fragment().is_empty() {
-            let err = ParseErrorKind::Leftovers.with_span(&rest.into());
-            return Err(NomErr::Failure(err));
-        }
+    let ty = T::try_from(parsed).map_err(|err| {
+        let err_span = err.main_span();
+        let err = ParseErrorKind::Type(err.inner.extra.into()).with_span(&err_span);
+        NomErr::Failure(err)
+    })?;
+    Ok((rest, ty))
+}
 
-        let ty = ValueType::try_from(parsed).map_err(|err| {
-            let err_span = err.main_span();
-            let err = ParseErrorKind::Type(err.inner.extra.into()).with_span(&err_span);
-            NomErr::Failure(err)
-        })?;
-        Ok((rest, ty))
-    }
+/// Shared `FromStr` logic for `ValueType` and `FnType`.
+fn from_str<'a, Ast, T>(
+    parser: fn(InputSpan<'a>) -> NomResult<'a, Ast>,
+    def: &'a str,
+) -> Result<T, SpannedError<usize>>
+where
+    T: TryFrom<Ast, Error = ConversionError<&'a str>>,
+{
+    let input = InputSpan::new(def);
+    let (_, ty) = parse_inner(parser, input, true).map_err(|err| match err {
+        NomErr::Incomplete(_) => ParseErrorKind::Incomplete
+            .with_span(&input.into())
+            .strip_code(),
+        NomErr::Error(e) | NomErr::Failure(e) => e.strip_code(),
+    })?;
+
+    Ok(ty)
 }
 
 impl<Lit: LiteralType> FromStr for ValueType<Lit> {
     type Err = SpannedError<usize>;
 
     fn from_str(def: &str) -> Result<Self, Self::Err> {
-        let input = InputSpan::new(def);
-        let (_, ty) = Self::parse_inner(input, true).map_err(|err| match err {
-            NomErr::Incomplete(_) => ParseErrorKind::Incomplete
-                .with_span(&input.into())
-                .strip_code(),
-            NomErr::Error(e) | NomErr::Failure(e) => e.strip_code(),
-        })?;
-
-        Ok(ty)
+        from_str(ValueTypeAst::parse, def)
     }
 }
 
@@ -344,6 +363,21 @@ impl<'a, Lit: LiteralType> TryFrom<FnTypeAst<'a, Lit>> for FnType<Lit> {
 
     fn try_from(value: FnTypeAst<'a, Lit>) -> Result<Self, Self::Error> {
         value.try_convert(ConversionState::default())
+    }
+}
+
+impl<Lit: LiteralType> FnType<Lit> {
+    /// Parses a functional type from `input`.
+    pub fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
+        parse_inner(FnTypeAst::parse, input, false)
+    }
+}
+
+impl<Lit: LiteralType> FromStr for FnType<Lit> {
+    type Err = SpannedError<usize>;
+
+    fn from_str(def: &str) -> Result<Self, Self::Err> {
+        from_str(FnTypeAst::parse, def)
     }
 }
 

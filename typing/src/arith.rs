@@ -170,6 +170,10 @@ impl NumArithmetic {
     /// Returns the result type of the binary operation.
     ///
     /// This logic can be reused by other [`TypeArithmetic`] implementations.
+    ///
+    /// # Arguments
+    ///
+    /// - `constraints` are applied to arguments of arithmetic ops.
     pub fn unify_binary_op<Lit: LiteralType>(
         substitutions: &mut Substitutions<Lit>,
         lhs_ty: &ValueType<Lit>,
@@ -192,7 +196,10 @@ impl NumArithmetic {
         }
     }
 
-    /// FIXME
+    /// Processes a unary operation according to [the numeric arithmetic rules](#unary-ops).
+    /// Returns the result type of the unary operation.
+    ///
+    /// This logic can be reused by other [`TypeArithmetic`] implementations.
     pub fn process_unary_op<'a, Lit: LiteralType>(
         substitutions: &mut Substitutions<Lit>,
         spans: UnaryOpSpans<'a, Lit>,
@@ -215,7 +222,16 @@ impl NumArithmetic {
         }
     }
 
-    /// FIXME
+    /// Processes a binary operation according to [the numeric arithmetic rules](#binary-ops).
+    /// Returns the result type of the unary operation.
+    ///
+    /// This logic can be reused by other [`TypeArithmetic`] implementations.
+    ///
+    /// # Arguments
+    ///
+    /// - If `comparable_type` is set to `Some(_)`, it will be used to unify arguments of
+    ///   order comparisons. If `comparable_type` is `None`, order comparisons are not supported.
+    /// - `constraints` are applied to arguments of arithmetic ops.
     pub fn process_binary_op<'a, Lit: LiteralType>(
         substitutions: &mut Substitutions<Lit>,
         spans: BinaryOpSpans<'a, Lit>,
@@ -256,6 +272,7 @@ impl NumArithmetic {
     }
 }
 
+// TODO: Are constraints on `Val` appropriate?
 impl<Val> MapLiteralType<Val> for NumArithmetic
 where
     Val: Clone + NumOps + PartialEq + ops::Neg<Output = Val> + Pow<Val, Output = Val>,

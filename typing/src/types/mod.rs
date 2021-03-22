@@ -52,22 +52,59 @@ impl TupleLength {
     }
 }
 
-/// Possible value type.
+/// Enumeration encompassing all types supported by the type system.
+///
+/// Parametric by the [`LiteralType`] (i.e., primitive types besides Booleans).
+///
+/// # Examples
+///
+/// There are conversions to construct `ValueType`s eloquently:
+///
+/// ```
+/// # use arithmetic_typing::{FnType, TupleLength, ValueType};
+/// let tuple: ValueType = (ValueType::Bool, ValueType::NUM).into();
+/// assert_eq!(tuple.to_string(), "(Bool, Num)");
+/// let slice: ValueType = tuple.repeat(TupleLength::Param(0));
+/// assert_eq!(slice.to_string(), "[(Bool, Num); N]");
+/// let fn_type: ValueType = FnType::builder()
+///     .with_len_params(0..1)
+///     .with_arg(slice)
+///     .returning(ValueType::NUM)
+///     .into();
+/// assert_eq!(fn_type.to_string(), "fn<len N>([(Bool, Num); N]) -> Num");
+/// ```
+///
+/// A `ValueType` can also be parsed from a string:
+///
+/// ```
+/// # use arithmetic_typing::ValueType;
+/// # use assert_matches::assert_matches;
+/// # fn main() -> anyhow::Result<()> {
+/// let slice: ValueType = "[(Bool, Num); _]".parse()?;
+/// assert_matches!(slice, ValueType::Slice { .. });
+/// let fn_type: ValueType = "fn<len N>([(Bool, Num); N]) -> Num".parse()?;
+/// assert_matches!(fn_type, ValueType::Function(_));
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone)]
 pub enum ValueType<Lit: LiteralType = Num> {
-    /// Wildcard type.
+    /// Wildcard type, i.e. some type that is not specified. Similar to `_` in type annotations
+    /// in Rust.
     Some,
-    /// Boolean.
+    /// Boolean type.
     // TODO: consider uniting literals and `Bool` as primitive types
     Bool,
-    /// Literal.
+    /// Literal type, i.e. a primitive type excluding Booleans.
     Lit(Lit),
-    /// Function.
+    /// Functional type.
     Function(Box<FnType<Lit>>),
-    /// Tuple.
+    /// Tuple type.
     // TODO: support start / middle / end structuring
     Tuple(Vec<ValueType<Lit>>),
-    /// Slice.
+    /// Slice type. Unlike in Rust, slices are a subset of tuples. If `length` is
+    /// [`Exact`](TupleLength::Exact), the slice is completely equivalent
+    /// to the corresponding tuple.
     Slice {
         /// Type of slice elements.
         element: Box<ValueType<Lit>>,

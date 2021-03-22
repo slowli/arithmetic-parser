@@ -24,12 +24,13 @@ mod tests;
 
 pub use self::conversion::{ConversionError, ConversionErrorKind};
 
-/// FIXME
+/// Type of a length parameter.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub enum LengthType {
-    /// FIXME
+    /// Parameter is static (can be found during type inference / "in compile time").
     Static,
-    /// FIXME
+    /// Parameter is dynamic (can very at runtime).
     Dynamic,
 }
 

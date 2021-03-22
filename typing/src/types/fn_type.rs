@@ -254,7 +254,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 /// Signature for a slice mapping function:
 ///
 /// ```
-/// # use arithmetic_typing::{FnType, TupleLength, ValueType, LinConstraints};
+/// # use arithmetic_typing::{arith::LinConstraints, FnType, TupleLength, ValueType};
 /// # use std::iter;
 /// // Definition of the mapping arg. Note that the definition uses type params,
 /// // but does not declare them (they are bound to the parent function).

@@ -1,14 +1,28 @@
-//! `TypeArithmetic` and its implementations.
+//! Types allowing to customize various aspects of the type system, such as type constraints
+//! and behavior of unary / binary ops.
 
 use num_traits::{NumOps, Pow};
 
 use std::ops;
 
-use crate::{
-    LinConstraints, MapPrimitiveType, Num, PrimitiveType, Substitutions, TypeConstraints,
-    TypeErrorKind, TypeResult, ValueType,
-};
+use crate::{Num, PrimitiveType, Substitutions, TypeErrorKind, TypeResult, ValueType};
 use arithmetic_parser::{BinaryOp, Spanned, UnaryOp};
+
+mod constraints;
+
+pub use self::constraints::{LinConstraints, LinearType, NoConstraints, TypeConstraints};
+
+/// Maps a literal value from a certain [`Grammar`] to its type. This assumes that all literals
+/// are primitive.
+///
+/// [`Grammar`]: arithmetic_parser::grammars::Grammar
+pub trait MapPrimitiveType<Val> {
+    /// Types of literals output by this mapper.
+    type Prim: PrimitiveType;
+
+    /// Gets the type of the provided literal value.
+    fn type_of_literal(&self, lit: &Val) -> Self::Prim;
+}
 
 /// Arithmetic allowing to customize primitive types and how unary and binary operations are handled
 /// during type inference.

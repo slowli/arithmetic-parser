@@ -7,8 +7,8 @@ use arithmetic_parser::{
 };
 
 use arithmetic_typing::{
-    arith::*, impl_display_for_singleton_type, Assertions, LinConstraints, LinearType,
-    MapPrimitiveType, PrimitiveType, Substitutions, TypeEnvironment, TypeResult, ValueType,
+    arith::*, impl_display_for_singleton_type, Assertions, PrimitiveType, Substitutions,
+    TypeEnvironment, TypeResult, ValueType,
 };
 
 /// Type of our literals: a string.

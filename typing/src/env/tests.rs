@@ -2,7 +2,7 @@ use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
 use assert_matches::assert_matches;
 
 use super::*;
-use crate::{Annotated, FnArgs, LinConstraints, Num, Prelude, TupleLength};
+use crate::{arith::LinConstraints, Annotated, FnArgs, Num, Prelude, TupleLength};
 
 pub type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
 

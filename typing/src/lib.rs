@@ -72,7 +72,6 @@ use arithmetic_parser::{
 
 pub mod arith;
 pub mod ast;
-mod constraints;
 mod env;
 mod error;
 mod substitutions;
@@ -80,13 +79,14 @@ mod type_map;
 mod types;
 
 pub use self::{
-    constraints::{LinConstraints, LinearType, NoConstraints, TypeConstraints},
     env::TypeEnvironment,
     error::{TypeError, TypeErrorKind, TypeResult},
     substitutions::Substitutions,
     type_map::{Assertions, Prelude},
     types::{FnArgs, FnType, FnTypeBuilder, LengthKind, TupleLength, ValueType},
 };
+
+use self::arith::{LinConstraints, LinearType, TypeConstraints};
 
 // Reexports for the macros.
 #[doc(hidden)]
@@ -116,7 +116,7 @@ pub mod _reexports {
 ///
 /// ```
 /// # use std::{fmt, str::FromStr};
-/// use arithmetic_typing::{PrimitiveType, NoConstraints};
+/// use arithmetic_typing::{arith::NoConstraints, PrimitiveType};
 ///
 /// #[derive(Debug, Clone, Copy, PartialEq)]
 /// enum NumOrBytes {
@@ -172,10 +172,9 @@ pub trait PrimitiveType:
 /// # Examples
 ///
 /// ```
-/// use arithmetic_typing::{
-///     impl_display_for_singleton_type, NoConstraints, PrimitiveType,
-/// };
-///
+/// # use arithmetic_typing::{
+/// #     arith::NoConstraints, impl_display_for_singleton_type, PrimitiveType,
+/// # };
 /// #[derive(Debug, Clone, Copy, PartialEq)]
 /// pub struct SomeType;
 ///
@@ -226,18 +225,6 @@ impl LinearType for Num {
     fn is_linear(&self) -> bool {
         true // all numbers are linear
     }
-}
-
-/// Maps a literal value from a certain [`Grammar`] to its type. This assumes that all literals
-/// are primitive.
-///
-/// [`Grammar`]: arithmetic_parser::grammars::Grammar
-pub trait MapPrimitiveType<Val> {
-    /// Types of literals output by this mapper.
-    type Prim: PrimitiveType;
-
-    /// Gets the type of the provided literal value.
-    fn type_of_literal(&self, lit: &Val) -> Self::Prim;
 }
 
 /// Grammar with support of type annotations. Works as a decorator.

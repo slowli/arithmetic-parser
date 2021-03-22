@@ -8,9 +8,9 @@ use std::{
 };
 
 use crate::{
-    arith::{BinaryOpSpans, NumArithmetic, TypeArithmetic, UnaryOpSpans},
-    FnArgs, FnType, MapPrimitiveType, Num, PrimitiveType, Substitutions, TypeError, TypeErrorKind,
-    TypeResult, ValueType,
+    arith::{BinaryOpSpans, MapPrimitiveType, NumArithmetic, TypeArithmetic, UnaryOpSpans},
+    FnArgs, FnType, Num, PrimitiveType, Substitutions, TypeError, TypeErrorKind, TypeResult,
+    ValueType,
 };
 use arithmetic_parser::{
     grammars::Grammar, BinaryOp, Block, Destructure, Expr, FnDefinition, Lvalue, Spanned,

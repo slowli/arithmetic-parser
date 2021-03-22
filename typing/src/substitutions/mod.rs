@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    FnArgs, FnType, PrimitiveType, TupleLength, TypeConstraints, TypeErrorKind, ValueType,
+    arith::TypeConstraints, FnArgs, FnType, PrimitiveType, TupleLength, TypeErrorKind, ValueType,
 };
 
 mod fns;

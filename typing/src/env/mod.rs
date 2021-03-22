@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     arith::{BinaryOpSpans, NumArithmetic, TypeArithmetic, UnaryOpSpans},
-    FnArgs, FnType, LiteralType, MapLiteralType, Num, Substitutions, TypeError, TypeErrorKind,
+    FnArgs, FnType, MapPrimitiveType, Num, PrimitiveType, Substitutions, TypeError, TypeErrorKind,
     TypeResult, ValueType,
 };
 use arithmetic_parser::{
@@ -22,7 +22,7 @@ mod tests;
 #[cfg(test)]
 mod type_annotation_tests;
 
-type FnArgsAndOutput<Lit> = (Vec<ValueType<Lit>>, ValueType<Lit>);
+type FnArgsAndOutput<Prim> = (Vec<ValueType<Prim>>, ValueType<Prim>);
 
 /// Environment containing type information on named variables.
 ///
@@ -66,12 +66,12 @@ type FnArgsAndOutput<Lit> = (Vec<ValueType<Lit>>, ValueType<Lit>);
 /// Non-concrete types are tied to an environment. An environment will panic
 /// on inserting a non-concrete type via [`Self::insert()`] or other methods.
 #[derive(Debug, Clone)]
-pub struct TypeEnvironment<Lit: LiteralType = Num> {
-    variables: HashMap<String, ValueType<Lit>>,
-    substitutions: Substitutions<Lit>,
+pub struct TypeEnvironment<Prim: PrimitiveType = Num> {
+    variables: HashMap<String, ValueType<Prim>>,
+    substitutions: Substitutions<Prim>,
 }
 
-impl<Lit: LiteralType> Default for TypeEnvironment<Lit> {
+impl<Prim: PrimitiveType> Default for TypeEnvironment<Prim> {
     fn default() -> Self {
         Self {
             variables: HashMap::new(),
@@ -80,19 +80,19 @@ impl<Lit: LiteralType> Default for TypeEnvironment<Lit> {
     }
 }
 
-impl<Lit: LiteralType> TypeEnvironment<Lit> {
+impl<Prim: PrimitiveType> TypeEnvironment<Prim> {
     /// Creates an empty environment.
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Gets type of the specified variable.
-    pub fn get(&self, name: &str) -> Option<&ValueType<Lit>> {
+    pub fn get(&self, name: &str) -> Option<&ValueType<Prim>> {
         self.variables.get(name)
     }
 
     /// Iterates over variables contained in this env.
-    pub fn iter(&self) -> impl Iterator<Item = (&str, &ValueType<Lit>)> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &ValueType<Prim>)> + '_ {
         self.variables.iter().map(|(name, ty)| (name.as_str(), ty))
     }
 
@@ -102,7 +102,7 @@ impl<Lit: LiteralType> TypeEnvironment<Lit> {
     ///
     /// - Will panic if `value_type` is not [concrete](ValueType::is_concrete()). Non-concrete
     ///   types are tied to the environment; inserting them into an env is a logical error.
-    pub fn insert(&mut self, name: &str, value_type: ValueType<Lit>) -> &mut Self {
+    pub fn insert(&mut self, name: &str, value_type: ValueType<Prim>) -> &mut Self {
         assert!(
             value_type.is_concrete(),
             "Type {} is not concrete",
@@ -120,10 +120,10 @@ impl<Lit: LiteralType> TypeEnvironment<Lit> {
     pub fn process_statements<'a, T>(
         &mut self,
         block: &Block<'a, T>,
-    ) -> Result<ValueType<Lit>, TypeError<'a, Lit>>
+    ) -> Result<ValueType<Prim>, TypeError<'a, Prim>>
     where
-        T: Grammar<Type = ValueType<Lit>>,
-        NumArithmetic: MapLiteralType<T::Lit, Lit = Lit> + TypeArithmetic<Lit>,
+        T: Grammar<Type = ValueType<Prim>>,
+        NumArithmetic: MapPrimitiveType<T::Lit, Prim = Prim> + TypeArithmetic<Prim>,
     {
         self.process_with_arithmetic(&NumArithmetic::without_comparisons(), block)
     }
@@ -134,17 +134,17 @@ impl<Lit: LiteralType> TypeEnvironment<Lit> {
         &mut self,
         arithmetic: &A,
         block: &Block<'a, T>,
-    ) -> Result<ValueType<Lit>, TypeError<'a, Lit>>
+    ) -> Result<ValueType<Prim>, TypeError<'a, Prim>>
     where
-        T: Grammar<Type = ValueType<Lit>>,
-        A: MapLiteralType<T::Lit, Lit = Lit> + TypeArithmetic<Lit>,
+        T: Grammar<Type = ValueType<Prim>>,
+        A: MapPrimitiveType<T::Lit, Prim = Prim> + TypeArithmetic<Prim>,
     {
         TypeProcessor::new(self, arithmetic).process_statements(block)
     }
 }
 
-impl<Lit: LiteralType> ops::Index<&str> for TypeEnvironment<Lit> {
-    type Output = ValueType<Lit>;
+impl<Prim: PrimitiveType> ops::Index<&str> for TypeEnvironment<Prim> {
+    type Output = ValueType<Prim>;
 
     fn index(&self, name: &str) -> &Self::Output {
         self.get(name)
@@ -152,25 +152,25 @@ impl<Lit: LiteralType> ops::Index<&str> for TypeEnvironment<Lit> {
     }
 }
 
-fn convert_iter<Lit: LiteralType, S, Ty, I>(
+fn convert_iter<Prim: PrimitiveType, S, Ty, I>(
     iter: I,
-) -> impl Iterator<Item = (String, ValueType<Lit>)>
+) -> impl Iterator<Item = (String, ValueType<Prim>)>
 where
     I: IntoIterator<Item = (S, Ty)>,
     S: Into<String>,
-    Ty: Into<ValueType<Lit>>,
+    Ty: Into<ValueType<Prim>>,
 {
     iter.into_iter().map(|(name, ty)| {
-        let ty: ValueType<Lit> = ty.into();
+        let ty: ValueType<Prim> = ty.into();
         assert!(ty.is_concrete(), "Type {} is not concrete", ty);
         (name.into(), ty)
     })
 }
 
-impl<Lit: LiteralType, S, Ty> FromIterator<(S, Ty)> for TypeEnvironment<Lit>
+impl<Prim: PrimitiveType, S, Ty> FromIterator<(S, Ty)> for TypeEnvironment<Prim>
 where
     S: Into<String>,
-    Ty: Into<ValueType<Lit>>,
+    Ty: Into<ValueType<Prim>>,
 {
     fn from_iter<I: IntoIterator<Item = (S, Ty)>>(iter: I) -> Self {
         Self {
@@ -180,10 +180,10 @@ where
     }
 }
 
-impl<Lit: LiteralType, S, Ty> Extend<(S, Ty)> for TypeEnvironment<Lit>
+impl<Prim: PrimitiveType, S, Ty> Extend<(S, Ty)> for TypeEnvironment<Prim>
 where
     S: Into<String>,
-    Ty: Into<ValueType<Lit>>,
+    Ty: Into<ValueType<Prim>>,
 {
     fn extend<I: IntoIterator<Item = (S, Ty)>>(&mut self, iter: I) {
         self.variables.extend(convert_iter(iter))
@@ -191,29 +191,29 @@ where
 }
 
 // Helper trait to wrap type mapper and arithmetic.
-trait FullArithmetic<Val, Lit: LiteralType>:
-    MapLiteralType<Val, Lit = Lit> + TypeArithmetic<Lit>
+trait FullArithmetic<Val, Prim: PrimitiveType>:
+    MapPrimitiveType<Val, Prim = Prim> + TypeArithmetic<Prim>
 {
 }
 
-impl<Val, Lit: LiteralType, T> FullArithmetic<Val, Lit> for T where
-    T: MapLiteralType<Val, Lit = Lit> + TypeArithmetic<Lit>
+impl<Val, Prim: PrimitiveType, T> FullArithmetic<Val, Prim> for T where
+    T: MapPrimitiveType<Val, Prim = Prim> + TypeArithmetic<Prim>
 {
 }
 
 /// Processor for deriving type information.
-struct TypeProcessor<'a, Val, Lit: LiteralType> {
-    root_scope: &'a mut TypeEnvironment<Lit>,
+struct TypeProcessor<'a, Val, Prim: PrimitiveType> {
+    root_scope: &'a mut TypeEnvironment<Prim>,
     unresolved_root_vars: HashSet<String>,
-    inner_scopes: Vec<HashMap<String, ValueType<Lit>>>,
-    arithmetic: &'a dyn FullArithmetic<Val, Lit>,
+    inner_scopes: Vec<HashMap<String, ValueType<Prim>>>,
+    arithmetic: &'a dyn FullArithmetic<Val, Prim>,
     is_in_function: bool,
 }
 
-impl<'a, Val, Lit: LiteralType> TypeProcessor<'a, Val, Lit> {
+impl<'a, Val, Prim: PrimitiveType> TypeProcessor<'a, Val, Prim> {
     fn new(
-        env: &'a mut TypeEnvironment<Lit>,
-        arithmetic: &'a dyn FullArithmetic<Val, Lit>,
+        env: &'a mut TypeEnvironment<Prim>,
+        arithmetic: &'a dyn FullArithmetic<Val, Prim>,
     ) -> Self {
         Self {
             root_scope: env,
@@ -225,8 +225,8 @@ impl<'a, Val, Lit: LiteralType> TypeProcessor<'a, Val, Lit> {
     }
 }
 
-impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
-    fn get_type(&self, name: &str) -> Option<&ValueType<Lit>> {
+impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> {
+    fn get_type(&self, name: &str) -> Option<&ValueType<Prim>> {
         self.inner_scopes
             .iter()
             .rev()
@@ -235,7 +235,7 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
             .or_else(|| self.root_scope.get(name))
     }
 
-    fn insert_type(&mut self, name: &str, ty: ValueType<Lit>) {
+    fn insert_type(&mut self, name: &str, ty: ValueType<Prim>) {
         let scope = self
             .inner_scopes
             .last_mut()
@@ -247,14 +247,14 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
         }
     }
 
-    fn process_expr_inner<'a, T>(&mut self, expr: &SpannedExpr<'a, T>) -> TypeResult<'a, Lit>
+    fn process_expr_inner<'a, T>(&mut self, expr: &SpannedExpr<'a, T>) -> TypeResult<'a, Prim>
     where
-        T: Grammar<Lit = L, Type = ValueType<Lit>>,
+        T: Grammar<Lit = Val, Type = ValueType<Prim>>,
     {
         match &expr.extra {
             Expr::Variable => self.process_var(expr),
 
-            Expr::Literal(lit) => Ok(ValueType::Lit(self.arithmetic.type_of_literal(lit))),
+            Expr::Literal(lit) => Ok(ValueType::Prim(self.arithmetic.type_of_literal(lit))),
 
             Expr::Tuple(ref terms) => {
                 let term_types: Result<Vec<_>, _> = terms
@@ -299,15 +299,15 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
     }
 
     #[inline]
-    fn process_var<'a, T>(&self, name: &Spanned<'a, T>) -> TypeResult<'a, Lit> {
+    fn process_var<'a, T>(&self, name: &Spanned<'a, T>) -> TypeResult<'a, Prim> {
         self.get_type(name.fragment()).cloned().ok_or_else(|| {
             TypeErrorKind::UndefinedVar((*name.fragment()).to_owned()).with_span(name)
         })
     }
 
-    fn process_block<'a, T>(&mut self, block: &Block<'a, T>) -> TypeResult<'a, Lit>
+    fn process_block<'a, T>(&mut self, block: &Block<'a, T>) -> TypeResult<'a, Prim>
     where
-        T: Grammar<Lit = L, Type = ValueType<Lit>>,
+        T: Grammar<Lit = Val, Type = ValueType<Prim>>,
     {
         for statement in &block.statements {
             self.process_statement(statement)?;
@@ -321,8 +321,8 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
     /// Processes an lvalue type by replacing `Any` types with newly created type vars.
     fn process_lvalue<'a>(
         &mut self,
-        lvalue: &SpannedLvalue<'a, ValueType<Lit>>,
-    ) -> TypeResult<'a, Lit> {
+        lvalue: &SpannedLvalue<'a, ValueType<Prim>>,
+    ) -> TypeResult<'a, Prim> {
         match &lvalue.extra {
             Lvalue::Variable { ty } => {
                 let mut value_type = ty.as_ref().map_or(ValueType::Some, |ty| ty.extra.clone());
@@ -348,8 +348,8 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
     #[inline]
     fn process_destructure<'a>(
         &mut self,
-        destructure: &Destructure<'a, ValueType<Lit>>,
-    ) -> Result<Vec<ValueType<Lit>>, TypeError<'a, Lit>> {
+        destructure: &Destructure<'a, ValueType<Prim>>,
+    ) -> Result<Vec<ValueType<Prim>>, TypeError<'a, Prim>> {
         if let Some(middle) = &destructure.middle {
             // TODO: allow middles with explicitly set type.
             return Err(TypeErrorKind::UnsupportedDestructure.with_span(middle));
@@ -366,11 +366,11 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
     fn process_fn_call<'it, 'a: 'it, T>(
         &mut self,
         call_expr: &SpannedExpr<'a, T>,
-        fn_type: &ValueType<Lit>,
+        fn_type: &ValueType<Prim>,
         args: impl Iterator<Item = &'it SpannedExpr<'a, T>>,
-    ) -> TypeResult<'a, Lit>
+    ) -> TypeResult<'a, Prim>
     where
-        T: Grammar<Lit = L, Type = ValueType<Lit>>,
+        T: Grammar<Lit = Val, Type = ValueType<Prim>>,
     {
         let arg_types: Result<Vec<_>, _> = args.map(|arg| self.process_expr_inner(arg)).collect();
         let arg_types = arg_types?;
@@ -389,9 +389,9 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
         unary_expr: &SpannedExpr<'a, T>,
         op: Spanned<'a, UnaryOp>,
         inner: &SpannedExpr<'a, T>,
-    ) -> TypeResult<'a, Lit>
+    ) -> TypeResult<'a, Prim>
     where
-        T: Grammar<Lit = L, Type = ValueType<Lit>>,
+        T: Grammar<Lit = Val, Type = ValueType<Prim>>,
     {
         let inner_ty = self.process_expr_inner(inner)?;
         let spans = UnaryOpSpans {
@@ -410,9 +410,9 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
         op: Spanned<'a, BinaryOp>,
         lhs: &SpannedExpr<'a, T>,
         rhs: &SpannedExpr<'a, T>,
-    ) -> TypeResult<'a, Lit>
+    ) -> TypeResult<'a, Prim>
     where
-        T: Grammar<Lit = L, Type = ValueType<Lit>>,
+        T: Grammar<Lit = Val, Type = ValueType<Prim>>,
     {
         let lhs_ty = self.process_expr_inner(lhs)?;
         let rhs_ty = self.process_expr_inner(rhs)?;
@@ -429,9 +429,9 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
     fn process_fn_def<'a, T>(
         &mut self,
         def: &FnDefinition<'a, T>,
-    ) -> Result<FnType<Lit>, TypeError<'a, Lit>>
+    ) -> Result<FnType<Prim>, TypeError<'a, Prim>>
     where
-        T: Grammar<Lit = L, Type = ValueType<Lit>>,
+        T: Grammar<Lit = Val, Type = ValueType<Prim>>,
     {
         self.inner_scopes.push(HashMap::new());
         let was_in_function = mem::replace(&mut self.is_in_function, true);
@@ -460,9 +460,9 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
     fn process_fn_def_inner<'a, T>(
         &mut self,
         def: &FnDefinition<'a, T>,
-    ) -> Result<FnArgsAndOutput<Lit>, TypeError<'a, Lit>>
+    ) -> Result<FnArgsAndOutput<Prim>, TypeError<'a, Prim>>
     where
-        T: Grammar<Lit = L, Type = ValueType<Lit>>,
+        T: Grammar<Lit = Val, Type = ValueType<Prim>>,
     {
         let arg_types = self.process_destructure(&def.args.extra)?;
         let return_type = self.process_block(&def.body)?;
@@ -472,9 +472,9 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
     fn process_statement<'a, T>(
         &mut self,
         statement: &SpannedStatement<'a, T>,
-    ) -> TypeResult<'a, Lit>
+    ) -> TypeResult<'a, Prim>
     where
-        T: Grammar<Lit = L, Type = ValueType<Lit>>,
+        T: Grammar<Lit = Val, Type = ValueType<Prim>>,
     {
         match &statement.extra {
             Statement::Expr(expr) => self.process_expr_inner(expr),
@@ -493,9 +493,9 @@ impl<L: fmt::Debug + Clone, Lit: LiteralType> TypeProcessor<'_, L, Lit> {
         }
     }
 
-    fn process_statements<'a, T>(&mut self, block: &Block<'a, T>) -> TypeResult<'a, Lit>
+    fn process_statements<'a, T>(&mut self, block: &Block<'a, T>) -> TypeResult<'a, Prim>
     where
-        T: Grammar<Lit = L, Type = ValueType<Lit>>,
+        T: Grammar<Lit = Val, Type = ValueType<Prim>>,
     {
         let result = self.process_block(block);
 

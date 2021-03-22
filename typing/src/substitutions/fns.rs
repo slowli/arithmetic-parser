@@ -4,13 +4,14 @@ use std::collections::{HashMap, HashSet};
 
 use crate::types::LenParamDescription;
 use crate::{
-    types::TypeParamDescription, FnArgs, FnType, LiteralType, Substitutions, TupleLength, ValueType,
+    types::TypeParamDescription, FnArgs, FnType, PrimitiveType, Substitutions, TupleLength,
+    ValueType,
 };
 
-impl<Lit: LiteralType> FnType<Lit> {
+impl<Prim: PrimitiveType> FnType<Prim> {
     /// Performs final transformations on this type, transforming all of its type vars
     /// into type params.
-    pub(crate) fn finalize(&mut self, substitutions: &Substitutions<Lit>) {
+    pub(crate) fn finalize(&mut self, substitutions: &Substitutions<Prim>) {
         let mut tree = FnTypeTree::new(self);
         tree.infer_type_params(&HashSet::new(), &HashSet::new());
         let mapping = tree.create_param_mapping();
@@ -92,12 +93,12 @@ struct FnTypeTree {
 
 // TODO: add unit tests covering main methods
 impl FnTypeTree {
-    fn new<Lit: LiteralType>(base: &FnType<Lit>) -> Self {
-        fn recurse<L: LiteralType>(
+    fn new<Prim: PrimitiveType>(base: &FnType<Prim>) -> Self {
+        fn recurse<P: PrimitiveType>(
             children: &mut Vec<FnTypeTree>,
             type_vars: &mut HashMap<usize, VarQuantity>,
             const_vars: &mut HashMap<usize, VarQuantity>,
-            ty: &ValueType<L>,
+            ty: &ValueType<P>,
         ) {
             match ty {
                 ValueType::Var(idx) => {
@@ -219,15 +220,15 @@ impl FnTypeTree {
     }
 
     /// Recursively sets `type_params` for `base`.
-    fn merge_into<Lit: LiteralType>(
+    fn merge_into<Prim: PrimitiveType>(
         self,
-        base: &mut FnType<Lit>,
-        substitutions: &Substitutions<Lit>,
+        base: &mut FnType<Prim>,
+        substitutions: &Substitutions<Prim>,
     ) {
-        fn recurse<L: LiteralType>(
+        fn recurse<P: PrimitiveType>(
             reversed_children: &mut Vec<FnTypeTree>,
-            ty: &mut ValueType<L>,
-            substitutions: &Substitutions<L>,
+            ty: &mut ValueType<P>,
+            substitutions: &Substitutions<P>,
         ) {
             match ty {
                 ValueType::Tuple(elements) => {
@@ -299,7 +300,7 @@ impl TupleLength {
     }
 }
 
-impl<Lit: LiteralType> ValueType<Lit> {
+impl<Prim: PrimitiveType> ValueType<Prim> {
     /// Recursively substitutes type vars in this type according to `type_var_mapping`.
     /// Returns the type with substituted vars.
     fn substitute_type_vars(&self, mapping: &ParamMapping, context: SubstitutionContext) -> Self {

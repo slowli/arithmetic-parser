@@ -5,55 +5,55 @@ use num_traits::{NumOps, Pow};
 use std::ops;
 
 use crate::{
-    LinConstraints, LiteralType, MapLiteralType, Num, Substitutions, TypeConstraints,
+    LinConstraints, MapPrimitiveType, Num, PrimitiveType, Substitutions, TypeConstraints,
     TypeErrorKind, TypeResult, ValueType,
 };
 use arithmetic_parser::{BinaryOp, Spanned, UnaryOp};
 
-/// Arithmetic allowing to customize literal types and how unary and binary operations are handled
+/// Arithmetic allowing to customize primitive types and how unary and binary operations are handled
 /// during type inference.
-pub trait TypeArithmetic<Lit: LiteralType> {
+pub trait TypeArithmetic<Prim: PrimitiveType> {
     /// Handles a unary operation.
     fn process_unary_op<'a>(
         &self,
-        substitutions: &mut Substitutions<Lit>,
-        spans: UnaryOpSpans<'a, Lit>,
-    ) -> TypeResult<'a, Lit>;
+        substitutions: &mut Substitutions<Prim>,
+        spans: UnaryOpSpans<'a, Prim>,
+    ) -> TypeResult<'a, Prim>;
 
     /// Handles a binary operation.
     fn process_binary_op<'a>(
         &self,
-        substitutions: &mut Substitutions<Lit>,
-        spans: BinaryOpSpans<'a, Lit>,
-    ) -> TypeResult<'a, Lit>;
+        substitutions: &mut Substitutions<Prim>,
+        spans: BinaryOpSpans<'a, Prim>,
+    ) -> TypeResult<'a, Prim>;
 }
 
 /// Code spans related to a unary operation.
 ///
 /// Used in [`TypeArithmetic::process_unary_op()`].
 #[derive(Debug, Clone)]
-pub struct UnaryOpSpans<'a, Lit: LiteralType> {
+pub struct UnaryOpSpans<'a, Prim: PrimitiveType> {
     /// Total span of the operation call.
     pub total: Spanned<'a>,
     /// Spanned unary operation.
     pub op: Spanned<'a, UnaryOp>,
     /// Span of the inner operation.
-    pub inner: Spanned<'a, ValueType<Lit>>,
+    pub inner: Spanned<'a, ValueType<Prim>>,
 }
 
 /// Code spans related to a binary operation.
 ///
 /// Used in [`TypeArithmetic::process_binary_op()`].
 #[derive(Debug, Clone)]
-pub struct BinaryOpSpans<'a, Lit: LiteralType> {
+pub struct BinaryOpSpans<'a, Prim: PrimitiveType> {
     /// Total span of the operation call.
     pub total: Spanned<'a>,
     /// Spanned binary operation.
     pub op: Spanned<'a, BinaryOp>,
     /// Spanned left-hand side.
-    pub lhs: Spanned<'a, ValueType<Lit>>,
+    pub lhs: Spanned<'a, ValueType<Prim>>,
     /// Spanned right-hand side.
-    pub rhs: Spanned<'a, ValueType<Lit>>,
+    pub rhs: Spanned<'a, ValueType<Prim>>,
 }
 
 /// Simplest [`TypeArithmetic`] implementation that defines unary / binary ops only on
@@ -61,16 +61,16 @@ pub struct BinaryOpSpans<'a, Lit: LiteralType> {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct BoolArithmetic;
 
-impl<Lit: LiteralType> TypeArithmetic<Lit> for BoolArithmetic {
+impl<Prim: PrimitiveType> TypeArithmetic<Prim> for BoolArithmetic {
     /// Processes a unary operation.
     ///
     /// - `!` requires a Boolean input and outputs a Boolean.
     /// - Other operations fail with [`TypeErrorKind::Unsupported`].
     fn process_unary_op<'a>(
         &self,
-        substitutions: &mut Substitutions<Lit>,
-        spans: UnaryOpSpans<'a, Lit>,
-    ) -> TypeResult<'a, Lit> {
+        substitutions: &mut Substitutions<Prim>,
+        spans: UnaryOpSpans<'a, Prim>,
+    ) -> TypeResult<'a, Prim> {
         let op = spans.op.extra;
         match op {
             UnaryOp::Not => {
@@ -92,9 +92,9 @@ impl<Lit: LiteralType> TypeArithmetic<Lit> for BoolArithmetic {
     /// - Other operations fail with [`TypeErrorKind::Unsupported`].
     fn process_binary_op<'a>(
         &self,
-        substitutions: &mut Substitutions<Lit>,
-        spans: BinaryOpSpans<'a, Lit>,
-    ) -> TypeResult<'a, Lit> {
+        substitutions: &mut Substitutions<Prim>,
+        spans: BinaryOpSpans<'a, Prim>,
+    ) -> TypeResult<'a, Prim> {
         let op = spans.op.extra;
         let lhs_ty = &spans.lhs.extra;
         let rhs_ty = &spans.rhs.extra;
@@ -174,12 +174,12 @@ impl NumArithmetic {
     /// # Arguments
     ///
     /// - `constraints` are applied to arguments of arithmetic ops.
-    pub fn unify_binary_op<Lit: LiteralType>(
-        substitutions: &mut Substitutions<Lit>,
-        lhs_ty: &ValueType<Lit>,
-        rhs_ty: &ValueType<Lit>,
-        constraints: &Lit::Constraints,
-    ) -> Result<ValueType<Lit>, TypeErrorKind<Lit>> {
+    pub fn unify_binary_op<Prim: PrimitiveType>(
+        substitutions: &mut Substitutions<Prim>,
+        lhs_ty: &ValueType<Prim>,
+        rhs_ty: &ValueType<Prim>,
+        constraints: &Prim::Constraints,
+    ) -> Result<ValueType<Prim>, TypeErrorKind<Prim>> {
         constraints.apply(lhs_ty, substitutions)?;
         constraints.apply(rhs_ty, substitutions)?;
 
@@ -200,11 +200,11 @@ impl NumArithmetic {
     /// Returns the result type of the unary operation.
     ///
     /// This logic can be reused by other [`TypeArithmetic`] implementations.
-    pub fn process_unary_op<'a, Lit: LiteralType>(
-        substitutions: &mut Substitutions<Lit>,
-        spans: UnaryOpSpans<'a, Lit>,
-        constraints: &Lit::Constraints,
-    ) -> TypeResult<'a, Lit> {
+    pub fn process_unary_op<'a, Prim: PrimitiveType>(
+        substitutions: &mut Substitutions<Prim>,
+        spans: UnaryOpSpans<'a, Prim>,
+        constraints: &Prim::Constraints,
+    ) -> TypeResult<'a, Prim> {
         let op = spans.op.extra;
         let inner_ty = &spans.inner.extra;
 
@@ -232,12 +232,12 @@ impl NumArithmetic {
     /// - If `comparable_type` is set to `Some(_)`, it will be used to unify arguments of
     ///   order comparisons. If `comparable_type` is `None`, order comparisons are not supported.
     /// - `constraints` are applied to arguments of arithmetic ops.
-    pub fn process_binary_op<'a, Lit: LiteralType>(
-        substitutions: &mut Substitutions<Lit>,
-        spans: BinaryOpSpans<'a, Lit>,
-        comparable_type: Option<Lit>,
-        constraints: &Lit::Constraints,
-    ) -> TypeResult<'a, Lit> {
+    pub fn process_binary_op<'a, Prim: PrimitiveType>(
+        substitutions: &mut Substitutions<Prim>,
+        spans: BinaryOpSpans<'a, Prim>,
+        comparable_type: Option<Prim>,
+        constraints: &Prim::Constraints,
+    ) -> TypeResult<'a, Prim> {
         let op = spans.op.extra;
         let lhs_ty = &spans.lhs.extra;
         let rhs_ty = &spans.rhs.extra;
@@ -254,7 +254,7 @@ impl NumArithmetic {
 
             BinaryOp::Ge | BinaryOp::Le | BinaryOp::Lt | BinaryOp::Gt => {
                 if let Some(ty) = comparable_type {
-                    let ty = ValueType::Lit(ty);
+                    let ty = ValueType::Prim(ty);
                     substitutions
                         .unify(&ty, lhs_ty)
                         .map_err(|err| err.with_span(&spans.lhs))?;
@@ -273,13 +273,13 @@ impl NumArithmetic {
 }
 
 // TODO: Are constraints on `Val` appropriate?
-impl<Val> MapLiteralType<Val> for NumArithmetic
+impl<Val> MapPrimitiveType<Val> for NumArithmetic
 where
     Val: Clone + NumOps + PartialEq + ops::Neg<Output = Val> + Pow<Val, Output = Val>,
 {
-    type Lit = Num;
+    type Prim = Num;
 
-    fn type_of_literal(&self, _: &Val) -> Self::Lit {
+    fn type_of_literal(&self, _: &Val) -> Self::Prim {
         Num
     }
 }

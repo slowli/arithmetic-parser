@@ -12,7 +12,7 @@
 //! The type system corresponds to types of `Value`s in `arithmetic-eval`:
 //!
 //! - There are 2 primitive types: Boolean (`Bool`) and other literals. In the simplest case,
-//!   there can be a single [`LiteralType`], such as a [`Num`]ber.
+//!   there can be a single [`PrimitiveType`], such as a [`Num`]ber.
 //! - There is only one container type - a tuple. It can be represented either
 //!   in the tuple form, such as `(Num, Bool)`, or as a slice, such as `[Num]` or `[Num; 3]`.
 //!   As in Rust, all slice elements must have the same type. Unlike Rust, tuple and slice
@@ -94,12 +94,12 @@ pub mod _reexports {
     pub use anyhow::{anyhow, Error};
 }
 
-/// Types of literals in a certain grammar.
+/// Primitive types in a certain grammar.
 ///
 /// More complex types, like [`ValueType`] and [`FnType`], are defined with a type param
-/// which determines the literal type. This type param must implement [`LiteralType`].
+/// which determines the primitive type(s). This type param must implement [`PrimitiveType`].
 ///
-/// [`TypeArithmetic`] has a `LiteralType` impl as an associated type, and one of the required
+/// [`TypeArithmetic`] has a `PrimitiveType` impl as an associated type, and one of the required
 /// operations of this trait is to be able to infer type for literal values from a [`Grammar`].
 ///
 /// # Implementation Requirements
@@ -116,7 +116,7 @@ pub mod _reexports {
 ///
 /// ```
 /// # use std::{fmt, str::FromStr};
-/// use arithmetic_typing::{LiteralType, NoConstraints};
+/// use arithmetic_typing::{PrimitiveType, NoConstraints};
 ///
 /// #[derive(Debug, Clone, Copy, PartialEq)]
 /// enum NumOrBytes {
@@ -154,11 +154,11 @@ pub mod _reexports {
 ///     }
 /// }
 ///
-/// impl LiteralType for NumOrBytes {
+/// impl PrimitiveType for NumOrBytes {
 ///     type Constraints = NoConstraints;
 /// }
 /// ```
-pub trait LiteralType:
+pub trait PrimitiveType:
     Clone + PartialEq + fmt::Debug + fmt::Display + FromStr + Send + Sync + 'static
 {
     /// Constraints that can be placed on type parameters.
@@ -166,14 +166,14 @@ pub trait LiteralType:
 }
 
 /// Implements [`Display`](fmt::Display) and [`FromStr`]for the provided type,
-/// which must be a no-field struct. Useful as a building block for [`LiteralType`]
+/// which must be a no-field struct. Useful as a building block for [`PrimitiveType`]
 /// and [`TypeConstraints`] implementations.
 ///
 /// # Examples
 ///
 /// ```
 /// use arithmetic_typing::{
-///     impl_display_for_singleton_type, NoConstraints, LiteralType,
+///     impl_display_for_singleton_type, NoConstraints, PrimitiveType,
 /// };
 ///
 /// #[derive(Debug, Clone, Copy, PartialEq)]
@@ -181,7 +181,7 @@ pub trait LiteralType:
 ///
 /// impl_display_for_singleton_type!(SomeType, "Some");
 ///
-/// impl LiteralType for SomeType {
+/// impl PrimitiveType for SomeType {
 ///     type Constraints = NoConstraints;
 /// }
 /// ```
@@ -218,7 +218,7 @@ pub struct Num;
 
 impl_display_for_singleton_type!(Num, "Num");
 
-impl LiteralType for Num {
+impl PrimitiveType for Num {
     type Constraints = LinConstraints;
 }
 
@@ -228,15 +228,16 @@ impl LinearType for Num {
     }
 }
 
-/// Maps a literal value from a certain [`Grammar`] to its type.
+/// Maps a literal value from a certain [`Grammar`] to its type. This assumes that all literals
+/// are primitive.
 ///
 /// [`Grammar`]: arithmetic_parser::grammars::Grammar
-pub trait MapLiteralType<Val> {
+pub trait MapPrimitiveType<Val> {
     /// Types of literals output by this mapper.
-    type Lit: LiteralType;
+    type Prim: PrimitiveType;
 
     /// Gets the type of the provided literal value.
-    fn type_of_literal(&self, lit: &Val) -> Self::Lit;
+    fn type_of_literal(&self, lit: &Val) -> Self::Prim;
 }
 
 /// Grammar with support of type annotations. Works as a decorator.
@@ -257,9 +258,9 @@ pub trait MapLiteralType<Val> {
 /// # }
 /// ```
 #[derive(Debug)]
-pub struct Annotated<T, Lit = Num>(PhantomData<(T, Lit)>);
+pub struct Annotated<T, Prim = Num>(PhantomData<(T, Prim)>);
 
-impl<T: ParseLiteral, Lit: LiteralType> ParseLiteral for Annotated<T, Lit> {
+impl<T: ParseLiteral, Prim: PrimitiveType> ParseLiteral for Annotated<T, Prim> {
     type Lit = T::Lit;
 
     fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
@@ -267,10 +268,10 @@ impl<T: ParseLiteral, Lit: LiteralType> ParseLiteral for Annotated<T, Lit> {
     }
 }
 
-impl<T: ParseLiteral, Lit: LiteralType> Grammar for Annotated<T, Lit> {
-    type Type = ValueType<Lit>;
+impl<T: ParseLiteral, Prim: PrimitiveType> Grammar for Annotated<T, Prim> {
+    type Type = ValueType<Prim>;
 
     fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
-        ValueType::<Lit>::parse(input)
+        ValueType::<Prim>::parse(input)
     }
 }

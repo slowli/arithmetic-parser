@@ -2,7 +2,7 @@
 
 use std::{borrow::Cow, fmt};
 
-use crate::{LiteralType, Num};
+use crate::{Num, PrimitiveType};
 
 mod fn_type;
 
@@ -64,7 +64,7 @@ pub enum LengthKind {
 
 /// Enumeration encompassing all types supported by the type system.
 ///
-/// Parametric by the [`LiteralType`] (i.e., primitive types besides Booleans).
+/// Parametric by the [`PrimitiveType`] (i.e., primitive types besides Booleans).
 ///
 /// # Examples
 ///
@@ -98,26 +98,26 @@ pub enum LengthKind {
 /// # }
 /// ```
 #[derive(Debug, Clone)]
-pub enum ValueType<Lit: LiteralType = Num> {
+pub enum ValueType<Prim: PrimitiveType = Num> {
     /// Wildcard type, i.e. some type that is not specified. Similar to `_` in type annotations
     /// in Rust.
     Some,
     /// Boolean type.
     // TODO: consider uniting literals and `Bool` as primitive types
     Bool,
-    /// Literal type, i.e. a primitive type excluding Booleans.
-    Lit(Lit),
+    /// Primitive type excluding Booleans.
+    Prim(Prim),
     /// Functional type.
-    Function(Box<FnType<Lit>>),
+    Function(Box<FnType<Prim>>),
     /// Tuple type.
     // TODO: support start / middle / end structuring
-    Tuple(Vec<ValueType<Lit>>),
+    Tuple(Vec<ValueType<Prim>>),
     /// Slice type. Unlike in Rust, slices are a subset of tuples. If `length` is
     /// [`Exact`](TupleLength::Exact), the slice is completely equivalent
     /// to the corresponding tuple.
     Slice {
         /// Type of slice elements.
-        element: Box<ValueType<Lit>>,
+        element: Box<ValueType<Prim>>,
         /// Slice length.
         length: TupleLength,
     },
@@ -129,12 +129,12 @@ pub enum ValueType<Lit: LiteralType = Num> {
     Var(usize),
 }
 
-impl<Lit: LiteralType> PartialEq for ValueType<Lit> {
+impl<Prim: PrimitiveType> PartialEq for ValueType<Prim> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Some, _) | (_, Self::Some) | (Self::Bool, Self::Bool) => true,
 
-            (Self::Lit(x), Self::Lit(y)) => x == y,
+            (Self::Prim(x), Self::Prim(y)) => x == y,
 
             (Self::Var(x), Self::Var(y)) | (Self::Param(x), Self::Param(y)) => x == y,
 
@@ -159,14 +159,14 @@ impl<Lit: LiteralType> PartialEq for ValueType<Lit> {
     }
 }
 
-impl<Lit: LiteralType> fmt::Display for ValueType<Lit> {
+impl<Prim: PrimitiveType> fmt::Display for ValueType<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Some | Self::Var(_) => formatter.write_str("_"),
             Self::Param(idx) => formatter.write_str(type_param(*idx).as_ref()),
 
             Self::Bool => formatter.write_str("Bool"),
-            Self::Lit(num) => fmt::Display::fmt(num, formatter),
+            Self::Prim(num) => fmt::Display::fmt(num, formatter),
             Self::Function(fn_type) => fmt::Display::fmt(fn_type, formatter),
 
             Self::Tuple(fragments) => {
@@ -201,17 +201,17 @@ impl<Lit: LiteralType> fmt::Display for ValueType<Lit> {
     }
 }
 
-impl<Lit: LiteralType> From<FnType<Lit>> for ValueType<Lit> {
-    fn from(fn_type: FnType<Lit>) -> Self {
+impl<Prim: PrimitiveType> From<FnType<Prim>> for ValueType<Prim> {
+    fn from(fn_type: FnType<Prim>) -> Self {
         Self::Function(Box::new(fn_type))
     }
 }
 
 macro_rules! impl_from_tuple_for_value_type {
     ($($var:tt : $ty:ident),*) => {
-        impl<Lit, $($ty : Into<ValueType<Lit>>,)*> From<($($ty,)*)> for ValueType<Lit>
+        impl<Prim, $($ty : Into<ValueType<Prim>>,)*> From<($($ty,)*)> for ValueType<Prim>
         where
-            Lit: LiteralType,
+            Prim: PrimitiveType,
         {
             #[allow(unused_variables)] // `tuple` is unused for empty tuple
             fn from(tuple: ($($ty,)*)) -> Self {
@@ -242,18 +242,18 @@ fn type_param(index: usize) -> Cow<'static, str> {
 }
 
 impl ValueType {
-    /// Numeric literal type.
-    pub const NUM: Self = ValueType::Lit(Num);
+    /// Numeric primitive type.
+    pub const NUM: Self = ValueType::Prim(Num);
 }
 
-impl<Lit: LiteralType> ValueType<Lit> {
+impl<Prim: PrimitiveType> ValueType<Prim> {
     /// Returns a void type (an empty tuple).
     pub fn void() -> Self {
         Self::Tuple(Vec::new())
     }
 
     /// Creates a slice type.
-    pub fn slice(element: impl Into<ValueType<Lit>>, length: TupleLength) -> Self {
+    pub fn slice(element: impl Into<ValueType<Prim>>, length: TupleLength) -> Self {
         Self::Slice {
             element: Box::new(element.into()),
             length,
@@ -278,7 +278,7 @@ impl<Lit: LiteralType> ValueType<Lit> {
     /// not to be a literal, and `None` if either case is possible.
     pub(crate) fn is_literal(&self) -> Option<bool> {
         match self {
-            Self::Lit(_) => Some(true),
+            Self::Prim(_) => Some(true),
             Self::Tuple(_) | Self::Slice { .. } | Self::Bool | Self::Function(_) => Some(false),
             _ => None,
         }
@@ -291,7 +291,7 @@ impl<Lit: LiteralType> ValueType<Lit> {
     pub fn is_concrete(&self) -> bool {
         match self {
             Self::Var(_) | Self::Some => false,
-            Self::Param(_) | Self::Bool | Self::Lit(_) => true,
+            Self::Param(_) | Self::Bool | Self::Prim(_) => true,
 
             Self::Function(fn_type) => fn_type.is_concrete(),
             Self::Tuple(elements) => elements.iter().all(Self::is_concrete),

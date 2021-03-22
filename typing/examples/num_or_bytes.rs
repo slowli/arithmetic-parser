@@ -1,4 +1,4 @@
-//! Demonstrates how to use custom type constraints with a custom literal type.
+//! Demonstrates how to use custom type constraints with custom primitive types.
 
 use std::{fmt, ops, str::FromStr};
 
@@ -7,7 +7,7 @@ use arithmetic_parser::{
     BinaryOp, InputSpan, NomResult,
 };
 use arithmetic_typing::{
-    arith::*, Annotated, LiteralType, MapLiteralType, Prelude, Substitutions, TypeConstraints,
+    arith::*, Annotated, MapPrimitiveType, Prelude, PrimitiveType, Substitutions, TypeConstraints,
     TypeEnvironment, TypeErrorKind, TypeResult, ValueType,
 };
 
@@ -140,7 +140,7 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
 
         match resolved_ty {
             // `Var`s are taken care of previously.
-            ValueType::Var(_) | ValueType::Lit(NumOrBytesType::Num) => Ok(()),
+            ValueType::Var(_) | ValueType::Prim(NumOrBytesType::Num) => Ok(()),
 
             ValueType::Some | ValueType::Param(_) => unreachable!(),
 
@@ -150,7 +150,7 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
             )),
 
             // Bytes are summable, but not linear.
-            ValueType::Lit(NumOrBytesType::Bytes) => {
+            ValueType::Prim(NumOrBytesType::Bytes) => {
                 if *self == Self::Summable {
                     Ok(())
                 } else {
@@ -172,17 +172,17 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
     }
 }
 
-impl LiteralType for NumOrBytesType {
+impl PrimitiveType for NumOrBytesType {
     type Constraints = Constraints;
 }
 
 #[derive(Debug, Clone, Copy)]
 struct NumOrBytesArithmetic;
 
-impl MapLiteralType<NumOrBytes> for NumOrBytesArithmetic {
-    type Lit = NumOrBytesType;
+impl MapPrimitiveType<NumOrBytes> for NumOrBytesArithmetic {
+    type Prim = NumOrBytesType;
 
-    fn type_of_literal(&self, lit: &NumOrBytes) -> Self::Lit {
+    fn type_of_literal(&self, lit: &NumOrBytes) -> Self::Prim {
         match lit {
             NumOrBytes::Num(_) => NumOrBytesType::Num,
             NumOrBytes::Bytes(_) => NumOrBytesType::Bytes,
@@ -235,7 +235,7 @@ fn main() -> anyhow::Result<()> {
     env.insert("fold", Prelude::fold_type().into());
     env.process_with_arithmetic(&NumOrBytesArithmetic, &ast)?;
 
-    assert_eq!(env["x"], ValueType::Lit(NumOrBytesType::Num));
+    assert_eq!(env["x"], ValueType::Prim(NumOrBytesType::Num));
     assert_eq!(env["y"].to_string(), "Bytes");
     assert_eq!(env["z"].to_string(), "(Num, Bytes)");
     assert_eq!(env["sum"].to_string(), "fn<len N; T: Sum>([T; N], T) -> T");

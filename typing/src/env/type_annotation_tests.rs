@@ -70,7 +70,7 @@ fn contradicting_type_hint_with_slice() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_incompatible_types(&err.kind(), &ValueType::Lit(Num), &ValueType::Bool);
+    assert_incompatible_types(&err.kind(), &ValueType::Prim(Num), &ValueType::Bool);
 }
 
 #[test]
@@ -123,7 +123,7 @@ fn invalid_type_hint_with_fn_declaration() {
     type_env.insert("map", Prelude::map_type().into());
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_incompatible_types(&err.kind(), &ValueType::Lit(Num), &ValueType::Bool);
+    assert_incompatible_types(&err.kind(), &ValueType::Prim(Num), &ValueType::Bool);
 }
 
 #[test]
@@ -191,8 +191,8 @@ fn fn_narrowed_via_type_hint() {
     assert_eq!(type_env["identity"].to_string(), "fn(Num) -> Num");
     assert_incompatible_types(
         &err.kind(),
-        &ValueType::Lit(Num),
-        &ValueType::Tuple(vec![ValueType::Lit(Num); 2]),
+        &ValueType::Prim(Num),
+        &ValueType::Tuple(vec![ValueType::Prim(Num); 2]),
     )
 }
 
@@ -203,7 +203,7 @@ fn fn_incorrectly_narrowed_via_type_hint() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_incompatible_types(&err.kind(), &ValueType::Lit(Num), &ValueType::Bool);
+    assert_incompatible_types(&err.kind(), &ValueType::Prim(Num), &ValueType::Bool);
 }
 
 #[test]

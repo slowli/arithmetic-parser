@@ -6,10 +6,10 @@ use crate::{Annotated, FnArgs, LinConstraints, Num, Prelude, TupleLength};
 
 pub type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
 
-pub fn assert_incompatible_types<Lit: LiteralType>(
-    err: &TypeErrorKind<Lit>,
-    first: &ValueType<Lit>,
-    second: &ValueType<Lit>,
+pub fn assert_incompatible_types<Prim: PrimitiveType>(
+    err: &TypeErrorKind<Prim>,
+    first: &ValueType<Prim>,
+    second: &ValueType<Prim>,
 ) {
     let (x, y) = match err {
         TypeErrorKind::IncompatibleTypes(x, y) => (x, y),
@@ -26,7 +26,7 @@ pub fn assert_incompatible_types<Lit: LiteralType>(
 fn hash_fn_type() -> FnType<Num> {
     FnType {
         args: FnArgs::Any,
-        return_type: ValueType::Lit(Num),
+        return_type: ValueType::Prim(Num),
         type_params: Vec::new(),
         len_params: Vec::new(),
     }
@@ -63,9 +63,10 @@ fn statements_with_a_block() {
     let code = "y = { x = 3; 2 * x }; x ^ y == 6 * x;";
     let block = F32Grammar::parse_statements(code).unwrap();
 
-    let mut type_env: TypeEnvironment<Num> = vec![("x", ValueType::Lit(Num))].into_iter().collect();
+    let mut type_env: TypeEnvironment<Num> =
+        vec![("x", ValueType::Prim(Num))].into_iter().collect();
     type_env.process_statements(&block).unwrap();
-    assert_eq!(*type_env.get("y").unwrap(), ValueType::Lit(Num));
+    assert_eq!(*type_env.get("y").unwrap(), ValueType::Prim(Num));
 }
 
 #[test]
@@ -73,7 +74,8 @@ fn boolean_statements() {
     let code = "y = x == x ^ 2; y = y || { x = 3; x != 7 };";
     let block = F32Grammar::parse_statements(code).unwrap();
 
-    let mut type_env: TypeEnvironment<Num> = vec![("x", ValueType::Lit(Num))].into_iter().collect();
+    let mut type_env: TypeEnvironment<Num> =
+        vec![("x", ValueType::Prim(Num))].into_iter().collect();
     type_env.process_statements(&block).unwrap();
     assert_eq!(type_env["y"], ValueType::Bool);
 }
@@ -190,13 +192,13 @@ fn method_basics() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let plus_type = FnType::new(
-        FnArgs::List(vec![ValueType::Lit(Num), ValueType::Lit(Num)]),
-        ValueType::Lit(Num),
+        FnArgs::List(vec![ValueType::Prim(Num), ValueType::Prim(Num)]),
+        ValueType::Prim(Num),
     );
     type_env.insert("plus", plus_type.into());
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(*type_env.get("bar").unwrap(), ValueType::Lit(Num));
+    assert_eq!(*type_env.get("bar").unwrap(), ValueType::Prim(Num));
 }
 
 #[test]
@@ -245,7 +247,7 @@ fn variable_scoping() {
 
     assert_eq!(
         *type_env.get("y").unwrap(),
-        ValueType::Tuple(vec![ValueType::Lit(Num), ValueType::Lit(Num)])
+        ValueType::Tuple(vec![ValueType::Prim(Num), ValueType::Prim(Num)])
     );
 }
 
@@ -498,8 +500,8 @@ fn parametric_fn_passed_as_arg_with_unsatisfiable_requirements() {
 
     assert_incompatible_types(
         &err.kind(),
-        &ValueType::Lit(Num),
-        &ValueType::Tuple(vec![ValueType::Lit(Num); 2]),
+        &ValueType::Prim(Num),
+        &ValueType::Tuple(vec![ValueType::Prim(Num); 2]),
     );
 }
 
@@ -576,7 +578,7 @@ fn function_passed_as_arg_invalid_arg_type() {
 
     assert_incompatible_types(
         &err.kind(),
-        &ValueType::Lit(Num),
+        &ValueType::Prim(Num),
         &ValueType::Tuple(vec![ValueType::Some; 2]),
     );
 }
@@ -591,7 +593,7 @@ fn function_passed_as_arg_invalid_input() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_incompatible_types(&err.kind(), &ValueType::Lit(Num), &ValueType::Bool);
+    assert_incompatible_types(&err.kind(), &ValueType::Prim(Num), &ValueType::Bool);
 }
 
 #[test]
@@ -604,7 +606,7 @@ fn unifying_slice_and_tuple() {
 
     assert_eq!(
         type_env["xs"],
-        ValueType::Tuple(vec![ValueType::Lit(Num); 2])
+        ValueType::Tuple(vec![ValueType::Prim(Num); 2])
     );
 }
 
@@ -623,7 +625,7 @@ fn function_accepting_slices() {
     assert_eq!(
         type_env["z"],
         ValueType::Slice {
-            element: Box::new(ValueType::Lit(Num)),
+            element: Box::new(ValueType::Prim(Num)),
             length: TupleLength::Exact(3)
         }
     );
@@ -639,7 +641,7 @@ fn incorrect_arg_in_slices() {
     let err = type_env.process_statements(&block).unwrap_err();
 
     // FIXME: error span is incorrect here; should be `(1, 2 == 3)`
-    assert_incompatible_types(&err.kind(), &ValueType::Lit(Num), &ValueType::Bool);
+    assert_incompatible_types(&err.kind(), &ValueType::Prim(Num), &ValueType::Bool);
 }
 
 #[test]

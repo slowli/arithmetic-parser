@@ -7,8 +7,8 @@ use arithmetic_parser::{
 };
 
 use arithmetic_typing::{
-    arith::*, impl_display_for_singleton_type, Assertions, LinConstraints, LinearType, LiteralType,
-    MapLiteralType, Substitutions, TypeEnvironment, TypeResult, ValueType,
+    arith::*, impl_display_for_singleton_type, Assertions, LinConstraints, LinearType,
+    MapPrimitiveType, PrimitiveType, Substitutions, TypeEnvironment, TypeResult, ValueType,
 };
 
 /// Type of our literals: a string.
@@ -17,7 +17,7 @@ struct StrType;
 
 impl_display_for_singleton_type!(StrType, "Str");
 
-impl LiteralType for StrType {
+impl PrimitiveType for StrType {
     type Constraints = LinConstraints;
 }
 
@@ -71,10 +71,10 @@ impl Grammar for StrGrammar {
 #[derive(Debug, Clone, Copy)]
 struct StrArithmetic;
 
-impl MapLiteralType<String> for StrArithmetic {
-    type Lit = StrType;
+impl MapPrimitiveType<String> for StrArithmetic {
+    type Prim = StrType;
 
-    fn type_of_literal(&self, _lit: &String) -> Self::Lit {
+    fn type_of_literal(&self, _lit: &String) -> Self::Prim {
         StrType
     }
 }
@@ -103,10 +103,10 @@ impl TypeArithmetic<StrType> for StrArithmetic {
 
             BinaryOp::Gt | BinaryOp::Lt | BinaryOp::Ge | BinaryOp::Le => {
                 substitutions
-                    .unify(&ValueType::Lit(StrType), lhs_ty)
+                    .unify(&ValueType::Prim(StrType), lhs_ty)
                     .map_err(|err| err.with_span(&spans.lhs))?;
                 substitutions
-                    .unify(&ValueType::Lit(StrType), rhs_ty)
+                    .unify(&ValueType::Prim(StrType), rhs_ty)
                     .map_err(|err| err.with_span(&spans.rhs))?;
                 Ok(ValueType::Bool)
             }
@@ -130,7 +130,7 @@ fn main() -> anyhow::Result<()> {
     let mut env = TypeEnvironment::<StrType>::new();
     env.insert("assert", Assertions::assert_type().into());
     env.process_with_arithmetic(&StrArithmetic, &ast)?;
-    assert_eq!(env["x"], ValueType::Lit(StrType));
+    assert_eq!(env["x"], ValueType::Prim(StrType));
     assert_eq!(env["y"].to_string(), "(Str, Str)");
 
     let bogus_code = r#""foo" - "bar""#;

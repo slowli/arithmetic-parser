@@ -2,7 +2,7 @@
 
 use std::{fmt, ops, str::FromStr};
 
-use crate::{LiteralType, Substitutions, TypeErrorKind, ValueType};
+use crate::{PrimitiveType, Substitutions, TypeErrorKind, ValueType};
 
 /// Container for constraints that can be placed on type parameters / variables.
 ///
@@ -35,7 +35,7 @@ use crate::{LiteralType, Substitutions, TypeErrorKind, ValueType};
 ///
 /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
 /// [`NumArithmetic`]: crate::arith::NumArithmetic
-pub trait TypeConstraints<Lit>:
+pub trait TypeConstraints<Prim>:
     Clone
     + Default
     + PartialEq
@@ -47,7 +47,7 @@ pub trait TypeConstraints<Lit>:
     + Sync
     + 'static
 where
-    Lit: LiteralType<Constraints = Self>,
+    Prim: PrimitiveType<Constraints = Self>,
 {
     /// Applies these constraints to the provided `ty`pe. Returns an error if the type
     /// contradicts the constraints.
@@ -57,9 +57,9 @@ where
     /// by recursively traversing and resolving the provided type.
     fn apply(
         &self,
-        ty: &ValueType<Lit>,
-        substitutions: &mut Substitutions<Lit>,
-    ) -> Result<(), TypeErrorKind<Lit>>;
+        ty: &ValueType<Prim>,
+        substitutions: &mut Substitutions<Prim>,
+    ) -> Result<(), TypeErrorKind<Prim>>;
 }
 
 /// Linearity constraints. In particular, this is [`TypeConstraints`] associated
@@ -102,26 +102,27 @@ impl ops::BitOrAssign<&Self> for LinConstraints {
 
 impl LinConstraints {
     /// Encumbered type is linear; it can be used as an argument in arithmetic ops.
-    /// Recursively defined as the literal type and tuples in which all elements are linear.
+    /// Recursively defined as primitive types for which [`LinearType::is_linear()`]
+    /// returns `true`, and tuples in which all elements are linear.
     ///
     /// Displayed as `Lin`.
     pub const LIN: Self = Self { is_linear: true };
 }
 
-/// Literal type which supports a notion of *linearity*. Linear types are types that
+/// Primitive type which supports a notion of *linearity*. Linear types are types that
 /// can be used in arithmetic ops.
-pub trait LinearType: LiteralType<Constraints = LinConstraints> {
+pub trait LinearType: PrimitiveType<Constraints = LinConstraints> {
     /// Returns `true` iff this type is linear.
     fn is_linear(&self) -> bool;
 }
 
-impl<Lit: LinearType> TypeConstraints<Lit> for LinConstraints {
+impl<Prim: LinearType> TypeConstraints<Prim> for LinConstraints {
     // TODO: extract common logic for it to be reusable?
     fn apply(
         &self,
-        ty: &ValueType<Lit>,
-        substitutions: &mut Substitutions<Lit>,
-    ) -> Result<(), TypeErrorKind<Lit>> {
+        ty: &ValueType<Prim>,
+        substitutions: &mut Substitutions<Prim>,
+    ) -> Result<(), TypeErrorKind<Prim>> {
         if !self.is_linear {
             // The default constraint: does nothing.
             return Ok(());
@@ -138,11 +139,11 @@ impl<Lit: LinearType> TypeConstraints<Lit> for LinConstraints {
             // `Var`s are taken care of previously.
             ValueType::Var(_) => Ok(()),
 
-            ValueType::Lit(lit) if lit.is_linear() => Ok(()),
+            ValueType::Prim(lit) if lit.is_linear() => Ok(()),
 
             ValueType::Some | ValueType::Param(_) => unreachable!(),
 
-            ValueType::Bool | ValueType::Function(_) | ValueType::Lit(_) => Err(
+            ValueType::Bool | ValueType::Function(_) | ValueType::Prim(_) => Err(
                 TypeErrorKind::failed_constraint(ty.to_owned(), self.to_owned()),
             ),
 
@@ -181,15 +182,15 @@ impl ops::BitOrAssign<&Self> for NoConstraints {
     }
 }
 
-impl<Lit> TypeConstraints<Lit> for NoConstraints
+impl<Prim> TypeConstraints<Prim> for NoConstraints
 where
-    Lit: LiteralType<Constraints = Self>,
+    Prim: PrimitiveType<Constraints = Self>,
 {
     fn apply(
         &self,
-        _ty: &ValueType<Lit>,
-        _substitutions: &mut Substitutions<Lit>,
-    ) -> Result<(), TypeErrorKind<Lit>> {
+        _ty: &ValueType<Prim>,
+        _substitutions: &mut Substitutions<Prim>,
+    ) -> Result<(), TypeErrorKind<Prim>> {
         Ok(())
     }
 }

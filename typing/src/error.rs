@@ -2,30 +2,30 @@
 
 use std::fmt;
 
-use crate::{LiteralType, TupleLength, ValueType};
+use crate::{PrimitiveType, TupleLength, ValueType};
 use arithmetic_parser::{BinaryOp, Spanned, UnsupportedType};
 
 /// Errors that can occur during type inference.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
-pub enum TypeErrorKind<Lit: LiteralType> {
+pub enum TypeErrorKind<Prim: PrimitiveType> {
     /// Error trying to unify operands of a binary operation.
     OperandMismatch {
         /// LHS type.
-        lhs_ty: ValueType<Lit>,
+        lhs_ty: ValueType<Prim>,
         /// RHS type.
-        rhs_ty: ValueType<Lit>,
+        rhs_ty: ValueType<Prim>,
         /// Operator.
         op: BinaryOp,
     },
 
     /// Trying to unify incompatible types. The first type is LHS, the second one is RHS.
-    IncompatibleTypes(ValueType<Lit>, ValueType<Lit>),
+    IncompatibleTypes(ValueType<Prim>, ValueType<Prim>),
     /// Incompatible tuple lengths. The first length is LHS, the second one is RHS.
     IncompatibleLengths(TupleLength, TupleLength),
 
     /// Trying to call a non-function type.
-    NotCallable(ValueType<Lit>),
+    NotCallable(ValueType<Prim>),
 
     /// Undefined variable occurrence.
     UndefinedVar(String),
@@ -39,14 +39,14 @@ pub enum TypeErrorKind<Lit: LiteralType> {
     },
 
     /// Trying to unify a type with a type containing it.
-    RecursiveType(ValueType<Lit>),
+    RecursiveType(ValueType<Prim>),
 
     /// Failure when applying constraint to a type.
     FailedConstraint {
         /// Type that fails constraint requirement.
-        ty: ValueType<Lit>,
+        ty: ValueType<Prim>,
         /// Failing constraint(s).
-        constraint: Lit::Constraints,
+        constraint: Prim::Constraints,
     },
 
     /// Language construct not supported by the type inference.
@@ -65,7 +65,7 @@ pub enum TypeErrorKind<Lit: LiteralType> {
     UnsupportedParam,
 }
 
-impl<Lit: LiteralType> fmt::Display for TypeErrorKind<Lit> {
+impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::OperandMismatch { op, .. } => write!(
@@ -116,21 +116,21 @@ impl<Lit: LiteralType> fmt::Display for TypeErrorKind<Lit> {
     }
 }
 
-impl<Lit: LiteralType> std::error::Error for TypeErrorKind<Lit> {}
+impl<Prim: PrimitiveType> std::error::Error for TypeErrorKind<Prim> {}
 
-impl<Lit: LiteralType> TypeErrorKind<Lit> {
+impl<Prim: PrimitiveType> TypeErrorKind<Prim> {
     /// Creates an error for an lvalue type not supported by the interpreter.
     pub fn unsupported<T: Into<UnsupportedType>>(ty: T) -> Self {
         Self::Unsupported(ty.into())
     }
 
     /// Creates a "failed constraint" error.
-    pub fn failed_constraint(ty: ValueType<Lit>, constraint: Lit::Constraints) -> Self {
+    pub fn failed_constraint(ty: ValueType<Prim>, constraint: Prim::Constraints) -> Self {
         Self::FailedConstraint { ty, constraint }
     }
 
     /// Creates an error from this error kind and the specified span.
-    pub fn with_span<'a, T>(self, span: &Spanned<'a, T>) -> TypeError<'a, Lit> {
+    pub fn with_span<'a, T>(self, span: &Spanned<'a, T>) -> TypeError<'a, Prim> {
         TypeError {
             inner: span.copy_with_extra(self),
         }
@@ -138,8 +138,8 @@ impl<Lit: LiteralType> TypeErrorKind<Lit> {
 
     pub(crate) fn into_op_mismatch(
         self,
-        lhs_ty: ValueType<Lit>,
-        rhs_ty: ValueType<Lit>,
+        lhs_ty: ValueType<Prim>,
+        rhs_ty: ValueType<Prim>,
         op: BinaryOp,
     ) -> Self {
         match self {
@@ -153,11 +153,11 @@ impl<Lit: LiteralType> TypeErrorKind<Lit> {
 
 /// Type error together with the corresponding code span.
 #[derive(Debug, Clone)]
-pub struct TypeError<'a, Lit: LiteralType> {
-    inner: Spanned<'a, TypeErrorKind<Lit>>,
+pub struct TypeError<'a, Prim: PrimitiveType> {
+    inner: Spanned<'a, TypeErrorKind<Prim>>,
 }
 
-impl<Lit: LiteralType> fmt::Display for TypeError<'_, Lit> {
+impl<Prim: PrimitiveType> fmt::Display for TypeError<'_, Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
@@ -169,15 +169,15 @@ impl<Lit: LiteralType> fmt::Display for TypeError<'_, Lit> {
     }
 }
 
-impl<Lit: LiteralType> std::error::Error for TypeError<'_, Lit> {
+impl<Prim: PrimitiveType> std::error::Error for TypeError<'_, Prim> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(self.kind())
     }
 }
 
-impl<'a, Lit: LiteralType> TypeError<'a, Lit> {
+impl<'a, Prim: PrimitiveType> TypeError<'a, Prim> {
     /// Gets the kind of this error.
-    pub fn kind(&self) -> &TypeErrorKind<Lit> {
+    pub fn kind(&self) -> &TypeErrorKind<Prim> {
         &self.inner.extra
     }
 
@@ -188,4 +188,4 @@ impl<'a, Lit: LiteralType> TypeError<'a, Lit> {
 }
 
 /// Result of inferring type for a certain expression.
-pub type TypeResult<'a, Lit> = Result<ValueType<Lit>, TypeError<'a, Lit>>;
+pub type TypeResult<'a, Prim> = Result<ValueType<Prim>, TypeError<'a, Prim>>;

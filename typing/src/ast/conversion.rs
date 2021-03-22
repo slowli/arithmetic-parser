@@ -7,7 +7,7 @@ use std::{collections::HashMap, convert::TryFrom, fmt, str::FromStr};
 use crate::{
     ast::{FnTypeAst, TupleLengthAst, TypeConstraintsAst, ValueTypeAst},
     types::TypeParamDescription,
-    FnArgs, FnType, LiteralType, TupleLength, ValueType,
+    FnArgs, FnType, PrimitiveType, TupleLength, ValueType,
 };
 use arithmetic_parser::{
     ErrorKind as ParseErrorKind, InputSpan, LocatedSpan, NomResult, SpannedError, StripCode,
@@ -140,15 +140,15 @@ impl<Span: fmt::Debug> std::error::Error for ConversionError<Span> {
 }
 
 impl<'a> TypeConstraintsAst<'a> {
-    fn try_convert<Lit>(&self) -> Result<Lit::Constraints, ConversionError<&'a str>>
+    fn try_convert<Prim>(&self) -> Result<Prim::Constraints, ConversionError<&'a str>>
     where
-        Lit: LiteralType,
+        Prim: PrimitiveType,
     {
         self.constraints
             .iter()
-            .try_fold(Lit::Constraints::default(), |mut acc, input| {
+            .try_fold(Prim::Constraints::default(), |mut acc, input| {
                 let input_str = *input.fragment();
-                let partial = Lit::Constraints::from_str(input_str).map_err(|_| {
+                let partial = Prim::Constraints::from_str(input_str).map_err(|_| {
                     ConversionErrorKind::InvalidConstraint(input_str.to_owned()).with_span(*input)
                 })?;
                 acc |= &partial;
@@ -202,15 +202,15 @@ impl<'a> ConversionState<'a> {
     }
 }
 
-impl<'a, Lit: LiteralType> ValueTypeAst<'a, Lit> {
+impl<'a, Prim: PrimitiveType> ValueTypeAst<'a, Prim> {
     fn try_convert(
         &self,
         state: &ConversionState<'a>,
-    ) -> Result<ValueType<Lit>, ConversionError<&'a str>> {
+    ) -> Result<ValueType<Prim>, ConversionError<&'a str>> {
         Ok(match self {
             Self::Any => ValueType::Some,
             Self::Bool => ValueType::Bool,
-            Self::Lit(num) => ValueType::Lit(num.to_owned()),
+            Self::Prim(num) => ValueType::Prim(num.to_owned()),
 
             Self::Ident(ident) => {
                 let name = *ident.fragment();
@@ -252,15 +252,15 @@ impl<'a, Lit: LiteralType> ValueTypeAst<'a, Lit> {
     }
 }
 
-impl<'a, Lit: LiteralType> TryFrom<ValueTypeAst<'a, Lit>> for ValueType<Lit> {
+impl<'a, Prim: PrimitiveType> TryFrom<ValueTypeAst<'a, Prim>> for ValueType<Prim> {
     type Error = ConversionError<&'a str>;
 
-    fn try_from(value: ValueTypeAst<'a, Lit>) -> Result<Self, Self::Error> {
+    fn try_from(value: ValueTypeAst<'a, Prim>) -> Result<Self, Self::Error> {
         value.try_convert(&ConversionState::default())
     }
 }
 
-impl<Lit: LiteralType> ValueType<Lit> {
+impl<Prim: PrimitiveType> ValueType<Prim> {
     /// Parses type from `input`.
     pub fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
         parse_inner(ValueTypeAst::parse, input, false)
@@ -309,7 +309,7 @@ where
     Ok(ty)
 }
 
-impl<Lit: LiteralType> FromStr for ValueType<Lit> {
+impl<Prim: PrimitiveType> FromStr for ValueType<Prim> {
     type Err = SpannedError<usize>;
 
     fn from_str(def: &str) -> Result<Self, Self::Err> {
@@ -317,11 +317,11 @@ impl<Lit: LiteralType> FromStr for ValueType<Lit> {
     }
 }
 
-impl<'a, Lit: LiteralType> FnTypeAst<'a, Lit> {
+impl<'a, Prim: PrimitiveType> FnTypeAst<'a, Prim> {
     fn try_convert(
         &self,
         mut state: ConversionState<'a>,
-    ) -> Result<FnType<Lit>, ConversionError<&'a str>> {
+    ) -> Result<FnType<Prim>, ConversionError<&'a str>> {
         // Check params for consistency.
         for (param, _) in &self.len_params {
             state.insert_const_param(*param)?;
@@ -344,7 +344,7 @@ impl<'a, Lit: LiteralType> FnTypeAst<'a, Lit> {
         });
 
         let type_params = self.type_params.iter().map(|(name, constraints)| {
-            let constraints = constraints.try_convert::<Lit>()?;
+            let constraints = constraints.try_convert::<Prim>()?;
             Ok((
                 state.type_param_idx(name.fragment()).unwrap(),
                 TypeParamDescription::new(constraints),
@@ -358,22 +358,22 @@ impl<'a, Lit: LiteralType> FnTypeAst<'a, Lit> {
     }
 }
 
-impl<'a, Lit: LiteralType> TryFrom<FnTypeAst<'a, Lit>> for FnType<Lit> {
+impl<'a, Prim: PrimitiveType> TryFrom<FnTypeAst<'a, Prim>> for FnType<Prim> {
     type Error = ConversionError<&'a str>;
 
-    fn try_from(value: FnTypeAst<'a, Lit>) -> Result<Self, Self::Error> {
+    fn try_from(value: FnTypeAst<'a, Prim>) -> Result<Self, Self::Error> {
         value.try_convert(ConversionState::default())
     }
 }
 
-impl<Lit: LiteralType> FnType<Lit> {
+impl<Prim: PrimitiveType> FnType<Prim> {
     /// Parses a functional type from `input`.
     pub fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
         parse_inner(FnTypeAst::parse, input, false)
     }
 }
 
-impl<Lit: LiteralType> FromStr for FnType<Lit> {
+impl<Prim: PrimitiveType> FromStr for FnType<Prim> {
     type Err = SpannedError<usize>;
 
     fn from_str(def: &str) -> Result<Self, Self::Err> {
@@ -504,7 +504,7 @@ mod tests {
     #[test]
     fn parsing_basic_value_types() {
         let num_type: ValueType = "Num".parse().unwrap();
-        assert_eq!(num_type, ValueType::Lit(Num));
+        assert_eq!(num_type, ValueType::Prim(Num));
 
         let bool_type: ValueType = "Bool".parse().unwrap();
         assert_eq!(bool_type, ValueType::Bool);
@@ -513,7 +513,7 @@ mod tests {
         assert_eq!(
             tuple_type,
             ValueType::Tuple(vec![
-                ValueType::Lit(Num),
+                ValueType::Prim(Num),
                 ValueType::Tuple(vec![ValueType::Bool, ValueType::Some]),
             ])
         );
@@ -525,7 +525,7 @@ mod tests {
         };
         assert_eq!(
             element_ty,
-            ValueType::Tuple(vec![ValueType::Lit(Num), ValueType::Some])
+            ValueType::Tuple(vec![ValueType::Prim(Num), ValueType::Some])
         );
         assert_matches!(length, TupleLength::Some { is_dynamic: false });
     }

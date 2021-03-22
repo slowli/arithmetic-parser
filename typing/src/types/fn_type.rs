@@ -3,7 +3,7 @@
 use std::{collections::HashMap, fmt};
 
 use super::type_param;
-use crate::{LengthKind, LiteralType, Num, TupleLength, ValueType};
+use crate::{LengthKind, Num, PrimitiveType, TupleLength, ValueType};
 
 /// Description of a constant parameter.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -38,7 +38,7 @@ impl<C> TypeParamDescription<C> {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_typing::{ast::LengthKind, FnArgs, FnType, ValueType};
+/// # use arithmetic_typing::{LengthKind, FnArgs, FnType, ValueType};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// let fn_type: FnType = "fn<len N>([Num; N]) -> Num".parse()?;
@@ -60,20 +60,20 @@ impl<C> TypeParamDescription<C> {
 /// # }
 /// ```
 #[derive(Debug, Clone, PartialEq)]
-pub struct FnType<Lit: LiteralType = Num> {
+pub struct FnType<Prim: PrimitiveType = Num> {
     /// Type of function arguments.
-    pub(crate) args: FnArgs<Lit>,
+    pub(crate) args: FnArgs<Prim>,
     /// Type of the value returned by the function.
-    pub(crate) return_type: ValueType<Lit>,
+    pub(crate) return_type: ValueType<Prim>,
     /// Type params associated with this function. The indexes of params should
     /// monotonically increase (necessary for correct display) and must be distinct.
-    pub(crate) type_params: Vec<(usize, TypeParamDescription<Lit::Constraints>)>,
+    pub(crate) type_params: Vec<(usize, TypeParamDescription<Prim::Constraints>)>,
     /// Indexes of length params associated with this function. The indexes should
     /// monotonically increase (necessary for correct display) and must be distinct.
     pub(crate) len_params: Vec<(usize, LenParamDescription)>,
 }
 
-impl<Lit: fmt::Display + LiteralType> fmt::Display for FnType<Lit> {
+impl<Prim: PrimitiveType> fmt::Display for FnType<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("fn")?;
 
@@ -99,7 +99,7 @@ impl<Lit: fmt::Display + LiteralType> fmt::Display for FnType<Lit> {
 
             for (i, (var_idx, description)) in self.type_params.iter().enumerate() {
                 formatter.write_str(type_param(*var_idx).as_ref())?;
-                if description.constraints != Lit::Constraints::default() {
+                if description.constraints != Prim::Constraints::default() {
                     write!(formatter, ": {}", description.constraints)?;
                 }
                 if i + 1 < self.type_params.len() {
@@ -118,8 +118,8 @@ impl<Lit: fmt::Display + LiteralType> fmt::Display for FnType<Lit> {
     }
 }
 
-impl<Lit: LiteralType> FnType<Lit> {
-    pub(crate) fn new(args: FnArgs<Lit>, return_type: ValueType<Lit>) -> Self {
+impl<Prim: PrimitiveType> FnType<Prim> {
+    pub(crate) fn new(args: FnArgs<Prim>, return_type: ValueType<Prim>) -> Self {
         Self {
             args,
             return_type,
@@ -136,7 +136,7 @@ impl<Lit: LiteralType> FnType<Lit> {
 
     pub(crate) fn with_type_params(
         mut self,
-        mut params: Vec<(usize, TypeParamDescription<Lit::Constraints>)>,
+        mut params: Vec<(usize, TypeParamDescription<Prim::Constraints>)>,
     ) -> Self {
         params.sort_unstable_by_key(|(idx, _)| *idx);
         self.type_params = params;
@@ -144,22 +144,22 @@ impl<Lit: LiteralType> FnType<Lit> {
     }
 
     /// Returns a builder for `FnType`s.
-    pub fn builder() -> FnTypeBuilder<Lit> {
+    pub fn builder() -> FnTypeBuilder<Prim> {
         FnTypeBuilder::default()
     }
 
     /// Gets the argument types of this function.
-    pub fn args(&self) -> &FnArgs<Lit> {
+    pub fn args(&self) -> &FnArgs<Prim> {
         &self.args
     }
 
     /// Gets the return type of this function.
-    pub fn return_type(&self) -> &ValueType<Lit> {
+    pub fn return_type(&self) -> &ValueType<Prim> {
         &self.return_type
     }
 
     /// Iterates over type params of this function together with their constraints.
-    pub fn type_params(&self) -> impl Iterator<Item = (usize, &Lit::Constraints)> + '_ {
+    pub fn type_params(&self) -> impl Iterator<Item = (usize, &Prim::Constraints)> + '_ {
         self.type_params
             .iter()
             .map(|(idx, description)| (*idx, &description.constraints))
@@ -190,7 +190,7 @@ impl<Lit: LiteralType> FnType<Lit> {
         self.arg_and_return_types().all(ValueType::is_concrete)
     }
 
-    pub(crate) fn arg_and_return_types(&self) -> impl Iterator<Item = &ValueType<Lit>> + '_ {
+    pub(crate) fn arg_and_return_types(&self) -> impl Iterator<Item = &ValueType<Prim>> + '_ {
         let args_slice = match &self.args {
             FnArgs::List(args) => args.as_slice(),
             FnArgs::Any => &[],
@@ -200,7 +200,7 @@ impl<Lit: LiteralType> FnType<Lit> {
 
     pub(crate) fn arg_and_return_types_mut(
         &mut self,
-    ) -> impl Iterator<Item = &mut ValueType<Lit>> + '_ {
+    ) -> impl Iterator<Item = &mut ValueType<Prim>> + '_ {
         let args_slice = match &mut self.args {
             FnArgs::List(args) => args.as_mut_slice(),
             FnArgs::Any => &mut [],
@@ -212,7 +212,7 @@ impl<Lit: LiteralType> FnType<Lit> {
     /// of the function.
     pub(crate) fn map_types<F>(&self, mut map_fn: F) -> Self
     where
-        F: FnMut(&ValueType<Lit>) -> ValueType<Lit>,
+        F: FnMut(&ValueType<Prim>) -> ValueType<Prim>,
     {
         Self {
             args: match &self.args {
@@ -275,13 +275,13 @@ impl<Lit: LiteralType> FnType<Lit> {
 /// );
 /// ```
 #[derive(Debug)]
-pub struct FnTypeBuilder<Lit: LiteralType = Num> {
-    args: FnArgs<Lit>,
-    type_params: HashMap<usize, TypeParamDescription<Lit::Constraints>>,
+pub struct FnTypeBuilder<Prim: PrimitiveType = Num> {
+    args: FnArgs<Prim>,
+    type_params: HashMap<usize, TypeParamDescription<Prim::Constraints>>,
     const_params: HashMap<usize, LenParamDescription>,
 }
 
-impl<Lit: LiteralType> Default for FnTypeBuilder<Lit> {
+impl<Prim: PrimitiveType> Default for FnTypeBuilder<Prim> {
     fn default() -> Self {
         Self {
             args: FnArgs::List(Vec::new()),
@@ -292,7 +292,7 @@ impl<Lit: LiteralType> Default for FnTypeBuilder<Lit> {
 }
 
 // TODO: support validation similarly to AST conversions.
-impl<Lit: LiteralType> FnTypeBuilder<Lit> {
+impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
     /// Adds the length params with the specified `indexes` to the function definition.
     pub fn with_len_params(mut self, indexes: impl Iterator<Item = usize>) -> Self {
         let static_description = LenParamDescription { is_dynamic: false };
@@ -312,7 +312,7 @@ impl<Lit: LiteralType> FnTypeBuilder<Lit> {
     /// Adds the type params with the specified `indexes` to the function definition.
     /// The params are unconstrained.
     pub fn with_type_params(self, indexes: impl Iterator<Item = usize>) -> Self {
-        self.with_constrained_type_params(indexes, Lit::Constraints::default())
+        self.with_constrained_type_params(indexes, Prim::Constraints::default())
     }
 
     /// Adds the type params with the specified `indexes` and `constraints`
@@ -320,7 +320,7 @@ impl<Lit: LiteralType> FnTypeBuilder<Lit> {
     pub fn with_constrained_type_params(
         mut self,
         indexes: impl Iterator<Item = usize>,
-        constraints: Lit::Constraints,
+        constraints: Prim::Constraints,
     ) -> Self {
         let description = TypeParamDescription { constraints };
         self.type_params
@@ -329,7 +329,7 @@ impl<Lit: LiteralType> FnTypeBuilder<Lit> {
     }
 
     /// Adds a new argument to the function definition.
-    pub fn with_arg(mut self, arg: impl Into<ValueType<Lit>>) -> Self {
+    pub fn with_arg(mut self, arg: impl Into<ValueType<Prim>>) -> Self {
         match &mut self.args {
             FnArgs::List(args) => {
                 args.push(arg.into());
@@ -340,7 +340,7 @@ impl<Lit: LiteralType> FnTypeBuilder<Lit> {
     }
 
     /// Declares the return type of the function and builds it.
-    pub fn returning(self, return_type: ValueType<Lit>) -> FnType<Lit> {
+    pub fn returning(self, return_type: ValueType<Prim>) -> FnType<Prim> {
         FnType::new(self.args, return_type)
             .with_len_params(self.const_params.into_iter().collect())
             .with_type_params(self.type_params.into_iter().collect())
@@ -349,15 +349,15 @@ impl<Lit: LiteralType> FnTypeBuilder<Lit> {
 
 /// Type of function arguments.
 #[derive(Debug, Clone, PartialEq)]
-pub enum FnArgs<Lit: LiteralType> {
+pub enum FnArgs<Prim: PrimitiveType> {
     /// Any arguments are accepted.
     // TODO: allow to parse any args
     Any,
     /// Lists accepted arguments.
-    List(Vec<ValueType<Lit>>),
+    List(Vec<ValueType<Prim>>),
 }
 
-impl<Lit: LiteralType> fmt::Display for FnArgs<Lit> {
+impl<Prim: PrimitiveType> fmt::Display for FnArgs<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         match self {
             FnArgs::Any => formatter.write_str("..."),

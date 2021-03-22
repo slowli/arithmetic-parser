@@ -56,9 +56,9 @@ impl TupleLength {
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum LengthKind {
-    /// Parameter is static (can be found during type inference / "in compile time").
+    /// Length is static (can be found during type inference / "in compile time").
     Static,
-    /// Parameter is dynamic (can vary at runtime).
+    /// Length is dynamic (can vary at runtime).
     Dynamic,
 }
 
@@ -274,9 +274,9 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
             || matches!(self, Self::Slice { length, .. } if *length == TupleLength::Exact(0))
     }
 
-    /// Returns `Some(true)` if this type is known to be a literal, `Some(false)` if it's known
-    /// not to be a literal, and `None` if either case is possible.
-    pub(crate) fn is_literal(&self) -> Option<bool> {
+    /// Returns `Some(true)` if this type is known to be primitive (except for Booleans),
+    /// `Some(false)` if it's known not to be primitive, and `None` if either case is possible.
+    pub(crate) fn is_primitive(&self) -> Option<bool> {
         match self {
             Self::Prim(_) => Some(true),
             Self::Tuple(_) | Self::Slice { .. } | Self::Bool | Self::Function(_) => Some(false),

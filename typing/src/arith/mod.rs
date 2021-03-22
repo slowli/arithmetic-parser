@@ -1,9 +1,7 @@
 //! Types allowing to customize various aspects of the type system, such as type constraints
 //! and behavior of unary / binary ops.
 
-use num_traits::{NumOps, Pow};
-
-use std::ops;
+use num_traits::NumOps;
 
 use crate::{Num, PrimitiveType, Substitutions, TypeErrorKind, TypeResult, ValueType};
 use arithmetic_parser::{BinaryOp, Spanned, UnaryOp};
@@ -200,7 +198,10 @@ impl NumArithmetic {
         let resolved_lhs_ty = substitutions.fast_resolve(lhs_ty);
         let resolved_rhs_ty = substitutions.fast_resolve(rhs_ty);
 
-        match (resolved_lhs_ty.is_literal(), resolved_rhs_ty.is_literal()) {
+        match (
+            resolved_lhs_ty.is_primitive(),
+            resolved_rhs_ty.is_primitive(),
+        ) {
             (Some(true), Some(false)) => Ok(resolved_rhs_ty.to_owned()),
             (Some(false), Some(true)) => Ok(resolved_lhs_ty.to_owned()),
             _ => {
@@ -286,10 +287,9 @@ impl NumArithmetic {
     }
 }
 
-// TODO: Are constraints on `Val` appropriate?
 impl<Val> MapPrimitiveType<Val> for NumArithmetic
 where
-    Val: Clone + NumOps + PartialEq + ops::Neg<Output = Val> + Pow<Val, Output = Val>,
+    Val: Clone + NumOps + PartialEq,
 {
     type Prim = Num;
 

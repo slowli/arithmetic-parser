@@ -3,10 +3,10 @@
 use assert_matches::assert_matches;
 
 use super::{
-    tests::{assert_incompatible_types, F32Grammar},
+    tests::{assert_incompatible_types, zip_fn_type, F32Grammar},
     *,
 };
-use crate::{Num, Prelude, TupleLength};
+use crate::{Prelude, TupleLength};
 use arithmetic_parser::grammars::Parse;
 
 #[test]
@@ -70,7 +70,7 @@ fn contradicting_type_hint_with_slice() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_incompatible_types(&err.kind(), &ValueType::Lit(Num), &ValueType::Bool);
+    assert_incompatible_types(&err.kind(), &ValueType::NUM, &ValueType::BOOL);
 }
 
 #[test]
@@ -78,12 +78,12 @@ fn valid_type_hint_with_fn_arg() {
     let code = "foo = |xs, map_fn: fn(Num) -> _| xs.map(map_fn);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("map", Prelude::map_type().into());
+    type_env.insert("map", Prelude::map_type().into());
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<const N; T>([Num; N], fn(Num) -> T) -> [T; N]"
+        "fn<len N; T>([Num; N], fn(Num) -> T) -> [T; N]"
     );
 }
 
@@ -92,7 +92,7 @@ fn invalid_type_hint_with_fn_arg() {
     let code = "foo = |xs, map_fn: fn(_, _) -> _| xs.map(map_fn);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("map", Prelude::map_type().into());
+    type_env.insert("map", Prelude::map_type().into());
     let err = type_env.process_statements(&block).unwrap_err();
 
     assert_matches!(
@@ -109,7 +109,7 @@ fn valid_type_hint_with_fn_declaration() {
     let code = "foo: fn(Num) -> _ = |x| x + 3;";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("map", Prelude::map_type().into());
+    type_env.insert("map", Prelude::map_type().into());
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(type_env["foo"].to_string(), "fn(Num) -> Num");
@@ -120,10 +120,10 @@ fn invalid_type_hint_with_fn_declaration() {
     let code = "foo: fn(_) -> Bool = |x| x + 3;";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("map", Prelude::map_type().into());
+    type_env.insert("map", Prelude::map_type().into());
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_incompatible_types(&err.kind(), &ValueType::Lit(Num), &ValueType::Bool);
+    assert_incompatible_types(&err.kind(), &ValueType::NUM, &ValueType::BOOL);
 }
 
 #[test]
@@ -132,12 +132,12 @@ fn widening_type_hint_with_generic_slice_arg() {
     let code = "foo = |xs: [_; _]| xs + 1;";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("map", Prelude::map_type().into());
+    type_env.insert("map", Prelude::map_type().into());
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<const N; T: Lin>([T; N]) -> [T; N]"
+        "fn<len N; T: Lin>([T; N]) -> [T; N]"
     );
 }
 
@@ -147,12 +147,12 @@ fn widening_type_hint_with_slice_arg() {
     let code = "foo = |xs: [Num; _]| xs + 1;";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert_type("map", Prelude::map_type().into());
+    type_env.insert("map", Prelude::map_type().into());
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<const N>([Num; N]) -> [Num; N]"
+        "fn<len N>([Num; N]) -> [Num; N]"
     );
 }
 
@@ -169,12 +169,12 @@ fn unsupported_type_param_in_generic_fn() {
 
 #[test]
 fn unsupported_const_param_in_generic_fn() {
-    let code = "identity: fn<const N>([Num; N]) -> [Num; N] = |x| x;";
+    let code = "identity: fn<len N>([Num; N]) -> [Num; N] = |x| x;";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_eq!(*err.span().fragment(), "fn<const N>([Num; N]) -> [Num; N]");
+    assert_eq!(*err.span().fragment(), "fn<len N>([Num; N]) -> [Num; N]");
     assert_matches!(err.kind(), TypeErrorKind::UnsupportedParam);
 }
 
@@ -191,8 +191,8 @@ fn fn_narrowed_via_type_hint() {
     assert_eq!(type_env["identity"].to_string(), "fn(Num) -> Num");
     assert_incompatible_types(
         &err.kind(),
-        &ValueType::Lit(Num),
-        &ValueType::Tuple(vec![ValueType::Lit(Num); 2]),
+        &ValueType::NUM,
+        &ValueType::Tuple(vec![ValueType::NUM; 2]),
     )
 }
 
@@ -203,7 +203,7 @@ fn fn_incorrectly_narrowed_via_type_hint() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_incompatible_types(&err.kind(), &ValueType::Lit(Num), &ValueType::Bool);
+    assert_incompatible_types(&err.kind(), &ValueType::NUM, &ValueType::BOOL);
 }
 
 #[test]
@@ -217,6 +217,7 @@ fn fn_instantiated_via_type_hint() {
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(type_env["identity"].to_string(), "fn(Num) -> Num");
+    assert!(type_env["identity"].is_concrete());
 }
 
 #[test]
@@ -226,7 +227,14 @@ fn assigning_to_dynamically_sized_slice() {
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(type_env["slice"].to_string(), "[Num]");
+    assert_eq!(type_env["slice"].to_string(), "[Num; _]");
+    assert!(!type_env["slice"].is_concrete());
+
+    let bogus_code = "(x, y) = slice;";
+    let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
+    let err = type_env.process_statements(&bogus_block).unwrap_err();
+
+    assert_matches!(err.kind(), TypeErrorKind::IncompatibleLengths(..));
 }
 
 #[test]
@@ -249,4 +257,73 @@ fn assigning_to_a_slice_and_then_narrowing() {
         type_env["slice_fn"].to_string(),
         "fn((Num, Num, Num)) -> Num"
     );
+}
+
+#[test]
+fn adding_dynamically_typed_slices() {
+    let code = r#"
+        x: [Num] = (1, 2);
+        y: [Num] = (3, 4, 5);
+        x + y
+    "#;
+
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env.process_statements(&block).unwrap_err();
+
+    assert_matches!(err.kind(), TypeErrorKind::IncompatibleLengths(..));
+}
+
+#[test]
+fn unifying_dynamic_slices_error() {
+    let code = r#"
+        x: [Num] = (1, 2);
+        y: [Num] = (3, 4, 5);
+        x.zip_with(y)
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.insert("zip_with", zip_fn_type().into());
+    let err = type_env.process_statements(&block).unwrap_err();
+
+    assert_matches!(err.kind(), TypeErrorKind::IncompatibleLengths(..));
+}
+
+#[test]
+fn unifying_dynamic_slices_in_arithmetic_op_error() {
+    let code = r#"
+        xs: [Num] = (1, 2);
+        ys: [Num] = (3, 4, 5);
+        xs + xs; // should work (dyn lengths are the same)
+        xs + xs.map(|x| x - 1); // should work (`map` retains length)
+        xs + ys
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.insert("map", Prelude::map_type().into());
+    let err = type_env.process_statements(&block).unwrap_err();
+
+    assert_eq!(*err.span().fragment(), "xs + ys");
+    assert_matches!(err.kind(), TypeErrorKind::IncompatibleLengths(..));
+}
+
+#[test]
+fn unifying_dynamic_slices_in_fn_error() {
+    let code = r#"
+        // This should work because the dynamic length is the same.
+        xs = (1, 2, 3).filter(|x| x != 2);
+        xs.zip_with(xs);
+        // This one shouldn't because dynamic lengths are different.
+        xs.zip_with(xs.filter(|x| x == 1));
+    "#;
+
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env
+        .insert("zip_with", zip_fn_type().into())
+        .insert("filter", Prelude::filter_type().into());
+    let err = type_env.process_statements(&block).unwrap_err();
+
+    assert_eq!(*err.span().fragment(), "xs.zip_with(xs.filter(|x| x == 1))");
+    assert_matches!(err.kind(), TypeErrorKind::IncompatibleLengths(..));
 }

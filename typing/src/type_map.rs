@@ -2,7 +2,7 @@
 
 use std::iter;
 
-use crate::{FnType, LiteralType, TupleLength, ValueType};
+use crate::{arith::WithBoolean, FnType, PrimitiveType, TupleLength, ValueType};
 
 /// Map containing type definitions for all variables from `Prelude` in the eval crate,
 /// except for `loop` function.
@@ -30,28 +30,7 @@ use crate::{FnType, LiteralType, TupleLength, ValueType};
 ///
 /// let mut env: TypeEnvironment = Prelude::iter().collect();
 /// let count_zeros_fn = env.process_statements(&ast)?;
-/// assert_eq!(count_zeros_fn.to_string(), "fn<const N>([Num; N]) -> Num");
-/// # Ok(())
-/// # }
-/// ```
-///
-/// Function that reverses a slice:
-///
-/// ```
-/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-/// # use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, ValueType};
-/// # fn main() -> anyhow::Result<()> {
-/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
-/// let code = r#"
-///     empty: [Num] = ();
-///     // ^ necessary to infer accumulator type as [Num], not as `()`
-///     |xs| xs.fold(empty, |acc, x| (x,).merge(acc))
-/// "#;
-/// let ast = Parser::parse_statements(code)?;
-///
-/// let mut env: TypeEnvironment = Prelude::iter().collect();
-/// let reverse_fn = env.process_statements(&ast)?;
-/// assert_eq!(reverse_fn.to_string(), "fn<const N>([Num; N]) -> [Num]");
+/// assert_eq!(count_zeros_fn.to_string(), "fn<len N>([Num; N]) -> Num");
 /// # Ok(())
 /// # }
 /// ```
@@ -84,9 +63,9 @@ pub struct Prelude;
 
 impl Prelude {
     /// Gets type definition by `name`.
-    pub fn get_type<Lit: LiteralType>(name: &str) -> Option<ValueType<Lit>> {
+    pub fn get_type<Prim: WithBoolean>(name: &str) -> Option<ValueType<Prim>> {
         Some(match name {
-            "false" | "true" => ValueType::Bool,
+            "false" | "true" => ValueType::BOOL,
             "if" => Self::if_type().into(),
             "while" => Self::while_type().into(),
             "map" => Self::map_type().into(),
@@ -109,10 +88,10 @@ impl Prelude {
     ///     "fn<T>(Bool, T, T) -> T"
     /// );
     /// ```
-    pub fn if_type<Lit: LiteralType>() -> FnType<Lit> {
+    pub fn if_type<Prim: WithBoolean>() -> FnType<Prim> {
         FnType::builder()
             .with_type_params(iter::once(0))
-            .with_arg(ValueType::Bool)
+            .with_arg(ValueType::BOOL)
             .with_arg(ValueType::Param(0))
             .with_arg(ValueType::Param(0))
             .returning(ValueType::Param(0))
@@ -129,10 +108,10 @@ impl Prelude {
     ///     "fn<T>(T, fn(T) -> Bool, fn(T) -> T) -> T"
     /// );
     /// ```
-    pub fn while_type<Lit: LiteralType>() -> FnType<Lit> {
+    pub fn while_type<Prim: WithBoolean>() -> FnType<Prim> {
         let condition_fn = FnType::builder()
             .with_arg(ValueType::Param(0))
-            .returning(ValueType::Bool);
+            .returning(ValueType::BOOL);
         let iter_fn = FnType::builder()
             .with_arg(ValueType::Param(0))
             .returning(ValueType::Param(0));
@@ -153,16 +132,16 @@ impl Prelude {
     /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
     ///     Prelude::map_type::<Num>().to_string(),
-    ///     "fn<const N; T, U>([T; N], fn(T) -> U) -> [U; N]"
+    ///     "fn<len N; T, U>([T; N], fn(T) -> U) -> [U; N]"
     /// );
     /// ```
-    pub fn map_type<Lit: LiteralType>() -> FnType<Lit> {
+    pub fn map_type<Prim: PrimitiveType>() -> FnType<Prim> {
         let map_arg = FnType::builder()
             .with_arg(ValueType::Param(0))
             .returning(ValueType::Param(1));
 
         FnType::builder()
-            .with_const_params(iter::once(0))
+            .with_len_params(iter::once(0))
             .with_type_params(0..=1)
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
             .with_arg(map_arg)
@@ -177,20 +156,21 @@ impl Prelude {
     /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
     ///     Prelude::filter_type::<Num>().to_string(),
-    ///     "fn<const N; T>([T; N], fn(T) -> Bool) -> [T]"
+    ///     "fn<len N, M*; T>([T; N], fn(T) -> Bool) -> [T; M]"
     /// );
     /// ```
-    pub fn filter_type<Lit: LiteralType>() -> FnType<Lit> {
+    pub fn filter_type<Prim: WithBoolean>() -> FnType<Prim> {
         let predicate_arg = FnType::builder()
             .with_arg(ValueType::Param(0))
-            .returning(ValueType::Bool);
+            .returning(ValueType::BOOL);
 
         FnType::builder()
-            .with_const_params(iter::once(0))
+            .with_len_params(iter::once(0))
+            .with_dyn_len_params(iter::once(1))
             .with_type_params(iter::once(0))
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
             .with_arg(predicate_arg)
-            .returning(ValueType::Param(0).repeat(TupleLength::Dynamic))
+            .returning(ValueType::Param(0).repeat(TupleLength::Param(1)))
     }
 
     /// Returns type of the `fold` function.
@@ -201,10 +181,10 @@ impl Prelude {
     /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
     ///     Prelude::fold_type::<Num>().to_string(),
-    ///     "fn<const N; T, U>([T; N], U, fn(U, T) -> U) -> U"
+    ///     "fn<len N; T, U>([T; N], U, fn(U, T) -> U) -> U"
     /// );
     /// ```
-    pub fn fold_type<Lit: LiteralType>() -> FnType<Lit> {
+    pub fn fold_type<Prim: PrimitiveType>() -> FnType<Prim> {
         // 0th type param is slice element, 1st is accumulator
         let fold_arg = FnType::builder()
             .with_arg(ValueType::Param(1))
@@ -212,7 +192,7 @@ impl Prelude {
             .returning(ValueType::Param(1));
 
         FnType::builder()
-            .with_const_params(iter::once(0))
+            .with_len_params(iter::once(0))
             .with_type_params(0..=1)
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
             .with_arg(ValueType::Param(1))
@@ -228,16 +208,17 @@ impl Prelude {
     /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
     ///     Prelude::push_type::<Num>().to_string(),
-    ///     "fn<const N; T>([T; N], T) -> [T]"
+    ///     "fn<len N, M*; T>([T; N], T) -> [T; M]"
     /// );
     /// ```
-    pub fn push_type<Lit: LiteralType>() -> FnType<Lit> {
+    pub fn push_type<Prim: PrimitiveType>() -> FnType<Prim> {
         FnType::builder()
-            .with_const_params(iter::once(0))
+            .with_len_params(iter::once(0))
+            .with_dyn_len_params(iter::once(1))
             .with_type_params(iter::once(0))
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
             .with_arg(ValueType::Param(0))
-            .returning(ValueType::Param(0).repeat(TupleLength::Dynamic))
+            .returning(ValueType::Param(0).repeat(TupleLength::Param(1)))
     }
 
     /// Returns type of the `merge` function.
@@ -248,20 +229,21 @@ impl Prelude {
     /// # use arithmetic_typing::{Num, Prelude};
     /// assert_eq!(
     ///     Prelude::merge_type::<Num>().to_string(),
-    ///     "fn<const N, M; T>([T; N], [T; M]) -> [T]"
+    ///     "fn<len N, M, L*; T>([T; N], [T; M]) -> [T; L]"
     /// );
     /// ```
-    pub fn merge_type<Lit: LiteralType>() -> FnType<Lit> {
+    pub fn merge_type<Prim: PrimitiveType>() -> FnType<Prim> {
         FnType::builder()
-            .with_const_params(0..=1)
+            .with_len_params(0..=1)
+            .with_dyn_len_params(iter::once(2))
             .with_type_params(iter::once(0))
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
             .with_arg(ValueType::Param(0).repeat(TupleLength::Param(1)))
-            .returning(ValueType::Param(0).repeat(TupleLength::Dynamic))
+            .returning(ValueType::Param(0).repeat(TupleLength::Param(2)))
     }
 
     /// Returns an iterator over all type definitions in the `Prelude`.
-    pub fn iter<Lit: LiteralType>() -> impl Iterator<Item = (&'static str, ValueType<Lit>)> {
+    pub fn iter<Prim: WithBoolean>() -> impl Iterator<Item = (&'static str, ValueType<Prim>)> {
         const VAR_NAMES: &[&str] = &[
             "false", "true", "if", "while", "map", "filter", "fold", "push", "merge",
         ];
@@ -278,7 +260,7 @@ pub struct Assertions;
 
 impl Assertions {
     /// Gets type definition by `name`.
-    pub fn get_type<Lit: LiteralType>(name: &str) -> Option<ValueType<Lit>> {
+    pub fn get_type<Prim: WithBoolean>(name: &str) -> Option<ValueType<Prim>> {
         Some(match name {
             "assert" => Self::assert_type().into(),
             "assert_eq" => Self::assert_eq_type().into(),
@@ -297,9 +279,9 @@ impl Assertions {
     ///     "fn(Bool)"
     /// );
     /// ```
-    pub fn assert_type<Lit: LiteralType>() -> FnType<Lit> {
+    pub fn assert_type<Prim: WithBoolean>() -> FnType<Prim> {
         FnType::builder()
-            .with_arg(ValueType::Bool)
+            .with_arg(ValueType::BOOL)
             .returning(ValueType::void())
     }
 
@@ -314,7 +296,7 @@ impl Assertions {
     ///     "fn<T>(T, T)"
     /// );
     /// ```
-    pub fn assert_eq_type<Lit: LiteralType>() -> FnType<Lit> {
+    pub fn assert_eq_type<Prim: PrimitiveType>() -> FnType<Prim> {
         FnType::builder()
             .with_type_params(iter::once(0))
             .with_arg(ValueType::Param(0))
@@ -323,7 +305,7 @@ impl Assertions {
     }
 
     /// Returns an iterator over all type definitions in `Assertions`.
-    pub fn iter<Lit: LiteralType>() -> impl Iterator<Item = (&'static str, ValueType<Lit>)> {
+    pub fn iter<Prim: WithBoolean>() -> impl Iterator<Item = (&'static str, ValueType<Prim>)> {
         const VAR_NAMES: &[&str] = &["assert", "assert_eq"];
 
         VAR_NAMES
@@ -344,11 +326,14 @@ mod tests {
         ("true", "Bool"),
         ("if", "fn<T>(Bool, T, T) -> T"),
         ("while", "fn<T>(T, fn(T) -> Bool, fn(T) -> T) -> T"),
-        ("map", "fn<const N; T, U>([T; N], fn(T) -> U) -> [U; N]"),
-        ("filter", "fn<const N; T>([T; N], fn(T) -> Bool) -> [T]"),
-        ("fold", "fn<const N; T, U>([T; N], U, fn(U, T) -> U) -> U"),
-        ("push", "fn<const N; T>([T; N], T) -> [T]"),
-        ("merge", "fn<const N, M; T>([T; N], [T; M]) -> [T]"),
+        ("map", "fn<len N; T, U>([T; N], fn(T) -> U) -> [U; N]"),
+        (
+            "filter",
+            "fn<len N, M*; T>([T; N], fn(T) -> Bool) -> [T; M]",
+        ),
+        ("fold", "fn<len N; T, U>([T; N], U, fn(U, T) -> U) -> U"),
+        ("push", "fn<len N, M*; T>([T; N], T) -> [T; M]"),
+        ("merge", "fn<len N, M, L*; T>([T; N], [T; M]) -> [T; L]"),
     ];
 
     #[test]

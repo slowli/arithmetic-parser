@@ -2,16 +2,20 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{types::TypeParamDescription, FnArgs, FnType, LiteralType, TupleLength, ValueType};
+use crate::types::LenParamDescription;
+use crate::{
+    types::TypeParamDescription, FnArgs, FnType, PrimitiveType, Substitutions, TupleLength,
+    ValueType,
+};
 
-impl<Lit: LiteralType> FnType<Lit> {
+impl<Prim: PrimitiveType> FnType<Prim> {
     /// Performs final transformations on this type, transforming all of its type vars
     /// into type params.
-    pub(crate) fn finalize(&mut self, constraints: &HashMap<usize, Lit::Constraints>) {
+    pub(crate) fn finalize(&mut self, substitutions: &Substitutions<Prim>) {
         let mut tree = FnTypeTree::new(self);
         tree.infer_type_params(&HashSet::new(), &HashSet::new());
         let mapping = tree.create_param_mapping();
-        tree.merge_into(self, constraints);
+        tree.merge_into(self, substitutions);
 
         *self = self.substitute_type_vars(&mapping, SubstitutionContext::VarsToParams);
     }
@@ -54,14 +58,13 @@ impl<Lit: LiteralType> FnType<Lit> {
         };
         let return_type = self.return_type.substitute_type_vars(mapping, context);
 
-        let const_params = self.const_params.iter().map(|idx| (*idx, ()));
-        let const_params =
-            map_params(const_params, &mapping.constants, context).map(|(idx, _)| idx);
+        let const_params = self.len_params.iter().copied();
+        let const_params = map_params(const_params, &mapping.constants, context);
         let type_params = self.type_params.iter().cloned();
         let type_params = map_params(type_params, &mapping.types, context);
 
         FnType::new(substituted_args, return_type)
-            .with_const_params(const_params.collect())
+            .with_len_params(const_params.collect())
             .with_type_params(type_params.collect())
     }
 }
@@ -90,12 +93,12 @@ struct FnTypeTree {
 
 // TODO: add unit tests covering main methods
 impl FnTypeTree {
-    fn new<Lit: LiteralType>(base: &FnType<Lit>) -> Self {
-        fn recurse<L: LiteralType>(
+    fn new<Prim: PrimitiveType>(base: &FnType<Prim>) -> Self {
+        fn recurse<P: PrimitiveType>(
             children: &mut Vec<FnTypeTree>,
             type_vars: &mut HashMap<usize, VarQuantity>,
             const_vars: &mut HashMap<usize, VarQuantity>,
-            ty: &ValueType<L>,
+            ty: &ValueType<P>,
         ) {
             match ty {
                 ValueType::Var(idx) => {
@@ -217,38 +220,39 @@ impl FnTypeTree {
     }
 
     /// Recursively sets `type_params` for `base`.
-    fn merge_into<Lit: LiteralType>(
+    fn merge_into<Prim: PrimitiveType>(
         self,
-        base: &mut FnType<Lit>,
-        constraints: &HashMap<usize, Lit::Constraints>,
+        base: &mut FnType<Prim>,
+        substitutions: &Substitutions<Prim>,
     ) {
-        fn recurse<L: LiteralType>(
+        fn recurse<P: PrimitiveType>(
             reversed_children: &mut Vec<FnTypeTree>,
-            ty: &mut ValueType<L>,
-            constraints: &HashMap<usize, L::Constraints>,
+            ty: &mut ValueType<P>,
+            substitutions: &Substitutions<P>,
         ) {
             match ty {
                 ValueType::Tuple(elements) => {
                     for element in elements {
-                        recurse(reversed_children, element, constraints);
+                        recurse(reversed_children, element, substitutions);
                     }
                 }
 
                 ValueType::Slice { element, .. } => {
-                    recurse(reversed_children, element, constraints);
+                    recurse(reversed_children, element, substitutions);
                 }
 
                 ValueType::Function(fn_type) => {
                     reversed_children
                         .pop()
                         .expect("Missing child")
-                        .merge_into(fn_type, constraints);
+                        .merge_into(fn_type, substitutions);
                 }
 
                 _ => { /* Do nothing. */ }
             }
         }
 
+        let constraints = substitutions.type_constraints();
         base.type_params = self
             .type_params
             .into_iter()
@@ -258,13 +262,22 @@ impl FnTypeTree {
             })
             .collect();
         base.type_params.sort_unstable_by_key(|(idx, _)| *idx);
-        base.const_params = self.const_params.into_iter().collect();
-        base.const_params.sort_unstable();
+
+        let dynamic_lengths = substitutions.dyn_lengths();
+        base.len_params = self
+            .const_params
+            .into_iter()
+            .map(|idx| {
+                let is_dynamic = dynamic_lengths.contains(&idx);
+                (idx, LenParamDescription { is_dynamic })
+            })
+            .collect();
+        base.len_params.sort_unstable_by_key(|(idx, _)| *idx);
 
         let mut reversed_children = self.children;
         reversed_children.reverse();
         for ty in base.arg_and_return_types_mut() {
-            recurse(&mut reversed_children, ty, constraints);
+            recurse(&mut reversed_children, ty, substitutions);
         }
     }
 }
@@ -287,7 +300,7 @@ impl TupleLength {
     }
 }
 
-impl<Lit: LiteralType> ValueType<Lit> {
+impl<Prim: PrimitiveType> ValueType<Prim> {
     /// Recursively substitutes type vars in this type according to `type_var_mapping`.
     /// Returns the type with substituted vars.
     fn substitute_type_vars(&self, mapping: &ParamMapping, context: SubstitutionContext) -> Self {

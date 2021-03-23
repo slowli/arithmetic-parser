@@ -2,20 +2,21 @@
 
 use std::{borrow::Cow, fmt};
 
-use crate::{LiteralType, Num};
+use crate::{arith::WithBoolean, Num, PrimitiveType};
 
 mod fn_type;
 
-pub(crate) use self::fn_type::TypeParamDescription;
 pub use self::fn_type::{FnArgs, FnType, FnTypeBuilder};
+pub(crate) use self::fn_type::{LenParamDescription, TypeParamDescription};
 
 /// Length of a tuple.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TupleLength {
-    /// Dynamic length that can vary at runtime.
-    Dynamic,
     /// Wildcard length.
-    Any,
+    Some {
+        /// Is this length dynamic (can vary at runtime)?
+        is_dynamic: bool,
+    },
     /// Exact known length.
     Exact(usize),
     /// Length parameter in a function definition.
@@ -29,12 +30,10 @@ pub enum TupleLength {
 impl fmt::Display for TupleLength {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Dynamic => formatter.write_str("*"),
-            Self::Any => formatter.write_str("_"),
+            Self::Some { is_dynamic: false } | Self::Var(_) => formatter.write_str("_"),
+            Self::Some { is_dynamic: true } => formatter.write_str("*"),
             Self::Exact(len) => fmt::Display::fmt(len, formatter),
-            Self::Var(idx) | Self::Param(idx) => {
-                formatter.write_str(Self::const_param(*idx).as_ref())
-            }
+            Self::Param(idx) => formatter.write_str(Self::const_param(*idx).as_ref()),
         }
     }
 }
@@ -47,27 +46,75 @@ impl TupleLength {
             Cow::from,
         )
     }
+
+    fn is_concrete(&self) -> bool {
+        matches!(self, Self::Param(_) | Self::Exact(_))
+    }
 }
 
-/// Possible value type.
+/// Kind of a length parameter.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub enum LengthKind {
+    /// Length is static (can be found during type inference / "in compile time").
+    Static,
+    /// Length is dynamic (can vary at runtime).
+    Dynamic,
+}
+
+/// Enumeration encompassing all types supported by the type system.
+///
+/// Parametric by the [`PrimitiveType`].
+///
+/// # Examples
+///
+/// There are conversions to construct `ValueType`s eloquently:
+///
+/// ```
+/// # use arithmetic_typing::{FnType, TupleLength, ValueType};
+/// let tuple: ValueType = (ValueType::BOOL, ValueType::NUM).into();
+/// assert_eq!(tuple.to_string(), "(Bool, Num)");
+/// let slice: ValueType = tuple.repeat(TupleLength::Param(0));
+/// assert_eq!(slice.to_string(), "[(Bool, Num); N]");
+/// let fn_type: ValueType = FnType::builder()
+///     .with_len_params(0..1)
+///     .with_arg(slice)
+///     .returning(ValueType::NUM)
+///     .into();
+/// assert_eq!(fn_type.to_string(), "fn<len N>([(Bool, Num); N]) -> Num");
+/// ```
+///
+/// A `ValueType` can also be parsed from a string:
+///
+/// ```
+/// # use arithmetic_typing::ValueType;
+/// # use assert_matches::assert_matches;
+/// # fn main() -> anyhow::Result<()> {
+/// let slice: ValueType = "[(Bool, Num); _]".parse()?;
+/// assert_matches!(slice, ValueType::Slice { .. });
+/// let fn_type: ValueType = "fn<len N>([(Bool, Num); N]) -> Num".parse()?;
+/// assert_matches!(fn_type, ValueType::Function(_));
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone)]
-pub enum ValueType<Lit: LiteralType = Num> {
-    /// Any type.
-    Any,
-    /// Boolean.
-    // TODO: consider uniting literals and `Bool` as primitive types
-    Bool,
-    /// Literal.
-    Lit(Lit),
-    /// Function.
-    Function(Box<FnType<Lit>>),
-    /// Tuple.
+pub enum ValueType<Prim: PrimitiveType = Num> {
+    /// Wildcard type, i.e. some type that is not specified. Similar to `_` in type annotations
+    /// in Rust.
+    Some,
+    /// Primitive type.
+    Prim(Prim),
+    /// Functional type.
+    Function(Box<FnType<Prim>>),
+    /// Tuple type.
     // TODO: support start / middle / end structuring
-    Tuple(Vec<ValueType<Lit>>),
-    /// Slice.
+    Tuple(Vec<ValueType<Prim>>),
+    /// Slice type. Unlike in Rust, slices are a subset of tuples. If `length` is
+    /// [`Exact`](TupleLength::Exact), the slice is completely equivalent
+    /// to the corresponding tuple.
     Slice {
         /// Type of slice elements.
-        element: Box<ValueType<Lit>>,
+        element: Box<ValueType<Prim>>,
         /// Slice length.
         length: TupleLength,
     },
@@ -79,12 +126,12 @@ pub enum ValueType<Lit: LiteralType = Num> {
     Var(usize),
 }
 
-impl<Lit: LiteralType> PartialEq for ValueType<Lit> {
+impl<Prim: PrimitiveType> PartialEq for ValueType<Prim> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Any, _) | (_, Self::Any) | (Self::Bool, Self::Bool) => true,
+            (Self::Some, _) | (_, Self::Some) => true,
 
-            (Self::Lit(x), Self::Lit(y)) => x == y,
+            (Self::Prim(x), Self::Prim(y)) => x == y,
 
             (Self::Var(x), Self::Var(y)) | (Self::Param(x), Self::Param(y)) => x == y,
 
@@ -109,14 +156,13 @@ impl<Lit: LiteralType> PartialEq for ValueType<Lit> {
     }
 }
 
-impl<Lit: LiteralType> fmt::Display for ValueType<Lit> {
+impl<Prim: PrimitiveType> fmt::Display for ValueType<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Any => formatter.write_str("_"),
-            Self::Var(idx) | Self::Param(idx) => formatter.write_str(type_param(*idx).as_ref()),
+            Self::Some | Self::Var(_) => formatter.write_str("_"),
+            Self::Param(idx) => formatter.write_str(type_param(*idx).as_ref()),
 
-            Self::Bool => formatter.write_str("Bool"),
-            Self::Lit(num) => fmt::Display::fmt(num, formatter),
+            Self::Prim(num) => fmt::Display::fmt(num, formatter),
             Self::Function(fn_type) => fmt::Display::fmt(fn_type, formatter),
 
             Self::Tuple(fragments) => {
@@ -130,12 +176,6 @@ impl<Lit: LiteralType> fmt::Display for ValueType<Lit> {
                 formatter.write_str(")")
             }
 
-            Self::Slice {
-                element,
-                length: TupleLength::Dynamic,
-            } => {
-                write!(formatter, "[{}]", element)
-            }
             Self::Slice {
                 element,
                 length: TupleLength::Exact(len),
@@ -157,17 +197,17 @@ impl<Lit: LiteralType> fmt::Display for ValueType<Lit> {
     }
 }
 
-impl<Lit: LiteralType> From<FnType<Lit>> for ValueType<Lit> {
-    fn from(fn_type: FnType<Lit>) -> Self {
+impl<Prim: PrimitiveType> From<FnType<Prim>> for ValueType<Prim> {
+    fn from(fn_type: FnType<Prim>) -> Self {
         Self::Function(Box::new(fn_type))
     }
 }
 
 macro_rules! impl_from_tuple_for_value_type {
     ($($var:tt : $ty:ident),*) => {
-        impl<Lit, $($ty : Into<ValueType<Lit>>,)*> From<($($ty,)*)> for ValueType<Lit>
+        impl<Prim, $($ty : Into<ValueType<Prim>>,)*> From<($($ty,)*)> for ValueType<Prim>
         where
-            Lit: LiteralType,
+            Prim: PrimitiveType,
         {
             #[allow(unused_variables)] // `tuple` is unused for empty tuple
             fn from(tuple: ($($ty,)*)) -> Self {
@@ -198,18 +238,23 @@ fn type_param(index: usize) -> Cow<'static, str> {
 }
 
 impl ValueType {
-    /// Numeric literal type.
-    pub const NUM: Self = ValueType::Lit(Num);
+    /// Numeric primitive type.
+    pub const NUM: Self = ValueType::Prim(Num::Num);
 }
 
-impl<Lit: LiteralType> ValueType<Lit> {
+impl<Prim: WithBoolean> ValueType<Prim> {
+    /// Boolean primitive type.
+    pub const BOOL: Self = ValueType::Prim(Prim::BOOL);
+}
+
+impl<Prim: PrimitiveType> ValueType<Prim> {
     /// Returns a void type (an empty tuple).
     pub fn void() -> Self {
         Self::Tuple(Vec::new())
     }
 
     /// Creates a slice type.
-    pub fn slice(element: impl Into<ValueType<Lit>>, length: TupleLength) -> Self {
+    pub fn slice(element: impl Into<ValueType<Prim>>, length: TupleLength) -> Self {
         Self::Slice {
             element: Box::new(element.into()),
             length,
@@ -230,13 +275,28 @@ impl<Lit: LiteralType> ValueType<Lit> {
             || matches!(self, Self::Slice { length, .. } if *length == TupleLength::Exact(0))
     }
 
-    /// Returns `Some(true)` if this type is known to be a literal, `Some(false)` if it's known
-    /// not to be a literal, and `None` if either case is possible.
-    pub(crate) fn is_literal(&self) -> Option<bool> {
+    /// Returns `Some(true)` if this type is known to be primitive,
+    /// `Some(false)` if it's known not to be primitive, and `None` if either case is possible.
+    pub(crate) fn is_primitive(&self) -> Option<bool> {
         match self {
-            Self::Lit(_) => Some(true),
-            Self::Tuple(_) | Self::Slice { .. } | Self::Bool | Self::Function(_) => Some(false),
+            Self::Prim(_) => Some(true),
+            Self::Tuple(_) | Self::Slice { .. } | Self::Function(_) => Some(false),
             _ => None,
+        }
+    }
+
+    /// Returns `true` iff this type does not contain type / length variables.
+    ///
+    /// See [`TypeEnvironment`](crate::TypeEnvironment) for caveats of dealing with
+    /// non-concrete types.
+    pub fn is_concrete(&self) -> bool {
+        match self {
+            Self::Var(_) | Self::Some => false,
+            Self::Param(_) | Self::Prim(_) => true,
+
+            Self::Function(fn_type) => fn_type.is_concrete(),
+            Self::Tuple(elements) => elements.iter().all(Self::is_concrete),
+            Self::Slice { element, length } => length.is_concrete() && element.is_concrete(),
         }
     }
 }

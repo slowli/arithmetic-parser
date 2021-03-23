@@ -11,10 +11,11 @@
 //!
 //! The type system corresponds to types of `Value`s in `arithmetic-eval`:
 //!
-//! - There are 2 primitive types: Boolean (`Bool`) and other literals. In the simplest case,
-//!   there can be a single [`LiteralType`], such as a [`Num`]ber.
+//! - Primitive types are customizeable via [`PrimitiveType`] impl. In the simplest case,
+//!   there can be 2 primitive types: Booleans (`Bool`) and numbers (`Num`),
+//!   as ecapsulated in [`Num`].
 //! - There is only one container type - a tuple. It can be represented either
-//!   in the tuple form, such as `(Num, Bool)`, or as a slice, such as `[Num]` or `[Num; 3]`.
+//!   in the tuple form, such as `(Num, Bool)`, or as a slice, such as `[Num; 3]`.
 //!   As in Rust, all slice elements must have the same type. Unlike Rust, tuple and slice
 //!   forms are equivalent; e.g., `[Num; 3]` and `(Num, Num, Num)` are the same type.
 //! - Functions are first-class types. Functions can have type and/or const params.
@@ -25,7 +26,20 @@
 //!
 //! # Inference rules
 //!
-//! FIXME
+//! Inference mostly corresponds to [Hindley–Milner typing rules]. It does not require
+//! type annotations, but utilizes them if present. Type unification (encapsulated in
+//! [`Substitutions`]) is performed at each variable use or assignment. Variable uses include
+//! function calls and unary and binary ops; the op behavior is customizable
+//! via [`TypeArithmetic`].
+//!
+//! Whenever possible, the most generic type satisfying the constraints is used. In particular,
+//! this means that all type / length variables not resolved at the function definition site become
+//! parameters of the function. Symmetrically, each function call instantiates a separate instance
+//! of a generic function; type / length params for each call are assigned independently.
+//! See the example below for more details.
+//!
+//! [Hindley–Milner typing rules]: https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system#Typing_rules
+//! [`TypeArithmetic`]: crate::arith::TypeArithmetic
 //!
 //! # Examples
 //!
@@ -39,12 +53,46 @@
 //! let ast = Parser::parse_statements(code)?;
 //!
 //! let mut env = TypeEnvironment::new();
-//! env.insert_type("fold", Prelude::fold_type().into());
+//! env.insert("fold", Prelude::fold_type().into());
 //!
 //! // Evaluate `code` to get the inferred `sum` function signature.
 //! let output_type = env.process_statements(&ast)?;
 //! assert!(output_type.is_void());
-//! assert_eq!(env["sum"].to_string(), "fn<const N>([Num; N]) -> Num");
+//! assert_eq!(env["sum"].to_string(), "fn<len N>([Num; N]) -> Num");
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Defining and using generic functions:
+//!
+//! ```
+//! # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+//! # use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, ValueType};
+//! # type Parser = Typed<Annotated<NumGrammar<f32>>>;
+//! # fn main() -> anyhow::Result<()> {
+//! let code = "sum_with = |xs, init| xs.fold(init, |acc, x| acc + x);";
+//! let ast = Parser::parse_statements(code)?;
+//!
+//! let mut env = TypeEnvironment::new();
+//! env.insert("fold", Prelude::fold_type().into());
+//!
+//! let output_type = env.process_statements(&ast)?;
+//! assert!(output_type.is_void());
+//! assert_eq!(
+//!     env["sum_with"].to_string(),
+//!     "fn<len N; T: Lin>([T; N], T) -> T"
+//! );
+//! // Note that `sum_with` is parametric by the element of the slice
+//! // (for which the linearity constraint is applied based on the arg usage)
+//! // *and* by its length.
+//!
+//! let usage_code = r#"
+//!     num_sum: Num = (1, 2, 3).sum_with(0);
+//!     tuple_sum: (Num, Num) = ((1, 2), (3, 4)).sum_with((0, 0));
+//! "#;
+//! // Both lengths and element types differ in these invocations,
+//! // but it works fine since they are treated independently.
+//! env.process_statements(&ast)?;
 //! # Ok(())
 //! # }
 //! ```
@@ -72,7 +120,6 @@ use arithmetic_parser::{
 
 pub mod arith;
 pub mod ast;
-mod constraints;
 mod env;
 mod error;
 mod substitutions;
@@ -80,13 +127,14 @@ mod type_map;
 mod types;
 
 pub use self::{
-    constraints::{LinConstraints, LinearType, NoConstraints, TypeConstraints},
     env::TypeEnvironment,
     error::{TypeError, TypeErrorKind, TypeResult},
     substitutions::Substitutions,
     type_map::{Assertions, Prelude},
-    types::{FnArgs, FnType, FnTypeBuilder, TupleLength, ValueType},
+    types::{FnArgs, FnType, FnTypeBuilder, LengthKind, TupleLength, ValueType},
 };
+
+use self::arith::{LinConstraints, LinearType, TypeConstraints, WithBoolean};
 
 // Reexports for the macros.
 #[doc(hidden)]
@@ -94,12 +142,12 @@ pub mod _reexports {
     pub use anyhow::{anyhow, Error};
 }
 
-/// Types of literals in a certain grammar.
+/// Primitive types in a certain type system.
 ///
 /// More complex types, like [`ValueType`] and [`FnType`], are defined with a type param
-/// which determines the literal type. This type param must implement [`LiteralType`].
+/// which determines the primitive type(s). This type param must implement [`PrimitiveType`].
 ///
-/// [`TypeArithmetic`] has a `LiteralType` impl as an associated type, and one of the required
+/// [`TypeArithmetic`] has a `PrimitiveType` impl as an associated type, and one of the required
 /// operations of this trait is to be able to infer type for literal values from a [`Grammar`].
 ///
 /// # Implementation Requirements
@@ -108,15 +156,20 @@ pub mod _reexports {
 ///   `Display` should produce output parseable by `FromStr`. `Display` will be used in
 ///   `Display` impls for `ValueType` etc. `FromStr` will be used to read type annotations.
 /// - `Display` presentations must be identifiers, such as `Num`.
+/// - While not required, a `PrimitiveType` should usually contain a Boolean type and
+///   implement [`WithBoolean`]. This allows to reuse [`BoolArithmetic`] and/or [`NumArithmetic`]
+///   as building blocks for your [`TypeArithmetic`].
 ///
 /// [`Grammar`]: arithmetic_parser::grammars::Grammar
 /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
+/// [`BoolArithmetic`]: crate::arith::BoolArithmetic
+/// [`NumArithmetic`]: crate::arith::NumArithmetic
 ///
 /// # Examples
 ///
 /// ```
 /// # use std::{fmt, str::FromStr};
-/// use arithmetic_typing::{LiteralType, NoConstraints};
+/// use arithmetic_typing::{arith::NoConstraints, PrimitiveType};
 ///
 /// #[derive(Debug, Clone, Copy, PartialEq)]
 /// enum NumOrBytes {
@@ -154,89 +207,59 @@ pub mod _reexports {
 ///     }
 /// }
 ///
-/// impl LiteralType for NumOrBytes {
+/// impl PrimitiveType for NumOrBytes {
 ///     type Constraints = NoConstraints;
 /// }
 /// ```
-pub trait LiteralType:
+pub trait PrimitiveType:
     Clone + PartialEq + fmt::Debug + fmt::Display + FromStr + Send + Sync + 'static
 {
     /// Constraints that can be placed on type parameters.
     type Constraints: TypeConstraints<Self>;
 }
 
-/// Implements [`Display`](fmt::Display) and [`FromStr`]for the provided type,
-/// which must be a no-field struct. Useful as a building block for [`LiteralType`]
-/// and [`TypeConstraints`] implementations.
-///
-/// # Examples
-///
-/// ```
-/// use arithmetic_typing::{
-///     impl_display_for_singleton_type, NoConstraints, LiteralType,
-/// };
-///
-/// #[derive(Debug, Clone, Copy, PartialEq)]
-/// pub struct SomeType;
-///
-/// impl_display_for_singleton_type!(SomeType, "Some");
-///
-/// impl LiteralType for SomeType {
-///     type Constraints = NoConstraints;
-/// }
-/// ```
-#[macro_export]
-macro_rules! impl_display_for_singleton_type {
-    ($ty:ident, $name:tt) => {
-        impl core::fmt::Display for $ty {
-            fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                formatter.write_str($name)
-            }
-        }
-
-        impl core::str::FromStr for $ty {
-            type Err = $crate::_reexports::Error;
-
-            fn from_str(s: &str) -> core::result::Result<Self, Self::Err> {
-                if s == $name {
-                    core::result::Result::Ok($ty)
-                } else {
-                    core::result::Result::Err($crate::_reexports::anyhow!(concat!(
-                        "Expected `",
-                        $name,
-                        "`"
-                    )))
-                }
-            }
-        }
-    };
+/// Primitive types for numeric arithmetic.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Num {
+    /// Numeric type (e.g., 1).
+    Num,
+    /// Boolean value (true or false).
+    Bool,
 }
 
-/// Generic numeric type.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Num;
+impl fmt::Display for Num {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Num => "Num",
+            Self::Bool => "Bool",
+        })
+    }
+}
 
-impl_display_for_singleton_type!(Num, "Num");
+impl FromStr for Num {
+    type Err = anyhow::Error;
 
-impl LiteralType for Num {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Num" => Ok(Self::Num),
+            "Bool" => Ok(Self::Bool),
+            _ => Err(anyhow::anyhow!("Expected `Num` or `Bool`")),
+        }
+    }
+}
+
+impl PrimitiveType for Num {
     type Constraints = LinConstraints;
+}
+
+impl WithBoolean for Num {
+    const BOOL: Self = Self::Bool;
 }
 
 impl LinearType for Num {
     fn is_linear(&self) -> bool {
-        true // all numbers are linear
+        matches!(self, Self::Num) // numbers are linear, booleans are not
     }
-}
-
-/// Maps a literal value from a certain [`Grammar`] to its type.
-///
-/// [`Grammar`]: arithmetic_parser::grammars::Grammar
-pub trait MapLiteralType<Val> {
-    /// Types of literals output by this mapper.
-    type Lit: LiteralType;
-
-    /// Gets the type of the provided literal value.
-    fn type_of_literal(&self, lit: &Val) -> Self::Lit;
 }
 
 /// Grammar with support of type annotations. Works as a decorator.
@@ -257,9 +280,9 @@ pub trait MapLiteralType<Val> {
 /// # }
 /// ```
 #[derive(Debug)]
-pub struct Annotated<T, Lit = Num>(PhantomData<(T, Lit)>);
+pub struct Annotated<T, Prim = Num>(PhantomData<(T, Prim)>);
 
-impl<T: ParseLiteral, Lit: LiteralType> ParseLiteral for Annotated<T, Lit> {
+impl<T: ParseLiteral, Prim: PrimitiveType> ParseLiteral for Annotated<T, Prim> {
     type Lit = T::Lit;
 
     fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
@@ -267,10 +290,10 @@ impl<T: ParseLiteral, Lit: LiteralType> ParseLiteral for Annotated<T, Lit> {
     }
 }
 
-impl<T: ParseLiteral, Lit: LiteralType> Grammar for Annotated<T, Lit> {
-    type Type = ValueType<Lit>;
+impl<T: ParseLiteral, Prim: PrimitiveType> Grammar for Annotated<T, Prim> {
+    type Type = ValueType<Prim>;
 
     fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
-        ValueType::<Lit>::parse(input)
+        ValueType::<Prim>::parse(input)
     }
 }

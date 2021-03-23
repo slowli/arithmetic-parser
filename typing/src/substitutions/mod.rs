@@ -1,8 +1,10 @@
 //! Substitutions type and dependencies.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use crate::{FnArgs, FnType, LiteralType, TupleLength, TypeConstraints, TypeErrorKind, ValueType};
+use crate::{
+    arith::TypeConstraints, FnArgs, FnType, PrimitiveType, TupleLength, TypeErrorKind, ValueType,
+};
 
 mod fns;
 use self::fns::{ParamMapping, SubstitutionContext};
@@ -12,19 +14,20 @@ mod tests;
 
 /// Set of equations and constraints on type variables.
 #[derive(Debug, Clone)]
-pub struct Substitutions<Lit: LiteralType> {
+pub struct Substitutions<Prim: PrimitiveType> {
     /// Number of type variables.
     type_var_count: usize,
     /// Type variable equations, encoded as `type_var[key] = value`.
-    eqs: HashMap<usize, ValueType<Lit>>,
-    constraints: HashMap<usize, Lit::Constraints>,
+    eqs: HashMap<usize, ValueType<Prim>>,
+    constraints: HashMap<usize, Prim::Constraints>,
     /// Number of length variables.
     const_var_count: usize,
     /// Length variable equations.
     length_eqs: HashMap<usize, TupleLength>,
+    dyn_lengths: HashSet<usize>,
 }
 
-impl<Lit: LiteralType> Default for Substitutions<Lit> {
+impl<Prim: PrimitiveType> Default for Substitutions<Prim> {
     fn default() -> Self {
         Self {
             type_var_count: 0,
@@ -32,18 +35,23 @@ impl<Lit: LiteralType> Default for Substitutions<Lit> {
             constraints: HashMap::new(),
             const_var_count: 0,
             length_eqs: HashMap::new(),
+            dyn_lengths: HashSet::new(),
         }
     }
 }
 
-impl<Lit: LiteralType> Substitutions<Lit> {
-    pub(crate) fn constraints(&self) -> &HashMap<usize, Lit::Constraints> {
+impl<Prim: PrimitiveType> Substitutions<Prim> {
+    pub(crate) fn type_constraints(&self) -> &HashMap<usize, Prim::Constraints> {
         &self.constraints
+    }
+
+    pub(crate) fn dyn_lengths(&self) -> &HashSet<usize> {
+        &self.dyn_lengths
     }
 
     /// Inserts `constraints` for a type var with the specified index and all vars
     /// it is equivalent to.
-    pub fn insert_constraint(&mut self, var_idx: usize, constraints: &Lit::Constraints) {
+    pub fn insert_constraint(&mut self, var_idx: usize, constraints: &Prim::Constraints) {
         for idx in self.equivalent_vars(var_idx) {
             let current_constraints = self.constraints.entry(idx).or_default();
             *current_constraints |= constraints;
@@ -69,7 +77,7 @@ impl<Lit: LiteralType> Substitutions<Lit> {
     }
 
     /// Resolves the type by following established equality links between type variables.
-    pub fn fast_resolve<'a>(&'a self, mut ty: &'a ValueType<Lit>) -> &'a ValueType<Lit> {
+    pub fn fast_resolve<'a>(&'a self, mut ty: &'a ValueType<Prim>) -> &'a ValueType<Prim> {
         while let ValueType::Var(idx) = ty {
             if let Some(resolved) = self.eqs.get(idx) {
                 ty = resolved;
@@ -84,7 +92,7 @@ impl<Lit: LiteralType> Substitutions<Lit> {
     ///
     /// Compared to `fast_resolve`, this method will also recursively resolve tuples
     /// and function types.
-    pub fn resolve(&self, ty: &ValueType<Lit>) -> ValueType<Lit> {
+    pub fn resolve(&self, ty: &ValueType<Prim>) -> ValueType<Prim> {
         let ty = self.fast_resolve(ty);
         match ty {
             ValueType::Tuple(fragments) => {
@@ -119,17 +127,17 @@ impl<Lit: LiteralType> Substitutions<Lit> {
 
     pub(crate) fn assign_new_type(
         &mut self,
-        ty: &mut ValueType<Lit>,
-    ) -> Result<(), TypeErrorKind<Lit>> {
+        ty: &mut ValueType<Prim>,
+    ) -> Result<(), TypeErrorKind<Prim>> {
         match ty {
-            ValueType::Lit(_) | ValueType::Bool | ValueType::Var(_) => {
+            ValueType::Prim(_) | ValueType::Var(_) => {
                 // Do nothing.
             }
 
             // Checked previously when considering a function.
             ValueType::Param(_) => unreachable!(),
 
-            ValueType::Any => {
+            ValueType::Some => {
                 *ty = ValueType::Var(self.type_var_count);
                 self.type_var_count += 1;
             }
@@ -156,7 +164,10 @@ impl<Lit: LiteralType> Substitutions<Lit> {
                 }
             }
             ValueType::Slice { element, length } => {
-                if matches!(length, TupleLength::Any) {
+                if let TupleLength::Some { is_dynamic } = length {
+                    if *is_dynamic {
+                        self.dyn_lengths.insert(self.const_var_count);
+                    }
                     *length = TupleLength::Var(self.const_var_count);
                     self.const_var_count += 1;
                 }
@@ -176,9 +187,9 @@ impl<Lit: LiteralType> Substitutions<Lit> {
     /// Returns an error if unification is impossible.
     pub fn unify(
         &mut self,
-        lhs: &ValueType<Lit>,
-        rhs: &ValueType<Lit>,
-    ) -> Result<(), TypeErrorKind<Lit>> {
+        lhs: &ValueType<Prim>,
+        rhs: &ValueType<Prim>,
+    ) -> Result<(), TypeErrorKind<Prim>> {
         use self::ValueType::{Function, Param, Slice, Tuple, Var};
 
         let resolved_lhs = self.fast_resolve(lhs).to_owned();
@@ -241,8 +252,8 @@ impl<Lit: LiteralType> Substitutions<Lit> {
             (Function(lhs_fn), Function(rhs_fn)) => self.unify_fn_types(lhs_fn, rhs_fn),
 
             (ty, other_ty) => Err(TypeErrorKind::IncompatibleTypes(
-                self.sanitize_type(None, ty),
-                self.sanitize_type(None, other_ty),
+                self.resolve(ty),
+                self.resolve(other_ty),
             )),
         }
     }
@@ -251,7 +262,7 @@ impl<Lit: LiteralType> Substitutions<Lit> {
         &mut self,
         lhs: TupleLength,
         rhs: TupleLength,
-    ) -> Result<(), TypeErrorKind<Lit>> {
+    ) -> Result<(), TypeErrorKind<Prim>> {
         let resolved_lhs = self.resolve_len(lhs);
         let resolved_rhs = self.resolve_len(rhs);
 
@@ -260,18 +271,29 @@ impl<Lit: LiteralType> Substitutions<Lit> {
                 // Lengths are already unified.
                 Ok(())
             }
+
+            // Different dyn lengths cannot be unified.
+            (TupleLength::Var(x), TupleLength::Var(y))
+                if self.dyn_lengths.contains(&x) && self.dyn_lengths.contains(&y) =>
+            {
+                Err(TypeErrorKind::IncompatibleLengths(
+                    resolved_lhs,
+                    resolved_rhs,
+                ))
+            }
+
             (TupleLength::Exact(x), TupleLength::Exact(y)) if x == y => {
                 // Lengths are known to be the same.
                 Ok(())
             }
 
-            (TupleLength::Dynamic, _) => {
-                // Any length can be interpreted as a dynamic length, but not the other way around.
-                // We intentionally skip creating an equation if RHS is a `Var`.
-                Ok(())
-            }
+            // Dynamic length can be unified at LHS position with anything other than other
+            // dynamic lengths, which we've checked previously.
+            (TupleLength::Var(x), _) if self.dyn_lengths.contains(&x) => Ok(()),
 
-            (TupleLength::Var(x), other) | (other, TupleLength::Var(x)) => {
+            (TupleLength::Var(x), other) | (other, TupleLength::Var(x))
+                if !self.dyn_lengths.contains(&x) =>
+            {
                 self.length_eqs.insert(x, other);
                 Ok(())
             }
@@ -285,9 +307,9 @@ impl<Lit: LiteralType> Substitutions<Lit> {
 
     fn unify_fn_types(
         &mut self,
-        lhs: &FnType<Lit>,
-        rhs: &FnType<Lit>,
-    ) -> Result<(), TypeErrorKind<Lit>> {
+        lhs: &FnType<Prim>,
+        rhs: &FnType<Prim>,
+    ) -> Result<(), TypeErrorKind<Prim>> {
         if lhs.is_parametric() {
             return Err(TypeErrorKind::UnsupportedParam);
         }
@@ -323,7 +345,7 @@ impl<Lit: LiteralType> Substitutions<Lit> {
     }
 
     /// Instantiates a functional type by replacing all type arguments with new type vars.
-    fn instantiate_function(&mut self, fn_type: &FnType<Lit>) -> FnType<Lit> {
+    fn instantiate_function(&mut self, fn_type: &FnType<Prim>) -> FnType<Prim> {
         if !fn_type.is_parametric() {
             // Fast path: just clone the function type.
             return fn_type.clone();
@@ -338,21 +360,27 @@ impl<Lit: LiteralType> Substitutions<Lit> {
                 .map(|(i, (var_idx, _))| (*var_idx, self.type_var_count + i))
                 .collect(),
             constants: fn_type
-                .const_params
+                .len_params
                 .iter()
                 .enumerate()
-                .map(|(i, var_idx)| (*var_idx, self.const_var_count + i))
+                .map(|(i, (var_idx, _))| (*var_idx, self.const_var_count + i))
                 .collect(),
         };
         self.type_var_count += fn_type.type_params.len();
-        self.const_var_count += fn_type.const_params.len();
+        self.const_var_count += fn_type.len_params.len();
 
         let instantiated_fn_type =
             fn_type.substitute_type_vars(&mapping, SubstitutionContext::ParamsToVars);
 
-        // Copy constraints on the newly generated type vars from the function definition.
+        // Copy constraints on the newly generated const and type vars from the function definition.
+        for (original_idx, description) in &fn_type.len_params {
+            if description.is_dynamic {
+                let new_idx = mapping.constants[original_idx];
+                self.dyn_lengths.insert(new_idx);
+            }
+        }
         for (original_idx, description) in &fn_type.type_params {
-            let new_idx = mapping.types[&original_idx];
+            let new_idx = mapping.types[original_idx];
             self.constraints
                 .insert(new_idx, description.constraints.to_owned());
         }
@@ -362,7 +390,7 @@ impl<Lit: LiteralType> Substitutions<Lit> {
 
     /// Checks if a type variable with the specified index is present in `ty`. This method
     /// is used to check that types are not recursive.
-    fn check_occurrence(&self, var_idx: usize, ty: &ValueType<Lit>) -> bool {
+    fn check_occurrence(&self, var_idx: usize, ty: &ValueType<Prim>) -> bool {
         match ty {
             ValueType::Var(i) if *i == var_idx => true,
 
@@ -387,14 +415,9 @@ impl<Lit: LiteralType> Substitutions<Lit> {
 
     /// Removes excessive information about type vars. This method is used when types are
     /// provided to `TypeError`.
-    pub(crate) fn sanitize_type(
-        &self,
-        fixed_idx: Option<usize>,
-        ty: &ValueType<Lit>,
-    ) -> ValueType<Lit> {
+    pub(crate) fn sanitize_type(&self, fixed_idx: usize, ty: &ValueType<Prim>) -> ValueType<Prim> {
         match self.resolve(ty) {
-            ValueType::Var(i) if Some(i) == fixed_idx => ValueType::Var(0),
-            ValueType::Var(_) => ValueType::Any,
+            ValueType::Var(i) if i == fixed_idx => ValueType::Param(0),
 
             ValueType::Tuple(elements) => ValueType::Tuple(
                 elements
@@ -406,7 +429,9 @@ impl<Lit: LiteralType> Substitutions<Lit> {
             ValueType::Slice { element, length } => ValueType::Slice {
                 element: Box::new(self.sanitize_type(fixed_idx, &element)),
                 length: match length {
-                    TupleLength::Var(_) => TupleLength::Any,
+                    TupleLength::Var(idx) => TupleLength::Some {
+                        is_dynamic: self.dyn_lengths.contains(&idx),
+                    },
                     _ => length,
                 },
             },
@@ -425,7 +450,11 @@ impl<Lit: LiteralType> Substitutions<Lit> {
     /// # Errors
     ///
     /// Returns an error if the unification is impossible.
-    fn unify_var(&mut self, var_idx: usize, ty: &ValueType<Lit>) -> Result<(), TypeErrorKind<Lit>> {
+    fn unify_var(
+        &mut self,
+        var_idx: usize,
+        ty: &ValueType<Prim>,
+    ) -> Result<(), TypeErrorKind<Prim>> {
         // variables should be resolved in `unify`.
         debug_assert!(!self.eqs.contains_key(&var_idx));
         debug_assert!(if let ValueType::Var(idx) = ty {
@@ -436,7 +465,7 @@ impl<Lit: LiteralType> Substitutions<Lit> {
 
         if self.check_occurrence(var_idx, ty) {
             Err(TypeErrorKind::RecursiveType(
-                self.sanitize_type(Some(var_idx), ty),
+                self.sanitize_type(var_idx, ty),
             ))
         } else {
             if let Some(constraints) = self.constraints.get(&var_idx).cloned() {
@@ -450,10 +479,10 @@ impl<Lit: LiteralType> Substitutions<Lit> {
     /// Returns the return type of the function.
     pub(crate) fn unify_fn_call(
         &mut self,
-        definition: &ValueType<Lit>,
-        arg_types: Vec<ValueType<Lit>>,
-    ) -> Result<ValueType<Lit>, TypeErrorKind<Lit>> {
-        let mut return_type = ValueType::Any;
+        definition: &ValueType<Prim>,
+        arg_types: Vec<ValueType<Prim>>,
+    ) -> Result<ValueType<Prim>, TypeErrorKind<Prim>> {
+        let mut return_type = ValueType::Some;
         self.assign_new_type(&mut return_type)?;
 
         let called_fn_type = FnType::new(FnArgs::List(arg_types), return_type.clone());

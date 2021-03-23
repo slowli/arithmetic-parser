@@ -12,10 +12,10 @@
 //! The type system corresponds to types of `Value`s in `arithmetic-eval`:
 //!
 //! - Primitive types are customizeable via [`PrimitiveType`] impl. In the simplest case,
-//!   there can be 2 primitive types: Booleans (`Bool`) and numbers (`Num`), which
-//!   is ecapsulated in [`Num`].
+//!   there can be 2 primitive types: Booleans (`Bool`) and numbers (`Num`),
+//!   as ecapsulated in [`Num`].
 //! - There is only one container type - a tuple. It can be represented either
-//!   in the tuple form, such as `(Num, Bool)`, or as a slice, such as `[Num]` or `[Num; 3]`.
+//!   in the tuple form, such as `(Num, Bool)`, or as a slice, such as `[Num; 3]`.
 //!   As in Rust, all slice elements must have the same type. Unlike Rust, tuple and slice
 //!   forms are equivalent; e.g., `[Num; 3]` and `(Num, Num, Num)` are the same type.
 //! - Functions are first-class types. Functions can have type and/or const params.
@@ -26,7 +26,20 @@
 //!
 //! # Inference rules
 //!
-//! FIXME
+//! Inference mostly corresponds to [Hindley–Milner typing rules]. It does not require
+//! type annotations, but utilizes them if present. Type unification (encapsulated in
+//! [`Substitutions`]) is performed at each variable use or assignment. Variable uses include
+//! function calls and unary and binary ops; the op behavior is customizable
+//! via [`TypeArithmetic`].
+//!
+//! Whenever possible, the most generic type satisfying the constraints is used. In particular,
+//! this means that all type / length variables not resolved at the function definition site become
+//! parameters of the function. Symmetrically, each function call instantiates a separate instance
+//! of a generic function; type / length params for each call are assigned independently.
+//! See the example below for more details.
+//!
+//! [Hindley–Milner typing rules]: https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system#Typing_rules
+//! [`TypeArithmetic`]: crate::arith::TypeArithmetic
 //!
 //! # Examples
 //!
@@ -46,6 +59,40 @@
 //! let output_type = env.process_statements(&ast)?;
 //! assert!(output_type.is_void());
 //! assert_eq!(env["sum"].to_string(), "fn<len N>([Num; N]) -> Num");
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Defining and using generic functions:
+//!
+//! ```
+//! # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+//! # use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, ValueType};
+//! # type Parser = Typed<Annotated<NumGrammar<f32>>>;
+//! # fn main() -> anyhow::Result<()> {
+//! let code = "sum_with = |xs, init| xs.fold(init, |acc, x| acc + x);";
+//! let ast = Parser::parse_statements(code)?;
+//!
+//! let mut env = TypeEnvironment::new();
+//! env.insert("fold", Prelude::fold_type().into());
+//!
+//! let output_type = env.process_statements(&ast)?;
+//! assert!(output_type.is_void());
+//! assert_eq!(
+//!     env["sum_with"].to_string(),
+//!     "fn<len N; T: Lin>([T; N], T) -> T"
+//! );
+//! // Note that `sum_with` is parametric by the element of the slice
+//! // (for which the linearity constraint is applied based on the arg usage)
+//! // *and* by its length.
+//!
+//! let usage_code = r#"
+//!     num_sum: Num = (1, 2, 3).sum_with(0);
+//!     tuple_sum: (Num, Num) = ((1, 2), (3, 4)).sum_with((0, 0));
+//! "#;
+//! // Both lengths and element types differ in these invocations,
+//! // but it works fine since they are treated independently.
+//! env.process_statements(&ast)?;
 //! # Ok(())
 //! # }
 //! ```
@@ -95,7 +142,7 @@ pub mod _reexports {
     pub use anyhow::{anyhow, Error};
 }
 
-/// Primitive types in a certain grammar.
+/// Primitive types in a certain type system.
 ///
 /// More complex types, like [`ValueType`] and [`FnType`], are defined with a type param
 /// which determines the primitive type(s). This type param must implement [`PrimitiveType`].
@@ -109,9 +156,14 @@ pub mod _reexports {
 ///   `Display` should produce output parseable by `FromStr`. `Display` will be used in
 ///   `Display` impls for `ValueType` etc. `FromStr` will be used to read type annotations.
 /// - `Display` presentations must be identifiers, such as `Num`.
+/// - While not required, a `PrimitiveType` should usually contain a Boolean type and
+///   implement [`WithBoolean`]. This allows to reuse [`BoolArithmetic`] and/or [`NumArithmetic`]
+///   as building blocks for your [`TypeArithmetic`].
 ///
 /// [`Grammar`]: arithmetic_parser::grammars::Grammar
 /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
+/// [`BoolArithmetic`]: crate::arith::BoolArithmetic
+/// [`NumArithmetic`]: crate::arith::NumArithmetic
 ///
 /// # Examples
 ///
@@ -164,52 +216,6 @@ pub trait PrimitiveType:
 {
     /// Constraints that can be placed on type parameters.
     type Constraints: TypeConstraints<Self>;
-}
-
-/// Implements [`Display`](fmt::Display) and [`FromStr`]for the provided type,
-/// which must be a no-field struct. Useful as a building block for [`PrimitiveType`]
-/// and [`TypeConstraints`] implementations.
-///
-/// # Examples
-///
-/// ```
-/// # use arithmetic_typing::{
-/// #     arith::NoConstraints, impl_display_for_singleton_type, PrimitiveType,
-/// # };
-/// #[derive(Debug, Clone, Copy, PartialEq)]
-/// pub struct SomeType;
-///
-/// impl_display_for_singleton_type!(SomeType, "Some");
-///
-/// impl PrimitiveType for SomeType {
-///     type Constraints = NoConstraints;
-/// }
-/// ```
-#[macro_export]
-macro_rules! impl_display_for_singleton_type {
-    ($ty:ident, $name:tt) => {
-        impl core::fmt::Display for $ty {
-            fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                formatter.write_str($name)
-            }
-        }
-
-        impl core::str::FromStr for $ty {
-            type Err = $crate::_reexports::Error;
-
-            fn from_str(s: &str) -> core::result::Result<Self, Self::Err> {
-                if s == $name {
-                    core::result::Result::Ok($ty)
-                } else {
-                    core::result::Result::Err($crate::_reexports::anyhow!(concat!(
-                        "Expected `",
-                        $name,
-                        "`"
-                    )))
-                }
-            }
-        }
-    };
 }
 
 /// Primitive types for numeric arithmetic.

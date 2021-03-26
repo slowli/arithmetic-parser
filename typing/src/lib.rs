@@ -128,19 +128,13 @@ mod types;
 
 pub use self::{
     env::TypeEnvironment,
-    error::{TypeError, TypeErrorKind, TypeResult},
+    error::{TupleLenMismatchContext, TypeError, TypeErrorKind, TypeResult},
     substitutions::Substitutions,
     type_map::{Assertions, Prelude},
     types::{FnType, FnTypeBuilder, LengthKind, Slice, Tuple, TupleLength, ValueType},
 };
 
 use self::arith::{LinConstraints, LinearType, TypeConstraints, WithBoolean};
-
-// Reexports for the macros.
-#[doc(hidden)]
-pub mod _reexports {
-    pub use anyhow::{anyhow, Error};
-}
 
 /// Primitive types in a certain type system.
 ///

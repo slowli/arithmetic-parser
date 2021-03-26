@@ -6,7 +6,7 @@ use super::{
     tests::{assert_incompatible_types, zip_fn_type, F32Grammar},
     *,
 };
-use crate::{Prelude, TupleLength};
+use crate::{Prelude, TupleLenMismatchContext, TupleLength};
 use arithmetic_parser::grammars::Parse;
 
 #[test]
@@ -49,7 +49,11 @@ fn contradicting_type_hint() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::IncompatibleLengths(TupleLength::Exact(2), TupleLength::Exact(3))
+        TypeErrorKind::TupleLenMismatch {
+            lhs: TupleLength::Exact(2),
+            rhs: TupleLength::Exact(3),
+            context: TupleLenMismatchContext::Assignment,
+        }
     );
 }
 
@@ -97,9 +101,10 @@ fn invalid_type_hint_with_fn_arg() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::ArgLenMismatch {
-            expected: 1,
-            actual: 2
+        TypeErrorKind::TupleLenMismatch {
+            lhs: TupleLength::Exact(2),
+            rhs: TupleLength::Exact(1),
+            context: TupleLenMismatchContext::FnArgs,
         }
     );
 }
@@ -234,7 +239,7 @@ fn assigning_to_dynamically_sized_slice() {
     let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
     let err = type_env.process_statements(&bogus_block).unwrap_err();
 
-    assert_matches!(err.kind(), TypeErrorKind::IncompatibleLengths(..));
+    assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
 }
 
 #[test]
@@ -271,7 +276,7 @@ fn adding_dynamically_typed_slices() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_matches!(err.kind(), TypeErrorKind::IncompatibleLengths(..));
+    assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
 }
 
 #[test]
@@ -286,7 +291,7 @@ fn unifying_dynamic_slices_error() {
     type_env.insert("zip_with", zip_fn_type().into());
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_matches!(err.kind(), TypeErrorKind::IncompatibleLengths(..));
+    assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
 }
 
 #[test]
@@ -304,7 +309,7 @@ fn unifying_dynamic_slices_in_arithmetic_op_error() {
     let err = type_env.process_statements(&block).unwrap_err();
 
     assert_eq!(*err.span().fragment(), "xs + ys");
-    assert_matches!(err.kind(), TypeErrorKind::IncompatibleLengths(..));
+    assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
 }
 
 #[test]
@@ -325,5 +330,5 @@ fn unifying_dynamic_slices_in_fn_error() {
     let err = type_env.process_statements(&block).unwrap_err();
 
     assert_eq!(*err.span().fragment(), "xs.zip_with(xs.filter(|x| x == 1))");
-    assert_matches!(err.kind(), TypeErrorKind::IncompatibleLengths(..));
+    assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
 }

@@ -2,8 +2,10 @@ use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
 use assert_matches::assert_matches;
 
 use super::*;
-use crate::types::TypeParamDescription;
-use crate::{arith::LinConstraints, Annotated, LengthKind, Num, Prelude, TupleLength};
+use crate::{
+    arith::LinConstraints, types::TypeParamDescription, Annotated, LengthKind, Num, Prelude,
+    TupleLenMismatchContext, TupleLength,
+};
 
 pub type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
 
@@ -346,7 +348,11 @@ fn incorrect_function_arity() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::IncompatibleLengths(TupleLength::Exact(1), TupleLength::Exact(2))
+        TypeErrorKind::TupleLenMismatch {
+            lhs: TupleLength::Exact(1),
+            rhs: TupleLength::Exact(2),
+            context: TupleLenMismatchContext::Assignment,
+        }
     );
 }
 
@@ -558,10 +564,15 @@ fn function_passed_as_arg_invalid_arity() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::ArgLenMismatch {
-            expected: 1,
-            actual: 2
+        TypeErrorKind::TupleLenMismatch {
+            lhs: TupleLength::Exact(2),
+            rhs: TupleLength::Exact(1),
+            context: TupleLenMismatchContext::FnArgs,
         }
+    );
+    assert_eq!(
+        err.kind().to_string(),
+        "Function expects 1 args, but is called with 2 args"
     );
 }
 
@@ -664,7 +675,11 @@ fn unifying_length_vars_error() {
     let err = type_env.process_statements(&block).unwrap_err();
     assert_matches!(
         err.kind(),
-        TypeErrorKind::IncompatibleLengths(TupleLength::Exact(2), TupleLength::Exact(3))
+        TypeErrorKind::TupleLenMismatch {
+            lhs: TupleLength::Exact(2),
+            rhs: TupleLength::Exact(3),
+            context: TupleLenMismatchContext::Assignment,
+        }
     );
 }
 
@@ -744,7 +759,11 @@ fn cannot_destructure_dynamic_slice() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::IncompatibleLengths(TupleLength::Exact(2), TupleLength::Var(_))
+        TypeErrorKind::TupleLenMismatch {
+            lhs: TupleLength::Exact(2),
+            rhs: TupleLength::Var(_),
+            ..
+        }
     );
 }
 

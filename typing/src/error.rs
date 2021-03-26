@@ -5,6 +5,16 @@ use std::fmt;
 use crate::{PrimitiveType, TupleLength, ValueType};
 use arithmetic_parser::{BinaryOp, Spanned, UnsupportedType};
 
+/// Context for [`TypeErrorKind::TupleLenMismatch`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum TupleLenMismatchContext {
+    /// An error has occurred during assignment.
+    Assignment,
+    /// An error has occurred when calling a function.
+    FnArgs,
+}
+
 /// Errors that can occur during type inference.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
@@ -20,24 +30,22 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
     },
 
     /// Trying to unify incompatible types. The first type is LHS, the second one is RHS.
+    // FIXME: Rename to `TypeMismatch`?
     IncompatibleTypes(ValueType<Prim>, ValueType<Prim>),
-    /// Incompatible tuple lengths. The first length is LHS, the second one is RHS.
-    IncompatibleLengths(TupleLength, TupleLength),
-
-    /// Trying to call a non-function type.
-    NotCallable(ValueType<Prim>),
-
+    /// Incompatible tuple lengths.
+    // FIXME: Inconsistency: `TupleLenMismatch` vs `TupleLength`
+    TupleLenMismatch {
+        /// Length of the LHS. This is the length determined by type annotations
+        /// for assignments and the number of actually supplied args in function calls.
+        lhs: TupleLength,
+        /// Length of the RHS. This is usually the actual tuple length in assignments
+        /// and the number of expected args in function calls.
+        rhs: TupleLength,
+        /// Context in which the error has occurred.
+        context: TupleLenMismatchContext,
+    },
     /// Undefined variable occurrence.
     UndefinedVar(String),
-
-    /// Mismatch between the number of args in the function definition and call.
-    ArgLenMismatch {
-        /// Number of args in function definition.
-        expected: usize,
-        /// Number of args supplied in the call.
-        actual: usize,
-    },
-
     /// Trying to unify a type with a type containing it.
     RecursiveType(ValueType<Prim>),
 
@@ -79,21 +87,22 @@ impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
                 "Trying to unify incompatible types `{}` and `{}`",
                 first, second
             ),
-            Self::IncompatibleLengths(first, second) => write!(
-                formatter,
-                "Trying to unify incompatible lengths {} and {}",
-                first, second
-            ),
-
-            Self::NotCallable(ty) => write!(formatter, "Trying to call non-function type: {}", ty),
-
-            Self::UndefinedVar(name) => write!(formatter, "Variable `{}` is not defined", name),
-
-            Self::ArgLenMismatch { expected, actual } => write!(
+            Self::TupleLenMismatch {
+                lhs,
+                rhs,
+                context: TupleLenMismatchContext::FnArgs,
+            } => write!(
                 formatter,
                 "Function expects {} args, but is called with {} args",
-                expected, actual
+                rhs, lhs
             ),
+            Self::TupleLenMismatch { lhs, rhs, .. } => write!(
+                formatter,
+                "Trying to unify incompatible lengths {} and {}",
+                lhs, rhs
+            ),
+
+            Self::UndefinedVar(name) => write!(formatter, "Variable `{}` is not defined", name),
 
             Self::RecursiveType(ty) => write!(
                 formatter,
@@ -143,7 +152,7 @@ impl<Prim: PrimitiveType> TypeErrorKind<Prim> {
         op: BinaryOp,
     ) -> Self {
         match self {
-            TypeErrorKind::IncompatibleLengths(..) | TypeErrorKind::IncompatibleTypes(..) => {
+            TypeErrorKind::TupleLenMismatch { .. } | TypeErrorKind::IncompatibleTypes(..) => {
                 TypeErrorKind::OperandMismatch { lhs_ty, rhs_ty, op }
             }
             err => err,

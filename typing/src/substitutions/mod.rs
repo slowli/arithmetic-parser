@@ -3,7 +3,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    arith::TypeConstraints, FnType, PrimitiveType, Tuple, TupleLength, TypeErrorKind, ValueType,
+    arith::TypeConstraints, FnType, PrimitiveType, Tuple, TupleLenMismatchContext, TupleLength,
+    TypeErrorKind, ValueType,
 };
 
 mod fns;
@@ -216,7 +217,9 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 unreachable!("Type params must be transformed into vars before unification")
             }
 
-            (Tuple(lhs_tuple), Tuple(rhs_tuple)) => self.unify_tuples(lhs_tuple, rhs_tuple),
+            (Tuple(lhs_tuple), Tuple(rhs_tuple)) => {
+                self.unify_tuples(lhs_tuple, rhs_tuple, TupleLenMismatchContext::Assignment)
+            }
 
             (Function(lhs_fn), Function(rhs_fn)) => self.unify_fn_types(lhs_fn, rhs_fn),
 
@@ -231,8 +234,9 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         &mut self,
         lhs: &Tuple<Prim>,
         rhs: &Tuple<Prim>,
+        context: TupleLenMismatchContext,
     ) -> Result<(), TypeErrorKind<Prim>> {
-        let resolved_len = self.unify_lengths(&lhs.len(), &rhs.len())?;
+        let resolved_len = self.unify_lengths(&lhs.len(), &rhs.len(), context)?;
 
         if let TupleLength::Exact(len) = resolved_len {
             for (lhs_elem, rhs_elem) in lhs.equal_elements_static(rhs, len) {
@@ -253,6 +257,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         &mut self,
         lhs: &TupleLength,
         rhs: &TupleLength,
+        context: TupleLenMismatchContext,
     ) -> Result<TupleLength, TypeErrorKind<Prim>> {
         let resolved_lhs = self.resolve_len(lhs);
         let resolved_rhs = self.resolve_len(rhs);
@@ -267,10 +272,11 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             (TupleLength::Var(x), TupleLength::Var(y))
                 if self.dyn_lengths.contains(x) && self.dyn_lengths.contains(y) =>
             {
-                Err(TypeErrorKind::IncompatibleLengths(
-                    resolved_lhs,
-                    resolved_rhs,
-                ))
+                Err(TypeErrorKind::TupleLenMismatch {
+                    lhs: resolved_lhs,
+                    rhs: resolved_rhs,
+                    context,
+                })
             }
 
             (TupleLength::Exact(x), TupleLength::Exact(y)) if x == y => {
@@ -295,10 +301,11 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 Ok(resolved_lhs)
             }
 
-            _ => Err(TypeErrorKind::IncompatibleLengths(
-                resolved_lhs,
-                resolved_rhs,
-            )),
+            _ => Err(TypeErrorKind::TupleLenMismatch {
+                lhs: resolved_lhs,
+                rhs: resolved_rhs,
+                context,
+            }),
         }
     }
 
@@ -322,7 +329,11 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         // (i.e., `T` is LHS and `A` is RHS); same with `U` and `B`. In contrast,
         // after function execution the return value of type `V` will be assigned
         // to type `C`. (I.e., unification of return values is not swapped.)
-        self.unify_tuples(&instantiated_rhs.args, &instantiated_lhs.args)?;
+        self.unify_tuples(
+            &instantiated_rhs.args,
+            &instantiated_lhs.args,
+            TupleLenMismatchContext::FnArgs,
+        )?;
 
         self.unify(&instantiated_lhs.return_type, &instantiated_rhs.return_type)
     }

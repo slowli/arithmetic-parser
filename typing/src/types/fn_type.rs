@@ -205,7 +205,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
         F: FnMut(&ValueType<Prim>) -> ValueType<Prim>,
     {
         Self {
-            args: self.args.map_types(&mut map_fn),
+            args: self.args.map(&mut map_fn, Clone::clone),
             return_type: map_fn(&self.return_type),
             type_params: self.type_params.clone(),
             len_params: self.len_params.clone(),

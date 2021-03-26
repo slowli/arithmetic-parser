@@ -47,13 +47,10 @@ impl<Prim: PrimitiveType> FnType<Prim> {
             })
         }
 
-        let mut substituted_args = self
-            .args
-            .map_types(|arg| arg.substitute_type_vars(mapping, context));
-        if let Some(middle_len) = substituted_args.middle_len_mut() {
-            *middle_len = middle_len.substitute_vars(mapping, context);
-        }
-
+        let substituted_args = self.args.map(
+            |arg| arg.substitute_type_vars(mapping, context),
+            |len| len.substitute_vars(mapping, context),
+        );
         let return_type = self.return_type.substitute_type_vars(mapping, context);
 
         let const_params = self.len_params.iter().copied();
@@ -307,11 +304,10 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
                 .map_or(Self::Param(*idx), Self::Var),
 
             Self::Tuple(tuple) => {
-                let mut mapped_tuple =
-                    tuple.map_types(|element| element.substitute_type_vars(mapping, context));
-                if let Some(length) = mapped_tuple.middle_len_mut() {
-                    *length = length.substitute_vars(mapping, context);
-                }
+                let mapped_tuple = tuple.map(
+                    |element| element.substitute_type_vars(mapping, context),
+                    |len| len.substitute_vars(mapping, context),
+                );
                 ValueType::Tuple(mapped_tuple)
             }
 

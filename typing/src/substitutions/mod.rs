@@ -96,10 +96,8 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         let ty = self.fast_resolve(ty);
         match ty {
             ValueType::Tuple(tuple) => {
-                let mut mapped_tuple = tuple.map_types(|ty| self.resolve(ty));
-                if let Some(len) = mapped_tuple.middle_len_mut() {
-                    *len = self.resolve_len(len);
-                }
+                let mapped_tuple =
+                    tuple.map(|element| self.resolve(element), |len| self.resolve_len(len));
                 ValueType::Tuple(mapped_tuple)
             }
 
@@ -164,10 +162,9 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             }
 
             ValueType::Tuple(tuple) => {
-                let mut empty_length = TupleLength::Exact(0);
-                let middle_len = tuple.middle_len_mut().unwrap_or(&mut empty_length);
-                self.assign_new_length(middle_len);
-
+                if let Some(middle_len) = tuple.middle_len_mut() {
+                    self.assign_new_length(middle_len);
+                }
                 for element in tuple.element_types_mut() {
                     self.assign_new_type(element)?;
                 }
@@ -403,9 +400,10 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         match self.resolve(ty) {
             ValueType::Var(i) if i == fixed_idx => ValueType::Param(0),
 
-            ValueType::Tuple(tuple) => {
-                ValueType::Tuple(tuple.map_types(|element| self.sanitize_type(fixed_idx, element)))
-            }
+            ValueType::Tuple(tuple) => ValueType::Tuple(tuple.map(
+                |element| self.sanitize_type(fixed_idx, element),
+                Clone::clone,
+            )),
 
             ValueType::Function(fn_type) => {
                 let sanitized_fn_type = fn_type.map_types(|ty| self.sanitize_type(fixed_idx, ty));

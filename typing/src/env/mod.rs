@@ -481,7 +481,7 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
 
         let (arg_types, return_type) = result?;
         let substitutions = &self.root_scope.substitutions;
-        let arg_types = arg_types.map_types(|arg| substitutions.resolve(arg));
+        let arg_types = arg_types.map(|arg| substitutions.resolve(arg), Clone::clone);
         let return_type = substitutions.resolve(&return_type);
 
         let mut fn_type = FnType::new(arg_types, return_type);

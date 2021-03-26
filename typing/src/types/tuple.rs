@@ -308,14 +308,14 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
             .iter()
             .skip(skip_at_start)
             .chain(self.end.iter().rev().skip(skip_at_end));
-        let iter = iter.chain(middle.map(move |elem| (elem, middle_elem)));
+        let iter = iter.chain(middle.map(move |elem| (middle_elem, elem)));
 
         let other_middle = other
             .start
             .iter()
             .skip(skip_at_start)
-            .chain(self.end.iter().rev().skip(skip_at_end));
-        iter.chain(other_middle.map(move |elem| (elem, middle_elem)))
+            .chain(other.end.iter().rev().skip(skip_at_end));
+        iter.chain(other_middle.map(move |elem| (middle_elem, elem)))
     }
 
     /// Iterates over all distinct elements in this tuple. The iteration is performed in order.
@@ -393,7 +393,7 @@ impl<Prim: PrimitiveType> Slice<Prim> {
         &self.length
     }
 
-    /// Returns `true` iff this slice is *definitely* empty.
+    /// Returns `true` iff this slice is definitely empty.
     pub fn is_empty(&self) -> bool {
         self.length == TupleLength::Exact(0)
     }
@@ -413,5 +413,197 @@ impl<Prim: PrimitiveType> From<Slice<Prim>> for Tuple<Prim> {
     }
 }
 
-// FIXME: test `Display`
-// FIXME: test equal items iterators
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tuple_length_display() {
+        let len = TupleLength::Exact(3);
+        assert_eq!(len.to_string(), "3");
+        let len = TupleLength::Compound(CompoundTupleLength::new(vec![
+            TupleLength::Exact(2),
+            TupleLength::Param(0),
+        ]));
+        assert_eq!(len.to_string(), "2 + N");
+    }
+
+    #[test]
+    fn slice_display() {
+        let slice = Slice::new(ValueType::NUM, TupleLength::Param(0));
+        assert_eq!(slice.to_string(), "[Num; N]");
+        let slice = Slice::new(ValueType::NUM, TupleLength::Var(0));
+        assert_eq!(slice.to_string(), "[Num; _]");
+        let slice = Slice::new(ValueType::NUM, TupleLength::Exact(3));
+        assert_eq!(slice.to_string(), "[Num; 3]");
+    }
+
+    #[test]
+    fn tuple_display() {
+        // Simple tuples.
+        let tuple = Tuple::from(vec![ValueType::NUM, ValueType::BOOL]);
+        assert_eq!(tuple.to_string(), "(Num, Bool)");
+        let tuple = Tuple::from(Slice::new(ValueType::NUM, TupleLength::Param(0)));
+        assert_eq!(tuple.to_string(), "[Num; N]");
+        let tuple = Tuple::from(Slice::new(ValueType::NUM, TupleLength::Exact(3)));
+        assert_eq!(tuple.to_string(), "(Num, Num, Num)");
+
+        let tuple = Tuple {
+            start: vec![ValueType::NUM, ValueType::BOOL],
+            middle: Some(Slice::new(ValueType::NUM, TupleLength::Param(0))),
+            end: vec![],
+        };
+        assert_eq!(tuple.to_string(), "(Num, Bool, ...[Num; N])");
+
+        let tuple = Tuple {
+            start: vec![ValueType::NUM, ValueType::BOOL],
+            middle: Some(Slice::new(ValueType::NUM, TupleLength::Exact(2))),
+            end: vec![],
+        };
+        assert_eq!(tuple.to_string(), "(Num, Bool, Num, Num)");
+
+        let tuple = Tuple {
+            start: vec![ValueType::NUM, ValueType::BOOL],
+            middle: Some(Slice::new(ValueType::NUM, TupleLength::Param(0))),
+            end: vec![ValueType::Param(0)],
+        };
+        assert_eq!(tuple.to_string(), "(Num, Bool, ...[Num; N], T)");
+    }
+
+    #[test]
+    fn equal_elements_static_two_simple_tuples() {
+        let tuple = Tuple::from(vec![ValueType::NUM, ValueType::BOOL, ValueType::Var(0)]);
+        let other_tuple = Tuple::from(vec![ValueType::Var(1), ValueType::BOOL, ValueType::Var(0)]);
+        let equal_elements: Vec<_> = tuple.equal_elements_static(&other_tuple, 3).collect();
+
+        assert_eq!(
+            equal_elements,
+            vec![
+                (&ValueType::NUM, &ValueType::Var(1)),
+                (&ValueType::BOOL, &ValueType::BOOL),
+                (&ValueType::Var(0), &ValueType::Var(0)),
+            ]
+        );
+    }
+
+    #[test]
+    fn equal_elements_static_simple_tuple_and_slice() {
+        let tuple = Tuple::from(vec![ValueType::NUM, ValueType::BOOL, ValueType::Var(0)]);
+        let slice = Tuple::from(Slice::new(ValueType::Var(1), TupleLength::Var(0)));
+        let equal_elements: Vec<_> = tuple.equal_elements_static(&slice, 3).collect();
+
+        assert_eq!(
+            equal_elements,
+            vec![
+                (&ValueType::NUM, &ValueType::Var(1)),
+                (&ValueType::BOOL, &ValueType::Var(1)),
+                (&ValueType::Var(0), &ValueType::Var(1)),
+            ]
+        );
+    }
+
+    #[test]
+    fn equal_elements_static_slice_and_complex_tuple() {
+        let slice = Tuple::from(Slice::new(ValueType::Var(1), TupleLength::Var(0)));
+        let tuple = Tuple {
+            start: vec![ValueType::NUM],
+            middle: Some(Slice::new(ValueType::Var(0), TupleLength::Var(1))),
+            end: vec![ValueType::BOOL, ValueType::Var(2)],
+        };
+
+        let mut expected_pairs = vec![
+            (ValueType::Var(1), ValueType::NUM),
+            (ValueType::Var(1), ValueType::BOOL),
+            (ValueType::Var(1), ValueType::Var(2)),
+        ];
+        let equal_elements: Vec<_> = slice
+            .equal_elements_static(&tuple, 3)
+            .map(|(x, y)| (x.to_owned(), y.to_owned()))
+            .collect();
+        assert_eq!(equal_elements, expected_pairs);
+
+        let equal_elements: Vec<_> = slice
+            .equal_elements_static(&tuple, 4)
+            .map(|(x, y)| (x.to_owned(), y.to_owned()))
+            .collect();
+        expected_pairs.insert(1, (ValueType::Var(1), ValueType::Var(0)));
+        assert_eq!(equal_elements, expected_pairs);
+
+        let equal_elements: Vec<_> = slice
+            .equal_elements_static(&tuple, 5)
+            .map(|(x, y)| (x.to_owned(), y.to_owned()))
+            .collect();
+        expected_pairs.insert(2, (ValueType::Var(1), ValueType::Var(0)));
+        assert_eq!(equal_elements, expected_pairs);
+    }
+
+    fn create_test_tuples() -> (Tuple, Tuple) {
+        let tuple = Tuple {
+            start: vec![ValueType::NUM],
+            middle: Some(Slice::new(ValueType::Var(0), TupleLength::Var(1))),
+            end: vec![ValueType::BOOL, ValueType::Var(2)],
+        };
+        let other_tuple = Tuple {
+            start: vec![ValueType::NUM, ValueType::Var(3)],
+            middle: Some(Slice::new(ValueType::BOOL, TupleLength::Var(1))),
+            end: vec![ValueType::Var(1)],
+        };
+        (tuple, other_tuple)
+    }
+
+    #[test]
+    fn equal_elements_static_two_complex_tuples() {
+        let (tuple, other_tuple) = create_test_tuples();
+
+        let equal_elements: Vec<_> = tuple.equal_elements_static(&other_tuple, 3).collect();
+        assert_eq!(
+            equal_elements,
+            vec![
+                (&ValueType::NUM, &ValueType::NUM),
+                (&ValueType::BOOL, &ValueType::Var(3)),
+                (&ValueType::Var(2), &ValueType::Var(1)),
+            ]
+        );
+
+        let equal_elements: Vec<_> = tuple.equal_elements_static(&other_tuple, 4).collect();
+        assert_eq!(
+            equal_elements,
+            vec![
+                (&ValueType::NUM, &ValueType::NUM),
+                (&ValueType::Var(0), &ValueType::Var(3)),
+                (&ValueType::BOOL, &ValueType::BOOL),
+                (&ValueType::Var(2), &ValueType::Var(1)),
+            ]
+        );
+    }
+
+    #[test]
+    fn equal_elements_dyn_two_slices() {
+        let slice = Tuple::from(Slice::new(ValueType::Var(0), TupleLength::Var(0)));
+        let other_slice = Tuple::from(Slice::new(ValueType::NUM, TupleLength::Var(1)));
+        let equal_elements: Vec<_> = slice.equal_elements_dyn(&other_slice).collect();
+
+        assert_eq!(equal_elements, vec![(&ValueType::Var(0), &ValueType::NUM)]);
+    }
+
+    #[test]
+    fn equal_elements_dyn_two_complex_tuples() {
+        let (tuple, other_tuple) = create_test_tuples();
+        let equal_elements: Vec<_> = tuple.equal_elements_dyn(&other_tuple).collect();
+
+        assert_eq!(
+            equal_elements,
+            vec![
+                // Middle elements
+                (&ValueType::Var(0), &ValueType::BOOL),
+                // Borders
+                (&ValueType::NUM, &ValueType::NUM),
+                (&ValueType::Var(2), &ValueType::Var(1)),
+                // Non-borders in first tuple.
+                (&ValueType::Var(0), &ValueType::BOOL),
+                // Non-borders in second tuple.
+                (&ValueType::Var(0), &ValueType::Var(3)),
+            ]
+        );
+    }
+}

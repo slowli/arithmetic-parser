@@ -167,13 +167,13 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
                 }
             }
 
-            ValueType::Tuple(elements) => {
-                for element in elements.to_owned() {
-                    self.apply(&element, substitutions)?;
+            ValueType::Tuple(tuple) => {
+                let tuple = tuple.to_owned();
+                for element in tuple.element_types() {
+                    self.apply(element, substitutions)?;
                 }
                 Ok(())
             }
-            ValueType::Slice { element, .. } => self.apply(&element.to_owned(), substitutions),
         }
     }
 }

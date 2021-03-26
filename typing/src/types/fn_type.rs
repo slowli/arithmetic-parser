@@ -38,7 +38,7 @@ impl<C> TypeParamDescription<C> {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_typing::{LengthKind, FnArgs, FnType, ValueType};
+/// # use arithmetic_typing::{LengthKind, FnType, ValueType};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// let fn_type: FnType = "fn<len N>([Num; N]) -> Num".parse()?;
@@ -48,12 +48,8 @@ impl<C> TypeParamDescription<C> {
 ///     vec![(0, LengthKind::Static)]
 /// );
 ///
-/// let args = match fn_type.args() {
-///     FnArgs::List(args) => args,
-///     _ => unreachable!(),
-/// };
 /// assert_matches!(
-///     args.as_slice(),
+///     fn_type.args().as_slice(),
 ///     [ValueType::Slice { element, .. }] if **element == ValueType::NUM
 /// );
 /// # Ok(())
@@ -62,7 +58,7 @@ impl<C> TypeParamDescription<C> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnType<Prim: PrimitiveType = Num> {
     /// Type of function arguments.
-    pub(crate) args: FnArgs<Prim>,
+    pub(crate) args: Tuple<Prim>,
     /// Type of the value returned by the function.
     pub(crate) return_type: ValueType<Prim>,
     /// Type params associated with this function. The indexes of params should
@@ -110,9 +106,7 @@ impl<Prim: PrimitiveType> fmt::Display for FnType<Prim> {
             formatter.write_str(">")?;
         }
 
-        match &self.args {
-            FnArgs::List(args) => args.format_as_tuple(formatter)?,
-        }
+        self.args.format_as_tuple(formatter)?;
         if !self.return_type.is_void() {
             write!(formatter, " -> {}", self.return_type)?;
         }
@@ -121,7 +115,7 @@ impl<Prim: PrimitiveType> fmt::Display for FnType<Prim> {
 }
 
 impl<Prim: PrimitiveType> FnType<Prim> {
-    pub(crate) fn new(args: FnArgs<Prim>, return_type: ValueType<Prim>) -> Self {
+    pub(crate) fn new(args: Tuple<Prim>, return_type: ValueType<Prim>) -> Self {
         Self {
             args,
             return_type,
@@ -151,7 +145,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
     }
 
     /// Gets the argument types of this function.
-    pub fn args(&self) -> &FnArgs<Prim> {
+    pub fn args(&self) -> &Tuple<Prim> {
         &self.args
     }
 
@@ -193,19 +187,15 @@ impl<Prim: PrimitiveType> FnType<Prim> {
     }
 
     pub(crate) fn arg_and_return_types(&self) -> impl Iterator<Item = &ValueType<Prim>> + '_ {
-        let args_iter = match &self.args {
-            FnArgs::List(args) => args.element_types(),
-        };
-        args_iter.chain(Some(&self.return_type))
+        self.args.element_types().chain(Some(&self.return_type))
     }
 
     pub(crate) fn arg_and_return_types_mut(
         &mut self,
     ) -> impl Iterator<Item = &mut ValueType<Prim>> + '_ {
-        let args_iter = match &mut self.args {
-            FnArgs::List(args) => args.element_types_mut(),
-        };
-        args_iter.chain(Some(&mut self.return_type))
+        self.args
+            .element_types_mut()
+            .chain(Some(&mut self.return_type))
     }
 
     /// Maps argument and return types. The mapping function must not touch type params
@@ -215,9 +205,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
         F: FnMut(&ValueType<Prim>) -> ValueType<Prim>,
     {
         Self {
-            args: match &self.args {
-                FnArgs::List(args) => FnArgs::List(args.map_types(&mut map_fn)),
-            },
+            args: self.args.map_types(&mut map_fn),
             return_type: map_fn(&self.return_type),
             type_params: self.type_params.clone(),
             len_params: self.len_params.clone(),
@@ -275,7 +263,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 /// ```
 #[derive(Debug)]
 pub struct FnTypeBuilder<Prim: PrimitiveType = Num> {
-    args: FnArgs<Prim>,
+    args: Tuple<Prim>,
     type_params: HashMap<usize, TypeParamDescription<Prim::Constraints>>,
     const_params: HashMap<usize, LenParamDescription>,
 }
@@ -283,7 +271,7 @@ pub struct FnTypeBuilder<Prim: PrimitiveType = Num> {
 impl<Prim: PrimitiveType> Default for FnTypeBuilder<Prim> {
     fn default() -> Self {
         Self {
-            args: FnArgs::List(Tuple::empty()),
+            args: Tuple::empty(),
             type_params: HashMap::new(),
             const_params: HashMap::new(),
         }
@@ -329,11 +317,7 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
 
     /// Adds a new argument to the function definition.
     pub fn with_arg(mut self, arg: impl Into<ValueType<Prim>>) -> Self {
-        match &mut self.args {
-            FnArgs::List(args) => {
-                args.push(arg.into());
-            }
-        }
+        self.args.push(arg.into());
         self
     }
 
@@ -342,20 +326,5 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
         FnType::new(self.args, return_type)
             .with_len_params(self.const_params.into_iter().collect())
             .with_type_params(self.type_params.into_iter().collect())
-    }
-}
-
-/// Type of function arguments.
-#[derive(Debug, Clone, PartialEq)]
-pub enum FnArgs<Prim: PrimitiveType> {
-    /// Lists accepted arguments.
-    List(Tuple<Prim>),
-}
-
-impl<Prim: PrimitiveType> fmt::Display for FnArgs<Prim> {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            FnArgs::List(args) => fmt::Display::fmt(args, formatter),
-        }
     }
 }

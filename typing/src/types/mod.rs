@@ -9,7 +9,7 @@ mod tuple;
 
 pub(crate) use self::fn_type::{LenParamDescription, TypeParamDescription};
 pub use self::{
-    fn_type::{FnArgs, FnType, FnTypeBuilder},
+    fn_type::{FnType, FnTypeBuilder},
     tuple::{LengthKind, Slice, Tuple, TupleLength},
 };
 

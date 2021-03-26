@@ -3,8 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    arith::TypeConstraints, FnArgs, FnType, PrimitiveType, Tuple, TupleLength, TypeErrorKind,
-    ValueType,
+    arith::TypeConstraints, FnType, PrimitiveType, Tuple, TupleLength, TypeErrorKind, ValueType,
 };
 
 mod fns;
@@ -320,15 +319,13 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         let instantiated_lhs = self.instantiate_function(lhs);
         let instantiated_rhs = self.instantiate_function(rhs);
 
-        let (FnArgs::List(lhs_list), FnArgs::List(rhs_list)) =
-            (&instantiated_lhs.args, &instantiated_rhs.args);
         // Swapping args is intentional. To see why, consider a function
         // `fn(T, U) -> V` called as `fn(A, B) -> C` (`T`, ... `C` are types).
         // In this case, the first arg of actual type `A` will be assigned to type `T`
         // (i.e., `T` is LHS and `A` is RHS); same with `U` and `B`. In contrast,
         // after function execution the return value of type `V` will be assigned
         // to type `C`. (I.e., unification of return values is not swapped.)
-        self.unify_tuples(rhs_list, lhs_list)?;
+        self.unify_tuples(&instantiated_rhs.args, &instantiated_lhs.args)?;
 
         self.unify(&instantiated_lhs.return_type, &instantiated_rhs.return_type)
     }
@@ -459,7 +456,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         let mut return_type = ValueType::Some;
         self.assign_new_type(&mut return_type)?;
 
-        let called_fn_type = FnType::new(FnArgs::List(arg_types.into()), return_type.clone());
+        let called_fn_type = FnType::new(arg_types.into(), return_type.clone());
         self.unify(&called_fn_type.into(), definition)
             .map(|()| return_type)
     }

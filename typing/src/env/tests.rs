@@ -3,7 +3,7 @@ use assert_matches::assert_matches;
 
 use super::*;
 use crate::types::TypeParamDescription;
-use crate::{arith::LinConstraints, Annotated, FnArgs, LengthKind, Num, Prelude, TupleLength};
+use crate::{arith::LinConstraints, Annotated, LengthKind, Num, Prelude, TupleLength};
 
 pub type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
 
@@ -27,7 +27,7 @@ pub fn assert_incompatible_types<Prim: PrimitiveType>(
 fn hash_fn_type() -> FnType<Num> {
     FnType {
         // TODO: use `ValueType::Any` instead of `ValueType::Param(0)`
-        args: FnArgs::List(Slice::new(ValueType::Param(0), TupleLength::Param(0)).into()),
+        args: Slice::new(ValueType::Param(0), TupleLength::Param(0)).into(),
         return_type: ValueType::NUM,
         type_params: vec![(0, TypeParamDescription::new(LinConstraints::default()))],
         len_params: vec![(0, LengthKind::Static.into())],
@@ -194,7 +194,7 @@ fn method_basics() {
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let plus_type = FnType::new(FnArgs::List(vec![ValueType::NUM; 2].into()), ValueType::NUM);
+    let plus_type = FnType::new(vec![ValueType::NUM; 2].into(), ValueType::NUM);
     type_env.insert("plus", plus_type.into());
     type_env.process_statements(&block).unwrap();
 

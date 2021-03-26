@@ -4,8 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::types::LenParamDescription;
 use crate::{
-    types::TypeParamDescription, FnArgs, FnType, PrimitiveType, Substitutions, TupleLength,
-    ValueType,
+    types::TypeParamDescription, FnType, PrimitiveType, Substitutions, TupleLength, ValueType,
 };
 
 impl<Prim: PrimitiveType> FnType<Prim> {
@@ -48,16 +47,13 @@ impl<Prim: PrimitiveType> FnType<Prim> {
             })
         }
 
-        let substituted_args = match &self.args {
-            FnArgs::List(args) => {
-                let mut mapped_args =
-                    args.map_types(|arg| arg.substitute_type_vars(mapping, context));
-                if let Some(middle_len) = mapped_args.middle_len_mut() {
-                    *middle_len = middle_len.substitute_vars(mapping, context);
-                }
-                FnArgs::List(mapped_args)
-            }
-        };
+        let mut substituted_args = self
+            .args
+            .map_types(|arg| arg.substitute_type_vars(mapping, context));
+        if let Some(middle_len) = substituted_args.middle_len_mut() {
+            *middle_len = middle_len.substitute_vars(mapping, context);
+        }
+
         let return_type = self.return_type.substitute_type_vars(mapping, context);
 
         let const_params = self.len_params.iter().copied();

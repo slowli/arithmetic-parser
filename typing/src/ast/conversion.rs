@@ -7,7 +7,7 @@ use std::{collections::HashMap, convert::TryFrom, fmt, str::FromStr};
 use crate::{
     ast::{FnTypeAst, TupleLengthAst, TypeConstraintsAst, ValueTypeAst},
     types::TypeParamDescription,
-    FnArgs, FnType, PrimitiveType, TupleLength, ValueType,
+    FnType, PrimitiveType, TupleLength, ValueType,
 };
 use arithmetic_parser::{
     ErrorKind as ParseErrorKind, InputSpan, LocatedSpan, NomResult, SpannedError, StripCode,
@@ -351,12 +351,9 @@ impl<'a, Prim: PrimitiveType> FnTypeAst<'a, Prim> {
             ))
         });
 
-        let fn_type = FnType::new(
-            FnArgs::List(args?.into()),
-            self.return_type.try_convert(&state)?,
-        )
-        .with_len_params(const_params.collect())
-        .with_type_params(type_params.collect::<Result<Vec<_>, _>>()?);
+        let fn_type = FnType::new(args?.into(), self.return_type.try_convert(&state)?)
+            .with_len_params(const_params.collect())
+            .with_type_params(type_params.collect::<Result<Vec<_>, _>>()?);
         Ok(fn_type)
     }
 }

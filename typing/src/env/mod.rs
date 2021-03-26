@@ -9,8 +9,8 @@ use std::{
 
 use crate::{
     arith::{BinaryOpSpans, MapPrimitiveType, NumArithmetic, TypeArithmetic, UnaryOpSpans},
-    FnArgs, FnType, Num, PrimitiveType, Slice, Substitutions, Tuple, TupleLength, TypeError,
-    TypeErrorKind, TypeResult, ValueType,
+    FnType, Num, PrimitiveType, Slice, Substitutions, Tuple, TupleLength, TypeError, TypeErrorKind,
+    TypeResult, ValueType,
 };
 use arithmetic_parser::{
     grammars::Grammar, BinaryOp, Block, Destructure, DestructureRest, Expr, FnDefinition, Lvalue,
@@ -484,7 +484,7 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
         let arg_types = arg_types.map_types(|arg| substitutions.resolve(arg));
         let return_type = substitutions.resolve(&return_type);
 
-        let mut fn_type = FnType::new(FnArgs::List(arg_types), return_type);
+        let mut fn_type = FnType::new(arg_types, return_type);
         if !self.is_in_function {
             fn_type.finalize(substitutions);
         }

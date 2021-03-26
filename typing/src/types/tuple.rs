@@ -318,8 +318,10 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
         iter.chain(other_middle.map(move |elem| (elem, middle_elem)))
     }
 
-    /// Iterates over all distinct elements in this tuple.
-    pub(crate) fn element_types(&self) -> impl Iterator<Item = &ValueType<Prim>> + '_ {
+    /// Iterates over all distinct elements in this tuple. The iteration is performed in order.
+    ///
+    /// FIXME: example
+    pub fn element_types(&self) -> impl Iterator<Item = &ValueType<Prim>> + '_ {
         let middle_element = self.middle.as_ref().map(|slice| slice.element.as_ref());
         self.start.iter().chain(middle_element).chain(&self.end)
     }
@@ -388,6 +390,11 @@ impl<Prim: PrimitiveType> Slice<Prim> {
     /// Returns the length of this slice.
     pub fn len(&self) -> &TupleLength {
         &self.length
+    }
+
+    /// Returns `true` iff this slice is *definitely* empty.
+    pub fn is_empty(&self) -> bool {
+        self.length == TupleLength::Exact(0)
     }
 
     fn is_concrete(&self) -> bool {

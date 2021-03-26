@@ -50,7 +50,12 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 
         let substituted_args = match &self.args {
             FnArgs::List(args) => {
-                FnArgs::List(args.map_types(|arg| arg.substitute_type_vars(mapping, context)))
+                let mut mapped_args =
+                    args.map_types(|arg| arg.substitute_type_vars(mapping, context));
+                if let Some(middle_len) = mapped_args.middle_len_mut() {
+                    *middle_len = middle_len.substitute_vars(mapping, context);
+                }
+                FnArgs::List(mapped_args)
             }
         };
         let return_type = self.return_type.substitute_type_vars(mapping, context);

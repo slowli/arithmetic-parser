@@ -2,7 +2,8 @@ use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
 use assert_matches::assert_matches;
 
 use super::*;
-use crate::{arith::LinConstraints, Annotated, FnArgs, Num, Prelude, TupleLength};
+use crate::types::TypeParamDescription;
+use crate::{arith::LinConstraints, Annotated, FnArgs, LengthKind, Num, Prelude, TupleLength};
 
 pub type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
 
@@ -25,11 +26,17 @@ pub fn assert_incompatible_types<Prim: PrimitiveType>(
 
 fn hash_fn_type() -> FnType<Num> {
     FnType {
-        args: FnArgs::List(vec![].into()), // FIXME
+        // TODO: use `ValueType::Any` instead of `ValueType::Param(0)`
+        args: FnArgs::List(Slice::new(ValueType::Param(0), TupleLength::Param(0)).into()),
         return_type: ValueType::NUM,
-        type_params: Vec::new(),
-        len_params: Vec::new(),
+        type_params: vec![(0, TypeParamDescription::new(LinConstraints::default()))],
+        len_params: vec![(0, LengthKind::Static.into())],
     }
+}
+
+#[test]
+fn hash_fn_type_display() {
+    assert_eq!(hash_fn_type().to_string(), "fn<len N; T>(...[T; N]) -> Num");
 }
 
 /// `zip` function signature:
@@ -109,7 +116,7 @@ fn function_definition() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env.get("sign").unwrap().to_string(),
-        "fn<T>(Num, T) -> (Num, Num)"
+        "fn(Num, Num) -> (Num, Num)"
     );
 }
 
@@ -136,7 +143,7 @@ fn non_linear_types_in_function() {
     );
     assert_eq!(
         type_env.get("add_hashes").unwrap().to_string(),
-        "fn<T, U>(T, U) -> Num"
+        "fn<T>(T, T) -> Num"
     );
 }
 

@@ -236,9 +236,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         lhs: &Tuple<Prim>,
         rhs: &Tuple<Prim>,
     ) -> Result<(), TypeErrorKind<Prim>> {
-        dbg!(lhs, rhs);
         let resolved_len = self.unify_lengths(&lhs.len(), &rhs.len())?;
-        dbg!(&resolved_len);
 
         if let TupleLength::Exact(len) = resolved_len {
             for (lhs_elem, rhs_elem) in lhs.equal_elements_static(rhs, len) {

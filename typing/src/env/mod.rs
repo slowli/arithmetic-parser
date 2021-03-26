@@ -396,7 +396,7 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
         if let DestructureRest::Named { variable, .. } = rest {
             self.insert_type(
                 variable.fragment(),
-                ValueType::slice(element.clone(), length),
+                ValueType::slice(element.clone(), length.clone()),
             );
         }
         Ok(Slice::new(element, length))

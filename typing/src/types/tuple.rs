@@ -5,7 +5,7 @@ use std::{borrow::Cow, cmp, fmt, iter};
 use crate::{Num, PrimitiveType, ValueType};
 
 /// Length of a tuple.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TupleLength {
     /// Wildcard length.
     Some {
@@ -16,6 +16,8 @@ pub enum TupleLength {
     Exact(usize),
     /// Length parameter in a function definition.
     Param(usize),
+    /// Compound length: sum of the specified lengths.
+    Compound(CompoundTupleLength),
 
     /// Length variable. In contrast to `Param`s, `Var`s are used exclusively during
     /// inference and cannot occur in standalone function signatures.
@@ -29,6 +31,7 @@ impl fmt::Display for TupleLength {
             Self::Some { is_dynamic: true } => formatter.write_str("*"),
             Self::Exact(len) => fmt::Display::fmt(len, formatter),
             Self::Param(idx) => formatter.write_str(Self::const_param(*idx).as_ref()),
+            Self::Compound(len) => fmt::Display::fmt(len, formatter),
         }
     }
 }
@@ -44,6 +47,59 @@ impl TupleLength {
 
     fn is_concrete(&self) -> bool {
         matches!(self, Self::Param(_) | Self::Exact(_))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompoundTupleLength {
+    // Invariant: contains at least two items.
+    items: Vec<TupleLength>,
+}
+
+impl fmt::Display for CompoundTupleLength {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (i, item) in self.items.iter().enumerate() {
+            fmt::Display::fmt(item, formatter)?;
+            if i + 1 < self.items.len() {
+                formatter.write_str(" + ")?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl CompoundTupleLength {
+    fn new(items: Vec<TupleLength>) -> Self {
+        debug_assert!(items.len() >= 2);
+        debug_assert!(items
+            .iter()
+            .all(|elem| !matches!(elem, TupleLength::Compound(_))));
+
+        Self { items }
+    }
+
+    pub(crate) fn map_items(&self, map_fn: impl FnMut(&TupleLength) -> TupleLength) -> TupleLength {
+        let (exact, mut var) = self.items.iter().map(map_fn).fold(
+            (0_usize, Vec::with_capacity(self.items.len())),
+            |(mut exact, mut var), item| {
+                if let TupleLength::Exact(len) = item {
+                    exact += len;
+                } else {
+                    var.push(item);
+                }
+                (exact, var)
+            },
+        );
+
+        if exact > 0 {
+            var.push(TupleLength::Exact(exact));
+        }
+
+        match var.len() {
+            0 => TupleLength::Exact(0),
+            1 => var.pop().unwrap(),
+            _ => TupleLength::Compound(Self::new(var)),
+        }
     }
 }
 
@@ -70,9 +126,8 @@ impl<Prim: PrimitiveType> PartialEq for Tuple<Prim> {
         let this_len = self.len();
         if this_len != other.len() {
             false
-        } else if this_len.1.is_none() {
-            self.equal_elements_static(other, this_len.0)
-                .all(|(x, y)| x == y)
+        } else if let TupleLength::Exact(len) = this_len {
+            self.equal_elements_static(other, len).all(|(x, y)| x == y)
         } else {
             self.equal_elements_dyn(other).all(|(x, y)| x == y)
         }
@@ -110,7 +165,7 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     pub(crate) fn is_empty(&self) -> bool {
         self.start.is_empty()
             && self.end.is_empty()
-            && self.resolved_middle_len() == TupleLength::Exact(0)
+            && *self.resolved_middle_len() == TupleLength::Exact(0)
     }
 
     pub(crate) fn is_concrete(&self) -> bool {
@@ -166,10 +221,10 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
         formatter.write_str(")")
     }
 
-    fn resolved_middle_len(&self) -> TupleLength {
+    fn resolved_middle_len(&self) -> &TupleLength {
         self.middle
             .as_ref()
-            .map_or(TupleLength::Exact(0), |middle| middle.length)
+            .map_or(&TupleLength::Exact(0), |middle| &middle.length)
     }
 
     fn middle_element(&self) -> &ValueType<Prim> {
@@ -182,14 +237,19 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
         self.middle.as_mut().map(|middle| &mut middle.length)
     }
 
-    /// Returns components of this length in the form `(exact, variable)`.
-    pub(crate) fn len(&self) -> (usize, Option<TupleLength>) {
+    /// Returns length of this tuple.
+    pub(crate) fn len(&self) -> TupleLength {
         let exact = self.start.len() + self.end.len();
         let middle_len = self.resolved_middle_len();
         if let TupleLength::Exact(middle_len) = middle_len {
-            (exact + middle_len, None)
+            TupleLength::Exact(exact + *middle_len)
+        } else if exact == 0 {
+            middle_len.to_owned()
         } else {
-            (exact, Some(middle_len))
+            TupleLength::Compound(CompoundTupleLength::new(vec![
+                TupleLength::Exact(exact),
+                middle_len.to_owned(),
+            ]))
         }
     }
 
@@ -280,7 +340,7 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
             start: self.start.iter().map(&mut map_fn).collect(),
             middle: self.middle.as_ref().map(|middle| Slice {
                 element: Box::new(map_fn(&middle.element)),
-                length: middle.length,
+                length: middle.length.clone(),
             }),
             end: self.end.iter().map(&mut map_fn).collect(),
         }
@@ -326,8 +386,8 @@ impl<Prim: PrimitiveType> Slice<Prim> {
     }
 
     /// Returns the length of this slice.
-    pub fn len(&self) -> TupleLength {
-        self.length
+    pub fn len(&self) -> &TupleLength {
+        &self.length
     }
 
     fn is_concrete(&self) -> bool {

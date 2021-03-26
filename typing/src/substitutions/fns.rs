@@ -110,7 +110,8 @@ impl FnTypeTree {
                         recurse(children, type_vars, const_vars, element);
                     }
 
-                    if let (_, Some(TupleLength::Var(idx))) = tuple.len() {
+                    // FIXME: handle compound lengths
+                    if let TupleLength::Var(idx) = tuple.len() {
                         const_vars
                             .entry(idx)
                             .and_modify(|qty| *qty = VarQuantity::Repeated)
@@ -273,19 +274,19 @@ impl FnTypeTree {
 }
 
 impl TupleLength {
-    fn substitute_vars(self, mapping: &ParamMapping, context: SubstitutionContext) -> Self {
+    fn substitute_vars(&self, mapping: &ParamMapping, context: SubstitutionContext) -> Self {
         match self {
             Self::Var(idx) if context == SubstitutionContext::VarsToParams => {
-                Self::Param(mapping.constants[&idx])
+                Self::Param(mapping.constants[idx])
             }
 
             Self::Param(idx) if context == SubstitutionContext::ParamsToVars => mapping
                 .constants
-                .get(&idx)
+                .get(idx)
                 .copied()
-                .map_or(Self::Param(idx), Self::Var),
+                .map_or(Self::Param(*idx), Self::Var),
 
-            _ => self,
+            _ => self.to_owned(),
         }
     }
 }

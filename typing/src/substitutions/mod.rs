@@ -99,7 +99,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             ValueType::Tuple(tuple) => {
                 let mut mapped_tuple = tuple.map_types(|ty| self.resolve(ty));
                 if let Some(len) = mapped_tuple.middle_len_mut() {
-                    *len = self.resolve_len(*len);
+                    *len = self.resolve_len(len);
                 }
                 ValueType::Tuple(mapped_tuple)
             }
@@ -113,28 +113,21 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         }
     }
 
-    fn resolve_len(&self, mut len: TupleLength) -> TupleLength {
+    fn resolve_len<'a>(&'a self, mut len: &'a TupleLength) -> TupleLength {
         while let TupleLength::Var(idx) = len {
-            let resolved = self.length_eqs.get(&idx).copied();
+            let resolved = self.length_eqs.get(idx);
             if let Some(resolved) = resolved {
                 len = resolved;
             } else {
                 break;
             }
         }
-        len
-    }
 
-    fn resolve_tuple_len(&self, tuple: &Tuple<Prim>) -> (usize, Option<TupleLength>) {
-        let (mut exact_len, mut dyn_len) = tuple.len();
-        if let Some(dyn_len) = &mut dyn_len {
-            *dyn_len = self.resolve_len(*dyn_len);
+        if let TupleLength::Compound(compound_len) = len {
+            compound_len.map_items(|item| self.resolve_len(item))
+        } else {
+            len.to_owned()
         }
-        if let Some(TupleLength::Exact(len)) = dyn_len {
-            exact_len += len;
-            dyn_len = None;
-        }
-        (exact_len, dyn_len)
     }
 
     pub(crate) fn assign_new_type(
@@ -243,46 +236,16 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         lhs: &Tuple<Prim>,
         rhs: &Tuple<Prim>,
     ) -> Result<(), TypeErrorKind<Prim>> {
-        // FIXME: Simplify.
         dbg!(lhs, rhs);
-        let (lhs_exact_len, lhs_dyn_len) = dbg!(self.resolve_tuple_len(lhs));
-        let (rhs_exact_len, rhs_dyn_len) = dbg!(self.resolve_tuple_len(rhs));
+        let resolved_len = self.unify_lengths(&lhs.len(), &rhs.len())?;
+        dbg!(&resolved_len);
 
-        let exact_length = if lhs_dyn_len.is_none() {
-            let expected_len = lhs_exact_len
-                .checked_sub(rhs_exact_len)
-                .ok_or_else(|| todo!())?;
-            self.unify_lengths(
-                TupleLength::Exact(expected_len),
-                rhs_dyn_len.unwrap_or(TupleLength::Exact(0)),
-            )?;
-            Some(lhs_exact_len)
-        } else if rhs_dyn_len.is_none() {
-            let expected_len = rhs_exact_len
-                .checked_sub(lhs_exact_len)
-                .ok_or_else(|| todo!())?;
-            self.unify_lengths(
-                lhs_dyn_len.unwrap_or(TupleLength::Exact(0)),
-                TupleLength::Exact(expected_len),
-            )?;
-            Some(rhs_exact_len)
-        } else if lhs_exact_len == rhs_exact_len {
-            // "Exact alignment" case. Covers pure slices.
-            self.unify_lengths(
-                lhs_dyn_len.unwrap_or(TupleLength::Exact(0)),
-                rhs_dyn_len.unwrap_or(TupleLength::Exact(0)),
-            )?;
-            None
-        } else {
-            return Err(TypeErrorKind::UnsupportedDestructure);
-        };
-
-        if let Some(len) = exact_length {
+        if let TupleLength::Exact(len) = resolved_len {
             for (lhs_elem, rhs_elem) in lhs.equal_elements_static(rhs, len) {
-                dbg!((lhs_elem, rhs_elem));
                 self.unify(lhs_elem, rhs_elem)?;
             }
         } else {
+            // FIXME: is this always applicable?
             for (lhs_elem, rhs_elem) in lhs.equal_elements_dyn(rhs) {
                 self.unify(lhs_elem, rhs_elem)?;
             }
@@ -291,23 +254,24 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         Ok(())
     }
 
+    /// Returns the resolved length that `lhs` and `rhs` are equal to.
     fn unify_lengths(
         &mut self,
-        lhs: TupleLength,
-        rhs: TupleLength,
-    ) -> Result<(), TypeErrorKind<Prim>> {
+        lhs: &TupleLength,
+        rhs: &TupleLength,
+    ) -> Result<TupleLength, TypeErrorKind<Prim>> {
         let resolved_lhs = self.resolve_len(lhs);
         let resolved_rhs = self.resolve_len(rhs);
 
-        match (resolved_lhs, resolved_rhs) {
+        match (&resolved_lhs, &resolved_rhs) {
             (TupleLength::Var(x), TupleLength::Var(y)) if x == y => {
                 // Lengths are already unified.
-                Ok(())
+                Ok(resolved_lhs)
             }
 
             // Different dyn lengths cannot be unified.
             (TupleLength::Var(x), TupleLength::Var(y))
-                if self.dyn_lengths.contains(&x) && self.dyn_lengths.contains(&y) =>
+                if self.dyn_lengths.contains(x) && self.dyn_lengths.contains(y) =>
             {
                 Err(TypeErrorKind::IncompatibleLengths(
                     resolved_lhs,
@@ -317,18 +281,24 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
             (TupleLength::Exact(x), TupleLength::Exact(y)) if x == y => {
                 // Lengths are known to be the same.
-                Ok(())
+                Ok(resolved_lhs)
+            }
+
+            (TupleLength::Compound(_), _) | (_, TupleLength::Compound(_)) => {
+                todo!()
             }
 
             // Dynamic length can be unified at LHS position with anything other than other
             // dynamic lengths, which we've checked previously.
-            (TupleLength::Var(x), _) if self.dyn_lengths.contains(&x) => Ok(()),
+            (TupleLength::Var(x), _) if self.dyn_lengths.contains(&x) => Ok(resolved_rhs),
 
-            (TupleLength::Var(x), other) | (other, TupleLength::Var(x))
-                if !self.dyn_lengths.contains(&x) =>
-            {
-                self.length_eqs.insert(x, other);
-                Ok(())
+            (TupleLength::Var(x), other) if !self.dyn_lengths.contains(x) => {
+                self.length_eqs.insert(*x, other.to_owned());
+                Ok(resolved_rhs)
+            }
+            (other, TupleLength::Var(x)) if !self.dyn_lengths.contains(x) => {
+                self.length_eqs.insert(*x, other.to_owned());
+                Ok(resolved_lhs)
             }
 
             _ => Err(TypeErrorKind::IncompatibleLengths(

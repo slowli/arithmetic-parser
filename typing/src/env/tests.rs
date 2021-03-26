@@ -25,7 +25,7 @@ pub fn assert_incompatible_types<Prim: PrimitiveType>(
 
 fn hash_fn_type() -> FnType<Num> {
     FnType {
-        args: FnArgs::Any,
+        args: FnArgs::List(vec![].into()), // FIXME
         return_type: ValueType::NUM,
         type_params: Vec::new(),
         len_params: Vec::new(),
@@ -123,9 +123,7 @@ fn non_linear_types_in_function() {
 
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-
-    let hash_type = hash_fn_type();
-    type_env.insert("hash", ValueType::Function(Box::new(hash_type)));
+    type_env.insert("hash", hash_fn_type().into());
 
     type_env.process_statements(&block).unwrap();
     assert_eq!(
@@ -189,10 +187,7 @@ fn method_basics() {
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let plus_type = FnType::new(
-        FnArgs::List(vec![ValueType::NUM, ValueType::NUM]),
-        ValueType::NUM,
-    );
+    let plus_type = FnType::new(FnArgs::List(vec![ValueType::NUM; 2].into()), ValueType::NUM);
     type_env.insert("plus", plus_type.into());
     type_env.process_statements(&block).unwrap();
 
@@ -242,7 +237,7 @@ fn variable_scoping() {
 
     assert_eq!(
         *type_env.get("y").unwrap(),
-        ValueType::Tuple(vec![ValueType::NUM, ValueType::NUM])
+        ValueType::Tuple(vec![ValueType::NUM; 2].into())
     );
 }
 
@@ -496,7 +491,7 @@ fn parametric_fn_passed_as_arg_with_unsatisfiable_requirements() {
     assert_incompatible_types(
         &err.kind(),
         &ValueType::NUM,
-        &ValueType::Tuple(vec![ValueType::NUM; 2]),
+        &ValueType::Tuple(vec![ValueType::NUM; 2].into()),
     );
 }
 
@@ -574,7 +569,7 @@ fn function_passed_as_arg_invalid_arg_type() {
     assert_incompatible_types(
         &err.kind(),
         &ValueType::NUM,
-        &ValueType::Tuple(vec![ValueType::Some; 2]),
+        &ValueType::Tuple(vec![ValueType::Some; 2].into()),
     );
 }
 
@@ -599,7 +594,10 @@ fn unifying_slice_and_tuple() {
     type_env.insert("map", Prelude::map_type().into());
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(type_env["xs"], ValueType::Tuple(vec![ValueType::NUM; 2]));
+    assert_eq!(
+        type_env["xs"],
+        ValueType::Tuple(vec![ValueType::NUM; 2].into())
+    );
 }
 
 #[test]
@@ -616,10 +614,7 @@ fn function_accepting_slices() {
     );
     assert_eq!(
         type_env["z"],
-        ValueType::Slice {
-            element: Box::new(ValueType::NUM),
-            length: TupleLength::Exact(3)
-        }
+        ValueType::slice(ValueType::NUM, TupleLength::Exact(3))
     );
 }
 
@@ -762,14 +757,17 @@ fn comparisons_when_switched_on() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("filter", Prelude::filter_type().into());
+
     let output = type_env
         .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
         .unwrap();
+    let slice = match &output {
+        ValueType::Tuple(tuple) => tuple.as_slice().unwrap(),
+        _ => panic!("Unexpected output: {:?}", output),
+    };
 
-    assert_matches!(
-        output,
-        ValueType::Slice { element, length: TupleLength::Var(_) } if *element == ValueType::NUM
-    );
+    assert_eq!(*slice.element(), ValueType::NUM);
+    assert_matches!(slice.len(), TupleLength::Var(_));
 }
 
 #[test]

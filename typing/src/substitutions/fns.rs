@@ -49,12 +49,9 @@ impl<Prim: PrimitiveType> FnType<Prim> {
         }
 
         let substituted_args = match &self.args {
-            FnArgs::List(args) => FnArgs::List(
-                args.iter()
-                    .map(|arg| arg.substitute_type_vars(mapping, context))
-                    .collect(),
-            ),
-            FnArgs::Any => FnArgs::Any,
+            FnArgs::List(args) => {
+                FnArgs::List(args.map_types(|arg| arg.substitute_type_vars(mapping, context)))
+            }
         };
         let return_type = self.return_type.substitute_type_vars(mapping, context);
 
@@ -108,19 +105,16 @@ impl FnTypeTree {
                         .or_insert(VarQuantity::UniqueVar);
                 }
 
-                ValueType::Slice { element, length } => {
-                    recurse(children, type_vars, const_vars, element);
-                    if let TupleLength::Var(idx) = length {
+                ValueType::Tuple(tuple) => {
+                    for element in tuple.element_types() {
+                        recurse(children, type_vars, const_vars, element);
+                    }
+
+                    if let (_, Some(TupleLength::Var(idx))) = tuple.len() {
                         const_vars
-                            .entry(*idx)
+                            .entry(idx)
                             .and_modify(|qty| *qty = VarQuantity::Repeated)
                             .or_insert(VarQuantity::UniqueVar);
-                    }
-                }
-
-                ValueType::Tuple(elements) => {
-                    for element in elements {
-                        recurse(children, type_vars, const_vars, element);
                     }
                 }
 
@@ -231,14 +225,10 @@ impl FnTypeTree {
             substitutions: &Substitutions<P>,
         ) {
             match ty {
-                ValueType::Tuple(elements) => {
-                    for element in elements {
+                ValueType::Tuple(tuple) => {
+                    for element in tuple.element_types_mut() {
                         recurse(reversed_children, element, substitutions);
                     }
-                }
-
-                ValueType::Slice { element, .. } => {
-                    recurse(reversed_children, element, substitutions);
                 }
 
                 ValueType::Function(fn_type) => {
@@ -314,17 +304,14 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
                 .copied()
                 .map_or(Self::Param(*idx), Self::Var),
 
-            Self::Slice { element, length } => Self::Slice {
-                element: Box::new(element.substitute_type_vars(mapping, context)),
-                length: length.substitute_vars(mapping, context),
-            },
-
-            Self::Tuple(fragments) => ValueType::Tuple(
-                fragments
-                    .iter()
-                    .map(|element| element.substitute_type_vars(mapping, context))
-                    .collect(),
-            ),
+            Self::Tuple(tuple) => {
+                let mut mapped_tuple =
+                    tuple.map_types(|element| element.substitute_type_vars(mapping, context));
+                if let Some(length) = mapped_tuple.middle_len_mut() {
+                    *length = length.substitute_vars(mapping, context);
+                }
+                ValueType::Tuple(mapped_tuple)
+            }
 
             Self::Function(fn_type) => {
                 Self::Function(Box::new(fn_type.substitute_type_vars(mapping, context)))

@@ -131,7 +131,7 @@ pub use self::{
     error::{TypeError, TypeErrorKind, TypeResult},
     substitutions::Substitutions,
     type_map::{Assertions, Prelude},
-    types::{FnArgs, FnType, FnTypeBuilder, LengthKind, TupleLength, ValueType},
+    types::{FnArgs, FnType, FnTypeBuilder, LengthKind, Slice, Tuple, TupleLength, ValueType},
 };
 
 use self::arith::{LinConstraints, LinearType, TypeConstraints, WithBoolean};

@@ -3,7 +3,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    arith::TypeConstraints, FnArgs, FnType, PrimitiveType, TupleLength, TypeErrorKind, ValueType,
+    arith::TypeConstraints, FnArgs, FnType, PrimitiveType, Tuple, TupleLength, TypeErrorKind,
+    ValueType,
 };
 
 mod fns;
@@ -95,19 +96,18 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     pub fn resolve(&self, ty: &ValueType<Prim>) -> ValueType<Prim> {
         let ty = self.fast_resolve(ty);
         match ty {
-            ValueType::Tuple(fragments) => {
-                ValueType::Tuple(fragments.iter().map(|frag| self.resolve(frag)).collect())
+            ValueType::Tuple(tuple) => {
+                let mut mapped_tuple = tuple.map_types(|ty| self.resolve(ty));
+                if let Some(len) = mapped_tuple.middle_len_mut() {
+                    *len = self.resolve_len(*len);
+                }
+                ValueType::Tuple(mapped_tuple)
             }
 
             ValueType::Function(fn_type) => {
                 let resolved_fn_type = fn_type.map_types(|ty| self.resolve(ty));
                 ValueType::Function(Box::new(resolved_fn_type))
             }
-
-            ValueType::Slice { element, length } => ValueType::Slice {
-                element: Box::new(self.resolve(element)),
-                length: self.resolve_len(*length),
-            },
 
             _ => ty.clone(),
         }
@@ -123,6 +123,18 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             }
         }
         len
+    }
+
+    fn resolve_tuple_len(&self, tuple: &Tuple<Prim>) -> (usize, Option<TupleLength>) {
+        let (mut exact_len, mut dyn_len) = tuple.len();
+        if let Some(dyn_len) = &mut dyn_len {
+            *dyn_len = self.resolve_len(*dyn_len);
+        }
+        if let Some(TupleLength::Exact(len)) = dyn_len {
+            exact_len += len;
+            dyn_len = None;
+        }
+        (exact_len, dyn_len)
     }
 
     pub(crate) fn assign_new_type(
@@ -158,23 +170,28 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                     self.assign_new_type(referenced_ty)?;
                 }
             }
-            ValueType::Tuple(elements) => {
-                for element in elements {
+
+            ValueType::Tuple(tuple) => {
+                let mut empty_length = TupleLength::Exact(0);
+                let middle_len = tuple.middle_len_mut().unwrap_or(&mut empty_length);
+                self.assign_new_length(middle_len);
+
+                for element in tuple.element_types_mut() {
                     self.assign_new_type(element)?;
                 }
             }
-            ValueType::Slice { element, length } => {
-                if let TupleLength::Some { is_dynamic } = length {
-                    if *is_dynamic {
-                        self.dyn_lengths.insert(self.const_var_count);
-                    }
-                    *length = TupleLength::Var(self.const_var_count);
-                    self.const_var_count += 1;
-                }
-                self.assign_new_type(element)?;
-            }
         }
         Ok(())
+    }
+
+    pub(crate) fn assign_new_length(&mut self, length: &mut TupleLength) {
+        if let TupleLength::Some { is_dynamic } = length {
+            if *is_dynamic {
+                self.dyn_lengths.insert(self.const_var_count);
+            }
+            *length = TupleLength::Var(self.const_var_count);
+            self.const_var_count += 1;
+        }
     }
 
     /// Unifies types in `lhs` and `rhs`.
@@ -190,7 +207,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         lhs: &ValueType<Prim>,
         rhs: &ValueType<Prim>,
     ) -> Result<(), TypeErrorKind<Prim>> {
-        use self::ValueType::{Function, Param, Slice, Tuple, Var};
+        use self::ValueType::{Function, Param, Tuple, Var};
 
         let resolved_lhs = self.fast_resolve(lhs).to_owned();
         let resolved_rhs = self.fast_resolve(rhs).to_owned();
@@ -210,44 +227,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 unreachable!("Type params must be transformed into vars before unification")
             }
 
-            (Tuple(lhs_types), Tuple(rhs_types)) => {
-                if lhs_types.len() != rhs_types.len() {
-                    return Err(TypeErrorKind::IncompatibleLengths(
-                        TupleLength::Exact(lhs_types.len()),
-                        TupleLength::Exact(rhs_types.len()),
-                    ));
-                }
-                for (lhs_type, rhs_type) in lhs_types.iter().zip(rhs_types) {
-                    self.unify(lhs_type, rhs_type)?;
-                }
-                Ok(())
-            }
-
-            (Slice { element, length }, Tuple(tuple_elements)) => {
-                self.unify_lengths(*length, TupleLength::Exact(tuple_elements.len()))?;
-                for tuple_element in tuple_elements {
-                    self.unify(element, tuple_element)?;
-                }
-                Ok(())
-            }
-            (Tuple(tuple_elements), Slice { element, length }) => {
-                self.unify_lengths(TupleLength::Exact(tuple_elements.len()), *length)?;
-                for tuple_element in tuple_elements {
-                    self.unify(tuple_element, element)?;
-                }
-                Ok(())
-            }
-
-            (
-                Slice { element, length },
-                Slice {
-                    element: rhs_element,
-                    length: rhs_length,
-                },
-            ) => {
-                self.unify_lengths(*length, *rhs_length)?;
-                self.unify(element, rhs_element)
-            }
+            (Tuple(lhs_tuple), Tuple(rhs_tuple)) => self.unify_tuples(lhs_tuple, rhs_tuple),
 
             (Function(lhs_fn), Function(rhs_fn)) => self.unify_fn_types(lhs_fn, rhs_fn),
 
@@ -256,6 +236,59 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 self.resolve(other_ty),
             )),
         }
+    }
+
+    fn unify_tuples(
+        &mut self,
+        lhs: &Tuple<Prim>,
+        rhs: &Tuple<Prim>,
+    ) -> Result<(), TypeErrorKind<Prim>> {
+        // FIXME: Simplify.
+        dbg!(lhs, rhs);
+        let (lhs_exact_len, lhs_dyn_len) = dbg!(self.resolve_tuple_len(lhs));
+        let (rhs_exact_len, rhs_dyn_len) = dbg!(self.resolve_tuple_len(rhs));
+
+        let exact_length = if lhs_dyn_len.is_none() {
+            let expected_len = lhs_exact_len
+                .checked_sub(rhs_exact_len)
+                .ok_or_else(|| todo!())?;
+            self.unify_lengths(
+                TupleLength::Exact(expected_len),
+                rhs_dyn_len.unwrap_or(TupleLength::Exact(0)),
+            )?;
+            Some(lhs_exact_len)
+        } else if rhs_dyn_len.is_none() {
+            let expected_len = rhs_exact_len
+                .checked_sub(lhs_exact_len)
+                .ok_or_else(|| todo!())?;
+            self.unify_lengths(
+                lhs_dyn_len.unwrap_or(TupleLength::Exact(0)),
+                TupleLength::Exact(expected_len),
+            )?;
+            Some(rhs_exact_len)
+        } else if lhs_exact_len == rhs_exact_len {
+            // "Exact alignment" case. Covers pure slices.
+            self.unify_lengths(
+                lhs_dyn_len.unwrap_or(TupleLength::Exact(0)),
+                rhs_dyn_len.unwrap_or(TupleLength::Exact(0)),
+            )?;
+            None
+        } else {
+            return Err(TypeErrorKind::UnsupportedDestructure);
+        };
+
+        if let Some(len) = exact_length {
+            for (lhs_elem, rhs_elem) in lhs.equal_elements_static(rhs, len) {
+                dbg!((lhs_elem, rhs_elem));
+                self.unify(lhs_elem, rhs_elem)?;
+            }
+        } else {
+            for (lhs_elem, rhs_elem) in lhs.equal_elements_dyn(rhs) {
+                self.unify(lhs_elem, rhs_elem)?;
+            }
+        }
+
+        Ok(())
     }
 
     fn unify_lengths(
@@ -314,32 +347,20 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             return Err(TypeErrorKind::UnsupportedParam);
         }
 
-        // Check if the argument number matches. If not, we can error immediately.
-        if let (FnArgs::List(lhs_list), FnArgs::List(rhs_list)) = (&lhs.args, &rhs.args) {
-            if lhs_list.len() != rhs_list.len() {
-                return Err(TypeErrorKind::ArgLenMismatch {
-                    expected: lhs_list.len(),
-                    actual: rhs_list.len(),
-                });
-            }
-        }
+        // FIXME: Check if the argument number matches. If not, we can error immediately.
 
         let instantiated_lhs = self.instantiate_function(lhs);
         let instantiated_rhs = self.instantiate_function(rhs);
 
-        if let (FnArgs::List(lhs_list), FnArgs::List(rhs_list)) =
-            (&instantiated_lhs.args, &instantiated_rhs.args)
-        {
-            for (lhs_arg, rhs_arg) in lhs_list.iter().zip(rhs_list) {
-                // Swapping args is intentional. To see why, consider a function
-                // `fn(T, U) -> V` called as `fn(A, B) -> C` (`T`, ... `C` are types).
-                // In this case, the first arg of actual type `A` will be assigned to type `T`
-                // (i.e., `T` is LHS and `A` is RHS); same with `U` and `B`. In contrast,
-                // after function execution the return value of type `V` will be assigned
-                // to type `C`. (I.e., unification of return values is not swapped.)
-                self.unify(rhs_arg, lhs_arg)?;
-            }
-        }
+        let (FnArgs::List(lhs_list), FnArgs::List(rhs_list)) =
+            (&instantiated_lhs.args, &instantiated_rhs.args);
+        // Swapping args is intentional. To see why, consider a function
+        // `fn(T, U) -> V` called as `fn(A, B) -> C` (`T`, ... `C` are types).
+        // In this case, the first arg of actual type `A` will be assigned to type `T`
+        // (i.e., `T` is LHS and `A` is RHS); same with `U` and `B`. In contrast,
+        // after function execution the return value of type `V` will be assigned
+        // to type `C`. (I.e., unification of return values is not swapped.)
+        self.unify_tuples(rhs_list, lhs_list)?;
 
         self.unify(&instantiated_lhs.return_type, &instantiated_rhs.return_type)
     }
@@ -399,15 +420,13 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 .get(i)
                 .map_or(false, |subst| self.check_occurrence(var_idx, subst)),
 
-            ValueType::Tuple(elements) => elements
-                .iter()
+            ValueType::Tuple(tuple) => tuple
+                .element_types()
                 .any(|element| self.check_occurrence(var_idx, element)),
 
             ValueType::Function(fn_type) => fn_type
                 .arg_and_return_types()
                 .any(|ty| self.check_occurrence(var_idx, ty)),
-
-            ValueType::Slice { element, .. } => self.check_occurrence(var_idx, element),
 
             _ => false,
         }
@@ -419,22 +438,9 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         match self.resolve(ty) {
             ValueType::Var(i) if i == fixed_idx => ValueType::Param(0),
 
-            ValueType::Tuple(elements) => ValueType::Tuple(
-                elements
-                    .iter()
-                    .map(|element| self.sanitize_type(fixed_idx, element))
-                    .collect(),
-            ),
-
-            ValueType::Slice { element, length } => ValueType::Slice {
-                element: Box::new(self.sanitize_type(fixed_idx, &element)),
-                length: match length {
-                    TupleLength::Var(idx) => TupleLength::Some {
-                        is_dynamic: self.dyn_lengths.contains(&idx),
-                    },
-                    _ => length,
-                },
-            },
+            ValueType::Tuple(tuple) => {
+                ValueType::Tuple(tuple.map_types(|element| self.sanitize_type(fixed_idx, element)))
+            }
 
             ValueType::Function(fn_type) => {
                 let sanitized_fn_type = fn_type.map_types(|ty| self.sanitize_type(fixed_idx, ty));
@@ -485,8 +491,8 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         let mut return_type = ValueType::Some;
         self.assign_new_type(&mut return_type)?;
 
-        let called_fn_type = FnType::new(FnArgs::List(arg_types), return_type.clone());
-        self.unify(&ValueType::Function(Box::new(called_fn_type)), definition)
+        let called_fn_type = FnType::new(FnArgs::List(arg_types.into()), return_type.clone());
+        self.unify(&called_fn_type.into(), definition)
             .map(|()| return_type)
     }
 }

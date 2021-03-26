@@ -192,7 +192,7 @@ fn fn_narrowed_via_type_hint() {
     assert_incompatible_types(
         &err.kind(),
         &ValueType::NUM,
-        &ValueType::Tuple(vec![ValueType::NUM; 2]),
+        &ValueType::Tuple(vec![ValueType::NUM; 2].into()),
     )
 }
 

@@ -3,7 +3,7 @@
 use std::{collections::HashMap, fmt};
 
 use super::type_param;
-use crate::{LengthKind, Num, PrimitiveType, TupleLength, ValueType};
+use crate::{LengthKind, Num, PrimitiveType, Tuple, TupleLength, ValueType};
 
 /// Description of a constant parameter.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -110,7 +110,9 @@ impl<Prim: PrimitiveType> fmt::Display for FnType<Prim> {
             formatter.write_str(">")?;
         }
 
-        write!(formatter, "({})", self.args)?;
+        match &self.args {
+            FnArgs::List(args) => args.format_as_tuple(formatter)?,
+        }
         if !self.return_type.is_void() {
             write!(formatter, " -> {}", self.return_type)?;
         }
@@ -191,21 +193,19 @@ impl<Prim: PrimitiveType> FnType<Prim> {
     }
 
     pub(crate) fn arg_and_return_types(&self) -> impl Iterator<Item = &ValueType<Prim>> + '_ {
-        let args_slice = match &self.args {
-            FnArgs::List(args) => args.as_slice(),
-            FnArgs::Any => &[],
+        let args_iter = match &self.args {
+            FnArgs::List(args) => args.element_types(),
         };
-        args_slice.iter().chain(Some(&self.return_type))
+        args_iter.chain(Some(&self.return_type))
     }
 
     pub(crate) fn arg_and_return_types_mut(
         &mut self,
     ) -> impl Iterator<Item = &mut ValueType<Prim>> + '_ {
-        let args_slice = match &mut self.args {
-            FnArgs::List(args) => args.as_mut_slice(),
-            FnArgs::Any => &mut [],
+        let args_iter = match &mut self.args {
+            FnArgs::List(args) => args.element_types_mut(),
         };
-        args_slice.iter_mut().chain(Some(&mut self.return_type))
+        args_iter.chain(Some(&mut self.return_type))
     }
 
     /// Maps argument and return types. The mapping function must not touch type params
@@ -216,8 +216,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
     {
         Self {
             args: match &self.args {
-                FnArgs::List(args) => FnArgs::List(args.iter().map(&mut map_fn).collect()),
-                FnArgs::Any => FnArgs::Any,
+                FnArgs::List(args) => FnArgs::List(args.map_types(&mut map_fn)),
             },
             return_type: map_fn(&self.return_type),
             type_params: self.type_params.clone(),
@@ -284,7 +283,7 @@ pub struct FnTypeBuilder<Prim: PrimitiveType = Num> {
 impl<Prim: PrimitiveType> Default for FnTypeBuilder<Prim> {
     fn default() -> Self {
         Self {
-            args: FnArgs::List(Vec::new()),
+            args: FnArgs::List(Tuple::empty()),
             type_params: HashMap::new(),
             const_params: HashMap::new(),
         }
@@ -334,7 +333,6 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
             FnArgs::List(args) => {
                 args.push(arg.into());
             }
-            FnArgs::Any => unreachable!(),
         }
         self
     }
@@ -350,26 +348,14 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
 /// Type of function arguments.
 #[derive(Debug, Clone, PartialEq)]
 pub enum FnArgs<Prim: PrimitiveType> {
-    /// Any arguments are accepted.
-    // TODO: allow to parse any args
-    Any,
     /// Lists accepted arguments.
-    List(Vec<ValueType<Prim>>),
+    List(Tuple<Prim>),
 }
 
 impl<Prim: PrimitiveType> fmt::Display for FnArgs<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            FnArgs::Any => formatter.write_str("..."),
-            FnArgs::List(args) => {
-                for (i, arg) in args.iter().enumerate() {
-                    fmt::Display::fmt(arg, formatter)?;
-                    if i + 1 < args.len() {
-                        formatter.write_str(", ")?;
-                    }
-                }
-                Ok(())
-            }
+            FnArgs::List(args) => fmt::Display::fmt(args, formatter),
         }
     }
 }

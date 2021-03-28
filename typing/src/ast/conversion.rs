@@ -5,9 +5,9 @@ use nom::Err as NomErr;
 use std::{collections::HashMap, convert::TryFrom, fmt, str::FromStr};
 
 use crate::{
-    ast::{FnTypeAst, TupleLengthAst, TypeConstraintsAst, ValueTypeAst},
+    ast::{FnTypeAst, SliceAst, TupleAst, TupleLengthAst, TypeConstraintsAst, ValueTypeAst},
     types::TypeParamDescription,
-    FnType, PrimitiveType, TupleLength, ValueType,
+    FnType, PrimitiveType, Slice, Tuple, TupleLength, ValueType,
 };
 use arithmetic_parser::{
     ErrorKind as ParseErrorKind, InputSpan, LocatedSpan, NomResult, SpannedError, StripCode,
@@ -202,6 +202,52 @@ impl<'a> ConversionState<'a> {
     }
 }
 
+impl<'a, Prim: PrimitiveType> TupleAst<'a, Prim> {
+    fn try_convert(
+        &self,
+        state: &ConversionState<'a>,
+    ) -> Result<Tuple<Prim>, ConversionError<&'a str>> {
+        let start = self
+            .start
+            .iter()
+            .map(|element| element.try_convert(state))
+            .collect::<Result<Vec<_>, _>>()?;
+        let middle = self
+            .middle
+            .as_ref()
+            .map(|middle| middle.try_convert(state))
+            .transpose()?;
+        let end = self
+            .end
+            .iter()
+            .map(|element| element.try_convert(state))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Tuple::new(start, middle, end))
+    }
+}
+
+impl<'a, Prim: PrimitiveType> SliceAst<'a, Prim> {
+    fn try_convert(
+        &self,
+        state: &ConversionState<'a>,
+    ) -> Result<Slice<Prim>, ConversionError<&'a str>> {
+        let element = self.element.try_convert(state)?;
+        let converted_length = match &self.length {
+            TupleLengthAst::Ident(ident) => {
+                let name = *ident.fragment();
+                let const_param = state.const_param_idx(name).ok_or_else(|| {
+                    ConversionErrorKind::UndefinedConst(name.to_owned()).with_span(*ident)
+                })?;
+                TupleLength::Param(const_param)
+            }
+            TupleLengthAst::Any => TupleLength::Some { is_dynamic: false },
+            TupleLengthAst::Dynamic => TupleLength::Some { is_dynamic: true },
+        };
+
+        Ok(Slice::new(element, converted_length))
+    }
+}
+
 impl<'a, Prim: PrimitiveType> ValueTypeAst<'a, Prim> {
     fn try_convert(
         &self,
@@ -224,30 +270,8 @@ impl<'a, Prim: PrimitiveType> ValueTypeAst<'a, Prim> {
                 ValueType::Function(Box::new(converted_fn))
             }
 
-            Self::Tuple(elements) => {
-                let converted_elements = elements
-                    .iter()
-                    .map(|elt| elt.try_convert(state))
-                    .collect::<Result<Vec<_>, _>>()?;
-                ValueType::Tuple(converted_elements.into())
-            }
-
-            Self::Slice { element, length } => {
-                let element = element.try_convert(state)?;
-                let converted_length = match length {
-                    TupleLengthAst::Ident(ident) => {
-                        let name = *ident.fragment();
-                        let const_param = state.const_param_idx(name).ok_or_else(|| {
-                            ConversionErrorKind::UndefinedConst(name.to_owned()).with_span(*ident)
-                        })?;
-                        TupleLength::Param(const_param)
-                    }
-                    TupleLengthAst::Any => TupleLength::Some { is_dynamic: false },
-                    TupleLengthAst::Dynamic => TupleLength::Some { is_dynamic: true },
-                };
-
-                ValueType::slice(element, converted_length)
-            }
+            Self::Tuple(tuple) => tuple.try_convert(state)?.into(),
+            Self::Slice(slice) => slice.try_convert(state)?.into(),
         })
     }
 }
@@ -330,11 +354,7 @@ impl<'a, Prim: PrimitiveType> FnTypeAst<'a, Prim> {
             state.insert_type_param(*param)?;
         }
 
-        let args: Result<Vec<_>, _> = self
-            .args
-            .iter()
-            .map(|arg| arg.try_convert(&state))
-            .collect();
+        let args = self.args.try_convert(&state)?;
 
         let const_params = self.len_params.iter().map(|(name, ty)| {
             (
@@ -351,7 +371,7 @@ impl<'a, Prim: PrimitiveType> FnTypeAst<'a, Prim> {
             ))
         });
 
-        let fn_type = FnType::new(args?.into(), self.return_type.try_convert(&state)?)
+        let fn_type = FnType::new(args, self.return_type.try_convert(&state)?)
             .with_len_params(const_params.collect())
             .with_type_params(type_params.collect::<Result<Vec<_>, _>>()?);
         Ok(fn_type)

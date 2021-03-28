@@ -64,25 +64,46 @@ pub enum ValueTypeAst<'a, Prim = Num> {
     /// Functional type.
     Function(Box<FnTypeAst<'a, Prim>>),
     /// Tuple type; for example, `(Num, Bool)`.
-    Tuple(Vec<ValueTypeAst<'a, Prim>>),
+    Tuple(TupleAst<'a, Prim>),
     /// Slice type; for example, `[Num]` or `[(Num, T); N]`.
-    Slice {
-        /// Element of this slice; for example, `Num` in `[Num; N]`.
-        element: Box<ValueTypeAst<'a, Prim>>,
-        /// Length of this slice; for example, `N` in `[Num; N]`.
-        length: TupleLengthAst<'a>,
-    },
+    Slice(SliceAst<'a, Prim>),
 }
 
 impl<'a, Prim: PrimitiveType> ValueTypeAst<'a, Prim> {
     fn void() -> Self {
-        Self::Tuple(vec![])
+        Self::Tuple(TupleAst {
+            start: Vec::new(),
+            middle: None,
+            end: Vec::new(),
+        })
     }
 
     /// Parses `input` as a type. This parser can be composed using `nom` infrastructure.
     pub fn parse(input: InputSpan<'a>) -> NomResult<'a, Self> {
         type_definition(input)
     }
+}
+
+/// Parsed tuple type, such as `(Num, Bool)` or `(fn() -> Num, ...[Num; _])`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TupleAst<'a, Prim = Num> {
+    /// Elements at the beginning of the tuple, e.g., `Num` and `Bool`
+    /// in `(Num, Bool, ...[T; _])`.
+    pub start: Vec<ValueTypeAst<'a, Prim>>,
+    /// Middle of the tuple, e.g., `[T; _]` in `(Num, Bool, ...[T; _])`.
+    pub middle: Option<SliceAst<'a, Prim>>,
+    /// Elements at the end of the tuple, e.g., `Bool` in `(...[Num; _], Bool)`.
+    /// Guaranteed to be empty if `middle` is not present.
+    pub end: Vec<ValueTypeAst<'a, Prim>>,
+}
+
+/// Parsed slice type, such as `[Num; N]`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SliceAst<'a, Prim = Num> {
+    /// Element of this slice; for example, `Num` in `[Num; N]`.
+    pub element: Box<ValueTypeAst<'a, Prim>>,
+    /// Length of this slice; for example, `N` in `[Num; N]`.
+    pub length: TupleLengthAst<'a>,
 }
 
 /// Parsed functional type.
@@ -118,7 +139,7 @@ pub struct FnTypeAst<'a, Prim = Num> {
     /// Type params together with their bounds. E.g., `T` in `fn<T>(T, T) -> T`.
     pub type_params: Vec<(InputSpan<'a>, TypeConstraintsAst<'a>)>,
     /// Function arguments.
-    pub args: Vec<ValueTypeAst<'a, Prim>>,
+    pub args: TupleAst<'a, Prim>,
     /// Return type of the function. Will be set to void if not declared.
     pub return_type: ValueTypeAst<'a, Prim>,
 }
@@ -180,15 +201,64 @@ fn ident(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
     )(input)
 }
 
-fn tuple_definition<Prim: PrimitiveType>(
+fn comma_separated_types<Prim: PrimitiveType>(
     input: InputSpan<'_>,
 ) -> NomResult<'_, Vec<ValueTypeAst<'_, Prim>>> {
-    let maybe_comma = opt(preceded(ws, tag_char(',')));
+    separated_list0(delimited(ws, tag_char(','), ws), type_definition)(input)
+}
+
+fn tuple_middle<Prim: PrimitiveType>(input: InputSpan<'_>) -> NomResult<'_, SliceAst<'_, Prim>> {
+    preceded(terminated(tag("..."), ws), slice_definition)(input)
+}
+
+type TupleTailAst<'a, Prim> = (SliceAst<'a, Prim>, Vec<ValueTypeAst<'a, Prim>>);
+
+fn tuple_tail<Prim: PrimitiveType>(input: InputSpan<'_>) -> NomResult<'_, TupleTailAst<'_, Prim>> {
+    tuple((
+        tuple_middle,
+        map(
+            opt(preceded(comma_sep, comma_separated_types)),
+            Option::unwrap_or_default,
+        ),
+    ))(input)
+}
+
+fn tuple_definition<Prim: PrimitiveType>(
+    input: InputSpan<'_>,
+) -> NomResult<'_, TupleAst<'_, Prim>> {
+    let maybe_comma = opt(comma_sep);
+
+    let main_parser = alt((
+        map(tuple_tail, |(middle, end)| TupleAst {
+            start: Vec::new(),
+            middle: Some(middle),
+            end,
+        }),
+        map(
+            tuple((comma_separated_types, opt(preceded(comma_sep, tuple_tail)))),
+            |(start, maybe_tail)| {
+                if let Some((middle, end)) = maybe_tail {
+                    TupleAst {
+                        start,
+                        middle: Some(middle),
+                        end,
+                    }
+                } else {
+                    TupleAst {
+                        start,
+                        middle: None,
+                        end: Vec::new(),
+                    }
+                }
+            },
+        ),
+    ));
+
     preceded(
         terminated(tag_char('('), ws),
         // Once we've encountered the opening `(`, the input *must* correspond to the parser.
         cut(terminated(
-            separated_list0(delimited(ws, tag_char(','), ws), type_definition),
+            main_parser,
             tuple((maybe_comma, ws, tag_char(')'))),
         )),
     )(input)
@@ -196,7 +266,7 @@ fn tuple_definition<Prim: PrimitiveType>(
 
 fn slice_definition<Prim: PrimitiveType>(
     input: InputSpan<'_>,
-) -> NomResult<'_, (ValueTypeAst<'_, Prim>, TupleLengthAst<'_>)> {
+) -> NomResult<'_, SliceAst<'_, Prim>> {
     let semicolon = tuple((ws, tag_char(';'), ws));
     let tuple_len = map(
         opt(preceded(semicolon, ident)),
@@ -211,7 +281,12 @@ fn slice_definition<Prim: PrimitiveType>(
         terminated(tag_char('['), ws),
         // Once we've encountered the opening `[`, the input *must* correspond to the parser.
         cut(terminated(
-            tuple((type_definition, tuple_len)),
+            map(tuple((type_definition, tuple_len)), |(element, length)| {
+                SliceAst {
+                    element: Box::new(element),
+                    length,
+                }
+            }),
             tuple((ws, tag_char(']'))),
         )),
     )(input)
@@ -307,9 +382,6 @@ fn type_definition<Prim: PrimitiveType>(
             }
         }),
         map(tuple_definition, ValueTypeAst::Tuple),
-        map(slice_definition, |(element, length)| ValueTypeAst::Slice {
-            element: Box::new(element),
-            length,
-        }),
+        map(slice_definition, ValueTypeAst::Slice),
     ))(input)
 }

@@ -104,6 +104,18 @@ impl<Prim: PrimitiveType> From<FnType<Prim>> for ValueType<Prim> {
     }
 }
 
+impl<Prim: PrimitiveType> From<Tuple<Prim>> for ValueType<Prim> {
+    fn from(tuple: Tuple<Prim>) -> ValueType<Prim> {
+        Self::Tuple(tuple)
+    }
+}
+
+impl<Prim: PrimitiveType> From<Slice<Prim>> for ValueType<Prim> {
+    fn from(slice: Slice<Prim>) -> ValueType<Prim> {
+        Self::Tuple(slice.into())
+    }
+}
+
 macro_rules! impl_from_tuple_for_value_type {
     ($($var:tt : $ty:ident),*) => {
         impl<Prim, $($ty : Into<ValueType<Prim>>,)*> From<($($ty,)*)> for ValueType<Prim>

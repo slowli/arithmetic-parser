@@ -83,7 +83,7 @@ fn simple_tuple() {
 
     assert!(rest.fragment().is_empty());
     assert_eq!(
-        elements,
+        elements.start,
         vec![
             ValueTypeAst::Prim(Num::Num),
             ValueTypeAst::Any,
@@ -96,53 +96,54 @@ fn simple_tuple() {
 #[test]
 fn simple_slice_with_length() {
     let input = InputSpan::new("[Num; N]");
-    let (rest, (element, len)) = slice_definition(input).unwrap();
+    let (rest, slice) = slice_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_eq!(element, ValueTypeAst::Prim(Num::Num));
-    assert_matches!(len, TupleLengthAst::Ident(ident) if *ident.fragment() == "N");
+    assert_eq!(*slice.element, ValueTypeAst::Prim(Num::Num));
+    assert_matches!(slice.length, TupleLengthAst::Ident(ident) if *ident.fragment() == "N");
 }
 
 #[test]
 fn simple_slice_without_length() {
     let input = InputSpan::new("[T]");
-    let (rest, (element, len)) = slice_definition::<Num>(input).unwrap();
+    let (rest, slice) = slice_definition::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_matches!(element, ValueTypeAst::Ident(ident) if *ident.fragment() == "T");
-    assert_eq!(len, TupleLengthAst::Dynamic);
+    assert_matches!(*slice.element, ValueTypeAst::Ident(ident) if *ident.fragment() == "T");
+    assert_eq!(slice.length, TupleLengthAst::Dynamic);
 }
 
 #[test]
 fn complex_slice_type() {
     let input = InputSpan::new("[(Num, Bool); M]");
-    let (rest, (element, len)) = slice_definition(input).unwrap();
+    let (rest, slice) = slice_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
     assert_eq!(
-        element,
-        ValueTypeAst::Tuple(vec![
-            ValueTypeAst::Prim(Num::Num),
-            ValueTypeAst::Prim(Num::Bool)
-        ])
+        *slice.element,
+        ValueTypeAst::Tuple(TupleAst {
+            start: vec![ValueTypeAst::Prim(Num::Num), ValueTypeAst::Prim(Num::Bool)],
+            middle: None,
+            end: vec![],
+        })
     );
-    assert_matches!(len, TupleLengthAst::Ident(ident) if *ident.fragment() == "M");
+    assert_matches!(slice.length, TupleLengthAst::Ident(ident) if *ident.fragment() == "M");
 }
 
 #[test]
 fn embedded_slice_type() {
     let input = InputSpan::new("[(Num, [Bool]); M]");
-    let (rest, (element, len)) = slice_definition::<Num>(input).unwrap();
+    let (rest, slice) = slice_definition::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_matches!(len, TupleLengthAst::Ident(ident) if *ident.fragment() == "M");
-    let first_element = match &element {
-        ValueTypeAst::Tuple(elements) => &elements[1],
-        _ => panic!("Unexpected slice element: {:?}", element),
+    assert_matches!(slice.length, TupleLengthAst::Ident(ident) if *ident.fragment() == "M");
+    let first_element = match slice.element.as_ref() {
+        ValueTypeAst::Tuple(tuple) => &tuple.start[1],
+        _ => panic!("Unexpected slice element: {:?}", slice.element),
     };
     assert_matches!(
         first_element,
-        ValueTypeAst::Slice { element, length: TupleLengthAst::Dynamic }
+        ValueTypeAst::Slice(SliceAst { element, length: TupleLengthAst::Dynamic })
             if **element == ValueTypeAst::Prim(Num::Bool)
     );
 }
@@ -155,7 +156,7 @@ fn simple_fn_type() {
     assert!(rest.fragment().is_empty());
     assert!(fn_type.len_params.is_empty());
     assert!(fn_type.type_params.is_empty());
-    assert!(fn_type.args.is_empty());
+    assert!(fn_type.args.start.is_empty());
     assert_eq!(fn_type.return_type, ValueTypeAst::Prim(Num::Num));
 }
 
@@ -167,12 +168,16 @@ fn simple_fn_type_with_args() {
     assert!(rest.fragment().is_empty());
     assert!(fn_type.len_params.is_empty());
     assert!(fn_type.type_params.is_empty());
-    assert_eq!(fn_type.args.len(), 2);
+    assert_eq!(fn_type.args.start.len(), 2);
     assert_eq!(
-        fn_type.args[0],
-        ValueTypeAst::Tuple(vec![ValueTypeAst::Prim(Num::Num); 2])
+        fn_type.args.start[0],
+        ValueTypeAst::Tuple(TupleAst {
+            start: vec![ValueTypeAst::Prim(Num::Num); 2],
+            middle: None,
+            end: vec![],
+        })
     );
-    assert_eq!(fn_type.args[1], ValueTypeAst::Prim(Num::Bool));
+    assert_eq!(fn_type.args.start[1], ValueTypeAst::Prim(Num::Bool));
     assert_eq!(fn_type.return_type, ValueTypeAst::Prim(Num::Num));
 }
 
@@ -185,8 +190,8 @@ fn fn_type_with_type_params() {
     assert!(fn_type.len_params.is_empty());
     assert_eq!(fn_type.type_params.len(), 1);
     assert_eq!(*fn_type.type_params[0].0.fragment(), "T");
-    assert_eq!(fn_type.args.len(), 3);
-    assert_matches!(fn_type.args[1], ValueTypeAst::Ident(ident) if *ident.fragment() == "T");
+    assert_eq!(fn_type.args.start.len(), 3);
+    assert_matches!(fn_type.args.start[1], ValueTypeAst::Ident(ident) if *ident.fragment() == "T");
     assert_matches!(fn_type.return_type, ValueTypeAst::Ident(ident) if *ident.fragment() == "T");
 }
 
@@ -198,17 +203,17 @@ fn fn_type_accepting_fn_arg() {
     assert!(rest.fragment().is_empty());
     assert_eq!(fn_type.len_params.len(), 1);
     assert_eq!(fn_type.type_params.len(), 1);
-    assert_eq!(fn_type.args.len(), 2);
+    assert_eq!(fn_type.args.start.len(), 2);
     assert_eq!(fn_type.return_type, ValueTypeAst::Prim(Num::Bool));
 
-    let inner_fn = match &fn_type.args[1] {
+    let inner_fn = match &fn_type.args.start[1] {
         ValueTypeAst::Function(inner_fn) => inner_fn.as_ref(),
         ty => panic!("Unexpected arg type: {:?}", ty),
     };
     assert!(inner_fn.len_params.is_empty());
     assert!(inner_fn.type_params.is_empty());
     assert_matches!(
-        inner_fn.args.as_slice(),
+        inner_fn.args.start.as_slice(),
         [ValueTypeAst::Ident(ident)] if *ident.fragment() == "T"
     );
     assert_eq!(inner_fn.return_type, ValueTypeAst::Prim(Num::Bool));
@@ -222,7 +227,7 @@ fn fn_type_returning_fn_arg() {
     assert!(rest.fragment().is_empty());
     assert!(fn_type.len_params.is_empty());
     assert!(fn_type.type_params.is_empty());
-    assert_eq!(fn_type.args, vec![ValueTypeAst::Prim(Num::Num)]);
+    assert_eq!(fn_type.args.start, vec![ValueTypeAst::Prim(Num::Num)]);
 
     let returned_fn = match fn_type.return_type {
         ValueTypeAst::Function(returned_fn) => *returned_fn,
@@ -230,6 +235,6 @@ fn fn_type_returning_fn_arg() {
     };
     assert!(returned_fn.len_params.is_empty());
     assert!(returned_fn.type_params.is_empty());
-    assert_eq!(returned_fn.args, vec![ValueTypeAst::Prim(Num::Bool)]);
+    assert_eq!(returned_fn.args.start, vec![ValueTypeAst::Prim(Num::Bool)]);
     assert_eq!(returned_fn.return_type, ValueTypeAst::Prim(Num::Num));
 }

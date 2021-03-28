@@ -50,6 +50,7 @@ impl TupleLength {
     }
 }
 
+/// FIXME
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompoundTupleLength {
     // Invariant: contains at least two items.
@@ -99,6 +100,15 @@ impl CompoundTupleLength {
             0 => TupleLength::Exact(0),
             1 => var.pop().unwrap(),
             _ => TupleLength::Compound(Self::new(var)),
+        }
+    }
+
+    pub(crate) fn as_exact_and_var(&self) -> Option<(usize, &TupleLength)> {
+        match self.items.as_slice() {
+            [TupleLength::Exact(exact), var] | [var, TupleLength::Exact(exact)] => {
+                Some((*exact, var))
+            }
+            _ => None,
         }
     }
 }

@@ -251,27 +251,121 @@ fn variable_scoping() {
 }
 
 #[test]
-#[ignore] // FIXME
-fn unsupported_destructuring_for_tuple() {
-    let code = "(x, ...ys) = (1, 2, 3);";
+fn destructuring_for_tuple_on_assignment() {
+    let code = r#"
+        (x, ...ys) = (1, 2, 3);
+        (...zs, fn, flag) = (4, 5, 6, |x| x + 3, 1 == 1);
+    "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block).unwrap_err();
+    type_env.process_statements(&block).unwrap();
 
-    assert_eq!(*err.span().fragment(), "...ys");
-    assert_matches!(err.kind(), TypeErrorKind::UnsupportedDestructure);
+    assert_eq!(type_env["x"], ValueType::NUM);
+    assert_eq!(
+        type_env["ys"],
+        ValueType::slice(ValueType::NUM, TupleLength::Exact(2))
+    );
+    assert_eq!(
+        type_env["zs"],
+        ValueType::slice(ValueType::NUM, TupleLength::Exact(3))
+    );
+    assert_matches!(type_env["fn"], ValueType::Function(_));
+    assert_eq!(type_env["flag"], ValueType::BOOL);
 }
 
 #[test]
-#[ignore] // FIXME
-fn unsupported_destructuring_for_fn_args() {
-    let code = "foo = |y, ...xs| xs + y;";
+fn destructuring_with_unnamed_middle() {
+    let code = r#"
+        (x, y, ...) = (1, 2, || 3);
+        (..., z) = (1 == 1,);
+    "#;
     let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.process_statements(&block).unwrap();
+
+    assert_eq!(type_env["x"], ValueType::NUM);
+    assert_eq!(type_env["y"], ValueType::NUM);
+    assert_eq!(type_env["z"], ValueType::BOOL);
+}
+
+#[test]
+fn destructuring_error_on_assignment() {
+    let bogus_code = "(x, y, ...zs) = (1,);";
+    let block = F32Grammar::parse_statements(bogus_code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_eq!(*err.span().fragment(), "...xs");
-    assert_matches!(err.kind(), TypeErrorKind::UnsupportedDestructure);
+    assert_matches!(
+        err.kind(),
+        TypeErrorKind::TupleLenMismatch { lhs, rhs: TupleLength::Exact(1), .. }
+            if lhs.to_string() == "_ + 2"
+    );
+}
+
+#[test]
+fn destructuring_for_fn_args() {
+    let code = r#"
+        shift = |shift: Num, ...xs| xs + shift;
+        shift(1, 2, 3, 4) == (3, 4, 5);
+        shift(1, (2, 3), (4, 5)) == ((3, 4), (5, 6));
+        3.shift(5)
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let res = type_env.process_statements(&block).unwrap();
+
+    assert_eq!(
+        type_env["shift"].to_string(),
+        "fn<len N; T: Lin>(Num, ...[T; N]) -> [T; N]"
+    );
+    assert_eq!(res.to_string(), "(Num)");
+
+    let bogus_code = "shift(1, 2, (3, 4))";
+    let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
+    let err = type_env.process_statements(&bogus_block).unwrap_err();
+    assert_matches!(err.kind(), TypeErrorKind::IncompatibleTypes(..));
+
+    let bogus_code = "shift(1, 1 == 2, 1 == 1)";
+    let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
+    let err = type_env.process_statements(&bogus_block).unwrap_err();
+    assert_matches!(err.kind(), TypeErrorKind::FailedConstraint { .. });
+
+    let bogus_code = "(x, _, _) = 1.shift(2, 3);";
+    let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
+    let err = type_env.process_statements(&bogus_block).unwrap_err();
+    assert_matches!(
+        err.kind(),
+        TypeErrorKind::TupleLenMismatch {
+            lhs: TupleLength::Exact(3),
+            rhs: TupleLength::Exact(2),
+            ..
+        }
+    )
+}
+
+#[test]
+fn exact_lengths_for_gathering_fn() {
+    let code = r#"
+        gather = |...xs| xs;
+        (x, y) = gather(1, 2);
+        (head, ...) = gather(1 == 1, 1 == 2, 1 == 3);
+        (_, ...tail) = gather(4, 5, 6);
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.process_statements(&block).unwrap();
+
+    assert_eq!(
+        type_env["gather"].to_string(),
+        "fn<len N; T>(...[T; N]) -> [T; N]"
+    );
+    assert_eq!(type_env["x"], ValueType::NUM);
+    assert_eq!(type_env["y"], ValueType::NUM);
+    assert_eq!(type_env["head"], ValueType::BOOL);
+    assert_eq!(
+        type_env["tail"],
+        ValueType::NUM.repeat(TupleLength::Exact(2))
+    );
 }
 
 #[test]

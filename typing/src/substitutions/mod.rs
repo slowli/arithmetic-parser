@@ -284,8 +284,11 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 Ok(resolved_lhs)
             }
 
-            (TupleLength::Compound(_), _) | (_, TupleLength::Compound(_)) => {
-                todo!()
+            (TupleLength::Compound(_), _) => {
+                self.unify_compound_length(resolved_lhs, resolved_rhs, true, context)
+            }
+            (_, TupleLength::Compound(_)) => {
+                self.unify_compound_length(resolved_lhs, resolved_rhs, false, context)
             }
 
             // Dynamic length can be unified at LHS position with anything other than other
@@ -309,6 +312,60 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         }
     }
 
+    fn unify_compound_length(
+        &mut self,
+        resolved_lhs: TupleLength,
+        resolved_rhs: TupleLength,
+        is_lhs: bool,
+        context: TupleLenMismatchContext,
+    ) -> Result<TupleLength, TypeErrorKind<Prim>> {
+        let (compound_len, other_len) = if is_lhs {
+            (&resolved_lhs, &resolved_rhs)
+        } else {
+            (&resolved_rhs, &resolved_lhs)
+        };
+        let compound_len = match compound_len {
+            TupleLength::Compound(compound) => compound,
+            _ => unreachable!(),
+        };
+
+        let (exact, var) = compound_len
+            .as_exact_and_var()
+            .ok_or(TypeErrorKind::UnsupportedDestructure)?;
+
+        match other_len {
+            TupleLength::Exact(other_exact) if *other_exact >= exact => {
+                if is_lhs {
+                    self.unify_lengths(var, &TupleLength::Exact(other_exact - exact), context)?;
+                } else {
+                    self.unify_lengths(&TupleLength::Exact(other_exact - exact), var, context)?;
+                }
+                return Ok(TupleLength::Exact(*other_exact));
+            }
+
+            TupleLength::Compound(other_compound_len) => {
+                let (other_exact, other_var) = other_compound_len
+                    .as_exact_and_var()
+                    .ok_or(TypeErrorKind::UnsupportedDestructure)?;
+                if exact == other_exact {
+                    return if is_lhs {
+                        self.unify_lengths(var, other_var, context)
+                    } else {
+                        self.unify_lengths(other_var, var, context)
+                    };
+                }
+            }
+
+            _ => { /* Do nothing. */ }
+        }
+
+        Err(TypeErrorKind::TupleLenMismatch {
+            lhs: resolved_lhs,
+            rhs: resolved_rhs,
+            context,
+        })
+    }
+
     fn unify_fn_types(
         &mut self,
         lhs: &FnType<Prim>,
@@ -317,8 +374,6 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         if lhs.is_parametric() {
             return Err(TypeErrorKind::UnsupportedParam);
         }
-
-        // FIXME: Check if the argument number matches. If not, we can error immediately.
 
         let instantiated_lhs = self.instantiate_function(lhs);
         let instantiated_rhs = self.instantiate_function(rhs);

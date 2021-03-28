@@ -10,7 +10,7 @@ mod tuple;
 pub(crate) use self::fn_type::{LenParamDescription, TypeParamDescription};
 pub use self::{
     fn_type::{FnType, FnTypeBuilder},
-    tuple::{LengthKind, Slice, Tuple, TupleLength},
+    tuple::{CompoundTupleLength, LengthKind, Slice, Tuple, TupleLength},
 };
 
 /// Enumeration encompassing all types supported by the type system.

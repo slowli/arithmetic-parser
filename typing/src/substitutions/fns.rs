@@ -6,7 +6,7 @@ use crate::types::LenParamDescription;
 use crate::{
     types::TypeParamDescription,
     visit::{self, Visit, VisitMut},
-    FnType, PrimitiveType, Substitutions, Tuple, TupleLength, ValueType,
+    FnType, PrimitiveType, Slice, Substitutions, Tuple, TupleLength, ValueType,
 };
 
 impl<Prim: PrimitiveType> FnType<Prim> {
@@ -194,7 +194,9 @@ impl FnTypeTree {
         base.type_params.sort_unstable_by_key(|(idx, _)| *idx);
 
         let dynamic_lengths = substitutions.dyn_lengths();
-        let vararg_length = base.args.middle_len_mut().and_then(|len| match len {
+
+        let (_, vararg, _) = base.args.parts();
+        let vararg_length = vararg.map(Slice::len).and_then(|len| match len {
             TupleLength::Var(idx) => Some(*idx),
             _ => None,
         });

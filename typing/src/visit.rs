@@ -28,7 +28,7 @@ use crate::{FnType, PrimitiveType, Tuple, TupleLength, ValueType};
 ///     }
 ///
 ///     fn visit_tuple(&mut self, tuple: &'a Tuple<Prim>) {
-///         let len = tuple.middle().map(Slice::len);
+///         let len = tuple.parts().1.map(Slice::len);
 ///         if let Some(TupleLength::Param(idx)) = len {
 ///             *self.lengths.entry(*idx).or_default() += 1;
 ///         }
@@ -220,8 +220,8 @@ where
     Prim: PrimitiveType,
     V: VisitMut<Prim> + ?Sized,
 {
-    if let Some(middle_len) = tuple.middle_len_mut() {
-        visitor.visit_middle_len_mut(middle_len);
+    if let Some(middle) = tuple.parts_mut().1 {
+        visitor.visit_middle_len_mut(middle.len_mut());
     }
     for ty in tuple.element_types_mut() {
         visitor.visit_type_mut(ty);

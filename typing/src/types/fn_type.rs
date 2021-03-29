@@ -49,8 +49,8 @@ impl<C> TypeParamDescription<C> {
 /// );
 ///
 /// assert_matches!(
-///     fn_type.args().start(),
-///     [ValueType::Tuple(t)]
+///     fn_type.args().parts(),
+///     ([ValueType::Tuple(t)], None, [])
 ///         if t.as_slice().map(Slice::element) == Some(&ValueType::NUM)
 /// );
 /// # Ok(())

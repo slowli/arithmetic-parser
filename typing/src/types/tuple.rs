@@ -127,8 +127,8 @@ pub enum LengthKind {
 
 /// Tuple type.
 ///
-/// Most generally, a tuple type consists of three fragments: [`start`](Self::start()),
-/// [`middle`](Self::middle()) and [`end`](Self::end()). Types at the start and end are
+/// Most generally, a tuple type consists of three fragments: *start*,
+/// *middle* and *end*. Types at the start and end are
 /// heterogeneous, while the middle always contains items of the same type (but the number
 /// of these items can generally vary). A [`Slice`] is essentially a partial case of a tuple type;
 /// i.e., a type with empty start and end.
@@ -140,15 +140,16 @@ pub enum LengthKind {
 ///
 /// ```
 /// # use arithmetic_typing::{Slice, Tuple, TupleLength, ValueType};
+/// # use assert_matches::assert_matches;
 /// let simple_tuple = Tuple::from(vec![ValueType::NUM, ValueType::BOOL]);
-/// assert_eq!(simple_tuple.start().len(), 2);
+/// assert_matches!(simple_tuple.parts(), ([_, _], None, []));
 /// assert!(simple_tuple.as_slice().is_none());
 /// assert_eq!(simple_tuple.to_string(), "(Num, Bool)");
 ///
 /// let slice_tuple = Tuple::from(
 ///     Slice::new(ValueType::NUM, TupleLength::Param(0)),
 /// );
-/// assert!(slice_tuple.start().is_empty());
+/// assert_matches!(slice_tuple.parts(), ([], Some(_), []));
 /// assert!(slice_tuple.as_slice().is_some());
 /// assert_eq!(slice_tuple.to_string(), "[Num; N]");
 ///
@@ -157,9 +158,7 @@ pub enum LengthKind {
 ///     Slice::new(ValueType::NUM, TupleLength::Param(0)),
 ///     vec![ValueType::BOOL, ValueType::Some],
 /// );
-/// assert_eq!(complex_tuple.start().len(), 1);
-/// assert!(slice_tuple.as_slice().is_some());
-/// assert_eq!(complex_tuple.end().len(), 2);
+/// assert_matches!(complex_tuple.parts(), ([_], Some(_), [_, _]));
 /// assert_eq!(complex_tuple.to_string(), "(Num, ...[Num; N], Bool, _)");
 /// ```
 #[derive(Debug, Clone)]
@@ -284,23 +283,22 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
             .map_or(&ValueType::Var(0), |middle| middle.element.as_ref())
     }
 
-    pub(crate) fn middle_len_mut(&mut self) -> Option<&mut TupleLength> {
-        self.middle.as_mut().map(|middle| &mut middle.length)
+    /// Returns shared references to the parts comprising this tuple: start, middle, and end.
+    #[allow(clippy::type_complexity)]
+    pub fn parts(&self) -> (&[ValueType<Prim>], Option<&Slice<Prim>>, &[ValueType<Prim>]) {
+        (&self.start, self.middle.as_ref(), &self.end)
     }
 
-    /// Returns types from the start of this tuple.
-    pub fn start(&self) -> &[ValueType<Prim>] {
-        &self.start
-    }
-
-    /// Returns the middle portion of this tuple, or `None` if it is not defined.
-    pub fn middle(&self) -> Option<&Slice<Prim>> {
-        self.middle.as_ref()
-    }
-
-    /// Returns types from the end of this tuple.
-    pub fn end(&self) -> &[ValueType<Prim>] {
-        &self.end
+    /// Returns exclusive references to the parts comprising this tuple: start, middle, and end.
+    #[allow(clippy::type_complexity)]
+    pub fn parts_mut(
+        &mut self,
+    ) -> (
+        &mut [ValueType<Prim>],
+        Option<&mut Slice<Prim>>,
+        &mut [ValueType<Prim>],
+    ) {
+        (&mut self.start, self.middle.as_mut(), &mut self.end)
     }
 
     /// Returns the length of this tuple.
@@ -468,6 +466,10 @@ impl<Prim: PrimitiveType> Slice<Prim> {
     /// Returns the length of this slice.
     pub fn len(&self) -> &TupleLength {
         &self.length
+    }
+
+    pub(crate) fn len_mut(&mut self) -> &mut TupleLength {
+        &mut self.length
     }
 
     /// Returns `true` iff this slice is definitely empty.

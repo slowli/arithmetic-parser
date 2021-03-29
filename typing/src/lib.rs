@@ -125,6 +125,7 @@ mod error;
 mod substitutions;
 mod type_map;
 mod types;
+pub mod visit;
 
 pub use self::{
     env::TypeEnvironment,

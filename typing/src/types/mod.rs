@@ -1,7 +1,5 @@
 //! Base types, such as `ValueType` and `FnType`.
 
-// TODO: consider visitor traits
-
 use std::{borrow::Cow, fmt};
 
 use crate::{arith::WithBoolean, Num, PrimitiveType};

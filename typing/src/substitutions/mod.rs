@@ -3,8 +3,9 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    arith::TypeConstraints, FnType, PrimitiveType, Tuple, TupleLenMismatchContext, TupleLength,
-    TypeErrorKind, ValueType,
+    arith::TypeConstraints,
+    visit::{self, Visit, VisitMut},
+    FnType, PrimitiveType, Tuple, TupleLenMismatchContext, TupleLength, TypeErrorKind, ValueType,
 };
 
 mod fns;
@@ -132,53 +133,12 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         &mut self,
         ty: &mut ValueType<Prim>,
     ) -> Result<(), TypeErrorKind<Prim>> {
-        match ty {
-            ValueType::Prim(_) | ValueType::Var(_) => {
-                // Do nothing.
-            }
-
-            // Checked previously when considering a function.
-            ValueType::Param(_) => unreachable!(),
-
-            ValueType::Some => {
-                *ty = ValueType::Var(self.type_var_count);
-                self.type_var_count += 1;
-            }
-
-            ValueType::Function(fn_type) => {
-                if fn_type.is_parametric() {
-                    // Can occur, for example, with function declarations:
-                    //
-                    // ```
-                    // identity: fn<T>(T) -> T = |x| x;
-                    // ```
-                    //
-                    // We don't handle such cases yet, because unifying functions with type params
-                    // is quite difficult.
-                    return Err(TypeErrorKind::UnsupportedParam);
-                }
-                self.assign_new_type_for_tuple(&mut fn_type.args)?;
-                self.assign_new_type(&mut fn_type.return_type)?;
-            }
-
-            ValueType::Tuple(tuple) => {
-                self.assign_new_type_for_tuple(tuple)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn assign_new_type_for_tuple(
-        &mut self,
-        tuple: &mut Tuple<Prim>,
-    ) -> Result<(), TypeErrorKind<Prim>> {
-        if let Some(middle_len) = tuple.middle_len_mut() {
-            self.assign_new_length(middle_len);
-        }
-        for element in tuple.element_types_mut() {
-            self.assign_new_type(element)?;
-        }
-        Ok(())
+        let mut assigner = TypeAssigner {
+            substitutions: self,
+            outcome: Ok(()),
+        };
+        assigner.visit_type_mut(ty);
+        assigner.outcome
     }
 
     pub(crate) fn assign_new_length(&mut self, length: &mut TupleLength) {
@@ -444,34 +404,6 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         instantiated_fn_type
     }
 
-    /// Checks if a type variable with the specified index is present in `ty`. This method
-    /// is used to check that types are not recursive.
-    fn check_occurrence(&self, var_idx: usize, ty: &ValueType<Prim>) -> bool {
-        match ty {
-            ValueType::Var(i) if *i == var_idx => true,
-
-            ValueType::Var(i) => self
-                .eqs
-                .get(i)
-                .map_or(false, |subst| self.check_occurrence(var_idx, subst)),
-
-            ValueType::Tuple(tuple) => self.check_occurrence_for_tuple(var_idx, tuple),
-
-            ValueType::Function(fn_type) => {
-                self.check_occurrence(var_idx, &fn_type.return_type)
-                    || self.check_occurrence_for_tuple(var_idx, &fn_type.args)
-            }
-
-            _ => false,
-        }
-    }
-
-    fn check_occurrence_for_tuple(&self, var_idx: usize, tuple: &Tuple<Prim>) -> bool {
-        tuple
-            .element_types()
-            .any(|element| self.check_occurrence(var_idx, element))
-    }
-
     /// Removes excessive information about type vars. This method is used when types are
     /// provided to `TypeError`.
     pub(crate) fn sanitize_type(&self, fixed_idx: usize, ty: &ValueType<Prim>) -> ValueType<Prim> {
@@ -510,7 +442,14 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             true
         });
 
-        if self.check_occurrence(var_idx, ty) {
+        let mut checker = OccurrenceChecker {
+            substitutions: self,
+            var_idx,
+            outcome: false,
+        };
+        checker.visit_type(ty);
+
+        if checker.outcome {
             Err(TypeErrorKind::RecursiveType(
                 self.sanitize_type(var_idx, ty),
             ))
@@ -535,5 +474,77 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         let called_fn_type = FnType::new(arg_types.into(), return_type.clone());
         self.unify(&called_fn_type.into(), definition)
             .map(|()| return_type)
+    }
+}
+
+/// Checks if a type variable with the specified index is present in `ty`. This method
+/// is used to check that types are not recursive.
+#[derive(Debug)]
+struct OccurrenceChecker<'a, Prim: PrimitiveType> {
+    substitutions: &'a Substitutions<Prim>,
+    var_idx: usize,
+    outcome: bool,
+}
+
+impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for OccurrenceChecker<'a, Prim> {
+    fn visit_type(&mut self, ty: &'a ValueType<Prim>) {
+        if self.outcome {
+            // Skip recursion; we already have our answer at this point.
+        } else {
+            visit::visit_type(self, ty);
+        }
+    }
+
+    fn visit_var(&mut self, index: usize) {
+        if index == self.var_idx {
+            self.outcome = true;
+        } else if let Some(ty) = self.substitutions.eqs.get(&index) {
+            self.visit_type(ty);
+        }
+    }
+}
+
+#[derive(Debug)]
+struct TypeAssigner<'a, Prim: PrimitiveType> {
+    substitutions: &'a mut Substitutions<Prim>,
+    outcome: Result<(), TypeErrorKind<Prim>>,
+}
+
+impl<Prim: PrimitiveType> VisitMut<Prim> for TypeAssigner<'_, Prim> {
+    fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
+        if self.outcome.is_err() {
+            return;
+        }
+
+        match ty {
+            ValueType::Some => {
+                *ty = ValueType::Var(self.substitutions.type_var_count);
+                self.substitutions.type_var_count += 1;
+            }
+            _ => visit::visit_type_mut(self, ty),
+        }
+    }
+
+    fn visit_tuple_mut(&mut self, tuple: &mut Tuple<Prim>) {
+        if let Some(middle_len) = tuple.middle_len_mut() {
+            self.substitutions.assign_new_length(middle_len);
+        }
+        visit::visit_tuple_mut(self, tuple);
+    }
+
+    fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {
+        if function.is_parametric() {
+            // Can occur, for example, with function declarations:
+            //
+            // ```
+            // identity: fn<T>(T) -> T = |x| x;
+            // ```
+            //
+            // We don't handle such cases yet, because unifying functions with type params
+            // is quite difficult.
+            self.outcome = Err(TypeErrorKind::UnsupportedParam);
+        } else {
+            visit::visit_function_mut(self, function);
+        }
     }
 }

@@ -4,8 +4,9 @@ use std::collections::{HashMap, HashSet};
 
 use crate::types::LenParamDescription;
 use crate::{
-    types::TypeParamDescription, FnType, PrimitiveType, Substitutions, Tuple, TupleLength,
-    ValueType,
+    types::TypeParamDescription,
+    visit::{self, Visit, VisitMut},
+    FnType, PrimitiveType, Substitutions, Tuple, TupleLength, ValueType,
 };
 
 impl<Prim: PrimitiveType> FnType<Prim> {
@@ -90,87 +91,60 @@ struct FnTypeTree {
 // TODO: add unit tests covering main methods
 impl FnTypeTree {
     fn new<Prim: PrimitiveType>(base: &FnType<Prim>) -> Self {
-        fn recurse<P: PrimitiveType>(
-            children: &mut Vec<FnTypeTree>,
-            type_vars: &mut HashMap<usize, VarQuantity>,
-            const_vars: &mut HashMap<usize, VarQuantity>,
-            ty: &ValueType<P>,
-        ) {
-            match ty {
-                ValueType::Var(idx) => {
-                    type_vars
-                        .entry(*idx)
+        #[derive(Debug, Default)]
+        struct VarExtractor {
+            children: Vec<FnTypeTree>,
+            type_vars: HashMap<usize, VarQuantity>,
+            const_vars: HashMap<usize, VarQuantity>,
+        }
+
+        impl<'ast, P: PrimitiveType> Visit<'ast, P> for VarExtractor {
+            fn visit_var(&mut self, index: usize) {
+                self.type_vars
+                    .entry(index)
+                    .and_modify(|qty| *qty = VarQuantity::Repeated)
+                    .or_insert(VarQuantity::UniqueVar);
+            }
+
+            fn visit_tuple(&mut self, tuple: &'ast Tuple<P>) {
+                // FIXME: handle compound lengths
+                if let TupleLength::Var(idx) = tuple.len() {
+                    self.const_vars
+                        .entry(idx)
                         .and_modify(|qty| *qty = VarQuantity::Repeated)
                         .or_insert(VarQuantity::UniqueVar);
                 }
 
-                ValueType::Tuple(tuple) => {
-                    recurse_for_tuple(children, type_vars, const_vars, tuple)
+                visit::visit_tuple(self, tuple);
+            }
+
+            fn visit_function(&mut self, function: &'ast FnType<P>) {
+                let child_tree = FnTypeTree::new(function);
+
+                for &type_var in child_tree.all_type_vars.keys() {
+                    self.type_vars
+                        .entry(type_var)
+                        .and_modify(|qty| *qty = VarQuantity::Repeated)
+                        .or_insert(VarQuantity::UniqueFunction);
+                }
+                for &const_var in child_tree.all_const_vars.keys() {
+                    self.const_vars
+                        .entry(const_var)
+                        .and_modify(|qty| *qty = VarQuantity::Repeated)
+                        .or_insert(VarQuantity::UniqueFunction);
                 }
 
-                ValueType::Function(fn_type) => {
-                    let child_tree = FnTypeTree::new(fn_type);
-
-                    for &type_var in child_tree.all_type_vars.keys() {
-                        type_vars
-                            .entry(type_var)
-                            .and_modify(|qty| *qty = VarQuantity::Repeated)
-                            .or_insert(VarQuantity::UniqueFunction);
-                    }
-                    for &const_var in child_tree.all_const_vars.keys() {
-                        const_vars
-                            .entry(const_var)
-                            .and_modify(|qty| *qty = VarQuantity::Repeated)
-                            .or_insert(VarQuantity::UniqueFunction);
-                    }
-
-                    children.push(child_tree);
-                }
-
-                _ => { /* Do nothing. */ }
+                self.children.push(child_tree);
             }
         }
 
-        fn recurse_for_tuple<P: PrimitiveType>(
-            children: &mut Vec<FnTypeTree>,
-            type_vars: &mut HashMap<usize, VarQuantity>,
-            const_vars: &mut HashMap<usize, VarQuantity>,
-            tuple: &Tuple<P>,
-        ) {
-            for element in tuple.element_types() {
-                recurse(children, type_vars, const_vars, element);
-            }
-
-            // FIXME: handle compound lengths
-            if let TupleLength::Var(idx) = tuple.len() {
-                const_vars
-                    .entry(idx)
-                    .and_modify(|qty| *qty = VarQuantity::Repeated)
-                    .or_insert(VarQuantity::UniqueVar);
-            }
-        }
-
-        dbg!(base);
-        let mut children = vec![];
-        let mut all_type_vars = HashMap::new();
-        let mut all_const_vars = HashMap::new();
-        recurse_for_tuple(
-            &mut children,
-            &mut all_type_vars,
-            &mut all_const_vars,
-            &base.args,
-        );
-        recurse(
-            &mut children,
-            &mut all_type_vars,
-            &mut all_const_vars,
-            &base.return_type,
-        );
+        let mut extractor = VarExtractor::default();
+        visit::visit_function(&mut extractor, base);
 
         Self {
-            children,
-            all_type_vars,
-            all_const_vars,
+            children: extractor.children,
+            all_type_vars: extractor.type_vars,
+            all_const_vars: extractor.const_vars,
             type_params: HashSet::new(),
             const_params: HashSet::new(),
         }
@@ -238,34 +212,18 @@ impl FnTypeTree {
         base: &mut FnType<Prim>,
         substitutions: &Substitutions<Prim>,
     ) {
-        fn recurse<P: PrimitiveType>(
-            reversed_children: &mut Vec<FnTypeTree>,
-            ty: &mut ValueType<P>,
-            substitutions: &Substitutions<P>,
-        ) {
-            match ty {
-                ValueType::Tuple(tuple) => {
-                    recurse_for_tuple(reversed_children, tuple, substitutions);
-                }
-
-                ValueType::Function(fn_type) => {
-                    reversed_children
-                        .pop()
-                        .expect("Missing child")
-                        .merge_into(fn_type, substitutions);
-                }
-
-                _ => { /* Do nothing. */ }
-            }
+        #[derive(Debug)]
+        struct Merger<'a, P: PrimitiveType> {
+            reversed_children: Vec<FnTypeTree>,
+            substitutions: &'a Substitutions<P>,
         }
 
-        fn recurse_for_tuple<P: PrimitiveType>(
-            reversed_children: &mut Vec<FnTypeTree>,
-            tuple: &mut Tuple<P>,
-            substitutions: &Substitutions<P>,
-        ) {
-            for element in tuple.element_types_mut() {
-                recurse(reversed_children, element, substitutions);
+        impl<P: PrimitiveType> VisitMut<P> for Merger<'_, P> {
+            fn visit_function_mut(&mut self, function: &mut FnType<P>) {
+                self.reversed_children
+                    .pop()
+                    .expect("Missing child")
+                    .merge_into(function, self.substitutions);
             }
         }
 
@@ -300,8 +258,11 @@ impl FnTypeTree {
 
         let mut reversed_children = self.children;
         reversed_children.reverse();
-        recurse_for_tuple(&mut reversed_children, &mut base.args, substitutions);
-        recurse(&mut reversed_children, &mut base.return_type, substitutions);
+        let mut merger = Merger {
+            reversed_children,
+            substitutions,
+        };
+        visit::visit_function_mut(&mut merger, base);
     }
 }
 

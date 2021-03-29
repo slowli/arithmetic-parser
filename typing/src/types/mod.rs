@@ -42,7 +42,7 @@ pub use self::{
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// let slice: ValueType = "[(Bool, Num); _]".parse()?;
-/// assert_matches!(slice, ValueType::Slice { .. });
+/// assert_matches!(slice, ValueType::Tuple(t) if t.as_slice().is_some());
 /// let fn_type: ValueType = "fn<len N>([(Bool, Num); N]) -> Num".parse()?;
 /// assert_matches!(fn_type, ValueType::Function(_));
 /// # Ok(())

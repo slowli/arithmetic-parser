@@ -222,7 +222,7 @@ impl<'a, Prim: PrimitiveType> TupleAst<'a, Prim> {
             .iter()
             .map(|element| element.try_convert(state))
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(Tuple::new(start, middle, end))
+        Ok(Tuple::from_parts(start, middle, end))
     }
 }
 

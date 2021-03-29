@@ -44,9 +44,9 @@ pub use self::conversion::{ConversionError, ConversionErrorKind};
 ///     ValueTypeAst::Tuple(elements) => elements,
 ///     _ => unreachable!(),
 /// };
-/// assert_eq!(elements[0], ValueTypeAst::Prim(Num::Num));
+/// assert_eq!(elements.start[0], ValueTypeAst::Prim(Num::Num));
 /// assert_matches!(
-///     &elements[1],
+///     &elements.start[1],
 ///     ValueTypeAst::Function(f) if f.type_params.len() == 1
 /// );
 /// # Ok(())
@@ -126,7 +126,7 @@ pub struct SliceAst<'a, Prim = Num> {
 /// assert!(rest.fragment().is_empty());
 /// assert_eq!(ty.len_params.len(), 1);
 /// assert!(ty.type_params.is_empty());
-/// assert_matches!(ty.args.as_slice(), [ValueTypeAst::Slice { .. }]);
+/// assert_matches!(ty.args.start.as_slice(), [ValueTypeAst::Slice(_)]);
 /// assert_eq!(ty.return_type, ValueTypeAst::Prim(Num::Num));
 /// # Ok(())
 /// # }

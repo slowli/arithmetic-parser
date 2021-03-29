@@ -517,7 +517,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeAssigner<'_, Prim> {
         }
     }
 
-    fn visit_len_mut(&mut self, len: &mut TupleLength) {
+    fn visit_middle_len_mut(&mut self, len: &mut TupleLength) {
         self.substitutions.assign_new_length(len);
     }
 
@@ -553,7 +553,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeResolver<'_, Prim> {
         visit::visit_type_mut(self, ty);
     }
 
-    fn visit_len_mut(&mut self, len: &mut TupleLength) {
+    fn visit_middle_len_mut(&mut self, len: &mut TupleLength) {
         *len = self.substitutions.resolve_len(len);
     }
 }

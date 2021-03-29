@@ -38,7 +38,7 @@ impl<C> TypeParamDescription<C> {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_typing::{LengthKind, FnType, ValueType};
+/// # use arithmetic_typing::{LengthKind, FnType, Slice, ValueType};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// let fn_type: FnType = "fn<len N>([Num; N]) -> Num".parse()?;
@@ -49,8 +49,9 @@ impl<C> TypeParamDescription<C> {
 /// );
 ///
 /// assert_matches!(
-///     fn_type.args().as_slice(),
-///     [ValueType::Slice { element, .. }] if **element == ValueType::NUM
+///     fn_type.args().start(),
+///     [ValueType::Tuple(t)]
+///         if t.as_slice().map(Slice::element) == Some(&ValueType::NUM)
 /// );
 /// # Ok(())
 /// # }

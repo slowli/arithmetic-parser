@@ -50,7 +50,7 @@ impl TupleLength {
     }
 }
 
-/// FIXME
+/// Compound tuple length.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompoundTupleLength {
     // Invariant: contains at least two items.
@@ -124,6 +124,42 @@ pub enum LengthKind {
 }
 
 /// Tuple type.
+///
+/// Most generally, a tuple type consists of three fragments: [`start`](Self::start()),
+/// [`middle`](Self::middle()) and [`end`](Self::end()). Types at the start and end are
+/// heterogeneous, while the middle always contains items of the same type (but the number
+/// of these items can generally vary). A [`Slice`] is essentially a partial case of a tuple type;
+/// i.e., a type with empty start and end.
+///
+/// # Examples
+///
+/// Simple tuples can be created using the [`From`] trait. Complex tuples can be created
+/// via [`Self::new()`].
+///
+/// ```
+/// # use arithmetic_typing::{Slice, Tuple, TupleLength, ValueType};
+/// let simple_tuple = Tuple::from(vec![ValueType::NUM, ValueType::BOOL]);
+/// assert_eq!(simple_tuple.start().len(), 2);
+/// assert!(simple_tuple.as_slice().is_none());
+/// assert_eq!(simple_tuple.to_string(), "(Num, Bool)");
+///
+/// let slice_tuple = Tuple::from(
+///     Slice::new(ValueType::NUM, TupleLength::Param(0)),
+/// );
+/// assert!(slice_tuple.start().is_empty());
+/// assert!(slice_tuple.as_slice().is_some());
+/// assert_eq!(slice_tuple.to_string(), "[Num; N]");
+///
+/// let complex_tuple = Tuple::new(
+///     vec![ValueType::NUM],
+///     Slice::new(ValueType::NUM, TupleLength::Param(0)),
+///     vec![ValueType::BOOL, ValueType::Some],
+/// );
+/// assert_eq!(complex_tuple.start().len(), 1);
+/// assert!(slice_tuple.as_slice().is_some());
+/// assert_eq!(complex_tuple.end().len(), 2);
+/// assert_eq!(complex_tuple.to_string(), "(Num, ...[Num; N], Bool, _)");
+/// ```
 #[derive(Debug, Clone)]
 pub struct Tuple<Prim: PrimitiveType = Num> {
     start: Vec<ValueType<Prim>>,
@@ -156,12 +192,21 @@ impl<Prim: PrimitiveType> fmt::Display for Tuple<Prim> {
 }
 
 impl<Prim: PrimitiveType> Tuple<Prim> {
-    pub(crate) fn new(
+    pub(crate) fn from_parts(
         start: Vec<ValueType<Prim>>,
         middle: Option<Slice<Prim>>,
         end: Vec<ValueType<Prim>>,
     ) -> Self {
         Self { start, middle, end }
+    }
+
+    /// Creates a new complex tuple.
+    pub fn new(
+        start: Vec<ValueType<Prim>>,
+        middle: Slice<Prim>,
+        end: Vec<ValueType<Prim>>,
+    ) -> Self {
+        Self::from_parts(start, Some(middle), end)
     }
 
     pub(crate) fn empty() -> Self {
@@ -170,12 +215,6 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
             middle: None,
             end: Vec::new(),
         }
-    }
-
-    pub(crate) fn is_empty(&self) -> bool {
-        self.start.is_empty()
-            && self.end.is_empty()
-            && *self.resolved_middle_len() == TupleLength::Exact(0)
     }
 
     pub(crate) fn is_concrete(&self) -> bool {
@@ -247,8 +286,35 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
         self.middle.as_mut().map(|middle| &mut middle.length)
     }
 
-    /// Returns length of this tuple.
-    pub(crate) fn len(&self) -> TupleLength {
+    /// Returns types from the start of this tuple.
+    pub fn start(&self) -> &[ValueType<Prim>] {
+        &self.start
+    }
+
+    /// Returns the middle portion of this tuple, or `None` if it is not defined.
+    pub fn middle(&self) -> Option<&Slice<Prim>> {
+        self.middle.as_ref()
+    }
+
+    /// Returns types from the end of this tuple.
+    pub fn end(&self) -> &[ValueType<Prim>] {
+        &self.end
+    }
+
+    /// Returns the length of this tuple.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use arithmetic_typing::{Slice, Tuple, ValueType, TupleLength};
+    /// let tuple = Tuple::from(vec![ValueType::NUM, ValueType::BOOL]);
+    /// assert_eq!(tuple.len(), TupleLength::Exact(2));
+    ///
+    /// let slice = Slice::new(ValueType::NUM, TupleLength::Param(0));
+    /// let tuple = Tuple::from(slice.clone());
+    /// assert_eq!(tuple.len(), TupleLength::Param(0));
+    /// ```
+    pub fn len(&self) -> TupleLength {
         let exact = self.start.len() + self.end.len();
         let middle_len = self.resolved_middle_len();
         if let TupleLength::Exact(middle_len) = middle_len {
@@ -261,6 +327,13 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
                 middle_len.to_owned(),
             ]))
         }
+    }
+
+    /// Returns `true` iff this tuple is guaranteed to be empty.
+    pub fn is_empty(&self) -> bool {
+        self.start.is_empty()
+            && self.end.is_empty()
+            && *self.resolved_middle_len() == TupleLength::Exact(0)
     }
 
     pub(crate) fn push(&mut self, element: ValueType<Prim>) {
@@ -293,8 +366,7 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
 
     /// Returns pairs of elements of this and `other` tuple that should be equal to each other.
     ///
-    /// This method is specialized for the case when the length of middles is unknown,
-    /// i.e., `self.len()` returns `(_, Some(_))`.
+    /// This method is specialized for the case when the length of middles is unknown.
     pub(crate) fn equal_elements_dyn<'a>(
         &'a self,
         other: &'a Self,
@@ -330,7 +402,21 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
 
     /// Iterates over all distinct elements in this tuple. The iteration is performed in order.
     ///
-    /// FIXME: example
+    /// # Examples
+    ///
+    /// ```
+    /// # use arithmetic_typing::{Slice, Tuple, TupleLength, ValueType};
+    /// let complex_tuple = Tuple::new(
+    ///     vec![ValueType::NUM],
+    ///     Slice::new(ValueType::NUM, TupleLength::Param(0)),
+    ///     vec![ValueType::BOOL, ValueType::Some],
+    /// );
+    /// let elements: Vec<_> = complex_tuple.element_types().collect();
+    /// assert_eq!(
+    ///     elements.as_slice(),
+    ///     &[&ValueType::NUM, &ValueType::NUM, &ValueType::BOOL, &ValueType::Some]
+    /// );
+    /// ```
     pub fn element_types(&self) -> impl Iterator<Item = &ValueType<Prim>> + '_ {
         let middle_element = self.middle.as_ref().map(|slice| slice.element.as_ref());
         self.start.iter().chain(middle_element).chain(&self.end)
@@ -371,7 +457,8 @@ impl<Prim: PrimitiveType> fmt::Display for Slice<Prim> {
 }
 
 impl<Prim: PrimitiveType> Slice<Prim> {
-    pub(crate) fn new(element: ValueType<Prim>, length: TupleLength) -> Self {
+    /// Creates a new slice.
+    pub fn new(element: ValueType<Prim>, length: TupleLength) -> Self {
         Self {
             element: Box::new(element),
             length,

@@ -372,7 +372,7 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
             .map(|element| self.process_lvalue(element))
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(Tuple::new(start, middle, end))
+        Ok(Tuple::from_parts(start, middle, end))
     }
 
     fn process_destructure_rest<'a>(

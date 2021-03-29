@@ -54,7 +54,7 @@ use crate::{arith::WithBoolean, FnType, PrimitiveType, TupleLength, ValueType};
 /// let mut env: TypeEnvironment = Prelude::iter().collect();
 /// let err = env.process_statements(&ast).unwrap_err();
 /// assert_eq!(*err.span().fragment(), "(_, _, z) = slice");
-/// # assert_matches!(err.kind(), TypeErrorKind::IncompatibleLengths(_, _));
+/// # assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
 /// # Ok(())
 /// # }
 /// ```

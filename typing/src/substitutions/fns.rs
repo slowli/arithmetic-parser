@@ -243,7 +243,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for PolyTypeTransformer {
         }
     }
 
-    fn visit_len_mut(&mut self, len: &mut TupleLength) {
+    fn visit_middle_len_mut(&mut self, len: &mut TupleLength) {
         if let TupleLength::Var(idx) = len {
             *len = TupleLength::Param(self.mapping.lengths[idx]);
         }
@@ -291,7 +291,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for MonoTypeTransformer<'_> {
         }
     }
 
-    fn visit_len_mut(&mut self, len: &mut TupleLength) {
+    fn visit_middle_len_mut(&mut self, len: &mut TupleLength) {
         if let TupleLength::Param(idx) = len {
             *len = self
                 .mapping

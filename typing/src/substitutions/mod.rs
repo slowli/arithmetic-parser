@@ -9,7 +9,7 @@ use crate::{
 };
 
 mod fns;
-use self::fns::{ParamMapping, SubstitutionContext};
+use self::fns::{MonoTypeTransformer, ParamMapping};
 
 #[cfg(test)]
 mod tests;
@@ -375,7 +375,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 .enumerate()
                 .map(|(i, (var_idx, _))| (*var_idx, self.type_var_count + i))
                 .collect(),
-            constants: fn_type
+            lengths: fn_type
                 .len_params
                 .iter()
                 .enumerate()
@@ -385,13 +385,13 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         self.type_var_count += fn_type.type_params.len();
         self.const_var_count += fn_type.len_params.len();
 
-        let instantiated_fn_type =
-            fn_type.substitute_type_vars(&mapping, SubstitutionContext::ParamsToVars);
+        let mut instantiated_fn_type = fn_type.clone();
+        MonoTypeTransformer::new(&mapping).visit_function_mut(&mut instantiated_fn_type);
 
         // Copy constraints on the newly generated const and type vars from the function definition.
         for (original_idx, description) in &fn_type.len_params {
             if description.is_dynamic {
-                let new_idx = mapping.constants[original_idx];
+                let new_idx = mapping.lengths[original_idx];
                 self.dyn_lengths.insert(new_idx);
             }
         }

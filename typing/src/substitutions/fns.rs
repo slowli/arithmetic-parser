@@ -18,51 +18,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
         let mapping = tree.create_param_mapping();
         tree.merge_into(self, substitutions);
 
-        *self = self.substitute_type_vars(&mapping, SubstitutionContext::VarsToParams);
-    }
-
-    /// Recursively substitutes type vars in this type according to `type_var_mapping`.
-    /// Returns the type with substituted vars.
-    pub(super) fn substitute_type_vars(
-        &self,
-        mapping: &ParamMapping,
-        context: SubstitutionContext,
-    ) -> Self {
-        #[allow(clippy::option_if_let_else)] // false positive
-        fn map_params<'a, T: 'static>(
-            params: impl Iterator<Item = (usize, T)> + 'a,
-            mapping: &'a HashMap<usize, usize>,
-            context: SubstitutionContext,
-        ) -> impl Iterator<Item = (usize, T)> + 'a {
-            params.filter_map(move |(var_idx, description)| {
-                if let Some(mapped_idx) = mapping.get(&var_idx) {
-                    if context == SubstitutionContext::ParamsToVars {
-                        // The params in mapping got instantiated into vars;
-                        // we must remove them from the `type_params`.
-                        None
-                    } else {
-                        Some((*mapped_idx, description))
-                    }
-                } else {
-                    Some((var_idx, description))
-                }
-            })
-        }
-
-        let substituted_args = self.args.map(
-            |arg| arg.substitute_type_vars(mapping, context),
-            |len| len.substitute_vars(mapping, context),
-        );
-        let return_type = self.return_type.substitute_type_vars(mapping, context);
-
-        let const_params = self.len_params.iter().copied();
-        let const_params = map_params(const_params, &mapping.constants, context);
-        let type_params = self.type_params.iter().cloned();
-        let type_params = map_params(type_params, &mapping.types, context);
-
-        FnType::new(substituted_args, return_type)
-            .with_len_params(const_params.collect())
-            .with_type_params(type_params.collect())
+        PolyTypeTransformer { mapping }.visit_function_mut(self);
     }
 }
 
@@ -83,9 +39,9 @@ enum VarQuantity {
 struct FnTypeTree {
     children: Vec<FnTypeTree>,
     all_type_vars: HashMap<usize, VarQuantity>,
-    all_const_vars: HashMap<usize, VarQuantity>,
+    all_length_vars: HashMap<usize, VarQuantity>,
     type_params: HashSet<usize>,
-    const_params: HashSet<usize>,
+    length_params: HashSet<usize>,
 }
 
 // TODO: add unit tests covering main methods
@@ -95,7 +51,7 @@ impl FnTypeTree {
         struct VarExtractor {
             children: Vec<FnTypeTree>,
             type_vars: HashMap<usize, VarQuantity>,
-            const_vars: HashMap<usize, VarQuantity>,
+            length_vars: HashMap<usize, VarQuantity>,
         }
 
         impl<'ast, P: PrimitiveType> Visit<'ast, P> for VarExtractor {
@@ -109,7 +65,7 @@ impl FnTypeTree {
             fn visit_tuple(&mut self, tuple: &'ast Tuple<P>) {
                 // FIXME: handle compound lengths
                 if let TupleLength::Var(idx) = tuple.len() {
-                    self.const_vars
+                    self.length_vars
                         .entry(idx)
                         .and_modify(|qty| *qty = VarQuantity::Repeated)
                         .or_insert(VarQuantity::UniqueVar);
@@ -127,8 +83,8 @@ impl FnTypeTree {
                         .and_modify(|qty| *qty = VarQuantity::Repeated)
                         .or_insert(VarQuantity::UniqueFunction);
                 }
-                for &const_var in child_tree.all_const_vars.keys() {
-                    self.const_vars
+                for &const_var in child_tree.all_length_vars.keys() {
+                    self.length_vars
                         .entry(const_var)
                         .and_modify(|qty| *qty = VarQuantity::Repeated)
                         .or_insert(VarQuantity::UniqueFunction);
@@ -144,45 +100,44 @@ impl FnTypeTree {
         Self {
             children: extractor.children,
             all_type_vars: extractor.type_vars,
-            all_const_vars: extractor.const_vars,
+            all_length_vars: extractor.length_vars,
             type_params: HashSet::new(),
-            const_params: HashSet::new(),
+            length_params: HashSet::new(),
         }
     }
 
     /// Recursively infers type params for the function and all child functions.
-    fn infer_type_params(&mut self, parent_types: &HashSet<usize>, parent_consts: &HashSet<usize>) {
-        self.type_params = self
-            .all_type_vars
-            .iter()
-            .filter_map(|(idx, qty)| {
-                if *qty != VarQuantity::UniqueFunction && !parent_types.contains(idx) {
-                    Some(*idx)
-                } else {
-                    None
-                }
-            })
-            .collect();
+    fn infer_type_params(
+        &mut self,
+        parent_types: &HashSet<usize>,
+        parent_lengths: &HashSet<usize>,
+    ) {
+        fn filter_params(
+            quantities: &HashMap<usize, VarQuantity>,
+            parent_params: &HashSet<usize>,
+        ) -> HashSet<usize> {
+            quantities
+                .iter()
+                .filter_map(|(idx, qty)| {
+                    if *qty != VarQuantity::UniqueFunction && !parent_params.contains(idx) {
+                        Some(*idx)
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        }
 
-        self.const_params = self
-            .all_const_vars
-            .iter()
-            .filter_map(|(idx, qty)| {
-                if *qty != VarQuantity::UniqueFunction && !parent_consts.contains(idx) {
-                    Some(*idx)
-                } else {
-                    None
-                }
-            })
-            .collect();
+        self.type_params = filter_params(&self.all_type_vars, parent_types);
+        self.length_params = filter_params(&self.all_length_vars, parent_lengths);
 
         let mut parent_and_self_types = parent_types.clone();
         parent_and_self_types.extend(self.type_params.iter().copied());
-        let mut parent_and_self_consts = parent_consts.clone();
-        parent_and_self_consts.extend(self.const_params.iter().copied());
+        let mut parent_and_self_lengths = parent_lengths.clone();
+        parent_and_self_lengths.extend(self.length_params.iter().copied());
 
         for child_tree in &mut self.children {
-            child_tree.infer_type_params(&parent_and_self_types, &parent_and_self_consts);
+            child_tree.infer_type_params(&parent_and_self_types, &parent_and_self_lengths);
         }
     }
 
@@ -197,12 +152,12 @@ impl FnTypeTree {
 
         let mut sorted_type_params: Vec<_> = self.all_type_vars.keys().copied().collect();
         sorted_type_params.sort_unstable();
-        let mut sorted_const_params: Vec<_> = self.all_const_vars.keys().copied().collect();
+        let mut sorted_const_params: Vec<_> = self.all_length_vars.keys().copied().collect();
         sorted_const_params.sort_unstable();
 
         ParamMapping {
             types: map_enumerated(sorted_type_params),
-            constants: map_enumerated(sorted_const_params),
+            lengths: map_enumerated(sorted_const_params),
         }
     }
 
@@ -247,7 +202,7 @@ impl FnTypeTree {
         // for the function definition.
 
         base.len_params = self
-            .const_params
+            .length_params
             .into_iter()
             .map(|idx| {
                 let is_dynamic = vararg_length != Some(idx) && dynamic_lengths.contains(&idx);
@@ -266,68 +221,100 @@ impl FnTypeTree {
     }
 }
 
-impl TupleLength {
-    fn substitute_vars(&self, mapping: &ParamMapping, context: SubstitutionContext) -> Self {
-        match self {
-            Self::Var(idx) if context == SubstitutionContext::VarsToParams => {
-                Self::Param(mapping.constants[idx])
-            }
-
-            Self::Param(idx) if context == SubstitutionContext::ParamsToVars => mapping
-                .constants
-                .get(idx)
-                .copied()
-                .map_or(Self::Param(*idx), Self::Var),
-
-            _ => self.to_owned(),
-        }
-    }
+#[derive(Debug)]
+pub(super) struct ParamMapping {
+    pub types: HashMap<usize, usize>,
+    pub lengths: HashMap<usize, usize>,
 }
 
-impl<Prim: PrimitiveType> ValueType<Prim> {
-    /// Recursively substitutes type vars in this type according to `type_var_mapping`.
-    /// Returns the type with substituted vars.
-    fn substitute_type_vars(&self, mapping: &ParamMapping, context: SubstitutionContext) -> Self {
-        match self {
-            Self::Var(idx) if context == SubstitutionContext::VarsToParams => {
-                Self::Param(mapping.types[idx])
-            }
-            Self::Param(idx) if context == SubstitutionContext::ParamsToVars => mapping
-                .types
-                .get(idx)
-                .copied()
-                .map_or(Self::Param(*idx), Self::Var),
+/// Makes functional types polymorphic on all free type vars.
+#[derive(Debug)]
+struct PolyTypeTransformer {
+    mapping: ParamMapping,
+}
 
-            Self::Tuple(tuple) => {
-                let mapped_tuple = tuple.map(
-                    |element| element.substitute_type_vars(mapping, context),
-                    |len| len.substitute_vars(mapping, context),
-                );
-                ValueType::Tuple(mapped_tuple)
+impl<Prim: PrimitiveType> VisitMut<Prim> for PolyTypeTransformer {
+    fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
+        match ty {
+            ValueType::Var(idx) => {
+                *ty = ValueType::Param(self.mapping.types[idx]);
             }
-
-            Self::Function(fn_type) => {
-                Self::Function(Box::new(fn_type.substitute_type_vars(mapping, context)))
-            }
-
-            _ => self.clone(),
+            _ => visit::visit_type_mut(self, ty),
         }
+    }
+
+    fn visit_tuple_mut(&mut self, tuple: &mut Tuple<Prim>) {
+        if let Some(len) = tuple.middle_len_mut() {
+            if let TupleLength::Var(idx) = len {
+                *len = TupleLength::Param(self.mapping.lengths[idx]);
+            }
+        }
+        visit::visit_tuple_mut(self, tuple);
+    }
+
+    fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {
+        for (idx, _) in &mut function.type_params {
+            *idx = self.mapping.types[idx];
+        }
+        function.type_params.sort_unstable_by_key(|(idx, _)| *idx);
+
+        for (idx, _) in &mut function.len_params {
+            *idx = self.mapping.lengths[idx];
+        }
+        function.len_params.sort_unstable_by_key(|(idx, _)| *idx);
+
+        visit::visit_function_mut(self, function);
     }
 }
 
 #[derive(Debug)]
-pub(super) struct ParamMapping {
-    pub types: HashMap<usize, usize>,
-    pub constants: HashMap<usize, usize>,
+pub(super) struct MonoTypeTransformer<'a> {
+    mapping: &'a ParamMapping,
 }
 
-/// Context for mapping `Var`s into `Param`s or back.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(super) enum SubstitutionContext {
-    /// Mapping `Var`s to `Param`s. This occurs for top-level functions once
-    /// their signature is established.
-    VarsToParams,
-    /// Mapping `Param`s to `Var`s. This occurs when instantiating a function type
-    /// with type params.
-    ParamsToVars,
+impl<'a> MonoTypeTransformer<'a> {
+    pub fn new(mapping: &'a ParamMapping) -> Self {
+        Self { mapping }
+    }
+}
+
+impl<Prim: PrimitiveType> VisitMut<Prim> for MonoTypeTransformer<'_> {
+    fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
+        match ty {
+            ValueType::Param(idx) => {
+                *ty = self
+                    .mapping
+                    .types
+                    .get(idx)
+                    .copied()
+                    .map_or(ValueType::Param(*idx), ValueType::Var)
+            }
+            _ => visit::visit_type_mut(self, ty),
+        }
+    }
+
+    fn visit_tuple_mut(&mut self, tuple: &mut Tuple<Prim>) {
+        if let Some(len) = tuple.middle_len_mut() {
+            if let TupleLength::Param(idx) = len {
+                *len = self
+                    .mapping
+                    .lengths
+                    .get(idx)
+                    .copied()
+                    .map_or(TupleLength::Param(*idx), TupleLength::Var);
+            }
+        }
+        visit::visit_tuple_mut(self, tuple);
+    }
+
+    fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {
+        function
+            .type_params
+            .retain(|(idx, _)| !self.mapping.types.contains_key(idx));
+        function
+            .len_params
+            .retain(|(idx, _)| !self.mapping.lengths.contains_key(idx));
+
+        visit::visit_function_mut(self, function);
+    }
 }

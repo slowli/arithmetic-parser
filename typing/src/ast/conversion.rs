@@ -542,6 +542,7 @@ mod tests {
             ValueType::Tuple(tuple) => tuple.as_slice().unwrap(),
             _ => panic!("Unexpected type: {:?}", slice_type),
         };
+
         assert_eq!(
             *slice_type.element(),
             ValueType::from((ValueType::NUM, ValueType::Some))
@@ -556,9 +557,25 @@ mod tests {
             ValueType::Function(fn_type) => *fn_type,
             _ => panic!("Unexpected type: {:?}", ty),
         };
+
         assert_eq!(ty.len_params.len(), 1);
         assert_eq!(ty.type_params.len(), 2);
         assert_eq!(ty.return_type, ValueType::Param(1));
+    }
+
+    #[test]
+    fn parsing_functional_type_with_varargs() {
+        let ty: ValueType = "fn<len N>(...[Num; N]) -> Num".parse().unwrap();
+        let ty = match ty {
+            ValueType::Function(fn_type) => *fn_type,
+            _ => panic!("Unexpected type: {:?}", ty),
+        };
+
+        assert_eq!(ty.len_params.len(), 1);
+        assert!(ty.type_params.is_empty());
+        let args_slice = ty.args.as_slice().unwrap();
+        assert_eq!(*args_slice.element(), ValueType::NUM);
+        assert_eq!(*args_slice.len(), TupleLength::Param(0));
     }
 
     #[test]

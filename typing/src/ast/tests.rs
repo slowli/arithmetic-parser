@@ -79,11 +79,11 @@ fn fn_params_mixed() {
 #[test]
 fn simple_tuple() {
     let input = InputSpan::new("(Num, _, Bool, _)");
-    let (rest, elements) = tuple_definition(input).unwrap();
+    let (rest, tuple) = tuple_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
     assert_eq!(
-        elements.start,
+        tuple.start,
         vec![
             ValueTypeAst::Prim(Num::Num),
             ValueTypeAst::Any,
@@ -91,6 +91,71 @@ fn simple_tuple() {
             ValueTypeAst::Any,
         ]
     );
+}
+
+#[derive(Debug)]
+struct TupleSample {
+    input: &'static str,
+    start: &'static [ValueTypeAst<'static>],
+    middle_element: ValueTypeAst<'static>,
+    end: &'static [ValueTypeAst<'static>],
+}
+
+#[test]
+fn complex_tuples() {
+    const SAMPLES: &[TupleSample] = &[
+        TupleSample {
+            input: "(Num, _, ...[Bool; _])",
+            start: &[ValueTypeAst::Prim(Num::Num), ValueTypeAst::Any],
+            middle_element: ValueTypeAst::Prim(Num::Bool),
+            end: &[],
+        },
+        TupleSample {
+            input: "(...[Bool; _], Num)",
+            start: &[],
+            middle_element: ValueTypeAst::Prim(Num::Bool),
+            end: &[ValueTypeAst::Prim(Num::Num)],
+        },
+        TupleSample {
+            input: "(_, ...[Bool; _], Num)",
+            start: &[ValueTypeAst::Any],
+            middle_element: ValueTypeAst::Prim(Num::Bool),
+            end: &[ValueTypeAst::Prim(Num::Num)],
+        },
+    ];
+
+    for sample in SAMPLES {
+        let input = InputSpan::new(sample.input);
+        let (rest, tuple) = tuple_definition(input).unwrap();
+
+        assert!(rest.fragment().is_empty());
+        assert_eq!(tuple.start, sample.start);
+        assert_eq!(*tuple.middle.unwrap().element, sample.middle_element);
+        assert_eq!(tuple.end, sample.end);
+    }
+}
+
+#[test]
+fn embedded_complex_tuple() {
+    let input = InputSpan::new("(Num, ...[Num; _], (...[T; N], fn() -> T))");
+    let (rest, tuple) = tuple_definition::<Num>(input).unwrap();
+
+    assert!(rest.fragment().is_empty());
+    assert_eq!(tuple.start, &[ValueTypeAst::Prim(Num::Num)]);
+    let middle = tuple.middle.unwrap();
+    assert_eq!(*middle.element, ValueTypeAst::Prim(Num::Num));
+    assert_eq!(tuple.end.len(), 1);
+
+    let embedded_tuple = match &tuple.end[0] {
+        ValueTypeAst::Tuple(tuple) => tuple,
+        other => panic!("Unexpected tuple end: {:?}", other),
+    };
+    assert!(embedded_tuple.start.is_empty());
+    assert_matches!(
+        *embedded_tuple.middle.as_ref().unwrap().element,
+        ValueTypeAst::Ident(id) if *id.fragment() == "T"
+    );
+    assert_matches!(embedded_tuple.end.as_slice(), [ValueTypeAst::Function(_)]);
 }
 
 #[test]
@@ -237,4 +302,17 @@ fn fn_type_returning_fn_arg() {
     assert!(returned_fn.type_params.is_empty());
     assert_eq!(returned_fn.args.start, vec![ValueTypeAst::Prim(Num::Bool)]);
     assert_eq!(returned_fn.return_type, ValueTypeAst::Prim(Num::Num));
+}
+
+#[test]
+fn fn_type_with_rest_params() {
+    let input = InputSpan::new("fn<len N>(Bool, ...[Num; N]) -> Num");
+    let (rest, fn_type) = fn_definition::<Num>(input).unwrap();
+
+    assert!(rest.fragment().is_empty());
+    assert_eq!(fn_type.args.start.len(), 1);
+    assert_eq!(fn_type.args.start[0], ValueTypeAst::Prim(Num::Bool));
+    let middle = fn_type.args.middle.unwrap();
+    assert_eq!(*middle.element, ValueTypeAst::Prim(Num::Num));
+    assert_matches!(middle.length, TupleLengthAst::Ident(id) if *id.fragment() == "N");
 }

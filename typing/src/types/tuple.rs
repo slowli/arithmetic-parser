@@ -1,6 +1,6 @@
 //! Tuple types.
 
-use std::{borrow::Cow, cmp, fmt, iter};
+use std::{borrow::Cow, cmp, fmt, iter, num::NonZeroUsize, ops};
 
 use crate::{Num, PrimitiveType, ValueType};
 
@@ -50,66 +50,68 @@ impl TupleLength {
     }
 }
 
+impl ops::Add<usize> for TupleLength {
+    type Output = Self;
+
+    #[allow(clippy::option_if_let_else)] // false positive; `self` is moved into both clauses
+    fn add(self, rhs: usize) -> Self::Output {
+        if let Some(non_zero_rhs) = NonZeroUsize::new(rhs) {
+            match self {
+                Self::Exact(len) => Self::Exact(len + rhs),
+                Self::Compound(CompoundTupleLength { var, exact }) => {
+                    Self::Compound(CompoundTupleLength {
+                        var,
+                        exact: exact + rhs,
+                    })
+                }
+                other => Self::Compound(CompoundTupleLength::new(other, non_zero_rhs)),
+            }
+        } else {
+            self
+        }
+    }
+}
+
 /// Compound tuple length.
+///
+/// A compound length always consists of the two components: a variable length,
+/// such as [`TupleLength::Param`], and a positive increment. These components can be obtained
+/// via [`Self::components()`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompoundTupleLength {
-    // Invariant: contains at least two items.
-    items: Vec<TupleLength>,
+    // Invariant: is a simple unknown length (i.e. not `Exact` or `Compound`).
+    var: Box<TupleLength>,
+    // Invariant: non-zero.
+    exact: usize,
 }
 
 impl fmt::Display for CompoundTupleLength {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (i, item) in self.items.iter().enumerate() {
-            fmt::Display::fmt(item, formatter)?;
-            if i + 1 < self.items.len() {
-                formatter.write_str(" + ")?;
-            }
-        }
-        Ok(())
+        write!(formatter, "{} + {}", self.var, self.exact)
     }
 }
 
 impl CompoundTupleLength {
-    fn new(items: Vec<TupleLength>) -> Self {
-        debug_assert!(items.len() >= 2);
-        debug_assert!(items
-            .iter()
-            .all(|elem| !matches!(elem, TupleLength::Compound(_))));
-
-        Self { items }
-    }
-
-    pub(crate) fn map_items(&self, map_fn: impl FnMut(&TupleLength) -> TupleLength) -> TupleLength {
-        let (exact, mut var) = self.items.iter().map(map_fn).fold(
-            (0_usize, Vec::with_capacity(self.items.len())),
-            |(mut exact, mut var), item| {
-                if let TupleLength::Exact(len) = item {
-                    exact += len;
-                } else {
-                    var.push(item);
-                }
-                (exact, var)
-            },
+    /// Creates a new compound length.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if `var` is [`Exact`](TupleLength::Exact) or [`Compound`](TupleLength::Compound).
+    pub fn new(var: TupleLength, exact: NonZeroUsize) -> Self {
+        assert!(
+            !matches!(var, TupleLength::Exact(_) | TupleLength::Compound(_)),
+            "`var` length must be a simple unknown length"
         );
 
-        if exact > 0 {
-            var.push(TupleLength::Exact(exact));
-        }
-
-        match var.len() {
-            0 => TupleLength::Exact(0),
-            1 => var.pop().unwrap(),
-            _ => TupleLength::Compound(Self::new(var)),
+        Self {
+            var: Box::new(var),
+            exact: exact.get(),
         }
     }
 
-    pub(crate) fn as_exact_and_var(&self) -> Option<(usize, &TupleLength)> {
-        match self.items.as_slice() {
-            [TupleLength::Exact(exact), var] | [var, TupleLength::Exact(exact)] => {
-                Some((*exact, var))
-            }
-            _ => None,
-        }
+    /// Returns components of this length.
+    pub fn components(&self) -> (&TupleLength, usize) {
+        (&self.var, self.exact)
     }
 }
 
@@ -313,20 +315,13 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     /// let slice = Slice::new(ValueType::NUM, TupleLength::Param(0));
     /// let tuple = Tuple::from(slice.clone());
     /// assert_eq!(tuple.len(), TupleLength::Param(0));
+    ///
+    /// let tuple = Tuple::new(vec![], slice, vec![ValueType::BOOL]);
+    /// assert_eq!(tuple.len(), TupleLength::Param(0) + 1);
     /// ```
     pub fn len(&self) -> TupleLength {
-        let exact = self.start.len() + self.end.len();
-        let middle_len = self.resolved_middle_len();
-        if let TupleLength::Exact(middle_len) = middle_len {
-            TupleLength::Exact(exact + *middle_len)
-        } else if exact == 0 {
-            middle_len.to_owned()
-        } else {
-            TupleLength::Compound(CompoundTupleLength::new(vec![
-                TupleLength::Exact(exact),
-                middle_len.to_owned(),
-            ]))
-        }
+        let increment = self.start.len() + self.end.len();
+        self.resolved_middle_len().to_owned() + increment
     }
 
     /// Returns `true` iff this tuple is guaranteed to be empty.
@@ -503,11 +498,8 @@ mod tests {
     fn tuple_length_display() {
         let len = TupleLength::Exact(3);
         assert_eq!(len.to_string(), "3");
-        let len = TupleLength::Compound(CompoundTupleLength::new(vec![
-            TupleLength::Exact(2),
-            TupleLength::Param(0),
-        ]));
-        assert_eq!(len.to_string(), "2 + N");
+        let len = TupleLength::Param(0) + 2;
+        assert_eq!(len.to_string(), "N + 2");
     }
 
     #[test]

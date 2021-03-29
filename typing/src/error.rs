@@ -59,10 +59,6 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
 
     /// Language construct not supported by the type inference.
     Unsupported(UnsupportedType),
-    /// Unsupported use of destructuring in an lvalue or function arguments.
-    ///
-    /// Destructuring with a specified middle, such as `(x, ...ys)` are not supported yet.
-    UnsupportedDestructure,
     /// Unsupported use of type or const params in function declaration.
     ///
     /// Type or const params are currently not supported in type annotations, such as
@@ -115,9 +111,6 @@ impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
             }
 
             Self::Unsupported(ty) => write!(formatter, "Unsupported {}", ty),
-            Self::UnsupportedDestructure => {
-                formatter.write_str("Destructuring with middle is not supported yet")
-            }
             Self::UnsupportedParam => {
                 formatter.write_str("Type params in declared function types is not supported yet")
             }

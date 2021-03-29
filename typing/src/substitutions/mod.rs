@@ -111,7 +111,8 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         }
 
         if let TupleLength::Compound(compound_len) = len {
-            compound_len.map_items(|item| self.resolve_len(item))
+            let (var, exact) = compound_len.components();
+            self.resolve_len(var) + exact
         } else {
             len.to_owned()
         }
@@ -288,9 +289,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             _ => unreachable!(),
         };
 
-        let (exact, var) = compound_len
-            .as_exact_and_var()
-            .ok_or(TypeErrorKind::UnsupportedDestructure)?;
+        let (var, exact) = compound_len.components();
 
         match other_len {
             TupleLength::Exact(other_exact) if *other_exact >= exact => {
@@ -303,9 +302,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             }
 
             TupleLength::Compound(other_compound_len) => {
-                let (other_exact, other_var) = other_compound_len
-                    .as_exact_and_var()
-                    .ok_or(TypeErrorKind::UnsupportedDestructure)?;
+                let (other_var, other_exact) = other_compound_len.components();
                 if exact == other_exact {
                     return if is_lhs {
                         self.unify_lengths(var, other_var, context)

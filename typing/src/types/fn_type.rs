@@ -185,20 +185,6 @@ impl<Prim: PrimitiveType> FnType<Prim> {
     pub fn is_concrete(&self) -> bool {
         self.args.is_concrete() && self.return_type.is_concrete()
     }
-
-    /// Maps argument and return types. The mapping function must not touch type params
-    /// of the function.
-    pub(crate) fn map_types<F>(&self, mut map_fn: F) -> Self
-    where
-        F: FnMut(&ValueType<Prim>) -> ValueType<Prim>,
-    {
-        Self {
-            args: self.args.map(&mut map_fn, Clone::clone),
-            return_type: map_fn(&self.return_type),
-            type_params: self.type_params.clone(),
-            len_params: self.len_params.clone(),
-        }
-    }
 }
 
 /// Builder for functional types.

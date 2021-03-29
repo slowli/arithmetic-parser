@@ -2,7 +2,7 @@
 
 #![allow(missing_docs)]
 
-use crate::{FnType, PrimitiveType, Tuple, ValueType};
+use crate::{FnType, PrimitiveType, Tuple, TupleLength, ValueType};
 
 #[allow(unused_variables)]
 pub trait Visit<'ast, Prim: PrimitiveType> {
@@ -75,6 +75,10 @@ pub trait VisitMut<Prim: PrimitiveType> {
         visit_tuple_mut(self, tuple);
     }
 
+    fn visit_len_mut(&mut self, len: &mut TupleLength) {
+        // Does nothing.
+    }
+
     fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {
         visit_function_mut(self, function);
     }
@@ -97,6 +101,9 @@ where
     Prim: PrimitiveType,
     V: VisitMut<Prim> + ?Sized,
 {
+    if let Some(middle_len) = tuple.middle_len_mut() {
+        visitor.visit_len_mut(middle_len);
+    }
     for ty in tuple.element_types_mut() {
         visitor.visit_type_mut(ty);
     }

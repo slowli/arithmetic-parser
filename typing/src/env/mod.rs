@@ -9,6 +9,7 @@ use std::{
 
 use crate::{
     arith::{BinaryOpSpans, MapPrimitiveType, NumArithmetic, TypeArithmetic, UnaryOpSpans},
+    visit::VisitMut,
     FnType, Num, PrimitiveType, Slice, Substitutions, Tuple, TupleLength, TypeError, TypeErrorKind,
     TypeResult, ValueType,
 };
@@ -301,9 +302,10 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
 
     #[inline]
     fn process_var<'a, T>(&self, name: &Spanned<'a, T>) -> TypeResult<'a, Prim> {
-        self.get_type(name.fragment()).cloned().ok_or_else(|| {
-            TypeErrorKind::UndefinedVar((*name.fragment()).to_owned()).with_span(name)
-        })
+        let var_name = *name.fragment();
+        self.get_type(var_name)
+            .cloned()
+            .ok_or_else(|| TypeErrorKind::UndefinedVar(var_name.to_owned()).with_span(name))
     }
 
     fn process_block<'a, T>(&mut self, block: &Block<'a, T>) -> TypeResult<'a, Prim>
@@ -379,8 +381,8 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
         is_fn_args: bool,
     ) -> Result<Slice<Prim>, TypeError<'a, Prim>> {
         let ty = match rest {
-            DestructureRest::Unnamed | DestructureRest::Named { ty: None, .. } => None,
-            DestructureRest::Named { ty: Some(ty), .. } => Some(ty),
+            DestructureRest::Unnamed => None,
+            DestructureRest::Named { ty, .. } => ty.as_ref(),
         };
         let mut element = ty.map_or(ValueType::Some, |ty| ty.extra.to_owned());
 
@@ -482,14 +484,10 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
         self.is_in_function = was_in_function;
 
         let (arg_types, return_type) = result?;
-        let substitutions = &self.root_scope.substitutions;
-        let arg_types = arg_types.map(
-            |arg| substitutions.resolve(arg),
-            |len| substitutions.resolve_len(len),
-        );
-        let return_type = substitutions.resolve(&return_type);
-
         let mut fn_type = FnType::new(arg_types, return_type);
+        let substitutions = &self.root_scope.substitutions;
+        substitutions.resolver().visit_function_mut(&mut fn_type);
+
         if !self.is_in_function {
             fn_type.finalize(substitutions);
         }
@@ -542,12 +540,16 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
 
         // We need to resolve vars even if an error occurred.
         debug_assert!(self.inner_scopes.is_empty());
-        let substitutions = &self.root_scope.substitutions;
+        let mut resolver = self.root_scope.substitutions.resolver();
         for (name, var_type) in &mut self.root_scope.variables {
             if self.unresolved_root_vars.contains(name) {
-                *var_type = substitutions.resolve(var_type);
+                resolver.visit_type_mut(var_type);
             }
         }
-        result.map(|ty| substitutions.resolve(&ty))
+
+        result.map(|mut ty| {
+            resolver.visit_type_mut(&mut ty);
+            ty
+        })
     }
 }

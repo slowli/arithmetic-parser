@@ -243,13 +243,10 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for PolyTypeTransformer {
         }
     }
 
-    fn visit_tuple_mut(&mut self, tuple: &mut Tuple<Prim>) {
-        if let Some(len) = tuple.middle_len_mut() {
-            if let TupleLength::Var(idx) = len {
-                *len = TupleLength::Param(self.mapping.lengths[idx]);
-            }
+    fn visit_len_mut(&mut self, len: &mut TupleLength) {
+        if let TupleLength::Var(idx) = len {
+            *len = TupleLength::Param(self.mapping.lengths[idx]);
         }
-        visit::visit_tuple_mut(self, tuple);
     }
 
     fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {
@@ -267,6 +264,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for PolyTypeTransformer {
     }
 }
 
+/// Makes functional types monomorphic by replacing type / length params with vars.
 #[derive(Debug)]
 pub(super) struct MonoTypeTransformer<'a> {
     mapping: &'a ParamMapping,
@@ -293,18 +291,15 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for MonoTypeTransformer<'_> {
         }
     }
 
-    fn visit_tuple_mut(&mut self, tuple: &mut Tuple<Prim>) {
-        if let Some(len) = tuple.middle_len_mut() {
-            if let TupleLength::Param(idx) = len {
-                *len = self
-                    .mapping
-                    .lengths
-                    .get(idx)
-                    .copied()
-                    .map_or(TupleLength::Param(*idx), TupleLength::Var);
-            }
+    fn visit_len_mut(&mut self, len: &mut TupleLength) {
+        if let TupleLength::Param(idx) = len {
+            *len = self
+                .mapping
+                .lengths
+                .get(idx)
+                .copied()
+                .map_or(TupleLength::Param(*idx), TupleLength::Var);
         }
-        visit::visit_tuple_mut(self, tuple);
     }
 
     fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {

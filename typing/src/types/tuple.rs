@@ -343,21 +343,6 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
             .chain(middle_element)
             .chain(&mut self.end)
     }
-
-    pub(crate) fn map(
-        &self,
-        mut map_types: impl FnMut(&ValueType<Prim>) -> ValueType<Prim>,
-        map_len: impl FnOnce(&TupleLength) -> TupleLength,
-    ) -> Self {
-        Self {
-            start: self.start.iter().map(&mut map_types).collect(),
-            middle: self.middle.as_ref().map(|middle| Slice {
-                element: Box::new(map_types(&middle.element)),
-                length: map_len(&middle.length),
-            }),
-            end: self.end.iter().map(&mut map_types).collect(),
-        }
-    }
 }
 
 impl<Prim: PrimitiveType> From<Vec<ValueType<Prim>>> for Tuple<Prim> {

@@ -1,6 +1,9 @@
 //! Substitutions type and dependencies.
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    ptr,
+};
 
 use crate::{
     arith::TypeConstraints,
@@ -90,29 +93,14 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         ty
     }
 
-    /// Resolves the type using equality relations in these `Substitutions`.
-    ///
-    /// Compared to `fast_resolve`, this method will also recursively resolve tuples
-    /// and function types.
-    pub fn resolve(&self, ty: &ValueType<Prim>) -> ValueType<Prim> {
-        let ty = self.fast_resolve(ty);
-        match ty {
-            ValueType::Tuple(tuple) => {
-                let mapped_tuple =
-                    tuple.map(|element| self.resolve(element), |len| self.resolve_len(len));
-                ValueType::Tuple(mapped_tuple)
-            }
-
-            ValueType::Function(fn_type) => {
-                let resolved_fn_type = fn_type.map_types(|ty| self.resolve(ty));
-                ValueType::Function(Box::new(resolved_fn_type))
-            }
-
-            _ => ty.clone(),
+    /// Returns a visitor that resolves the type using equality relations in these `Substitutions`.
+    pub fn resolver(&self) -> impl VisitMut<Prim> + '_ {
+        TypeResolver {
+            substitutions: self,
         }
     }
 
-    pub(crate) fn resolve_len<'a>(&'a self, mut len: &'a TupleLength) -> TupleLength {
+    fn resolve_len<'a>(&'a self, mut len: &'a TupleLength) -> TupleLength {
         while let TupleLength::Var(idx) = len {
             let resolved = self.length_eqs.get(idx);
             if let Some(resolved) = resolved {
@@ -190,10 +178,14 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
             (Function(lhs_fn), Function(rhs_fn)) => self.unify_fn_types(lhs_fn, rhs_fn),
 
-            (ty, other_ty) => Err(TypeErrorKind::IncompatibleTypes(
-                self.resolve(ty),
-                self.resolve(other_ty),
-            )),
+            (ty, other_ty) => {
+                let mut resolver = self.resolver();
+                let mut ty = ty.to_owned();
+                resolver.visit_type_mut(&mut ty);
+                let mut other_ty = other_ty.to_owned();
+                resolver.visit_type_mut(&mut other_ty);
+                Err(TypeErrorKind::IncompatibleTypes(ty, other_ty))
+            }
         }
     }
 
@@ -404,26 +396,6 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         instantiated_fn_type
     }
 
-    /// Removes excessive information about type vars. This method is used when types are
-    /// provided to `TypeError`.
-    pub(crate) fn sanitize_type(&self, fixed_idx: usize, ty: &ValueType<Prim>) -> ValueType<Prim> {
-        match self.resolve(ty) {
-            ValueType::Var(i) if i == fixed_idx => ValueType::Param(0),
-
-            ValueType::Tuple(tuple) => ValueType::Tuple(tuple.map(
-                |element| self.sanitize_type(fixed_idx, element),
-                Clone::clone,
-            )),
-
-            ValueType::Function(fn_type) => {
-                let sanitized_fn_type = fn_type.map_types(|ty| self.sanitize_type(fixed_idx, ty));
-                ValueType::Function(Box::new(sanitized_fn_type))
-            }
-
-            simple_ty => simple_ty,
-        }
-    }
-
     /// Unifies a type variable with the specified index and the specified type.
     ///
     /// # Errors
@@ -445,14 +417,15 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         let mut checker = OccurrenceChecker {
             substitutions: self,
             var_idx,
-            outcome: false,
+            is_recursive: false,
         };
         checker.visit_type(ty);
 
-        if checker.outcome {
-            Err(TypeErrorKind::RecursiveType(
-                self.sanitize_type(var_idx, ty),
-            ))
+        if checker.is_recursive {
+            let mut resolved_ty = ty.to_owned();
+            self.resolver().visit_type_mut(&mut resolved_ty);
+            TypeSanitizer { fixed_idx: var_idx }.visit_type_mut(&mut resolved_ty);
+            Err(TypeErrorKind::RecursiveType(resolved_ty))
         } else {
             if let Some(constraints) = self.constraints.get(&var_idx).cloned() {
                 constraints.apply(ty, self)?;
@@ -483,12 +456,12 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 struct OccurrenceChecker<'a, Prim: PrimitiveType> {
     substitutions: &'a Substitutions<Prim>,
     var_idx: usize,
-    outcome: bool,
+    is_recursive: bool,
 }
 
 impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for OccurrenceChecker<'a, Prim> {
     fn visit_type(&mut self, ty: &'a ValueType<Prim>) {
-        if self.outcome {
+        if self.is_recursive {
             // Skip recursion; we already have our answer at this point.
         } else {
             visit::visit_type(self, ty);
@@ -497,13 +470,32 @@ impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for OccurrenceChecker<'a, Prim> {
 
     fn visit_var(&mut self, index: usize) {
         if index == self.var_idx {
-            self.outcome = true;
+            self.is_recursive = true;
         } else if let Some(ty) = self.substitutions.eqs.get(&index) {
             self.visit_type(ty);
         }
     }
 }
 
+/// Removes excessive information about type vars. This method is used when types are
+/// provided to `TypeError`.
+#[derive(Debug)]
+struct TypeSanitizer {
+    fixed_idx: usize,
+}
+
+impl<Prim: PrimitiveType> VisitMut<Prim> for TypeSanitizer {
+    fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
+        match ty {
+            ValueType::Var(idx) if *idx == self.fixed_idx => {
+                *ty = ValueType::Param(0);
+            }
+            _ => visit::visit_type_mut(self, ty),
+        }
+    }
+}
+
+/// Replaces `ValueType::Some` and `TupleLength::Some` with new variables.
 #[derive(Debug)]
 struct TypeAssigner<'a, Prim: PrimitiveType> {
     substitutions: &'a mut Substitutions<Prim>,
@@ -525,11 +517,8 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeAssigner<'_, Prim> {
         }
     }
 
-    fn visit_tuple_mut(&mut self, tuple: &mut Tuple<Prim>) {
-        if let Some(middle_len) = tuple.middle_len_mut() {
-            self.substitutions.assign_new_length(middle_len);
-        }
-        visit::visit_tuple_mut(self, tuple);
+    fn visit_len_mut(&mut self, len: &mut TupleLength) {
+        self.substitutions.assign_new_length(len);
     }
 
     fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {
@@ -546,5 +535,25 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeAssigner<'_, Prim> {
         } else {
             visit::visit_function_mut(self, function);
         }
+    }
+}
+
+/// Mutable visitor that performs type resolution based on `Substitutions`.
+#[derive(Debug, Clone, Copy)]
+struct TypeResolver<'a, Prim: PrimitiveType> {
+    substitutions: &'a Substitutions<Prim>,
+}
+
+impl<Prim: PrimitiveType> VisitMut<Prim> for TypeResolver<'_, Prim> {
+    fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
+        let fast_resolved = self.substitutions.fast_resolve(ty);
+        if !ptr::eq(ty, fast_resolved) {
+            *ty = fast_resolved.to_owned();
+        }
+        visit::visit_type_mut(self, ty);
+    }
+
+    fn visit_len_mut(&mut self, len: &mut TupleLength) {
+        *len = self.substitutions.resolve_len(len);
     }
 }

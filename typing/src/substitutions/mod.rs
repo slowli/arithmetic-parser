@@ -111,7 +111,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         }
     }
 
-    fn resolve_len<'a>(&'a self, mut len: &'a TupleLength) -> TupleLength {
+    pub(crate) fn resolve_len<'a>(&'a self, mut len: &'a TupleLength) -> TupleLength {
         while let TupleLength::Var(idx) = len {
             let resolved = self.length_eqs.get(idx);
             if let Some(resolved) = resolved {
@@ -157,19 +157,26 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                     // is quite difficult.
                     return Err(TypeErrorKind::UnsupportedParam);
                 }
-                for referenced_ty in fn_type.arg_and_return_types_mut() {
-                    self.assign_new_type(referenced_ty)?;
-                }
+                self.assign_new_type_for_tuple(&mut fn_type.args)?;
+                self.assign_new_type(&mut fn_type.return_type)?;
             }
 
             ValueType::Tuple(tuple) => {
-                if let Some(middle_len) = tuple.middle_len_mut() {
-                    self.assign_new_length(middle_len);
-                }
-                for element in tuple.element_types_mut() {
-                    self.assign_new_type(element)?;
-                }
+                self.assign_new_type_for_tuple(tuple)?;
             }
+        }
+        Ok(())
+    }
+
+    fn assign_new_type_for_tuple(
+        &mut self,
+        tuple: &mut Tuple<Prim>,
+    ) -> Result<(), TypeErrorKind<Prim>> {
+        if let Some(middle_len) = tuple.middle_len_mut() {
+            self.assign_new_length(middle_len);
+        }
+        for element in tuple.element_types_mut() {
+            self.assign_new_type(element)?;
         }
         Ok(())
     }
@@ -448,16 +455,21 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 .get(i)
                 .map_or(false, |subst| self.check_occurrence(var_idx, subst)),
 
-            ValueType::Tuple(tuple) => tuple
-                .element_types()
-                .any(|element| self.check_occurrence(var_idx, element)),
+            ValueType::Tuple(tuple) => self.check_occurrence_for_tuple(var_idx, tuple),
 
-            ValueType::Function(fn_type) => fn_type
-                .arg_and_return_types()
-                .any(|ty| self.check_occurrence(var_idx, ty)),
+            ValueType::Function(fn_type) => {
+                self.check_occurrence(var_idx, &fn_type.return_type)
+                    || self.check_occurrence_for_tuple(var_idx, &fn_type.args)
+            }
 
             _ => false,
         }
+    }
+
+    fn check_occurrence_for_tuple(&self, var_idx: usize, tuple: &Tuple<Prim>) -> bool {
+        tuple
+            .element_types()
+            .any(|element| self.check_occurrence(var_idx, element))
     }
 
     /// Removes excessive information about type vars. This method is used when types are

@@ -320,15 +320,18 @@ fn destructuring_for_fn_args() {
     );
     assert_eq!(res.to_string(), "(Num)");
 
-    let bogus_code = "shift(1, 2, (3, 4))";
-    let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
-    let err = type_env.process_statements(&bogus_block).unwrap_err();
-    assert_matches!(err.kind(), TypeErrorKind::IncompatibleTypes(..));
-
-    let bogus_code = "shift(1, 1 == 2, 1 == 1)";
-    let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
-    let err = type_env.process_statements(&bogus_block).unwrap_err();
-    assert_matches!(err.kind(), TypeErrorKind::FailedConstraint { .. });
+    {
+        let bogus_code = "shift(1, 2, (3, 4))";
+        let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
+        let err = type_env.process_statements(&bogus_block).unwrap_err();
+        assert_matches!(err.kind(), TypeErrorKind::IncompatibleTypes(..));
+    }
+    {
+        let bogus_code = "shift(1, 1 == 2, 1 == 1)";
+        let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
+        let err = type_env.process_statements(&bogus_block).unwrap_err();
+        assert_matches!(err.kind(), TypeErrorKind::FailedConstraint { .. });
+    }
 
     let bogus_code = "(x, _, _) = 1.shift(2, 3);";
     let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
@@ -341,6 +344,17 @@ fn destructuring_for_fn_args() {
             ..
         }
     )
+}
+
+#[test]
+fn fn_args_cannot_be_unified_with_concrete_length() {
+    let code = "bogus = |...xs| { (x, y) = xs; x };";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env.process_statements(&block).unwrap_err();
+
+    assert_eq!(*err.span().fragment(), "(x, y) = xs");
+    assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
 }
 
 #[test]
@@ -430,7 +444,33 @@ fn defining_and_calling_embedded_function() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
+
     assert_eq!(type_env["call_double"].to_string(), "fn(Num) -> Bool");
+}
+
+#[test]
+fn varargs_in_embedded_fn() {
+    let code = r#"
+        create_sum = |init| |...xs| xs.fold(init, |acc, x| acc + x);
+        sum = create_sum(0);
+        sum(1, 2, 3, 4) == 10;
+        other_sum = create_sum((0, 0));
+        other_sum((1, 2), (3, 4)) == (4, 6);
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.insert("fold", Prelude::fold_type().into());
+    type_env.process_statements(&block).unwrap();
+
+    assert_eq!(
+        type_env["create_sum"].to_string(),
+        "fn<T: Lin>(T) -> fn<len N>(...[T; N]) -> T"
+    );
+    assert_eq!(type_env["sum"].to_string(), "fn<len N>(...[Num; N]) -> Num");
+    assert_eq!(
+        type_env["other_sum"].to_string(),
+        "fn<len N>(...[(Num, Num); N]) -> (Num, Num)"
+    );
 }
 
 #[test]

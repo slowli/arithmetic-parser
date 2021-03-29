@@ -183,19 +183,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
     /// See [`TypeEnvironment`](crate::TypeEnvironment) for caveats of dealing with
     /// non-concrete types.
     pub fn is_concrete(&self) -> bool {
-        self.arg_and_return_types().all(ValueType::is_concrete)
-    }
-
-    pub(crate) fn arg_and_return_types(&self) -> impl Iterator<Item = &ValueType<Prim>> + '_ {
-        self.args.element_types().chain(Some(&self.return_type))
-    }
-
-    pub(crate) fn arg_and_return_types_mut(
-        &mut self,
-    ) -> impl Iterator<Item = &mut ValueType<Prim>> + '_ {
-        self.args
-            .element_types_mut()
-            .chain(Some(&mut self.return_type))
+        self.args.is_concrete() && self.return_type.is_concrete()
     }
 
     /// Maps argument and return types. The mapping function must not touch type params

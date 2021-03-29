@@ -4,7 +4,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::types::LenParamDescription;
 use crate::{
-    types::TypeParamDescription, FnType, PrimitiveType, Substitutions, TupleLength, ValueType,
+    types::TypeParamDescription, FnType, PrimitiveType, Substitutions, Tuple, TupleLength,
+    ValueType,
 };
 
 impl<Prim: PrimitiveType> FnType<Prim> {
@@ -104,17 +105,7 @@ impl FnTypeTree {
                 }
 
                 ValueType::Tuple(tuple) => {
-                    for element in tuple.element_types() {
-                        recurse(children, type_vars, const_vars, element);
-                    }
-
-                    // FIXME: handle compound lengths
-                    if let TupleLength::Var(idx) = tuple.len() {
-                        const_vars
-                            .entry(idx)
-                            .and_modify(|qty| *qty = VarQuantity::Repeated)
-                            .or_insert(VarQuantity::UniqueVar);
-                    }
+                    recurse_for_tuple(children, type_vars, const_vars, tuple)
                 }
 
                 ValueType::Function(fn_type) => {
@@ -140,12 +131,41 @@ impl FnTypeTree {
             }
         }
 
+        fn recurse_for_tuple<P: PrimitiveType>(
+            children: &mut Vec<FnTypeTree>,
+            type_vars: &mut HashMap<usize, VarQuantity>,
+            const_vars: &mut HashMap<usize, VarQuantity>,
+            tuple: &Tuple<P>,
+        ) {
+            for element in tuple.element_types() {
+                recurse(children, type_vars, const_vars, element);
+            }
+
+            // FIXME: handle compound lengths
+            if let TupleLength::Var(idx) = tuple.len() {
+                const_vars
+                    .entry(idx)
+                    .and_modify(|qty| *qty = VarQuantity::Repeated)
+                    .or_insert(VarQuantity::UniqueVar);
+            }
+        }
+
+        dbg!(base);
         let mut children = vec![];
         let mut all_type_vars = HashMap::new();
         let mut all_const_vars = HashMap::new();
-        for ty in base.arg_and_return_types() {
-            recurse(&mut children, &mut all_type_vars, &mut all_const_vars, ty);
-        }
+        recurse_for_tuple(
+            &mut children,
+            &mut all_type_vars,
+            &mut all_const_vars,
+            &base.args,
+        );
+        recurse(
+            &mut children,
+            &mut all_type_vars,
+            &mut all_const_vars,
+            &base.return_type,
+        );
 
         Self {
             children,
@@ -225,9 +245,7 @@ impl FnTypeTree {
         ) {
             match ty {
                 ValueType::Tuple(tuple) => {
-                    for element in tuple.element_types_mut() {
-                        recurse(reversed_children, element, substitutions);
-                    }
+                    recurse_for_tuple(reversed_children, tuple, substitutions);
                 }
 
                 ValueType::Function(fn_type) => {
@@ -238,6 +256,16 @@ impl FnTypeTree {
                 }
 
                 _ => { /* Do nothing. */ }
+            }
+        }
+
+        fn recurse_for_tuple<P: PrimitiveType>(
+            reversed_children: &mut Vec<FnTypeTree>,
+            tuple: &mut Tuple<P>,
+            substitutions: &Substitutions<P>,
+        ) {
+            for element in tuple.element_types_mut() {
+                recurse(reversed_children, element, substitutions);
             }
         }
 
@@ -253,11 +281,18 @@ impl FnTypeTree {
         base.type_params.sort_unstable_by_key(|(idx, _)| *idx);
 
         let dynamic_lengths = substitutions.dyn_lengths();
+        let vararg_length = base.args.middle_len_mut().and_then(|len| match len {
+            TupleLength::Var(idx) => Some(*idx),
+            _ => None,
+        });
+        // `vararg_length` is dynamic within function context, but must be set to non-dynamic
+        // for the function definition.
+
         base.len_params = self
             .const_params
             .into_iter()
             .map(|idx| {
-                let is_dynamic = dynamic_lengths.contains(&idx);
+                let is_dynamic = vararg_length != Some(idx) && dynamic_lengths.contains(&idx);
                 (idx, LenParamDescription { is_dynamic })
             })
             .collect();
@@ -265,9 +300,8 @@ impl FnTypeTree {
 
         let mut reversed_children = self.children;
         reversed_children.reverse();
-        for ty in base.arg_and_return_types_mut() {
-            recurse(&mut reversed_children, ty, substitutions);
-        }
+        recurse_for_tuple(&mut reversed_children, &mut base.args, substitutions);
+        recurse(&mut reversed_children, &mut base.return_type, substitutions);
     }
 }
 

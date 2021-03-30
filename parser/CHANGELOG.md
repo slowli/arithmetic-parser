@@ -5,6 +5,11 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ## [Unreleased]
 
+### Added
+
+- Parse type annotations for varargs and tuples with a middle, such as
+  `|...xs: T, y| { /* ... */ }` or `(head, ...tail: T)`. (#72)
+
 ## 0.2.0 - 2020-12-05
 
 *(All changes are relative compared to [the 0.2.0-beta.1 release](#020-beta1---2020-10-04))* 

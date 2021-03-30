@@ -51,7 +51,7 @@ impl dyn ModuleId {
     pub fn downcast_ref<T: ModuleId>(&self) -> Option<&T> {
         if self.is::<T>() {
             // SAFETY: Same code as for `<dyn Any>::downcast_ref()`.
-            unsafe { Some(&*(self as *const dyn ModuleId as *const T)) }
+            unsafe { Some(&*(self as *const dyn ModuleId).cast::<T>()) }
         } else {
             None
         }

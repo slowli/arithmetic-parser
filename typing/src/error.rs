@@ -30,8 +30,7 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
     },
 
     /// Trying to unify incompatible types. The first type is LHS, the second one is RHS.
-    // FIXME: Rename to `TypeMismatch`?
-    IncompatibleTypes(ValueType<Prim>, ValueType<Prim>),
+    TypeMismatch(ValueType<Prim>, ValueType<Prim>),
     /// Incompatible tuple lengths.
     // FIXME: Inconsistency: `TupleLenMismatch` vs `TupleLength`
     TupleLenMismatch {
@@ -87,7 +86,7 @@ impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
                 op
             ),
 
-            Self::IncompatibleTypes(first, second) => write!(
+            Self::TypeMismatch(first, second) => write!(
                 formatter,
                 "Trying to unify incompatible types `{}` and `{}`",
                 first, second
@@ -158,7 +157,7 @@ impl<Prim: PrimitiveType> TypeErrorKind<Prim> {
         op: BinaryOp,
     ) -> Self {
         match self {
-            TypeErrorKind::TupleLenMismatch { .. } | TypeErrorKind::IncompatibleTypes(..) => {
+            TypeErrorKind::TupleLenMismatch { .. } | TypeErrorKind::TypeMismatch(..) => {
                 TypeErrorKind::OperandMismatch { lhs_ty, rhs_ty, op }
             }
             err => err,

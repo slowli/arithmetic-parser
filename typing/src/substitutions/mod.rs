@@ -185,7 +185,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 resolver.visit_type_mut(&mut ty);
                 let mut other_ty = other_ty.to_owned();
                 resolver.visit_type_mut(&mut other_ty);
-                Err(TypeErrorKind::IncompatibleTypes(ty, other_ty))
+                Err(TypeErrorKind::TypeMismatch(ty, other_ty))
             }
         }
     }

@@ -15,7 +15,7 @@ pub fn assert_incompatible_types<Prim: PrimitiveType>(
     second: &ValueType<Prim>,
 ) {
     let (x, y) = match err {
-        TypeErrorKind::IncompatibleTypes(x, y) => (x, y),
+        TypeErrorKind::TypeMismatch(x, y) => (x, y),
         _ => panic!("Unexpected error type: {:?}", err),
     };
     assert!(
@@ -324,7 +324,7 @@ fn destructuring_for_fn_args() {
         let bogus_code = "shift(1, 2, (3, 4))";
         let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
         let err = type_env.process_statements(&bogus_block).unwrap_err();
-        assert_matches!(err.kind(), TypeErrorKind::IncompatibleTypes(..));
+        assert_matches!(err.kind(), TypeErrorKind::TypeMismatch(..));
     }
     {
         let bogus_code = "shift(1, 1 == 2, 1 == 1)";

@@ -79,14 +79,10 @@ impl<Prim: PrimitiveType> PartialEq for ValueType<Prim> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Some, _) | (_, Self::Some) => true,
-
             (Self::Prim(x), Self::Prim(y)) => x == y,
-
             (Self::Var(x), Self::Var(y)) | (Self::Param(x), Self::Param(y)) => x == y,
-
             (Self::Tuple(xs), Self::Tuple(ys)) => xs == ys,
-
-            // TODO: function equality?
+            (Self::Function(x), Self::Function(y)) => x == y,
             _ => false,
         }
     }
@@ -97,10 +93,8 @@ impl<Prim: PrimitiveType> fmt::Display for ValueType<Prim> {
         match self {
             Self::Some | Self::Var(_) => formatter.write_str("_"),
             Self::Param(idx) => formatter.write_str(type_param(*idx).as_ref()),
-
             Self::Prim(num) => fmt::Display::fmt(num, formatter),
             Self::Function(fn_type) => fmt::Display::fmt(fn_type, formatter),
-
             Self::Tuple(tuple) => fmt::Display::fmt(tuple, formatter),
         }
     }
@@ -210,6 +204,63 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
 
             Self::Function(fn_type) => fn_type.is_concrete(),
             Self::Tuple(tuple) => tuple.is_concrete(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn value_types_are_equal_to_self() {
+        const SAMPLE_TYPES: &[&str] = &[
+            "Num",
+            "(Num, Bool)",
+            "[Num; _]",
+            "(Num, ...[Bool; _])",
+            "fn(Num) -> Num",
+            "fn<len N; T: Lin>([T; N]) -> T",
+        ];
+
+        for &sample_type in SAMPLE_TYPES {
+            let ty: ValueType = sample_type.parse().unwrap();
+            assert_eq!(ty, ty);
+        }
+    }
+
+    #[test]
+    fn equality_is_preserved_on_renaming_params() {
+        const EQUAL_FNS: &[&str] = &[
+            "fn<len N; T: Lin>([T; N]) -> T",
+            "fn<len L; T: Lin>([T; L]) -> T",
+            "fn<len N; Ty: Lin>([Ty; N]) -> Ty",
+            "fn<len T; N: Lin>([N; T]) -> N",
+        ];
+
+        let functions: Vec<ValueType> = EQUAL_FNS.iter().map(|s| s.parse().unwrap()).collect();
+        for (i, function) in functions.iter().enumerate() {
+            for other_function in &functions[(i + 1)..] {
+                assert_eq!(function, other_function);
+            }
+        }
+    }
+
+    #[test]
+    fn unequal_functions() {
+        const FUNCTIONS: &[&str] = &[
+            "fn<len N; T: Lin>([T; N]) -> T",
+            "fn<len N*; T: Lin>([T; N]) -> T",
+            "fn<len N; T>([T; N]) -> T",
+            "fn<len N; T: Lin>([T; N], T) -> T",
+            "fn<len N; T: Lin>([T; N]) -> (T)",
+        ];
+
+        let functions: Vec<ValueType> = FUNCTIONS.iter().map(|s| s.parse().unwrap()).collect();
+        for (i, function) in functions.iter().enumerate() {
+            for other_function in &functions[(i + 1)..] {
+                assert_ne!(function, other_function);
+            }
         }
     }
 }

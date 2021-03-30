@@ -330,7 +330,15 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     }
 
     pub(crate) fn push(&mut self, element: ValueType<Prim>) {
-        self.start.push(element);
+        if self.middle.is_some() {
+            self.end.push(element);
+        } else {
+            self.start.push(element);
+        }
+    }
+
+    pub(crate) fn set_middle(&mut self, element: ValueType<Prim>, len: TupleLength) {
+        self.middle = Some(Slice::new(element, len));
     }
 
     /// Returns pairs of elements of this and `other` tuple that should be equal to each other.

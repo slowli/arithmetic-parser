@@ -240,6 +240,23 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 ///     "fn<len N; T, U: Lin>([T; N], fn(T) -> U) -> [U; N]"
 /// );
 /// ```
+///
+/// Signature of a function with varargs:
+///
+/// ```
+/// # use arithmetic_typing::{arith::LinConstraints, FnType, TupleLength, ValueType};
+/// # use std::iter;
+/// let fn_type = <FnType>::builder()
+///     .with_len_params(iter::once(0))
+///     .with_constrained_type_params(iter::once(0), LinConstraints::LIN)
+///     .with_varargs(ValueType::Param(0), TupleLength::Param(0))
+///     .with_arg(ValueType::BOOL)
+///     .returning(ValueType::Param(0));
+/// assert_eq!(
+///     fn_type.to_string(),
+///     "fn<len N; T: Lin>(...[T; N], Bool) -> T"
+/// );
+/// ```
 #[derive(Debug)]
 pub struct FnTypeBuilder<Prim: PrimitiveType = Num> {
     args: Tuple<Prim>,
@@ -297,6 +314,12 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
     /// Adds a new argument to the function definition.
     pub fn with_arg(mut self, arg: impl Into<ValueType<Prim>>) -> Self {
         self.args.push(arg.into());
+        self
+    }
+
+    /// Adds or sets varargs in the function definition.
+    pub fn with_varargs(mut self, element: impl Into<ValueType<Prim>>, len: TupleLength) -> Self {
+        self.args.set_middle(element.into(), len);
         self
     }
 

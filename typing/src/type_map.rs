@@ -1,5 +1,9 @@
 //! `TypeMap` trait and standard implementations.
 
+#![allow(renamed_and_removed_lints, clippy::unknown_clippy_lints)]
+// ^ `missing_panics_doc` is newer than MSRV, and `clippy::unknown_clippy_lints` is removed
+// since Rust 1.51.
+
 use std::iter;
 
 use crate::{arith::WithBoolean, FnType, PrimitiveType, TupleLength, ValueType};
@@ -243,6 +247,7 @@ impl Prelude {
     }
 
     /// Returns an iterator over all type definitions in the `Prelude`.
+    #[allow(clippy::missing_panics_doc)] // false positive; `unwrap()` never panics
     pub fn iter<Prim: WithBoolean>() -> impl Iterator<Item = (&'static str, ValueType<Prim>)> {
         const VAR_NAMES: &[&str] = &[
             "false", "true", "if", "while", "map", "filter", "fold", "push", "merge",
@@ -305,6 +310,7 @@ impl Assertions {
     }
 
     /// Returns an iterator over all type definitions in `Assertions`.
+    #[allow(clippy::missing_panics_doc)] // false positive; `unwrap()` never panics
     pub fn iter<Prim: WithBoolean>() -> impl Iterator<Item = (&'static str, ValueType<Prim>)> {
         const VAR_NAMES: &[&str] = &["assert", "assert_eq"];
 

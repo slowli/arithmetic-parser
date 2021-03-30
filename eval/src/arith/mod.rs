@@ -31,7 +31,9 @@
 //!
 //! [`ExecutableModule`]: crate::ExecutableModule
 
-#![allow(clippy::unknown_clippy_lints)] // `map_err_ignore` is newer than MSRV
+#![allow(renamed_and_removed_lints, clippy::unknown_clippy_lints)]
+// ^ `map_err_ignore` is newer than MSRV, and `clippy::unknown_clippy_lints` is removed
+// since Rust 1.51.
 
 use num_traits::{
     checked_pow, CheckedAdd, CheckedDiv, CheckedMul, CheckedNeg, CheckedSub, NumOps, One, Pow,

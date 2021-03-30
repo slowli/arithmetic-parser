@@ -1,5 +1,9 @@
 //! `VariableMap` trait and implementations.
 
+#![allow(renamed_and_removed_lints, clippy::unknown_clippy_lints)]
+// ^ `missing_panics_doc` is newer than MSRV, and `clippy::unknown_clippy_lints` is removed
+// since Rust 1.51.
+
 use arithmetic_parser::{grammars::Grammar, Block};
 
 use core::{cmp::Ordering, fmt};
@@ -55,6 +59,7 @@ pub struct Prelude;
 
 impl Prelude {
     /// Creates an iterator over contained values and the corresponding names.
+    #[allow(clippy::missing_panics_doc)] // false positive; `unwrap()` never panics
     pub fn iter<T: Clone>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
         const VAR_NAMES: &[&str] = &[
             "false", "true", "if", "loop", "while", "map", "filter", "fold", "push", "merge",
@@ -90,6 +95,7 @@ pub struct Assertions;
 
 impl Assertions {
     /// Creates an iterator over contained values and the corresponding names.
+    #[allow(clippy::missing_panics_doc)] // false positive; `unwrap()` never panics
     pub fn iter<T: fmt::Display>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
         const VAR_NAMES: &[&str] = &["assert", "assert_eq"];
 
@@ -129,6 +135,7 @@ impl<'a, T> VariableMap<'a, T> for Comparisons {
 
 impl Comparisons {
     /// Creates an iterator over contained values and the corresponding names.
+    #[allow(clippy::missing_panics_doc)] // false positive; `unwrap()` never panics
     pub fn iter<T>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
         const VAR_NAMES: &[&str] = &["LESS", "EQUAL", "GREATER", "cmp", "min", "max"];
 

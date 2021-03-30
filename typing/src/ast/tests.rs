@@ -165,7 +165,7 @@ fn simple_slice_with_length() {
 
     assert!(rest.fragment().is_empty());
     assert_eq!(*slice.element, ValueTypeAst::Prim(Num::Num));
-    assert_matches!(slice.length, TupleLengthAst::Ident(ident) if *ident.fragment() == "N");
+    assert_matches!(slice.length, TupleLenAst::Ident(ident) if *ident.fragment() == "N");
 }
 
 #[test]
@@ -175,7 +175,7 @@ fn simple_slice_without_length() {
 
     assert!(rest.fragment().is_empty());
     assert_matches!(*slice.element, ValueTypeAst::Ident(ident) if *ident.fragment() == "T");
-    assert_eq!(slice.length, TupleLengthAst::Dynamic);
+    assert_eq!(slice.length, TupleLenAst::Dynamic);
 }
 
 #[test]
@@ -192,7 +192,7 @@ fn complex_slice_type() {
             end: vec![],
         })
     );
-    assert_matches!(slice.length, TupleLengthAst::Ident(ident) if *ident.fragment() == "M");
+    assert_matches!(slice.length, TupleLenAst::Ident(ident) if *ident.fragment() == "M");
 }
 
 #[test]
@@ -201,14 +201,14 @@ fn embedded_slice_type() {
     let (rest, slice) = slice_definition::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_matches!(slice.length, TupleLengthAst::Ident(ident) if *ident.fragment() == "M");
+    assert_matches!(slice.length, TupleLenAst::Ident(ident) if *ident.fragment() == "M");
     let first_element = match slice.element.as_ref() {
         ValueTypeAst::Tuple(tuple) => &tuple.start[1],
         _ => panic!("Unexpected slice element: {:?}", slice.element),
     };
     assert_matches!(
         first_element,
-        ValueTypeAst::Slice(SliceAst { element, length: TupleLengthAst::Dynamic })
+        ValueTypeAst::Slice(SliceAst { element, length: TupleLenAst::Dynamic })
             if **element == ValueTypeAst::Prim(Num::Bool)
     );
 }
@@ -314,5 +314,5 @@ fn fn_type_with_rest_params() {
     assert_eq!(fn_type.args.start[0], ValueTypeAst::Prim(Num::Bool));
     let middle = fn_type.args.middle.unwrap();
     assert_eq!(*middle.element, ValueTypeAst::Prim(Num::Num));
-    assert_matches!(middle.length, TupleLengthAst::Ident(id) if *id.fragment() == "N");
+    assert_matches!(middle.length, TupleLenAst::Ident(id) if *id.fragment() == "N");
 }

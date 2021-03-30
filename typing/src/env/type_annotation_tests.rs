@@ -6,7 +6,7 @@ use super::{
     tests::{assert_incompatible_types, zip_fn_type, F32Grammar},
     *,
 };
-use crate::{Prelude, TupleLenMismatchContext, TupleLength};
+use crate::{Prelude, TupleLen, TupleLenMismatchContext};
 use arithmetic_parser::grammars::Parse;
 
 #[test]
@@ -50,8 +50,8 @@ fn contradicting_type_hint() {
     assert_matches!(
         err.kind(),
         TypeErrorKind::TupleLenMismatch {
-            lhs: TupleLength::Exact(2),
-            rhs: TupleLength::Exact(3),
+            lhs: TupleLen::Exact(2),
+            rhs: TupleLen::Exact(3),
             context: TupleLenMismatchContext::Assignment,
         }
     );
@@ -102,8 +102,8 @@ fn invalid_type_hint_with_fn_arg() {
     assert_matches!(
         err.kind(),
         TypeErrorKind::TupleLenMismatch {
-            lhs: TupleLength::Exact(2),
-            rhs: TupleLength::Exact(1),
+            lhs: TupleLen::Exact(2),
+            rhs: TupleLen::Exact(1),
             context: TupleLenMismatchContext::FnArgs,
         }
     );

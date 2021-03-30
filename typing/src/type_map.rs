@@ -6,7 +6,7 @@
 
 use std::iter;
 
-use crate::{arith::WithBoolean, FnType, PrimitiveType, TupleLength, ValueType};
+use crate::{arith::WithBoolean, FnType, PrimitiveType, TupleLen, ValueType};
 
 /// Map containing type definitions for all variables from `Prelude` in the eval crate,
 /// except for `loop` function.
@@ -147,9 +147,9 @@ impl Prelude {
         FnType::builder()
             .with_len_params(iter::once(0))
             .with_type_params(0..=1)
-            .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
+            .with_arg(ValueType::Param(0).repeat(TupleLen::Param(0)))
             .with_arg(map_arg)
-            .returning(ValueType::Param(1).repeat(TupleLength::Param(0)))
+            .returning(ValueType::Param(1).repeat(TupleLen::Param(0)))
     }
 
     /// Returns type of the `filter` function.
@@ -172,9 +172,9 @@ impl Prelude {
             .with_len_params(iter::once(0))
             .with_dyn_len_params(iter::once(1))
             .with_type_params(iter::once(0))
-            .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
+            .with_arg(ValueType::Param(0).repeat(TupleLen::Param(0)))
             .with_arg(predicate_arg)
-            .returning(ValueType::Param(0).repeat(TupleLength::Param(1)))
+            .returning(ValueType::Param(0).repeat(TupleLen::Param(1)))
     }
 
     /// Returns type of the `fold` function.
@@ -198,7 +198,7 @@ impl Prelude {
         FnType::builder()
             .with_len_params(iter::once(0))
             .with_type_params(0..=1)
-            .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
+            .with_arg(ValueType::Param(0).repeat(TupleLen::Param(0)))
             .with_arg(ValueType::Param(1))
             .with_arg(fold_arg)
             .returning(ValueType::Param(1))
@@ -220,9 +220,9 @@ impl Prelude {
             .with_len_params(iter::once(0))
             .with_dyn_len_params(iter::once(1))
             .with_type_params(iter::once(0))
-            .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
+            .with_arg(ValueType::Param(0).repeat(TupleLen::Param(0)))
             .with_arg(ValueType::Param(0))
-            .returning(ValueType::Param(0).repeat(TupleLength::Param(1)))
+            .returning(ValueType::Param(0).repeat(TupleLen::Param(1)))
     }
 
     /// Returns type of the `merge` function.
@@ -241,9 +241,9 @@ impl Prelude {
             .with_len_params(0..=1)
             .with_dyn_len_params(iter::once(2))
             .with_type_params(iter::once(0))
-            .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
-            .with_arg(ValueType::Param(0).repeat(TupleLength::Param(1)))
-            .returning(ValueType::Param(0).repeat(TupleLength::Param(2)))
+            .with_arg(ValueType::Param(0).repeat(TupleLen::Param(0)))
+            .with_arg(ValueType::Param(0).repeat(TupleLen::Param(1)))
+            .returning(ValueType::Param(0).repeat(TupleLen::Param(2)))
     }
 
     /// Returns an iterator over all type definitions in the `Prelude`.

@@ -4,7 +4,7 @@ use assert_matches::assert_matches;
 use super::*;
 use crate::{
     arith::LinConstraints, types::TypeParamDescription, Annotated, LengthKind, Num, Prelude,
-    TupleLenMismatchContext, TupleLength,
+    TupleLen, TupleLenMismatchContext,
 };
 
 pub type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
@@ -29,7 +29,7 @@ pub fn assert_incompatible_types<Prim: PrimitiveType>(
 fn hash_fn_type() -> FnType<Num> {
     FnType {
         // TODO: use `ValueType::Any` instead of `ValueType::Param(0)`
-        args: Slice::new(ValueType::Param(0), TupleLength::Param(0)).into(),
+        args: Slice::new(ValueType::Param(0), TupleLen::Param(0)).into(),
         return_type: ValueType::NUM,
         type_params: vec![(0, TypeParamDescription::new(LinConstraints::default()))],
         len_params: vec![(0, LengthKind::Static.into())],
@@ -50,11 +50,11 @@ pub fn zip_fn_type() -> FnType<Num> {
     FnType::builder()
         .with_len_params(iter::once(0))
         .with_type_params(0..=1)
-        .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
-        .with_arg(ValueType::Param(1).repeat(TupleLength::Param(0)))
+        .with_arg(ValueType::Param(0).repeat(TupleLen::Param(0)))
+        .with_arg(ValueType::Param(1).repeat(TupleLen::Param(0)))
         .returning(ValueType::slice(
             (ValueType::Param(0), ValueType::Param(1)),
-            TupleLength::Param(0),
+            TupleLen::Param(0),
         ))
 }
 
@@ -263,11 +263,11 @@ fn destructuring_for_tuple_on_assignment() {
     assert_eq!(type_env["x"], ValueType::NUM);
     assert_eq!(
         type_env["ys"],
-        ValueType::slice(ValueType::NUM, TupleLength::Exact(2))
+        ValueType::slice(ValueType::NUM, TupleLen::Exact(2))
     );
     assert_eq!(
         type_env["zs"],
-        ValueType::slice(ValueType::NUM, TupleLength::Exact(3))
+        ValueType::slice(ValueType::NUM, TupleLen::Exact(3))
     );
     assert_matches!(type_env["fn"], ValueType::Function(_));
     assert_eq!(type_env["flag"], ValueType::BOOL);
@@ -297,7 +297,7 @@ fn destructuring_error_on_assignment() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch { lhs, rhs: TupleLength::Exact(1), .. }
+        TypeErrorKind::TupleLenMismatch { lhs, rhs: TupleLen::Exact(1), .. }
             if lhs.to_string() == "_ + 2"
     );
 }
@@ -339,8 +339,8 @@ fn destructuring_for_fn_args() {
     assert_matches!(
         err.kind(),
         TypeErrorKind::TupleLenMismatch {
-            lhs: TupleLength::Exact(3),
-            rhs: TupleLength::Exact(2),
+            lhs: TupleLen::Exact(3),
+            rhs: TupleLen::Exact(2),
             ..
         }
     )
@@ -378,7 +378,7 @@ fn exact_lengths_for_gathering_fn() {
     assert_eq!(type_env["head"], ValueType::BOOL);
     assert_eq!(
         type_env["tail"],
-        ValueType::slice(ValueType::NUM, TupleLength::Exact(2))
+        ValueType::slice(ValueType::NUM, TupleLen::Exact(2))
     );
 }
 
@@ -483,8 +483,8 @@ fn incorrect_function_arity() {
     assert_matches!(
         err.kind(),
         TypeErrorKind::TupleLenMismatch {
-            lhs: TupleLength::Exact(1),
-            rhs: TupleLength::Exact(2),
+            lhs: TupleLen::Exact(1),
+            rhs: TupleLen::Exact(2),
             context: TupleLenMismatchContext::Assignment,
         }
     );
@@ -699,8 +699,8 @@ fn function_passed_as_arg_invalid_arity() {
     assert_matches!(
         err.kind(),
         TypeErrorKind::TupleLenMismatch {
-            lhs: TupleLength::Exact(2),
-            rhs: TupleLength::Exact(1),
+            lhs: TupleLen::Exact(2),
+            rhs: TupleLen::Exact(1),
             context: TupleLenMismatchContext::FnArgs,
         }
     );
@@ -768,7 +768,7 @@ fn function_accepting_slices() {
     );
     assert_eq!(
         type_env["z"],
-        ValueType::slice(ValueType::NUM, TupleLength::Exact(3))
+        ValueType::slice(ValueType::NUM, TupleLen::Exact(3))
     );
 }
 
@@ -810,8 +810,8 @@ fn unifying_length_vars_error() {
     assert_matches!(
         err.kind(),
         TypeErrorKind::TupleLenMismatch {
-            lhs: TupleLength::Exact(2),
-            rhs: TupleLength::Exact(3),
+            lhs: TupleLen::Exact(2),
+            rhs: TupleLen::Exact(3),
             context: TupleLenMismatchContext::Assignment,
         }
     );
@@ -894,8 +894,8 @@ fn cannot_destructure_dynamic_slice() {
     assert_matches!(
         err.kind(),
         TypeErrorKind::TupleLenMismatch {
-            lhs: TupleLength::Exact(2),
-            rhs: TupleLength::Var(_),
+            lhs: TupleLen::Exact(2),
+            rhs: TupleLen::Var(_),
             ..
         }
     );
@@ -929,7 +929,7 @@ fn comparisons_when_switched_on() {
     };
 
     assert_eq!(*slice.element(), ValueType::NUM);
-    assert_matches!(slice.len(), TupleLength::Var(_));
+    assert_matches!(slice.len(), TupleLen::Var(_));
 }
 
 #[test]

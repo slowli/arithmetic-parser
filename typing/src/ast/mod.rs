@@ -103,7 +103,7 @@ pub struct SliceAst<'a, Prim = Num> {
     /// Element of this slice; for example, `Num` in `[Num; N]`.
     pub element: Box<ValueTypeAst<'a, Prim>>,
     /// Length of this slice; for example, `N` in `[Num; N]`.
-    pub length: TupleLengthAst<'a>,
+    pub length: TupleLenAst<'a>,
 }
 
 /// Parsed functional type.
@@ -154,7 +154,7 @@ impl<'a, Prim: PrimitiveType> FnTypeAst<'a, Prim> {
 /// Parsed tuple length.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-pub enum TupleLengthAst<'a> {
+pub enum TupleLenAst<'a> {
     /// Length placeholder (`_`). Corresponds to any single length.
     Any,
     /// Dynamic tuple length. This length is *implicit*, as in `[Num]`.
@@ -271,9 +271,9 @@ fn slice_definition<Prim: PrimitiveType>(
     let tuple_len = map(
         opt(preceded(semicolon, ident)),
         |maybe_ident| match maybe_ident {
-            Some(ident) if *ident.fragment() == "_" => TupleLengthAst::Any,
-            Some(ident) => TupleLengthAst::Ident(ident),
-            None => TupleLengthAst::Dynamic,
+            Some(ident) if *ident.fragment() == "_" => TupleLenAst::Any,
+            Some(ident) => TupleLenAst::Ident(ident),
+            None => TupleLenAst::Dynamic,
         },
     );
 

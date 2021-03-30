@@ -10,7 +10,7 @@ mod tuple;
 pub(crate) use self::fn_type::{LenParamDescription, TypeParamDescription};
 pub use self::{
     fn_type::{FnType, FnTypeBuilder},
-    tuple::{CompoundTupleLength, LengthKind, Slice, Tuple, TupleLength},
+    tuple::{CompoundTupleLen, LengthKind, Slice, Tuple, TupleLen},
 };
 
 /// Enumeration encompassing all types supported by the type system.
@@ -30,10 +30,10 @@ pub use self::{
 /// There are conversions to construct `ValueType`s eloquently:
 ///
 /// ```
-/// # use arithmetic_typing::{FnType, TupleLength, ValueType};
+/// # use arithmetic_typing::{FnType, TupleLen, ValueType};
 /// let tuple: ValueType = (ValueType::BOOL, ValueType::NUM).into();
 /// assert_eq!(tuple.to_string(), "(Bool, Num)");
-/// let slice = tuple.repeat(TupleLength::Param(0));
+/// let slice = tuple.repeat(TupleLen::Param(0));
 /// assert_eq!(slice.to_string(), "[(Bool, Num); N]");
 /// let fn_type: ValueType = FnType::builder()
 ///     .with_len_params(0..1)
@@ -175,12 +175,12 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
     }
 
     /// Creates a slice type.
-    pub fn slice(element: impl Into<ValueType<Prim>>, length: TupleLength) -> Self {
+    pub fn slice(element: impl Into<ValueType<Prim>>, length: TupleLen) -> Self {
         Self::Tuple(Slice::new(element.into(), length).into())
     }
 
     /// Creates a slice type by repeating this type.
-    pub fn repeat(self, length: TupleLength) -> Slice<Prim> {
+    pub fn repeat(self, length: TupleLen) -> Slice<Prim> {
         Slice::new(self, length)
     }
 

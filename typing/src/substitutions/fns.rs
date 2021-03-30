@@ -6,7 +6,7 @@ use crate::types::LenParamDescription;
 use crate::{
     types::TypeParamDescription,
     visit::{self, Visit, VisitMut},
-    FnType, PrimitiveType, Slice, Substitutions, Tuple, TupleLength, ValueType,
+    FnType, PrimitiveType, Slice, Substitutions, Tuple, TupleLen, ValueType,
 };
 
 impl<Prim: PrimitiveType> FnType<Prim> {
@@ -63,14 +63,14 @@ impl FnTypeTree {
             }
 
             fn visit_tuple(&mut self, tuple: &'ast Tuple<P>) {
-                let middle_len = tuple.parts().1.map_or(&TupleLength::Exact(0), Slice::len);
-                let maybe_var_len = if let TupleLength::Compound(len) = middle_len {
+                let middle_len = tuple.parts().1.map_or(&TupleLen::Exact(0), Slice::len);
+                let maybe_var_len = if let TupleLen::Compound(len) = middle_len {
                     len.components().0
                 } else {
                     middle_len
                 };
 
-                if let TupleLength::Var(idx) = maybe_var_len {
+                if let TupleLen::Var(idx) = maybe_var_len {
                     self.length_vars
                         .entry(*idx)
                         .and_modify(|qty| *qty = VarQuantity::Repeated)
@@ -203,7 +203,7 @@ impl FnTypeTree {
 
         let (_, vararg, _) = base.args.parts();
         let vararg_length = vararg.map(Slice::len).and_then(|len| match len {
-            TupleLength::Var(idx) => Some(*idx),
+            TupleLen::Var(idx) => Some(*idx),
             _ => None,
         });
         // `vararg_length` is dynamic within function context, but must be set to non-dynamic
@@ -251,9 +251,9 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for PolyTypeTransformer {
         }
     }
 
-    fn visit_middle_len_mut(&mut self, len: &mut TupleLength) {
-        if let TupleLength::Var(idx) = len {
-            *len = TupleLength::Param(self.mapping.lengths[idx]);
+    fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
+        if let TupleLen::Var(idx) = len {
+            *len = TupleLen::Param(self.mapping.lengths[idx]);
         }
     }
 
@@ -299,14 +299,14 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for MonoTypeTransformer<'_> {
         }
     }
 
-    fn visit_middle_len_mut(&mut self, len: &mut TupleLength) {
-        if let TupleLength::Param(idx) = len {
+    fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
+        if let TupleLen::Param(idx) = len {
             *len = self
                 .mapping
                 .lengths
                 .get(idx)
                 .copied()
-                .map_or(TupleLength::Param(*idx), TupleLength::Var);
+                .map_or(TupleLen::Param(*idx), TupleLen::Var);
         }
     }
 

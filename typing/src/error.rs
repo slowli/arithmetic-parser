@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::{PrimitiveType, TupleLength, ValueType};
+use crate::{PrimitiveType, TupleLen, ValueType};
 use arithmetic_parser::{BinaryOp, Spanned, UnsupportedType};
 
 /// Context for [`TypeErrorKind::TupleLenMismatch`].
@@ -32,14 +32,13 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
     /// Trying to unify incompatible types. The first type is LHS, the second one is RHS.
     TypeMismatch(ValueType<Prim>, ValueType<Prim>),
     /// Incompatible tuple lengths.
-    // FIXME: Inconsistency: `TupleLenMismatch` vs `TupleLength`
     TupleLenMismatch {
         /// Length of the LHS. This is the length determined by type annotations
         /// for assignments and the number of actually supplied args in function calls.
-        lhs: TupleLength,
+        lhs: TupleLen,
         /// Length of the RHS. This is usually the actual tuple length in assignments
         /// and the number of expected args in function calls.
-        rhs: TupleLength,
+        rhs: TupleLen,
         /// Context in which the error has occurred.
         context: TupleLenMismatchContext,
     },
@@ -48,7 +47,7 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
     /// Trying to unify a type with a type containing it.
     RecursiveType(ValueType<Prim>),
 
-    /// Mention of [`ValueType::Param`] or [`TupleLength::Param`] in a type.
+    /// Mention of [`ValueType::Param`] or [`TupleLen::Param`] in a type.
     ///
     /// `Param`s are instantiated into `Var`s automatically, so this error
     /// can only occur with types manually supplied to [`Substitutions::unify()`].

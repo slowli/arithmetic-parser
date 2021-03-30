@@ -10,7 +10,7 @@ use std::{
 use crate::{
     arith::{BinaryOpSpans, MapPrimitiveType, NumArithmetic, TypeArithmetic, UnaryOpSpans},
     visit::VisitMut,
-    FnType, Num, PrimitiveType, Slice, Substitutions, Tuple, TupleLength, TypeError, TypeErrorKind,
+    FnType, Num, PrimitiveType, Slice, Substitutions, Tuple, TupleLen, TypeError, TypeErrorKind,
     TypeResult, ValueType,
 };
 use arithmetic_parser::{
@@ -392,7 +392,7 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
             .map_err(|err| err.with_span(ty.as_ref().unwrap()))?;
         // `unwrap` is safe: an error can only occur with a type annotation present.
 
-        let mut length = TupleLength::Some {
+        let mut length = TupleLen::Some {
             is_dynamic: is_fn_args,
         };
         self.root_scope.substitutions.assign_new_length(&mut length);

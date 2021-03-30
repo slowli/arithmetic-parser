@@ -5,9 +5,9 @@ use nom::Err as NomErr;
 use std::{collections::HashMap, convert::TryFrom, fmt, str::FromStr};
 
 use crate::{
-    ast::{FnTypeAst, SliceAst, TupleAst, TupleLengthAst, TypeConstraintsAst, ValueTypeAst},
+    ast::{FnTypeAst, SliceAst, TupleAst, TupleLenAst, TypeConstraintsAst, ValueTypeAst},
     types::TypeParamDescription,
-    FnType, PrimitiveType, Slice, Tuple, TupleLength, ValueType,
+    FnType, PrimitiveType, Slice, Tuple, TupleLen, ValueType,
 };
 use arithmetic_parser::{
     ErrorKind as ParseErrorKind, InputSpan, LocatedSpan, NomResult, SpannedError, StripCode,
@@ -233,15 +233,15 @@ impl<'a, Prim: PrimitiveType> SliceAst<'a, Prim> {
     ) -> Result<Slice<Prim>, ConversionError<&'a str>> {
         let element = self.element.try_convert(state)?;
         let converted_length = match &self.length {
-            TupleLengthAst::Ident(ident) => {
+            TupleLenAst::Ident(ident) => {
                 let name = *ident.fragment();
                 let const_param = state.const_param_idx(name).ok_or_else(|| {
                     ConversionErrorKind::UndefinedConst(name.to_owned()).with_span(*ident)
                 })?;
-                TupleLength::Param(const_param)
+                TupleLen::Param(const_param)
             }
-            TupleLengthAst::Any => TupleLength::Some { is_dynamic: false },
-            TupleLengthAst::Dynamic => TupleLength::Some { is_dynamic: true },
+            TupleLenAst::Any => TupleLen::Some { is_dynamic: false },
+            TupleLenAst::Dynamic => TupleLen::Some { is_dynamic: true },
         };
 
         Ok(Slice::new(element, converted_length))
@@ -547,7 +547,7 @@ mod tests {
             *slice_type.element(),
             ValueType::from((ValueType::NUM, ValueType::Some))
         );
-        assert_matches!(slice_type.len(), TupleLength::Some { is_dynamic: false });
+        assert_matches!(slice_type.len(), TupleLen::Some { is_dynamic: false });
     }
 
     #[test]
@@ -575,7 +575,7 @@ mod tests {
         assert!(ty.type_params.is_empty());
         let args_slice = ty.args.as_slice().unwrap();
         assert_eq!(*args_slice.element(), ValueType::NUM);
-        assert_eq!(*args_slice.len(), TupleLength::Param(0));
+        assert_eq!(*args_slice.len(), TupleLen::Param(0));
     }
 
     #[test]

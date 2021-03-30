@@ -63,10 +63,16 @@ impl FnTypeTree {
             }
 
             fn visit_tuple(&mut self, tuple: &'ast Tuple<P>) {
-                // FIXME: handle compound lengths
-                if let TupleLength::Var(idx) = tuple.len() {
+                let middle_len = tuple.parts().1.map_or(&TupleLength::Exact(0), Slice::len);
+                let maybe_var_len = if let TupleLength::Compound(len) = middle_len {
+                    len.components().0
+                } else {
+                    middle_len
+                };
+
+                if let TupleLength::Var(idx) = maybe_var_len {
                     self.length_vars
-                        .entry(idx)
+                        .entry(*idx)
                         .and_modify(|qty| *qty = VarQuantity::Repeated)
                         .or_insert(VarQuantity::UniqueVar);
                 }

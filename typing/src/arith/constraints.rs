@@ -129,7 +129,7 @@ impl<Prim: LinearType> TypeConstraints<Prim> for LinConstraints {
         }
 
         let resolved_ty = if let ValueType::Var(idx) = ty {
-            substitutions.insert_constraint(*idx, self);
+            substitutions.insert_constraints(*idx, self);
             substitutions.fast_resolve(ty)
         } else {
             ty

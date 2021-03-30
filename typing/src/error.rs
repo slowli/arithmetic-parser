@@ -49,6 +49,14 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
     /// Trying to unify a type with a type containing it.
     RecursiveType(ValueType<Prim>),
 
+    /// Mention of [`ValueType::Param`] or [`TupleLength::Param`] in a type.
+    ///
+    /// `Param`s are instantiated into `Var`s automatically, so this error
+    /// can only occur with types manually supplied to [`Substitutions::unify()`].
+    ///
+    /// [`Substitutions::unify()`]: crate::Substitutions::unify()
+    UnresolvedParam,
+
     /// Failure when applying constraint to a type.
     FailedConstraint {
         /// Type that fails constraint requirement.
@@ -59,9 +67,10 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
 
     /// Language construct not supported by the type inference.
     Unsupported(UnsupportedType),
-    /// Unsupported use of type or const params in function declaration.
+    /// Unsupported use of type or length params in a function declaration.
     ///
-    /// Type or const params are currently not supported in type annotations, such as
+    /// Type or length params are currently not supported in type annotations. Here's an example
+    /// of code that triggers this error:
     ///
     /// ```text
     /// identity: fn<T>(T) -> T = |x| x;
@@ -106,13 +115,17 @@ impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
                 ty
             ),
 
+            Self::UnresolvedParam => {
+                formatter.write_str("Params not instantiated into variables cannot be unified")
+            }
+
             Self::FailedConstraint { ty, constraint } => {
                 write!(formatter, "Type `{}` fails constraint {}", ty, constraint)
             }
 
             Self::Unsupported(ty) => write!(formatter, "Unsupported {}", ty),
             Self::UnsupportedParam => {
-                formatter.write_str("Type params in declared function types is not supported yet")
+                formatter.write_str("Params in declared function types are not supported yet")
             }
         }
     }

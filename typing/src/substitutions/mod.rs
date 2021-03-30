@@ -24,11 +24,13 @@ pub struct Substitutions<Prim: PrimitiveType> {
     type_var_count: usize,
     /// Type variable equations, encoded as `type_var[key] = value`.
     eqs: HashMap<usize, ValueType<Prim>>,
+    /// Constraints on type variables.
     constraints: HashMap<usize, Prim::Constraints>,
     /// Number of length variables.
     const_var_count: usize,
     /// Length variable equations.
     length_eqs: HashMap<usize, TupleLength>,
+    /// Length variable known to be dynamic.
     dyn_lengths: HashSet<usize>,
 }
 
@@ -56,7 +58,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
     /// Inserts `constraints` for a type var with the specified index and all vars
     /// it is equivalent to.
-    pub fn insert_constraint(&mut self, var_idx: usize, constraints: &Prim::Constraints) {
+    pub fn insert_constraints(&mut self, var_idx: usize, constraints: &Prim::Constraints) {
         for idx in self.equivalent_vars(var_idx) {
             let current_constraints = self.constraints.entry(idx).or_default();
             *current_constraints |= constraints;
@@ -148,11 +150,6 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     /// # Errors
     ///
     /// Returns an error if unification is impossible.
-    ///
-    /// # Panics
-    ///
-    /// - Panics if `lhs` or `rhs` contains [`ValueType::Param`]s. This will never happen
-    ///   for types constructed automatically during inference.
     pub fn unify(
         &mut self,
         lhs: &ValueType<Prim>,
@@ -174,9 +171,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
             (Var(idx), ty) | (ty, Var(idx)) => self.unify_var(*idx, ty),
 
-            (Param(_), _) | (_, Param(_)) => {
-                unreachable!("Type params must be transformed into vars before unification")
-            }
+            (Param(_), _) | (_, Param(_)) => Err(TypeErrorKind::UnresolvedParam),
 
             (Tuple(lhs_tuple), Tuple(rhs_tuple)) => {
                 self.unify_tuples(lhs_tuple, rhs_tuple, TupleLenMismatchContext::Assignment)
@@ -228,6 +223,10 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         let resolved_rhs = self.resolve_len(rhs);
 
         match (&resolved_lhs, &resolved_rhs) {
+            (TupleLength::Param(_), _) | (_, TupleLength::Param(_)) => {
+                Err(TypeErrorKind::UnresolvedParam)
+            }
+
             (TupleLength::Var(x), TupleLength::Var(y)) if x == y => {
                 // Lengths are already unified.
                 Ok(resolved_lhs)

@@ -1015,13 +1015,19 @@ fn destructuring_is_parsed() {
         }
     );
 
-    let input = InputSpan::new("..., end)");
+    let input = InputSpan::new("...xs: Ge, end)");
     assert_eq!(
         destructure::<FieldGrammar, Complete>(input).unwrap().1,
         Destructure {
             start: vec![],
-            middle: Some(Spanned::new(span(0, "..."), DestructureRest::Unnamed)),
-            end: vec![lsp(5, "end", Lvalue::Variable { ty: None })],
+            middle: Some(Spanned::new(
+                span(0, "...xs: Ge"),
+                DestructureRest::Named {
+                    variable: span(3, "xs").into(),
+                    ty: Some(Spanned::new(span(7, "Ge"), ValueType::Element))
+                }
+            )),
+            end: vec![lsp(11, "end", Lvalue::Variable { ty: None })],
         }
     );
 }

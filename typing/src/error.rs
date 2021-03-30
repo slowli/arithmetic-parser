@@ -63,8 +63,17 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
         constraint: Prim::Constraints,
     },
 
-    /// Language construct not supported by the type inference.
+    /// Language construct not supported by type inference logic.
     Unsupported(UnsupportedType),
+
+    /// Type not supported by type inference logic. For example,
+    /// a [`TypeArithmetic`] or [`TypeConstraints`] implementations may return this error
+    /// if they encounter an unknown [`ValueType`] variant.
+    ///
+    /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
+    /// [`TypeConstraints`]: crate::arith::TypeConstraints
+    UnsupportedType(ValueType<Prim>),
+
     /// Unsupported use of type or length params in a function declaration.
     ///
     /// Type or length params are currently not supported in type annotations. Here's an example
@@ -122,6 +131,7 @@ impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
             }
 
             Self::Unsupported(ty) => write!(formatter, "Unsupported {}", ty),
+            Self::UnsupportedType(ty) => write!(formatter, "Unsupported type: {}", ty),
             Self::UnsupportedParam => {
                 formatter.write_str("Params in declared function types are not supported yet")
             }

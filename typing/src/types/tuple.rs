@@ -6,6 +6,7 @@ use crate::{Num, PrimitiveType, ValueType};
 
 /// Length of a tuple.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum TupleLen {
     /// Wildcard length.
     Some {

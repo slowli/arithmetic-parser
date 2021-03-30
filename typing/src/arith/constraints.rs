@@ -53,7 +53,7 @@ where
     /// contradicts the constraints.
     ///
     /// A typical implementation will use `substitutions` to
-    /// [place constraints on type vars](Substitutions::insert_constraint()), e.g.,
+    /// [place constraints on type vars](Substitutions::insert_constraints()), e.g.,
     /// by recursively traversing and resolving the provided type.
     fn apply(
         &self,

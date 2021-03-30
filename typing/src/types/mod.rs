@@ -57,6 +57,7 @@ pub use self::{
 /// # }
 /// ```
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum ValueType<Prim: PrimitiveType = Num> {
     /// Wildcard type, i.e. some type that is not specified. Similar to `_` in type annotations
     /// in Rust.
@@ -225,7 +226,7 @@ mod tests {
 
         for &sample_type in SAMPLE_TYPES {
             let ty: ValueType = sample_type.parse().unwrap();
-            assert_eq!(ty, ty);
+            assert!(ty.eq(&ty), "Type is not equal to self: {}", ty);
         }
     }
 

@@ -174,6 +174,8 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
                 }
                 Ok(())
             }
+
+            other => Err(TypeErrorKind::UnsupportedType(other.to_owned())),
         }
     }
 }

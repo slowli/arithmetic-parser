@@ -139,7 +139,7 @@ impl<T> dyn NativeFn<T> {
         // see https://github.com/rust-lang/rust/issues/27751. This is seemingly
         // the simplest way to extract the data pointer; `TraitObject` in `std::raw` is
         // a more future-proof alternative, but it is unstable.
-        self as *const dyn NativeFn<T> as *const ()
+        (self as *const dyn NativeFn<T>).cast()
     }
 }
 
@@ -362,10 +362,14 @@ pub struct OpaqueRef {
     dyn_fmt: fn(&dyn Any, &mut fmt::Formatter<'_>) -> fmt::Result,
 }
 
+#[allow(renamed_and_removed_lints, clippy::unknown_clippy_lints)]
+// ^ `missing_panics_doc` is newer than MSRV, and `clippy::unknown_clippy_lints` is removed
+// since Rust 1.51.
 impl OpaqueRef {
     /// Creates a reference to `value` that implements equality comparison.
     ///
     /// Prefer using this method if the wrapped type implements [`PartialEq`].
+    #[allow(clippy::missing_panics_doc)] // false positive; `unwrap()`s never panic
     pub fn new<T>(value: T) -> Self
     where
         T: Any + fmt::Debug + PartialEq,
@@ -391,6 +395,7 @@ impl OpaqueRef {
     /// equal iff they point to the same data.
     ///
     /// Prefer [`Self::new()`] when possible.
+    #[allow(clippy::missing_panics_doc)] // false positive; `unwrap()`s never panic
     pub fn with_identity_eq<T>(value: T) -> Self
     where
         T: Any + fmt::Debug,
@@ -400,8 +405,8 @@ impl OpaqueRef {
             type_name: type_name::<T>(),
 
             dyn_eq: |this, other| {
-                let this_data = this as *const dyn Any as *const ();
-                let other_data = other as *const dyn Any as *const ();
+                let this_data = (this as *const dyn Any).cast::<()>();
+                let other_data = (other as *const dyn Any).cast::<()>();
                 this_data == other_data
             },
             dyn_fmt: |this, formatter| {

@@ -1,5 +1,9 @@
 //! Functional type (`FnType`) and closely related types.
 
+#![allow(renamed_and_removed_lints, clippy::unknown_clippy_lints)]
+// ^ `missing_panics_doc` is newer than MSRV, and `clippy::unknown_clippy_lints` is removed
+// since Rust 1.51.
+
 use std::{collections::HashMap, fmt};
 
 use super::type_param;
@@ -291,6 +295,7 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
     }
 
     /// Adds a new argument to the function definition.
+    #[allow(clippy::missing_panics_doc)] // false positive
     pub fn with_arg(mut self, arg: impl Into<ValueType<Prim>>) -> Self {
         self.args.push(arg.into());
         self

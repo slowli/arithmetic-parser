@@ -148,6 +148,11 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     /// # Errors
     ///
     /// Returns an error if unification is impossible.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if `lhs` or `rhs` contains [`ValueType::Param`]s. This will never happen
+    ///   for types constructed automatically during inference.
     pub fn unify(
         &mut self,
         lhs: &ValueType<Prim>,

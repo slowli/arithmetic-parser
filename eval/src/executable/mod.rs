@@ -436,6 +436,10 @@ impl<'a, T> ExecutableModuleBuilder<'a, T> {
     }
 
     /// A version of [`Self::try_build()`] that panics if there are undefined imports.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if there are undefined imports.
     pub fn build(self) -> ExecutableModule<'a, T> {
         self.try_build().unwrap()
     }

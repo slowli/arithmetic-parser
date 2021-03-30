@@ -39,6 +39,36 @@ impl<C> TypeParamDescription<C> {
 ///
 /// Functional types can be constructed via [`Self::builder()`] or parsed from a string.
 ///
+/// # Notation
+///
+/// Functional types are denoted similarly to Rust:
+///
+/// ```text
+/// fn<len N, M*; T: Lin>([T; N], T) -> [T; M]
+/// ```
+///
+/// Here:
+///
+/// - `len N, M*` and `T: Lin` are length params and type params, respectively.
+///   Length and/or type params may be empty.
+/// - `N`, `M` and `T` are parameter names. The args and the return type may reference these
+///   parameters and/or parameters of the outer function(s), if any.
+/// - `Lin` is a [constraint] on the type param.
+/// - `*` after `M` denotes that `M` is a [dynamic length] (i.e., cannot be unified with
+///   any other length during type inference).
+/// - `[T; N]` and `T` are types of the function arguments.
+/// - `[T; M]` is the return type.
+///
+/// If a function returns [`ValueType::void()`], the `-> _` part may be omitted.
+///
+/// A function may accept variable number of arguments of the same type along
+/// with other args. (This construction is known as *varargs*.) This is denoted similarly
+/// to middles in [`Tuple`]s. For example, `fn<len N>(...[Num; N]) -> Num` denotes a function
+/// that accepts any number of `Num` args and returns a `Num` value.
+///
+/// [constraint]: crate::TypeConstraints
+/// [dynamic length]: crate::LengthKind::Dynamic
+///
 /// # Examples
 ///
 /// ```

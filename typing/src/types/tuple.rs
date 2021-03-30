@@ -121,17 +121,28 @@ impl CompoundTupleLength {
 pub enum LengthKind {
     /// Length is static (can be found during type inference / "in compile time").
     Static,
-    /// Length is dynamic (can vary at runtime).
+    /// Length is dynamic (can vary at runtime). Dynamic lengths cannot be unified with
+    /// any other length during type inference.
     Dynamic,
 }
 
 /// Tuple type.
 ///
 /// Most generally, a tuple type consists of three fragments: *start*,
-/// *middle* and *end*. Types at the start and end are
-/// heterogeneous, while the middle always contains items of the same type (but the number
-/// of these items can generally vary). A [`Slice`] is essentially a partial case of a tuple type;
-/// i.e., a type with empty start and end.
+/// *middle* and *end*. Types at the start and at the end are heterogeneous,
+/// while the middle always contains items of the same type (but the number
+/// of these items can generally vary). A [`Slice`] is a partial case of a tuple type;
+/// i.e., a type with the empty start and end. Likewise, a Rust-like tuple is a tuple
+/// that only has a start.
+///
+/// # Notation
+///
+/// A tuple type is denoted like `(T, U, ...[V; _], X, Y)`, where `T` and `U` are types
+/// at the start, `V` is the middle type, and `X`, `Y` are types at the end.
+/// The number of middle elements can be parametric, such as `N`.
+/// If a tuple only has a start, this notation collapses into Rust-like `(T, U)`.
+/// If a tuple only has a middle part ([`Self::as_slice()`] returns `Some(_)`),
+/// it is denoted as the corresponding slice, something like `[T; N]`.
 ///
 /// # Examples
 ///
@@ -445,6 +456,39 @@ impl<Prim: PrimitiveType> From<Vec<ValueType<Prim>>> for Tuple<Prim> {
 /// Slice type. Unlike in Rust, slices are a subset of tuples. If `length` is
 /// [`Exact`](TupleLength::Exact), the slice is completely equivalent
 /// to the corresponding tuple.
+///
+/// # Notation
+///
+/// A slice is denoted as `[T; N]` where `T` is the slice [element](Self::element())
+/// and `N` is the slice [length](Self::len()). A special case is `[T]`, a slice
+/// with a dynamic length.
+///
+/// # Examples
+///
+/// ```
+/// use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// use arithmetic_typing::{Annotated, TupleLength, TypeEnvironment, ValueType};
+///
+/// # fn main() -> anyhow::Result<()> {
+/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
+/// let ast = Parser::parse_statements("xs: [Num; _] = (1, 2, 3);")?;
+/// let mut env = TypeEnvironment::new();
+/// env.process_statements(&ast)?;
+/// // Slices with fixed length are equivalent to tuples.
+/// assert_eq!(env["xs"].to_string(), "(Num, Num, Num)");
+///
+/// let ast = Parser::parse_statements(r#"
+///     xs: [Num] = (1, 2, 3);
+///     ys = xs + 1; // works fine: despite `xs` having unknown length,
+///                  // it's always possible to add a number to it
+///     (_, _, z) = xs; // does not work: the tuple length is erased
+/// "#)?;
+/// let err = env.process_statements(&ast).unwrap_err();
+/// assert_eq!(*err.span().fragment(), "(_, _, z) = xs");
+/// assert_eq!(env["ys"], env["xs"]);
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Slice<Prim: PrimitiveType = Num> {
     element: Box<ValueType<Prim>>,
@@ -453,7 +497,11 @@ pub struct Slice<Prim: PrimitiveType = Num> {
 
 impl<Prim: PrimitiveType> fmt::Display for Slice<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "[{}; {}]", self.element, self.length)
+        if let TupleLength::Some { is_dynamic: true } = self.length {
+            write!(formatter, "[{}]", self.element)
+        } else {
+            write!(formatter, "[{}; {}]", self.element, self.length)
+        }
     }
 }
 

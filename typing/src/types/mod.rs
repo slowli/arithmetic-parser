@@ -17,6 +17,14 @@ pub use self::{
 ///
 /// Parametric by the [`PrimitiveType`].
 ///
+/// # Notation
+///
+/// - [`Self::Some`] and [`Self::Var`] are represented as `_`.
+/// - [`Prim`](Self::Prim)itive types are represented using the [`Display`](fmt::Display)
+///   implementation of the corresponding [`PrimitiveType`].
+/// - [`Param`](Self::Param)s are represented as `T`, `U`, `V` etc.
+/// - Notation for [functional](FnType) and [tuple](Tuple) types is documented separately.
+///
 /// # Examples
 ///
 /// There are conversions to construct `ValueType`s eloquently:

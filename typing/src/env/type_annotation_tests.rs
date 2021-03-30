@@ -332,3 +332,67 @@ fn unifying_dynamic_slices_in_fn_error() {
     assert_eq!(*err.span().fragment(), "xs.zip_with(xs.filter(|x| x == 1))");
     assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
 }
+
+#[test]
+fn unifying_tuples_with_middle() {
+    let code = r#"
+        xs: (Num, ...[Num; _]) = (1, 2, 3);
+        ys: (...[_; _], _) = (4, 5, |x| x);
+        zs: (_, ...[Num], _) = (6, 7, 8, 9);
+
+        // Check basic destructuring.
+        (...xs_head: Num, _) = xs;
+        (_, _, _: fn(_) -> _) = ys;
+        (_, ...zs_middle, _) = zs;
+    "#;
+
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.process_statements(&block).unwrap();
+
+    assert_eq!(type_env["xs"].to_string(), "(Num, Num, Num)");
+    assert_eq!(type_env["ys"].to_string(), "(Num, Num, fn<T>(T) -> T)");
+    assert_eq!(type_env["zs"].to_string(), "(Num, ...[Num; _], Num)");
+    assert_eq!(type_env["xs_head"].to_string(), "(Num, Num)");
+    assert_eq!(type_env["zs_middle"].to_string(), "[Num; _]");
+}
+
+#[test]
+fn unifying_tuples_with_dyn_lengths() {
+    let code = r#"
+        xs: (_, ...[_], _) = (true, 1, 2, 3, 4);
+        (_, _, ...ys) = xs; // should work
+        zs: (...[_; _], _, Num) = xs; // should not work (Bool and Num cannot be unified)
+    "#;
+
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.insert("true", ValueType::BOOL);
+    let err = type_env.process_statements(&block).unwrap_err();
+
+    assert!(err.span().fragment().starts_with("zs:"));
+    assert_incompatible_types(err.kind(), &ValueType::BOOL, &ValueType::NUM);
+    assert_eq!(type_env["xs"].to_string(), "(Bool, ...[Num; _], Num)");
+    assert_eq!(type_env["ys"].to_string(), "[Num; _]");
+}
+
+#[test]
+fn fn_with_varargs() {
+    let code = r#"
+        sum = |...xs: Num| xs.fold(0, |acc, x| acc + x);
+        sum_spec: fn(Num, Num, Num) -> _ = sum;
+        tuple_sum = |init, ...xs: (_, _)| xs.fold((init, init), |acc, x| acc + x);
+    "#;
+
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.insert("fold", Prelude::fold_type().into());
+    type_env.process_statements(&block).unwrap();
+
+    assert_eq!(type_env["sum"].to_string(), "fn<len N>(...[Num; N]) -> Num");
+    assert_eq!(type_env["sum_spec"].to_string(), "fn(Num, Num, Num) -> Num");
+    assert_eq!(
+        type_env["tuple_sum"].to_string(),
+        "fn<len N; T: Lin>(T, ...[(T, T); N]) -> (T, T)"
+    );
+}

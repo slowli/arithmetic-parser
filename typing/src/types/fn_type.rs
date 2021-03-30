@@ -295,15 +295,14 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
     }
 
     /// Adds a new argument to the function definition.
-    #[allow(clippy::missing_panics_doc)] // false positive
     pub fn with_arg(mut self, arg: impl Into<ValueType<Prim>>) -> Self {
         self.args.push(arg.into());
         self
     }
 
     /// Declares the return type of the function and builds it.
-    pub fn returning(self, return_type: ValueType<Prim>) -> FnType<Prim> {
-        FnType::new(self.args, return_type)
+    pub fn returning(self, return_type: impl Into<ValueType<Prim>>) -> FnType<Prim> {
+        FnType::new(self.args, return_type.into())
             .with_len_params(self.const_params.into_iter().collect())
             .with_type_params(self.type_params.into_iter().collect())
     }

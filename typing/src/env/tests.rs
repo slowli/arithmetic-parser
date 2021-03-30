@@ -378,7 +378,7 @@ fn exact_lengths_for_gathering_fn() {
     assert_eq!(type_env["head"], ValueType::BOOL);
     assert_eq!(
         type_env["tail"],
-        ValueType::NUM.repeat(TupleLength::Exact(2))
+        ValueType::slice(ValueType::NUM, TupleLength::Exact(2))
     );
 }
 

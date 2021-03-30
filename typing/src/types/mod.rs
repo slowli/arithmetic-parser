@@ -25,7 +25,7 @@ pub use self::{
 /// # use arithmetic_typing::{FnType, TupleLength, ValueType};
 /// let tuple: ValueType = (ValueType::BOOL, ValueType::NUM).into();
 /// assert_eq!(tuple.to_string(), "(Bool, Num)");
-/// let slice: ValueType = tuple.repeat(TupleLength::Param(0));
+/// let slice = tuple.repeat(TupleLength::Param(0));
 /// assert_eq!(slice.to_string(), "[(Bool, Num); N]");
 /// let fn_type: ValueType = FnType::builder()
 ///     .with_len_params(0..1)
@@ -172,8 +172,8 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
     }
 
     /// Creates a slice type by repeating this type.
-    pub fn repeat(self, length: TupleLength) -> Self {
-        Self::slice(self, length)
+    pub fn repeat(self, length: TupleLength) -> Slice<Prim> {
+        Slice::new(self, length)
     }
 
     /// Checks if this type is void (i.e., an empty tuple).

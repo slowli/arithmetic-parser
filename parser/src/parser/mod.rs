@@ -584,13 +584,16 @@ where
     map(
         with_span(preceded(
             terminated(tag("..."), ws::<Ty>),
-            cut(opt(var_name)),
+            cut(opt(simple_lvalue_with_type::<T, Ty>)),
         )),
         |spanned| {
-            spanned.map_extra(|maybe_name| {
-                maybe_name.map_or(DestructureRest::Unnamed, |name| DestructureRest::Named {
-                    variable: name.into(),
-                    ty: None,
+            spanned.map_extra(|maybe_lvalue| {
+                maybe_lvalue.map_or(DestructureRest::Unnamed, |lvalue| DestructureRest::Named {
+                    variable: lvalue.with_no_extra(),
+                    ty: match lvalue.extra {
+                        Lvalue::Variable { ty } => ty,
+                        _ => None,
+                    },
                 })
             })
         },

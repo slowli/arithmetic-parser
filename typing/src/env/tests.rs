@@ -2,7 +2,10 @@ use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
 use assert_matches::assert_matches;
 
 use super::*;
-use crate::{arith::LinConstraints, Annotated, FnArgs, Num, Prelude, TupleLength};
+use crate::{
+    arith::LinConstraints, types::TypeParamDescription, Annotated, LengthKind, Num, Prelude,
+    TupleLenMismatchContext, TupleLength,
+};
 
 pub type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
 
@@ -25,11 +28,17 @@ pub fn assert_incompatible_types<Prim: PrimitiveType>(
 
 fn hash_fn_type() -> FnType<Num> {
     FnType {
-        args: FnArgs::Any,
+        // TODO: use `ValueType::Any` instead of `ValueType::Param(0)`
+        args: Slice::new(ValueType::Param(0), TupleLength::Param(0)).into(),
         return_type: ValueType::NUM,
-        type_params: Vec::new(),
-        len_params: Vec::new(),
+        type_params: vec![(0, TypeParamDescription::new(LinConstraints::default()))],
+        len_params: vec![(0, LengthKind::Static.into())],
     }
+}
+
+#[test]
+fn hash_fn_type_display() {
+    assert_eq!(hash_fn_type().to_string(), "fn<len N; T>(...[T; N]) -> Num");
 }
 
 /// `zip` function signature:
@@ -109,7 +118,7 @@ fn function_definition() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env.get("sign").unwrap().to_string(),
-        "fn<T>(Num, T) -> (Num, Num)"
+        "fn(Num, Num) -> (Num, Num)"
     );
 }
 
@@ -123,9 +132,7 @@ fn non_linear_types_in_function() {
 
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-
-    let hash_type = hash_fn_type();
-    type_env.insert("hash", ValueType::Function(Box::new(hash_type)));
+    type_env.insert("hash", hash_fn_type().into());
 
     type_env.process_statements(&block).unwrap();
     assert_eq!(
@@ -138,7 +145,7 @@ fn non_linear_types_in_function() {
     );
     assert_eq!(
         type_env.get("add_hashes").unwrap().to_string(),
-        "fn<T, U>(T, U) -> Num"
+        "fn<T>(T, T) -> Num"
     );
 }
 
@@ -189,10 +196,7 @@ fn method_basics() {
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let plus_type = FnType::new(
-        FnArgs::List(vec![ValueType::NUM, ValueType::NUM]),
-        ValueType::NUM,
-    );
+    let plus_type = FnType::new(vec![ValueType::NUM; 2].into(), ValueType::NUM);
     type_env.insert("plus", plus_type.into());
     type_env.process_statements(&block).unwrap();
 
@@ -242,30 +246,140 @@ fn variable_scoping() {
 
     assert_eq!(
         *type_env.get("y").unwrap(),
-        ValueType::Tuple(vec![ValueType::NUM, ValueType::NUM])
+        ValueType::Tuple(vec![ValueType::NUM; 2].into())
     );
 }
 
 #[test]
-fn unsupported_destructuring_for_tuple() {
-    let code = "(x, ...ys) = (1, 2, 3);";
+fn destructuring_for_tuple_on_assignment() {
+    let code = r#"
+        (x, ...ys) = (1, 2, 3);
+        (...zs, fn, flag) = (4, 5, 6, |x| x + 3, 1 == 1);
+    "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block).unwrap_err();
+    type_env.process_statements(&block).unwrap();
 
-    assert_eq!(*err.span().fragment(), "...ys");
-    assert_matches!(err.kind(), TypeErrorKind::UnsupportedDestructure);
+    assert_eq!(type_env["x"], ValueType::NUM);
+    assert_eq!(
+        type_env["ys"],
+        ValueType::slice(ValueType::NUM, TupleLength::Exact(2))
+    );
+    assert_eq!(
+        type_env["zs"],
+        ValueType::slice(ValueType::NUM, TupleLength::Exact(3))
+    );
+    assert_matches!(type_env["fn"], ValueType::Function(_));
+    assert_eq!(type_env["flag"], ValueType::BOOL);
 }
 
 #[test]
-fn unsupported_destructuring_for_fn_args() {
-    let code = "foo = |y, ...xs| xs + y;";
+fn destructuring_with_unnamed_middle() {
+    let code = r#"
+        (x, y, ...) = (1, 2, || 3);
+        (..., z) = (1 == 1,);
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.process_statements(&block).unwrap();
+
+    assert_eq!(type_env["x"], ValueType::NUM);
+    assert_eq!(type_env["y"], ValueType::NUM);
+    assert_eq!(type_env["z"], ValueType::BOOL);
+}
+
+#[test]
+fn destructuring_error_on_assignment() {
+    let bogus_code = "(x, y, ...zs) = (1,);";
+    let block = F32Grammar::parse_statements(bogus_code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env.process_statements(&block).unwrap_err();
+
+    assert_matches!(
+        err.kind(),
+        TypeErrorKind::TupleLenMismatch { lhs, rhs: TupleLength::Exact(1), .. }
+            if lhs.to_string() == "_ + 2"
+    );
+}
+
+#[test]
+fn destructuring_for_fn_args() {
+    let code = r#"
+        shift = |shift: Num, ...xs| xs + shift;
+        shift(1, 2, 3, 4) == (3, 4, 5);
+        shift(1, (2, 3), (4, 5)) == ((3, 4), (5, 6));
+        3.shift(5)
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let res = type_env.process_statements(&block).unwrap();
+
+    assert_eq!(
+        type_env["shift"].to_string(),
+        "fn<len N; T: Lin>(Num, ...[T; N]) -> [T; N]"
+    );
+    assert_eq!(res.to_string(), "(Num)");
+
+    {
+        let bogus_code = "shift(1, 2, (3, 4))";
+        let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
+        let err = type_env.process_statements(&bogus_block).unwrap_err();
+        assert_matches!(err.kind(), TypeErrorKind::IncompatibleTypes(..));
+    }
+    {
+        let bogus_code = "shift(1, 1 == 2, 1 == 1)";
+        let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
+        let err = type_env.process_statements(&bogus_block).unwrap_err();
+        assert_matches!(err.kind(), TypeErrorKind::FailedConstraint { .. });
+    }
+
+    let bogus_code = "(x, _, _) = 1.shift(2, 3);";
+    let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
+    let err = type_env.process_statements(&bogus_block).unwrap_err();
+    assert_matches!(
+        err.kind(),
+        TypeErrorKind::TupleLenMismatch {
+            lhs: TupleLength::Exact(3),
+            rhs: TupleLength::Exact(2),
+            ..
+        }
+    )
+}
+
+#[test]
+fn fn_args_cannot_be_unified_with_concrete_length() {
+    let code = "bogus = |...xs| { (x, y) = xs; x };";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_eq!(*err.span().fragment(), "...xs");
-    assert_matches!(err.kind(), TypeErrorKind::UnsupportedDestructure);
+    assert_eq!(*err.span().fragment(), "(x, y) = xs");
+    assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
+}
+
+#[test]
+fn exact_lengths_for_gathering_fn() {
+    let code = r#"
+        gather = |...xs| xs;
+        (x, y) = gather(1, 2);
+        (head, ...) = gather(1 == 1, 1 == 2, 1 == 3);
+        (_, ...tail) = gather(4, 5, 6);
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.process_statements(&block).unwrap();
+
+    assert_eq!(
+        type_env["gather"].to_string(),
+        "fn<len N; T>(...[T; N]) -> [T; N]"
+    );
+    assert_eq!(type_env["x"], ValueType::NUM);
+    assert_eq!(type_env["y"], ValueType::NUM);
+    assert_eq!(type_env["head"], ValueType::BOOL);
+    assert_eq!(
+        type_env["tail"],
+        ValueType::slice(ValueType::NUM, TupleLength::Exact(2))
+    );
 }
 
 #[test]
@@ -330,7 +444,33 @@ fn defining_and_calling_embedded_function() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
+
     assert_eq!(type_env["call_double"].to_string(), "fn(Num) -> Bool");
+}
+
+#[test]
+fn varargs_in_embedded_fn() {
+    let code = r#"
+        create_sum = |init| |...xs| xs.fold(init, |acc, x| acc + x);
+        sum = create_sum(0);
+        sum(1, 2, 3, 4) == 10;
+        other_sum = create_sum((0, 0));
+        other_sum((1, 2), (3, 4)) == (4, 6);
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.insert("fold", Prelude::fold_type().into());
+    type_env.process_statements(&block).unwrap();
+
+    assert_eq!(
+        type_env["create_sum"].to_string(),
+        "fn<T: Lin>(T) -> fn<len N>(...[T; N]) -> T"
+    );
+    assert_eq!(type_env["sum"].to_string(), "fn<len N>(...[Num; N]) -> Num");
+    assert_eq!(
+        type_env["other_sum"].to_string(),
+        "fn<len N>(...[(Num, Num); N]) -> (Num, Num)"
+    );
 }
 
 #[test]
@@ -342,7 +482,11 @@ fn incorrect_function_arity() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::IncompatibleLengths(TupleLength::Exact(1), TupleLength::Exact(2))
+        TypeErrorKind::TupleLenMismatch {
+            lhs: TupleLength::Exact(1),
+            rhs: TupleLength::Exact(2),
+            context: TupleLenMismatchContext::Assignment,
+        }
     );
 }
 
@@ -496,7 +640,7 @@ fn parametric_fn_passed_as_arg_with_unsatisfiable_requirements() {
     assert_incompatible_types(
         &err.kind(),
         &ValueType::NUM,
-        &ValueType::Tuple(vec![ValueType::NUM; 2]),
+        &ValueType::Tuple(vec![ValueType::NUM; 2].into()),
     );
 }
 
@@ -554,10 +698,15 @@ fn function_passed_as_arg_invalid_arity() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::ArgLenMismatch {
-            expected: 1,
-            actual: 2
+        TypeErrorKind::TupleLenMismatch {
+            lhs: TupleLength::Exact(2),
+            rhs: TupleLength::Exact(1),
+            context: TupleLenMismatchContext::FnArgs,
         }
+    );
+    assert_eq!(
+        err.kind().to_string(),
+        "Function expects 1 args, but is called with 2 args"
     );
 }
 
@@ -574,7 +723,7 @@ fn function_passed_as_arg_invalid_arg_type() {
     assert_incompatible_types(
         &err.kind(),
         &ValueType::NUM,
-        &ValueType::Tuple(vec![ValueType::Some; 2]),
+        &ValueType::Tuple(vec![ValueType::Some; 2].into()),
     );
 }
 
@@ -599,7 +748,10 @@ fn unifying_slice_and_tuple() {
     type_env.insert("map", Prelude::map_type().into());
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(type_env["xs"], ValueType::Tuple(vec![ValueType::NUM; 2]));
+    assert_eq!(
+        type_env["xs"],
+        ValueType::Tuple(vec![ValueType::NUM; 2].into())
+    );
 }
 
 #[test]
@@ -616,10 +768,7 @@ fn function_accepting_slices() {
     );
     assert_eq!(
         type_env["z"],
-        ValueType::Slice {
-            element: Box::new(ValueType::NUM),
-            length: TupleLength::Exact(3)
-        }
+        ValueType::slice(ValueType::NUM, TupleLength::Exact(3))
     );
 }
 
@@ -660,7 +809,11 @@ fn unifying_length_vars_error() {
     let err = type_env.process_statements(&block).unwrap_err();
     assert_matches!(
         err.kind(),
-        TypeErrorKind::IncompatibleLengths(TupleLength::Exact(2), TupleLength::Exact(3))
+        TypeErrorKind::TupleLenMismatch {
+            lhs: TupleLength::Exact(2),
+            rhs: TupleLength::Exact(3),
+            context: TupleLenMismatchContext::Assignment,
+        }
     );
 }
 
@@ -740,7 +893,11 @@ fn cannot_destructure_dynamic_slice() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::IncompatibleLengths(TupleLength::Exact(2), TupleLength::Var(_))
+        TypeErrorKind::TupleLenMismatch {
+            lhs: TupleLength::Exact(2),
+            rhs: TupleLength::Var(_),
+            ..
+        }
     );
 }
 
@@ -762,14 +919,17 @@ fn comparisons_when_switched_on() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("filter", Prelude::filter_type().into());
+
     let output = type_env
         .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
         .unwrap();
+    let slice = match &output {
+        ValueType::Tuple(tuple) => tuple.as_slice().unwrap(),
+        _ => panic!("Unexpected output: {:?}", output),
+    };
 
-    assert_matches!(
-        output,
-        ValueType::Slice { element, length: TupleLength::Var(_) } if *element == ValueType::NUM
-    );
+    assert_eq!(*slice.element(), ValueType::NUM);
+    assert_matches!(slice.len(), TupleLength::Var(_));
 }
 
 #[test]

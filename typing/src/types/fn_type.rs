@@ -7,7 +7,7 @@
 use std::{collections::HashMap, fmt};
 
 use super::type_param;
-use crate::{LengthKind, Num, PrimitiveType, TupleLength, ValueType};
+use crate::{LengthKind, Num, PrimitiveType, Tuple, TupleLength, ValueType};
 
 /// Description of a constant parameter.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -39,10 +39,40 @@ impl<C> TypeParamDescription<C> {
 ///
 /// Functional types can be constructed via [`Self::builder()`] or parsed from a string.
 ///
+/// # Notation
+///
+/// Functional types are denoted similarly to Rust:
+///
+/// ```text
+/// fn<len N, M*; T: Lin>([T; N], T) -> [T; M]
+/// ```
+///
+/// Here:
+///
+/// - `len N, M*` and `T: Lin` are length params and type params, respectively.
+///   Length and/or type params may be empty.
+/// - `N`, `M` and `T` are parameter names. The args and the return type may reference these
+///   parameters and/or parameters of the outer function(s), if any.
+/// - `Lin` is a [constraint] on the type param.
+/// - `*` after `M` denotes that `M` is a [dynamic length] (i.e., cannot be unified with
+///   any other length during type inference).
+/// - `[T; N]` and `T` are types of the function arguments.
+/// - `[T; M]` is the return type.
+///
+/// If a function returns [`ValueType::void()`], the `-> _` part may be omitted.
+///
+/// A function may accept variable number of arguments of the same type along
+/// with other args. (This construction is known as *varargs*.) This is denoted similarly
+/// to middles in [`Tuple`]s. For example, `fn<len N>(...[Num; N]) -> Num` denotes a function
+/// that accepts any number of `Num` args and returns a `Num` value.
+///
+/// [constraint]: crate::TypeConstraints
+/// [dynamic length]: crate::LengthKind::Dynamic
+///
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_typing::{LengthKind, FnArgs, FnType, ValueType};
+/// # use arithmetic_typing::{LengthKind, FnType, Slice, ValueType};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// let fn_type: FnType = "fn<len N>([Num; N]) -> Num".parse()?;
@@ -52,13 +82,10 @@ impl<C> TypeParamDescription<C> {
 ///     vec![(0, LengthKind::Static)]
 /// );
 ///
-/// let args = match fn_type.args() {
-///     FnArgs::List(args) => args,
-///     _ => unreachable!(),
-/// };
 /// assert_matches!(
-///     args.as_slice(),
-///     [ValueType::Slice { element, .. }] if **element == ValueType::NUM
+///     fn_type.args().parts(),
+///     ([ValueType::Tuple(t)], None, [])
+///         if t.as_slice().map(Slice::element) == Some(&ValueType::NUM)
 /// );
 /// # Ok(())
 /// # }
@@ -66,7 +93,7 @@ impl<C> TypeParamDescription<C> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnType<Prim: PrimitiveType = Num> {
     /// Type of function arguments.
-    pub(crate) args: FnArgs<Prim>,
+    pub(crate) args: Tuple<Prim>,
     /// Type of the value returned by the function.
     pub(crate) return_type: ValueType<Prim>,
     /// Type params associated with this function. The indexes of params should
@@ -114,7 +141,7 @@ impl<Prim: PrimitiveType> fmt::Display for FnType<Prim> {
             formatter.write_str(">")?;
         }
 
-        write!(formatter, "({})", self.args)?;
+        self.args.format_as_tuple(formatter)?;
         if !self.return_type.is_void() {
             write!(formatter, " -> {}", self.return_type)?;
         }
@@ -123,7 +150,7 @@ impl<Prim: PrimitiveType> fmt::Display for FnType<Prim> {
 }
 
 impl<Prim: PrimitiveType> FnType<Prim> {
-    pub(crate) fn new(args: FnArgs<Prim>, return_type: ValueType<Prim>) -> Self {
+    pub(crate) fn new(args: Tuple<Prim>, return_type: ValueType<Prim>) -> Self {
         Self {
             args,
             return_type,
@@ -153,7 +180,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
     }
 
     /// Gets the argument types of this function.
-    pub fn args(&self) -> &FnArgs<Prim> {
+    pub fn args(&self) -> &Tuple<Prim> {
         &self.args
     }
 
@@ -191,42 +218,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
     /// See [`TypeEnvironment`](crate::TypeEnvironment) for caveats of dealing with
     /// non-concrete types.
     pub fn is_concrete(&self) -> bool {
-        self.arg_and_return_types().all(ValueType::is_concrete)
-    }
-
-    pub(crate) fn arg_and_return_types(&self) -> impl Iterator<Item = &ValueType<Prim>> + '_ {
-        let args_slice = match &self.args {
-            FnArgs::List(args) => args.as_slice(),
-            FnArgs::Any => &[],
-        };
-        args_slice.iter().chain(Some(&self.return_type))
-    }
-
-    pub(crate) fn arg_and_return_types_mut(
-        &mut self,
-    ) -> impl Iterator<Item = &mut ValueType<Prim>> + '_ {
-        let args_slice = match &mut self.args {
-            FnArgs::List(args) => args.as_mut_slice(),
-            FnArgs::Any => &mut [],
-        };
-        args_slice.iter_mut().chain(Some(&mut self.return_type))
-    }
-
-    /// Maps argument and return types. The mapping function must not touch type params
-    /// of the function.
-    pub(crate) fn map_types<F>(&self, mut map_fn: F) -> Self
-    where
-        F: FnMut(&ValueType<Prim>) -> ValueType<Prim>,
-    {
-        Self {
-            args: match &self.args {
-                FnArgs::List(args) => FnArgs::List(args.iter().map(&mut map_fn).collect()),
-                FnArgs::Any => FnArgs::Any,
-            },
-            return_type: map_fn(&self.return_type),
-            type_params: self.type_params.clone(),
-            len_params: self.len_params.clone(),
-        }
+        self.args.is_concrete() && self.return_type.is_concrete()
     }
 }
 
@@ -278,9 +270,26 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 ///     "fn<len N; T, U: Lin>([T; N], fn(T) -> U) -> [U; N]"
 /// );
 /// ```
+///
+/// Signature of a function with varargs:
+///
+/// ```
+/// # use arithmetic_typing::{arith::LinConstraints, FnType, TupleLength, ValueType};
+/// # use std::iter;
+/// let fn_type = <FnType>::builder()
+///     .with_len_params(iter::once(0))
+///     .with_constrained_type_params(iter::once(0), LinConstraints::LIN)
+///     .with_varargs(ValueType::Param(0), TupleLength::Param(0))
+///     .with_arg(ValueType::BOOL)
+///     .returning(ValueType::Param(0));
+/// assert_eq!(
+///     fn_type.to_string(),
+///     "fn<len N; T: Lin>(...[T; N], Bool) -> T"
+/// );
+/// ```
 #[derive(Debug)]
 pub struct FnTypeBuilder<Prim: PrimitiveType = Num> {
-    args: FnArgs<Prim>,
+    args: Tuple<Prim>,
     type_params: HashMap<usize, TypeParamDescription<Prim::Constraints>>,
     const_params: HashMap<usize, LenParamDescription>,
 }
@@ -288,7 +297,7 @@ pub struct FnTypeBuilder<Prim: PrimitiveType = Num> {
 impl<Prim: PrimitiveType> Default for FnTypeBuilder<Prim> {
     fn default() -> Self {
         Self {
-            args: FnArgs::List(Vec::new()),
+            args: Tuple::empty(),
             type_params: HashMap::new(),
             const_params: HashMap::new(),
         }
@@ -333,48 +342,21 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
     }
 
     /// Adds a new argument to the function definition.
-    #[allow(clippy::missing_panics_doc)] // false positive
     pub fn with_arg(mut self, arg: impl Into<ValueType<Prim>>) -> Self {
-        match &mut self.args {
-            FnArgs::List(args) => {
-                args.push(arg.into());
-            }
-            FnArgs::Any => unreachable!(),
-        }
+        self.args.push(arg.into());
+        self
+    }
+
+    /// Adds or sets varargs in the function definition.
+    pub fn with_varargs(mut self, element: impl Into<ValueType<Prim>>, len: TupleLength) -> Self {
+        self.args.set_middle(element.into(), len);
         self
     }
 
     /// Declares the return type of the function and builds it.
-    pub fn returning(self, return_type: ValueType<Prim>) -> FnType<Prim> {
-        FnType::new(self.args, return_type)
+    pub fn returning(self, return_type: impl Into<ValueType<Prim>>) -> FnType<Prim> {
+        FnType::new(self.args, return_type.into())
             .with_len_params(self.const_params.into_iter().collect())
             .with_type_params(self.type_params.into_iter().collect())
-    }
-}
-
-/// Type of function arguments.
-#[derive(Debug, Clone, PartialEq)]
-pub enum FnArgs<Prim: PrimitiveType> {
-    /// Any arguments are accepted.
-    // TODO: allow to parse any args
-    Any,
-    /// Lists accepted arguments.
-    List(Vec<ValueType<Prim>>),
-}
-
-impl<Prim: PrimitiveType> fmt::Display for FnArgs<Prim> {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            FnArgs::Any => formatter.write_str("..."),
-            FnArgs::List(args) => {
-                for (i, arg) in args.iter().enumerate() {
-                    fmt::Display::fmt(arg, formatter)?;
-                    if i + 1 < args.len() {
-                        formatter.write_str(", ")?;
-                    }
-                }
-                Ok(())
-            }
-        }
     }
 }

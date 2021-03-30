@@ -90,6 +90,7 @@
 //!     num_sum: Num = (1, 2, 3).sum_with(0);
 //!     tuple_sum: (Num, Num) = ((1, 2), (3, 4)).sum_with((0, 0));
 //! "#;
+//! let ast = Parser::parse_statements(usage_code)?;
 //! // Both lengths and element types differ in these invocations,
 //! // but it works fine since they are treated independently.
 //! env.process_statements(&ast)?;
@@ -125,22 +126,20 @@ mod error;
 mod substitutions;
 mod type_map;
 mod types;
+pub mod visit;
 
 pub use self::{
     env::TypeEnvironment,
-    error::{TypeError, TypeErrorKind, TypeResult},
+    error::{TupleLenMismatchContext, TypeError, TypeErrorKind, TypeResult},
     substitutions::Substitutions,
     type_map::{Assertions, Prelude},
-    types::{FnArgs, FnType, FnTypeBuilder, LengthKind, TupleLength, ValueType},
+    types::{
+        CompoundTupleLength, FnType, FnTypeBuilder, LengthKind, Slice, Tuple, TupleLength,
+        ValueType,
+    },
 };
 
 use self::arith::{LinConstraints, LinearType, TypeConstraints, WithBoolean};
-
-// Reexports for the macros.
-#[doc(hidden)]
-pub mod _reexports {
-    pub use anyhow::{anyhow, Error};
-}
 
 /// Primitive types in a certain type system.
 ///

@@ -5,9 +5,9 @@ use nom::Err as NomErr;
 use std::{collections::HashMap, convert::TryFrom, fmt, str::FromStr};
 
 use crate::{
-    ast::{FnTypeAst, TupleLengthAst, TypeConstraintsAst, ValueTypeAst},
+    ast::{FnTypeAst, SliceAst, TupleAst, TupleLengthAst, TypeConstraintsAst, ValueTypeAst},
     types::TypeParamDescription,
-    FnArgs, FnType, PrimitiveType, TupleLength, ValueType,
+    FnType, PrimitiveType, Slice, Tuple, TupleLength, ValueType,
 };
 use arithmetic_parser::{
     ErrorKind as ParseErrorKind, InputSpan, LocatedSpan, NomResult, SpannedError, StripCode,
@@ -202,6 +202,52 @@ impl<'a> ConversionState<'a> {
     }
 }
 
+impl<'a, Prim: PrimitiveType> TupleAst<'a, Prim> {
+    fn try_convert(
+        &self,
+        state: &ConversionState<'a>,
+    ) -> Result<Tuple<Prim>, ConversionError<&'a str>> {
+        let start = self
+            .start
+            .iter()
+            .map(|element| element.try_convert(state))
+            .collect::<Result<Vec<_>, _>>()?;
+        let middle = self
+            .middle
+            .as_ref()
+            .map(|middle| middle.try_convert(state))
+            .transpose()?;
+        let end = self
+            .end
+            .iter()
+            .map(|element| element.try_convert(state))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Tuple::from_parts(start, middle, end))
+    }
+}
+
+impl<'a, Prim: PrimitiveType> SliceAst<'a, Prim> {
+    fn try_convert(
+        &self,
+        state: &ConversionState<'a>,
+    ) -> Result<Slice<Prim>, ConversionError<&'a str>> {
+        let element = self.element.try_convert(state)?;
+        let converted_length = match &self.length {
+            TupleLengthAst::Ident(ident) => {
+                let name = *ident.fragment();
+                let const_param = state.const_param_idx(name).ok_or_else(|| {
+                    ConversionErrorKind::UndefinedConst(name.to_owned()).with_span(*ident)
+                })?;
+                TupleLength::Param(const_param)
+            }
+            TupleLengthAst::Any => TupleLength::Some { is_dynamic: false },
+            TupleLengthAst::Dynamic => TupleLength::Some { is_dynamic: true },
+        };
+
+        Ok(Slice::new(element, converted_length))
+    }
+}
+
 impl<'a, Prim: PrimitiveType> ValueTypeAst<'a, Prim> {
     fn try_convert(
         &self,
@@ -224,29 +270,8 @@ impl<'a, Prim: PrimitiveType> ValueTypeAst<'a, Prim> {
                 ValueType::Function(Box::new(converted_fn))
             }
 
-            Self::Tuple(elements) => {
-                let converted_elements: Result<Vec<_>, _> =
-                    elements.iter().map(|elt| elt.try_convert(state)).collect();
-                ValueType::Tuple(converted_elements?)
-            }
-
-            Self::Slice { element, length } => {
-                let converted_length = match length {
-                    TupleLengthAst::Ident(ident) => {
-                        let name = *ident.fragment();
-                        let const_param = state.const_param_idx(name).ok_or_else(|| {
-                            ConversionErrorKind::UndefinedConst(name.to_owned()).with_span(*ident)
-                        })?;
-                        TupleLength::Param(const_param)
-                    }
-                    TupleLengthAst::Any => TupleLength::Some { is_dynamic: false },
-                    TupleLengthAst::Dynamic => TupleLength::Some { is_dynamic: true },
-                };
-                ValueType::Slice {
-                    element: Box::new(element.try_convert(state)?),
-                    length: converted_length,
-                }
-            }
+            Self::Tuple(tuple) => tuple.try_convert(state)?.into(),
+            Self::Slice(slice) => slice.try_convert(state)?.into(),
         })
     }
 }
@@ -329,11 +354,7 @@ impl<'a, Prim: PrimitiveType> FnTypeAst<'a, Prim> {
             state.insert_type_param(*param)?;
         }
 
-        let args: Result<Vec<_>, _> = self
-            .args
-            .iter()
-            .map(|arg| arg.try_convert(&state))
-            .collect();
+        let args = self.args.try_convert(&state)?;
 
         let const_params = self.len_params.iter().map(|(name, ty)| {
             (
@@ -350,7 +371,7 @@ impl<'a, Prim: PrimitiveType> FnTypeAst<'a, Prim> {
             ))
         });
 
-        let fn_type = FnType::new(FnArgs::List(args?), self.return_type.try_convert(&state)?)
+        let fn_type = FnType::new(args, self.return_type.try_convert(&state)?)
             .with_len_params(const_params.collect())
             .with_type_params(type_params.collect::<Result<Vec<_>, _>>()?);
         Ok(fn_type)
@@ -510,22 +531,23 @@ mod tests {
         let tuple_type: ValueType = "(Num, (Bool, _))".parse().unwrap();
         assert_eq!(
             tuple_type,
-            ValueType::Tuple(vec![
+            ValueType::from((
                 ValueType::NUM,
-                ValueType::Tuple(vec![ValueType::BOOL, ValueType::Some]),
-            ])
+                ValueType::Tuple(vec![ValueType::BOOL, ValueType::Some].into()),
+            ))
         );
 
         let slice_type: ValueType = "[(Num, _); _]".parse().unwrap();
-        let (element_ty, length) = match slice_type {
-            ValueType::Slice { element, length } => (*element, length),
+        let slice_type = match &slice_type {
+            ValueType::Tuple(tuple) => tuple.as_slice().unwrap(),
             _ => panic!("Unexpected type: {:?}", slice_type),
         };
+
         assert_eq!(
-            element_ty,
-            ValueType::Tuple(vec![ValueType::NUM, ValueType::Some])
+            *slice_type.element(),
+            ValueType::from((ValueType::NUM, ValueType::Some))
         );
-        assert_matches!(length, TupleLength::Some { is_dynamic: false });
+        assert_matches!(slice_type.len(), TupleLength::Some { is_dynamic: false });
     }
 
     #[test]
@@ -535,9 +557,25 @@ mod tests {
             ValueType::Function(fn_type) => *fn_type,
             _ => panic!("Unexpected type: {:?}", ty),
         };
+
         assert_eq!(ty.len_params.len(), 1);
         assert_eq!(ty.type_params.len(), 2);
         assert_eq!(ty.return_type, ValueType::Param(1));
+    }
+
+    #[test]
+    fn parsing_functional_type_with_varargs() {
+        let ty: ValueType = "fn<len N>(...[Num; N]) -> Num".parse().unwrap();
+        let ty = match ty {
+            ValueType::Function(fn_type) => *fn_type,
+            _ => panic!("Unexpected type: {:?}", ty),
+        };
+
+        assert_eq!(ty.len_params.len(), 1);
+        assert!(ty.type_params.is_empty());
+        let args_slice = ty.args.as_slice().unwrap();
+        assert_eq!(*args_slice.element(), ValueType::NUM);
+        assert_eq!(*args_slice.len(), TupleLength::Param(0));
     }
 
     #[test]

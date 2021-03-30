@@ -9,12 +9,13 @@ use std::{
 
 use crate::{
     arith::{BinaryOpSpans, MapPrimitiveType, NumArithmetic, TypeArithmetic, UnaryOpSpans},
-    FnArgs, FnType, Num, PrimitiveType, Substitutions, TypeError, TypeErrorKind, TypeResult,
-    ValueType,
+    visit::VisitMut,
+    FnType, Num, PrimitiveType, Slice, Substitutions, Tuple, TupleLength, TypeError, TypeErrorKind,
+    TypeResult, ValueType,
 };
 use arithmetic_parser::{
-    grammars::Grammar, BinaryOp, Block, Destructure, Expr, FnDefinition, Lvalue, Spanned,
-    SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
+    grammars::Grammar, BinaryOp, Block, Destructure, DestructureRest, Expr, FnDefinition, Lvalue,
+    Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
 };
 
 #[cfg(test)]
@@ -22,7 +23,7 @@ mod tests;
 #[cfg(test)]
 mod type_annotation_tests;
 
-type FnArgsAndOutput<Prim> = (Vec<ValueType<Prim>>, ValueType<Prim>);
+type FnArgsAndOutput<Prim> = (Tuple<Prim>, ValueType<Prim>);
 
 /// Environment containing type information on named variables.
 ///
@@ -257,11 +258,12 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
             Expr::Literal(lit) => Ok(ValueType::Prim(self.arithmetic.type_of_literal(lit))),
 
             Expr::Tuple(ref terms) => {
-                let term_types: Result<Vec<_>, _> = terms
+                let elements: Result<Vec<_>, _> = terms
                     .iter()
                     .map(|term| self.process_expr_inner(term))
                     .collect();
-                term_types.map(ValueType::Tuple)
+                let elements = elements?;
+                Ok(ValueType::Tuple(elements.into()))
             }
 
             Expr::Function { name, args } => {
@@ -300,9 +302,10 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
 
     #[inline]
     fn process_var<'a, T>(&self, name: &Spanned<'a, T>) -> TypeResult<'a, Prim> {
-        self.get_type(name.fragment()).cloned().ok_or_else(|| {
-            TypeErrorKind::UndefinedVar((*name.fragment()).to_owned()).with_span(name)
-        })
+        let var_name = *name.fragment();
+        self.get_type(var_name)
+            .cloned()
+            .ok_or_else(|| TypeErrorKind::UndefinedVar(var_name.to_owned()).with_span(name))
     }
 
     fn process_block<'a, T>(&mut self, block: &Block<'a, T>) -> TypeResult<'a, Prim>
@@ -337,7 +340,7 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
             }
 
             Lvalue::Tuple(destructure) => {
-                let element_types = self.process_destructure(destructure)?;
+                let element_types = self.process_destructure(destructure, false)?;
                 Ok(ValueType::Tuple(element_types))
             }
 
@@ -349,18 +352,58 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
     fn process_destructure<'a>(
         &mut self,
         destructure: &Destructure<'a, ValueType<Prim>>,
-    ) -> Result<Vec<ValueType<Prim>>, TypeError<'a, Prim>> {
-        if let Some(middle) = &destructure.middle {
-            // TODO: allow middles with explicitly set type.
-            return Err(TypeErrorKind::UnsupportedDestructure.with_span(middle));
-        }
-
-        destructure
+        is_fn_args: bool,
+    ) -> Result<Tuple<Prim>, TypeError<'a, Prim>> {
+        let start = destructure
             .start
             .iter()
-            .chain(&destructure.end)
             .map(|element| self.process_lvalue(element))
-            .collect()
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let middle = if let Some(middle) = &destructure.middle {
+            Some(self.process_destructure_rest(&middle.extra, is_fn_args)?)
+        } else {
+            None
+        };
+
+        let end = destructure
+            .end
+            .iter()
+            .map(|element| self.process_lvalue(element))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Tuple::from_parts(start, middle, end))
+    }
+
+    fn process_destructure_rest<'a>(
+        &mut self,
+        rest: &DestructureRest<'a, ValueType<Prim>>,
+        is_fn_args: bool,
+    ) -> Result<Slice<Prim>, TypeError<'a, Prim>> {
+        let ty = match rest {
+            DestructureRest::Unnamed => None,
+            DestructureRest::Named { ty, .. } => ty.as_ref(),
+        };
+        let mut element = ty.map_or(ValueType::Some, |ty| ty.extra.to_owned());
+
+        self.root_scope
+            .substitutions
+            .assign_new_type(&mut element)
+            .map_err(|err| err.with_span(ty.as_ref().unwrap()))?;
+        // `unwrap` is safe: an error can only occur with a type annotation present.
+
+        let mut length = TupleLength::Some {
+            is_dynamic: is_fn_args,
+        };
+        self.root_scope.substitutions.assign_new_length(&mut length);
+
+        if let DestructureRest::Named { variable, .. } = rest {
+            self.insert_type(
+                variable.fragment(),
+                ValueType::slice(element.clone(), length.clone()),
+            );
+        }
+        Ok(Slice::new(element, length))
     }
 
     fn process_fn_call<'it, 'a: 'it, T>(
@@ -441,14 +484,10 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
         self.is_in_function = was_in_function;
 
         let (arg_types, return_type) = result?;
+        let mut fn_type = FnType::new(arg_types, return_type);
         let substitutions = &self.root_scope.substitutions;
-        let arg_types = arg_types
-            .iter()
-            .map(|arg| substitutions.resolve(arg))
-            .collect();
-        let return_type = substitutions.resolve(&return_type);
+        substitutions.resolver().visit_function_mut(&mut fn_type);
 
-        let mut fn_type = FnType::new(FnArgs::List(arg_types), return_type);
         if !self.is_in_function {
             fn_type.finalize(substitutions);
         }
@@ -464,7 +503,7 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
     where
         T: Grammar<Lit = Val, Type = ValueType<Prim>>,
     {
-        let arg_types = self.process_destructure(&def.args.extra)?;
+        let arg_types = self.process_destructure(&def.args.extra, true)?;
         let return_type = self.process_block(&def.body)?;
         Ok((arg_types, return_type))
     }
@@ -501,12 +540,16 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
 
         // We need to resolve vars even if an error occurred.
         debug_assert!(self.inner_scopes.is_empty());
-        let substitutions = &self.root_scope.substitutions;
+        let mut resolver = self.root_scope.substitutions.resolver();
         for (name, var_type) in &mut self.root_scope.variables {
             if self.unresolved_root_vars.contains(name) {
-                *var_type = substitutions.resolve(var_type);
+                resolver.visit_type_mut(var_type);
             }
         }
-        result.map(|ty| substitutions.resolve(&ty))
+
+        result.map(|mut ty| {
+            resolver.visit_type_mut(&mut ty);
+            ty
+        })
     }
 }

@@ -148,13 +148,12 @@ impl<Prim: LinearType> TypeConstraints<Prim> for LinConstraints {
                 self.to_owned(),
             )),
 
-            ValueType::Tuple(elements) => {
-                for element in elements.to_owned() {
-                    self.apply(&element, substitutions)?;
+            ValueType::Tuple(tuple) => {
+                for element in tuple.to_owned().element_types() {
+                    self.apply(element, substitutions)?;
                 }
                 Ok(())
             }
-            ValueType::Slice { element, .. } => self.apply(&element.to_owned(), substitutions),
         }
     }
 }

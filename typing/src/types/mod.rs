@@ -5,66 +5,25 @@ use std::{borrow::Cow, fmt};
 use crate::{arith::WithBoolean, Num, PrimitiveType};
 
 mod fn_type;
+mod tuple;
 
-pub use self::fn_type::{FnArgs, FnType, FnTypeBuilder};
 pub(crate) use self::fn_type::{LenParamDescription, TypeParamDescription};
-
-/// Length of a tuple.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum TupleLength {
-    /// Wildcard length.
-    Some {
-        /// Is this length dynamic (can vary at runtime)?
-        is_dynamic: bool,
-    },
-    /// Exact known length.
-    Exact(usize),
-    /// Length parameter in a function definition.
-    Param(usize),
-
-    /// Length variable. In contrast to `Param`s, `Var`s are used exclusively during
-    /// inference and cannot occur in standalone function signatures.
-    Var(usize),
-}
-
-impl fmt::Display for TupleLength {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Some { is_dynamic: false } | Self::Var(_) => formatter.write_str("_"),
-            Self::Some { is_dynamic: true } => formatter.write_str("*"),
-            Self::Exact(len) => fmt::Display::fmt(len, formatter),
-            Self::Param(idx) => formatter.write_str(Self::const_param(*idx).as_ref()),
-        }
-    }
-}
-
-impl TupleLength {
-    fn const_param(index: usize) -> Cow<'static, str> {
-        const PARAM_NAMES: &str = "NMLKJI";
-        PARAM_NAMES.get(index..=index).map_or_else(
-            || Cow::from(format!("N{}", index - PARAM_NAMES.len())),
-            Cow::from,
-        )
-    }
-
-    fn is_concrete(&self) -> bool {
-        matches!(self, Self::Param(_) | Self::Exact(_))
-    }
-}
-
-/// Kind of a length parameter.
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[non_exhaustive]
-pub enum LengthKind {
-    /// Length is static (can be found during type inference / "in compile time").
-    Static,
-    /// Length is dynamic (can vary at runtime).
-    Dynamic,
-}
+pub use self::{
+    fn_type::{FnType, FnTypeBuilder},
+    tuple::{CompoundTupleLength, LengthKind, Slice, Tuple, TupleLength},
+};
 
 /// Enumeration encompassing all types supported by the type system.
 ///
 /// Parametric by the [`PrimitiveType`].
+///
+/// # Notation
+///
+/// - [`Self::Some`] and [`Self::Var`] are represented as `_`.
+/// - [`Prim`](Self::Prim)itive types are represented using the [`Display`](fmt::Display)
+///   implementation of the corresponding [`PrimitiveType`].
+/// - [`Param`](Self::Param)s are represented as `T`, `U`, `V` etc.
+/// - Notation for [functional](FnType) and [tuple](Tuple) types is documented separately.
 ///
 /// # Examples
 ///
@@ -74,7 +33,7 @@ pub enum LengthKind {
 /// # use arithmetic_typing::{FnType, TupleLength, ValueType};
 /// let tuple: ValueType = (ValueType::BOOL, ValueType::NUM).into();
 /// assert_eq!(tuple.to_string(), "(Bool, Num)");
-/// let slice: ValueType = tuple.repeat(TupleLength::Param(0));
+/// let slice = tuple.repeat(TupleLength::Param(0));
 /// assert_eq!(slice.to_string(), "[(Bool, Num); N]");
 /// let fn_type: ValueType = FnType::builder()
 ///     .with_len_params(0..1)
@@ -91,7 +50,7 @@ pub enum LengthKind {
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// let slice: ValueType = "[(Bool, Num); _]".parse()?;
-/// assert_matches!(slice, ValueType::Slice { .. });
+/// assert_matches!(slice, ValueType::Tuple(t) if t.as_slice().is_some());
 /// let fn_type: ValueType = "fn<len N>([(Bool, Num); N]) -> Num".parse()?;
 /// assert_matches!(fn_type, ValueType::Function(_));
 /// # Ok(())
@@ -107,17 +66,7 @@ pub enum ValueType<Prim: PrimitiveType = Num> {
     /// Functional type.
     Function(Box<FnType<Prim>>),
     /// Tuple type.
-    // TODO: support start / middle / end structuring
-    Tuple(Vec<ValueType<Prim>>),
-    /// Slice type. Unlike in Rust, slices are a subset of tuples. If `length` is
-    /// [`Exact`](TupleLength::Exact), the slice is completely equivalent
-    /// to the corresponding tuple.
-    Slice {
-        /// Type of slice elements.
-        element: Box<ValueType<Prim>>,
-        /// Slice length.
-        length: TupleLength,
-    },
+    Tuple(Tuple<Prim>),
     /// Type parameter in a function definition.
     Param(usize),
 
@@ -137,19 +86,6 @@ impl<Prim: PrimitiveType> PartialEq for ValueType<Prim> {
 
             (Self::Tuple(xs), Self::Tuple(ys)) => xs == ys,
 
-            (
-                Self::Slice { element, length },
-                Self::Slice {
-                    element: other_element,
-                    length: other_length,
-                },
-            ) => length == other_length && element == other_element,
-
-            (Self::Tuple(xs), Self::Slice { element, length })
-            | (Self::Slice { element, length }, Self::Tuple(xs)) => {
-                *length == TupleLength::Exact(xs.len()) && xs.iter().all(|x| x == element.as_ref())
-            }
-
             // TODO: function equality?
             _ => false,
         }
@@ -165,34 +101,7 @@ impl<Prim: PrimitiveType> fmt::Display for ValueType<Prim> {
             Self::Prim(num) => fmt::Display::fmt(num, formatter),
             Self::Function(fn_type) => fmt::Display::fmt(fn_type, formatter),
 
-            Self::Tuple(fragments) => {
-                formatter.write_str("(")?;
-                for (i, frag) in fragments.iter().enumerate() {
-                    fmt::Display::fmt(frag, formatter)?;
-                    if i + 1 < fragments.len() {
-                        formatter.write_str(", ")?;
-                    }
-                }
-                formatter.write_str(")")
-            }
-
-            Self::Slice {
-                element,
-                length: TupleLength::Exact(len),
-            } => {
-                // Format slice as a tuple since its size is statically known.
-                formatter.write_str("(")?;
-                for i in 0..*len {
-                    fmt::Display::fmt(element, formatter)?;
-                    if i + 1 < *len {
-                        formatter.write_str(", ")?;
-                    }
-                }
-                formatter.write_str(")")
-            }
-            Self::Slice { element, length } => {
-                write!(formatter, "[{}; {}]", element, length)
-            }
+            Self::Tuple(tuple) => fmt::Display::fmt(tuple, formatter),
         }
     }
 }
@@ -200,6 +109,18 @@ impl<Prim: PrimitiveType> fmt::Display for ValueType<Prim> {
 impl<Prim: PrimitiveType> From<FnType<Prim>> for ValueType<Prim> {
     fn from(fn_type: FnType<Prim>) -> Self {
         Self::Function(Box::new(fn_type))
+    }
+}
+
+impl<Prim: PrimitiveType> From<Tuple<Prim>> for ValueType<Prim> {
+    fn from(tuple: Tuple<Prim>) -> ValueType<Prim> {
+        Self::Tuple(tuple)
+    }
+}
+
+impl<Prim: PrimitiveType> From<Slice<Prim>> for ValueType<Prim> {
+    fn from(slice: Slice<Prim>) -> ValueType<Prim> {
+        Self::Tuple(slice.into())
     }
 }
 
@@ -211,7 +132,7 @@ macro_rules! impl_from_tuple_for_value_type {
         {
             #[allow(unused_variables)] // `tuple` is unused for empty tuple
             fn from(tuple: ($($ty,)*)) -> Self {
-                Self::Tuple(vec![$(tuple.$var.into(),)*])
+                Self::Tuple(Tuple::from(vec![$(tuple.$var.into(),)*]))
             }
         }
     };
@@ -250,29 +171,22 @@ impl<Prim: WithBoolean> ValueType<Prim> {
 impl<Prim: PrimitiveType> ValueType<Prim> {
     /// Returns a void type (an empty tuple).
     pub fn void() -> Self {
-        Self::Tuple(Vec::new())
+        Self::Tuple(Tuple::empty())
     }
 
     /// Creates a slice type.
     pub fn slice(element: impl Into<ValueType<Prim>>, length: TupleLength) -> Self {
-        Self::Slice {
-            element: Box::new(element.into()),
-            length,
-        }
+        Self::Tuple(Slice::new(element.into(), length).into())
     }
 
     /// Creates a slice type by repeating this type.
-    pub fn repeat(self, length: TupleLength) -> Self {
-        Self::Slice {
-            element: Box::new(self),
-            length,
-        }
+    pub fn repeat(self, length: TupleLength) -> Slice<Prim> {
+        Slice::new(self, length)
     }
 
     /// Checks if this type is void (i.e., an empty tuple).
     pub fn is_void(&self) -> bool {
-        matches!(self, Self::Tuple(elements) if elements.is_empty())
-            || matches!(self, Self::Slice { length, .. } if *length == TupleLength::Exact(0))
+        matches!(self, Self::Tuple(tuple) if tuple.is_empty())
     }
 
     /// Returns `Some(true)` if this type is known to be primitive,
@@ -280,7 +194,7 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
     pub(crate) fn is_primitive(&self) -> Option<bool> {
         match self {
             Self::Prim(_) => Some(true),
-            Self::Tuple(_) | Self::Slice { .. } | Self::Function(_) => Some(false),
+            Self::Tuple(_) | Self::Function(_) => Some(false),
             _ => None,
         }
     }
@@ -295,8 +209,7 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
             Self::Param(_) | Self::Prim(_) => true,
 
             Self::Function(fn_type) => fn_type.is_concrete(),
-            Self::Tuple(elements) => elements.iter().all(Self::is_concrete),
-            Self::Slice { element, length } => length.is_concrete() && element.is_concrete(),
+            Self::Tuple(tuple) => tuple.is_concrete(),
         }
     }
 }

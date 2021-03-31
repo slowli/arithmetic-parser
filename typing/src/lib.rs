@@ -102,6 +102,9 @@
 //! [`Grammar`]: arithmetic_parser::grammars::Grammar
 //! [`arithmetic-eval`]: https://crates.io/crates/arithmetic-eval
 
+// FIXME: is fn<T: Lin>([T; _]) -> T equivalent to `<len N; ...>`?
+// FIXME: is `fn<T>([T; _], fn(T) -> Bool) -> [T]` equivalent to `filter`?
+
 #![doc(html_root_url = "https://docs.rs/arithmetic-typing/0.2.0")]
 #![warn(missing_docs, missing_debug_implementations)]
 #![warn(clippy::all, clippy::pedantic)]

@@ -46,6 +46,16 @@ impl TupleLen {
         )
     }
 
+    /// FIXME
+    pub const fn some() -> Self {
+        Self::Some { is_dynamic: false }
+    }
+
+    /// FIXME
+    pub const fn dynamic() -> Self {
+        Self::Some { is_dynamic: true }
+    }
+
     fn is_concrete(&self) -> bool {
         matches!(self, Self::Param(_) | Self::Exact(_))
     }

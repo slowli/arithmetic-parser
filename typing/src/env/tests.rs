@@ -113,7 +113,7 @@ fn function_definition() {
 
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("hash", hash_fn_type().into());
+    type_env.insert("hash", hash_fn_type());
 
     type_env.process_statements(&block).unwrap();
     assert_eq!(
@@ -132,7 +132,7 @@ fn non_linear_types_in_function() {
 
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("hash", hash_fn_type().into());
+    type_env.insert("hash", hash_fn_type());
 
     type_env.process_statements(&block).unwrap();
     assert_eq!(
@@ -197,7 +197,7 @@ fn method_basics() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let plus_type = FnType::new(vec![ValueType::NUM; 2].into(), ValueType::NUM);
-    type_env.insert("plus", plus_type.into());
+    type_env.insert("plus", plus_type);
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(*type_env.get("bar").unwrap(), ValueType::NUM);
@@ -459,7 +459,7 @@ fn varargs_in_embedded_fn() {
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("fold", Prelude::fold_type().into());
+    type_env.insert("fold", Prelude::Fold);
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
@@ -745,7 +745,7 @@ fn unifying_slice_and_tuple() {
     let code = "xs = (1, 2).map(|x| x + 5);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("map", Prelude::map_type().into());
+    type_env.insert("map", Prelude::Map);
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
@@ -759,7 +759,7 @@ fn function_accepting_slices() {
     let code = "inc = |xs| xs.map(|x| x + 5); z = (1, 2, 3).inc();";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("map", Prelude::map_type().into());
+    type_env.insert("map", Prelude::Map);
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
@@ -777,7 +777,7 @@ fn incorrect_arg_in_slices() {
     let code = "(1, 2 == 3).map(|x| x);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("map", Prelude::map_type().into());
+    type_env.insert("map", Prelude::Map);
 
     let err = type_env.process_statements(&block).unwrap_err();
 
@@ -790,7 +790,7 @@ fn slice_narrowed_to_tuple() {
     let code = "foo = |xs, fn| { (x, y, _) = xs.map(fn); y - x };";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("map", Prelude::map_type().into());
+    type_env.insert("map", Prelude::Map);
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
@@ -804,7 +804,7 @@ fn unifying_length_vars_error() {
     let code = "(1, 2).zip_with((3, 4, 5));";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("zip_with", zip_fn_type().into());
+    type_env.insert("zip_with", zip_fn_type());
 
     let err = type_env.process_statements(&block).unwrap_err();
     assert_matches!(
@@ -822,8 +822,8 @@ fn unifying_length_vars() {
     let code = "foo = |xs, ys| xs.zip_with(ys).map(|(x, y)| x + y);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("map", Prelude::map_type().into());
-    type_env.insert("zip_with", zip_fn_type().into());
+    type_env.insert("map", Prelude::Map);
+    type_env.insert("zip_with", zip_fn_type());
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
@@ -837,7 +837,7 @@ fn dynamically_sized_slices_basics() {
     let code = "filtered = (1, 2, 3).filter(|x| x != 1);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("filter", Prelude::filter_type().into());
+    type_env.insert("filter", Prelude::Filter);
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(type_env["filtered"].to_string(), "[Num; _]");
@@ -848,8 +848,8 @@ fn dynamically_sized_slices_basics() {
         sum = mapped.fold(0, |acc, x| acc + x);
     "#;
     type_env
-        .insert("map", Prelude::map_type().into())
-        .insert("fold", Prelude::fold_type().into());
+        .insert("map", Prelude::Map)
+        .insert("fold", Prelude::Fold);
     for line in new_code.lines() {
         let line = line.trim();
         if line.is_empty() {
@@ -873,8 +873,8 @@ fn dynamically_sized_slices_with_map() {
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("filter", Prelude::filter_type().into());
-    type_env.insert("map", Prelude::map_type().into());
+    type_env.insert("filter", Prelude::Filter);
+    type_env.insert("map", Prelude::Map);
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
@@ -888,7 +888,7 @@ fn cannot_destructure_dynamic_slice() {
     let code = "(x, y) = (1, 2, 3).filter(|x| x != 1);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("filter", Prelude::filter_type().into());
+    type_env.insert("filter", Prelude::Filter);
     let err = type_env.process_statements(&block).unwrap_err();
 
     assert_matches!(
@@ -906,7 +906,7 @@ fn comparisons_when_switched_off() {
     let code = "(1, 2, 3).filter(|x| x > 1)";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("filter", Prelude::filter_type().into());
+    type_env.insert("filter", Prelude::Filter);
     let err = type_env.process_statements(&block).unwrap_err();
 
     assert_eq!(*err.span().fragment(), ">");
@@ -918,7 +918,7 @@ fn comparisons_when_switched_on() {
     let code = "(1, 2, 3).filter(|x| x > 1)";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("filter", Prelude::filter_type().into());
+    type_env.insert("filter", Prelude::Filter);
 
     let output = type_env
         .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)

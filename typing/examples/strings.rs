@@ -154,7 +154,7 @@ fn main() -> anyhow::Result<()> {
     let ast = Typed::<StrGrammar>::parse_statements(code)?;
 
     let mut env = TypeEnvironment::<StrType>::new();
-    env.insert("assert", Assertions::assert_type().into());
+    env.insert("assert", Assertions::Assert);
     env.process_with_arithmetic(&StrArithmetic, &ast)?;
     assert_eq!(env["x"], ValueType::Prim(StrType::Str));
     assert_eq!(env["y"].to_string(), "(Str, Str)");

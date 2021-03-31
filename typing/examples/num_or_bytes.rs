@@ -240,7 +240,7 @@ fn main() -> anyhow::Result<()> {
     let ast = Parser::parse_statements(code)?;
 
     let mut env = TypeEnvironment::<NumOrBytesType>::new();
-    env.insert("fold", Prelude::fold_type().into());
+    env.insert("fold", Prelude::Fold);
     env.process_with_arithmetic(&NumOrBytesArithmetic, &ast)?;
 
     assert_eq!(env["x"], ValueType::Prim(NumOrBytesType::Num));

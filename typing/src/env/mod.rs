@@ -103,7 +103,8 @@ impl<Prim: PrimitiveType> TypeEnvironment<Prim> {
     ///
     /// - Will panic if `value_type` is not [concrete](ValueType::is_concrete()). Non-concrete
     ///   types are tied to the environment; inserting them into an env is a logical error.
-    pub fn insert(&mut self, name: &str, value_type: ValueType<Prim>) -> &mut Self {
+    pub fn insert(&mut self, name: &str, value_type: impl Into<ValueType<Prim>>) -> &mut Self {
+        let value_type = value_type.into();
         assert!(
             value_type.is_concrete(),
             "Type {} is not concrete",
@@ -300,6 +301,7 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
         }
     }
 
+    // TODO: handle `Some` type specially? (Assign new type on each call.)
     #[inline]
     fn process_var<'a, T>(&self, name: &Spanned<'a, T>) -> TypeResult<'a, Prim> {
         let var_name = *name.fragment();

@@ -156,7 +156,7 @@ impl<'a, Prim: PrimitiveType> FnTypeAst<'a, Prim> {
 #[non_exhaustive]
 pub enum TupleLenAst<'a> {
     /// Length placeholder (`_`). Corresponds to any single length.
-    Any,
+    Some,
     /// Dynamic tuple length. This length is *implicit*, as in `[Num]`.
     Dynamic,
     /// Reference to a length; for example, `N` in `[Num; N]`.
@@ -271,7 +271,7 @@ fn slice_definition<Prim: PrimitiveType>(
     let tuple_len = map(
         opt(preceded(semicolon, ident)),
         |maybe_ident| match maybe_ident {
-            Some(ident) if *ident.fragment() == "_" => TupleLenAst::Any,
+            Some(ident) if *ident.fragment() == "_" => TupleLenAst::Some,
             Some(ident) => TupleLenAst::Ident(ident),
             None => TupleLenAst::Dynamic,
         },

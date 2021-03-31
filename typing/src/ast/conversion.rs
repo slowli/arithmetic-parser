@@ -240,8 +240,8 @@ impl<'a, Prim: PrimitiveType> SliceAst<'a, Prim> {
                 })?;
                 TupleLen::Param(const_param)
             }
-            TupleLenAst::Any => TupleLen::Some { is_dynamic: false },
-            TupleLenAst::Dynamic => TupleLen::Some { is_dynamic: true },
+            TupleLenAst::Some => TupleLen::Some,
+            TupleLenAst::Dynamic => TupleLen::Dynamic,
         };
 
         Ok(Slice::new(element, converted_length))
@@ -547,7 +547,7 @@ mod tests {
             *slice_type.element(),
             ValueType::from((ValueType::NUM, ValueType::Some))
         );
-        assert_matches!(slice_type.len(), TupleLen::Some { is_dynamic: false });
+        assert_matches!(slice_type.len(), TupleLen::Some);
     }
 
     #[test]

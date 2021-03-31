@@ -5,16 +5,14 @@ use assert_matches::assert_matches;
 use super::*;
 use crate::{Num, TupleLenMismatchContext::Assignment};
 
-const DYN: TupleLen = TupleLen::Some { is_dynamic: true };
-
 #[test]
 fn unifying_lengths_success_without_side_effects() {
     const SAMPLES: &[(TupleLen, TupleLen)] = &[
         (TupleLen::Exact(2), TupleLen::Exact(2)),
         (TupleLen::Var(1), TupleLen::Var(1)),
         // `Dynamic` should always be accepted on LHS.
-        (DYN, TupleLen::Exact(2)),
-        (DYN, TupleLen::Var(3)),
+        (TupleLen::Dynamic, TupleLen::Exact(2)),
+        (TupleLen::Dynamic, TupleLen::Var(3)),
     ];
 
     let mut substitutions = Substitutions::<Num>::default();
@@ -32,9 +30,9 @@ fn unifying_lengths_success_without_side_effects() {
 fn unifying_lengths_error() {
     const SAMPLES: &[(TupleLen, TupleLen)] = &[
         (TupleLen::Exact(1), TupleLen::Exact(2)),
-        (DYN, DYN),
-        (TupleLen::Var(0), DYN),
-        (TupleLen::Exact(2), DYN),
+        (TupleLen::Dynamic, TupleLen::Dynamic),
+        (TupleLen::Var(0), TupleLen::Dynamic),
+        (TupleLen::Exact(2), TupleLen::Dynamic),
     ];
 
     let mut substitutions = Substitutions::<Num>::default();
@@ -53,7 +51,7 @@ fn unifying_lengths_error() {
 
 #[test]
 fn unifying_lengths_success_with_new_equation() {
-    const LEN_SAMPLES: &[TupleLen] = &[TupleLen::Exact(3), TupleLen::Var(5), DYN];
+    const LEN_SAMPLES: &[TupleLen] = &[TupleLen::Exact(3), TupleLen::Var(5), TupleLen::Dynamic];
 
     for rhs in LEN_SAMPLES {
         let mut substitutions = Substitutions::<Num>::default();

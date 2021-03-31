@@ -8,11 +8,12 @@ use crate::{Num, PrimitiveType, ValueType};
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum TupleLen {
-    /// Wildcard length.
-    Some {
-        /// Is this length dynamic (can vary at runtime)?
-        is_dynamic: bool,
-    },
+    /// Wildcard length, i.e. some length that is not specified. Similar to `_` in type annotations
+    /// in Rust. Unlike [`Self::Dynamic`], this length can be found during type inference.
+    Some,
+    /// *Dynamic* wildcard length. Unlike [`Self::Some`], this length can vary at runtime,
+    /// i.e., it cannot be unified with any other length during type inference.
+    Dynamic,
     /// Exact known length.
     Exact(usize),
     /// Length parameter in a function definition.
@@ -28,8 +29,8 @@ pub enum TupleLen {
 impl fmt::Display for TupleLen {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Some { is_dynamic: false } | Self::Var(_) => formatter.write_str("_"),
-            Self::Some { is_dynamic: true } => formatter.write_str("*"),
+            Self::Some | Self::Var(_) => formatter.write_str("_"),
+            Self::Dynamic => formatter.write_str("*"),
             Self::Exact(len) => fmt::Display::fmt(len, formatter),
             Self::Param(idx) => formatter.write_str(Self::const_param(*idx).as_ref()),
             Self::Compound(len) => fmt::Display::fmt(len, formatter),
@@ -44,16 +45,6 @@ impl TupleLen {
             || Cow::from(format!("N{}", index - PARAM_NAMES.len())),
             Cow::from,
         )
-    }
-
-    /// FIXME
-    pub const fn some() -> Self {
-        Self::Some { is_dynamic: false }
-    }
-
-    /// FIXME
-    pub const fn dynamic() -> Self {
-        Self::Some { is_dynamic: true }
     }
 
     fn is_concrete(&self) -> bool {
@@ -508,7 +499,7 @@ pub struct Slice<Prim: PrimitiveType = Num> {
 
 impl<Prim: PrimitiveType> fmt::Display for Slice<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let TupleLen::Some { is_dynamic: true } = self.length {
+        if let TupleLen::Dynamic = self.length {
             write!(formatter, "[{}]", self.element)
         } else {
             write!(formatter, "[{}; {}]", self.element, self.length)

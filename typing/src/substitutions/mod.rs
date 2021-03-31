@@ -133,13 +133,17 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     }
 
     pub(crate) fn assign_new_length(&mut self, length: &mut TupleLen) {
-        if let TupleLen::Some { is_dynamic } = length {
-            if *is_dynamic {
-                self.dyn_lengths.insert(self.const_var_count);
-            }
-            *length = TupleLen::Var(self.const_var_count);
-            self.const_var_count += 1;
+        let is_dynamic = match length {
+            TupleLen::Some => false,
+            TupleLen::Dynamic => true,
+            _ => return,
+        };
+
+        if is_dynamic {
+            self.dyn_lengths.insert(self.const_var_count);
         }
+        *length = TupleLen::Var(self.const_var_count);
+        self.const_var_count += 1;
     }
 
     /// Unifies types in `lhs` and `rhs`.

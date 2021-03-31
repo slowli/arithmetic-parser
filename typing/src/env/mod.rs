@@ -394,8 +394,10 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
             .map_err(|err| err.with_span(ty.as_ref().unwrap()))?;
         // `unwrap` is safe: an error can only occur with a type annotation present.
 
-        let mut length = TupleLen::Some {
-            is_dynamic: is_fn_args,
+        let mut length = if is_fn_args {
+            TupleLen::Dynamic
+        } else {
+            TupleLen::Some
         };
         self.root_scope.substitutions.assign_new_length(&mut length);
 

@@ -399,7 +399,7 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
         } else {
             TupleLen::Some
         };
-        self.root_scope.substitutions.assign_new_length(&mut length);
+        self.root_scope.substitutions.assign_new_len(&mut length);
 
         if let DestructureRest::Named { variable, .. } = rest {
             self.insert_type(

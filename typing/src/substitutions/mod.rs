@@ -1,6 +1,8 @@
 //! Substitutions type and dependencies.
 
 use std::{
+    borrow::Cow,
+    cmp::Ordering,
     collections::{HashMap, HashSet},
     ptr,
 };
@@ -132,8 +134,9 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         assigner.outcome
     }
 
-    pub(crate) fn assign_new_length(&mut self, length: &mut TupleLen) {
-        let is_dynamic = match length {
+    pub(crate) fn assign_new_len(&mut self, len: &mut TupleLen) {
+        let target_len = len.var_part_mut();
+        let is_dynamic = match target_len {
             TupleLen::Some => false,
             TupleLen::Dynamic => true,
             _ => return,
@@ -142,7 +145,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         if is_dynamic {
             self.dyn_lengths.insert(self.const_var_count);
         }
-        *length = TupleLen::Var(self.const_var_count);
+        *target_len = TupleLen::Var(self.const_var_count);
         self.const_var_count += 1;
     }
 
@@ -252,13 +255,6 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 Ok(resolved_lhs)
             }
 
-            (TupleLen::Compound(_), _) => {
-                self.unify_compound_length(resolved_lhs, resolved_rhs, true, context)
-            }
-            (_, TupleLen::Compound(_)) => {
-                self.unify_compound_length(resolved_lhs, resolved_rhs, false, context)
-            }
-
             // Dynamic length can be unified at LHS position with anything other than other
             // dynamic lengths, which we've checked previously.
             (TupleLen::Var(x), _) if self.dyn_lengths.contains(&x) => Ok(resolved_rhs),
@@ -270,6 +266,13 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             (other, TupleLen::Var(x)) if !self.dyn_lengths.contains(x) => {
                 self.length_eqs.insert(*x, other.to_owned());
                 Ok(resolved_lhs)
+            }
+
+            (TupleLen::Compound(_), _) => {
+                self.unify_compound_length(resolved_lhs, resolved_rhs, true, context)
+            }
+            (_, TupleLen::Compound(_)) => {
+                self.unify_compound_length(resolved_lhs, resolved_rhs, false, context)
             }
 
             _ => Err(TypeErrorKind::TupleLenMismatch {
@@ -311,13 +314,24 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
             TupleLen::Compound(other_compound_len) => {
                 let (other_var, other_exact) = other_compound_len.components();
-                if exact == other_exact {
-                    return if is_lhs {
-                        self.unify_lengths(var, other_var, context)
-                    } else {
-                        self.unify_lengths(other_var, var, context)
-                    };
-                }
+
+                let (var, other_var) = match exact.cmp(&other_exact) {
+                    Ordering::Equal => (Cow::Borrowed(var), Cow::Borrowed(other_var)),
+                    Ordering::Greater => {
+                        let reduced = var.to_owned() + (exact - other_exact);
+                        (Cow::Owned(reduced), Cow::Borrowed(other_var))
+                    }
+                    Ordering::Less => {
+                        let reduced = other_var.to_owned() + (other_exact - exact);
+                        (Cow::Borrowed(var), Cow::Owned(reduced))
+                    }
+                };
+
+                return if is_lhs {
+                    self.unify_lengths(&var, &other_var, context)
+                } else {
+                    self.unify_lengths(&other_var, &var, context)
+                };
             }
 
             _ => { /* Do nothing. */ }
@@ -523,7 +537,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeAssigner<'_, Prim> {
     }
 
     fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
-        self.substitutions.assign_new_length(len);
+        self.substitutions.assign_new_len(len);
     }
 
     fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {

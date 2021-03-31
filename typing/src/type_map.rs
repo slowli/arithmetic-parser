@@ -159,11 +159,10 @@ impl<Prim: WithBoolean> From<Prelude> for ValueType<Prim> {
 
             Prelude::Push => FnType::builder()
                 .with_len_params(iter::once(0))
-                .with_dyn_len_params(iter::once(1))
                 .with_type_params(iter::once(0))
                 .with_arg(ValueType::Param(0).repeat(TupleLen::Param(0)))
                 .with_arg(ValueType::Param(0))
-                .returning(ValueType::Param(0).repeat(TupleLen::Param(1)))
+                .returning(ValueType::Param(0).repeat(TupleLen::Param(0) + 1))
                 .into(),
 
             Prelude::Merge => FnType::builder()
@@ -274,7 +273,7 @@ mod tests {
             "fn<len N, M*; T>([T; N], fn(T) -> Bool) -> [T; M]",
         ),
         ("fold", "fn<len N; T, U>([T; N], U, fn(U, T) -> U) -> U"),
-        ("push", "fn<len N, M*; T>([T; N], T) -> [T; M]"),
+        ("push", "fn<len N; T>([T; N], T) -> [T; N + 1]"),
         ("merge", "fn<len N, M, L*; T>([T; N], [T; M]) -> [T; L]"),
     ];
 

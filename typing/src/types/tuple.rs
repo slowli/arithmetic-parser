@@ -48,7 +48,19 @@ impl TupleLen {
     }
 
     fn is_concrete(&self) -> bool {
-        matches!(self, Self::Param(_) | Self::Exact(_))
+        match self {
+            Self::Exact(_) | Self::Param(_) => true,
+            Self::Compound(compound_len) => compound_len.var.is_concrete(),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn var_part_mut(&mut self) -> &mut Self {
+        if let TupleLen::Compound(compound_len) = self {
+            &mut compound_len.var
+        } else {
+            self
+        }
     }
 }
 

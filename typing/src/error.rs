@@ -3,7 +3,7 @@
 use std::fmt;
 
 use crate::{PrimitiveType, TupleLen, ValueType};
-use arithmetic_parser::{BinaryOp, Spanned, UnsupportedType};
+use arithmetic_parser::{Spanned, UnsupportedType};
 
 /// Context for [`TypeErrorKind::TupleLenMismatch`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,16 +19,6 @@ pub enum TupleLenMismatchContext {
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum TypeErrorKind<Prim: PrimitiveType> {
-    /// Error trying to unify operands of a binary operation.
-    OperandMismatch {
-        /// LHS type.
-        lhs_ty: ValueType<Prim>,
-        /// RHS type.
-        rhs_ty: ValueType<Prim>,
-        /// Operator.
-        op: BinaryOp,
-    },
-
     /// Trying to unify incompatible types. The first type is LHS, the second one is RHS.
     TypeMismatch(ValueType<Prim>, ValueType<Prim>),
     /// Incompatible tuple lengths.
@@ -88,12 +78,6 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
 impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::OperandMismatch { op, .. } => write!(
-                formatter,
-                "Operands of {} operation must have the same type",
-                op
-            ),
-
             Self::TypeMismatch(first, second) => write!(
                 formatter,
                 "Trying to unify incompatible types `{}` and `{}`",
@@ -156,20 +140,6 @@ impl<Prim: PrimitiveType> TypeErrorKind<Prim> {
     pub fn with_span<'a, T>(self, span: &Spanned<'a, T>) -> TypeError<'a, Prim> {
         TypeError {
             inner: span.copy_with_extra(self),
-        }
-    }
-
-    pub(crate) fn into_op_mismatch(
-        self,
-        lhs_ty: ValueType<Prim>,
-        rhs_ty: ValueType<Prim>,
-        op: BinaryOp,
-    ) -> Self {
-        match self {
-            TypeErrorKind::TupleLenMismatch { .. } | TypeErrorKind::TypeMismatch(..) => {
-                TypeErrorKind::OperandMismatch { lhs_ty, rhs_ty, op }
-            }
-            err => err,
         }
     }
 }

@@ -119,10 +119,9 @@ impl<Prim: WithBoolean> TypeArithmetic<Prim> for BoolArithmetic {
 
         match op {
             BinaryOp::Eq | BinaryOp::NotEq => {
-                substitutions.unify(&lhs_ty, &rhs_ty).map_err(|err| {
-                    err.into_op_mismatch(spans.lhs.extra, spans.rhs.extra, op)
-                        .with_span(&spans.total)
-                })?;
+                substitutions
+                    .unify(&lhs_ty, &rhs_ty)
+                    .map_err(|err| err.with_span(&spans.total))?;
                 Ok(ValueType::BOOL)
             }
 

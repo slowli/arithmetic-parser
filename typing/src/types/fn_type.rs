@@ -281,7 +281,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 /// # use arithmetic_typing::{FnType, TupleLen, ValueType};
 /// # use std::iter;
 /// let sum_fn_type = FnType::builder()
-///     .with_len_params(iter::once(0))
+///     .with_len_params(&[0])
 ///     .with_arg(ValueType::NUM.repeat(TupleLen::Param(0)))
 ///     .returning(ValueType::NUM);
 /// assert_eq!(
@@ -302,9 +302,9 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 ///     .returning(ValueType::Param(1));
 ///
 /// let map_fn_type = <FnType>::builder()
-///     .with_len_params(iter::once(0))
-///     .with_type_params(iter::once(0))
-///     .with_constrained_type_params(iter::once(1), LinConstraints::LIN)
+///     .with_len_params(&[0])
+///     .with_type_params(&[0])
+///     .with_constrained_type_params(&[1], LinConstraints::LIN)
 ///     .with_arg(ValueType::Param(0).repeat(TupleLen::Param(0)))
 ///     .with_arg(map_fn_arg)
 ///     .returning(ValueType::Param(1).repeat(TupleLen::Param(0)));
@@ -320,8 +320,8 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 /// # use arithmetic_typing::{arith::LinConstraints, FnType, TupleLen, ValueType};
 /// # use std::iter;
 /// let fn_type = <FnType>::builder()
-///     .with_len_params(iter::once(0))
-///     .with_constrained_type_params(iter::once(0), LinConstraints::LIN)
+///     .with_len_params(&[0])
+///     .with_constrained_type_params(&[0], LinConstraints::LIN)
 ///     .with_varargs(ValueType::Param(0), TupleLen::Param(0))
 ///     .with_arg(ValueType::BOOL)
 ///     .returning(ValueType::Param(0));
@@ -350,24 +350,24 @@ impl<Prim: PrimitiveType> Default for FnTypeBuilder<Prim> {
 // TODO: support validation similarly to AST conversions.
 impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
     /// Adds the length params with the specified `indexes` to the function definition.
-    pub fn with_len_params(mut self, indexes: impl Iterator<Item = usize>) -> Self {
+    pub fn with_len_params(mut self, indexes: &[usize]) -> Self {
         let static_description = LengthKind::Static.into();
         self.const_params
-            .extend(indexes.map(|idx| (idx, static_description)));
+            .extend(indexes.iter().map(|&idx| (idx, static_description)));
         self
     }
 
     /// Adds the dynamic length params with the specified `indexes` to the function definition.
-    pub fn with_dyn_len_params(mut self, indexes: impl Iterator<Item = usize>) -> Self {
+    pub fn with_dyn_len_params(mut self, indexes: &[usize]) -> Self {
         let dyn_description = LengthKind::Dynamic.into();
         self.const_params
-            .extend(indexes.map(|idx| (idx, dyn_description)));
+            .extend(indexes.iter().map(|&idx| (idx, dyn_description)));
         self
     }
 
     /// Adds the type params with the specified `indexes` to the function definition.
     /// The params are unconstrained.
-    pub fn with_type_params(self, indexes: impl Iterator<Item = usize>) -> Self {
+    pub fn with_type_params(self, indexes: &[usize]) -> Self {
         self.with_constrained_type_params(indexes, Prim::Constraints::default())
     }
 
@@ -375,12 +375,12 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
     /// to the function definition.
     pub fn with_constrained_type_params(
         mut self,
-        indexes: impl Iterator<Item = usize>,
+        indexes: &[usize],
         constraints: Prim::Constraints,
     ) -> Self {
         let description = TypeParamDescription { constraints };
         self.type_params
-            .extend(indexes.map(|i| (i, description.clone())));
+            .extend(indexes.iter().map(|&idx| (idx, description.clone())));
         self
     }
 

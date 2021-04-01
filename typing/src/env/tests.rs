@@ -48,8 +48,8 @@ fn hash_fn_type_display() {
 /// ```
 pub fn zip_fn_type() -> FnType<Num> {
     FnType::builder()
-        .with_len_params(iter::once(0))
-        .with_type_params(0..=1)
+        .with_len_params(&[0])
+        .with_type_params(&[0, 1])
         .with_arg(ValueType::Param(0).repeat(SimpleTupleLen::Param(0)))
         .with_arg(ValueType::Param(1).repeat(SimpleTupleLen::Param(0)))
         .returning(ValueType::slice(

@@ -1,7 +1,5 @@
 //! `TypeMap` trait and standard implementations.
 
-use std::iter;
-
 use crate::{arith::WithBoolean, FnType, SimpleTupleLen, ValueType};
 
 /// Map containing type definitions for all variables from `Prelude` in the eval crate,
@@ -86,7 +84,7 @@ impl<Prim: WithBoolean> From<Prelude> for ValueType<Prim> {
             Prelude::True | Prelude::False => ValueType::BOOL,
 
             Prelude::If => FnType::builder()
-                .with_type_params(iter::once(0))
+                .with_type_params(&[0])
                 .with_arg(ValueType::BOOL)
                 .with_arg(ValueType::Param(0))
                 .with_arg(ValueType::Param(0))
@@ -102,7 +100,7 @@ impl<Prim: WithBoolean> From<Prelude> for ValueType<Prim> {
                     .returning(ValueType::Param(0));
 
                 FnType::builder()
-                    .with_type_params(iter::once(0))
+                    .with_type_params(&[0])
                     .with_arg(ValueType::Param(0)) // state
                     .with_arg(condition_fn)
                     .with_arg(iter_fn)
@@ -116,8 +114,8 @@ impl<Prim: WithBoolean> From<Prelude> for ValueType<Prim> {
                     .returning(ValueType::Param(1));
 
                 FnType::builder()
-                    .with_len_params(iter::once(0))
-                    .with_type_params(0..=1)
+                    .with_len_params(&[0])
+                    .with_type_params(&[0, 1])
                     .with_arg(ValueType::Param(0).repeat(SimpleTupleLen::Param(0)))
                     .with_arg(map_arg)
                     .returning(ValueType::Param(1).repeat(SimpleTupleLen::Param(0)))
@@ -130,9 +128,9 @@ impl<Prim: WithBoolean> From<Prelude> for ValueType<Prim> {
                     .returning(ValueType::BOOL);
 
                 FnType::builder()
-                    .with_len_params(iter::once(0))
-                    .with_dyn_len_params(iter::once(1))
-                    .with_type_params(iter::once(0))
+                    .with_len_params(&[0])
+                    .with_dyn_len_params(&[1])
+                    .with_type_params(&[0])
                     .with_arg(ValueType::Param(0).repeat(SimpleTupleLen::Param(0)))
                     .with_arg(predicate_arg)
                     .returning(ValueType::Param(0).repeat(SimpleTupleLen::Param(1)))
@@ -147,8 +145,8 @@ impl<Prim: WithBoolean> From<Prelude> for ValueType<Prim> {
                     .returning(ValueType::Param(1));
 
                 FnType::builder()
-                    .with_len_params(iter::once(0))
-                    .with_type_params(0..=1)
+                    .with_len_params(&[0])
+                    .with_type_params(&[0, 1])
                     .with_arg(ValueType::Param(0).repeat(SimpleTupleLen::Param(0)))
                     .with_arg(ValueType::Param(1))
                     .with_arg(fold_arg)
@@ -157,17 +155,17 @@ impl<Prim: WithBoolean> From<Prelude> for ValueType<Prim> {
             }
 
             Prelude::Push => FnType::builder()
-                .with_len_params(iter::once(0))
-                .with_type_params(iter::once(0))
+                .with_len_params(&[0])
+                .with_type_params(&[0])
                 .with_arg(ValueType::Param(0).repeat(SimpleTupleLen::Param(0)))
                 .with_arg(ValueType::Param(0))
                 .returning(ValueType::Param(0).repeat(SimpleTupleLen::Param(0) + 1))
                 .into(),
 
             Prelude::Merge => FnType::builder()
-                .with_len_params(0..=1)
-                .with_dyn_len_params(iter::once(2))
-                .with_type_params(iter::once(0))
+                .with_len_params(&[0, 1])
+                .with_dyn_len_params(&[2])
+                .with_type_params(&[0])
                 .with_arg(ValueType::Param(0).repeat(SimpleTupleLen::Param(0)))
                 .with_arg(ValueType::Param(0).repeat(SimpleTupleLen::Param(1)))
                 .returning(ValueType::Param(0).repeat(SimpleTupleLen::Param(2)))
@@ -229,7 +227,7 @@ impl<Prim: WithBoolean> From<Assertions> for ValueType<Prim> {
                 .returning(ValueType::void())
                 .into(),
             Assertions::AssertEq => FnType::builder()
-                .with_type_params(iter::once(0))
+                .with_type_params(&[0])
                 .with_arg(ValueType::Param(0))
                 .with_arg(ValueType::Param(0))
                 .returning(ValueType::void())

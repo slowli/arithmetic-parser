@@ -50,10 +50,10 @@ fn contradicting_type_hint() {
     assert_matches!(
         err.kind(),
         TypeErrorKind::TupleLenMismatch {
-            lhs: TupleLen::Exact(2),
-            rhs: TupleLen::Exact(3),
+            lhs,
+            rhs,
             context: TupleLenMismatchContext::Assignment,
-        }
+        } if *lhs == TupleLen::from(2) && *rhs == TupleLen::from(3)
     );
 }
 
@@ -102,10 +102,10 @@ fn invalid_type_hint_with_fn_arg() {
     assert_matches!(
         err.kind(),
         TypeErrorKind::TupleLenMismatch {
-            lhs: TupleLen::Exact(2),
-            rhs: TupleLen::Exact(1),
+            lhs,
+            rhs,
             context: TupleLenMismatchContext::FnArgs,
-        }
+        } if *lhs == TupleLen::from(2) && *rhs == TupleLen::from(1)
     );
 }
 

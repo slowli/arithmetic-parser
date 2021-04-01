@@ -7,7 +7,7 @@
 use std::{collections::HashMap, fmt};
 
 use super::type_param;
-use crate::{LengthKind, Num, PrimitiveType, Tuple, TupleLen, ValueType};
+use crate::{LengthKind, Num, PrimitiveType, SimpleTupleLen, Tuple, TupleLen, ValueType};
 
 /// Description of a constant parameter.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -112,7 +112,7 @@ impl<Prim: PrimitiveType> fmt::Display for FnType<Prim> {
             if !self.len_params.is_empty() {
                 formatter.write_str("len ")?;
                 for (i, (var_idx, description)) in self.len_params.iter().enumerate() {
-                    formatter.write_str(TupleLen::const_param(*var_idx).as_ref())?;
+                    formatter.write_str(SimpleTupleLen::const_param(*var_idx).as_ref())?;
                     if description.kind == LengthKind::Dynamic {
                         formatter.write_str("*")?;
                     }
@@ -196,9 +196,9 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 
     /// Iterates over length params of this function together with their type.
     pub fn len_params(&self) -> impl Iterator<Item = (usize, LengthKind)> + '_ {
-        self.len_params.iter().map(|(idx, description)| {
-            (*idx, description.kind)
-        })
+        self.len_params
+            .iter()
+            .map(|(idx, description)| (*idx, description.kind))
     }
 
     /// Returns `true` iff the function has at least one length or type param.
@@ -391,8 +391,12 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
     }
 
     /// Adds or sets varargs in the function definition.
-    pub fn with_varargs(mut self, element: impl Into<ValueType<Prim>>, len: TupleLen) -> Self {
-        self.args.set_middle(element.into(), len);
+    pub fn with_varargs(
+        mut self,
+        element: impl Into<ValueType<Prim>>,
+        len: impl Into<TupleLen>,
+    ) -> Self {
+        self.args.set_middle(element.into(), len.into());
         self
     }
 

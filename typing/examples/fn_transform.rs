@@ -7,7 +7,7 @@ use std::{
 
 use arithmetic_typing::{
     visit::{self, Visit, VisitMut},
-    FnType, LengthKind, Prelude, PrimitiveType, Tuple, TupleLen, ValueType,
+    FnType, LengthKind, Prelude, PrimitiveType, SimpleTupleLen, Tuple, TupleLen, ValueType,
 };
 
 /// Function quantifier that allows to transform implicitly quantified types (`ValueType::Some`)
@@ -51,15 +51,18 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for FnQuantifier {
     }
 
     fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
-        let target_len = len.var_part_mut();
+        let target_len = match len.components_mut().0 {
+            Some(len) => len,
+            None => return,
+        };
         let kind = match target_len {
-            TupleLen::Some => LengthKind::Static,
-            TupleLen::Dynamic => LengthKind::Dynamic,
+            SimpleTupleLen::Some => LengthKind::Static,
+            SimpleTupleLen::Dynamic => LengthKind::Dynamic,
             _ => return,
         };
 
         let next_len_param = Self::next_value(&self.len_params);
-        *target_len = TupleLen::Param(next_len_param);
+        *target_len = SimpleTupleLen::Param(next_len_param);
         self.len_params.insert(next_len_param);
         self.new_len_params
             .last_mut()
@@ -114,9 +117,10 @@ impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for Mentions {
     }
 
     fn visit_tuple(&mut self, tuple: &'a Tuple<Prim>) {
-        let len = tuple.parts().1.map(|middle| middle.len().var_part());
-        if let Some(TupleLen::Param(idx)) = len {
-            *self.len_params.entry(*idx).or_default() += 1;
+        let (_, middle, _) = tuple.parts();
+        let len = middle.and_then(|middle| middle.len().components().0);
+        if let Some(SimpleTupleLen::Param(idx)) = len {
+            *self.len_params.entry(idx).or_default() += 1;
         }
         visit::visit_tuple(self, tuple);
     }
@@ -139,12 +143,15 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for FnSimplifier {
     }
 
     fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
-        let target_len = len.var_part_mut();
-        if let TupleLen::Param(idx) = target_len {
-            if let Some(kind) = self.removed_lengths.get(idx) {
+        let target_len = match len.components_mut().0 {
+            Some(target_len) => target_len,
+            None => return,
+        };
+        if let SimpleTupleLen::Param(idx) = target_len {
+            if let Some(kind) = self.removed_lengths.get(&idx) {
                 *target_len = match kind {
-                    LengthKind::Static => TupleLen::Some,
-                    LengthKind::Dynamic => TupleLen::Dynamic,
+                    LengthKind::Static => SimpleTupleLen::Some,
+                    LengthKind::Dynamic => SimpleTupleLen::Dynamic,
                     _ => unreachable!(),
                 }
             }
@@ -182,7 +189,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for FnSimplifier {
                 }
             })
             .collect();
-        for (&idx, _) in &removed_lengths {
+        for &idx in removed_lengths.keys() {
             function.remove_len_param(idx);
         }
         mem::swap(&mut removed_lengths, &mut self.removed_lengths);
@@ -220,7 +227,6 @@ fn main() -> anyhow::Result<()> {
     roundtrip(fold_fn_str, Prelude::Fold.into())?;
 
     let tuple_str = "(fn([Num; _]) -> Num, fn<T>(T) -> fn([T; _]) -> [T])";
-    let std_tuple_str =
-        "(fn<len N>([Num; N]) -> Num, fn<T>(T) -> fn<len N, M*>([T; N]) -> [T; M])";
+    let std_tuple_str = "(fn<len N>([Num; N]) -> Num, fn<T>(T) -> fn<len N, M*>([T; N]) -> [T; M])";
     roundtrip(tuple_str, std_tuple_str.parse()?)
 }

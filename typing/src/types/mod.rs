@@ -10,7 +10,7 @@ mod tuple;
 pub(crate) use self::fn_type::TypeParamDescription;
 pub use self::{
     fn_type::{FnType, FnTypeBuilder},
-    tuple::{CompoundTupleLen, LengthKind, Slice, Tuple, TupleLen},
+    tuple::{LengthKind, SimpleTupleLen, Slice, Tuple, TupleLen},
 };
 
 /// Enumeration encompassing all types supported by the type system.
@@ -170,12 +170,12 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
     }
 
     /// Creates a slice type.
-    pub fn slice(element: impl Into<ValueType<Prim>>, length: TupleLen) -> Self {
+    pub fn slice(element: impl Into<ValueType<Prim>>, length: impl Into<TupleLen>) -> Self {
         Self::Tuple(Slice::new(element.into(), length).into())
     }
 
     /// Creates a slice type by repeating this type.
-    pub fn repeat(self, length: TupleLen) -> Slice<Prim> {
+    pub fn repeat(self, length: impl Into<TupleLen>) -> Slice<Prim> {
         Slice::new(self, length)
     }
 

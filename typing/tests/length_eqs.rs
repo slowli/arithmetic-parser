@@ -19,7 +19,7 @@ fn push_fn_basics() {
         .process_statements(&block)
         .unwrap();
 
-    assert_eq!(tuple, ValueType::slice(ValueType::NUM, TupleLen::Exact(4)));
+    assert_eq!(tuple, ValueType::slice(ValueType::NUM, TupleLen::from(4)));
 }
 
 #[test]
@@ -39,10 +39,10 @@ fn push_fn_in_other_fn_definition() {
     assert_matches!(
         err.kind(),
         TypeErrorKind::TupleLenMismatch {
-            lhs: TupleLen::Exact(2),
-            rhs: TupleLen::Exact(1),
+            lhs,
+            rhs,
             context: TupleLenMismatchContext::Assignment,
-        }
+        } if *lhs == TupleLen::from(2) && *rhs == TupleLen::from(1)
     );
 
     assert_eq!(
@@ -51,11 +51,11 @@ fn push_fn_in_other_fn_definition() {
     );
     assert_eq!(
         type_env["xs"],
-        ValueType::slice(ValueType::NUM, TupleLen::Exact(3))
+        ValueType::slice(ValueType::NUM, TupleLen::from(3))
     );
     assert_eq!(
         type_env["ys"],
-        ValueType::slice(ValueType::NUM, TupleLen::Exact(4))
+        ValueType::slice(ValueType::NUM, TupleLen::from(4))
     );
 }
 
@@ -78,7 +78,7 @@ fn several_push_applications() {
     assert_eq!(type_env["head"], ValueType::NUM);
     assert_eq!(
         type_env["tail"],
-        ValueType::slice(ValueType::NUM, TupleLen::Exact(3))
+        ValueType::slice(ValueType::NUM, TupleLen::from(3))
     );
 }
 
@@ -141,9 +141,9 @@ fn requirements_on_len_via_destructuring() {
         err.kind(),
         TypeErrorKind::TupleLenMismatch {
             lhs,
-            rhs: TupleLen::Exact(1),
+            rhs,
             context: TupleLenMismatchContext::Assignment,
-        } if lhs.to_string() == "_ + 2"
+        } if lhs.to_string() == "_ + 2" && *rhs == TupleLen::from(1)
     );
 
     assert_eq!(

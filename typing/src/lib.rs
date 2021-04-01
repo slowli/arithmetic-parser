@@ -133,9 +133,7 @@ pub use self::{
     error::{TupleLenMismatchContext, TypeError, TypeErrorKind, TypeResult},
     substitutions::Substitutions,
     type_map::{Assertions, Prelude},
-    types::{
-        CompoundTupleLen, FnType, FnTypeBuilder, LengthKind, Slice, Tuple, TupleLen, ValueType,
-    },
+    types::{FnType, FnTypeBuilder, LengthKind, SimpleTupleLen, Slice, Tuple, TupleLen, ValueType},
 };
 
 use self::arith::{LinConstraints, LinearType, TypeConstraints, WithBoolean};

@@ -5,7 +5,8 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     types::TypeParamDescription,
     visit::{self, Visit, VisitMut},
-    FnType, LengthKind, PrimitiveType, Slice, Substitutions, Tuple, TupleLen, ValueType,
+    FnType, LengthKind, PrimitiveType, SimpleTupleLen, Slice, Substitutions, Tuple, TupleLen,
+    ValueType,
 };
 
 impl<Prim: PrimitiveType> FnType<Prim> {
@@ -62,16 +63,12 @@ impl FnTypeTree {
             }
 
             fn visit_tuple(&mut self, tuple: &'ast Tuple<P>) {
-                let middle_len = tuple.parts().1.map_or(&TupleLen::Exact(0), Slice::len);
-                let maybe_var_len = if let TupleLen::Compound(len) = middle_len {
-                    len.components().0
-                } else {
-                    middle_len
-                };
+                let (_, middle, _) = tuple.parts();
+                let var_len = middle.and_then(|middle| middle.len().components().0);
 
-                if let TupleLen::Var(idx) = maybe_var_len {
+                if let Some(SimpleTupleLen::Var(idx)) = var_len {
                     self.length_vars
-                        .entry(*idx)
+                        .entry(idx)
                         .and_modify(|qty| *qty = VarQuantity::Repeated)
                         .or_insert(VarQuantity::UniqueVar);
                 }
@@ -201,10 +198,12 @@ impl FnTypeTree {
         let dynamic_lengths = substitutions.dyn_lengths();
 
         let (_, vararg, _) = base.args.parts();
-        let vararg_length = vararg.map(Slice::len).and_then(|len| match len {
-            TupleLen::Var(idx) => Some(*idx),
-            _ => None,
-        });
+        let vararg_length = vararg
+            .map(Slice::len)
+            .and_then(|len| match len.components() {
+                (Some(SimpleTupleLen::Var(idx)), _) => Some(idx),
+                _ => None,
+            });
         // `vararg_length` is dynamic within function context, but must be set to non-dynamic
         // for the function definition.
 
@@ -255,9 +254,12 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for PolyTypeTransformer {
     }
 
     fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
-        let target_len = len.var_part_mut();
-        if let TupleLen::Var(idx) = target_len {
-            *target_len = TupleLen::Param(self.mapping.lengths[idx]);
+        let target_len = match len.components_mut() {
+            (Some(var), _) => var,
+            _ => return,
+        };
+        if let SimpleTupleLen::Var(idx) = target_len {
+            *target_len = SimpleTupleLen::Param(self.mapping.lengths[idx]);
         }
     }
 
@@ -304,14 +306,18 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for MonoTypeTransformer<'_> {
     }
 
     fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
-        let target_len = len.var_part_mut();
-        if let TupleLen::Param(idx) = target_len {
+        let target_len = match len.components_mut() {
+            (Some(var), _) => var,
+            _ => return,
+        };
+
+        if let SimpleTupleLen::Param(idx) = target_len {
             *target_len = self
                 .mapping
                 .lengths
                 .get(idx)
                 .copied()
-                .map_or(TupleLen::Param(*idx), TupleLen::Var);
+                .map_or(SimpleTupleLen::Param(*idx), SimpleTupleLen::Var);
         }
     }
 

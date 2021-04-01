@@ -12,8 +12,7 @@ use crate::{arith::WithBoolean, FnType, TupleLen, ValueType};
 /// - `true` and `false` Boolean constants
 /// - `if`, `while`, `map`, `filter`, `fold`, `push` and `merge` functions
 ///
-/// `push` and `merge` functions have somewhat imprecise typing; their return values
-/// are dynamically-sized slices.
+/// `merge` function has somewhat imprecise typing; its return value is a dynamically-sized slice.
 ///
 /// # Examples
 ///
@@ -35,7 +34,7 @@ use crate::{arith::WithBoolean, FnType, TupleLen, ValueType};
 /// # }
 /// ```
 ///
-/// Limitations of `push` / `merge`:
+/// Limitations of `merge`:
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
@@ -45,15 +44,15 @@ use crate::{arith::WithBoolean, FnType, TupleLen, ValueType};
 /// type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// let code = r#"
 ///     len = |xs| xs.fold(0, |acc, _| acc + 1);
-///     slice = (1, 2).push(3);
+///     slice = (1, 2).merge((3, 4));
 ///     slice.len(); // methods working on slices are applicable
-///     (_, _, z) = slice; // but destructring is not
+///     (_, _, _, z) = slice; // but destructring is not
 /// "#;
 /// let ast = Parser::parse_statements(code)?;
 ///
 /// let mut env: TypeEnvironment = Prelude::iter().collect();
 /// let err = env.process_statements(&ast).unwrap_err();
-/// assert_eq!(*err.span().fragment(), "(_, _, z) = slice");
+/// assert_eq!(*err.span().fragment(), "(_, _, _, z) = slice");
 /// # assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
 /// # Ok(())
 /// # }

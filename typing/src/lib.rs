@@ -53,7 +53,7 @@
 //! let ast = Parser::parse_statements(code)?;
 //!
 //! let mut env = TypeEnvironment::new();
-//! env.insert("fold", Prelude::fold_type().into());
+//! env.insert("fold", Prelude::Fold);
 //!
 //! // Evaluate `code` to get the inferred `sum` function signature.
 //! let output_type = env.process_statements(&ast)?;
@@ -74,7 +74,7 @@
 //! let ast = Parser::parse_statements(code)?;
 //!
 //! let mut env = TypeEnvironment::new();
-//! env.insert("fold", Prelude::fold_type().into());
+//! env.insert("fold", Prelude::Fold);
 //!
 //! let output_type = env.process_statements(&ast)?;
 //! assert!(output_type.is_void());
@@ -101,9 +101,6 @@
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
 //! [`Grammar`]: arithmetic_parser::grammars::Grammar
 //! [`arithmetic-eval`]: https://crates.io/crates/arithmetic-eval
-
-// FIXME: is fn<T: Lin>([T; _]) -> T equivalent to `<len N; ...>`?
-// FIXME: is `fn<T>([T; _], fn(T) -> Bool) -> [T]` equivalent to `filter`?
 
 #![doc(html_root_url = "https://docs.rs/arithmetic-typing/0.2.0")]
 #![warn(missing_docs, missing_debug_implementations)]

@@ -4,6 +4,7 @@ use std::{borrow::Cow, cmp, fmt, iter, num::NonZeroUsize, ops};
 
 use crate::{Num, PrimitiveType, ValueType};
 
+// TODO: to make `CompoundTupleLen` the "main" type?
 /// Length of a tuple.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -55,7 +56,17 @@ impl TupleLen {
         }
     }
 
-    pub(crate) fn var_part_mut(&mut self) -> &mut Self {
+    /// FIXME
+    pub fn var_part(&self) -> &Self {
+        if let TupleLen::Compound(compound_len) = self {
+            &compound_len.var
+        } else {
+            self
+        }
+    }
+
+    /// FIXME
+    pub fn var_part_mut(&mut self) -> &mut Self {
         if let TupleLen::Compound(compound_len) = self {
             &mut compound_len.var
         } else {

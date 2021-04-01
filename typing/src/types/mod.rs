@@ -30,13 +30,13 @@ pub use self::{
 /// There are conversions to construct `ValueType`s eloquently:
 ///
 /// ```
-/// # use arithmetic_typing::{FnType, TupleLen, ValueType};
+/// # use arithmetic_typing::{FnType, SimpleTupleLen, ValueType};
 /// let tuple: ValueType = (ValueType::BOOL, ValueType::NUM).into();
 /// assert_eq!(tuple.to_string(), "(Bool, Num)");
-/// let slice = tuple.repeat(TupleLen::Param(0));
+/// let slice = tuple.repeat(SimpleTupleLen::Param(0));
 /// assert_eq!(slice.to_string(), "[(Bool, Num); N]");
 /// let fn_type: ValueType = FnType::builder()
-///     .with_len_params(0..1)
+///     .with_len_params(&[0])
 ///     .with_arg(slice)
 ///     .returning(ValueType::NUM)
 ///     .into();

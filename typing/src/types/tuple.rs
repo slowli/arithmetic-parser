@@ -157,7 +157,7 @@ pub enum LengthKind {
 /// via [`Self::new()`].
 ///
 /// ```
-/// # use arithmetic_typing::{Slice, Tuple, TupleLen, ValueType};
+/// # use arithmetic_typing::{Slice, Tuple, SimpleTupleLen, ValueType};
 /// # use assert_matches::assert_matches;
 /// let simple_tuple = Tuple::from(vec![ValueType::NUM, ValueType::BOOL]);
 /// assert_matches!(simple_tuple.parts(), ([_, _], None, []));
@@ -165,7 +165,7 @@ pub enum LengthKind {
 /// assert_eq!(simple_tuple.to_string(), "(Num, Bool)");
 ///
 /// let slice_tuple = Tuple::from(
-///     Slice::new(ValueType::NUM, TupleLen::Param(0)),
+///    ValueType::NUM.repeat(SimpleTupleLen::Param(0)),
 /// );
 /// assert_matches!(slice_tuple.parts(), ([], Some(_), []));
 /// assert!(slice_tuple.as_slice().is_some());
@@ -173,7 +173,7 @@ pub enum LengthKind {
 ///
 /// let complex_tuple = Tuple::new(
 ///     vec![ValueType::NUM],
-///     Slice::new(ValueType::NUM, TupleLen::Param(0)),
+///     ValueType::NUM.repeat(SimpleTupleLen::Param(0)),
 ///     vec![ValueType::BOOL, ValueType::Some],
 /// );
 /// assert_matches!(complex_tuple.parts(), ([_], Some(_), [_, _]));
@@ -324,16 +324,16 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     /// # Examples
     ///
     /// ```
-    /// # use arithmetic_typing::{Slice, Tuple, ValueType, TupleLen};
+    /// # use arithmetic_typing::{Slice, Tuple, ValueType, SimpleTupleLen, TupleLen};
     /// let tuple = Tuple::from(vec![ValueType::NUM, ValueType::BOOL]);
-    /// assert_eq!(tuple.len(), TupleLen::Exact(2));
+    /// assert_eq!(tuple.len(), TupleLen::from(2));
     ///
-    /// let slice = Slice::new(ValueType::NUM, TupleLen::Param(0));
+    /// let slice = Slice::new(ValueType::NUM, SimpleTupleLen::Param(0));
     /// let tuple = Tuple::from(slice.clone());
-    /// assert_eq!(tuple.len(), TupleLen::Param(0));
+    /// assert_eq!(tuple.len(), TupleLen::from(SimpleTupleLen::Param(0)));
     ///
     /// let tuple = Tuple::new(vec![], slice, vec![ValueType::BOOL]);
-    /// assert_eq!(tuple.len(), TupleLen::Param(0) + 1);
+    /// assert_eq!(tuple.len(), SimpleTupleLen::Param(0) + 1);
     /// ```
     pub fn len(&self) -> TupleLen {
         let increment = self.start.len() + self.end.len();
@@ -422,10 +422,10 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     /// # Examples
     ///
     /// ```
-    /// # use arithmetic_typing::{Slice, Tuple, TupleLen, ValueType};
+    /// # use arithmetic_typing::{Slice, Tuple, SimpleTupleLen, ValueType};
     /// let complex_tuple = Tuple::new(
     ///     vec![ValueType::NUM],
-    ///     Slice::new(ValueType::NUM, TupleLen::Param(0)),
+    ///     Slice::new(ValueType::NUM, SimpleTupleLen::Param(0)),
     ///     vec![ValueType::BOOL, ValueType::Some],
     /// );
     /// let elements: Vec<_> = complex_tuple.element_types().collect();

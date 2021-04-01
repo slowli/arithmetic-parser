@@ -278,11 +278,11 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 /// Signature for a function summing a slice of numbers:
 ///
 /// ```
-/// # use arithmetic_typing::{FnType, TupleLen, ValueType};
+/// # use arithmetic_typing::{FnType, SimpleTupleLen, ValueType};
 /// # use std::iter;
 /// let sum_fn_type = FnType::builder()
 ///     .with_len_params(&[0])
-///     .with_arg(ValueType::NUM.repeat(TupleLen::Param(0)))
+///     .with_arg(ValueType::NUM.repeat(SimpleTupleLen::Param(0)))
 ///     .returning(ValueType::NUM);
 /// assert_eq!(
 ///     sum_fn_type.to_string(),
@@ -293,7 +293,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 /// Signature for a slice mapping function:
 ///
 /// ```
-/// # use arithmetic_typing::{arith::LinConstraints, FnType, TupleLen, ValueType};
+/// # use arithmetic_typing::{arith::LinConstraints, FnType, SimpleTupleLen, ValueType};
 /// # use std::iter;
 /// // Definition of the mapping arg. Note that the definition uses type params,
 /// // but does not declare them (they are bound to the parent function).
@@ -305,9 +305,9 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 ///     .with_len_params(&[0])
 ///     .with_type_params(&[0])
 ///     .with_constrained_type_params(&[1], LinConstraints::LIN)
-///     .with_arg(ValueType::Param(0).repeat(TupleLen::Param(0)))
+///     .with_arg(ValueType::Param(0).repeat(SimpleTupleLen::Param(0)))
 ///     .with_arg(map_fn_arg)
-///     .returning(ValueType::Param(1).repeat(TupleLen::Param(0)));
+///     .returning(ValueType::Param(1).repeat(SimpleTupleLen::Param(0)));
 /// assert_eq!(
 ///     map_fn_type.to_string(),
 ///     "fn<len N; T, U: Lin>([T; N], fn(T) -> U) -> [U; N]"
@@ -317,12 +317,12 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 /// Signature of a function with varargs:
 ///
 /// ```
-/// # use arithmetic_typing::{arith::LinConstraints, FnType, TupleLen, ValueType};
+/// # use arithmetic_typing::{arith::LinConstraints, FnType, SimpleTupleLen, ValueType};
 /// # use std::iter;
 /// let fn_type = <FnType>::builder()
 ///     .with_len_params(&[0])
 ///     .with_constrained_type_params(&[0], LinConstraints::LIN)
-///     .with_varargs(ValueType::Param(0), TupleLen::Param(0))
+///     .with_varargs(ValueType::Param(0), SimpleTupleLen::Param(0))
 ///     .with_arg(ValueType::BOOL)
 ///     .returning(ValueType::Param(0));
 /// assert_eq!(
@@ -330,7 +330,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 ///     "fn<len N; T: Lin>(...[T; N], Bool) -> T"
 /// );
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FnTypeBuilder<Prim: PrimitiveType = Num> {
     args: Tuple<Prim>,
     type_params: HashMap<usize, TypeParamDescription<Prim::Constraints>>,

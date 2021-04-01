@@ -548,7 +548,7 @@ mod tests {
             *slice_type.element(),
             ValueType::from((ValueType::NUM, ValueType::Some))
         );
-        assert_eq!(*slice_type.len(), TupleLen::from(SimpleTupleLen::Some));
+        assert_eq!(slice_type.len(), TupleLen::from(SimpleTupleLen::Some));
     }
 
     #[test]
@@ -576,7 +576,7 @@ mod tests {
         assert!(ty.type_params.is_empty());
         let args_slice = ty.args.as_slice().unwrap();
         assert_eq!(*args_slice.element(), ValueType::NUM);
-        assert_eq!(*args_slice.len(), SimpleTupleLen::Param(0).into());
+        assert_eq!(args_slice.len(), SimpleTupleLen::Param(0).into());
     }
 
     #[test]

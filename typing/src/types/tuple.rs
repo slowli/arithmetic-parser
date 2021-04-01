@@ -53,12 +53,12 @@ impl ops::Add<usize> for SimpleTupleLen {
     }
 }
 
-/// Compound tuple length.
+/// Generic tuple length.
 ///
-/// A compound length always consists of the two components: a variable length,
-/// such as [`TupleLen::Param`], and a positive increment. These components can be obtained
-/// via [`Self::components()`].
-#[derive(Debug, Clone, PartialEq)]
+/// A tuple length consists of the two components: a variable length,
+/// such as [`SimpleTupleLen::Param`], and a non-negative increment.
+/// These components can be obtained via [`Self::components()`].
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TupleLen {
     var: Option<SimpleTupleLen>,
     exact: usize,
@@ -289,10 +289,10 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
         formatter.write_str(")")
     }
 
-    fn resolved_middle_len(&self) -> &TupleLen {
+    fn resolved_middle_len(&self) -> TupleLen {
         self.middle
             .as_ref()
-            .map_or(&TupleLen::ZERO, |middle| &middle.length)
+            .map_or(TupleLen::ZERO, |middle| middle.length)
     }
 
     fn middle_element(&self) -> &ValueType<Prim> {
@@ -342,9 +342,7 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
 
     /// Returns `true` iff this tuple is guaranteed to be empty.
     pub fn is_empty(&self) -> bool {
-        self.start.is_empty()
-            && self.end.is_empty()
-            && *self.resolved_middle_len() == TupleLen::ZERO
+        self.start.is_empty() && self.end.is_empty() && self.resolved_middle_len() == TupleLen::ZERO
     }
 
     pub(crate) fn push(&mut self, element: ValueType<Prim>) {
@@ -527,8 +525,8 @@ impl<Prim: PrimitiveType> Slice<Prim> {
     }
 
     /// Returns the length of this slice.
-    pub fn len(&self) -> &TupleLen {
-        &self.length
+    pub fn len(&self) -> TupleLen {
+        self.length
     }
 
     pub(crate) fn len_mut(&mut self) -> &mut TupleLen {

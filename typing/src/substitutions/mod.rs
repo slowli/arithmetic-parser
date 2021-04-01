@@ -110,8 +110,8 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         }
     }
 
-    fn resolve_len<'a>(&'a self, len: &'a TupleLen) -> TupleLen {
-        let mut resolved = len.to_owned();
+    fn resolve_len(&self, len: TupleLen) -> TupleLen {
+        let mut resolved = len;
         while let (Some(SimpleTupleLen::Var(idx)), exact) = resolved.components() {
             if let Some(eq_rhs) = self.length_eqs.get(&idx) {
                 resolved = eq_rhs.to_owned() + exact;
@@ -206,7 +206,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         rhs: &Tuple<Prim>,
         context: TupleLenMismatchContext,
     ) -> Result<(), TypeErrorKind<Prim>> {
-        let resolved_len = self.unify_lengths(&lhs.len(), &rhs.len(), context)?;
+        let resolved_len = self.unify_lengths(lhs.len(), rhs.len(), context)?;
 
         if let (None, exact) = resolved_len.components() {
             for (lhs_elem, rhs_elem) in lhs.equal_elements_static(rhs, exact) {
@@ -225,14 +225,14 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     /// Returns the resolved length that `lhs` and `rhs` are equal to.
     fn unify_lengths(
         &mut self,
-        lhs: &TupleLen,
-        rhs: &TupleLen,
+        lhs: TupleLen,
+        rhs: TupleLen,
         context: TupleLenMismatchContext,
     ) -> Result<TupleLen, TypeErrorKind<Prim>> {
         let resolved_lhs = self.resolve_len(lhs);
         let resolved_rhs = self.resolve_len(rhs);
 
-        self.unify_lengths_inner(&resolved_lhs, &resolved_rhs)
+        self.unify_lengths_inner(resolved_lhs, resolved_rhs)
             .map_err(|err| match err {
                 LenErrorKind::UnresolvedParam => TypeErrorKind::UnresolvedParam,
                 LenErrorKind::Mismatch => TypeErrorKind::TupleLenMismatch {
@@ -245,8 +245,8 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
     fn unify_lengths_inner(
         &mut self,
-        resolved_lhs: &TupleLen,
-        resolved_rhs: &TupleLen,
+        resolved_lhs: TupleLen,
+        resolved_rhs: TupleLen,
     ) -> Result<TupleLen, LenErrorKind> {
         let (lhs_var, lhs_exact) = resolved_lhs.components();
         let (rhs_var, rhs_exact) = resolved_rhs.components();
@@ -274,12 +274,12 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         match lhs_exact.cmp(&rhs_exact) {
             Ordering::Equal => self.unify_simple_length(lhs_var, TupleLen::from(rhs_var), true),
             Ordering::Greater => {
-                let reduced = lhs_var.to_owned() + (lhs_exact - rhs_exact);
+                let reduced = lhs_var + (lhs_exact - rhs_exact);
                 self.unify_simple_length(rhs_var, reduced, false)
                     .map(|len| len + rhs_exact)
             }
             Ordering::Less => {
-                let reduced = rhs_var.to_owned() + (rhs_exact - lhs_exact);
+                let reduced = rhs_var + (rhs_exact - lhs_exact);
                 self.unify_simple_length(lhs_var, reduced, true)
                     .map(|len| len + lhs_exact)
             }
@@ -349,7 +349,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 if is_dyn {
                     Err(LenErrorKind::Mismatch)
                 } else {
-                    self.length_eqs.insert(var_idx, source.clone());
+                    self.length_eqs.insert(var_idx, source);
                     Ok(source)
                 }
             }
@@ -585,6 +585,6 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeResolver<'_, Prim> {
     }
 
     fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
-        *len = self.substitutions.resolve_len(len);
+        *len = self.substitutions.resolve_len(*len);
     }
 }

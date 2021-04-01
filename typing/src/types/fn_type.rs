@@ -12,14 +12,12 @@ use crate::{LengthKind, Num, PrimitiveType, Tuple, TupleLen, ValueType};
 /// Description of a constant parameter.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct LenParamDescription {
-    pub is_dynamic: bool,
+    pub kind: LengthKind,
 }
 
 impl From<LengthKind> for LenParamDescription {
-    fn from(value: LengthKind) -> Self {
-        Self {
-            is_dynamic: value == LengthKind::Dynamic,
-        }
+    fn from(kind: LengthKind) -> Self {
+        Self { kind }
     }
 }
 
@@ -115,7 +113,7 @@ impl<Prim: PrimitiveType> fmt::Display for FnType<Prim> {
                 formatter.write_str("len ")?;
                 for (i, (var_idx, description)) in self.len_params.iter().enumerate() {
                     formatter.write_str(TupleLen::const_param(*var_idx).as_ref())?;
-                    if description.is_dynamic {
+                    if description.kind == LengthKind::Dynamic {
                         formatter.write_str("*")?;
                     }
                     if i + 1 < self.len_params.len() {
@@ -199,12 +197,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
     /// Iterates over length params of this function together with their type.
     pub fn len_params(&self) -> impl Iterator<Item = (usize, LengthKind)> + '_ {
         self.len_params.iter().map(|(idx, description)| {
-            let length_type = if description.is_dynamic {
-                LengthKind::Dynamic
-            } else {
-                LengthKind::Static
-            };
-            (*idx, length_type)
+            (*idx, description.kind)
         })
     }
 
@@ -219,6 +212,56 @@ impl<Prim: PrimitiveType> FnType<Prim> {
     /// non-concrete types.
     pub fn is_concrete(&self) -> bool {
         self.args.is_concrete() && self.return_type.is_concrete()
+    }
+
+    /// Adds or replaces a type parameter with the specified `index`.
+    pub fn insert_type_param(&mut self, index: usize, constraints: Prim::Constraints) {
+        let value_to_insert = (index, TypeParamDescription::new(constraints));
+        let insert_pos = self
+            .type_params
+            .binary_search_by_key(&index, |(idx, _)| *idx);
+        match insert_pos {
+            Ok(pos) => self.type_params[pos] = value_to_insert,
+            Err(pos) => self.type_params.insert(pos, value_to_insert),
+        }
+    }
+
+    /// Removes a type parameter with the specified index. Returns the constraints on the param
+    /// if it was present.
+    pub fn remove_type_param(&mut self, index: usize) -> Option<Prim::Constraints> {
+        let remove_pos = self
+            .type_params
+            .binary_search_by_key(&index, |(idx, _)| *idx);
+        if let Ok(pos) = remove_pos {
+            Some(self.type_params.remove(pos).1.constraints)
+        } else {
+            None
+        }
+    }
+
+    /// Adds or replaces a length parameter with the specified `index`.
+    pub fn insert_len_param(&mut self, index: usize, kind: LengthKind) {
+        let value_to_insert = (index, LenParamDescription::from(kind));
+        let insert_pos = self
+            .len_params
+            .binary_search_by_key(&index, |(idx, _)| *idx);
+        match insert_pos {
+            Ok(pos) => self.len_params[pos] = value_to_insert,
+            Err(pos) => self.len_params.insert(pos, value_to_insert),
+        }
+    }
+
+    /// Removes a length parameter with the specified index. Returns the length type if it was
+    /// present.
+    pub fn remove_len_param(&mut self, index: usize) -> Option<LengthKind> {
+        let remove_pos = self
+            .len_params
+            .binary_search_by_key(&index, |(idx, _)| *idx);
+        if let Ok(pos) = remove_pos {
+            Some(self.len_params.remove(pos).1.kind)
+        } else {
+            None
+        }
     }
 }
 
@@ -308,7 +351,7 @@ impl<Prim: PrimitiveType> Default for FnTypeBuilder<Prim> {
 impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
     /// Adds the length params with the specified `indexes` to the function definition.
     pub fn with_len_params(mut self, indexes: impl Iterator<Item = usize>) -> Self {
-        let static_description = LenParamDescription { is_dynamic: false };
+        let static_description = LengthKind::Static.into();
         self.const_params
             .extend(indexes.map(|idx| (idx, static_description)));
         self
@@ -316,7 +359,7 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
 
     /// Adds the dynamic length params with the specified `indexes` to the function definition.
     pub fn with_dyn_len_params(mut self, indexes: impl Iterator<Item = usize>) -> Self {
-        let dyn_description = LenParamDescription { is_dynamic: true };
+        let dyn_description = LengthKind::Dynamic.into();
         self.const_params
             .extend(indexes.map(|idx| (idx, dyn_description)));
         self

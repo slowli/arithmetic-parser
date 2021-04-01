@@ -11,6 +11,7 @@ use crate::{
     arith::TypeConstraints,
     visit::{self, Visit, VisitMut},
     FnType, PrimitiveType, Tuple, TupleLen, TupleLenMismatchContext, TypeErrorKind, ValueType,
+    LengthKind,
 };
 
 mod fns;
@@ -401,7 +402,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
         // Copy constraints on the newly generated const and type vars from the function definition.
         for (original_idx, description) in &fn_type.len_params {
-            if description.is_dynamic {
+            if description.kind == LengthKind::Dynamic {
                 let new_idx = mapping.lengths[original_idx];
                 self.dyn_lengths.insert(new_idx);
             }

@@ -2,11 +2,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::types::LenParamDescription;
 use crate::{
     types::TypeParamDescription,
     visit::{self, Visit, VisitMut},
-    FnType, PrimitiveType, Slice, Substitutions, Tuple, TupleLen, ValueType,
+    FnType, LengthKind, PrimitiveType, Slice, Substitutions, Tuple, TupleLen, ValueType,
 };
 
 impl<Prim: PrimitiveType> FnType<Prim> {
@@ -213,8 +212,12 @@ impl FnTypeTree {
             .length_params
             .into_iter()
             .map(|idx| {
-                let is_dynamic = vararg_length != Some(idx) && dynamic_lengths.contains(&idx);
-                (idx, LenParamDescription { is_dynamic })
+                let kind = if vararg_length != Some(idx) && dynamic_lengths.contains(&idx) {
+                    LengthKind::Dynamic
+                } else {
+                    LengthKind::Static
+                };
+                (idx, kind.into())
             })
             .collect();
         base.len_params.sort_unstable_by_key(|(idx, _)| *idx);

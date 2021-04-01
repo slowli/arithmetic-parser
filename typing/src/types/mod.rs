@@ -7,7 +7,7 @@ use crate::{arith::WithBoolean, Num, PrimitiveType};
 mod fn_type;
 mod tuple;
 
-pub(crate) use self::fn_type::{LenParamDescription, TypeParamDescription};
+pub(crate) use self::fn_type::TypeParamDescription;
 pub use self::{
     fn_type::{FnType, FnTypeBuilder},
     tuple::{CompoundTupleLen, LengthKind, Slice, Tuple, TupleLen},

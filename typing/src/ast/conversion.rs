@@ -7,7 +7,7 @@ use std::{collections::HashMap, convert::TryFrom, fmt, str::FromStr};
 use crate::{
     ast::{FnTypeAst, SliceAst, TupleAst, TupleLenAst, TypeConstraintsAst, ValueTypeAst},
     types::TypeParamDescription,
-    FnType, PrimitiveType, SimpleTupleLen, Slice, Tuple, ValueType,
+    FnType, PrimitiveType, Slice, Tuple, UnknownLen, ValueType,
 };
 use arithmetic_parser::{
     ErrorKind as ParseErrorKind, InputSpan, LocatedSpan, NomResult, SpannedError, StripCode,
@@ -238,10 +238,10 @@ impl<'a, Prim: PrimitiveType> SliceAst<'a, Prim> {
                 let const_param = state.const_param_idx(name).ok_or_else(|| {
                     ConversionErrorKind::UndefinedConst(name.to_owned()).with_span(*ident)
                 })?;
-                SimpleTupleLen::Param(const_param)
+                UnknownLen::Param(const_param)
             }
-            TupleLenAst::Some => SimpleTupleLen::Some,
-            TupleLenAst::Dynamic => SimpleTupleLen::Dynamic,
+            TupleLenAst::Some => UnknownLen::Some,
+            TupleLenAst::Dynamic => UnknownLen::Dynamic,
         };
 
         Ok(Slice::new(element, converted_length))
@@ -548,7 +548,7 @@ mod tests {
             *slice_type.element(),
             ValueType::from((ValueType::NUM, ValueType::Some))
         );
-        assert_eq!(slice_type.len(), TupleLen::from(SimpleTupleLen::Some));
+        assert_eq!(slice_type.len(), TupleLen::from(UnknownLen::Some));
     }
 
     #[test]
@@ -576,7 +576,7 @@ mod tests {
         assert!(ty.type_params.is_empty());
         let args_slice = ty.args.as_slice().unwrap();
         assert_eq!(*args_slice.element(), ValueType::NUM);
-        assert_eq!(args_slice.len(), SimpleTupleLen::Param(0).into());
+        assert_eq!(args_slice.len(), UnknownLen::Param(0).into());
     }
 
     #[test]

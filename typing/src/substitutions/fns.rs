@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     types::TypeParamDescription,
     visit::{self, Visit, VisitMut},
-    FnType, LengthKind, PrimitiveType, SimpleTupleLen, Slice, Substitutions, Tuple, TupleLen,
+    FnType, LengthKind, PrimitiveType, Slice, Substitutions, Tuple, TupleLen, UnknownLen,
     ValueType,
 };
 
@@ -66,7 +66,7 @@ impl FnTypeTree {
                 let (_, middle, _) = tuple.parts();
                 let var_len = middle.and_then(|middle| middle.len().components().0);
 
-                if let Some(SimpleTupleLen::Var(idx)) = var_len {
+                if let Some(UnknownLen::Var(idx)) = var_len {
                     self.length_vars
                         .entry(idx)
                         .and_modify(|qty| *qty = VarQuantity::Repeated)
@@ -201,7 +201,7 @@ impl FnTypeTree {
         let vararg_length = vararg
             .map(Slice::len)
             .and_then(|len| match len.components() {
-                (Some(SimpleTupleLen::Var(idx)), _) => Some(idx),
+                (Some(UnknownLen::Var(idx)), _) => Some(idx),
                 _ => None,
             });
         // `vararg_length` is dynamic within function context, but must be set to non-dynamic
@@ -258,8 +258,8 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for PolyTypeTransformer {
             (Some(var), _) => var,
             _ => return,
         };
-        if let SimpleTupleLen::Var(idx) = target_len {
-            *target_len = SimpleTupleLen::Param(self.mapping.lengths[idx]);
+        if let UnknownLen::Var(idx) = target_len {
+            *target_len = UnknownLen::Param(self.mapping.lengths[idx]);
         }
     }
 
@@ -311,13 +311,13 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for MonoTypeTransformer<'_> {
             _ => return,
         };
 
-        if let SimpleTupleLen::Param(idx) = target_len {
+        if let UnknownLen::Param(idx) = target_len {
             *target_len = self
                 .mapping
                 .lengths
                 .get(idx)
                 .copied()
-                .map_or(SimpleTupleLen::Param(*idx), SimpleTupleLen::Var);
+                .map_or(UnknownLen::Param(*idx), UnknownLen::Var);
         }
     }
 

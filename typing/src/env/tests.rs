@@ -29,7 +29,7 @@ pub fn assert_incompatible_types<Prim: PrimitiveType>(
 fn hash_fn_type() -> FnType<Num> {
     FnType {
         // TODO: use `ValueType::Any` instead of `ValueType::Param(0)`
-        args: Slice::new(ValueType::Param(0), SimpleTupleLen::Param(0)).into(),
+        args: Slice::new(ValueType::Param(0), UnknownLen::Param(0)).into(),
         return_type: ValueType::NUM,
         type_params: vec![(0, TypeParamDescription::new(LinConstraints::default()))],
         len_params: vec![(0, LengthKind::Static.into())],
@@ -50,11 +50,11 @@ pub fn zip_fn_type() -> FnType<Num> {
     FnType::builder()
         .with_len_params(&[0])
         .with_type_params(&[0, 1])
-        .with_arg(ValueType::Param(0).repeat(SimpleTupleLen::Param(0)))
-        .with_arg(ValueType::Param(1).repeat(SimpleTupleLen::Param(0)))
+        .with_arg(ValueType::Param(0).repeat(UnknownLen::Param(0)))
+        .with_arg(ValueType::Param(1).repeat(UnknownLen::Param(0)))
         .returning(ValueType::slice(
             (ValueType::Param(0), ValueType::Param(1)),
-            SimpleTupleLen::Param(0),
+            UnknownLen::Param(0),
         ))
 }
 
@@ -925,7 +925,7 @@ fn comparisons_when_switched_on() {
     };
 
     assert_eq!(*slice.element(), ValueType::NUM);
-    assert_matches!(slice.len().components(), (Some(SimpleTupleLen::Var(_)), 0));
+    assert_matches!(slice.len().components(), (Some(UnknownLen::Var(_)), 0));
 }
 
 #[test]

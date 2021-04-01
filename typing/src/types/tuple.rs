@@ -4,10 +4,10 @@ use std::{borrow::Cow, cmp, fmt, iter, ops};
 
 use crate::{Num, PrimitiveType, ValueType};
 
-/// Simple length of a tuple.
+/// Unknown / variable length, e.g., of a tuple.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
-pub enum SimpleTupleLen {
+pub enum UnknownLen {
     /// Wildcard length, i.e. some length that is not specified. Similar to `_` in type annotations
     /// in Rust. Unlike [`Self::Dynamic`], this length can be found during type inference.
     Some,
@@ -22,7 +22,7 @@ pub enum SimpleTupleLen {
     Var(usize),
 }
 
-impl fmt::Display for SimpleTupleLen {
+impl fmt::Display for UnknownLen {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Some | Self::Var(_) => formatter.write_str("_"),
@@ -32,7 +32,7 @@ impl fmt::Display for SimpleTupleLen {
     }
 }
 
-impl SimpleTupleLen {
+impl UnknownLen {
     pub(crate) fn const_param(index: usize) -> Cow<'static, str> {
         const PARAM_NAMES: &str = "NMLKJI";
         PARAM_NAMES.get(index..=index).map_or_else(
@@ -42,7 +42,7 @@ impl SimpleTupleLen {
     }
 }
 
-impl ops::Add<usize> for SimpleTupleLen {
+impl ops::Add<usize> for UnknownLen {
     type Output = TupleLen;
 
     fn add(self, rhs: usize) -> Self::Output {
@@ -55,12 +55,12 @@ impl ops::Add<usize> for SimpleTupleLen {
 
 /// Generic tuple length.
 ///
-/// A tuple length consists of the two components: a variable length,
-/// such as [`SimpleTupleLen::Param`], and a non-negative increment.
+/// A tuple length consists of the two components: an unknown / variable length,
+/// such as [`UnknownLen::Param`], and a non-negative increment.
 /// These components can be obtained via [`Self::components()`].
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TupleLen {
-    var: Option<SimpleTupleLen>,
+    var: Option<UnknownLen>,
     exact: usize,
 }
 
@@ -85,8 +85,8 @@ impl ops::Add<usize> for TupleLen {
     }
 }
 
-impl From<SimpleTupleLen> for TupleLen {
-    fn from(var: SimpleTupleLen) -> Self {
+impl From<UnknownLen> for TupleLen {
+    fn from(var: UnknownLen) -> Self {
         Self {
             var: Some(var),
             exact: 0,
@@ -108,16 +108,16 @@ impl TupleLen {
     };
 
     fn is_concrete(&self) -> bool {
-        matches!(&self.var, None | Some(SimpleTupleLen::Param(_)))
+        matches!(&self.var, None | Some(UnknownLen::Param(_)))
     }
 
     /// Returns components of this length.
-    pub fn components(&self) -> (Option<SimpleTupleLen>, usize) {
+    pub fn components(&self) -> (Option<UnknownLen>, usize) {
         (self.var, self.exact)
     }
 
     /// Returns mutable references to the components of this length.
-    pub fn components_mut(&mut self) -> (Option<&mut SimpleTupleLen>, &mut usize) {
+    pub fn components_mut(&mut self) -> (Option<&mut UnknownLen>, &mut usize) {
         (self.var.as_mut(), &mut self.exact)
     }
 }
@@ -157,7 +157,7 @@ pub enum LengthKind {
 /// via [`Self::new()`].
 ///
 /// ```
-/// # use arithmetic_typing::{Slice, Tuple, SimpleTupleLen, ValueType};
+/// # use arithmetic_typing::{Slice, Tuple, UnknownLen, ValueType};
 /// # use assert_matches::assert_matches;
 /// let simple_tuple = Tuple::from(vec![ValueType::NUM, ValueType::BOOL]);
 /// assert_matches!(simple_tuple.parts(), ([_, _], None, []));
@@ -165,7 +165,7 @@ pub enum LengthKind {
 /// assert_eq!(simple_tuple.to_string(), "(Num, Bool)");
 ///
 /// let slice_tuple = Tuple::from(
-///    ValueType::NUM.repeat(SimpleTupleLen::Param(0)),
+///    ValueType::NUM.repeat(UnknownLen::Param(0)),
 /// );
 /// assert_matches!(slice_tuple.parts(), ([], Some(_), []));
 /// assert!(slice_tuple.as_slice().is_some());
@@ -173,7 +173,7 @@ pub enum LengthKind {
 ///
 /// let complex_tuple = Tuple::new(
 ///     vec![ValueType::NUM],
-///     ValueType::NUM.repeat(SimpleTupleLen::Param(0)),
+///     ValueType::NUM.repeat(UnknownLen::Param(0)),
 ///     vec![ValueType::BOOL, ValueType::Some],
 /// );
 /// assert_matches!(complex_tuple.parts(), ([_], Some(_), [_, _]));
@@ -324,16 +324,16 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     /// # Examples
     ///
     /// ```
-    /// # use arithmetic_typing::{Slice, Tuple, ValueType, SimpleTupleLen, TupleLen};
+    /// # use arithmetic_typing::{Slice, Tuple, ValueType, UnknownLen, TupleLen};
     /// let tuple = Tuple::from(vec![ValueType::NUM, ValueType::BOOL]);
     /// assert_eq!(tuple.len(), TupleLen::from(2));
     ///
-    /// let slice = Slice::new(ValueType::NUM, SimpleTupleLen::Param(0));
+    /// let slice = Slice::new(ValueType::NUM, UnknownLen::Param(0));
     /// let tuple = Tuple::from(slice.clone());
-    /// assert_eq!(tuple.len(), TupleLen::from(SimpleTupleLen::Param(0)));
+    /// assert_eq!(tuple.len(), TupleLen::from(UnknownLen::Param(0)));
     ///
     /// let tuple = Tuple::new(vec![], slice, vec![ValueType::BOOL]);
-    /// assert_eq!(tuple.len(), SimpleTupleLen::Param(0) + 1);
+    /// assert_eq!(tuple.len(), UnknownLen::Param(0) + 1);
     /// ```
     pub fn len(&self) -> TupleLen {
         let increment = self.start.len() + self.end.len();
@@ -422,10 +422,10 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     /// # Examples
     ///
     /// ```
-    /// # use arithmetic_typing::{Slice, Tuple, SimpleTupleLen, ValueType};
+    /// # use arithmetic_typing::{Slice, Tuple, UnknownLen, ValueType};
     /// let complex_tuple = Tuple::new(
     ///     vec![ValueType::NUM],
-    ///     Slice::new(ValueType::NUM, SimpleTupleLen::Param(0)),
+    ///     Slice::new(ValueType::NUM, UnknownLen::Param(0)),
     ///     vec![ValueType::BOOL, ValueType::Some],
     /// );
     /// let elements: Vec<_> = complex_tuple.element_types().collect();
@@ -502,7 +502,7 @@ pub struct Slice<Prim: PrimitiveType = Num> {
 
 impl<Prim: PrimitiveType> fmt::Display for Slice<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.length == TupleLen::from(SimpleTupleLen::Dynamic) {
+        if self.length == TupleLen::from(UnknownLen::Dynamic) {
             write!(formatter, "[{}]", self.element)
         } else {
             write!(formatter, "[{}; {}]", self.element, self.length)
@@ -561,15 +561,15 @@ mod tests {
     fn tuple_length_display() {
         let len = TupleLen::from(3);
         assert_eq!(len.to_string(), "3");
-        let len = SimpleTupleLen::Param(0) + 2;
+        let len = UnknownLen::Param(0) + 2;
         assert_eq!(len.to_string(), "N + 2");
     }
 
     #[test]
     fn slice_display() {
-        let slice = Slice::new(ValueType::NUM, SimpleTupleLen::Param(0));
+        let slice = Slice::new(ValueType::NUM, UnknownLen::Param(0));
         assert_eq!(slice.to_string(), "[Num; N]");
-        let slice = Slice::new(ValueType::NUM, SimpleTupleLen::Var(0));
+        let slice = Slice::new(ValueType::NUM, UnknownLen::Var(0));
         assert_eq!(slice.to_string(), "[Num; _]");
         let slice = Slice::new(ValueType::NUM, TupleLen::from(3));
         assert_eq!(slice.to_string(), "[Num; 3]");
@@ -580,14 +580,14 @@ mod tests {
         // Simple tuples.
         let tuple = Tuple::from(vec![ValueType::NUM, ValueType::BOOL]);
         assert_eq!(tuple.to_string(), "(Num, Bool)");
-        let tuple = Tuple::from(Slice::new(ValueType::NUM, SimpleTupleLen::Param(0)));
+        let tuple = Tuple::from(Slice::new(ValueType::NUM, UnknownLen::Param(0)));
         assert_eq!(tuple.to_string(), "[Num; N]");
         let tuple = Tuple::from(Slice::new(ValueType::NUM, TupleLen::from(3)));
         assert_eq!(tuple.to_string(), "(Num, Num, Num)");
 
         let tuple = Tuple {
             start: vec![ValueType::NUM, ValueType::BOOL],
-            middle: Some(Slice::new(ValueType::NUM, SimpleTupleLen::Param(0))),
+            middle: Some(Slice::new(ValueType::NUM, UnknownLen::Param(0))),
             end: vec![],
         };
         assert_eq!(tuple.to_string(), "(Num, Bool, ...[Num; N])");
@@ -601,7 +601,7 @@ mod tests {
 
         let tuple = Tuple {
             start: vec![ValueType::NUM, ValueType::BOOL],
-            middle: Some(Slice::new(ValueType::NUM, SimpleTupleLen::Param(0))),
+            middle: Some(Slice::new(ValueType::NUM, UnknownLen::Param(0))),
             end: vec![ValueType::Param(0)],
         };
         assert_eq!(tuple.to_string(), "(Num, Bool, ...[Num; N], T)");
@@ -626,7 +626,7 @@ mod tests {
     #[test]
     fn equal_elements_static_simple_tuple_and_slice() {
         let tuple = Tuple::from(vec![ValueType::NUM, ValueType::BOOL, ValueType::Var(0)]);
-        let slice = Tuple::from(Slice::new(ValueType::Var(1), SimpleTupleLen::Var(0)));
+        let slice = Tuple::from(Slice::new(ValueType::Var(1), UnknownLen::Var(0)));
         let equal_elements: Vec<_> = tuple.equal_elements_static(&slice, 3).collect();
 
         assert_eq!(
@@ -641,10 +641,10 @@ mod tests {
 
     #[test]
     fn equal_elements_static_slice_and_complex_tuple() {
-        let slice = Tuple::from(Slice::new(ValueType::Var(1), SimpleTupleLen::Var(0)));
+        let slice = Tuple::from(Slice::new(ValueType::Var(1), UnknownLen::Var(0)));
         let tuple = Tuple {
             start: vec![ValueType::NUM],
-            middle: Some(Slice::new(ValueType::Var(0), SimpleTupleLen::Var(1))),
+            middle: Some(Slice::new(ValueType::Var(0), UnknownLen::Var(1))),
             end: vec![ValueType::BOOL, ValueType::Var(2)],
         };
 
@@ -677,12 +677,12 @@ mod tests {
     fn create_test_tuples() -> (Tuple, Tuple) {
         let tuple = Tuple {
             start: vec![ValueType::NUM],
-            middle: Some(Slice::new(ValueType::Var(0), SimpleTupleLen::Var(1))),
+            middle: Some(Slice::new(ValueType::Var(0), UnknownLen::Var(1))),
             end: vec![ValueType::BOOL, ValueType::Var(2)],
         };
         let other_tuple = Tuple {
             start: vec![ValueType::NUM, ValueType::Var(3)],
-            middle: Some(Slice::new(ValueType::BOOL, SimpleTupleLen::Var(1))),
+            middle: Some(Slice::new(ValueType::BOOL, UnknownLen::Var(1))),
             end: vec![ValueType::Var(1)],
         };
         (tuple, other_tuple)
@@ -716,8 +716,8 @@ mod tests {
 
     #[test]
     fn equal_elements_dyn_two_slices() {
-        let slice = Tuple::from(Slice::new(ValueType::Var(0), SimpleTupleLen::Var(0)));
-        let other_slice = Tuple::from(Slice::new(ValueType::NUM, SimpleTupleLen::Var(1)));
+        let slice = Tuple::from(Slice::new(ValueType::Var(0), UnknownLen::Var(0)));
+        let other_slice = Tuple::from(Slice::new(ValueType::NUM, UnknownLen::Var(1)));
         let equal_elements: Vec<_> = slice.equal_elements_dyn(&other_slice).collect();
 
         assert_eq!(equal_elements, vec![(&ValueType::Var(0), &ValueType::NUM)]);

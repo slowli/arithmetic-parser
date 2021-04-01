@@ -9,8 +9,8 @@ use std::{
 use crate::{
     arith::TypeConstraints,
     visit::{self, Visit, VisitMut},
-    FnType, LengthKind, PrimitiveType, SimpleTupleLen, Tuple, TupleLen, TupleLenMismatchContext,
-    TypeErrorKind, ValueType,
+    FnType, LengthKind, PrimitiveType, Tuple, TupleLen, TupleLenMismatchContext, TypeErrorKind,
+    UnknownLen, ValueType,
 };
 
 mod fns;
@@ -112,7 +112,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
     fn resolve_len(&self, len: TupleLen) -> TupleLen {
         let mut resolved = len;
-        while let (Some(SimpleTupleLen::Var(idx)), exact) = resolved.components() {
+        while let (Some(UnknownLen::Var(idx)), exact) = resolved.components() {
             if let Some(eq_rhs) = self.length_eqs.get(&idx) {
                 resolved = eq_rhs.to_owned() + exact;
             } else {
@@ -140,15 +140,15 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             None => return,
         };
         let is_dynamic = match target_len {
-            SimpleTupleLen::Some => false,
-            SimpleTupleLen::Dynamic => true,
+            UnknownLen::Some => false,
+            UnknownLen::Dynamic => true,
             _ => return,
         };
 
         if is_dynamic {
             self.dyn_lengths.insert(self.const_var_count);
         }
-        *target_len = SimpleTupleLen::Var(self.const_var_count);
+        *target_len = UnknownLen::Var(self.const_var_count);
         self.const_var_count += 1;
     }
 
@@ -288,17 +288,17 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
     fn unify_simple_length(
         &mut self,
-        simple_len: SimpleTupleLen,
+        simple_len: UnknownLen,
         source: TupleLen,
         is_lhs: bool,
     ) -> Result<TupleLen, LenErrorKind> {
         let var_idx = match simple_len {
-            SimpleTupleLen::Var(idx) => idx,
+            UnknownLen::Var(idx) => idx,
             _ => return Err(LenErrorKind::UnresolvedParam),
         };
         let source_var_idx = match source.components().0 {
             None => None,
-            Some(SimpleTupleLen::Var(idx)) => Some(idx),
+            Some(UnknownLen::Var(idx)) => Some(idx),
             Some(_) => return Err(LenErrorKind::UnresolvedParam),
         };
 

@@ -11,7 +11,7 @@ use crate::{FnType, PrimitiveType, Tuple, TupleLen, ValueType};
 /// ```
 /// use arithmetic_typing::{
 ///     visit::{self, Visit},
-///     PrimitiveType, Slice, Tuple, SimpleTupleLen, ValueType,
+///     PrimitiveType, Slice, Tuple, UnknownLen, ValueType,
 /// };
 /// # use std::collections::HashMap;
 ///
@@ -30,7 +30,7 @@ use crate::{FnType, PrimitiveType, Tuple, TupleLen, ValueType};
 ///     fn visit_tuple(&mut self, tuple: &'a Tuple<Prim>) {
 ///         let (_, middle, _) = tuple.parts();
 ///         let len = middle.and_then(|middle| middle.len().components().0);
-///         if let Some(SimpleTupleLen::Param(idx)) = len {
+///         if let Some(UnknownLen::Param(idx)) = len {
 ///             *self.lengths.entry(idx).or_default() += 1;
 ///         }
 ///         visit::visit_tuple(self, tuple);

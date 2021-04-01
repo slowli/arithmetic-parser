@@ -10,8 +10,8 @@ use std::{
 use crate::{
     arith::{BinaryOpSpans, MapPrimitiveType, NumArithmetic, TypeArithmetic, UnaryOpSpans},
     visit::VisitMut,
-    FnType, Num, PrimitiveType, SimpleTupleLen, Slice, Substitutions, Tuple, TypeError,
-    TypeErrorKind, TypeResult, ValueType,
+    FnType, Num, PrimitiveType, Slice, Substitutions, Tuple, TypeError, TypeErrorKind, TypeResult,
+    UnknownLen, ValueType,
 };
 use arithmetic_parser::{
     grammars::Grammar, BinaryOp, Block, Destructure, DestructureRest, Expr, FnDefinition, Lvalue,
@@ -395,9 +395,9 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
         // `unwrap` is safe: an error can only occur with a type annotation present.
 
         let mut length = if is_fn_args {
-            SimpleTupleLen::Dynamic.into()
+            UnknownLen::Dynamic.into()
         } else {
-            SimpleTupleLen::Some.into()
+            UnknownLen::Some.into()
         };
         self.root_scope.substitutions.assign_new_len(&mut length);
 

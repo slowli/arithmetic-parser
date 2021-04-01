@@ -7,7 +7,7 @@ use std::{
 
 use arithmetic_typing::{
     visit::{self, Visit, VisitMut},
-    FnType, LengthKind, Prelude, PrimitiveType, SimpleTupleLen, Tuple, TupleLen, ValueType,
+    FnType, LengthKind, Prelude, PrimitiveType, Tuple, TupleLen, UnknownLen, ValueType,
 };
 
 /// Function quantifier that allows to transform implicitly quantified types (`ValueType::Some`)
@@ -56,13 +56,13 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for FnQuantifier {
             None => return,
         };
         let kind = match target_len {
-            SimpleTupleLen::Some => LengthKind::Static,
-            SimpleTupleLen::Dynamic => LengthKind::Dynamic,
+            UnknownLen::Some => LengthKind::Static,
+            UnknownLen::Dynamic => LengthKind::Dynamic,
             _ => return,
         };
 
         let next_len_param = Self::next_value(&self.len_params);
-        *target_len = SimpleTupleLen::Param(next_len_param);
+        *target_len = UnknownLen::Param(next_len_param);
         self.len_params.insert(next_len_param);
         self.new_len_params
             .last_mut()
@@ -119,7 +119,7 @@ impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for Mentions {
     fn visit_tuple(&mut self, tuple: &'a Tuple<Prim>) {
         let (_, middle, _) = tuple.parts();
         let len = middle.and_then(|middle| middle.len().components().0);
-        if let Some(SimpleTupleLen::Param(idx)) = len {
+        if let Some(UnknownLen::Param(idx)) = len {
             *self.len_params.entry(idx).or_default() += 1;
         }
         visit::visit_tuple(self, tuple);
@@ -147,11 +147,11 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for FnSimplifier {
             Some(target_len) => target_len,
             None => return,
         };
-        if let SimpleTupleLen::Param(idx) = target_len {
+        if let UnknownLen::Param(idx) = target_len {
             if let Some(kind) = self.removed_lengths.get(&idx) {
                 *target_len = match kind {
-                    LengthKind::Static => SimpleTupleLen::Some,
-                    LengthKind::Dynamic => SimpleTupleLen::Dynamic,
+                    LengthKind::Static => UnknownLen::Some,
+                    LengthKind::Dynamic => UnknownLen::Dynamic,
                     _ => unreachable!(),
                 }
             }

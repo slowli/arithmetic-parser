@@ -10,7 +10,7 @@ mod tuple;
 pub(crate) use self::fn_type::TypeParamDescription;
 pub use self::{
     fn_type::{FnType, FnTypeBuilder},
-    tuple::{LengthKind, SimpleTupleLen, Slice, Tuple, TupleLen},
+    tuple::{LengthKind, Slice, Tuple, TupleLen, UnknownLen},
 };
 
 /// Enumeration encompassing all types supported by the type system.
@@ -30,10 +30,10 @@ pub use self::{
 /// There are conversions to construct `ValueType`s eloquently:
 ///
 /// ```
-/// # use arithmetic_typing::{FnType, SimpleTupleLen, ValueType};
+/// # use arithmetic_typing::{FnType, UnknownLen, ValueType};
 /// let tuple: ValueType = (ValueType::BOOL, ValueType::NUM).into();
 /// assert_eq!(tuple.to_string(), "(Bool, Num)");
-/// let slice = tuple.repeat(SimpleTupleLen::Param(0));
+/// let slice = tuple.repeat(UnknownLen::Param(0));
 /// assert_eq!(slice.to_string(), "[(Bool, Num); N]");
 /// let fn_type: ValueType = FnType::builder()
 ///     .with_len_params(&[0])

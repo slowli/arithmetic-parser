@@ -7,7 +7,7 @@
 use std::{collections::HashMap, fmt};
 
 use super::type_param;
-use crate::{LengthKind, Num, PrimitiveType, SimpleTupleLen, Tuple, TupleLen, ValueType};
+use crate::{LengthKind, Num, PrimitiveType, Tuple, TupleLen, UnknownLen, ValueType};
 
 /// Description of a constant parameter.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -112,7 +112,7 @@ impl<Prim: PrimitiveType> fmt::Display for FnType<Prim> {
             if !self.len_params.is_empty() {
                 formatter.write_str("len ")?;
                 for (i, (var_idx, description)) in self.len_params.iter().enumerate() {
-                    formatter.write_str(SimpleTupleLen::const_param(*var_idx).as_ref())?;
+                    formatter.write_str(UnknownLen::const_param(*var_idx).as_ref())?;
                     if description.kind == LengthKind::Dynamic {
                         formatter.write_str("*")?;
                     }
@@ -278,11 +278,11 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 /// Signature for a function summing a slice of numbers:
 ///
 /// ```
-/// # use arithmetic_typing::{FnType, SimpleTupleLen, ValueType};
+/// # use arithmetic_typing::{FnType, UnknownLen, ValueType};
 /// # use std::iter;
 /// let sum_fn_type = FnType::builder()
 ///     .with_len_params(&[0])
-///     .with_arg(ValueType::NUM.repeat(SimpleTupleLen::Param(0)))
+///     .with_arg(ValueType::NUM.repeat(UnknownLen::Param(0)))
 ///     .returning(ValueType::NUM);
 /// assert_eq!(
 ///     sum_fn_type.to_string(),
@@ -293,7 +293,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 /// Signature for a slice mapping function:
 ///
 /// ```
-/// # use arithmetic_typing::{arith::LinConstraints, FnType, SimpleTupleLen, ValueType};
+/// # use arithmetic_typing::{arith::LinConstraints, FnType, UnknownLen, ValueType};
 /// # use std::iter;
 /// // Definition of the mapping arg. Note that the definition uses type params,
 /// // but does not declare them (they are bound to the parent function).
@@ -305,9 +305,9 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 ///     .with_len_params(&[0])
 ///     .with_type_params(&[0])
 ///     .with_constrained_type_params(&[1], LinConstraints::LIN)
-///     .with_arg(ValueType::Param(0).repeat(SimpleTupleLen::Param(0)))
+///     .with_arg(ValueType::Param(0).repeat(UnknownLen::Param(0)))
 ///     .with_arg(map_fn_arg)
-///     .returning(ValueType::Param(1).repeat(SimpleTupleLen::Param(0)));
+///     .returning(ValueType::Param(1).repeat(UnknownLen::Param(0)));
 /// assert_eq!(
 ///     map_fn_type.to_string(),
 ///     "fn<len N; T, U: Lin>([T; N], fn(T) -> U) -> [U; N]"
@@ -317,12 +317,12 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 /// Signature of a function with varargs:
 ///
 /// ```
-/// # use arithmetic_typing::{arith::LinConstraints, FnType, SimpleTupleLen, ValueType};
+/// # use arithmetic_typing::{arith::LinConstraints, FnType, UnknownLen, ValueType};
 /// # use std::iter;
 /// let fn_type = <FnType>::builder()
 ///     .with_len_params(&[0])
 ///     .with_constrained_type_params(&[0], LinConstraints::LIN)
-///     .with_varargs(ValueType::Param(0), SimpleTupleLen::Param(0))
+///     .with_varargs(ValueType::Param(0), UnknownLen::Param(0))
 ///     .with_arg(ValueType::BOOL)
 ///     .returning(ValueType::Param(0));
 /// assert_eq!(

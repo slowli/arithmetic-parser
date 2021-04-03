@@ -5,9 +5,13 @@ use std::{borrow::Cow, fmt};
 use crate::{arith::WithBoolean, Num, PrimitiveType};
 
 mod fn_type;
+mod quantifier;
 mod tuple;
 
-pub(crate) use self::fn_type::TypeParamDescription;
+pub(crate) use self::{
+    fn_type::{FnParams, ParamConstraints},
+    quantifier::ParamQuantifier,
+};
 pub use self::{
     fn_type::{FnType, FnTypeBuilder},
     tuple::{LengthKind, Slice, Tuple, TupleLen, UnknownLen},
@@ -200,8 +204,8 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
     /// non-concrete types.
     pub fn is_concrete(&self) -> bool {
         match self {
-            Self::Var(_) | Self::Some => false,
-            Self::Param(_) | Self::Prim(_) => true,
+            Self::Var(_) => false,
+            Self::Some | Self::Param(_) | Self::Prim(_) => true,
 
             Self::Function(fn_type) => fn_type.is_concrete(),
             Self::Tuple(tuple) => tuple.is_concrete(),

@@ -9,6 +9,7 @@ use std::{
 
 use crate::{
     arith::{BinaryOpSpans, MapPrimitiveType, NumArithmetic, TypeArithmetic, UnaryOpSpans},
+    types::{ParamConstraints, ParamQuantifier},
     visit::VisitMut,
     FnType, Num, PrimitiveType, Slice, Substitutions, Tuple, TypeError, TypeErrorKind, TypeResult,
     UnknownLen, ValueType,
@@ -104,12 +105,19 @@ impl<Prim: PrimitiveType> TypeEnvironment<Prim> {
     /// - Will panic if `value_type` is not [concrete](ValueType::is_concrete()). Non-concrete
     ///   types are tied to the environment; inserting them into an env is a logical error.
     pub fn insert(&mut self, name: &str, value_type: impl Into<ValueType<Prim>>) -> &mut Self {
-        let value_type = value_type.into();
+        let mut value_type = value_type.into();
         assert!(
             value_type.is_concrete(),
             "Type {} is not concrete",
             value_type
         );
+
+        if let ValueType::Function(function) = &mut value_type {
+            if function.params.is_none() {
+                ParamQuantifier::set_params(function, ParamConstraints::default());
+            }
+        }
+
         self.variables.insert(name.to_owned(), value_type);
         self
     }

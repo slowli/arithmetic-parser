@@ -2,10 +2,7 @@ use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
 use assert_matches::assert_matches;
 
 use super::*;
-use crate::{
-    arith::LinConstraints, types::TypeParamDescription, Annotated, LengthKind, Num, Prelude,
-    TupleLen, TupleLenMismatchContext,
-};
+use crate::{arith::LinConstraints, Annotated, Num, Prelude, TupleLen, TupleLenMismatchContext};
 
 pub type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
 
@@ -28,28 +25,25 @@ pub fn assert_incompatible_types<Prim: PrimitiveType>(
 
 fn hash_fn_type() -> FnType<Num> {
     FnType {
-        // TODO: use `ValueType::Any` instead of `ValueType::Param(0)`
-        args: Slice::new(ValueType::Param(0), UnknownLen::Param(0)).into(),
+        // TODO: use `ValueType::Any` instead of `ValueType::Some`
+        args: Slice::new(ValueType::Some, UnknownLen::Some).into(),
         return_type: ValueType::NUM,
-        type_params: vec![(0, TypeParamDescription::new(LinConstraints::default()))],
-        len_params: vec![(0, LengthKind::Static.into())],
+        params: None,
     }
 }
 
 #[test]
 fn hash_fn_type_display() {
-    assert_eq!(hash_fn_type().to_string(), "fn<len N; T>(...[T; N]) -> Num");
+    assert_eq!(hash_fn_type().to_string(), "fn(...[_; _]) -> Num");
 }
 
 /// `zip` function signature:
 ///
 /// ```text
-/// fn<len N; T, U>([T; N], [U; N]) -> [(T, U); N]
+/// fn([T; N], [U; N]) -> [(T, U); N]
 /// ```
 pub fn zip_fn_type() -> FnType<Num> {
     FnType::builder()
-        .with_len_params(&[0])
-        .with_type_params(&[0, 1])
         .with_arg(ValueType::Param(0).repeat(UnknownLen::Param(0)))
         .with_arg(ValueType::Param(1).repeat(UnknownLen::Param(0)))
         .returning(ValueType::slice(
@@ -61,10 +55,7 @@ pub fn zip_fn_type() -> FnType<Num> {
 #[test]
 fn zip_fn_type_display() {
     let zip_fn_string = zip_fn_type().to_string();
-    assert_eq!(
-        zip_fn_string,
-        "fn<len N; T, U>([T; N], [U; N]) -> [(T, U); N]"
-    );
+    assert_eq!(zip_fn_string, "fn([T; N], [U; N]) -> [(T, U); N]");
 }
 
 #[test]

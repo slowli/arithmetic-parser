@@ -6,7 +6,7 @@ use std::{collections::HashMap, convert::TryFrom, fmt, str::FromStr};
 
 use crate::{
     ast::{FnTypeAst, SliceAst, TupleAst, TupleLenAst, TypeConstraintsAst, ValueTypeAst},
-    types::TypeParamDescription,
+    types::FnParams,
     FnType, PrimitiveType, Slice, Tuple, UnknownLen, ValueType,
 };
 use arithmetic_parser::{
@@ -356,24 +356,22 @@ impl<'a, Prim: PrimitiveType> FnTypeAst<'a, Prim> {
 
         let args = self.args.try_convert(&state)?;
 
-        let const_params = self.len_params.iter().map(|(name, ty)| {
-            (
-                state.const_param_idx(name.fragment()).unwrap(),
-                (*ty).into(),
-            )
-        });
+        let const_params = self
+            .len_params
+            .iter()
+            .map(|(name, ty)| (state.const_param_idx(name.fragment()).unwrap(), *ty));
 
         let type_params = self.type_params.iter().map(|(name, constraints)| {
             let constraints = constraints.try_convert::<Prim>()?;
-            Ok((
-                state.type_param_idx(name.fragment()).unwrap(),
-                TypeParamDescription::new(constraints),
-            ))
+            Ok((state.type_param_idx(name.fragment()).unwrap(), constraints))
         });
 
-        let fn_type = FnType::new(args, self.return_type.try_convert(&state)?)
-            .with_len_params(const_params.collect())
-            .with_type_params(type_params.collect::<Result<Vec<_>, _>>()?);
+        let mut fn_type = FnType::new(args, self.return_type.try_convert(&state)?);
+        // TODO: rework?
+        fn_type.params = Some(FnParams {
+            len_params: const_params.collect(),
+            type_params: type_params.collect::<Result<Vec<_>, _>>()?,
+        });
         Ok(fn_type)
     }
 }
@@ -559,8 +557,8 @@ mod tests {
             _ => panic!("Unexpected type: {:?}", ty),
         };
 
-        assert_eq!(ty.len_params.len(), 1);
-        assert_eq!(ty.type_params.len(), 2);
+        assert_eq!(ty.params.as_ref().unwrap().len_params.len(), 1);
+        assert_eq!(ty.params.as_ref().unwrap().type_params.len(), 2);
         assert_eq!(ty.return_type, ValueType::Param(1));
     }
 
@@ -572,8 +570,8 @@ mod tests {
             _ => panic!("Unexpected type: {:?}", ty),
         };
 
-        assert_eq!(ty.len_params.len(), 1);
-        assert!(ty.type_params.is_empty());
+        assert_eq!(ty.params.as_ref().unwrap().len_params.len(), 1);
+        assert!(ty.params.as_ref().unwrap().type_params.is_empty());
         let args_slice = ty.args.as_slice().unwrap();
         assert_eq!(*args_slice.element(), ValueType::NUM);
         assert_eq!(args_slice.len(), UnknownLen::Param(0).into());

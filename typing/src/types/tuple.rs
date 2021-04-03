@@ -108,7 +108,7 @@ impl TupleLen {
     };
 
     fn is_concrete(&self) -> bool {
-        matches!(&self.var, None | Some(UnknownLen::Param(_)))
+        !matches!(&self.var, Some(UnknownLen::Var(_)))
     }
 
     /// Returns components of this length.

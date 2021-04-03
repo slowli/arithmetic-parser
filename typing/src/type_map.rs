@@ -84,7 +84,6 @@ impl<Prim: WithBoolean> From<Prelude> for ValueType<Prim> {
             Prelude::True | Prelude::False => ValueType::BOOL,
 
             Prelude::If => FnType::builder()
-                .with_type_params(&[0])
                 .with_arg(ValueType::BOOL)
                 .with_arg(ValueType::Param(0))
                 .with_arg(ValueType::Param(0))
@@ -100,7 +99,6 @@ impl<Prim: WithBoolean> From<Prelude> for ValueType<Prim> {
                     .returning(ValueType::Param(0));
 
                 FnType::builder()
-                    .with_type_params(&[0])
                     .with_arg(ValueType::Param(0)) // state
                     .with_arg(condition_fn)
                     .with_arg(iter_fn)
@@ -114,8 +112,6 @@ impl<Prim: WithBoolean> From<Prelude> for ValueType<Prim> {
                     .returning(ValueType::Param(1));
 
                 FnType::builder()
-                    .with_len_params(&[0])
-                    .with_type_params(&[0, 1])
                     .with_arg(ValueType::Param(0).repeat(UnknownLen::Param(0)))
                     .with_arg(map_arg)
                     .returning(ValueType::Param(1).repeat(UnknownLen::Param(0)))
@@ -128,12 +124,9 @@ impl<Prim: WithBoolean> From<Prelude> for ValueType<Prim> {
                     .returning(ValueType::BOOL);
 
                 FnType::builder()
-                    .with_len_params(&[0])
-                    .with_dyn_len_params(&[1])
-                    .with_type_params(&[0])
-                    .with_arg(ValueType::Param(0).repeat(UnknownLen::Param(0)))
+                    .with_arg(ValueType::Param(0).repeat(UnknownLen::Some))
                     .with_arg(predicate_arg)
-                    .returning(ValueType::Param(0).repeat(UnknownLen::Param(1)))
+                    .returning(ValueType::Param(0).repeat(UnknownLen::Dynamic))
                     .into()
             }
 
@@ -145,9 +138,7 @@ impl<Prim: WithBoolean> From<Prelude> for ValueType<Prim> {
                     .returning(ValueType::Param(1));
 
                 FnType::builder()
-                    .with_len_params(&[0])
-                    .with_type_params(&[0, 1])
-                    .with_arg(ValueType::Param(0).repeat(UnknownLen::Param(0)))
+                    .with_arg(ValueType::Param(0).repeat(UnknownLen::Some))
                     .with_arg(ValueType::Param(1))
                     .with_arg(fold_arg)
                     .returning(ValueType::Param(1))
@@ -155,20 +146,15 @@ impl<Prim: WithBoolean> From<Prelude> for ValueType<Prim> {
             }
 
             Prelude::Push => FnType::builder()
-                .with_len_params(&[0])
-                .with_type_params(&[0])
                 .with_arg(ValueType::Param(0).repeat(UnknownLen::Param(0)))
                 .with_arg(ValueType::Param(0))
                 .returning(ValueType::Param(0).repeat(UnknownLen::Param(0) + 1))
                 .into(),
 
             Prelude::Merge => FnType::builder()
-                .with_len_params(&[0, 1])
-                .with_dyn_len_params(&[2])
-                .with_type_params(&[0])
-                .with_arg(ValueType::Param(0).repeat(UnknownLen::Param(0)))
-                .with_arg(ValueType::Param(0).repeat(UnknownLen::Param(1)))
-                .returning(ValueType::Param(0).repeat(UnknownLen::Param(2)))
+                .with_arg(ValueType::Param(0).repeat(UnknownLen::Some))
+                .with_arg(ValueType::Param(0).repeat(UnknownLen::Some))
+                .returning(ValueType::Param(0).repeat(UnknownLen::Dynamic))
                 .into(),
         }
     }
@@ -227,7 +213,6 @@ impl<Prim: WithBoolean> From<Assertions> for ValueType<Prim> {
                 .returning(ValueType::void())
                 .into(),
             Assertions::AssertEq => FnType::builder()
-                .with_type_params(&[0])
                 .with_arg(ValueType::Param(0))
                 .with_arg(ValueType::Param(0))
                 .returning(ValueType::void())
@@ -262,16 +247,13 @@ mod tests {
     const EXPECTED_PRELUDE_TYPES: &[(&str, &str)] = &[
         ("false", "Bool"),
         ("true", "Bool"),
-        ("if", "fn<T>(Bool, T, T) -> T"),
-        ("while", "fn<T>(T, fn(T) -> Bool, fn(T) -> T) -> T"),
-        ("map", "fn<len N; T, U>([T; N], fn(T) -> U) -> [U; N]"),
-        (
-            "filter",
-            "fn<len N, M*; T>([T; N], fn(T) -> Bool) -> [T; M]",
-        ),
-        ("fold", "fn<len N; T, U>([T; N], U, fn(U, T) -> U) -> U"),
-        ("push", "fn<len N; T>([T; N], T) -> [T; N + 1]"),
-        ("merge", "fn<len N, M, L*; T>([T; N], [T; M]) -> [T; L]"),
+        ("if", "fn(Bool, T, T) -> T"),
+        ("while", "fn(T, fn(T) -> Bool, fn(T) -> T) -> T"),
+        ("map", "fn([T; N], fn(T) -> U) -> [U; N]"),
+        ("filter", "fn([T; _], fn(T) -> Bool) -> [T]"),
+        ("fold", "fn([T; _], U, fn(U, T) -> U) -> U"),
+        ("push", "fn([T; N], T) -> [T; N + 1]"),
+        ("merge", "fn([T; _], [T; _]) -> [T]"),
     ];
 
     #[test]

@@ -35,7 +35,7 @@ pub struct Substitutions<Prim: PrimitiveType> {
     /// Constraints on type variables.
     constraints: HashMap<usize, Prim::Constraints>,
     /// Number of length variables.
-    const_var_count: usize,
+    len_var_count: usize,
     /// Length variable equations.
     length_eqs: HashMap<usize, TupleLen>,
     /// Length variable known to be dynamic.
@@ -48,7 +48,7 @@ impl<Prim: PrimitiveType> Default for Substitutions<Prim> {
             type_var_count: 0,
             eqs: HashMap::new(),
             constraints: HashMap::new(),
-            const_var_count: 0,
+            len_var_count: 0,
             length_eqs: HashMap::new(),
             dyn_lengths: HashSet::new(),
         }
@@ -56,14 +56,6 @@ impl<Prim: PrimitiveType> Default for Substitutions<Prim> {
 }
 
 impl<Prim: PrimitiveType> Substitutions<Prim> {
-    pub(crate) fn type_constraints(&self) -> &HashMap<usize, Prim::Constraints> {
-        &self.constraints
-    }
-
-    pub(crate) fn dyn_lengths(&self) -> &HashSet<usize> {
-        &self.dyn_lengths
-    }
-
     /// Inserts `constraints` for a type var with the specified index and all vars
     /// it is equivalent to.
     pub fn insert_constraints(&mut self, var_idx: usize, constraints: &Prim::Constraints) {
@@ -146,10 +138,10 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         };
 
         if is_dynamic {
-            self.dyn_lengths.insert(self.const_var_count);
+            self.dyn_lengths.insert(self.len_var_count);
         }
-        *target_len = UnknownLen::Var(self.const_var_count);
-        self.const_var_count += 1;
+        *target_len = UnknownLen::Var(self.len_var_count);
+        self.len_var_count += 1;
     }
 
     /// Unifies types in `lhs` and `rhs`.
@@ -389,39 +381,39 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             // Fast path: just clone the function type.
             return fn_type.clone();
         }
+        let fn_params = fn_type.params.as_ref().expect("fn with params");
 
         // Map type vars in the function into newly created type vars.
         let mapping = ParamMapping {
-            types: fn_type
+            types: fn_params
                 .type_params
                 .iter()
                 .enumerate()
                 .map(|(i, (var_idx, _))| (*var_idx, self.type_var_count + i))
                 .collect(),
-            lengths: fn_type
+            lengths: fn_params
                 .len_params
                 .iter()
                 .enumerate()
-                .map(|(i, (var_idx, _))| (*var_idx, self.const_var_count + i))
+                .map(|(i, (var_idx, _))| (*var_idx, self.len_var_count + i))
                 .collect(),
         };
-        self.type_var_count += fn_type.type_params.len();
-        self.const_var_count += fn_type.len_params.len();
+        self.type_var_count += fn_params.type_params.len();
+        self.len_var_count += fn_params.len_params.len();
 
         let mut instantiated_fn_type = fn_type.clone();
-        MonoTypeTransformer::new(&mapping).visit_function_mut(&mut instantiated_fn_type);
+        MonoTypeTransformer::transform(&mapping, &mut instantiated_fn_type);
 
         // Copy constraints on the newly generated const and type vars from the function definition.
-        for (original_idx, description) in &fn_type.len_params {
-            if description.kind == LengthKind::Dynamic {
+        for (original_idx, kind) in &fn_params.len_params {
+            if *kind == LengthKind::Dynamic {
                 let new_idx = mapping.lengths[original_idx];
                 self.dyn_lengths.insert(new_idx);
             }
         }
-        for (original_idx, description) in &fn_type.type_params {
+        for (original_idx, constraints) in &fn_params.type_params {
             let new_idx = mapping.types[original_idx];
-            self.constraints
-                .insert(new_idx, description.constraints.to_owned());
+            self.constraints.insert(new_idx, constraints.to_owned());
         }
 
         instantiated_fn_type

@@ -1,35 +1,81 @@
 //! Functional type (`FnType`) and closely related types.
 
-#![allow(renamed_and_removed_lints, clippy::unknown_clippy_lints)]
-// ^ `missing_panics_doc` is newer than MSRV, and `clippy::unknown_clippy_lints` is removed
-// since Rust 1.51.
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+};
 
-use std::{collections::HashMap, fmt};
+use crate::{
+    types::type_param, LengthKind, Num, PrimitiveType, Tuple, TupleLen, UnknownLen, ValueType,
+};
 
-use super::type_param;
-use crate::{LengthKind, Num, PrimitiveType, Tuple, TupleLen, UnknownLen, ValueType};
-
-/// Description of a constant parameter.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct LenParamDescription {
-    pub kind: LengthKind,
+#[derive(Debug, Clone)]
+pub(crate) struct ParamConstraints<Prim: PrimitiveType> {
+    pub type_params: HashMap<usize, Prim::Constraints>,
+    pub dyn_lengths: HashSet<usize>,
 }
 
-impl From<LengthKind> for LenParamDescription {
-    fn from(kind: LengthKind) -> Self {
-        Self { kind }
+impl<Prim: PrimitiveType> Default for ParamConstraints<Prim> {
+    fn default() -> Self {
+        Self {
+            type_params: HashMap::new(),
+            dyn_lengths: HashSet::new(),
+        }
     }
 }
 
-/// Description of a type parameter.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct TypeParamDescription<C> {
-    pub constraints: C,
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct FnParams<Prim: PrimitiveType> {
+    /// Type params associated with this function. Filled in by `FnQuantifier`.
+    pub type_params: Vec<(usize, Prim::Constraints)>,
+    /// Length params associated with this function. Filled in by `FnQuantifier`.
+    pub len_params: Vec<(usize, LengthKind)>,
 }
 
-impl<C> TypeParamDescription<C> {
-    pub fn new(constraints: C) -> Self {
-        Self { constraints }
+impl<Prim: PrimitiveType> Default for FnParams<Prim> {
+    fn default() -> Self {
+        Self {
+            type_params: vec![],
+            len_params: vec![],
+        }
+    }
+}
+
+impl<Prim: PrimitiveType> fmt::Display for FnParams<Prim> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if !self.len_params.is_empty() {
+            formatter.write_str("len ")?;
+            for (i, (var_idx, kind)) in self.len_params.iter().enumerate() {
+                formatter.write_str(UnknownLen::const_param(*var_idx).as_ref())?;
+                if *kind == LengthKind::Dynamic {
+                    formatter.write_str("*")?;
+                }
+                if i + 1 < self.len_params.len() {
+                    formatter.write_str(", ")?;
+                }
+            }
+
+            if !self.type_params.is_empty() {
+                formatter.write_str("; ")?;
+            }
+        }
+
+        for (i, (var_idx, constraints)) in self.type_params.iter().enumerate() {
+            formatter.write_str(type_param(*var_idx).as_ref())?;
+            if *constraints != Prim::Constraints::default() {
+                write!(formatter, ": {}", constraints)?;
+            }
+            if i + 1 < self.type_params.len() {
+                formatter.write_str(", ")?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<Prim: PrimitiveType> FnParams<Prim> {
+    fn is_empty(&self) -> bool {
+        self.len_params.is_empty() && self.type_params.is_empty()
     }
 }
 
@@ -94,49 +140,20 @@ pub struct FnType<Prim: PrimitiveType = Num> {
     pub(crate) args: Tuple<Prim>,
     /// Type of the value returned by the function.
     pub(crate) return_type: ValueType<Prim>,
-    /// Type params associated with this function. The indexes of params should
-    /// monotonically increase (necessary for correct display) and must be distinct.
-    pub(crate) type_params: Vec<(usize, TypeParamDescription<Prim::Constraints>)>,
-    /// Indexes of length params associated with this function. The indexes should
-    /// monotonically increase (necessary for correct display) and must be distinct.
-    pub(crate) len_params: Vec<(usize, LenParamDescription)>,
+    /// Cache for function params.
+    pub(crate) params: Option<FnParams<Prim>>,
 }
 
 impl<Prim: PrimitiveType> fmt::Display for FnType<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("fn")?;
 
-        if self.len_params.len() + self.type_params.len() > 0 {
-            formatter.write_str("<")?;
-
-            if !self.len_params.is_empty() {
-                formatter.write_str("len ")?;
-                for (i, (var_idx, description)) in self.len_params.iter().enumerate() {
-                    formatter.write_str(UnknownLen::const_param(*var_idx).as_ref())?;
-                    if description.kind == LengthKind::Dynamic {
-                        formatter.write_str("*")?;
-                    }
-                    if i + 1 < self.len_params.len() {
-                        formatter.write_str(", ")?;
-                    }
-                }
-
-                if !self.type_params.is_empty() {
-                    formatter.write_str("; ")?;
-                }
+        if let Some(params) = &self.params {
+            if !params.is_empty() {
+                formatter.write_str("<")?;
+                fmt::Display::fmt(params, formatter)?;
+                formatter.write_str(">")?;
             }
-
-            for (i, (var_idx, description)) in self.type_params.iter().enumerate() {
-                formatter.write_str(type_param(*var_idx).as_ref())?;
-                if description.constraints != Prim::Constraints::default() {
-                    write!(formatter, ": {}", description.constraints)?;
-                }
-                if i + 1 < self.type_params.len() {
-                    formatter.write_str(", ")?;
-                }
-            }
-
-            formatter.write_str(">")?;
         }
 
         self.args.format_as_tuple(formatter)?;
@@ -152,24 +169,8 @@ impl<Prim: PrimitiveType> FnType<Prim> {
         Self {
             args,
             return_type,
-            type_params: Vec::new(), // filled in by `Self::with_type_params()`
-            len_params: Vec::new(),  // filled in by `Self::with_len_params()`
+            params: None,
         }
-    }
-
-    pub(crate) fn with_len_params(mut self, mut params: Vec<(usize, LenParamDescription)>) -> Self {
-        params.sort_unstable_by_key(|(idx, _)| *idx);
-        self.len_params = params;
-        self
-    }
-
-    pub(crate) fn with_type_params(
-        mut self,
-        mut params: Vec<(usize, TypeParamDescription<Prim::Constraints>)>,
-    ) -> Self {
-        params.sort_unstable_by_key(|(idx, _)| *idx);
-        self.type_params = params;
-        self
     }
 
     /// Returns a builder for `FnType`s.
@@ -187,23 +188,10 @@ impl<Prim: PrimitiveType> FnType<Prim> {
         &self.return_type
     }
 
-    /// Iterates over type params of this function together with their constraints.
-    pub fn type_params(&self) -> impl Iterator<Item = (usize, &Prim::Constraints)> + '_ {
-        self.type_params
-            .iter()
-            .map(|(idx, description)| (*idx, &description.constraints))
-    }
-
-    /// Iterates over length params of this function together with their type.
-    pub fn len_params(&self) -> impl Iterator<Item = (usize, LengthKind)> + '_ {
-        self.len_params
-            .iter()
-            .map(|(idx, description)| (*idx, description.kind))
-    }
-
-    /// Returns `true` iff the function has at least one length or type param.
-    pub fn is_parametric(&self) -> bool {
-        !self.len_params.is_empty() || !self.type_params.is_empty()
+    pub(crate) fn is_parametric(&self) -> bool {
+        self.params
+            .as_ref()
+            .map_or(false, |params| !params.is_empty())
     }
 
     /// Returns `true` iff this type does not contain type / length variables.
@@ -212,56 +200,6 @@ impl<Prim: PrimitiveType> FnType<Prim> {
     /// non-concrete types.
     pub fn is_concrete(&self) -> bool {
         self.args.is_concrete() && self.return_type.is_concrete()
-    }
-
-    /// Adds or replaces a type parameter with the specified `index`.
-    pub fn insert_type_param(&mut self, index: usize, constraints: Prim::Constraints) {
-        let value_to_insert = (index, TypeParamDescription::new(constraints));
-        let insert_pos = self
-            .type_params
-            .binary_search_by_key(&index, |(idx, _)| *idx);
-        match insert_pos {
-            Ok(pos) => self.type_params[pos] = value_to_insert,
-            Err(pos) => self.type_params.insert(pos, value_to_insert),
-        }
-    }
-
-    /// Removes a type parameter with the specified index. Returns the constraints on the param
-    /// if it was present.
-    pub fn remove_type_param(&mut self, index: usize) -> Option<Prim::Constraints> {
-        let remove_pos = self
-            .type_params
-            .binary_search_by_key(&index, |(idx, _)| *idx);
-        if let Ok(pos) = remove_pos {
-            Some(self.type_params.remove(pos).1.constraints)
-        } else {
-            None
-        }
-    }
-
-    /// Adds or replaces a length parameter with the specified `index`.
-    pub fn insert_len_param(&mut self, index: usize, kind: LengthKind) {
-        let value_to_insert = (index, LenParamDescription::from(kind));
-        let insert_pos = self
-            .len_params
-            .binary_search_by_key(&index, |(idx, _)| *idx);
-        match insert_pos {
-            Ok(pos) => self.len_params[pos] = value_to_insert,
-            Err(pos) => self.len_params.insert(pos, value_to_insert),
-        }
-    }
-
-    /// Removes a length parameter with the specified index. Returns the length type if it was
-    /// present.
-    pub fn remove_len_param(&mut self, index: usize) -> Option<LengthKind> {
-        let remove_pos = self
-            .len_params
-            .binary_search_by_key(&index, |(idx, _)| *idx);
-        if let Ok(pos) = remove_pos {
-            Some(self.len_params.remove(pos).1.kind)
-        } else {
-            None
-        }
     }
 }
 
@@ -333,54 +271,30 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 #[derive(Debug, Clone)]
 pub struct FnTypeBuilder<Prim: PrimitiveType = Num> {
     args: Tuple<Prim>,
-    type_params: HashMap<usize, TypeParamDescription<Prim::Constraints>>,
-    const_params: HashMap<usize, LenParamDescription>,
+    constraints: ParamConstraints<Prim>,
 }
 
 impl<Prim: PrimitiveType> Default for FnTypeBuilder<Prim> {
     fn default() -> Self {
         Self {
             args: Tuple::empty(),
-            type_params: HashMap::new(),
-            const_params: HashMap::new(),
+            constraints: ParamConstraints::default(),
         }
     }
 }
 
-// TODO: support validation similarly to AST conversions.
+// FIXME: disallow quantified functions as args / return type?
 impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
-    /// Adds the length params with the specified `indexes` to the function definition.
-    pub fn with_len_params(mut self, indexes: &[usize]) -> Self {
-        let static_description = LengthKind::Static.into();
-        self.const_params
-            .extend(indexes.iter().map(|&idx| (idx, static_description)));
-        self
-    }
-
-    /// Adds the dynamic length params with the specified `indexes` to the function definition.
-    pub fn with_dyn_len_params(mut self, indexes: &[usize]) -> Self {
-        let dyn_description = LengthKind::Dynamic.into();
-        self.const_params
-            .extend(indexes.iter().map(|&idx| (idx, dyn_description)));
-        self
-    }
-
-    /// Adds the type params with the specified `indexes` to the function definition.
-    /// The params are unconstrained.
-    pub fn with_type_params(self, indexes: &[usize]) -> Self {
-        self.with_constrained_type_params(indexes, Prim::Constraints::default())
-    }
-
     /// Adds the type params with the specified `indexes` and `constraints`
     /// to the function definition.
     pub fn with_constrained_type_params(
         mut self,
         indexes: &[usize],
-        constraints: Prim::Constraints,
+        constraints: &Prim::Constraints,
     ) -> Self {
-        let description = TypeParamDescription { constraints };
-        self.type_params
-            .extend(indexes.iter().map(|&idx| (idx, description.clone())));
+        self.constraints
+            .type_params
+            .extend(indexes.iter().map(|&idx| (idx, constraints.clone())));
         self
     }
 
@@ -402,8 +316,7 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
 
     /// Declares the return type of the function and builds it.
     pub fn returning(self, return_type: impl Into<ValueType<Prim>>) -> FnType<Prim> {
+        // FIXME: return fn + constraints?
         FnType::new(self.args, return_type.into())
-            .with_len_params(self.const_params.into_iter().collect())
-            .with_type_params(self.type_params.into_iter().collect())
     }
 }

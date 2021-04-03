@@ -343,8 +343,7 @@ mod tests {
         let mut merge_fn = <FnType>::builder()
             .with_arg(ValueType::Param(0).repeat(UnknownLen::Some))
             .with_arg(ValueType::Param(0).repeat(UnknownLen::Some))
-            .returning(ValueType::Param(0).repeat(UnknownLen::Dynamic))
-            .into();
+            .returning(ValueType::Param(0).repeat(UnknownLen::Dynamic));
         ParamQuantifier::set_params(&mut merge_fn, ParamConstraints::default());
         assert_eq!(
             merge_fn.to_string(),

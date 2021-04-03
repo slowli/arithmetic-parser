@@ -37,14 +37,13 @@ pub use self::{
 /// # use arithmetic_typing::{FnType, UnknownLen, ValueType};
 /// let tuple: ValueType = (ValueType::BOOL, ValueType::NUM).into();
 /// assert_eq!(tuple.to_string(), "(Bool, Num)");
-/// let slice = tuple.repeat(UnknownLen::Param(0));
-/// assert_eq!(slice.to_string(), "[(Bool, Num); N]");
+/// let slice = tuple.repeat(UnknownLen::Some);
+/// assert_eq!(slice.to_string(), "[(Bool, Num); _]");
 /// let fn_type: ValueType = FnType::builder()
-///     .with_len_params(&[0])
 ///     .with_arg(slice)
 ///     .returning(ValueType::NUM)
 ///     .into();
-/// assert_eq!(fn_type.to_string(), "fn<len N>([(Bool, Num); N]) -> Num");
+/// assert_eq!(fn_type.to_string(), "fn([(Bool, Num); _]) -> Num");
 /// ```
 ///
 /// A `ValueType` can also be parsed from a string:

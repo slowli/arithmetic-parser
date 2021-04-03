@@ -5,6 +5,7 @@ use std::{
     fmt,
 };
 
+use crate::types::ParamQuantifier;
 use crate::{
     types::type_param, LengthKind, Num, PrimitiveType, Tuple, TupleLen, UnknownLen, ValueType,
 };
@@ -188,6 +189,26 @@ impl<Prim: PrimitiveType> FnType<Prim> {
         &self.return_type
     }
 
+    /// Iterates over type params of this function together with their constraints.
+    pub fn type_params(&self) -> impl Iterator<Item = (usize, &Prim::Constraints)> + '_ {
+        let type_params = self
+            .params
+            .as_ref()
+            .map_or(&[] as &[_], |params| &params.type_params);
+        type_params
+            .iter()
+            .map(|(idx, constraints)| (*idx, constraints))
+    }
+
+    /// Iterates over length params of this function together with their type.
+    pub fn len_params(&self) -> impl Iterator<Item = (usize, LengthKind)> + '_ {
+        let len_params = self
+            .params
+            .as_ref()
+            .map_or(&[] as &[_], |params| &params.len_params);
+        len_params.iter().map(|(idx, kind)| (*idx, *kind))
+    }
+
     pub(crate) fn is_parametric(&self) -> bool {
         self.params
             .as_ref()
@@ -200,6 +221,63 @@ impl<Prim: PrimitiveType> FnType<Prim> {
     /// non-concrete types.
     pub fn is_concrete(&self) -> bool {
         self.args.is_concrete() && self.return_type.is_concrete()
+    }
+
+    /// Adds the type params with the specified `indexes` and `constraints`
+    /// to the function definition.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this function has already undergone var quantification.
+    pub fn with_constraints(
+        self,
+        indexes: &[usize],
+        constraints: &Prim::Constraints,
+    ) -> FnWithConstraints<Prim> {
+        assert!(
+            self.params.is_none(),
+            "Cannot attach constraints to a quantified function `{}`",
+            self
+        );
+
+        FnWithConstraints {
+            function: self,
+            constraints: ParamConstraints {
+                type_params: indexes
+                    .iter()
+                    .map(|&idx| (idx, constraints.clone()))
+                    .collect(),
+                dyn_lengths: HashSet::new(),
+            },
+        }
+    }
+}
+
+/// Function together with constraints on type params contained either in the function itself
+/// or any of the child functions.
+#[derive(Debug)]
+pub struct FnWithConstraints<Prim: PrimitiveType> {
+    function: FnType<Prim>,
+    constraints: ParamConstraints<Prim>,
+}
+
+// TODO: implement `Display`
+
+impl<Prim: PrimitiveType> FnWithConstraints<Prim> {
+    /// Adds the type params with the specified `indexes` and `constraints`
+    /// to the function definition.
+    pub fn with_constraints(mut self, indexes: &[usize], constraints: &Prim::Constraints) -> Self {
+        let new_constraints = indexes.iter().map(|&idx| (idx, constraints.clone()));
+        self.constraints.type_params.extend(new_constraints);
+        self
+    }
+}
+
+impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
+    fn from(value: FnWithConstraints<Prim>) -> Self {
+        let mut function = value.function;
+        ParamQuantifier::set_params(&mut function, value.constraints);
+        function.into()
     }
 }
 
@@ -219,13 +297,9 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 /// # use arithmetic_typing::{FnType, UnknownLen, ValueType};
 /// # use std::iter;
 /// let sum_fn_type = FnType::builder()
-///     .with_len_params(&[0])
-///     .with_arg(ValueType::NUM.repeat(UnknownLen::Param(0)))
+///     .with_arg(ValueType::NUM.repeat(UnknownLen::Some))
 ///     .returning(ValueType::NUM);
-/// assert_eq!(
-///     sum_fn_type.to_string(),
-///     "fn<len N>([Num; N]) -> Num"
-/// );
+/// assert_eq!(sum_fn_type.to_string(), "fn([Num; _]) -> Num");
 /// ```
 ///
 /// Signature for a slice mapping function:
@@ -240,15 +314,13 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 ///     .returning(ValueType::Param(1));
 ///
 /// let map_fn_type = <FnType>::builder()
-///     .with_len_params(&[0])
-///     .with_type_params(&[0])
-///     .with_constrained_type_params(&[1], LinConstraints::LIN)
-///     .with_arg(ValueType::Param(0).repeat(UnknownLen::Param(0)))
+///     .with_arg(ValueType::Param(0).repeat(UnknownLen::Some))
 ///     .with_arg(map_fn_arg)
-///     .returning(ValueType::Param(1).repeat(UnknownLen::Param(0)));
+///     .returning(ValueType::Param(1).repeat(UnknownLen::Dynamic))
+///     .with_constraints(&[1], &LinConstraints::LIN);
 /// assert_eq!(
 ///     map_fn_type.to_string(),
-///     "fn<len N; T, U: Lin>([T; N], fn(T) -> U) -> [U; N]"
+///     "fn([T; N], fn(T) -> U) -> [U; N] where U: Lin"
 /// );
 /// ```
 ///
@@ -258,46 +330,29 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 /// # use arithmetic_typing::{arith::LinConstraints, FnType, UnknownLen, ValueType};
 /// # use std::iter;
 /// let fn_type = <FnType>::builder()
-///     .with_len_params(&[0])
-///     .with_constrained_type_params(&[0], LinConstraints::LIN)
-///     .with_varargs(ValueType::Param(0), UnknownLen::Param(0))
+///     .with_varargs(ValueType::Param(0), UnknownLen::Some)
 ///     .with_arg(ValueType::BOOL)
 ///     .returning(ValueType::Param(0));
 /// assert_eq!(
 ///     fn_type.to_string(),
-///     "fn<len N; T: Lin>(...[T; N], Bool) -> T"
+///     "fn(...[T; _], Bool) -> T"
 /// );
 /// ```
 #[derive(Debug, Clone)]
 pub struct FnTypeBuilder<Prim: PrimitiveType = Num> {
     args: Tuple<Prim>,
-    constraints: ParamConstraints<Prim>,
 }
 
 impl<Prim: PrimitiveType> Default for FnTypeBuilder<Prim> {
     fn default() -> Self {
         Self {
             args: Tuple::empty(),
-            constraints: ParamConstraints::default(),
         }
     }
 }
 
 // FIXME: disallow quantified functions as args / return type?
 impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
-    /// Adds the type params with the specified `indexes` and `constraints`
-    /// to the function definition.
-    pub fn with_constrained_type_params(
-        mut self,
-        indexes: &[usize],
-        constraints: &Prim::Constraints,
-    ) -> Self {
-        self.constraints
-            .type_params
-            .extend(indexes.iter().map(|&idx| (idx, constraints.clone())));
-        self
-    }
-
     /// Adds a new argument to the function definition.
     pub fn with_arg(mut self, arg: impl Into<ValueType<Prim>>) -> Self {
         self.args.push(arg.into());
@@ -316,7 +371,6 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
 
     /// Declares the return type of the function and builds it.
     pub fn returning(self, return_type: impl Into<ValueType<Prim>>) -> FnType<Prim> {
-        // FIXME: return fn + constraints?
         FnType::new(self.args, return_type.into())
     }
 }

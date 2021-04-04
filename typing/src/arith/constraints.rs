@@ -4,9 +4,9 @@ use std::{fmt, ops, str::FromStr};
 
 use crate::{PrimitiveType, Substitutions, TypeErrorKind, ValueType};
 
-/// Container for constraints that can be placed on type parameters / variables.
+/// Container for constraints that can be placed on type variables.
 ///
-/// Constraints can be placed on [function](crate::FnType) type params, and can be applied
+/// Constraints can be placed on [function](crate::FnType) type variables, and can be applied
 /// to types in [`TypeArithmetic`] impls. For example, [`NumArithmetic`] places
 /// a [linearity constraint](LinConstraints::LIN) on types involved in arithmetic ops.
 ///
@@ -15,7 +15,7 @@ use crate::{PrimitiveType, Substitutions, TypeErrorKind, ValueType};
 /// - Constraints cannot be parametric (cf. parameters in traits, such `AsRef<_>`
 ///   or `Iterator<Item = _>`).
 /// - Constraints are applied to types in separation; it is impossible to create a constraint
-///   involving several type params.
+///   involving several type variables.
 /// - Constraints cannot contradict each other.
 ///
 /// # Implementation rules
@@ -128,8 +128,9 @@ impl<Prim: LinearType> TypeConstraints<Prim> for LinConstraints {
             return Ok(());
         }
 
-        let resolved_ty = if let ValueType::Var(idx) = ty {
-            substitutions.insert_constraints(*idx, self);
+        let resolved_ty = if let ValueType::Var(var) = ty {
+            debug_assert!(var.is_free());
+            substitutions.insert_constraints(var.index(), self);
             substitutions.fast_resolve(ty)
         } else {
             ty
@@ -141,7 +142,7 @@ impl<Prim: LinearType> TypeConstraints<Prim> for LinConstraints {
 
             ValueType::Prim(lit) if lit.is_linear() => Ok(()),
 
-            ValueType::Some | ValueType::Param(_) => unreachable!(),
+            ValueType::Some => unreachable!(),
 
             ValueType::Function(_) | ValueType::Prim(_) => Err(TypeErrorKind::failed_constraint(
                 ty.to_owned(),

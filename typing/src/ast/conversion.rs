@@ -262,7 +262,7 @@ impl<'a, Prim: PrimitiveType> ValueTypeAst<'a, Prim> {
                 let idx = state.type_param_idx(name).ok_or_else(|| {
                     ConversionErrorKind::UndefinedTypeParam(name.to_owned()).with_span(*ident)
                 })?;
-                ValueType::Param(idx)
+                ValueType::param(idx)
             }
 
             Self::Function(fn_type) => {
@@ -559,7 +559,7 @@ mod tests {
 
         assert_eq!(ty.params.as_ref().unwrap().len_params.len(), 1);
         assert_eq!(ty.params.as_ref().unwrap().type_params.len(), 2);
-        assert_eq!(ty.return_type, ValueType::Param(1));
+        assert_eq!(ty.return_type, ValueType::param(1));
     }
 
     #[test]

@@ -85,76 +85,76 @@ impl<Prim: WithBoolean> From<Prelude> for ValueType<Prim> {
 
             Prelude::If => FnType::builder()
                 .with_arg(ValueType::BOOL)
-                .with_arg(ValueType::Param(0))
-                .with_arg(ValueType::Param(0))
-                .returning(ValueType::Param(0))
+                .with_arg(ValueType::param(0))
+                .with_arg(ValueType::param(0))
+                .returning(ValueType::param(0))
                 .into(),
 
             Prelude::While => {
                 let condition_fn = FnType::builder()
-                    .with_arg(ValueType::Param(0))
+                    .with_arg(ValueType::param(0))
                     .returning(ValueType::BOOL);
                 let iter_fn = FnType::builder()
-                    .with_arg(ValueType::Param(0))
-                    .returning(ValueType::Param(0));
+                    .with_arg(ValueType::param(0))
+                    .returning(ValueType::param(0));
 
                 FnType::builder()
-                    .with_arg(ValueType::Param(0)) // state
+                    .with_arg(ValueType::param(0)) // state
                     .with_arg(condition_fn)
                     .with_arg(iter_fn)
-                    .returning(ValueType::Param(0))
+                    .returning(ValueType::param(0))
                     .into()
             }
 
             Prelude::Map => {
                 let map_arg = FnType::builder()
-                    .with_arg(ValueType::Param(0))
-                    .returning(ValueType::Param(1));
+                    .with_arg(ValueType::param(0))
+                    .returning(ValueType::param(1));
 
                 FnType::builder()
-                    .with_arg(ValueType::Param(0).repeat(UnknownLen::Param(0)))
+                    .with_arg(ValueType::param(0).repeat(UnknownLen::Param(0)))
                     .with_arg(map_arg)
-                    .returning(ValueType::Param(1).repeat(UnknownLen::Param(0)))
+                    .returning(ValueType::param(1).repeat(UnknownLen::Param(0)))
                     .into()
             }
 
             Prelude::Filter => {
                 let predicate_arg = FnType::builder()
-                    .with_arg(ValueType::Param(0))
+                    .with_arg(ValueType::param(0))
                     .returning(ValueType::BOOL);
 
                 FnType::builder()
-                    .with_arg(ValueType::Param(0).repeat(UnknownLen::Some))
+                    .with_arg(ValueType::param(0).repeat(UnknownLen::Some))
                     .with_arg(predicate_arg)
-                    .returning(ValueType::Param(0).repeat(UnknownLen::Dynamic))
+                    .returning(ValueType::param(0).repeat(UnknownLen::Dynamic))
                     .into()
             }
 
             Prelude::Fold => {
                 // 0th type param is slice element, 1st is accumulator
                 let fold_arg = FnType::builder()
-                    .with_arg(ValueType::Param(1))
-                    .with_arg(ValueType::Param(0))
-                    .returning(ValueType::Param(1));
+                    .with_arg(ValueType::param(1))
+                    .with_arg(ValueType::param(0))
+                    .returning(ValueType::param(1));
 
                 FnType::builder()
-                    .with_arg(ValueType::Param(0).repeat(UnknownLen::Some))
-                    .with_arg(ValueType::Param(1))
+                    .with_arg(ValueType::param(0).repeat(UnknownLen::Some))
+                    .with_arg(ValueType::param(1))
                     .with_arg(fold_arg)
-                    .returning(ValueType::Param(1))
+                    .returning(ValueType::param(1))
                     .into()
             }
 
             Prelude::Push => FnType::builder()
-                .with_arg(ValueType::Param(0).repeat(UnknownLen::Param(0)))
-                .with_arg(ValueType::Param(0))
-                .returning(ValueType::Param(0).repeat(UnknownLen::Param(0) + 1))
+                .with_arg(ValueType::param(0).repeat(UnknownLen::Param(0)))
+                .with_arg(ValueType::param(0))
+                .returning(ValueType::param(0).repeat(UnknownLen::Param(0) + 1))
                 .into(),
 
             Prelude::Merge => FnType::builder()
-                .with_arg(ValueType::Param(0).repeat(UnknownLen::Some))
-                .with_arg(ValueType::Param(0).repeat(UnknownLen::Some))
-                .returning(ValueType::Param(0).repeat(UnknownLen::Dynamic))
+                .with_arg(ValueType::param(0).repeat(UnknownLen::Some))
+                .with_arg(ValueType::param(0).repeat(UnknownLen::Some))
+                .returning(ValueType::param(0).repeat(UnknownLen::Dynamic))
                 .into(),
         }
     }
@@ -213,8 +213,8 @@ impl<Prim: WithBoolean> From<Assertions> for ValueType<Prim> {
                 .returning(ValueType::void())
                 .into(),
             Assertions::AssertEq => FnType::builder()
-                .with_arg(ValueType::Param(0))
-                .with_arg(ValueType::Param(0))
+                .with_arg(ValueType::param(0))
+                .with_arg(ValueType::param(0))
                 .returning(ValueType::void())
                 .into(),
         }

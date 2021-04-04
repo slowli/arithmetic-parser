@@ -9,8 +9,8 @@ use crate::{
 };
 
 impl<Prim: PrimitiveType> FnType<Prim> {
-    /// Performs final transformations on this type, transforming all of its type vars
-    /// into type params.
+    /// Performs final transformations on this function, bounding all of its type vars
+    /// to the function or its child functions.
     pub(crate) fn finalize(&mut self, substitutions: &Substitutions<Prim>) {
         // 1. Replace `Var`s with `Param`s.
         let mut transformer = PolyTypeTransformer::default();
@@ -69,10 +69,10 @@ struct PolyTypeTransformer {
 impl<Prim: PrimitiveType> VisitMut<Prim> for PolyTypeTransformer {
     fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
         match ty {
-            ValueType::Var(idx) => {
+            ValueType::Var(var) if var.is_free() => {
                 let type_count = self.mapping.types.len();
-                let param_idx = *self.mapping.types.entry(*idx).or_insert(type_count);
-                *ty = ValueType::Param(param_idx);
+                let param_idx = *self.mapping.types.entry(var.index()).or_insert(type_count);
+                *ty = ValueType::param(param_idx);
             }
             _ => visit::visit_type_mut(self, ty),
         }
@@ -122,13 +122,10 @@ impl<'a> MonoTypeTransformer<'a> {
 impl<Prim: PrimitiveType> VisitMut<Prim> for MonoTypeTransformer<'_> {
     fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
         match ty {
-            ValueType::Param(idx) => {
-                *ty = self
-                    .mapping
-                    .types
-                    .get(idx)
-                    .copied()
-                    .map_or(ValueType::Param(*idx), ValueType::Var)
+            ValueType::Var(var) if !var.is_free() => {
+                if let Some(mapped_idx) = self.mapping.types.get(&var.index()) {
+                    *ty = ValueType::free_var(*mapped_idx);
+                }
             }
             _ => visit::visit_type_mut(self, ty),
         }

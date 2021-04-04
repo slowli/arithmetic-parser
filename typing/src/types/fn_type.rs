@@ -6,9 +6,7 @@ use std::{
 };
 
 use crate::types::ParamQuantifier;
-use crate::{
-    types::type_param, LengthKind, Num, PrimitiveType, Tuple, TupleLen, UnknownLen, ValueType,
-};
+use crate::{LengthKind, Num, PrimitiveType, Tuple, TupleLen, TypeVar, UnknownLen, ValueType};
 
 #[derive(Debug, Clone)]
 pub(crate) struct ParamConstraints<Prim: PrimitiveType> {
@@ -44,7 +42,7 @@ impl<Prim: PrimitiveType> fmt::Display for ParamConstraints<Prim> {
 
         let type_param_count = self.type_params.len();
         for (&idx, constraints) in &self.type_params {
-            write!(formatter, "{}: {}", type_param(idx), constraints)?;
+            write!(formatter, "{}: {}", TypeVar::param_str(idx), constraints)?;
             if idx + 1 < type_param_count {
                 formatter.write_str(", ")?;
             }
@@ -97,7 +95,7 @@ impl<Prim: PrimitiveType> fmt::Display for FnParams<Prim> {
         }
 
         for (i, (var_idx, constraints)) in self.type_params.iter().enumerate() {
-            formatter.write_str(type_param(*var_idx).as_ref())?;
+            formatter.write_str(TypeVar::param_str(*var_idx).as_ref())?;
             if *constraints != Prim::Constraints::default() {
                 write!(formatter, ": {}", constraints)?;
             }
@@ -294,7 +292,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
     }
 }
 
-/// Function together with constraints on type params contained either in the function itself
+/// Function together with constraints on type variables contained either in the function itself
 /// or any of the child functions.
 #[derive(Debug)]
 pub struct FnWithConstraints<Prim: PrimitiveType> {
@@ -313,7 +311,7 @@ impl<Prim: PrimitiveType> fmt::Display for FnWithConstraints<Prim> {
 }
 
 impl<Prim: PrimitiveType> FnWithConstraints<Prim> {
-    /// Adds the type params with the specified `indexes` and `constraints`
+    /// Adds the type variables with the specified `indexes` and `constraints`
     /// to the function definition.
     pub fn with_constraints(mut self, indexes: &[usize], constraints: &Prim::Constraints) -> Self {
         if *constraints != Prim::Constraints::default() {
@@ -364,8 +362,7 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 /// ```
 /// # use arithmetic_typing::{arith::LinConstraints, FnType, UnknownLen, ValueType};
 /// # use std::iter;
-/// // Definition of the mapping arg. Note that the definition uses type params,
-/// // but does not declare them (they are bound to the parent function).
+/// // Definition of the mapping arg.
 /// let map_fn_arg = <FnType>::builder()
 ///     .with_arg(ValueType::Param(0))
 ///     .returning(ValueType::Param(1));

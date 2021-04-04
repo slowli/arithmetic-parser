@@ -1,6 +1,6 @@
 //! Visitor traits allowing to traverse [`ValueType`] and related types.
 
-use crate::{FnType, PrimitiveType, Tuple, TupleLen, ValueType};
+use crate::{FnType, PrimitiveType, Tuple, TupleLen, TypeVar, ValueType};
 
 /// Recursive traversal across the shared reference to a [`ValueType`].
 ///
@@ -11,7 +11,7 @@ use crate::{FnType, PrimitiveType, Tuple, TupleLen, ValueType};
 /// ```
 /// use arithmetic_typing::{
 ///     visit::{self, Visit},
-///     PrimitiveType, Slice, Tuple, UnknownLen, ValueType,
+///     PrimitiveType, Slice, Tuple, UnknownLen, ValueType, TypeVar,
 /// };
 /// # use std::collections::HashMap;
 ///
@@ -23,8 +23,8 @@ use crate::{FnType, PrimitiveType, Tuple, TupleLen, ValueType};
 /// }
 ///
 /// impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for Mentions {
-///     fn visit_param(&mut self, index: usize) {
-///         *self.types.entry(index).or_default() += 1;
+///     fn visit_var(&mut self, var: TypeVar) {
+///         *self.types.entry(var.index()).or_default() += 1;
 ///     }
 ///
 ///     fn visit_tuple(&mut self, tuple: &'a Tuple<Prim>) {
@@ -61,14 +61,7 @@ pub trait Visit<'ast, Prim: PrimitiveType> {
     /// Visits a type variable.
     ///
     /// The default implementation does nothing.
-    fn visit_var(&mut self, index: usize) {
-        // Does nothing.
-    }
-
-    /// Visits a type parameter.
-    ///
-    /// The default implementation does nothing.
-    fn visit_param(&mut self, index: usize) {
+    fn visit_var(&mut self, var: TypeVar) {
         // Does nothing.
     }
 
@@ -104,8 +97,7 @@ where
 {
     match ty {
         ValueType::Some => { /* Do nothing. */ }
-        ValueType::Var(index) => visitor.visit_var(*index),
-        ValueType::Param(index) => visitor.visit_param(*index),
+        ValueType::Var(var) => visitor.visit_var(*var),
         ValueType::Prim(primitive) => visitor.visit_primitive(primitive),
         ValueType::Tuple(tuple) => visitor.visit_tuple(tuple),
         ValueType::Function(function) => visitor.visit_function(function.as_ref()),
@@ -209,7 +201,7 @@ where
     V: VisitMut<Prim> + ?Sized,
 {
     match ty {
-        ValueType::Some | ValueType::Var(_) | ValueType::Param(_) | ValueType::Prim(_) => {}
+        ValueType::Some | ValueType::Var(_) | ValueType::Prim(_) => {}
         ValueType::Tuple(tuple) => visitor.visit_tuple_mut(tuple),
         ValueType::Function(function) => visitor.visit_function_mut(function.as_mut()),
     }

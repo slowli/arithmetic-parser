@@ -44,10 +44,10 @@ fn hash_fn_type_display() {
 /// ```
 pub fn zip_fn_type() -> FnType<Num> {
     FnType::builder()
-        .with_arg(ValueType::Param(0).repeat(UnknownLen::Param(0)))
-        .with_arg(ValueType::Param(1).repeat(UnknownLen::Param(0)))
+        .with_arg(ValueType::param(0).repeat(UnknownLen::Param(0)))
+        .with_arg(ValueType::param(1).repeat(UnknownLen::Param(0)))
         .returning(ValueType::slice(
-            (ValueType::Param(0), ValueType::Param(1)),
+            (ValueType::param(0), ValueType::param(1)),
             UnknownLen::Param(0),
         ))
 }

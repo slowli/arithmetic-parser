@@ -59,7 +59,7 @@ pub enum ValueTypeAst<'a, Prim = Num> {
     Any,
     /// Primitive types.
     Prim(Prim),
-    /// Reference to a type param.
+    /// Reference to a type variable.
     Ident(InputSpan<'a>),
     /// Functional type.
     Function(Box<FnTypeAst<'a, Prim>>),
@@ -163,7 +163,7 @@ pub enum TupleLenAst<'a> {
     Ident(InputSpan<'a>),
 }
 
-/// Bounds that can be placed on a type param.
+/// Bounds that can be placed on a type variable.
 #[derive(Debug, Default, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct TypeConstraintsAst<'a> {

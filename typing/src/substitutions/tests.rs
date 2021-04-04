@@ -167,7 +167,7 @@ fn unresolved_param_error() {
     assert_matches!(err, TypeErrorKind::UnresolvedParam);
 
     let err = substitutions
-        .unify(&ValueType::Param(2), &ValueType::NUM)
+        .unify(&ValueType::param(2), &ValueType::NUM)
         .unwrap_err();
     assert_matches!(err, TypeErrorKind::UnresolvedParam);
 }
@@ -187,7 +187,7 @@ fn unifying_complex_tuples() {
     assert_eq!(substitutions.length_eqs.len(), 1);
     assert_eq!(substitutions.length_eqs[&0], UnknownLen::Var(1).into());
 
-    let zs = Tuple::from(ValueType::Var(0).repeat(UnknownLen::Var(1)));
+    let zs = Tuple::from(ValueType::free_var(0).repeat(UnknownLen::Var(1)));
     let mut substitutions = Substitutions::<Num>::default();
     substitutions.unify_tuples(&xs, &zs, Assignment).unwrap();
 
@@ -199,7 +199,11 @@ fn unifying_complex_tuples() {
     let us = Tuple::new(
         vec![],
         ValueType::NUM.repeat(UnknownLen::Var(1)),
-        vec![ValueType::Var(0), ValueType::Var(1), ValueType::Var(2)],
+        vec![
+            ValueType::free_var(0),
+            ValueType::free_var(1),
+            ValueType::free_var(2),
+        ],
     );
     let mut substitutions = Substitutions::<Num>::default();
     substitutions.unify_tuples(&xs, &us, Assignment).unwrap();

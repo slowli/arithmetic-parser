@@ -138,8 +138,8 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
             return Ok(());
         }
 
-        let resolved_ty = if let ValueType::Var(idx) = ty {
-            substitutions.insert_constraints(*idx, self);
+        let resolved_ty = if let ValueType::Var(var) = ty {
+            substitutions.insert_constraints(var.index(), self);
             substitutions.fast_resolve(ty)
         } else {
             ty
@@ -149,7 +149,7 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
             // `Var`s are taken care of previously.
             ValueType::Var(_) | ValueType::Prim(NumOrBytesType::Num) => Ok(()),
 
-            ValueType::Some | ValueType::Param(_) => unreachable!(),
+            ValueType::Some => unreachable!(),
 
             ValueType::Prim(NumOrBytesType::Bool) | ValueType::Function(_) => Err(
                 TypeErrorKind::failed_constraint(ty.to_owned(), self.to_owned()),

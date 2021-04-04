@@ -17,16 +17,73 @@ pub use self::{
     tuple::{LengthKind, Slice, Tuple, TupleLen, UnknownLen},
 };
 
+/// Type variable.
+///
+/// A variable represents a certain unknown type. Variables can be either *free*
+/// or *bound* to a [function](FnType) (these are known as *type params* in Rust).
+/// Types input to a [`TypeEnvironment`] only have bounded variables (this is
+/// verified in runtime), but types output by the inference process can contain both.
+///
+/// # Notation
+///
+/// - Bounded type variables are represented as `T`, `U`, `V`, etc.
+/// - Free variables are represented as `_`.
+///
+/// [`TypeEnvironment`]: crate::TypeEnvironment
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TypeVar {
+    index: usize,
+    is_free: bool,
+}
+
+impl fmt::Display for TypeVar {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_free {
+            formatter.write_str("_")
+        } else {
+            formatter.write_str(Self::param_str(self.index).as_ref())
+        }
+    }
+}
+
+impl TypeVar {
+    fn param_str(index: usize) -> Cow<'static, str> {
+        const PARAM_NAMES: &str = "TUVXYZ";
+        PARAM_NAMES.get(index..=index).map_or_else(
+            || Cow::from(format!("T{}", index - PARAM_NAMES.len())),
+            Cow::from,
+        )
+    }
+
+    /// Creates a bounded type variable that can be used to [build functions](FnTypeBuilder).
+    pub const fn param(index: usize) -> Self {
+        Self {
+            index,
+            is_free: false,
+        }
+    }
+
+    /// Returns the 0-based index of this variable.
+    pub fn index(self) -> usize {
+        self.index
+    }
+
+    /// Is this variable free (not bounded in a function declaration)?
+    pub fn is_free(self) -> bool {
+        self.is_free
+    }
+}
+
 /// Enumeration encompassing all types supported by the type system.
 ///
 /// Parametric by the [`PrimitiveType`].
 ///
 /// # Notation
 ///
-/// - [`Self::Some`] and [`Self::Var`] are represented as `_`.
+/// - [`Self::Some`] is represented as `_`.
 /// - [`Prim`](Self::Prim)itive types are represented using the [`Display`](fmt::Display)
 ///   implementation of the corresponding [`PrimitiveType`].
-/// - [`Param`](Self::Param)s are represented as `T`, `U`, `V` etc.
+/// - [`Var`](Self::Var)s are represented as documented in [`TypeVar`].
 /// - Notation for [functional](FnType) and [tuple](Tuple) types is documented separately.
 ///
 /// # Examples
@@ -71,12 +128,8 @@ pub enum ValueType<Prim: PrimitiveType = Num> {
     Function(Box<FnType<Prim>>),
     /// Tuple type.
     Tuple(Tuple<Prim>),
-    /// Type parameter in a function definition.
-    Param(usize),
-
-    /// Type variable. In contrast to `Param`s, `Var`s are used exclusively during
-    /// inference and cannot occur in standalone function signatures.
-    Var(usize),
+    /// Type variable.
+    Var(TypeVar),
 }
 
 impl<Prim: PrimitiveType> PartialEq for ValueType<Prim> {
@@ -84,7 +137,7 @@ impl<Prim: PrimitiveType> PartialEq for ValueType<Prim> {
         match (self, other) {
             (Self::Some, _) | (_, Self::Some) => true,
             (Self::Prim(x), Self::Prim(y)) => x == y,
-            (Self::Var(x), Self::Var(y)) | (Self::Param(x), Self::Param(y)) => x == y,
+            (Self::Var(x), Self::Var(y)) => x == y,
             (Self::Tuple(xs), Self::Tuple(ys)) => xs == ys,
             (Self::Function(x), Self::Function(y)) => x == y,
             _ => false,
@@ -95,8 +148,8 @@ impl<Prim: PrimitiveType> PartialEq for ValueType<Prim> {
 impl<Prim: PrimitiveType> fmt::Display for ValueType<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Some | Self::Var(_) => formatter.write_str("_"),
-            Self::Param(idx) => formatter.write_str(type_param(*idx).as_ref()),
+            Self::Some => formatter.write_str("_"),
+            Self::Var(var) => fmt::Display::fmt(var, formatter),
             Self::Prim(num) => fmt::Display::fmt(num, formatter),
             Self::Function(fn_type) => fmt::Display::fmt(fn_type, formatter),
             Self::Tuple(tuple) => fmt::Display::fmt(tuple, formatter),
@@ -148,14 +201,6 @@ impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A);
 impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A, 8: B);
 impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A, 8: B, 9: C);
 
-fn type_param(index: usize) -> Cow<'static, str> {
-    const PARAM_NAMES: &str = "TUVXYZ";
-    PARAM_NAMES.get(index..=index).map_or_else(
-        || Cow::from(format!("T{}", index - PARAM_NAMES.len())),
-        Cow::from,
-    )
-}
-
 impl ValueType {
     /// Numeric primitive type.
     pub const NUM: Self = ValueType::Prim(Num::Num);
@@ -170,6 +215,18 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
     /// Returns a void type (an empty tuple).
     pub fn void() -> Self {
         Self::Tuple(Tuple::empty())
+    }
+
+    /// Creates a bounded type variable with the specified `index`.
+    pub fn param(index: usize) -> Self {
+        Self::Var(TypeVar::param(index))
+    }
+
+    pub(crate) fn free_var(index: usize) -> Self {
+        Self::Var(TypeVar {
+            index,
+            is_free: true,
+        })
     }
 
     /// Creates a slice type.
@@ -203,9 +260,8 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
     /// non-concrete types.
     pub fn is_concrete(&self) -> bool {
         match self {
-            Self::Var(_) => false,
-            Self::Some | Self::Param(_) | Self::Prim(_) => true,
-
+            Self::Var(var) => !var.is_free,
+            Self::Some | Self::Prim(_) => true,
             Self::Function(fn_type) => fn_type.is_concrete(),
             Self::Tuple(tuple) => tuple.is_concrete(),
         }

@@ -134,8 +134,8 @@ pub use self::{
     substitutions::Substitutions,
     type_map::{Assertions, Prelude},
     types::{
-        FnType, FnTypeBuilder, FnWithConstraints, LengthKind, Slice, Tuple, TupleLen, UnknownLen,
-        ValueType,
+        FnType, FnTypeBuilder, FnWithConstraints, LengthKind, Slice, Tuple, TupleLen, TypeVar,
+        UnknownLen, ValueType,
     },
 };
 
@@ -213,7 +213,7 @@ use self::arith::{LinConstraints, LinearType, TypeConstraints, WithBoolean};
 pub trait PrimitiveType:
     Clone + PartialEq + fmt::Debug + fmt::Display + FromStr + Send + Sync + 'static
 {
-    /// Constraints that can be placed on type parameters.
+    /// Constraints that can be placed on type variables.
     type Constraints: TypeConstraints<Self>;
 }
 

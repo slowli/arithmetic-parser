@@ -124,9 +124,9 @@ impl ParamQuantifier {
 impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for ParamQuantifier {
     fn visit_type(&mut self, ty: &'a ValueType<Prim>) {
         match ty {
-            ValueType::Var(_) => panic!("Vars should be forbidden earlier"),
-            ValueType::Param(idx) => {
-                let stats = self.type_params.entry(*idx).or_default();
+            ValueType::Var(var) => {
+                assert!(!var.is_free(), "Free vars should be forbidden earlier");
+                let stats = self.type_params.entry(var.index()).or_default();
                 stats.mentioning_fns.insert(self.current_function_idx);
             }
             _ => visit::visit_type(self, ty),
@@ -216,7 +216,7 @@ impl<Prim: PrimitiveType> ParamPlacement<Prim> {
 impl<Prim: PrimitiveType> VisitMut<Prim> for ParamPlacement<Prim> {
     fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
         if let ValueType::Some = ty {
-            *ty = ValueType::Param(self.next_type_param);
+            *ty = ValueType::param(self.next_type_param);
             self.type_params
                 .entry(self.current_function_idx)
                 .or_default()
@@ -298,12 +298,12 @@ mod tests {
     #[test]
     fn analyzing_map_fn() {
         let map_arg = FnType::builder()
-            .with_arg(ValueType::Param(0))
-            .returning(ValueType::Param(1));
+            .with_arg(ValueType::param(0))
+            .returning(ValueType::param(1));
         let mut map_fn = <FnType>::builder()
-            .with_arg(ValueType::Param(0).repeat(UnknownLen::Param(0)))
+            .with_arg(ValueType::param(0).repeat(UnknownLen::Param(0)))
             .with_arg(map_arg)
-            .returning(ValueType::Param(1).repeat(UnknownLen::Param(0)));
+            .returning(ValueType::param(1).repeat(UnknownLen::Param(0)));
 
         let mut analyzer = ParamQuantifier::new();
         analyzer.visit_function(&map_fn);
@@ -341,9 +341,9 @@ mod tests {
     #[test]
     fn transforming_wildcards_into_params() {
         let mut merge_fn = <FnType>::builder()
-            .with_arg(ValueType::Param(0).repeat(UnknownLen::Some))
-            .with_arg(ValueType::Param(0).repeat(UnknownLen::Some))
-            .returning(ValueType::Param(0).repeat(UnknownLen::Dynamic));
+            .with_arg(ValueType::param(0).repeat(UnknownLen::Some))
+            .with_arg(ValueType::param(0).repeat(UnknownLen::Some))
+            .returning(ValueType::param(0).repeat(UnknownLen::Dynamic));
         ParamQuantifier::set_params(&mut merge_fn, ParamConstraints::default());
         assert_eq!(
             merge_fn.to_string(),

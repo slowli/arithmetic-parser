@@ -4,6 +4,65 @@ use std::{borrow::Cow, cmp, fmt, iter, ops};
 
 use crate::{Num, PrimitiveType, ValueType};
 
+/// Length variable.
+///
+/// A variable represents a certain unknown length. Variables can be either *free*
+/// or *bound* to a [function](FnType) (similar to const params in Rust, except all lengths
+/// have a single type).
+/// Just as with [`TypeVar`](crate::TypeVar)s, types input to a [`TypeEnvironment`]
+/// can only have bounded length variables (this is
+/// verified in runtime), but types output by the inference process can contain both.
+///
+/// # Notation
+///
+/// - Bounded length variables are represented as `N`, `M`, `L`, etc.
+/// - Free variables are represented as `_`.
+///
+/// [`TypeEnvironment`]: crate::TypeEnvironment
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct LengthVar {
+    index: usize,
+    is_free: bool,
+}
+
+impl fmt::Display for LengthVar {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_free {
+            formatter.write_str("_")
+        } else {
+            formatter.write_str(Self::param_str(self.index).as_ref())
+        }
+    }
+}
+
+impl LengthVar {
+    pub(crate) fn param_str(index: usize) -> Cow<'static, str> {
+        const PARAM_NAMES: &str = "NMLKJI";
+        PARAM_NAMES.get(index..=index).map_or_else(
+            || Cow::from(format!("N{}", index - PARAM_NAMES.len())),
+            Cow::from,
+        )
+    }
+
+    /// Creates a bounded length variable that can be used to [build functions](FnTypeBuilder).
+    pub const fn param(index: usize) -> Self {
+        Self {
+            index,
+            is_free: false,
+        }
+    }
+
+    /// Returns the 0-based index of this variable.
+    pub fn index(self) -> usize {
+        self.index
+    }
+
+    /// Is this variable free (not bounded in a function declaration)?
+    pub fn is_free(self) -> bool {
+        self.is_free
+    }
+}
+
 /// Unknown / variable length, e.g., of a tuple.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
@@ -14,31 +73,17 @@ pub enum UnknownLen {
     /// *Dynamic* wildcard length. Unlike [`Self::Some`], this length can vary at runtime,
     /// i.e., it cannot be unified with any other length during type inference.
     Dynamic,
-    /// Length parameter in a function definition.
-    Param(usize),
-
-    /// Length variable. In contrast to `Param`s, `Var`s are used exclusively during
-    /// inference and cannot occur in standalone function signatures.
-    Var(usize),
+    /// Length variable.
+    Var(LengthVar),
 }
 
 impl fmt::Display for UnknownLen {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Some | Self::Var(_) => formatter.write_str("_"),
+            Self::Some => formatter.write_str("_"),
             Self::Dynamic => formatter.write_str("*"),
-            Self::Param(idx) => formatter.write_str(Self::const_param(*idx).as_ref()),
+            Self::Var(var) => fmt::Display::fmt(var, formatter),
         }
-    }
-}
-
-impl UnknownLen {
-    pub(crate) fn const_param(index: usize) -> Cow<'static, str> {
-        const PARAM_NAMES: &str = "NMLKJI";
-        PARAM_NAMES.get(index..=index).map_or_else(
-            || Cow::from(format!("N{}", index - PARAM_NAMES.len())),
-            Cow::from,
-        )
     }
 }
 
@@ -50,6 +95,20 @@ impl ops::Add<usize> for UnknownLen {
             var: Some(self),
             exact: rhs,
         }
+    }
+}
+
+impl UnknownLen {
+    /// Creates a bounded type variable that can be used to [build functions](FnTypeBuilder).
+    pub const fn param(index: usize) -> Self {
+        Self::Var(LengthVar::param(index))
+    }
+
+    pub(crate) const fn free_var(index: usize) -> Self {
+        Self::Var(LengthVar {
+            index,
+            is_free: true,
+        })
     }
 }
 
@@ -108,7 +167,7 @@ impl TupleLen {
     };
 
     fn is_concrete(&self) -> bool {
-        !matches!(&self.var, Some(UnknownLen::Var(_)))
+        !matches!(&self.var, Some(UnknownLen::Var(var)) if var.is_free())
     }
 
     /// Returns components of this length.
@@ -561,15 +620,15 @@ mod tests {
     fn tuple_length_display() {
         let len = TupleLen::from(3);
         assert_eq!(len.to_string(), "3");
-        let len = UnknownLen::Param(0) + 2;
+        let len = UnknownLen::param(0) + 2;
         assert_eq!(len.to_string(), "N + 2");
     }
 
     #[test]
     fn slice_display() {
-        let slice = Slice::new(ValueType::NUM, UnknownLen::Param(0));
+        let slice = Slice::new(ValueType::NUM, UnknownLen::param(0));
         assert_eq!(slice.to_string(), "[Num; N]");
-        let slice = Slice::new(ValueType::NUM, UnknownLen::Var(0));
+        let slice = Slice::new(ValueType::NUM, UnknownLen::free_var(0));
         assert_eq!(slice.to_string(), "[Num; _]");
         let slice = Slice::new(ValueType::NUM, TupleLen::from(3));
         assert_eq!(slice.to_string(), "[Num; 3]");
@@ -580,14 +639,14 @@ mod tests {
         // Simple tuples.
         let tuple = Tuple::from(vec![ValueType::NUM, ValueType::BOOL]);
         assert_eq!(tuple.to_string(), "(Num, Bool)");
-        let tuple = Tuple::from(Slice::new(ValueType::NUM, UnknownLen::Param(0)));
+        let tuple = Tuple::from(Slice::new(ValueType::NUM, UnknownLen::param(0)));
         assert_eq!(tuple.to_string(), "[Num; N]");
         let tuple = Tuple::from(Slice::new(ValueType::NUM, TupleLen::from(3)));
         assert_eq!(tuple.to_string(), "(Num, Num, Num)");
 
         let tuple = Tuple {
             start: vec![ValueType::NUM, ValueType::BOOL],
-            middle: Some(Slice::new(ValueType::NUM, UnknownLen::Param(0))),
+            middle: Some(Slice::new(ValueType::NUM, UnknownLen::param(0))),
             end: vec![],
         };
         assert_eq!(tuple.to_string(), "(Num, Bool, ...[Num; N])");
@@ -601,7 +660,7 @@ mod tests {
 
         let tuple = Tuple {
             start: vec![ValueType::NUM, ValueType::BOOL],
-            middle: Some(Slice::new(ValueType::NUM, UnknownLen::Param(0))),
+            middle: Some(Slice::new(ValueType::NUM, UnknownLen::param(0))),
             end: vec![ValueType::param(0)],
         };
         assert_eq!(tuple.to_string(), "(Num, Bool, ...[Num; N], T)");
@@ -638,7 +697,7 @@ mod tests {
             ValueType::BOOL,
             ValueType::free_var(0),
         ]);
-        let slice = Tuple::from(Slice::new(ValueType::free_var(1), UnknownLen::Var(0)));
+        let slice = Tuple::from(Slice::new(ValueType::free_var(1), UnknownLen::free_var(0)));
         let equal_elements: Vec<_> = tuple.equal_elements_static(&slice, 3).collect();
 
         assert_eq!(
@@ -653,10 +712,10 @@ mod tests {
 
     #[test]
     fn equal_elements_static_slice_and_complex_tuple() {
-        let slice = Tuple::from(Slice::new(ValueType::free_var(1), UnknownLen::Var(0)));
+        let slice = Tuple::from(Slice::new(ValueType::free_var(1), UnknownLen::free_var(0)));
         let tuple = Tuple {
             start: vec![ValueType::NUM],
-            middle: Some(Slice::new(ValueType::free_var(0), UnknownLen::Var(1))),
+            middle: Some(Slice::new(ValueType::free_var(0), UnknownLen::free_var(1))),
             end: vec![ValueType::BOOL, ValueType::free_var(2)],
         };
 
@@ -689,12 +748,12 @@ mod tests {
     fn create_test_tuples() -> (Tuple, Tuple) {
         let tuple = Tuple {
             start: vec![ValueType::NUM],
-            middle: Some(Slice::new(ValueType::free_var(0), UnknownLen::Var(1))),
+            middle: Some(Slice::new(ValueType::free_var(0), UnknownLen::free_var(1))),
             end: vec![ValueType::BOOL, ValueType::free_var(2)],
         };
         let other_tuple = Tuple {
             start: vec![ValueType::NUM, ValueType::free_var(3)],
-            middle: Some(Slice::new(ValueType::BOOL, UnknownLen::Var(1))),
+            middle: Some(Slice::new(ValueType::BOOL, UnknownLen::free_var(1))),
             end: vec![ValueType::free_var(1)],
         };
         (tuple, other_tuple)
@@ -728,8 +787,8 @@ mod tests {
 
     #[test]
     fn equal_elements_dyn_two_slices() {
-        let slice = Tuple::from(Slice::new(ValueType::free_var(0), UnknownLen::Var(0)));
-        let other_slice = Tuple::from(Slice::new(ValueType::NUM, UnknownLen::Var(1)));
+        let slice = Tuple::from(Slice::new(ValueType::free_var(0), UnknownLen::free_var(0)));
+        let other_slice = Tuple::from(Slice::new(ValueType::NUM, UnknownLen::free_var(1)));
         let equal_elements: Vec<_> = slice.equal_elements_dyn(&other_slice).collect();
 
         assert_eq!(

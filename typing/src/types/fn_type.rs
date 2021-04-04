@@ -5,8 +5,10 @@ use std::{
     fmt,
 };
 
-use crate::types::ParamQuantifier;
-use crate::{LengthKind, Num, PrimitiveType, Tuple, TupleLen, TypeVar, UnknownLen, ValueType};
+use crate::{
+    types::ParamQuantifier, LengthKind, LengthVar, Num, PrimitiveType, Tuple, TupleLen, TypeVar,
+    ValueType,
+};
 
 #[derive(Debug, Clone)]
 pub(crate) struct ParamConstraints<Prim: PrimitiveType> {
@@ -28,7 +30,7 @@ impl<Prim: PrimitiveType> fmt::Display for ParamConstraints<Prim> {
         if !self.dyn_lengths.is_empty() {
             formatter.write_str("len ")?;
             for (i, len) in self.dyn_lengths.iter().enumerate() {
-                formatter.write_str(UnknownLen::const_param(*len).as_ref())?;
+                formatter.write_str(LengthVar::param_str(*len).as_ref())?;
                 if i + 1 < self.dyn_lengths.len() {
                     formatter.write_str(", ")?;
                 }
@@ -80,7 +82,7 @@ impl<Prim: PrimitiveType> fmt::Display for FnParams<Prim> {
         if !self.len_params.is_empty() {
             formatter.write_str("len ")?;
             for (i, (var_idx, kind)) in self.len_params.iter().enumerate() {
-                formatter.write_str(UnknownLen::const_param(*var_idx).as_ref())?;
+                formatter.write_str(LengthVar::param_str(*var_idx).as_ref())?;
                 if *kind == LengthKind::Dynamic {
                     formatter.write_str("*")?;
                 }

@@ -134,8 +134,8 @@ pub use self::{
     substitutions::Substitutions,
     type_map::{Assertions, Prelude},
     types::{
-        FnType, FnTypeBuilder, FnWithConstraints, LengthKind, Slice, Tuple, TupleLen, TypeVar,
-        UnknownLen, ValueType,
+        FnType, FnTypeBuilder, FnWithConstraints, LengthKind, LengthVar, Slice, Tuple, TupleLen,
+        TypeVar, UnknownLen, ValueType,
     },
 };
 

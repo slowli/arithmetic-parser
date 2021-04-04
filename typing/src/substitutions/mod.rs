@@ -110,8 +110,12 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
     fn resolve_len(&self, len: TupleLen) -> TupleLen {
         let mut resolved = len;
-        while let (Some(UnknownLen::Var(idx)), exact) = resolved.components() {
-            if let Some(eq_rhs) = self.length_eqs.get(&idx) {
+        while let (Some(UnknownLen::Var(var)), exact) = resolved.components() {
+            if !var.is_free() {
+                break;
+            }
+
+            if let Some(eq_rhs) = self.length_eqs.get(&var.index()) {
                 resolved = eq_rhs.to_owned() + exact;
             } else {
                 break;
@@ -146,7 +150,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         if is_dynamic {
             self.dyn_lengths.insert(self.len_var_count);
         }
-        *target_len = UnknownLen::Var(self.len_var_count);
+        *target_len = UnknownLen::free_var(self.len_var_count);
         self.len_var_count += 1;
     }
 
@@ -295,12 +299,12 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         is_lhs: bool,
     ) -> Result<TupleLen, LenErrorKind> {
         let var_idx = match simple_len {
-            UnknownLen::Var(idx) => idx,
+            UnknownLen::Var(var) if var.is_free() => var.index(),
             _ => return Err(LenErrorKind::UnresolvedParam),
         };
         let source_var_idx = match source.components().0 {
             None => None,
-            Some(UnknownLen::Var(idx)) => Some(idx),
+            Some(UnknownLen::Var(var)) if var.is_free() => Some(var.index()),
             Some(_) => return Err(LenErrorKind::UnresolvedParam),
         };
 

@@ -112,9 +112,9 @@ impl<Prim: WithBoolean> From<Prelude> for ValueType<Prim> {
                     .returning(ValueType::param(1));
 
                 FnType::builder()
-                    .with_arg(ValueType::param(0).repeat(UnknownLen::Param(0)))
+                    .with_arg(ValueType::param(0).repeat(UnknownLen::param(0)))
                     .with_arg(map_arg)
-                    .returning(ValueType::param(1).repeat(UnknownLen::Param(0)))
+                    .returning(ValueType::param(1).repeat(UnknownLen::param(0)))
                     .into()
             }
 
@@ -146,9 +146,9 @@ impl<Prim: WithBoolean> From<Prelude> for ValueType<Prim> {
             }
 
             Prelude::Push => FnType::builder()
-                .with_arg(ValueType::param(0).repeat(UnknownLen::Param(0)))
+                .with_arg(ValueType::param(0).repeat(UnknownLen::param(0)))
                 .with_arg(ValueType::param(0))
-                .returning(ValueType::param(0).repeat(UnknownLen::Param(0) + 1))
+                .returning(ValueType::param(0).repeat(UnknownLen::param(0) + 1))
                 .into(),
 
             Prelude::Merge => FnType::builder()

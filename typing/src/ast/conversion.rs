@@ -238,7 +238,7 @@ impl<'a, Prim: PrimitiveType> SliceAst<'a, Prim> {
                 let const_param = state.const_param_idx(name).ok_or_else(|| {
                     ConversionErrorKind::UndefinedConst(name.to_owned()).with_span(*ident)
                 })?;
-                UnknownLen::Param(const_param)
+                UnknownLen::param(const_param)
             }
             TupleLenAst::Some => UnknownLen::Some,
             TupleLenAst::Dynamic => UnknownLen::Dynamic,
@@ -574,7 +574,7 @@ mod tests {
         assert!(ty.params.as_ref().unwrap().type_params.is_empty());
         let args_slice = ty.args.as_slice().unwrap();
         assert_eq!(*args_slice.element(), ValueType::NUM);
-        assert_eq!(args_slice.len(), UnknownLen::Param(0).into());
+        assert_eq!(args_slice.len(), UnknownLen::param(0).into());
     }
 
     #[test]

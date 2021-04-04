@@ -143,13 +143,10 @@ impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for ParamQuantifier {
             return;
         };
 
-        match middle_len {
-            UnknownLen::Var(_) => panic!("Vars should be forbidden earlier"),
-            UnknownLen::Param(idx) => {
-                let stats = self.len_params.entry(idx).or_default();
-                stats.mentioning_fns.insert(self.current_function_idx);
-            }
-            _ => { /* Do nothing. */ }
+        if let UnknownLen::Var(var) = middle_len {
+            assert!(!var.is_free(), "Free vars should be forbidden earlier");
+            let stats = self.len_params.entry(var.index()).or_default();
+            stats.mentioning_fns.insert(self.current_function_idx);
         }
         visit::visit_tuple(self, tuple);
     }
@@ -238,7 +235,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for ParamPlacement<Prim> {
             _ => return,
         };
 
-        *target_len = UnknownLen::Param(self.next_len_param);
+        *target_len = UnknownLen::param(self.next_len_param);
         self.len_params
             .entry(self.current_function_idx)
             .or_default()
@@ -301,9 +298,9 @@ mod tests {
             .with_arg(ValueType::param(0))
             .returning(ValueType::param(1));
         let mut map_fn = <FnType>::builder()
-            .with_arg(ValueType::param(0).repeat(UnknownLen::Param(0)))
+            .with_arg(ValueType::param(0).repeat(UnknownLen::param(0)))
             .with_arg(map_arg)
-            .returning(ValueType::param(1).repeat(UnknownLen::Param(0)));
+            .returning(ValueType::param(1).repeat(UnknownLen::param(0)));
 
         let mut analyzer = ParamQuantifier::new();
         analyzer.visit_function(&map_fn);

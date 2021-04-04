@@ -14,14 +14,14 @@ pub(crate) use self::{
 };
 pub use self::{
     fn_type::{FnType, FnTypeBuilder, FnWithConstraints},
-    tuple::{LengthKind, Slice, Tuple, TupleLen, UnknownLen},
+    tuple::{LengthKind, LengthVar, Slice, Tuple, TupleLen, UnknownLen},
 };
 
 /// Type variable.
 ///
 /// A variable represents a certain unknown type. Variables can be either *free*
-/// or *bound* to a [function](FnType) (these are known as *type params* in Rust).
-/// Types input to a [`TypeEnvironment`] only have bounded variables (this is
+/// or *bound* to a [function](FnType) (these are known as type params in Rust).
+/// Types input to a [`TypeEnvironment`] can only have bounded variables (this is
 /// verified in runtime), but types output by the inference process can contain both.
 ///
 /// # Notation

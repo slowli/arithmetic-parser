@@ -83,10 +83,11 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for PolyTypeTransformer {
             (Some(var), _) => var,
             _ => return,
         };
-        if let UnknownLen::Var(idx) = target_len {
+        if let UnknownLen::Var(var) = target_len {
+            debug_assert!(var.is_free());
             let len_count = self.mapping.lengths.len();
-            let param_idx = *self.mapping.lengths.entry(*idx).or_insert(len_count);
-            *target_len = UnknownLen::Param(param_idx);
+            let param_idx = *self.mapping.lengths.entry(var.index()).or_insert(len_count);
+            *target_len = UnknownLen::param(param_idx);
         }
     }
 
@@ -95,7 +96,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for PolyTypeTransformer {
         let vararg_len = vararg
             .map(Slice::len)
             .and_then(|len| match len.components() {
-                (Some(UnknownLen::Var(idx)), _) => Some(idx),
+                (Some(UnknownLen::Var(var)), _) => Some(var.index()),
                 _ => None,
             });
         if let Some(vararg_len) = vararg_len {
@@ -137,13 +138,12 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for MonoTypeTransformer<'_> {
             _ => return,
         };
 
-        if let UnknownLen::Param(idx) = target_len {
-            *target_len = self
-                .mapping
-                .lengths
-                .get(idx)
-                .copied()
-                .map_or(UnknownLen::Param(*idx), UnknownLen::Var);
+        if let UnknownLen::Var(var) = target_len {
+            if !var.is_free() {
+                if let Some(mapped_len) = self.mapping.lengths.get(&var.index()) {
+                    *target_len = UnknownLen::free_var(*mapped_len);
+                }
+            }
         }
     }
 }

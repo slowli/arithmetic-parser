@@ -37,12 +37,13 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
     /// Trying to unify a type with a type containing it.
     RecursiveType(ValueType<Prim>),
 
-    /// Mention of [`ValueType::Param`] or [`UnknownLen::Param`] in a type.
+    /// Mention of a bounded type or length variable in a type supplied
+    /// to [`Substitutions::unify()`].
     ///
-    /// `Param`s are instantiated into `Var`s automatically, so this error
-    /// can only occur with types manually supplied to [`Substitutions::unify()`].
+    /// Bounded variables are instantiated into free vars automatically during
+    /// type inference, so this error
+    /// can only occur with types manually supplied to `Substitutions::unify()`.
     ///
-    /// [`UnknownLen::Param`]: crate::UnknownLen::Param
     /// [`Substitutions::unify()`]: crate::Substitutions::unify()
     UnresolvedParam,
 

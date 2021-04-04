@@ -30,8 +30,8 @@ use crate::{FnType, PrimitiveType, Tuple, TupleLen, TypeVar, ValueType};
 ///     fn visit_tuple(&mut self, tuple: &'a Tuple<Prim>) {
 ///         let (_, middle, _) = tuple.parts();
 ///         let len = middle.and_then(|middle| middle.len().components().0);
-///         if let Some(UnknownLen::Param(idx)) = len {
-///             *self.lengths.entry(idx).or_default() += 1;
+///         if let Some(UnknownLen::Var(var)) = len {
+///             *self.lengths.entry(var.index()).or_default() += 1;
 ///         }
 ///         visit::visit_tuple(self, tuple);
 ///     }

@@ -7,8 +7,8 @@ use crate::{Num, PrimitiveType, ValueType};
 /// Length variable.
 ///
 /// A variable represents a certain unknown length. Variables can be either *free*
-/// or *bound* to a [function](FnType) (similar to const params in Rust, except all lengths
-/// have a single type).
+/// or *bound* to a [function](crate::FnType) (similar to const params in Rust, except lengths
+/// always have the `usize` type).
 /// Just as with [`TypeVar`](crate::TypeVar)s, types input to a [`TypeEnvironment`]
 /// can only have bounded length variables (this is
 /// verified in runtime), but types output by the inference process can contain both.
@@ -44,7 +44,8 @@ impl LengthVar {
         )
     }
 
-    /// Creates a bounded length variable that can be used to [build functions](FnTypeBuilder).
+    /// Creates a bounded length variable that can be used to
+    /// [build functions](crate::FnTypeBuilder).
     pub const fn param(index: usize) -> Self {
         Self {
             index,
@@ -99,7 +100,7 @@ impl ops::Add<usize> for UnknownLen {
 }
 
 impl UnknownLen {
-    /// Creates a bounded type variable that can be used to [build functions](FnTypeBuilder).
+    /// Creates a bounded type variable that can be used to [build functions](crate::FnTypeBuilder).
     pub const fn param(index: usize) -> Self {
         Self::Var(LengthVar::param(index))
     }
@@ -115,7 +116,7 @@ impl UnknownLen {
 /// Generic tuple length.
 ///
 /// A tuple length consists of the two components: an unknown / variable length,
-/// such as [`UnknownLen::Param`], and a non-negative increment.
+/// such as [`UnknownLen::Var`], and a non-negative increment.
 /// These components can be obtained via [`Self::components()`].
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TupleLen {
@@ -224,7 +225,7 @@ pub enum LengthKind {
 /// assert_eq!(simple_tuple.to_string(), "(Num, Bool)");
 ///
 /// let slice_tuple = Tuple::from(
-///    ValueType::NUM.repeat(UnknownLen::Param(0)),
+///    ValueType::NUM.repeat(UnknownLen::param(0)),
 /// );
 /// assert_matches!(slice_tuple.parts(), ([], Some(_), []));
 /// assert!(slice_tuple.as_slice().is_some());
@@ -232,7 +233,7 @@ pub enum LengthKind {
 ///
 /// let complex_tuple = Tuple::new(
 ///     vec![ValueType::NUM],
-///     ValueType::NUM.repeat(UnknownLen::Param(0)),
+///     ValueType::NUM.repeat(UnknownLen::param(0)),
 ///     vec![ValueType::BOOL, ValueType::Some],
 /// );
 /// assert_matches!(complex_tuple.parts(), ([_], Some(_), [_, _]));
@@ -387,12 +388,12 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     /// let tuple = Tuple::from(vec![ValueType::NUM, ValueType::BOOL]);
     /// assert_eq!(tuple.len(), TupleLen::from(2));
     ///
-    /// let slice = Slice::new(ValueType::NUM, UnknownLen::Param(0));
+    /// let slice = Slice::new(ValueType::NUM, UnknownLen::param(0));
     /// let tuple = Tuple::from(slice.clone());
-    /// assert_eq!(tuple.len(), TupleLen::from(UnknownLen::Param(0)));
+    /// assert_eq!(tuple.len(), TupleLen::from(UnknownLen::param(0)));
     ///
     /// let tuple = Tuple::new(vec![], slice, vec![ValueType::BOOL]);
-    /// assert_eq!(tuple.len(), UnknownLen::Param(0) + 1);
+    /// assert_eq!(tuple.len(), UnknownLen::param(0) + 1);
     /// ```
     pub fn len(&self) -> TupleLen {
         let increment = self.start.len() + self.end.len();
@@ -484,7 +485,7 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     /// # use arithmetic_typing::{Slice, Tuple, UnknownLen, ValueType};
     /// let complex_tuple = Tuple::new(
     ///     vec![ValueType::NUM],
-    ///     Slice::new(ValueType::NUM, UnknownLen::Param(0)),
+    ///     Slice::new(ValueType::NUM, UnknownLen::param(0)),
     ///     vec![ValueType::BOOL, ValueType::Some],
     /// );
     /// let elements: Vec<_> = complex_tuple.element_types().collect();

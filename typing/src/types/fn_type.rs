@@ -366,13 +366,13 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 /// # use std::iter;
 /// // Definition of the mapping arg.
 /// let map_fn_arg = <FnType>::builder()
-///     .with_arg(ValueType::Param(0))
-///     .returning(ValueType::Param(1));
+///     .with_arg(ValueType::param(0))
+///     .returning(ValueType::param(1));
 ///
 /// let map_fn_type = <FnType>::builder()
-///     .with_arg(ValueType::Param(0).repeat(UnknownLen::Some))
+///     .with_arg(ValueType::param(0).repeat(UnknownLen::Some))
 ///     .with_arg(map_fn_arg)
-///     .returning(ValueType::Param(1).repeat(UnknownLen::Dynamic))
+///     .returning(ValueType::param(1).repeat(UnknownLen::Dynamic))
 ///     .with_constraints(&[1], &LinConstraints::LIN);
 /// assert_eq!(
 ///     map_fn_type.to_string(),
@@ -386,9 +386,9 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 /// # use arithmetic_typing::{arith::LinConstraints, FnType, UnknownLen, ValueType};
 /// # use std::iter;
 /// let fn_type = <FnType>::builder()
-///     .with_varargs(ValueType::Param(0), UnknownLen::Some)
+///     .with_varargs(ValueType::param(0), UnknownLen::Some)
 ///     .with_arg(ValueType::BOOL)
-///     .returning(ValueType::Param(0));
+///     .returning(ValueType::param(0));
 /// assert_eq!(
 ///     fn_type.to_string(),
 ///     "fn(...[T; _], Bool) -> T"

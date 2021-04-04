@@ -4,7 +4,7 @@ use assert_matches::assert_matches;
 use super::*;
 use crate::{
     arith::LinConstraints, types::TypeParamDescription, Annotated, LengthKind, Num, Prelude,
-    TupleLenMismatchContext, TupleLength,
+    TupleLen, TupleLenMismatchContext,
 };
 
 pub type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
@@ -15,7 +15,7 @@ pub fn assert_incompatible_types<Prim: PrimitiveType>(
     second: &ValueType<Prim>,
 ) {
     let (x, y) = match err {
-        TypeErrorKind::IncompatibleTypes(x, y) => (x, y),
+        TypeErrorKind::TypeMismatch(x, y) => (x, y),
         _ => panic!("Unexpected error type: {:?}", err),
     };
     assert!(
@@ -29,7 +29,7 @@ pub fn assert_incompatible_types<Prim: PrimitiveType>(
 fn hash_fn_type() -> FnType<Num> {
     FnType {
         // TODO: use `ValueType::Any` instead of `ValueType::Param(0)`
-        args: Slice::new(ValueType::Param(0), TupleLength::Param(0)).into(),
+        args: Slice::new(ValueType::Param(0), UnknownLen::Param(0)).into(),
         return_type: ValueType::NUM,
         type_params: vec![(0, TypeParamDescription::new(LinConstraints::default()))],
         len_params: vec![(0, LengthKind::Static.into())],
@@ -48,13 +48,13 @@ fn hash_fn_type_display() {
 /// ```
 pub fn zip_fn_type() -> FnType<Num> {
     FnType::builder()
-        .with_len_params(iter::once(0))
-        .with_type_params(0..=1)
-        .with_arg(ValueType::Param(0).repeat(TupleLength::Param(0)))
-        .with_arg(ValueType::Param(1).repeat(TupleLength::Param(0)))
+        .with_len_params(&[0])
+        .with_type_params(&[0, 1])
+        .with_arg(ValueType::Param(0).repeat(UnknownLen::Param(0)))
+        .with_arg(ValueType::Param(1).repeat(UnknownLen::Param(0)))
         .returning(ValueType::slice(
             (ValueType::Param(0), ValueType::Param(1)),
-            TupleLength::Param(0),
+            UnknownLen::Param(0),
         ))
 }
 
@@ -113,7 +113,7 @@ fn function_definition() {
 
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("hash", hash_fn_type().into());
+    type_env.insert("hash", hash_fn_type());
 
     type_env.process_statements(&block).unwrap();
     assert_eq!(
@@ -132,7 +132,7 @@ fn non_linear_types_in_function() {
 
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("hash", hash_fn_type().into());
+    type_env.insert("hash", hash_fn_type());
 
     type_env.process_statements(&block).unwrap();
     assert_eq!(
@@ -197,7 +197,7 @@ fn method_basics() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let plus_type = FnType::new(vec![ValueType::NUM; 2].into(), ValueType::NUM);
-    type_env.insert("plus", plus_type.into());
+    type_env.insert("plus", plus_type);
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(*type_env.get("bar").unwrap(), ValueType::NUM);
@@ -263,11 +263,11 @@ fn destructuring_for_tuple_on_assignment() {
     assert_eq!(type_env["x"], ValueType::NUM);
     assert_eq!(
         type_env["ys"],
-        ValueType::slice(ValueType::NUM, TupleLength::Exact(2))
+        ValueType::slice(ValueType::NUM, TupleLen::from(2))
     );
     assert_eq!(
         type_env["zs"],
-        ValueType::slice(ValueType::NUM, TupleLength::Exact(3))
+        ValueType::slice(ValueType::NUM, TupleLen::from(3))
     );
     assert_matches!(type_env["fn"], ValueType::Function(_));
     assert_eq!(type_env["flag"], ValueType::BOOL);
@@ -297,8 +297,8 @@ fn destructuring_error_on_assignment() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch { lhs, rhs: TupleLength::Exact(1), .. }
-            if lhs.to_string() == "_ + 2"
+        TypeErrorKind::TupleLenMismatch { lhs, rhs, .. }
+            if lhs.to_string() == "_ + 2" && *rhs == TupleLen::from(1)
     );
 }
 
@@ -324,7 +324,7 @@ fn destructuring_for_fn_args() {
         let bogus_code = "shift(1, 2, (3, 4))";
         let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
         let err = type_env.process_statements(&bogus_block).unwrap_err();
-        assert_matches!(err.kind(), TypeErrorKind::IncompatibleTypes(..));
+        assert_matches!(err.kind(), TypeErrorKind::TypeMismatch(..));
     }
     {
         let bogus_code = "shift(1, 1 == 2, 1 == 1)";
@@ -339,10 +339,10 @@ fn destructuring_for_fn_args() {
     assert_matches!(
         err.kind(),
         TypeErrorKind::TupleLenMismatch {
-            lhs: TupleLength::Exact(3),
-            rhs: TupleLength::Exact(2),
+            lhs,
+            rhs,
             ..
-        }
+        } if *lhs == TupleLen::from(3) && *rhs == TupleLen::from(2)
     )
 }
 
@@ -378,7 +378,7 @@ fn exact_lengths_for_gathering_fn() {
     assert_eq!(type_env["head"], ValueType::BOOL);
     assert_eq!(
         type_env["tail"],
-        ValueType::slice(ValueType::NUM, TupleLength::Exact(2))
+        ValueType::slice(ValueType::NUM, TupleLen::from(2))
     );
 }
 
@@ -459,7 +459,7 @@ fn varargs_in_embedded_fn() {
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("fold", Prelude::fold_type().into());
+    type_env.insert("fold", Prelude::Fold);
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
@@ -483,10 +483,10 @@ fn incorrect_function_arity() {
     assert_matches!(
         err.kind(),
         TypeErrorKind::TupleLenMismatch {
-            lhs: TupleLength::Exact(1),
-            rhs: TupleLength::Exact(2),
+            lhs,
+            rhs,
             context: TupleLenMismatchContext::Assignment,
-        }
+        } if *lhs == TupleLen::from(1) && *rhs == TupleLen::from(2)
     );
 }
 
@@ -699,10 +699,10 @@ fn function_passed_as_arg_invalid_arity() {
     assert_matches!(
         err.kind(),
         TypeErrorKind::TupleLenMismatch {
-            lhs: TupleLength::Exact(2),
-            rhs: TupleLength::Exact(1),
+            lhs,
+            rhs,
             context: TupleLenMismatchContext::FnArgs,
-        }
+        } if *lhs == TupleLen::from(2) && *rhs == TupleLen::from(1)
     );
     assert_eq!(
         err.kind().to_string(),
@@ -745,7 +745,7 @@ fn unifying_slice_and_tuple() {
     let code = "xs = (1, 2).map(|x| x + 5);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("map", Prelude::map_type().into());
+    type_env.insert("map", Prelude::Map);
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
@@ -759,7 +759,7 @@ fn function_accepting_slices() {
     let code = "inc = |xs| xs.map(|x| x + 5); z = (1, 2, 3).inc();";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("map", Prelude::map_type().into());
+    type_env.insert("map", Prelude::Map);
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
@@ -768,7 +768,7 @@ fn function_accepting_slices() {
     );
     assert_eq!(
         type_env["z"],
-        ValueType::slice(ValueType::NUM, TupleLength::Exact(3))
+        ValueType::slice(ValueType::NUM, TupleLen::from(3))
     );
 }
 
@@ -777,7 +777,7 @@ fn incorrect_arg_in_slices() {
     let code = "(1, 2 == 3).map(|x| x);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("map", Prelude::map_type().into());
+    type_env.insert("map", Prelude::Map);
 
     let err = type_env.process_statements(&block).unwrap_err();
 
@@ -790,7 +790,7 @@ fn slice_narrowed_to_tuple() {
     let code = "foo = |xs, fn| { (x, y, _) = xs.map(fn); y - x };";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("map", Prelude::map_type().into());
+    type_env.insert("map", Prelude::Map);
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
@@ -804,16 +804,16 @@ fn unifying_length_vars_error() {
     let code = "(1, 2).zip_with((3, 4, 5));";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("zip_with", zip_fn_type().into());
+    type_env.insert("zip_with", zip_fn_type());
 
     let err = type_env.process_statements(&block).unwrap_err();
     assert_matches!(
         err.kind(),
         TypeErrorKind::TupleLenMismatch {
-            lhs: TupleLength::Exact(2),
-            rhs: TupleLength::Exact(3),
+            lhs,
+            rhs,
             context: TupleLenMismatchContext::Assignment,
-        }
+        } if *lhs == TupleLen::from(2) && *rhs == TupleLen::from(3)
     );
 }
 
@@ -822,8 +822,8 @@ fn unifying_length_vars() {
     let code = "foo = |xs, ys| xs.zip_with(ys).map(|(x, y)| x + y);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("map", Prelude::map_type().into());
-    type_env.insert("zip_with", zip_fn_type().into());
+    type_env.insert("map", Prelude::Map);
+    type_env.insert("zip_with", zip_fn_type());
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
@@ -837,7 +837,7 @@ fn dynamically_sized_slices_basics() {
     let code = "filtered = (1, 2, 3).filter(|x| x != 1);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("filter", Prelude::filter_type().into());
+    type_env.insert("filter", Prelude::Filter);
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(type_env["filtered"].to_string(), "[Num; _]");
@@ -848,8 +848,8 @@ fn dynamically_sized_slices_basics() {
         sum = mapped.fold(0, |acc, x| acc + x);
     "#;
     type_env
-        .insert("map", Prelude::map_type().into())
-        .insert("fold", Prelude::fold_type().into());
+        .insert("map", Prelude::Map)
+        .insert("fold", Prelude::Fold);
     for line in new_code.lines() {
         let line = line.trim();
         if line.is_empty() {
@@ -873,8 +873,8 @@ fn dynamically_sized_slices_with_map() {
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("filter", Prelude::filter_type().into());
-    type_env.insert("map", Prelude::map_type().into());
+    type_env.insert("filter", Prelude::Filter);
+    type_env.insert("map", Prelude::Map);
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(
@@ -888,16 +888,12 @@ fn cannot_destructure_dynamic_slice() {
     let code = "(x, y) = (1, 2, 3).filter(|x| x != 1);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("filter", Prelude::filter_type().into());
+    type_env.insert("filter", Prelude::Filter);
     let err = type_env.process_statements(&block).unwrap_err();
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch {
-            lhs: TupleLength::Exact(2),
-            rhs: TupleLength::Var(_),
-            ..
-        }
+        TypeErrorKind::TupleLenMismatch { lhs, .. } if *lhs == TupleLen::from(2)
     );
 }
 
@@ -906,7 +902,7 @@ fn comparisons_when_switched_off() {
     let code = "(1, 2, 3).filter(|x| x > 1)";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("filter", Prelude::filter_type().into());
+    type_env.insert("filter", Prelude::Filter);
     let err = type_env.process_statements(&block).unwrap_err();
 
     assert_eq!(*err.span().fragment(), ">");
@@ -918,7 +914,7 @@ fn comparisons_when_switched_on() {
     let code = "(1, 2, 3).filter(|x| x > 1)";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("filter", Prelude::filter_type().into());
+    type_env.insert("filter", Prelude::Filter);
 
     let output = type_env
         .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
@@ -929,7 +925,7 @@ fn comparisons_when_switched_on() {
     };
 
     assert_eq!(*slice.element(), ValueType::NUM);
-    assert_matches!(slice.len(), TupleLength::Var(_));
+    assert_matches!(slice.len().components(), (Some(UnknownLen::Var(_)), 0));
 }
 
 #[test]

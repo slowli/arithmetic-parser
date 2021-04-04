@@ -2,8 +2,8 @@
 
 use std::fmt;
 
-use crate::{PrimitiveType, TupleLength, ValueType};
-use arithmetic_parser::{BinaryOp, Spanned, UnsupportedType};
+use crate::{PrimitiveType, TupleLen, ValueType};
+use arithmetic_parser::{Spanned, UnsupportedType};
 
 /// Context for [`TypeErrorKind::TupleLenMismatch`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,28 +19,16 @@ pub enum TupleLenMismatchContext {
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum TypeErrorKind<Prim: PrimitiveType> {
-    /// Error trying to unify operands of a binary operation.
-    OperandMismatch {
-        /// LHS type.
-        lhs_ty: ValueType<Prim>,
-        /// RHS type.
-        rhs_ty: ValueType<Prim>,
-        /// Operator.
-        op: BinaryOp,
-    },
-
     /// Trying to unify incompatible types. The first type is LHS, the second one is RHS.
-    // FIXME: Rename to `TypeMismatch`?
-    IncompatibleTypes(ValueType<Prim>, ValueType<Prim>),
+    TypeMismatch(ValueType<Prim>, ValueType<Prim>),
     /// Incompatible tuple lengths.
-    // FIXME: Inconsistency: `TupleLenMismatch` vs `TupleLength`
     TupleLenMismatch {
         /// Length of the LHS. This is the length determined by type annotations
         /// for assignments and the number of actually supplied args in function calls.
-        lhs: TupleLength,
+        lhs: TupleLen,
         /// Length of the RHS. This is usually the actual tuple length in assignments
         /// and the number of expected args in function calls.
-        rhs: TupleLength,
+        rhs: TupleLen,
         /// Context in which the error has occurred.
         context: TupleLenMismatchContext,
     },
@@ -48,6 +36,14 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
     UndefinedVar(String),
     /// Trying to unify a type with a type containing it.
     RecursiveType(ValueType<Prim>),
+
+    /// Mention of [`ValueType::Param`] or [`TupleLen::Param`] in a type.
+    ///
+    /// `Param`s are instantiated into `Var`s automatically, so this error
+    /// can only occur with types manually supplied to [`Substitutions::unify()`].
+    ///
+    /// [`Substitutions::unify()`]: crate::Substitutions::unify()
+    UnresolvedParam,
 
     /// Failure when applying constraint to a type.
     FailedConstraint {
@@ -57,11 +53,21 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
         constraint: Prim::Constraints,
     },
 
-    /// Language construct not supported by the type inference.
+    /// Language construct not supported by type inference logic.
     Unsupported(UnsupportedType),
-    /// Unsupported use of type or const params in function declaration.
+
+    /// Type not supported by type inference logic. For example,
+    /// a [`TypeArithmetic`] or [`TypeConstraints`] implementations may return this error
+    /// if they encounter an unknown [`ValueType`] variant.
     ///
-    /// Type or const params are currently not supported in type annotations, such as
+    /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
+    /// [`TypeConstraints`]: crate::arith::TypeConstraints
+    UnsupportedType(ValueType<Prim>),
+
+    /// Unsupported use of type or length params in a function declaration.
+    ///
+    /// Type or length params are currently not supported in type annotations. Here's an example
+    /// of code that triggers this error:
     ///
     /// ```text
     /// identity: fn<T>(T) -> T = |x| x;
@@ -72,13 +78,7 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
 impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::OperandMismatch { op, .. } => write!(
-                formatter,
-                "Operands of {} operation must have the same type",
-                op
-            ),
-
-            Self::IncompatibleTypes(first, second) => write!(
+            Self::TypeMismatch(first, second) => write!(
                 formatter,
                 "Trying to unify incompatible types `{}` and `{}`",
                 first, second
@@ -106,13 +106,18 @@ impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
                 ty
             ),
 
+            Self::UnresolvedParam => {
+                formatter.write_str("Params not instantiated into variables cannot be unified")
+            }
+
             Self::FailedConstraint { ty, constraint } => {
                 write!(formatter, "Type `{}` fails constraint {}", ty, constraint)
             }
 
             Self::Unsupported(ty) => write!(formatter, "Unsupported {}", ty),
+            Self::UnsupportedType(ty) => write!(formatter, "Unsupported type: {}", ty),
             Self::UnsupportedParam => {
-                formatter.write_str("Type params in declared function types is not supported yet")
+                formatter.write_str("Params in declared function types are not supported yet")
             }
         }
     }
@@ -135,20 +140,6 @@ impl<Prim: PrimitiveType> TypeErrorKind<Prim> {
     pub fn with_span<'a, T>(self, span: &Spanned<'a, T>) -> TypeError<'a, Prim> {
         TypeError {
             inner: span.copy_with_extra(self),
-        }
-    }
-
-    pub(crate) fn into_op_mismatch(
-        self,
-        lhs_ty: ValueType<Prim>,
-        rhs_ty: ValueType<Prim>,
-        op: BinaryOp,
-    ) -> Self {
-        match self {
-            TypeErrorKind::TupleLenMismatch { .. } | TypeErrorKind::IncompatibleTypes(..) => {
-                TypeErrorKind::OperandMismatch { lhs_ty, rhs_ty, op }
-            }
-            err => err,
         }
     }
 }

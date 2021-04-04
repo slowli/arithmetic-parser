@@ -1,6 +1,7 @@
 //! Substitutions type and dependencies.
 
 use std::{
+    cmp::Ordering,
     collections::{HashMap, HashSet},
     ptr,
 };
@@ -8,7 +9,8 @@ use std::{
 use crate::{
     arith::TypeConstraints,
     visit::{self, Visit, VisitMut},
-    FnType, PrimitiveType, Tuple, TupleLenMismatchContext, TupleLength, TypeErrorKind, ValueType,
+    FnType, LengthKind, PrimitiveType, Tuple, TupleLen, TupleLenMismatchContext, TypeErrorKind,
+    UnknownLen, ValueType,
 };
 
 mod fns;
@@ -17,6 +19,12 @@ use self::fns::{MonoTypeTransformer, ParamMapping};
 #[cfg(test)]
 mod tests;
 
+#[derive(Debug, Clone, Copy)]
+enum LenErrorKind {
+    UnresolvedParam,
+    Mismatch,
+}
+
 /// Set of equations and constraints on type variables.
 #[derive(Debug, Clone)]
 pub struct Substitutions<Prim: PrimitiveType> {
@@ -24,11 +32,13 @@ pub struct Substitutions<Prim: PrimitiveType> {
     type_var_count: usize,
     /// Type variable equations, encoded as `type_var[key] = value`.
     eqs: HashMap<usize, ValueType<Prim>>,
+    /// Constraints on type variables.
     constraints: HashMap<usize, Prim::Constraints>,
     /// Number of length variables.
     const_var_count: usize,
     /// Length variable equations.
-    length_eqs: HashMap<usize, TupleLength>,
+    length_eqs: HashMap<usize, TupleLen>,
+    /// Length variable known to be dynamic.
     dyn_lengths: HashSet<usize>,
 }
 
@@ -56,7 +66,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
     /// Inserts `constraints` for a type var with the specified index and all vars
     /// it is equivalent to.
-    pub fn insert_constraint(&mut self, var_idx: usize, constraints: &Prim::Constraints) {
+    pub fn insert_constraints(&mut self, var_idx: usize, constraints: &Prim::Constraints) {
         for idx in self.equivalent_vars(var_idx) {
             let current_constraints = self.constraints.entry(idx).or_default();
             *current_constraints |= constraints;
@@ -100,22 +110,16 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         }
     }
 
-    fn resolve_len<'a>(&'a self, mut len: &'a TupleLength) -> TupleLength {
-        while let TupleLength::Var(idx) = len {
-            let resolved = self.length_eqs.get(idx);
-            if let Some(resolved) = resolved {
-                len = resolved;
+    fn resolve_len(&self, len: TupleLen) -> TupleLen {
+        let mut resolved = len;
+        while let (Some(UnknownLen::Var(idx)), exact) = resolved.components() {
+            if let Some(eq_rhs) = self.length_eqs.get(&idx) {
+                resolved = eq_rhs.to_owned() + exact;
             } else {
                 break;
             }
         }
-
-        if let TupleLength::Compound(compound_len) = len {
-            let (var, exact) = compound_len.components();
-            self.resolve_len(var) + exact
-        } else {
-            len.to_owned()
-        }
+        resolved
     }
 
     pub(crate) fn assign_new_type(
@@ -130,14 +134,22 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         assigner.outcome
     }
 
-    pub(crate) fn assign_new_length(&mut self, length: &mut TupleLength) {
-        if let TupleLength::Some { is_dynamic } = length {
-            if *is_dynamic {
-                self.dyn_lengths.insert(self.const_var_count);
-            }
-            *length = TupleLength::Var(self.const_var_count);
-            self.const_var_count += 1;
+    pub(crate) fn assign_new_len(&mut self, len: &mut TupleLen) {
+        let target_len = match len.components_mut().0 {
+            Some(target_len) => target_len,
+            None => return,
+        };
+        let is_dynamic = match target_len {
+            UnknownLen::Some => false,
+            UnknownLen::Dynamic => true,
+            _ => return,
+        };
+
+        if is_dynamic {
+            self.dyn_lengths.insert(self.const_var_count);
         }
+        *target_len = UnknownLen::Var(self.const_var_count);
+        self.const_var_count += 1;
     }
 
     /// Unifies types in `lhs` and `rhs`.
@@ -148,11 +160,6 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     /// # Errors
     ///
     /// Returns an error if unification is impossible.
-    ///
-    /// # Panics
-    ///
-    /// - Panics if `lhs` or `rhs` contains [`ValueType::Param`]s. This will never happen
-    ///   for types constructed automatically during inference.
     pub fn unify(
         &mut self,
         lhs: &ValueType<Prim>,
@@ -174,9 +181,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
             (Var(idx), ty) | (ty, Var(idx)) => self.unify_var(*idx, ty),
 
-            (Param(_), _) | (_, Param(_)) => {
-                unreachable!("Type params must be transformed into vars before unification")
-            }
+            (Param(_), _) | (_, Param(_)) => Err(TypeErrorKind::UnresolvedParam),
 
             (Tuple(lhs_tuple), Tuple(rhs_tuple)) => {
                 self.unify_tuples(lhs_tuple, rhs_tuple, TupleLenMismatchContext::Assignment)
@@ -190,7 +195,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 resolver.visit_type_mut(&mut ty);
                 let mut other_ty = other_ty.to_owned();
                 resolver.visit_type_mut(&mut other_ty);
-                Err(TypeErrorKind::IncompatibleTypes(ty, other_ty))
+                Err(TypeErrorKind::TypeMismatch(ty, other_ty))
             }
         }
     }
@@ -201,10 +206,10 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         rhs: &Tuple<Prim>,
         context: TupleLenMismatchContext,
     ) -> Result<(), TypeErrorKind<Prim>> {
-        let resolved_len = self.unify_lengths(&lhs.len(), &rhs.len(), context)?;
+        let resolved_len = self.unify_lengths(lhs.len(), rhs.len(), context)?;
 
-        if let TupleLength::Exact(len) = resolved_len {
-            for (lhs_elem, rhs_elem) in lhs.equal_elements_static(rhs, len) {
+        if let (None, exact) = resolved_len.components() {
+            for (lhs_elem, rhs_elem) in lhs.equal_elements_static(rhs, exact) {
                 self.unify(lhs_elem, rhs_elem)?;
             }
         } else {
@@ -220,111 +225,135 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     /// Returns the resolved length that `lhs` and `rhs` are equal to.
     fn unify_lengths(
         &mut self,
-        lhs: &TupleLength,
-        rhs: &TupleLength,
+        lhs: TupleLen,
+        rhs: TupleLen,
         context: TupleLenMismatchContext,
-    ) -> Result<TupleLength, TypeErrorKind<Prim>> {
+    ) -> Result<TupleLen, TypeErrorKind<Prim>> {
         let resolved_lhs = self.resolve_len(lhs);
         let resolved_rhs = self.resolve_len(rhs);
 
-        match (&resolved_lhs, &resolved_rhs) {
-            (TupleLength::Var(x), TupleLength::Var(y)) if x == y => {
-                // Lengths are already unified.
-                Ok(resolved_lhs)
-            }
-
-            // Different dyn lengths cannot be unified.
-            (TupleLength::Var(x), TupleLength::Var(y))
-                if self.dyn_lengths.contains(x) && self.dyn_lengths.contains(y) =>
-            {
-                Err(TypeErrorKind::TupleLenMismatch {
+        self.unify_lengths_inner(resolved_lhs, resolved_rhs)
+            .map_err(|err| match err {
+                LenErrorKind::UnresolvedParam => TypeErrorKind::UnresolvedParam,
+                LenErrorKind::Mismatch => TypeErrorKind::TupleLenMismatch {
                     lhs: resolved_lhs,
                     rhs: resolved_rhs,
                     context,
-                })
+                },
+            })
+    }
+
+    fn unify_lengths_inner(
+        &mut self,
+        resolved_lhs: TupleLen,
+        resolved_rhs: TupleLen,
+    ) -> Result<TupleLen, LenErrorKind> {
+        let (lhs_var, lhs_exact) = resolved_lhs.components();
+        let (rhs_var, rhs_exact) = resolved_rhs.components();
+
+        // First, consider a case when at least one of resolved lengths is exact.
+        let (lhs_var, rhs_var) = match (lhs_var, rhs_var) {
+            (Some(lhs_var), Some(rhs_var)) => (lhs_var, rhs_var),
+
+            (Some(lhs_var), None) if rhs_exact >= lhs_exact => {
+                return self
+                    .unify_simple_length(lhs_var, TupleLen::from(rhs_exact - lhs_exact), true)
+                    .map(|len| len + lhs_exact);
+            }
+            (None, Some(rhs_var)) if lhs_exact >= rhs_exact => {
+                return self
+                    .unify_simple_length(rhs_var, TupleLen::from(lhs_exact - rhs_exact), false)
+                    .map(|len| len + rhs_exact);
             }
 
-            (TupleLength::Exact(x), TupleLength::Exact(y)) if x == y => {
-                // Lengths are known to be the same.
-                Ok(resolved_lhs)
-            }
+            (None, None) if lhs_exact == rhs_exact => return Ok(TupleLen::from(lhs_exact)),
 
-            (TupleLength::Compound(_), _) => {
-                self.unify_compound_length(resolved_lhs, resolved_rhs, true, context)
-            }
-            (_, TupleLength::Compound(_)) => {
-                self.unify_compound_length(resolved_lhs, resolved_rhs, false, context)
-            }
+            _ => return Err(LenErrorKind::Mismatch),
+        };
 
-            // Dynamic length can be unified at LHS position with anything other than other
-            // dynamic lengths, which we've checked previously.
-            (TupleLength::Var(x), _) if self.dyn_lengths.contains(&x) => Ok(resolved_rhs),
-
-            (TupleLength::Var(x), other) if !self.dyn_lengths.contains(x) => {
-                self.length_eqs.insert(*x, other.to_owned());
-                Ok(resolved_rhs)
+        match lhs_exact.cmp(&rhs_exact) {
+            Ordering::Equal => self.unify_simple_length(lhs_var, TupleLen::from(rhs_var), true),
+            Ordering::Greater => {
+                let reduced = lhs_var + (lhs_exact - rhs_exact);
+                self.unify_simple_length(rhs_var, reduced, false)
+                    .map(|len| len + rhs_exact)
             }
-            (other, TupleLength::Var(x)) if !self.dyn_lengths.contains(x) => {
-                self.length_eqs.insert(*x, other.to_owned());
-                Ok(resolved_lhs)
+            Ordering::Less => {
+                let reduced = rhs_var + (rhs_exact - lhs_exact);
+                self.unify_simple_length(lhs_var, reduced, true)
+                    .map(|len| len + lhs_exact)
             }
-
-            _ => Err(TypeErrorKind::TupleLenMismatch {
-                lhs: resolved_lhs,
-                rhs: resolved_rhs,
-                context,
-            }),
         }
     }
 
-    fn unify_compound_length(
+    fn unify_simple_length(
         &mut self,
-        resolved_lhs: TupleLength,
-        resolved_rhs: TupleLength,
+        simple_len: UnknownLen,
+        source: TupleLen,
         is_lhs: bool,
-        context: TupleLenMismatchContext,
-    ) -> Result<TupleLength, TypeErrorKind<Prim>> {
-        let (compound_len, other_len) = if is_lhs {
-            (&resolved_lhs, &resolved_rhs)
-        } else {
-            (&resolved_rhs, &resolved_lhs)
+    ) -> Result<TupleLen, LenErrorKind> {
+        let var_idx = match simple_len {
+            UnknownLen::Var(idx) => idx,
+            _ => return Err(LenErrorKind::UnresolvedParam),
         };
-        let compound_len = match compound_len {
-            TupleLength::Compound(compound) => compound,
-            _ => unreachable!(),
+        let source_var_idx = match source.components().0 {
+            None => None,
+            Some(UnknownLen::Var(idx)) => Some(idx),
+            Some(_) => return Err(LenErrorKind::UnresolvedParam),
         };
 
-        let (var, exact) = compound_len.components();
-
-        match other_len {
-            TupleLength::Exact(other_exact) if *other_exact >= exact => {
-                if is_lhs {
-                    self.unify_lengths(var, &TupleLength::Exact(other_exact - exact), context)?;
+        let (is_dyn, is_source_dyn) = match source_var_idx {
+            // Same length variable.
+            Some(idx) if idx == var_idx => {
+                return if source.components().1 == 0 {
+                    Ok(source) // lengths are already unified
                 } else {
-                    self.unify_lengths(&TupleLength::Exact(other_exact - exact), var, context)?;
-                }
-                return Ok(TupleLength::Exact(*other_exact));
+                    // x = x + C, C > 0: cannot be unified
+                    Err(LenErrorKind::Mismatch)
+                };
             }
+            // Different length variables.
+            Some(source_var_idx) => {
+                let is_dyn = self.dyn_lengths.contains(&var_idx);
+                let is_source_dyn = self.dyn_lengths.contains(&source_var_idx);
+                (is_dyn, is_source_dyn)
+            }
+            // No length variable.
+            None => {
+                let is_dyn = self.dyn_lengths.contains(&var_idx);
+                (is_dyn, false)
+            }
+        };
 
-            TupleLength::Compound(other_compound_len) => {
-                let (other_var, other_exact) = other_compound_len.components();
-                if exact == other_exact {
-                    return if is_lhs {
-                        self.unify_lengths(var, other_var, context)
-                    } else {
-                        self.unify_lengths(other_var, var, context)
-                    };
+        let (is_lhs_dyn, is_rhs_dyn) = if is_lhs {
+            (is_dyn, is_source_dyn)
+        } else {
+            (is_source_dyn, is_dyn)
+        };
+
+        match (is_lhs_dyn, is_rhs_dyn) {
+            // Dynamic vars are different, hence cannot be unified.
+            (true, true) => Err(LenErrorKind::Mismatch),
+            // LHS is dynamic, RHS is not.
+            (true, false) => {
+                // Check additionally that LHS does not have a non-zero exact part.
+                let is_valid = is_lhs || source.components().1 == 0;
+                if is_valid {
+                    Ok(source) // no new equation required
+                } else {
+                    Err(LenErrorKind::Mismatch)
                 }
             }
-
-            _ => { /* Do nothing. */ }
+            // LHS is not dynamic; RHS may or may not be.
+            (false, _) => {
+                if is_dyn {
+                    Err(LenErrorKind::Mismatch)
+                } else {
+                    self.length_eqs.insert(var_idx, source);
+                    Ok(source)
+                }
+            }
         }
-
-        Err(TypeErrorKind::TupleLenMismatch {
-            lhs: resolved_lhs,
-            rhs: resolved_rhs,
-            context,
-        })
     }
 
     fn unify_fn_types(
@@ -384,7 +413,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
         // Copy constraints on the newly generated const and type vars from the function definition.
         for (original_idx, description) in &fn_type.len_params {
-            if description.is_dynamic {
+            if description.kind == LengthKind::Dynamic {
                 let new_idx = mapping.lengths[original_idx];
                 self.dyn_lengths.insert(new_idx);
             }
@@ -497,7 +526,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeSanitizer {
     }
 }
 
-/// Replaces `ValueType::Some` and `TupleLength::Some` with new variables.
+/// Replaces `ValueType::Some` and `TupleLen::Some` with new variables.
 #[derive(Debug)]
 struct TypeAssigner<'a, Prim: PrimitiveType> {
     substitutions: &'a mut Substitutions<Prim>,
@@ -519,8 +548,8 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeAssigner<'_, Prim> {
         }
     }
 
-    fn visit_middle_len_mut(&mut self, len: &mut TupleLength) {
-        self.substitutions.assign_new_length(len);
+    fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
+        self.substitutions.assign_new_len(len);
     }
 
     fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {
@@ -555,7 +584,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeResolver<'_, Prim> {
         visit::visit_type_mut(self, ty);
     }
 
-    fn visit_middle_len_mut(&mut self, len: &mut TupleLength) {
-        *len = self.substitutions.resolve_len(len);
+    fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
+        *len = self.substitutions.resolve_len(*len);
     }
 }

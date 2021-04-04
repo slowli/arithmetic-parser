@@ -10,8 +10,8 @@ use std::{
 use crate::{
     arith::{BinaryOpSpans, MapPrimitiveType, NumArithmetic, TypeArithmetic, UnaryOpSpans},
     visit::VisitMut,
-    FnType, Num, PrimitiveType, Slice, Substitutions, Tuple, TupleLength, TypeError, TypeErrorKind,
-    TypeResult, ValueType,
+    FnType, Num, PrimitiveType, Slice, Substitutions, Tuple, TypeError, TypeErrorKind, TypeResult,
+    UnknownLen, ValueType,
 };
 use arithmetic_parser::{
     grammars::Grammar, BinaryOp, Block, Destructure, DestructureRest, Expr, FnDefinition, Lvalue,
@@ -103,7 +103,8 @@ impl<Prim: PrimitiveType> TypeEnvironment<Prim> {
     ///
     /// - Will panic if `value_type` is not [concrete](ValueType::is_concrete()). Non-concrete
     ///   types are tied to the environment; inserting them into an env is a logical error.
-    pub fn insert(&mut self, name: &str, value_type: ValueType<Prim>) -> &mut Self {
+    pub fn insert(&mut self, name: &str, value_type: impl Into<ValueType<Prim>>) -> &mut Self {
+        let value_type = value_type.into();
         assert!(
             value_type.is_concrete(),
             "Type {} is not concrete",
@@ -300,6 +301,7 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
         }
     }
 
+    // TODO: handle `Some` type specially? (Assign new type on each call.)
     #[inline]
     fn process_var<'a, T>(&self, name: &Spanned<'a, T>) -> TypeResult<'a, Prim> {
         let var_name = *name.fragment();
@@ -392,15 +394,17 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
             .map_err(|err| err.with_span(ty.as_ref().unwrap()))?;
         // `unwrap` is safe: an error can only occur with a type annotation present.
 
-        let mut length = TupleLength::Some {
-            is_dynamic: is_fn_args,
+        let mut length = if is_fn_args {
+            UnknownLen::Dynamic.into()
+        } else {
+            UnknownLen::Some.into()
         };
-        self.root_scope.substitutions.assign_new_length(&mut length);
+        self.root_scope.substitutions.assign_new_len(&mut length);
 
         if let DestructureRest::Named { variable, .. } = rest {
             self.insert_type(
                 variable.fragment(),
-                ValueType::slice(element.clone(), length.clone()),
+                ValueType::slice(element.clone(), length),
             );
         }
         Ok(Slice::new(element, length))

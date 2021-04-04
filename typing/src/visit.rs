@@ -1,6 +1,6 @@
 //! Visitor traits allowing to traverse [`ValueType`] and related types.
 
-use crate::{FnType, PrimitiveType, Tuple, TupleLength, ValueType};
+use crate::{FnType, PrimitiveType, Tuple, TupleLen, ValueType};
 
 /// Recursive traversal across the shared reference to a [`ValueType`].
 ///
@@ -11,7 +11,7 @@ use crate::{FnType, PrimitiveType, Tuple, TupleLength, ValueType};
 /// ```
 /// use arithmetic_typing::{
 ///     visit::{self, Visit},
-///     PrimitiveType, Slice, Tuple, TupleLength, ValueType,
+///     PrimitiveType, Slice, Tuple, UnknownLen, ValueType,
 /// };
 /// # use std::collections::HashMap;
 ///
@@ -28,9 +28,10 @@ use crate::{FnType, PrimitiveType, Tuple, TupleLength, ValueType};
 ///     }
 ///
 ///     fn visit_tuple(&mut self, tuple: &'a Tuple<Prim>) {
-///         let len = tuple.parts().1.map(Slice::len);
-///         if let Some(TupleLength::Param(idx)) = len {
-///             *self.lengths.entry(*idx).or_default() += 1;
+///         let (_, middle, _) = tuple.parts();
+///         let len = middle.and_then(|middle| middle.len().components().0);
+///         if let Some(UnknownLen::Param(idx)) = len {
+///             *self.lengths.entry(idx).or_default() += 1;
 ///         }
 ///         visit::visit_tuple(self, tuple);
 ///     }
@@ -188,7 +189,7 @@ pub trait VisitMut<Prim: PrimitiveType> {
     /// Visits a middle length of a tuple.
     ///
     /// The default implementation does nothing.
-    fn visit_middle_len_mut(&mut self, len: &mut TupleLength) {
+    fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
         // Does nothing.
     }
 

@@ -139,7 +139,7 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
         }
 
         let resolved_ty = if let ValueType::Var(idx) = ty {
-            substitutions.insert_constraint(*idx, self);
+            substitutions.insert_constraints(*idx, self);
             substitutions.fast_resolve(ty)
         } else {
             ty
@@ -174,6 +174,8 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
                 }
                 Ok(())
             }
+
+            other => Err(TypeErrorKind::UnsupportedType(other.to_owned())),
         }
     }
 }
@@ -238,7 +240,7 @@ fn main() -> anyhow::Result<()> {
     let ast = Parser::parse_statements(code)?;
 
     let mut env = TypeEnvironment::<NumOrBytesType>::new();
-    env.insert("fold", Prelude::fold_type().into());
+    env.insert("fold", Prelude::Fold);
     env.process_with_arithmetic(&NumOrBytesArithmetic, &ast)?;
 
     assert_eq!(env["x"], ValueType::Prim(NumOrBytesType::Num));

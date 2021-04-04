@@ -53,7 +53,7 @@
 //! let ast = Parser::parse_statements(code)?;
 //!
 //! let mut env = TypeEnvironment::new();
-//! env.insert("fold", Prelude::fold_type().into());
+//! env.insert("fold", Prelude::Fold);
 //!
 //! // Evaluate `code` to get the inferred `sum` function signature.
 //! let output_type = env.process_statements(&ast)?;
@@ -74,7 +74,7 @@
 //! let ast = Parser::parse_statements(code)?;
 //!
 //! let mut env = TypeEnvironment::new();
-//! env.insert("fold", Prelude::fold_type().into());
+//! env.insert("fold", Prelude::Fold);
 //!
 //! let output_type = env.process_statements(&ast)?;
 //! assert!(output_type.is_void());
@@ -133,10 +133,7 @@ pub use self::{
     error::{TupleLenMismatchContext, TypeError, TypeErrorKind, TypeResult},
     substitutions::Substitutions,
     type_map::{Assertions, Prelude},
-    types::{
-        CompoundTupleLength, FnType, FnTypeBuilder, LengthKind, Slice, Tuple, TupleLength,
-        ValueType,
-    },
+    types::{FnType, FnTypeBuilder, LengthKind, Slice, Tuple, TupleLen, UnknownLen, ValueType},
 };
 
 use self::arith::{LinConstraints, LinearType, TypeConstraints, WithBoolean};

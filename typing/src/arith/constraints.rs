@@ -53,7 +53,7 @@ where
     /// contradicts the constraints.
     ///
     /// A typical implementation will use `substitutions` to
-    /// [place constraints on type vars](Substitutions::insert_constraint()), e.g.,
+    /// [place constraints on type vars](Substitutions::insert_constraints()), e.g.,
     /// by recursively traversing and resolving the provided type.
     fn apply(
         &self,
@@ -129,7 +129,7 @@ impl<Prim: LinearType> TypeConstraints<Prim> for LinConstraints {
         }
 
         let resolved_ty = if let ValueType::Var(idx) = ty {
-            substitutions.insert_constraint(*idx, self);
+            substitutions.insert_constraints(*idx, self);
             substitutions.fast_resolve(ty)
         } else {
             ty

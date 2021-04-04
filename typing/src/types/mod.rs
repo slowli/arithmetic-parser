@@ -13,7 +13,7 @@ pub(crate) use self::{
     quantifier::ParamQuantifier,
 };
 pub use self::{
-    fn_type::{FnType, FnTypeBuilder},
+    fn_type::{FnType, FnTypeBuilder, FnWithConstraints},
     tuple::{LengthKind, Slice, Tuple, TupleLen, UnknownLen},
 };
 

@@ -459,7 +459,7 @@ impl<Prim: PrimitiveType> From<Vec<ValueType<Prim>>> for Tuple<Prim> {
 }
 
 /// Slice type. Unlike in Rust, slices are a subset of tuples. If `length` is
-/// [`Exact`](TupleLen::Exact), the slice is completely equivalent
+/// exact (has no [`UnknownLen`] part), the slice is completely equivalent
 /// to the corresponding tuple.
 ///
 /// # Notation

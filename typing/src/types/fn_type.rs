@@ -25,6 +25,41 @@ impl<Prim: PrimitiveType> Default for ParamConstraints<Prim> {
     }
 }
 
+impl<Prim: PrimitiveType> fmt::Display for ParamConstraints<Prim> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if !self.dyn_lengths.is_empty() {
+            formatter.write_str("len ")?;
+            for (i, len) in self.dyn_lengths.iter().enumerate() {
+                formatter.write_str(UnknownLen::const_param(*len).as_ref())?;
+                if i + 1 < self.dyn_lengths.len() {
+                    formatter.write_str(", ")?;
+                }
+            }
+            formatter.write_str(" = *")?;
+
+            if !self.type_params.is_empty() {
+                formatter.write_str("; ")?;
+            }
+        }
+
+        let type_param_count = self.type_params.len();
+        for (&idx, constraints) in &self.type_params {
+            write!(formatter, "{}: {}", type_param(idx), constraints)?;
+            if idx + 1 < type_param_count {
+                formatter.write_str(", ")?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl<Prim: PrimitiveType> ParamConstraints<Prim> {
+    fn is_empty(&self) -> bool {
+        self.type_params.is_empty() && self.dyn_lengths.is_empty()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct FnParams<Prim: PrimitiveType> {
     /// Type params associated with this function. Filled in by `FnQuantifier`.
@@ -240,13 +275,19 @@ impl<Prim: PrimitiveType> FnType<Prim> {
             self
         );
 
+        let type_params = if *constraints == Prim::Constraints::default() {
+            HashMap::new()
+        } else {
+            indexes
+                .iter()
+                .map(|&idx| (idx, constraints.clone()))
+                .collect()
+        };
+
         FnWithConstraints {
             function: self,
             constraints: ParamConstraints {
-                type_params: indexes
-                    .iter()
-                    .map(|&idx| (idx, constraints.clone()))
-                    .collect(),
+                type_params,
                 dyn_lengths: HashSet::new(),
             },
         }
@@ -261,23 +302,39 @@ pub struct FnWithConstraints<Prim: PrimitiveType> {
     constraints: ParamConstraints<Prim>,
 }
 
-// TODO: implement `Display`
+impl<Prim: PrimitiveType> fmt::Display for FnWithConstraints<Prim> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.constraints.is_empty() {
+            fmt::Display::fmt(&self.function, formatter)
+        } else {
+            write!(formatter, "{} where {}", self.function, self.constraints)
+        }
+    }
+}
 
 impl<Prim: PrimitiveType> FnWithConstraints<Prim> {
     /// Adds the type params with the specified `indexes` and `constraints`
     /// to the function definition.
     pub fn with_constraints(mut self, indexes: &[usize], constraints: &Prim::Constraints) -> Self {
-        let new_constraints = indexes.iter().map(|&idx| (idx, constraints.clone()));
-        self.constraints.type_params.extend(new_constraints);
+        if *constraints != Prim::Constraints::default() {
+            let new_constraints = indexes.iter().map(|&idx| (idx, constraints.clone()));
+            self.constraints.type_params.extend(new_constraints);
+        }
         self
+    }
+}
+
+impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for FnType<Prim> {
+    fn from(value: FnWithConstraints<Prim>) -> Self {
+        let mut function = value.function;
+        ParamQuantifier::set_params(&mut function, value.constraints);
+        function
     }
 }
 
 impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
     fn from(value: FnWithConstraints<Prim>) -> Self {
-        let mut function = value.function;
-        ParamQuantifier::set_params(&mut function, value.constraints);
-        function.into()
+        FnType::from(value).into()
     }
 }
 
@@ -320,7 +377,7 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 ///     .with_constraints(&[1], &LinConstraints::LIN);
 /// assert_eq!(
 ///     map_fn_type.to_string(),
-///     "fn([T; N], fn(T) -> U) -> [U; N] where U: Lin"
+///     "fn([T; _], fn(T) -> U) -> [U] where U: Lin"
 /// );
 /// ```
 ///
@@ -372,5 +429,26 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
     /// Declares the return type of the function and builds it.
     pub fn returning(self, return_type: impl Into<ValueType<Prim>>) -> FnType<Prim> {
         FnType::new(self.args, return_type.into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::arith::LinConstraints;
+
+    #[test]
+    fn constraints_display() {
+        let constraints: ParamConstraints<Num> = ParamConstraints {
+            type_params: vec![(0, LinConstraints::LIN)].into_iter().collect(),
+            dyn_lengths: HashSet::new(),
+        };
+        assert_eq!(constraints.to_string(), "T: Lin");
+
+        let constraints: ParamConstraints<Num> = ParamConstraints {
+            type_params: vec![(0, LinConstraints::LIN)].into_iter().collect(),
+            dyn_lengths: vec![0].into_iter().collect(),
+        };
+        assert_eq!(constraints.to_string(), "len N = *; T: Lin");
     }
 }

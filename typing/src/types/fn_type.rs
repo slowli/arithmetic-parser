@@ -117,8 +117,6 @@ impl<Prim: PrimitiveType> FnParams<Prim> {
 
 /// Functional type.
 ///
-/// Functional types can be constructed via [`Self::builder()`] or parsed from a string.
-///
 /// # Notation
 ///
 /// Functional types are denoted similarly to Rust:
@@ -148,6 +146,16 @@ impl<Prim: PrimitiveType> FnParams<Prim> {
 ///
 /// [constraint]: crate::TypeConstraints
 /// [dynamic length]: crate::LengthKind::Dynamic
+///
+/// # Construction
+///
+/// Functional types can be constructed via [`Self::builder()`] or parsed from a string.
+///
+/// With [`Self::builder()`], type / length params are *implicit*; they are computed automatically
+/// when a function or [`FnWithConstraints`] is supplied to a [`TypeEnvironment`]. Computations
+/// include both the function itself, and any child functions.
+///
+/// [`TypeEnvironment`]: crate::TypeEnvironment
 ///
 /// # Examples
 ///
@@ -263,7 +271,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
     ///
     /// # Panics
     ///
-    /// Panics if this function has already undergone var quantification.
+    /// - Panics if parameters were already computed for the function.
     pub fn with_constraints(
         self,
         indexes: &[usize],
@@ -271,7 +279,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
     ) -> FnWithConstraints<Prim> {
         assert!(
             self.params.is_none(),
-            "Cannot attach constraints to a quantified function `{}`",
+            "Cannot attach constraints to a function with computed params: `{}`",
             self
         );
 
@@ -296,6 +304,8 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 
 /// Function together with constraints on type variables contained either in the function itself
 /// or any of the child functions.
+///
+/// Constructed via [`FnType::with_constraints()`].
 #[derive(Debug)]
 pub struct FnWithConstraints<Prim: PrimitiveType> {
     function: FnType<Prim>,
@@ -340,9 +350,6 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 
 /// Builder for functional types.
 ///
-/// The builder does not check well-formedness of the function, such as that all referenced
-/// length / type params are declared.
-///
 /// **Tip.** You may also use [`FromStr`](core::str::FromStr) implementation to parse
 /// functional types.
 ///
@@ -351,12 +358,21 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 /// Signature for a function summing a slice of numbers:
 ///
 /// ```
-/// # use arithmetic_typing::{FnType, UnknownLen, ValueType};
+/// # use arithmetic_typing::{FnType, UnknownLen, ValueType, TypeEnvironment};
 /// # use std::iter;
 /// let sum_fn_type = FnType::builder()
 ///     .with_arg(ValueType::NUM.repeat(UnknownLen::Some))
 ///     .returning(ValueType::NUM);
 /// assert_eq!(sum_fn_type.to_string(), "fn([Num; _]) -> Num");
+///
+/// // Function params are computed once the function is input
+/// // into a `TypeEnvironment`.
+/// let mut env = TypeEnvironment::new();
+/// let sum_fn_type = &env.insert("sum", sum_fn_type)["sum"];
+/// assert_eq!(
+///     sum_fn_type.to_string(),
+///     "fn<len N>([Num; N]) -> Num"
+/// );
 /// ```
 ///
 /// Signature for a slice mapping function:
@@ -407,7 +423,6 @@ impl<Prim: PrimitiveType> Default for FnTypeBuilder<Prim> {
     }
 }
 
-// FIXME: disallow quantified functions as args / return type?
 impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
     /// Adds a new argument to the function definition.
     pub fn with_arg(mut self, arg: impl Into<ValueType<Prim>>) -> Self {
@@ -434,7 +449,7 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::arith::LinConstraints;
+    use crate::{arith::LinConstraints, UnknownLen};
 
     #[test]
     fn constraints_display() {
@@ -449,5 +464,37 @@ mod tests {
             dyn_lengths: vec![0].into_iter().collect(),
         };
         assert_eq!(constraints.to_string(), "len N = *; T: Lin");
+    }
+
+    #[test]
+    fn fn_builder_with_quantified_arg() {
+        let sum_fn: FnType = FnType::builder()
+            .with_arg(ValueType::NUM.repeat(UnknownLen::Some))
+            .returning(ValueType::NUM)
+            .with_constraints(&[], &LinConstraints::LIN)
+            .into();
+        assert_eq!(sum_fn.to_string(), "fn<len N>([Num; N]) -> Num");
+
+        let complex_fn: FnType = FnType::builder()
+            .with_arg(ValueType::NUM)
+            .with_arg(sum_fn.clone())
+            .returning(ValueType::NUM)
+            .with_constraints(&[], &LinConstraints::LIN)
+            .into();
+        assert_eq!(
+            complex_fn.to_string(),
+            "fn(Num, fn<len N>([Num; N]) -> Num) -> Num"
+        );
+
+        let other_complex_fn: FnType = FnType::builder()
+            .with_varargs(ValueType::NUM, UnknownLen::param(0))
+            .with_arg(sum_fn)
+            .returning(ValueType::NUM)
+            .with_constraints(&[], &LinConstraints::LIN)
+            .into();
+        assert_eq!(
+            other_complex_fn.to_string(),
+            "fn<len N>(...[Num; N], fn([Num; N]) -> Num) -> Num"
+        );
     }
 }

@@ -50,6 +50,8 @@ use arithmetic_parser::{
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum ConversionErrorKind {
+    /// Embedded param quantifiers.
+    EmbeddedQuantifier,
     /// Length param not scoped by a function.
     FreeLengthVar(String),
     /// Type param not scoped by a function.
@@ -71,6 +73,9 @@ impl ConversionErrorKind {
 impl fmt::Display for ConversionErrorKind {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::EmbeddedQuantifier => {
+                formatter.write_str("`for` quantifier within the scope of another `for` quantifier")
+            }
             Self::FreeLengthVar(name) => {
                 write!(
                     formatter,
@@ -266,7 +271,11 @@ impl<'a, Prim: PrimitiveType> ValueTypeAst<'a, Prim> {
                 function,
             } => {
                 if let Some(state) = state {
-                    debug_assert!(constraints.is_none());
+                    if let Some(constraints) = constraints {
+                        let err = ConversionErrorKind::EmbeddedQuantifier
+                            .with_span(constraints.for_keyword);
+                        return Err(err);
+                    }
                     function.try_convert(state)?.into()
                 } else {
                     let mut state = ConversionState::default();
@@ -480,6 +489,17 @@ mod tests {
             err.kind(),
             ParseErrorKind::Type(err) if err.to_string() == "Cannot parse type constraint"
         );
+    }
+
+    #[test]
+    fn embedded_type_with_constraints() {
+        let input = InputSpan::new("fn(T, for<U: Lin> fn(U) -> U)");
+        let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
+        let err = ValueType::try_from(ast).unwrap_err();
+
+        assert_eq!(*err.main_span().fragment(), "for");
+        assert_eq!(err.main_span().location_offset(), 6);
+        assert_matches!(err.kind(), ConversionErrorKind::EmbeddedQuantifier);
     }
 
     #[test]

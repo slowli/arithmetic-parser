@@ -5,7 +5,7 @@ use crate::{arith::LinConstraints, Num};
 
 #[test]
 fn fn_const_params() {
-    let input = InputSpan::new("<len N*>");
+    let input = InputSpan::new("for<len N*>");
     let (rest, constraints) = constraints::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
@@ -15,8 +15,8 @@ fn fn_const_params() {
 }
 
 #[test]
-fn fn_const_dyn_params() {
-    let input = InputSpan::new("<len N*, M*>");
+fn multiple_dyn_lengths() {
+    let input = InputSpan::new("for<len N*, M*>");
     let (rest, constraints) = constraints::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
@@ -26,8 +26,8 @@ fn fn_const_dyn_params() {
 }
 
 #[test]
-fn fn_type_params() {
-    let input = InputSpan::new("<T: Lin, U: Lin>");
+fn type_param_constraints() {
+    let input = InputSpan::new("for<T: Lin, U: Lin>");
     let (rest, constraints) = constraints::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
@@ -43,8 +43,8 @@ fn fn_type_params() {
 }
 
 #[test]
-fn fn_params_mixed() {
-    let input = InputSpan::new("<len N*; T: Lin>");
+fn mixed_constraints() {
+    let input = InputSpan::new("for<len N*; T: Lin>");
     let (rest, constraints) = constraints::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
@@ -304,10 +304,9 @@ fn fn_type_with_constraints() {
 }
 
 #[test]
-#[ignore] // FIXME
 fn multiple_fns_with_constraints() {
     let input = InputSpan::new("(for<T: Lin> fn(T) -> T, for<T: Lin> fn(...[T; _]))");
-    let (rest, ty) = root_type_definition::<Num>(input).unwrap();
+    let (rest, ty) = type_definition::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
     let (second_fn, first_fn) = match ty {
@@ -339,16 +338,4 @@ fn multiple_fns_with_constraints() {
         ValueTypeAst::Ident(id) if *id.fragment() == "T"
     );
     assert_eq!(second_fn.return_type, ValueTypeAst::void());
-}
-
-#[test]
-fn embedded_type_with_constraints() {
-    let input = InputSpan::new("fn(T, for<U: Lin> fn(U) -> U)");
-    let err = root_type_definition::<Num>(input).unwrap_err();
-    let err = match err {
-        NomErr::Failure(err) => err,
-        _ => panic!("Unexpected error kind: {:?}", err),
-    };
-    assert_eq!(err.span().location_offset(), 9);
-    assert_matches!(err.kind(), ParserErrorKind::UnexpectedChar { .. });
 }

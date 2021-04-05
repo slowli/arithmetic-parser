@@ -77,10 +77,9 @@ fn contradicting_type_hint_with_slice() {
     assert_incompatible_types(&err.kind(), &ValueType::NUM, &ValueType::BOOL);
 }
 
-// TODO: Should `map_fn: fn(Num) -> _` work?
 #[test]
 fn valid_type_hint_with_fn_arg() {
-    let code = "foo = |xs, map_fn: fn(Num) -> Num| xs.map(map_fn);";
+    let code = "foo = |xs, map_fn: fn(Num) -> _| xs.map(map_fn);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("map", Prelude::Map);
@@ -88,13 +87,31 @@ fn valid_type_hint_with_fn_arg() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<len N>([Num; N], fn(Num) -> Num) -> [Num; N]"
+        "fn<len N; T>([Num; N], fn(Num) -> T) -> [T; N]"
+    );
+}
+
+#[test]
+fn invalid_type_hint_with_fn_arg() {
+    let code = "foo = |xs, map_fn: fn(_, _) -> _| xs.map(map_fn);";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.insert("map", Prelude::Map);
+    let err = type_env.process_statements(&block).unwrap_err();
+
+    assert_matches!(
+        err.kind(),
+        TypeErrorKind::TupleLenMismatch {
+            lhs,
+            rhs,
+            context: TupleLenMismatchContext::FnArgs,
+        } if *lhs == TupleLen::from(2) && *rhs == TupleLen::from(1)
     );
 }
 
 #[test]
 fn valid_type_hint_with_fn_declaration() {
-    let code = "foo: fn(Num) -> Num = |x| x + 3;";
+    let code = "foo: fn(Num) -> _ = |x| x + 3;";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("map", Prelude::Map);
@@ -105,7 +122,7 @@ fn valid_type_hint_with_fn_declaration() {
 
 #[test]
 fn invalid_type_hint_with_fn_declaration() {
-    let code = "foo: fn(Num) -> Bool = |x| x + 3;";
+    let code = "foo: fn(_) -> Bool = |x| x + 3;";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("map", Prelude::Map);
@@ -169,7 +186,7 @@ fn unsupported_const_param_in_generic_fn() {
 #[test]
 fn fn_narrowed_via_type_hint() {
     let code = r#"
-        identity: fn(Num) -> Num = |x| x;
+        identity: fn(Num) -> _ = |x| x;
         identity((1, 2));
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
@@ -197,7 +214,7 @@ fn fn_incorrectly_narrowed_via_type_hint() {
 #[test]
 fn fn_instantiated_via_type_hint() {
     let code = r#"
-        identity: fn(Num) -> Num = |x| x;
+        identity: fn(_) -> _ = |x| x;
         identity(5) == 5;
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
@@ -325,7 +342,7 @@ fn unifying_tuples_with_middle() {
 
         // Check basic destructuring.
         (...xs_head: Num, _) = xs;
-        (_, _, _: fn(Num) -> Num) = ys;
+        (_, _, _: fn(_) -> _) = ys;
         (_, ...zs_middle, _) = zs;
     "#;
 
@@ -363,7 +380,7 @@ fn unifying_tuples_with_dyn_lengths() {
 fn fn_with_varargs() {
     let code = r#"
         sum = |...xs: Num| xs.fold(0, |acc, x| acc + x);
-        sum_spec: fn(Num, Num, Num) -> Num = sum;
+        sum_spec: fn(Num, Num, Num) -> _ = sum;
         tuple_sum = |init, ...xs: (_, _)| xs.fold((init, init), |acc, x| acc + x);
     "#;
 

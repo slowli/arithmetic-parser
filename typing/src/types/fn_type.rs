@@ -30,12 +30,11 @@ impl<Prim: PrimitiveType> fmt::Display for ParamConstraints<Prim> {
         if !self.dyn_lengths.is_empty() {
             formatter.write_str("len ")?;
             for (i, len) in self.dyn_lengths.iter().enumerate() {
-                formatter.write_str(LengthVar::param_str(*len).as_ref())?;
+                write!(formatter, "{}*", LengthVar::param_str(*len))?;
                 if i + 1 < self.dyn_lengths.len() {
                     formatter.write_str(", ")?;
                 }
             }
-            formatter.write_str(" = *")?;
 
             if !self.type_params.is_empty() {
                 formatter.write_str("; ")?;
@@ -317,7 +316,7 @@ impl<Prim: PrimitiveType> fmt::Display for FnWithConstraints<Prim> {
         if self.constraints.is_empty() {
             fmt::Display::fmt(&self.function, formatter)
         } else {
-            write!(formatter, "{} where {}", self.function, self.constraints)
+            write!(formatter, "for<{}> {}", self.constraints, self.function)
         }
     }
 }
@@ -392,7 +391,7 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 ///     .with_constraints(&[1], &LinConstraints::LIN);
 /// assert_eq!(
 ///     map_fn_type.to_string(),
-///     "fn([T; _], fn(T) -> U) -> [U] where U: Lin"
+///     "for<U: Lin> fn([T; _], fn(T) -> U) -> [U]"
 /// );
 /// ```
 ///
@@ -463,7 +462,16 @@ mod tests {
             type_params: vec![(0, LinConstraints::LIN)].into_iter().collect(),
             dyn_lengths: vec![0].into_iter().collect(),
         };
-        assert_eq!(constraints.to_string(), "len N = *; T: Lin");
+        assert_eq!(constraints.to_string(), "len N*; T: Lin");
+    }
+
+    #[test]
+    fn fn_with_constraints_display() {
+        let sum_fn = <FnType>::builder()
+            .with_arg(ValueType::param(0).repeat(UnknownLen::Some))
+            .returning(ValueType::param(0))
+            .with_constraints(&[0], &LinConstraints::LIN);
+        assert_eq!(sum_fn.to_string(), "for<T: Lin> fn([T; _]) -> T");
     }
 
     #[test]

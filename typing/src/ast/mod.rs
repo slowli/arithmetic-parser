@@ -13,10 +13,13 @@ use nom::{
     combinator::{cut, map, opt, peek, recognize},
     multi::{many0, separated_list0, separated_list1},
     sequence::{delimited, preceded, terminated, tuple},
+    Err as NomErr,
 };
 
-use crate::{LengthKind, Num, PrimitiveType};
-use arithmetic_parser::{InputSpan, NomResult};
+use std::str::FromStr;
+
+use crate::{Num, PrimitiveType};
+use arithmetic_parser::{ErrorKind as ParserErrorKind, InputSpan, NomResult};
 
 mod conversion;
 #[cfg(test)]
@@ -54,7 +57,7 @@ pub use self::conversion::{ConversionError, ConversionErrorKind};
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-pub enum ValueTypeAst<'a, Prim = Num> {
+pub enum ValueTypeAst<'a, Prim: PrimitiveType = Num> {
     /// Type placeholder (`_`). Corresponds to any single type.
     Any,
     /// Primitive types.
@@ -62,7 +65,12 @@ pub enum ValueTypeAst<'a, Prim = Num> {
     /// Reference to a type variable.
     Ident(InputSpan<'a>),
     /// Functional type.
-    Function(Box<FnTypeAst<'a, Prim>>),
+    Function {
+        /// Constraints on function params. Can only be present for top-level functions.
+        constraints: Option<ConstraintsAst<'a, Prim>>,
+        /// Function body.
+        function: Box<FnTypeAst<'a, Prim>>,
+    },
     /// Tuple type; for example, `(Num, Bool)`.
     Tuple(TupleAst<'a, Prim>),
     /// Slice type; for example, `[Num]` or `[(Num, T); N]`.
@@ -80,13 +88,13 @@ impl<'a, Prim: PrimitiveType> ValueTypeAst<'a, Prim> {
 
     /// Parses `input` as a type. This parser can be composed using `nom` infrastructure.
     pub fn parse(input: InputSpan<'a>) -> NomResult<'a, Self> {
-        type_definition(input)
+        root_type_definition(input)
     }
 }
 
 /// Parsed tuple type, such as `(Num, Bool)` or `(fn() -> Num, ...[Num; _])`.
 #[derive(Debug, Clone, PartialEq)]
-pub struct TupleAst<'a, Prim = Num> {
+pub struct TupleAst<'a, Prim: PrimitiveType = Num> {
     /// Elements at the beginning of the tuple, e.g., `Num` and `Bool`
     /// in `(Num, Bool, ...[T; _])`.
     pub start: Vec<ValueTypeAst<'a, Prim>>,
@@ -99,7 +107,7 @@ pub struct TupleAst<'a, Prim = Num> {
 
 /// Parsed slice type, such as `[Num; N]`.
 #[derive(Debug, Clone, PartialEq)]
-pub struct SliceAst<'a, Prim = Num> {
+pub struct SliceAst<'a, Prim: PrimitiveType = Num> {
     /// Element of this slice; for example, `Num` in `[Num; N]`.
     pub element: Box<ValueTypeAst<'a, Prim>>,
     /// Length of this slice; for example, `N` in `[Num; N]`.
@@ -133,11 +141,7 @@ pub struct SliceAst<'a, Prim = Num> {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-pub struct FnTypeAst<'a, Prim = Num> {
-    /// Length params; e.g., `N` in `fn<len N>([Num; N]) -> Num`.
-    pub len_params: Vec<(InputSpan<'a>, LengthKind)>,
-    /// Type params together with their bounds. E.g., `T` in `fn<T>(T, T) -> T`.
-    pub type_params: Vec<(InputSpan<'a>, TypeConstraintsAst<'a>)>,
+pub struct FnTypeAst<'a, Prim: PrimitiveType = Num> {
     /// Function arguments.
     pub args: TupleAst<'a, Prim>,
     /// Return type of the function. Will be set to void if not declared.
@@ -163,12 +167,24 @@ pub enum TupleLenAst<'a> {
     Ident(InputSpan<'a>),
 }
 
+/// Parameter constraints, e.g. `for<len N*; T: Lin>`.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct ConstraintsAst<'a, Prim: PrimitiveType> {
+    /// Dynamic lengths, e.g., `N` in `for<len N*>`.
+    pub dyn_lengths: Vec<InputSpan<'a>>,
+    /// Type constraints.
+    pub type_params: Vec<(InputSpan<'a>, TypeConstraintsAst<'a, Prim>)>,
+}
+
 /// Bounds that can be placed on a type variable.
 #[derive(Debug, Default, Clone, PartialEq)]
 #[non_exhaustive]
-pub struct TypeConstraintsAst<'a> {
+pub struct TypeConstraintsAst<'a, Prim: PrimitiveType> {
     /// Spans corresponding to constraints, e.g. `Foo` and `Bar` in `Foo + Bar`.
-    pub constraints: Vec<InputSpan<'a>>,
+    pub terms: Vec<InputSpan<'a>>,
+    /// Computed constraint.
+    pub computed: Prim::Constraints,
 }
 
 /// Whitespace and comments.
@@ -292,38 +308,43 @@ fn slice_definition<Prim: PrimitiveType>(
     )(input)
 }
 
-fn type_bounds(input: InputSpan<'_>) -> NomResult<'_, TypeConstraintsAst<'_>> {
+fn type_bounds<Prim: PrimitiveType>(
+    input: InputSpan<'_>,
+) -> NomResult<'_, TypeConstraintsAst<'_, Prim>> {
     let constraint_sep = tuple((ws, tag_char('+'), ws));
-    map(separated_list1(constraint_sep, ident), |constraints| {
-        TypeConstraintsAst { constraints }
-    })(input)
+    let (rest, terms) = separated_list1(constraint_sep, ident)(input)?;
+
+    let computed = terms
+        .iter()
+        .try_fold(Prim::Constraints::default(), |mut acc, &input| {
+            let input_str = *input.fragment();
+            let partial = Prim::Constraints::from_str(input_str).map_err(|_| {
+                let err = anyhow::anyhow!("Cannot parse type constraint");
+                ParserErrorKind::Type(err).with_span(&input.into())
+            })?;
+            acc |= &partial;
+            Ok(acc)
+        })
+        .map_err(NomErr::Failure)?;
+
+    Ok((rest, TypeConstraintsAst { terms, computed }))
 }
 
-fn type_params(input: InputSpan<'_>) -> NomResult<'_, Vec<(InputSpan<'_>, TypeConstraintsAst)>> {
-    let maybe_type_bounds = opt(preceded(tuple((ws, tag_char(':'), ws)), type_bounds));
-    let type_param = tuple((ident, map(maybe_type_bounds, Option::unwrap_or_default)));
+fn type_params<Prim: PrimitiveType>(
+    input: InputSpan<'_>,
+) -> NomResult<'_, Vec<(InputSpan<'_>, TypeConstraintsAst<'_, Prim>)>> {
+    let type_bounds = preceded(tuple((ws, tag_char(':'), ws)), type_bounds);
+    let type_param = tuple((ident, type_bounds));
     separated_list1(comma_sep, type_param)(input)
 }
 
-type FnParams<'a> = (
-    Vec<(InputSpan<'a>, LengthKind)>,
-    Vec<(InputSpan<'a>, TypeConstraintsAst<'a>)>,
-);
-
 /// Function params, including `<>` brackets.
-fn fn_params(input: InputSpan<'_>) -> NomResult<'_, FnParams> {
+fn constraints<Prim: PrimitiveType>(
+    input: InputSpan<'_>,
+) -> NomResult<'_, ConstraintsAst<'_, Prim>> {
     let semicolon = tuple((ws, tag_char(';'), ws));
 
-    let len_param = tuple((
-        ident,
-        map(opt(tag_char('*')), |ty| {
-            if ty.is_some() {
-                LengthKind::Dynamic
-            } else {
-                LengthKind::Static
-            }
-        }),
-    ));
+    let len_param = terminated(ident, tag_char('*'));
     let len_params = preceded(
         terminated(tag("len"), ws),
         separated_list1(comma_sep, len_param),
@@ -332,9 +353,15 @@ fn fn_params(input: InputSpan<'_>) -> NomResult<'_, FnParams> {
     let params_parser = alt((
         map(
             tuple((len_params, opt(preceded(semicolon, type_params)))),
-            |(len_params, type_params)| (len_params, type_params.unwrap_or_default()),
+            |(dyn_lengths, type_params)| ConstraintsAst {
+                dyn_lengths,
+                type_params: type_params.unwrap_or_default(),
+            },
         ),
-        map(type_params, |type_params| (vec![], type_params)),
+        map(type_params, |type_params| ConstraintsAst {
+            dyn_lengths: vec![],
+            type_params,
+        }),
     ));
 
     preceded(
@@ -346,22 +373,25 @@ fn fn_params(input: InputSpan<'_>) -> NomResult<'_, FnParams> {
 fn fn_definition<Prim: PrimitiveType>(input: InputSpan<'_>) -> NomResult<'_, FnTypeAst<'_, Prim>> {
     let return_type = preceded(tuple((ws, tag("->"), ws)), type_definition);
     let fn_parser = tuple((
-        opt(fn_params),
         tuple_definition,
         map(opt(return_type), |ty| ty.unwrap_or_else(ValueTypeAst::void)),
     ));
 
     preceded(
         terminated(tag("fn"), ws),
-        map(fn_parser, |(params, args, return_type)| {
-            let (len_params, type_params) = params.unwrap_or_default();
-            FnTypeAst {
-                len_params,
-                type_params,
-                args,
-                return_type,
-            }
+        map(fn_parser, |(args, return_type)| FnTypeAst {
+            args,
+            return_type,
         }),
+    )(input)
+}
+
+fn fn_definition_with_constraints<Prim: PrimitiveType>(
+    input: InputSpan<'_>,
+) -> NomResult<'_, (ConstraintsAst<'_, Prim>, FnTypeAst<'_, Prim>)> {
+    map(
+        preceded(tag("for"), tuple((ws, constraints, ws, fn_definition))),
+        |(_, constraints, _, fn_def)| (constraints, fn_def),
     )(input)
 }
 
@@ -369,8 +399,9 @@ fn type_definition<Prim: PrimitiveType>(
     input: InputSpan<'_>,
 ) -> NomResult<'_, ValueTypeAst<'_, Prim>> {
     alt((
-        map(fn_definition, |fn_type| {
-            ValueTypeAst::Function(Box::new(fn_type))
+        map(fn_definition, |fn_type| ValueTypeAst::Function {
+            constraints: None,
+            function: Box::new(fn_type),
         }),
         map(ident, |ident| {
             if let Ok(res) = ident.fragment().parse::<Prim>() {
@@ -383,5 +414,19 @@ fn type_definition<Prim: PrimitiveType>(
         }),
         map(tuple_definition, ValueTypeAst::Tuple),
         map(slice_definition, ValueTypeAst::Slice),
+    ))(input)
+}
+
+fn root_type_definition<Prim: PrimitiveType>(
+    input: InputSpan<'_>,
+) -> NomResult<'_, ValueTypeAst<'_, Prim>> {
+    alt((
+        map(fn_definition_with_constraints, |(constraints, fn_type)| {
+            ValueTypeAst::Function {
+                constraints: Some(constraints),
+                function: Box::new(fn_type),
+            }
+        }),
+        type_definition,
     ))(input)
 }

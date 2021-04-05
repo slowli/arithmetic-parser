@@ -280,7 +280,7 @@ mod tests {
             "[Num; _]",
             "(Num, ...[Bool; _])",
             "fn(Num) -> Num",
-            "fn<len N; T: Lin>([T; N]) -> T",
+            "for<T: Lin> fn([T; _]) -> T",
         ];
 
         for &sample_type in SAMPLE_TYPES {
@@ -292,10 +292,10 @@ mod tests {
     #[test]
     fn equality_is_preserved_on_renaming_params() {
         const EQUAL_FNS: &[&str] = &[
-            "fn<len N; T: Lin>([T; N]) -> T",
-            "fn<len L; T: Lin>([T; L]) -> T",
-            "fn<len N; Ty: Lin>([Ty; N]) -> Ty",
-            "fn<len T; N: Lin>([N; T]) -> N",
+            "for<T: Lin> fn([T; N]) -> T",
+            "for<T: Lin> fn([T; L]) -> T",
+            "for<Ty: Lin> fn([Ty; N]) -> Ty",
+            "for<N: Lin> fn([N; T]) -> N",
         ];
 
         let functions: Vec<ValueType> = EQUAL_FNS.iter().map(|s| s.parse().unwrap()).collect();
@@ -309,11 +309,11 @@ mod tests {
     #[test]
     fn unequal_functions() {
         const FUNCTIONS: &[&str] = &[
-            "fn<len N; T: Lin>([T; N]) -> T",
-            "fn<len N*; T: Lin>([T; N]) -> T",
-            "fn<len N; T>([T; N]) -> T",
-            "fn<len N; T: Lin>([T; N], T) -> T",
-            "fn<len N; T: Lin>([T; N]) -> (T)",
+            "for<T: Lin> fn([T; N]) -> T",
+            "for<len N*; T: Lin> fn([T; N]) -> T",
+            "fn([T; N]) -> T",
+            "for<T: Lin> fn([T; N], T) -> T",
+            "for<T: Lin> fn([T; N]) -> (T)",
         ];
 
         let functions: Vec<ValueType> = FUNCTIONS.iter().map(|s| s.parse().unwrap()).collect();

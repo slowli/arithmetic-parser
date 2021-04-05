@@ -477,7 +477,7 @@ mod tests {
     #[test]
     fn fn_builder_with_quantified_arg() {
         let sum_fn: FnType = FnType::builder()
-            .with_arg(ValueType::NUM.repeat(UnknownLen::Some))
+            .with_arg(ValueType::NUM.repeat(UnknownLen::param(0)))
             .returning(ValueType::NUM)
             .with_constraints(&[], &LinConstraints::LIN)
             .into();

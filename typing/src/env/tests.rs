@@ -26,7 +26,7 @@ pub fn assert_incompatible_types<Prim: PrimitiveType>(
 fn hash_fn_type() -> FnType<Num> {
     FnType {
         // TODO: use `ValueType::Any` instead of `ValueType::Some`
-        args: Slice::new(ValueType::Some, UnknownLen::Some).into(),
+        args: Slice::new(ValueType::param(0), UnknownLen::param(0)).into(),
         return_type: ValueType::NUM,
         params: None,
     }
@@ -34,7 +34,7 @@ fn hash_fn_type() -> FnType<Num> {
 
 #[test]
 fn hash_fn_type_display() {
-    assert_eq!(hash_fn_type().to_string(), "fn(...[_; _]) -> Num");
+    assert_eq!(hash_fn_type().to_string(), "fn(...[T; N]) -> Num");
 }
 
 /// `zip` function signature:

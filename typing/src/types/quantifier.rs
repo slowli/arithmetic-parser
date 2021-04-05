@@ -1,6 +1,4 @@
-//! Type validation.
-
-#![allow(missing_docs)]
+//! Quantification of type / length parameters.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -172,7 +170,6 @@ impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for ParamQuantifier {
 struct ParamPlacement<Prim: PrimitiveType> {
     // Grouped by function index.
     type_params: HashMap<usize, Vec<usize>>,
-    next_type_param: usize,
     // Grouped by function index.
     len_params: HashMap<usize, Vec<usize>>,
     next_len_param: usize,
@@ -196,11 +193,9 @@ impl<Prim: PrimitiveType> ParamPlacement<Prim> {
         len_params: HashMap<usize, Vec<usize>>,
         constraints: ParamConstraints<Prim>,
     ) -> Self {
-        let next_type_param = Self::next_param(&type_params);
         let next_len_param = Self::next_param(&len_params);
         Self {
             type_params,
-            next_type_param,
             len_params,
             next_len_param,
             function_count: 0,
@@ -211,27 +206,9 @@ impl<Prim: PrimitiveType> ParamPlacement<Prim> {
 }
 
 impl<Prim: PrimitiveType> VisitMut<Prim> for ParamPlacement<Prim> {
-    fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
-        if let ValueType::Some = ty {
-            *ty = ValueType::param(self.next_type_param);
-            self.type_params
-                .entry(self.current_function_idx)
-                .or_default()
-                .push(self.next_type_param);
-            self.next_type_param += 1;
-        } else {
-            visit::visit_type_mut(self, ty);
-        }
-    }
-
     fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
         let target_len = match len.components_mut().0 {
-            Some(target_len) => target_len,
-            None => return,
-        };
-        let is_dynamic = match target_len {
-            UnknownLen::Some => false,
-            UnknownLen::Dynamic => true,
+            Some(target_len @ UnknownLen::Dynamic) => target_len,
             _ => return,
         };
 
@@ -240,9 +217,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for ParamPlacement<Prim> {
             .entry(self.current_function_idx)
             .or_default()
             .push(self.next_len_param);
-        if is_dynamic {
-            self.constraints.dyn_lengths.insert(self.next_len_param);
-        }
+        self.constraints.dyn_lengths.insert(self.next_len_param);
         self.next_len_param += 1;
     }
 
@@ -338,8 +313,8 @@ mod tests {
     #[test]
     fn transforming_wildcards_into_params() {
         let mut merge_fn = <FnType>::builder()
-            .with_arg(ValueType::param(0).repeat(UnknownLen::Some))
-            .with_arg(ValueType::param(0).repeat(UnknownLen::Some))
+            .with_arg(ValueType::param(0).repeat(UnknownLen::param(0)))
+            .with_arg(ValueType::param(0).repeat(UnknownLen::param(1)))
             .returning(ValueType::param(0).repeat(UnknownLen::Dynamic));
         ParamQuantifier::set_params(&mut merge_fn, ParamConstraints::default());
         assert_eq!(

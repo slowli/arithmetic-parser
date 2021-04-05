@@ -414,7 +414,7 @@ mod tests {
 
     #[test]
     fn converting_fn_type_with_constraint() {
-        let input = InputSpan::new("for<T: Lin> fn([T; _], fn(T) -> Bool) -> Bool");
+        let input = InputSpan::new("for<T: Lin> fn([T; N], fn(T) -> Bool) -> Bool");
         let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
         let fn_type = ValueType::try_from(ast).unwrap();
 

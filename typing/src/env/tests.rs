@@ -34,7 +34,7 @@ fn hash_fn_type() -> FnType<Num> {
 
 #[test]
 fn hash_fn_type_display() {
-    assert_eq!(hash_fn_type().to_string(), "fn(...[T; N]) -> Num");
+    assert_eq!(hash_fn_type().to_string(), "fn(...['T; N]) -> Num");
 }
 
 /// `zip` function signature:
@@ -55,7 +55,7 @@ pub fn zip_fn_type() -> FnType<Num> {
 #[test]
 fn zip_fn_type_display() {
     let zip_fn_string = zip_fn_type().to_string();
-    assert_eq!(zip_fn_string, "fn([T; N], [U; N]) -> [(T, U); N]");
+    assert_eq!(zip_fn_string, "fn(['T; N], ['U; N]) -> [('T, 'U); N]");
 }
 
 #[test]
@@ -128,15 +128,15 @@ fn non_linear_types_in_function() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env.get("compare").unwrap().to_string(),
-        "fn<T>(T, T) -> Bool"
+        "fn<'T>('T, 'T) -> Bool"
     );
     assert_eq!(
         type_env.get("compare_hash").unwrap().to_string(),
-        "fn<T>(Num, T) -> Bool"
+        "fn<'T>(Num, 'T) -> Bool"
     );
     assert_eq!(
         type_env.get("add_hashes").unwrap().to_string(),
-        "fn<T>(T, T) -> Num"
+        "fn<'T>('T, 'T) -> Num"
     );
 }
 
@@ -146,8 +146,12 @@ fn type_recursion() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err();
+
     assert_eq!(*err.span().fragment(), "x + (x, 2)");
-    assert_matches!(err.kind(), TypeErrorKind::RecursiveType(ref ty) if ty.to_string() == "(T, Num)");
+    assert_matches!(
+        err.kind(),
+        TypeErrorKind::RecursiveType(ref ty) if ty.to_string() == "('T, Num)"
+    );
 }
 
 #[test]
@@ -162,7 +166,7 @@ fn indirect_type_recursion() {
     let err = type_env.process_statements(&block).unwrap_err();
     assert_matches!(
         err.kind(),
-        TypeErrorKind::RecursiveType(ref ty) if ty.to_string() == "(Num, T)"
+        TypeErrorKind::RecursiveType(ref ty) if ty.to_string() == "(Num, 'T)"
     );
 }
 
@@ -174,7 +178,7 @@ fn recursion_via_fn() {
     let err = type_env.process_statements(&block).unwrap_err();
     assert_matches!(
         err.kind(),
-        TypeErrorKind::RecursiveType(ref ty) if ty.to_string() == "fn(Num, T) -> _"
+        TypeErrorKind::RecursiveType(ref ty) if ty.to_string() == "fn(Num, 'T) -> _"
     );
 }
 
@@ -307,7 +311,7 @@ fn destructuring_for_fn_args() {
 
     assert_eq!(
         type_env["shift"].to_string(),
-        "fn<len N; T: Lin>(Num, ...[T; N]) -> [T; N]"
+        "fn<len N; 'T: Lin>(Num, ...['T; N]) -> ['T; N]"
     );
     assert_eq!(res.to_string(), "(Num)");
 
@@ -362,7 +366,7 @@ fn exact_lengths_for_gathering_fn() {
 
     assert_eq!(
         type_env["gather"].to_string(),
-        "fn<len N; T>(...[T; N]) -> [T; N]"
+        "fn<len N; 'T>(...['T; N]) -> ['T; N]"
     );
     assert_eq!(type_env["x"], ValueType::NUM);
     assert_eq!(type_env["y"], ValueType::NUM);
@@ -399,12 +403,12 @@ fn free_and_bound_type_vars() {
 
     assert_eq!(
         type_env.get("concat").unwrap().to_string(),
-        "fn<T>(T) -> fn<U>(U) -> (T, U)"
+        "fn<'T>('T) -> fn<'U>('U) -> ('T, 'U)"
     );
     assert_eq!(type_env.get("x").unwrap().to_string(), "(Num, Num)");
     assert_eq!(
         type_env.get("partial").unwrap().to_string(),
-        "fn<U>(U) -> (Num, U)"
+        "fn<'U>('U) -> (Num, 'U)"
     );
     assert_eq!(
         type_env.get("y").unwrap().to_string(),
@@ -420,7 +424,7 @@ fn attributing_type_vars_to_correct_fn() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env["double"].to_string(),
-        "fn<T>(T) -> (T, fn() -> (T, T))"
+        "fn<'T>('T) -> ('T, fn() -> ('T, 'T))"
     );
 }
 
@@ -455,7 +459,7 @@ fn varargs_in_embedded_fn() {
 
     assert_eq!(
         type_env["create_sum"].to_string(),
-        "fn<T: Lin>(T) -> fn<len N>(...[T; N]) -> T"
+        "fn<'T: Lin>('T) -> fn<len N>(...['T; N]) -> 'T"
     );
     assert_eq!(type_env["sum"].to_string(), "fn<len N>(...[Num; N]) -> Num");
     assert_eq!(
@@ -489,7 +493,7 @@ fn function_as_arg() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env["mapper"].to_string(),
-        "fn<T, U>((T, T), fn(T) -> U) -> (U, U)"
+        "fn<'T, 'U>(('T, 'T), fn('T) -> 'U) -> ('U, 'U)"
     );
 }
 
@@ -501,7 +505,7 @@ fn function_as_arg_with_more_constraints() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env["mapper"].to_string(),
-        "fn<T, U: Lin>((T, T), fn(T) -> U) -> U"
+        "fn<'T, 'U: Lin>(('T, 'T), fn('T) -> 'U) -> 'U"
     );
 }
 
@@ -513,7 +517,7 @@ fn function_as_arg_with_even_more_constraints() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env["mapper"].to_string(),
-        "fn<T: Lin>((T, T), fn(T) -> T) -> T"
+        "fn<'T: Lin>(('T, 'T), fn('T) -> 'T) -> 'T"
     );
 }
 
@@ -525,7 +529,7 @@ fn function_arg_with_multiple_args() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env["test_fn"].to_string(),
-        "fn<T>(Num, fn(Num, Num) -> T) -> T"
+        "fn<'T>(Num, fn(Num, Num) -> 'T) -> 'T"
     );
 }
 
@@ -543,7 +547,7 @@ fn function_as_arg_within_tuple() {
 
     assert_eq!(
         type_env.get("test_fn").unwrap().to_string(),
-        "fn<T: Lin>((fn(Num) -> T, Num), T) -> T"
+        "fn<'T: Lin>((fn(Num) -> 'T, Num), 'T) -> 'T"
     );
 }
 
@@ -660,7 +664,7 @@ fn type_param_is_placed_correctly_with_fn_arg() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env.get("foo").unwrap().to_string(),
-        "fn<T>(fn(T) -> T) -> fn(T) -> Bool"
+        "fn<'T>(fn('T) -> 'T) -> fn('T) -> Bool"
     );
 }
 
@@ -673,7 +677,7 @@ fn type_params_in_fn_with_multiple_fn_args() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env.get("test").unwrap().to_string(),
-        "fn<T: Lin, U>(T, fn(T) -> U, fn(T) -> U) -> Bool"
+        "fn<'T: Lin, 'U>('T, fn('T) -> 'U, fn('T) -> 'U) -> Bool"
     );
 }
 
@@ -786,7 +790,7 @@ fn slice_narrowed_to_tuple() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<T, U: Lin>((T, T, T), fn(T) -> U) -> U"
+        "fn<'T, 'U: Lin>(('T, 'T, 'T), fn('T) -> 'U) -> 'U"
     );
 }
 
@@ -819,7 +823,7 @@ fn unifying_length_vars() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<len N; T: Lin>([T; N], [T; N]) -> [T; N]"
+        "fn<len N; 'T: Lin>(['T; N], ['T; N]) -> ['T; N]"
     );
 }
 
@@ -961,5 +965,5 @@ fn constraint_passed_to_wrapping_fn() {
         .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
         .unwrap();
 
-    assert_eq!(double_fn.to_string(), "fn<T: Lin>(T) -> T");
+    assert_eq!(double_fn.to_string(), "fn<'T: Lin>('T) -> 'T");
 }

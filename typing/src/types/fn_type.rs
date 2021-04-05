@@ -43,7 +43,7 @@ impl<Prim: PrimitiveType> fmt::Display for ParamConstraints<Prim> {
 
         let type_param_count = self.type_params.len();
         for (&idx, constraints) in &self.type_params {
-            write!(formatter, "{}: {}", TypeVar::param_str(idx), constraints)?;
+            write!(formatter, "'{}: {}", TypeVar::param_str(idx), constraints)?;
             if idx + 1 < type_param_count {
                 formatter.write_str(", ")?;
             }
@@ -96,7 +96,7 @@ impl<Prim: PrimitiveType> fmt::Display for FnParams<Prim> {
         }
 
         for (i, (var_idx, constraints)) in self.type_params.iter().enumerate() {
-            formatter.write_str(TypeVar::param_str(*var_idx).as_ref())?;
+            write!(formatter, "'{}", TypeVar::param_str(*var_idx))?;
             if *constraints != Prim::Constraints::default() {
                 write!(formatter, ": {}", constraints)?;
             }
@@ -456,13 +456,13 @@ mod tests {
             type_params: vec![(0, LinConstraints::LIN)].into_iter().collect(),
             dyn_lengths: HashSet::new(),
         };
-        assert_eq!(constraints.to_string(), "T: Lin");
+        assert_eq!(constraints.to_string(), "'T: Lin");
 
         let constraints: ParamConstraints<Num> = ParamConstraints {
             type_params: vec![(0, LinConstraints::LIN)].into_iter().collect(),
             dyn_lengths: vec![0].into_iter().collect(),
         };
-        assert_eq!(constraints.to_string(), "len N*; T: Lin");
+        assert_eq!(constraints.to_string(), "len N*; 'T: Lin");
     }
 
     #[test]
@@ -471,7 +471,7 @@ mod tests {
             .with_arg(ValueType::param(0).repeat(UnknownLen::Some))
             .returning(ValueType::param(0))
             .with_constraints(&[0], &LinConstraints::LIN);
-        assert_eq!(sum_fn.to_string(), "for<T: Lin> fn([T; _]) -> T");
+        assert_eq!(sum_fn.to_string(), "for<'T: Lin> fn(['T; _]) -> 'T");
     }
 
     #[test]

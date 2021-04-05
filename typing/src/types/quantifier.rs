@@ -306,7 +306,7 @@ mod tests {
         placement.visit_function_mut(&mut map_fn);
         assert_eq!(
             map_fn.to_string(),
-            "fn<len N; T, U>([T; N], fn(T) -> U) -> [U; N]"
+            "fn<len N; 'T, 'U>(['T; N], fn('T) -> 'U) -> ['U; N]"
         );
     }
 
@@ -319,7 +319,7 @@ mod tests {
         ParamQuantifier::set_params(&mut merge_fn, ParamConstraints::default());
         assert_eq!(
             merge_fn.to_string(),
-            "fn<len N, M, L*; T>([T; N], [T; M]) -> [T; L]"
+            "fn<len N, M, L*; 'T>(['T; N], ['T; M]) -> ['T; L]"
         );
     }
 

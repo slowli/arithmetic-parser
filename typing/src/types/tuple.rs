@@ -664,7 +664,7 @@ mod tests {
             middle: Some(Slice::new(ValueType::NUM, UnknownLen::param(0))),
             end: vec![ValueType::param(0)],
         };
-        assert_eq!(tuple.to_string(), "(Num, Bool, ...[Num; N], T)");
+        assert_eq!(tuple.to_string(), "(Num, Bool, ...[Num; N], 'T)");
     }
 
     #[test]

@@ -62,8 +62,8 @@ pub enum ValueTypeAst<'a, Prim: PrimitiveType = Num> {
     Any,
     /// Primitive types.
     Prim(Prim),
-    /// Reference to a type variable.
-    Ident(InputSpan<'a>),
+    /// Ticked identifier, e.g., `'T`.
+    Param(InputSpan<'a>),
     /// Functional type.
     Function {
         /// Constraints on function params. Can only be present for top-level functions.
@@ -219,6 +219,10 @@ fn ident(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
     )(input)
 }
 
+fn type_param_ident(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
+    preceded(tag_char('\''), ident)(input)
+}
+
 fn comma_separated_types<Prim: PrimitiveType>(
     input: InputSpan<'_>,
 ) -> NomResult<'_, Vec<ValueTypeAst<'_, Prim>>> {
@@ -336,7 +340,7 @@ fn type_params<Prim: PrimitiveType>(
     input: InputSpan<'_>,
 ) -> NomResult<'_, Vec<(InputSpan<'_>, TypeConstraintsAst<'_, Prim>)>> {
     let type_bounds = preceded(tuple((ws, tag_char(':'), ws)), type_bounds);
-    let type_param = tuple((ident, type_bounds));
+    let type_param = tuple((type_param_ident, type_bounds));
     separated_list1(comma_sep, type_param)(input)
 }
 
@@ -401,6 +405,21 @@ fn fn_definition_with_constraints<Prim: PrimitiveType>(
     )(input)
 }
 
+fn free_ident<Prim: PrimitiveType>(input: InputSpan<'_>) -> NomResult<'_, ValueTypeAst<'_, Prim>> {
+    let (rest, ident) = ident(input)?;
+
+    let output = if let Ok(res) = ident.fragment().parse::<Prim>() {
+        ValueTypeAst::Prim(res)
+    } else if *ident.fragment() == "_" {
+        ValueTypeAst::Any
+    } else {
+        let err =
+            ParserErrorKind::Type(anyhow::anyhow!("Unknown type name")).with_span(&ident.into());
+        return Err(NomErr::Failure(err));
+    };
+    Ok((rest, output))
+}
+
 fn type_definition<Prim: PrimitiveType>(
     input: InputSpan<'_>,
 ) -> NomResult<'_, ValueTypeAst<'_, Prim>> {
@@ -415,15 +434,8 @@ fn type_definition<Prim: PrimitiveType>(
                 function: Box::new(fn_type),
             }
         }),
-        map(ident, |ident| {
-            if let Ok(res) = ident.fragment().parse::<Prim>() {
-                return ValueTypeAst::Prim(res);
-            }
-            match *ident.fragment() {
-                "_" => ValueTypeAst::Any,
-                _ => ValueTypeAst::Ident(ident),
-            }
-        }),
+        map(type_param_ident, ValueTypeAst::Param),
+        free_ident,
         map(tuple_definition, ValueTypeAst::Tuple),
         map(slice_definition, ValueTypeAst::Slice),
     ))(input)

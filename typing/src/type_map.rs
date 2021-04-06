@@ -27,7 +27,7 @@ use crate::{arith::WithBoolean, FnType, UnknownLen, ValueType};
 ///
 /// let mut env: TypeEnvironment = Prelude::iter().collect();
 /// let count_zeros_fn = env.process_statements(&ast)?;
-/// assert_eq!(count_zeros_fn.to_string(), "fn<len N>([Num; N]) -> Num");
+/// assert_eq!(count_zeros_fn.to_string(), "([Num; N]) -> Num");
 /// # Ok(())
 /// # }
 /// ```

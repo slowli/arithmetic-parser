@@ -42,7 +42,7 @@ pub use self::conversion::{ConversionError, ConversionErrorKind};
 /// # use assert_matches::assert_matches;
 ///
 /// # fn main() -> anyhow::Result<()> {
-/// let input = InputSpan::new("(Num, fn<T>(T) -> (T, T))");
+/// let input = InputSpan::new("(Num, ('T) -> ('T, 'T))");
 /// let elements = match ValueTypeAst::parse(input)?.1 {
 ///     ValueTypeAst::Tuple(elements) => elements,
 ///     _ => unreachable!(),
@@ -50,7 +50,7 @@ pub use self::conversion::{ConversionError, ConversionErrorKind};
 /// assert_eq!(elements.start[0], ValueTypeAst::Prim(Num::Num));
 /// assert_matches!(
 ///     &elements.start[1],
-///     ValueTypeAst::Function(f) if f.type_params.len() == 1
+///     ValueTypeAst::Function { .. }
 /// );
 /// # Ok(())
 /// # }
@@ -121,11 +121,9 @@ pub struct SliceAst<'a, Prim: PrimitiveType = Num> {
 /// # use arithmetic_typing::{ast::{FnTypeAst, ValueTypeAst}, Num};
 ///
 /// # fn main() -> anyhow::Result<()> {
-/// let input = InputSpan::new("fn<len N>([Num; N]) -> Num");
+/// let input = InputSpan::new("([Num; N]) -> Num");
 /// let (rest, ty) = FnTypeAst::parse(input)?;
 /// assert!(rest.fragment().is_empty());
-/// assert_eq!(ty.len_params.len(), 1);
-/// assert!(ty.type_params.is_empty());
 /// assert_matches!(ty.args.start.as_slice(), [ValueTypeAst::Slice(_)]);
 /// assert_eq!(ty.return_type, ValueTypeAst::Prim(Num::Num));
 /// # Ok(())
@@ -417,8 +415,8 @@ fn free_ident<Prim: PrimitiveType>(input: InputSpan<'_>) -> NomResult<'_, ValueT
     } else if *ident.fragment() == "_" {
         ValueTypeAst::Any
     } else {
-        let err =
-            ParserErrorKind::Type(anyhow::anyhow!("Unknown type name")).with_span(&ident.into());
+        let err = anyhow::anyhow!("Unknown type name: {}", ident.fragment());
+        let err = ParserErrorKind::Type(err).with_span(&ident.into());
         return Err(NomErr::Failure(err));
     };
     Ok((rest, output))

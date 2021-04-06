@@ -27,7 +27,8 @@ pub use self::{
 /// # Notation
 ///
 /// - Bounded type variables are represented as `'T`, `'U`, `'V`, etc.
-///   (The tick is inspired by lifetimes in Rust and implicit type params in [F*].)
+///   The tick is inspired by lifetimes in Rust and implicit type params in [F*]. It allows
+///   to easily distinguish between vars and primitive types.
 /// - Free variables are represented as `_`.
 ///
 /// [`TypeEnvironment`]: crate::TypeEnvironment
@@ -102,7 +103,7 @@ impl TypeVar {
 ///     .with_arg(slice)
 ///     .returning(ValueType::NUM)
 ///     .into();
-/// assert_eq!(fn_type.to_string(), "fn([(Bool, Num); _]) -> Num");
+/// assert_eq!(fn_type.to_string(), "([(Bool, Num); _]) -> Num");
 /// ```
 ///
 /// A `ValueType` can also be parsed from a string:
@@ -113,7 +114,7 @@ impl TypeVar {
 /// # fn main() -> anyhow::Result<()> {
 /// let slice: ValueType = "[(Bool, Num); _]".parse()?;
 /// assert_matches!(slice, ValueType::Tuple(t) if t.as_slice().is_some());
-/// let fn_type: ValueType = "fn<len N>([(Bool, Num); N]) -> Num".parse()?;
+/// let fn_type: ValueType = "([(Bool, Num); N]) -> Num".parse()?;
 /// assert_matches!(fn_type, ValueType::Function(_));
 /// # Ok(())
 /// # }

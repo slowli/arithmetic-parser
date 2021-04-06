@@ -39,7 +39,7 @@ use crate::{FnType, PrimitiveType, Tuple, TupleLen, TypeVar, ValueType};
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let value_type: ValueType =
-///     "fn<len N; T, U>(...[T; N], fn(T) -> U) -> [(T, U); N]".parse()?;
+///     "(...['T; N], ('T) -> 'U) -> [('T, 'U); N]".parse()?;
 /// let mut mentions = Mentions::default();
 /// mentions.visit_type(&value_type);
 /// assert_eq!(mentions.lengths[&0], 2); // `N` is mentioned twice
@@ -153,9 +153,9 @@ where
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let mut ty: ValueType =
-///     "(Num, Bool, fn(Num) -> (Bool, Num))".parse()?;
+///     "(Num, Bool, (Num) -> (Bool, Num))".parse()?;
 /// Replacer.visit_type_mut(&mut ty);
-/// assert_eq!(ty.to_string(), "(Num, Num, fn(Num) -> (Num, Num))");
+/// assert_eq!(ty.to_string(), "(Num, Num, (Num) -> (Num, Num))");
 /// # Ok(())
 /// # }
 /// ```

@@ -32,7 +32,7 @@ use arithmetic_parser::{
 ///
 /// type Parser = Typed<Annotated<NumGrammar<f32>>>;
 ///
-/// let code = "bogus_slice: [T; _] = (1, 2, 3);";
+/// let code = "bogus_slice: ['T; _] = (1, 2, 3);";
 /// let err = Parser::parse_statements(code).unwrap_err();
 ///
 /// assert_eq!(*err.span().fragment(), "T");
@@ -44,7 +44,7 @@ use arithmetic_parser::{
 /// };
 /// assert_matches!(
 ///     err,
-///     ConversionErrorKind::UndefinedTypeParam(t) if t == "T"
+///     ConversionErrorKind::FreeTypeVar(t) if t == "T"
 /// );
 /// ```
 #[derive(Debug)]

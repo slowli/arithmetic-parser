@@ -96,31 +96,34 @@ impl<Prim: PrimitiveType> FnParams<Prim> {
 ///
 /// # Notation
 ///
-/// Functional types are denoted similarly to Rust:
+/// Functional types are denoted as follows:
 ///
 /// ```text
-/// fn<len N, M*; T: Lin>([T; N], T) -> [T; M]
+/// for<len M*; 'T: Lin> (['T; N], 'T) -> ['T; M]
 /// ```
 ///
 /// Here:
 ///
-/// - `len N, M*` and `T: Lin` are length params and type params, respectively.
-///   Length and/or type params may be empty.
-/// - `N`, `M` and `T` are parameter names. The args and the return type may reference these
-///   parameters and/or parameters of the outer function(s), if any.
+/// - `len M*` and `'T: Lin` are constraints on [length params] and [type params], respectively.
+///   Length and/or type params constraints may be empty. Unconstrained type / length params
+///   (such as length `N` in the example) do not need to be mentioned.
 /// - `Lin` is a [constraint] on the type param.
 /// - `*` after `M` denotes that `M` is a [dynamic length] (i.e., cannot be unified with
 ///   any other length during type inference).
-/// - `[T; N]` and `T` are types of the function arguments.
-/// - `[T; M]` is the return type.
+/// - `N`, `M` and `'T` are parameter names. The args and the return type may reference these
+///   parameters.
+/// - `['T; N]` and `'T` are types of the function arguments.
+/// - `['T; M]` is the return type.
 ///
-/// If a function returns [`ValueType::void()`], the `-> _` part may be omitted.
+/// The `-> _` part is mandatory, even if the function returns [`ValueType::void()`].
 ///
 /// A function may accept variable number of arguments of the same type along
 /// with other args. (This construction is known as *varargs*.) This is denoted similarly
-/// to middles in [`Tuple`]s. For example, `fn<len N>(...[Num; N]) -> Num` denotes a function
+/// to middles in [`Tuple`]s. For example, `(...[Num; N]) -> Num` denotes a function
 /// that accepts any number of `Num` args and returns a `Num` value.
 ///
+/// [length params]: crate::LengthVar
+/// [type params]: crate::TypeVar
 /// [constraint]: crate::TypeConstraints
 /// [dynamic length]: crate::LengthKind::Dynamic
 ///
@@ -140,13 +143,8 @@ impl<Prim: PrimitiveType> FnParams<Prim> {
 /// # use arithmetic_typing::{LengthKind, FnType, Slice, ValueType};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
-/// let fn_type: FnType = "fn<len N>([Num; N]) -> Num".parse()?;
+/// let fn_type: FnType = "([Num; N]) -> Num".parse()?;
 /// assert_eq!(*fn_type.return_type(), ValueType::NUM);
-/// assert_eq!(
-///     fn_type.len_params().collect::<Vec<_>>(),
-///     vec![(0, LengthKind::Static)]
-/// );
-///
 /// assert_matches!(
 ///     fn_type.args().parts(),
 ///     ([ValueType::Tuple(t)], None, [])
@@ -225,8 +223,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
         self.args.is_concrete() && self.return_type.is_concrete()
     }
 
-    /// Adds the type params with the specified `indexes` and `constraints`
-    /// to the function definition.
+    /// Marks type params with the specified `indexes` to have `constraints`.
     ///
     /// # Panics
     ///
@@ -282,8 +279,8 @@ impl<Prim: PrimitiveType> fmt::Display for FnWithConstraints<Prim> {
 }
 
 impl<Prim: PrimitiveType> FnWithConstraints<Prim> {
-    /// Adds the type variables with the specified `indexes` and `constraints`
-    /// to the function definition.
+    /// Marks type params with the specified `indexes` to have `constraints`. If some constraints
+    /// are already present for some of the types, they are overwritten.
     pub fn with_constraints(mut self, indexes: &[usize], constraints: &Prim::Constraints) -> Self {
         if *constraints != Prim::Constraints::default() {
             let new_constraints = indexes.iter().map(|&idx| (idx, constraints.clone()));
@@ -320,18 +317,9 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 /// # use arithmetic_typing::{FnType, UnknownLen, ValueType, TypeEnvironment};
 /// # use std::iter;
 /// let sum_fn_type = FnType::builder()
-///     .with_arg(ValueType::NUM.repeat(UnknownLen::Some))
+///     .with_arg(ValueType::NUM.repeat(UnknownLen::param(0)))
 ///     .returning(ValueType::NUM);
-/// assert_eq!(sum_fn_type.to_string(), "fn([Num; _]) -> Num");
-///
-/// // Function params are computed once the function is input
-/// // into a `TypeEnvironment`.
-/// let mut env = TypeEnvironment::new();
-/// let sum_fn_type = &env.insert("sum", sum_fn_type)["sum"];
-/// assert_eq!(
-///     sum_fn_type.to_string(),
-///     "fn<len N>([Num; N]) -> Num"
-/// );
+/// assert_eq!(sum_fn_type.to_string(), "([Num; N]) -> Num");
 /// ```
 ///
 /// Signature for a slice mapping function:
@@ -351,7 +339,7 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 ///     .with_constraints(&[1], &LinConstraints::LIN);
 /// assert_eq!(
 ///     map_fn_type.to_string(),
-///     "for<U: Lin> fn([T; _], fn(T) -> U) -> [U]"
+///     "for<'U: Lin> (['T; _], ('T) -> 'U) -> ['U]"
 /// );
 /// ```
 ///
@@ -364,10 +352,7 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 ///     .with_varargs(ValueType::param(0), UnknownLen::Some)
 ///     .with_arg(ValueType::BOOL)
 ///     .returning(ValueType::param(0));
-/// assert_eq!(
-///     fn_type.to_string(),
-///     "fn(...[T; _], Bool) -> T"
-/// );
+/// assert_eq!(fn_type.to_string(), "(...['T; _], Bool) -> 'T");
 /// ```
 #[derive(Debug, Clone)]
 pub struct FnTypeBuilder<Prim: PrimitiveType = Num> {

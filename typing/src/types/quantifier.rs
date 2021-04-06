@@ -237,7 +237,8 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for ParamPlacement<Prim> {
                     let constraints = self
                         .constraints
                         .type_params
-                        .remove(&idx)
+                        .get(&idx)
+                        .cloned()
                         .unwrap_or_default();
                     (idx, constraints)
                 })
@@ -256,7 +257,12 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for ParamPlacement<Prim> {
                 })
                 .collect();
         }
-        function.params = Some(params);
+        if this_function_idx == 0 {
+            // Root function; set constraints.
+            params.constraints = Some(mem::take(&mut self.constraints));
+        }
+
+        function.set_params(params);
 
         self.current_function_idx = old_function_idx;
     }
@@ -304,10 +310,7 @@ mod tests {
         assert_eq!(placement.len_params, expected_len_params);
 
         placement.visit_function_mut(&mut map_fn);
-        assert_eq!(
-            map_fn.to_string(),
-            "fn<len N; 'T, 'U>(['T; N], fn('T) -> 'U) -> ['U; N]"
-        );
+        assert_eq!(map_fn.to_string(), "fn(['T; N], fn('T) -> 'U) -> ['U; N]");
     }
 
     #[test]
@@ -319,7 +322,7 @@ mod tests {
         ParamQuantifier::set_params(&mut merge_fn, ParamConstraints::default());
         assert_eq!(
             merge_fn.to_string(),
-            "fn<len N, M, L*; 'T>(['T; N], ['T; M]) -> ['T; L]"
+            "for<len L*> fn(['T; N], ['T; M]) -> ['T; L]"
         );
     }
 

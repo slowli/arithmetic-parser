@@ -3,6 +3,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt,
+    sync::Arc,
 };
 
 use crate::{
@@ -59,12 +60,14 @@ impl<Prim: PrimitiveType> ParamConstraints<Prim> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 pub(crate) struct FnParams<Prim: PrimitiveType> {
     /// Type params associated with this function. Filled in by `FnQuantifier`.
     pub type_params: Vec<(usize, Prim::Constraints)>,
     /// Length params associated with this function. Filled in by `FnQuantifier`.
     pub len_params: Vec<(usize, LengthKind)>,
+    /// Constraints for params of this function and child functions.
+    pub constraints: Option<ParamConstraints<Prim>>,
 }
 
 impl<Prim: PrimitiveType> Default for FnParams<Prim> {
@@ -72,39 +75,14 @@ impl<Prim: PrimitiveType> Default for FnParams<Prim> {
         Self {
             type_params: vec![],
             len_params: vec![],
+            constraints: None,
         }
     }
 }
 
-impl<Prim: PrimitiveType> fmt::Display for FnParams<Prim> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if !self.len_params.is_empty() {
-            formatter.write_str("len ")?;
-            for (i, (var_idx, kind)) in self.len_params.iter().enumerate() {
-                formatter.write_str(LengthVar::param_str(*var_idx).as_ref())?;
-                if *kind == LengthKind::Dynamic {
-                    formatter.write_str("*")?;
-                }
-                if i + 1 < self.len_params.len() {
-                    formatter.write_str(", ")?;
-                }
-            }
-
-            if !self.type_params.is_empty() {
-                formatter.write_str("; ")?;
-            }
-        }
-
-        for (i, (var_idx, constraints)) in self.type_params.iter().enumerate() {
-            write!(formatter, "'{}", TypeVar::param_str(*var_idx))?;
-            if *constraints != Prim::Constraints::default() {
-                write!(formatter, ": {}", constraints)?;
-            }
-            if i + 1 < self.type_params.len() {
-                formatter.write_str(", ")?;
-            }
-        }
-        Ok(())
+impl<Prim: PrimitiveType> PartialEq for FnParams<Prim> {
+    fn eq(&self, other: &Self) -> bool {
+        self.type_params == other.type_params && self.len_params == other.len_params
     }
 }
 
@@ -184,20 +162,22 @@ pub struct FnType<Prim: PrimitiveType = Num> {
     /// Type of the value returned by the function.
     pub(crate) return_type: ValueType<Prim>,
     /// Cache for function params.
-    pub(crate) params: Option<FnParams<Prim>>,
+    pub(crate) params: Option<Arc<FnParams<Prim>>>,
 }
 
 impl<Prim: PrimitiveType> fmt::Display for FnType<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("fn")?;
-
-        if let Some(params) = &self.params {
-            if !params.is_empty() {
-                formatter.write_str("<")?;
-                fmt::Display::fmt(params, formatter)?;
-                formatter.write_str(">")?;
+        let constraints = self
+            .params
+            .as_ref()
+            .and_then(|params| params.constraints.as_ref());
+        if let Some(constraints) = constraints {
+            if !constraints.is_empty() {
+                write!(formatter, "for<{}> ", constraints)?;
             }
         }
+
+        formatter.write_str("fn")?;
 
         self.args.format_as_tuple(formatter)?;
         if !self.return_type.is_void() {
@@ -231,24 +211,8 @@ impl<Prim: PrimitiveType> FnType<Prim> {
         &self.return_type
     }
 
-    /// Iterates over type params of this function together with their constraints.
-    pub fn type_params(&self) -> impl Iterator<Item = (usize, &Prim::Constraints)> + '_ {
-        let type_params = self
-            .params
-            .as_ref()
-            .map_or(&[] as &[_], |params| &params.type_params);
-        type_params
-            .iter()
-            .map(|(idx, constraints)| (*idx, constraints))
-    }
-
-    /// Iterates over length params of this function together with their type.
-    pub fn len_params(&self) -> impl Iterator<Item = (usize, LengthKind)> + '_ {
-        let len_params = self
-            .params
-            .as_ref()
-            .map_or(&[] as &[_], |params| &params.len_params);
-        len_params.iter().map(|(idx, kind)| (*idx, *kind))
+    pub(crate) fn set_params(&mut self, params: FnParams<Prim>) {
+        self.params = Some(Arc::new(params));
     }
 
     pub(crate) fn is_parametric(&self) -> bool {
@@ -481,7 +445,7 @@ mod tests {
             .returning(ValueType::NUM)
             .with_constraints(&[], &LinConstraints::LIN)
             .into();
-        assert_eq!(sum_fn.to_string(), "fn<len N>([Num; N]) -> Num");
+        assert_eq!(sum_fn.to_string(), "fn([Num; N]) -> Num");
 
         let complex_fn: FnType = FnType::builder()
             .with_arg(ValueType::NUM)
@@ -491,7 +455,7 @@ mod tests {
             .into();
         assert_eq!(
             complex_fn.to_string(),
-            "fn(Num, fn<len N>([Num; N]) -> Num) -> Num"
+            "fn(Num, fn([Num; N]) -> Num) -> Num"
         );
 
         let other_complex_fn: FnType = FnType::builder()
@@ -502,7 +466,7 @@ mod tests {
             .into();
         assert_eq!(
             other_complex_fn.to_string(),
-            "fn<len N>(...[Num; N], fn([Num; N]) -> Num) -> Num"
+            "fn(...[Num; N], fn([Num; N]) -> Num) -> Num"
         );
     }
 }

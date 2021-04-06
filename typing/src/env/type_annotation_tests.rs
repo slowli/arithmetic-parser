@@ -18,7 +18,7 @@ fn type_hint_within_tuple() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<'T>((Num, Num), fn(Num) -> 'T) -> 'T"
+        "fn((Num, Num), fn(Num) -> 'T) -> 'T"
     );
 }
 
@@ -87,7 +87,7 @@ fn valid_type_hint_with_fn_arg() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<len N; 'T>([Num; N], fn(Num) -> 'T) -> ['T; N]"
+        "fn([Num; N], fn(Num) -> 'T) -> ['T; N]"
     );
 }
 
@@ -142,7 +142,7 @@ fn widening_type_hint_with_generic_slice_arg() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<len N; 'T: Lin>(['T; N]) -> ['T; N]"
+        "for<'T: Lin> fn(['T; N]) -> ['T; N]"
     );
 }
 
@@ -155,10 +155,7 @@ fn widening_type_hint_with_slice_arg() {
     type_env.insert("map", Prelude::Map);
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(
-        type_env["foo"].to_string(),
-        "fn<len N>([Num; N]) -> [Num; N]"
-    );
+    assert_eq!(type_env["foo"].to_string(), "fn([Num; N]) -> [Num; N]");
 }
 
 #[test]
@@ -351,7 +348,7 @@ fn unifying_tuples_with_middle() {
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(type_env["xs"].to_string(), "(Num, Num, Num)");
-    assert_eq!(type_env["ys"].to_string(), "(Num, Num, fn<'T>('T) -> 'T)");
+    assert_eq!(type_env["ys"].to_string(), "(Num, Num, fn('T) -> 'T)");
     assert_eq!(type_env["zs"].to_string(), "(Num, ...[Num; _], Num)");
     assert_eq!(type_env["xs_head"].to_string(), "(Num, Num)");
     assert_eq!(type_env["zs_middle"].to_string(), "[Num; _]");
@@ -389,10 +386,10 @@ fn fn_with_varargs() {
     type_env.insert("fold", Prelude::Fold);
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(type_env["sum"].to_string(), "fn<len N>(...[Num; N]) -> Num");
+    assert_eq!(type_env["sum"].to_string(), "fn(...[Num; N]) -> Num");
     assert_eq!(type_env["sum_spec"].to_string(), "fn(Num, Num, Num) -> Num");
     assert_eq!(
         type_env["tuple_sum"].to_string(),
-        "fn<len N; 'T: Lin>('T, ...[('T, 'T); N]) -> ('T, 'T)"
+        "for<'T: Lin> fn('T, ...[('T, 'T); N]) -> ('T, 'T)"
     );
 }

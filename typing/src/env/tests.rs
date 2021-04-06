@@ -128,15 +128,15 @@ fn non_linear_types_in_function() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env.get("compare").unwrap().to_string(),
-        "fn<'T>('T, 'T) -> Bool"
+        "fn('T, 'T) -> Bool"
     );
     assert_eq!(
         type_env.get("compare_hash").unwrap().to_string(),
-        "fn<'T>(Num, 'T) -> Bool"
+        "fn(Num, 'T) -> Bool"
     );
     assert_eq!(
         type_env.get("add_hashes").unwrap().to_string(),
-        "fn<'T>('T, 'T) -> Num"
+        "fn('T, 'T) -> Num"
     );
 }
 
@@ -311,7 +311,7 @@ fn destructuring_for_fn_args() {
 
     assert_eq!(
         type_env["shift"].to_string(),
-        "fn<len N; 'T: Lin>(Num, ...['T; N]) -> ['T; N]"
+        "for<'T: Lin> fn(Num, ...['T; N]) -> ['T; N]"
     );
     assert_eq!(res.to_string(), "(Num)");
 
@@ -364,10 +364,7 @@ fn exact_lengths_for_gathering_fn() {
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(
-        type_env["gather"].to_string(),
-        "fn<len N; 'T>(...['T; N]) -> ['T; N]"
-    );
+    assert_eq!(type_env["gather"].to_string(), "fn(...['T; N]) -> ['T; N]");
     assert_eq!(type_env["x"], ValueType::NUM);
     assert_eq!(type_env["y"], ValueType::NUM);
     assert_eq!(type_env["head"], ValueType::BOOL);
@@ -403,12 +400,12 @@ fn free_and_bound_type_vars() {
 
     assert_eq!(
         type_env.get("concat").unwrap().to_string(),
-        "fn<'T>('T) -> fn<'U>('U) -> ('T, 'U)"
+        "fn('T) -> fn('U) -> ('T, 'U)"
     );
     assert_eq!(type_env.get("x").unwrap().to_string(), "(Num, Num)");
     assert_eq!(
         type_env.get("partial").unwrap().to_string(),
-        "fn<'U>('U) -> (Num, 'U)"
+        "fn('U) -> (Num, 'U)"
     );
     assert_eq!(
         type_env.get("y").unwrap().to_string(),
@@ -424,7 +421,7 @@ fn attributing_type_vars_to_correct_fn() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env["double"].to_string(),
-        "fn<'T>('T) -> ('T, fn() -> ('T, 'T))"
+        "fn('T) -> ('T, fn() -> ('T, 'T))"
     );
 }
 
@@ -459,12 +456,12 @@ fn varargs_in_embedded_fn() {
 
     assert_eq!(
         type_env["create_sum"].to_string(),
-        "fn<'T: Lin>('T) -> fn<len N>(...['T; N]) -> 'T"
+        "for<'T: Lin> fn('T) -> fn(...['T; N]) -> 'T"
     );
-    assert_eq!(type_env["sum"].to_string(), "fn<len N>(...[Num; N]) -> Num");
+    assert_eq!(type_env["sum"].to_string(), "fn(...[Num; N]) -> Num");
     assert_eq!(
         type_env["other_sum"].to_string(),
-        "fn<len N>(...[(Num, Num); N]) -> (Num, Num)"
+        "fn(...[(Num, Num); N]) -> (Num, Num)"
     );
 }
 
@@ -493,7 +490,7 @@ fn function_as_arg() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env["mapper"].to_string(),
-        "fn<'T, 'U>(('T, 'T), fn('T) -> 'U) -> ('U, 'U)"
+        "fn(('T, 'T), fn('T) -> 'U) -> ('U, 'U)"
     );
 }
 
@@ -505,7 +502,7 @@ fn function_as_arg_with_more_constraints() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env["mapper"].to_string(),
-        "fn<'T, 'U: Lin>(('T, 'T), fn('T) -> 'U) -> 'U"
+        "for<'U: Lin> fn(('T, 'T), fn('T) -> 'U) -> 'U"
     );
 }
 
@@ -517,7 +514,7 @@ fn function_as_arg_with_even_more_constraints() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env["mapper"].to_string(),
-        "fn<'T: Lin>(('T, 'T), fn('T) -> 'T) -> 'T"
+        "for<'T: Lin> fn(('T, 'T), fn('T) -> 'T) -> 'T"
     );
 }
 
@@ -529,7 +526,7 @@ fn function_arg_with_multiple_args() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env["test_fn"].to_string(),
-        "fn<'T>(Num, fn(Num, Num) -> 'T) -> 'T"
+        "fn(Num, fn(Num, Num) -> 'T) -> 'T"
     );
 }
 
@@ -547,7 +544,7 @@ fn function_as_arg_within_tuple() {
 
     assert_eq!(
         type_env.get("test_fn").unwrap().to_string(),
-        "fn<'T: Lin>((fn(Num) -> 'T, Num), 'T) -> 'T"
+        "for<'T: Lin> fn((fn(Num) -> 'T, Num), 'T) -> 'T"
     );
 }
 
@@ -664,7 +661,7 @@ fn type_param_is_placed_correctly_with_fn_arg() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env.get("foo").unwrap().to_string(),
-        "fn<'T>(fn('T) -> 'T) -> fn('T) -> Bool"
+        "fn(fn('T) -> 'T) -> fn('T) -> Bool"
     );
 }
 
@@ -677,7 +674,7 @@ fn type_params_in_fn_with_multiple_fn_args() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env.get("test").unwrap().to_string(),
-        "fn<'T: Lin, 'U>('T, fn('T) -> 'U, fn('T) -> 'U) -> Bool"
+        "for<'T: Lin> fn('T, fn('T) -> 'U, fn('T) -> 'U) -> Bool"
     );
 }
 
@@ -757,10 +754,7 @@ fn function_accepting_slices() {
     type_env.insert("map", Prelude::Map);
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(
-        type_env["inc"].to_string(),
-        "fn<len N>([Num; N]) -> [Num; N]"
-    );
+    assert_eq!(type_env["inc"].to_string(), "fn([Num; N]) -> [Num; N]");
     assert_eq!(
         type_env["z"],
         ValueType::slice(ValueType::NUM, TupleLen::from(3))
@@ -790,7 +784,7 @@ fn slice_narrowed_to_tuple() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<'T, 'U: Lin>(('T, 'T, 'T), fn('T) -> 'U) -> 'U"
+        "for<'U: Lin> fn(('T, 'T, 'T), fn('T) -> 'U) -> 'U"
     );
 }
 
@@ -823,7 +817,7 @@ fn unifying_length_vars() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<len N; 'T: Lin>(['T; N], ['T; N]) -> ['T; N]"
+        "for<'T: Lin> fn(['T; N], ['T; N]) -> ['T; N]"
     );
 }
 
@@ -874,7 +868,7 @@ fn dynamically_sized_slices_with_map() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<len N, M*>([Num; N]) -> [Num; M]"
+        "for<len M*> fn([Num; N]) -> [Num; M]"
     );
 }
 
@@ -965,5 +959,5 @@ fn constraint_passed_to_wrapping_fn() {
         .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
         .unwrap();
 
-    assert_eq!(double_fn.to_string(), "fn<'T: Lin>('T) -> 'T");
+    assert_eq!(double_fn.to_string(), "for<'T: Lin> fn('T) -> 'T");
 }

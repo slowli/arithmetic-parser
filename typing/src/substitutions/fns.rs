@@ -22,8 +22,11 @@ impl<Prim: PrimitiveType> FnType<Prim> {
             .types
             .into_iter()
             .filter_map(|(var_idx, param_idx)| {
-                let constraints = substitutions.constraints.get(&var_idx).cloned();
-                constraints.map(|constraints| (param_idx, constraints))
+                let constraints = substitutions.constraints.get(&var_idx);
+                constraints
+                    .filter(|constraints| **constraints != Prim::Constraints::default())
+                    .cloned()
+                    .map(|constraints| (param_idx, constraints))
             })
             .collect();
 

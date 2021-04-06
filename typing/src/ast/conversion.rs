@@ -420,7 +420,7 @@ mod tests {
 
         assert_eq!(
             fn_type.to_string(),
-            "fn<len N; 'T: Lin>(['T; N], fn('T) -> Bool) -> Bool"
+            "for<'T: Lin> fn(['T; N], fn('T) -> Bool) -> Bool"
         );
     }
 

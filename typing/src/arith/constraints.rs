@@ -141,8 +141,7 @@ impl<Prim: LinearType> TypeConstraints<Prim> for LinConstraints {
             ValueType::Var(_) => Ok(()),
 
             ValueType::Prim(lit) if lit.is_linear() => Ok(()),
-
-            ValueType::Some => unreachable!(),
+            ValueType::Some => Ok(()),
 
             ValueType::Function(_) | ValueType::Prim(_) => Err(TypeErrorKind::failed_constraint(
                 ty.to_owned(),

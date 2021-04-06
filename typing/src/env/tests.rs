@@ -25,8 +25,7 @@ pub fn assert_incompatible_types<Prim: PrimitiveType>(
 
 fn hash_fn_type() -> FnType<Num> {
     FnType {
-        // TODO: use `ValueType::Any` instead of `ValueType::Some`
-        args: Slice::new(ValueType::param(0), UnknownLen::param(0)).into(),
+        args: Slice::new(ValueType::Some, UnknownLen::param(0)).into(),
         return_type: ValueType::NUM,
         params: None,
     }
@@ -34,7 +33,7 @@ fn hash_fn_type() -> FnType<Num> {
 
 #[test]
 fn hash_fn_type_display() {
-    assert_eq!(hash_fn_type().to_string(), "(...['T; N]) -> Num");
+    assert_eq!(hash_fn_type().to_string(), "(...[_; N]) -> Num");
 }
 
 /// `zip` function signature:
@@ -109,7 +108,7 @@ fn function_definition() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env.get("sign").unwrap().to_string(),
-        "(Num, Num) -> (Num, Num)"
+        "(Num, 'T) -> (Num, Num)"
     );
 }
 
@@ -136,7 +135,7 @@ fn non_linear_types_in_function() {
     );
     assert_eq!(
         type_env.get("add_hashes").unwrap().to_string(),
-        "('T, 'T) -> Num"
+        "('T, 'U) -> Num"
     );
 }
 
@@ -960,4 +959,83 @@ fn constraint_passed_to_wrapping_fn() {
         .unwrap();
 
     assert_eq!(double_fn.to_string(), "for<'T: Lin> ('T) -> 'T");
+}
+
+#[test]
+fn some_can_be_unified_with_anything() {
+    let code = r#"
+        any == 5 && any == (2, 3);
+        any(2, (3, 5)) == any(7);
+        any.map(|x| x + 3) == (2, 4, 5); // could be valid
+        any.map(|x| x + 3) == (1 == 2); // cannot be valid; the output is a slice of numbers
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env
+        .insert("any", ValueType::Some)
+        .insert("map", Prelude::Map)
+        .process_statements(&block)
+        .unwrap_err();
+
+    let lhs_slice = match err.kind() {
+        TypeErrorKind::TypeMismatch(ValueType::Tuple(tuple), bool) if *bool == ValueType::BOOL => {
+            tuple.as_slice().unwrap()
+        }
+        _ => panic!("Unexpected error: {:?}", err),
+    };
+    assert_eq!(*lhs_slice.element(), ValueType::NUM);
+}
+
+#[test]
+fn some_can_be_copied_and_unified_with_anything() {
+    let code = r#"
+        any = some;
+        any == 5 && any == (2, 3);
+        any(2, (3, 5)) == any(7);
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env
+        .insert("some", ValueType::Some)
+        .process_statements(&block)
+        .unwrap();
+}
+
+#[test]
+fn some_can_be_destructured_and_unified_with_anything() {
+    let code = r#"
+        (any, ...) = some_tuple;
+        any == 5 && any == (2, 3);
+        any(2, (3, 5)) == any(7);
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env
+        .insert("some_tuple", ValueType::Some.repeat(3))
+        .process_statements(&block)
+        .unwrap();
+}
+
+#[test]
+fn unifying_types_containing_some() {
+    let code = "digest(1, (2, 3), |x| x + 1)";
+    let block = F32Grammar::parse_statements(code).unwrap();
+
+    let digest_type = FnType::builder()
+        .with_arg(ValueType::NUM)
+        .with_varargs(ValueType::Some, UnknownLen::param(0))
+        .returning(ValueType::NUM);
+    let mut type_env = TypeEnvironment::new();
+    let output = type_env
+        .insert("digest", digest_type)
+        .process_statements(&block)
+        .unwrap();
+
+    assert_eq!(output, ValueType::NUM);
+
+    let bogus_code = "digest(2 == 3, 5)";
+    let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
+    let err = type_env.process_statements(&bogus_block).unwrap_err();
+
+    assert_incompatible_types(err.kind(), &ValueType::NUM, &ValueType::BOOL);
 }

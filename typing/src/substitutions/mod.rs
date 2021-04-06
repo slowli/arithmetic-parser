@@ -167,8 +167,6 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         lhs: &ValueType<Prim>,
         rhs: &ValueType<Prim>,
     ) -> Result<(), TypeErrorKind<Prim>> {
-        use self::ValueType::{Function, Tuple, Var};
-
         let resolved_lhs = self.fast_resolve(lhs).to_owned();
         let resolved_rhs = self.fast_resolve(rhs).to_owned();
 
@@ -176,24 +174,35 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         // accuracy of error reporting, and for some cases of type inference (e.g.,
         // instantiation of parametric functions).
         match (&resolved_lhs, &resolved_rhs) {
-            (ty, other_ty) if ty == other_ty => {
-                // We already know that types are equal.
-                Ok(())
-            }
-
-            (Var(var), ty) | (ty, Var(var)) => {
+            // Variables should be assigned *before* the equality check to account for
+            // `var <- some` assignment.
+            (ValueType::Var(var), ty) => {
                 if var.is_free() {
-                    self.unify_var(var.index(), ty)
+                    self.unify_var(var.index(), ty, true)
+                } else {
+                    Err(TypeErrorKind::UnresolvedParam)
+                }
+            }
+            (ty, ValueType::Var(var)) => {
+                if var.is_free() {
+                    self.unify_var(var.index(), ty, false)
                 } else {
                     Err(TypeErrorKind::UnresolvedParam)
                 }
             }
 
-            (Tuple(lhs_tuple), Tuple(rhs_tuple)) => {
+            (ty, other_ty) if ty == other_ty => {
+                // We already know that types are equal.
+                Ok(())
+            }
+
+            (ValueType::Tuple(lhs_tuple), ValueType::Tuple(rhs_tuple)) => {
                 self.unify_tuples(lhs_tuple, rhs_tuple, TupleLenMismatchContext::Assignment)
             }
 
-            (Function(lhs_fn), Function(rhs_fn)) => self.unify_fn_types(lhs_fn, rhs_fn),
+            (ValueType::Function(lhs_fn), ValueType::Function(rhs_fn)) => {
+                self.unify_fn_types(lhs_fn, rhs_fn)
+            }
 
             (ty, other_ty) => {
                 let mut resolver = self.resolver();
@@ -442,7 +451,20 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         &mut self,
         var_idx: usize,
         ty: &ValueType<Prim>,
+        is_lhs: bool,
     ) -> Result<(), TypeErrorKind<Prim>> {
+        if let ValueType::Var(var) = ty {
+            if !var.is_free() {
+                return Err(TypeErrorKind::UnresolvedParam);
+            } else if var.index() == var_idx {
+                return Ok(());
+            }
+        }
+        if matches!(ty, ValueType::Some) && !is_lhs {
+            // `Some` <- `Var` assignment; we shouldn't create a type var equation.
+            return Ok(());
+        }
+
         // variables should be resolved in `unify`.
         debug_assert!(!self.eqs.contains_key(&var_idx));
         debug_assert!(if let ValueType::Var(var) = ty {

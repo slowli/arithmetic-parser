@@ -601,7 +601,7 @@ fn curried_function_passed_as_arg() {
 fn parametric_fn_passed_as_arg_with_different_constraints() {
     let code = r#"
         concat = |x| { |y| (x, y) };
-        partial = concat(3); // fn<U>(U) -> (Num, U)
+        partial = concat(3); // (U) -> (Num, U)
 
         first = |fun| fun(5);
         r = first(partial); // (Num, Num)
@@ -619,7 +619,7 @@ fn parametric_fn_passed_as_arg_with_different_constraints() {
 fn parametric_fn_passed_as_arg_with_unsatisfiable_requirements() {
     let code = r#"
         concat = |x| { |y| (x, y) };
-        partial = concat(3); // fn<U>(U) -> (Num, U)
+        partial = concat(3); // (U) -> (Num, U)
 
         bogus = |fun| fun(1) == 4;
         bogus(partial);
@@ -640,7 +640,7 @@ fn parametric_fn_passed_as_arg_with_unsatisfiable_requirements() {
 fn parametric_fn_passed_as_arg_with_recursive_requirements() {
     let code = r#"
         concat = |x| { |y| (x, y) };
-        partial = concat(3); // fn<U>(U) -> (Num, U)
+        partial = concat(3); // (U) -> (Num, U)
         bogus = |fun| { |x| fun(x) == x };
         bogus(partial);
     "#;

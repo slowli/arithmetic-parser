@@ -115,6 +115,9 @@ impl<Prim: PrimitiveType> FnParams<Prim> {
 /// - `['T; N]` and `'T` are types of the function arguments.
 /// - `['T; M]` is the return type.
 ///
+/// The `for` constraints can only be present on top-level functions, but not in functions
+/// mentioned in args / return types of other functions.
+///
 /// The `-> _` part is mandatory, even if the function returns [`ValueType::void()`].
 ///
 /// A function may accept variable number of arguments of the same type along
@@ -333,13 +336,13 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 ///     .returning(ValueType::param(1));
 ///
 /// let map_fn_type = <FnType>::builder()
-///     .with_arg(ValueType::param(0).repeat(UnknownLen::Some))
+///     .with_arg(ValueType::param(0).repeat(UnknownLen::param(0)))
 ///     .with_arg(map_fn_arg)
 ///     .returning(ValueType::param(1).repeat(UnknownLen::Dynamic))
 ///     .with_constraints(&[1], &LinConstraints::LIN);
 /// assert_eq!(
 ///     map_fn_type.to_string(),
-///     "for<'U: Lin> (['T; _], ('T) -> 'U) -> ['U]"
+///     "for<'U: Lin> (['T; N], ('T) -> 'U) -> ['U]"
 /// );
 /// ```
 ///
@@ -349,10 +352,10 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 /// # use arithmetic_typing::{arith::LinConstraints, FnType, UnknownLen, ValueType};
 /// # use std::iter;
 /// let fn_type = <FnType>::builder()
-///     .with_varargs(ValueType::param(0), UnknownLen::Some)
+///     .with_varargs(ValueType::param(0), UnknownLen::param(0))
 ///     .with_arg(ValueType::BOOL)
 ///     .returning(ValueType::param(0));
-/// assert_eq!(fn_type.to_string(), "(...['T; _], Bool) -> 'T");
+/// assert_eq!(fn_type.to_string(), "(...['T; N], Bool) -> 'T");
 /// ```
 #[derive(Debug, Clone)]
 pub struct FnTypeBuilder<Prim: PrimitiveType = Num> {

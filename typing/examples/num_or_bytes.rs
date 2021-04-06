@@ -246,12 +246,12 @@ fn main() -> anyhow::Result<()> {
     assert_eq!(env["x"], ValueType::Prim(NumOrBytesType::Num));
     assert_eq!(env["y"].to_string(), "Bytes");
     assert_eq!(env["z"].to_string(), "(Num, Bytes)");
-    assert_eq!(env["sum"].to_string(), "fn<len N; T: Sum>([T; N], T) -> T");
+    assert_eq!(env["sum"].to_string(), "for<'T: Sum> (['T; N], 'T) -> 'T");
     assert_eq!(env["sum_of_bytes"].to_string(), "Bytes");
     assert_eq!(env["sum_of_tuples"].to_string(), "(Num, Num)");
     assert_eq!(
         env["product"].to_string(),
-        "fn<len N; T: Lin>([T; N], T) -> T"
+        "for<'T: Lin> (['T; N], 'T) -> 'T"
     );
     assert_eq!(env["product_of_ints"].to_string(), "Num");
 
@@ -271,7 +271,7 @@ fn main() -> anyhow::Result<()> {
 
     assert_eq!(
         err.to_string(),
-        "1:0: Type `fn(Num) -> Num` fails constraint Sum"
+        "1:0: Type `(Num) -> Num` fails constraint Sum"
     );
 
     env.insert("true", ValueType::BOOL);

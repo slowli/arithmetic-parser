@@ -66,7 +66,7 @@ pub enum ValueTypeAst<'a, Prim: PrimitiveType = Num> {
     Param(InputSpan<'a>),
     /// Functional type.
     Function {
-        /// Constraints on function params. Can only be present for top-level functions.
+        /// Constraints on function params.
         constraints: Option<ConstraintsAst<'a, Prim>>,
         /// Function body.
         function: Box<FnTypeAst<'a, Prim>>,
@@ -134,7 +134,7 @@ pub struct SliceAst<'a, Prim: PrimitiveType = Num> {
 pub struct FnTypeAst<'a, Prim: PrimitiveType = Num> {
     /// Function arguments.
     pub args: TupleAst<'a, Prim>,
-    /// Return type of the function. Will be set to void if not declared.
+    /// Return type of the function.
     pub return_type: ValueTypeAst<'a, Prim>,
 }
 

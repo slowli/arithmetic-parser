@@ -18,6 +18,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
         let mapping = transformer.mapping;
         let vararg_lengths = transformer.vararg_lengths;
 
+        // 2. Extract constraints on type params and lengths.
         let type_params = mapping
             .types
             .into_iter()
@@ -46,6 +47,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
             })
             .collect();
 
+        // 3. Set constraints for the function.
         ParamQuantifier::set_params(
             self,
             ParamConstraints {

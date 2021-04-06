@@ -72,7 +72,7 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
     /// of code that triggers this error:
     ///
     /// ```text
-    /// identity: fn<T>(T) -> T = |x| x;
+    /// identity: ('T) -> 'T = |x| x;
     /// ```
     UnsupportedParam,
 }

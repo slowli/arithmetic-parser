@@ -563,7 +563,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeAssigner<'_, Prim> {
             // Can occur, for example, with function declarations:
             //
             // ```
-            // identity: fn<T>(T) -> T = |x| x;
+            // identity: ('T) -> 'T = |x| x;
             // ```
             //
             // We don't handle such cases yet, because unifying functions with type params

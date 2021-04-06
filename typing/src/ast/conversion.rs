@@ -76,6 +76,7 @@ impl fmt::Display for ConversionErrorKind {
             Self::EmbeddedQuantifier => {
                 formatter.write_str("`for` quantifier within the scope of another `for` quantifier")
             }
+
             Self::FreeLengthVar(name) => {
                 write!(
                     formatter,
@@ -90,6 +91,7 @@ impl fmt::Display for ConversionErrorKind {
                     name
                 )
             }
+
             Self::UnusedLength(name) => {
                 write!(formatter, "Unused length param `{}`", name)
             }
@@ -306,7 +308,7 @@ impl<'a, Prim: PrimitiveType> TryFrom<ValueTypeAst<'a, Prim>> for ValueType<Prim
 }
 
 impl<Prim: PrimitiveType> ValueType<Prim> {
-    /// Parses type from `input`.
+    /// Parses type from `input`. This parser can be composed using `nom` infrastructure.
     pub fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
         parse_inner(ValueTypeAst::parse, input, false)
     }
@@ -382,7 +384,8 @@ impl<'a, Prim: PrimitiveType> TryFrom<FnTypeAst<'a, Prim>> for FnType<Prim> {
 }
 
 impl<Prim: PrimitiveType> FnType<Prim> {
-    /// Parses a functional type from `input`.
+    /// Parses a functional type from `input`. This parser can be composed using
+    /// `nom` infrastructure.
     pub fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
         parse_inner(FnTypeAst::parse, input, false)
     }

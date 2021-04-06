@@ -2,11 +2,16 @@
 
 use nom::Err as NomErr;
 
-use std::{collections::HashMap, convert::TryFrom, fmt, str::FromStr};
+use std::{
+    collections::{HashMap, HashSet},
+    convert::TryFrom,
+    fmt,
+    str::FromStr,
+};
 
 use crate::{
-    ast::{FnTypeAst, SliceAst, TupleAst, TupleLenAst, TypeConstraintsAst, ValueTypeAst},
-    types::TypeParamDescription,
+    ast::{ConstraintsAst, FnTypeAst, SliceAst, TupleAst, TupleLenAst, ValueTypeAst},
+    types::{ParamConstraints, ParamQuantifier},
     FnType, PrimitiveType, Slice, Tuple, UnknownLen, ValueType,
 };
 use arithmetic_parser::{
@@ -27,7 +32,7 @@ use arithmetic_parser::{
 ///
 /// type Parser = Typed<Annotated<NumGrammar<f32>>>;
 ///
-/// let code = "bogus_slice: [T; _] = (1, 2, 3);";
+/// let code = "bogus_slice: ['T; _] = (1, 2, 3);";
 /// let err = Parser::parse_statements(code).unwrap_err();
 ///
 /// assert_eq!(*err.span().fragment(), "T");
@@ -39,33 +44,22 @@ use arithmetic_parser::{
 /// };
 /// assert_matches!(
 ///     err,
-///     ConversionErrorKind::UndefinedTypeParam(t) if t == "T"
+///     ConversionErrorKind::FreeTypeVar(t) if t == "T"
 /// );
 /// ```
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum ConversionErrorKind {
-    /// Duplicate const param definition.
-    DuplicateConst {
-        /// Offending definition.
-        name: String,
-        /// Previous definition of a param with the same name.
-        previous: LocatedSpan<usize>,
-    },
-    /// Duplicate type param definition.
-    DuplicateTypeParam {
-        /// Offending definition.
-        name: String,
-        /// Previous definition of a param with the same name.
-        previous: LocatedSpan<usize>,
-    },
+    /// Embedded param quantifiers.
+    EmbeddedQuantifier,
+    /// Length param not scoped by a function.
+    FreeLengthVar(String),
+    /// Type param not scoped by a function.
+    FreeTypeVar(String),
     /// Undefined const param.
-    UndefinedConst(String),
+    UnusedLength(String),
     /// Undefined type param.
-    UndefinedTypeParam(String),
-    /// Invalid type constraint.
-    InvalidConstraint(String),
-    // TODO: unused params? dyn length on args?
+    UnusedTypeParam(String),
 }
 
 impl ConversionErrorKind {
@@ -79,20 +73,30 @@ impl ConversionErrorKind {
 impl fmt::Display for ConversionErrorKind {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::DuplicateConst { name, .. } => {
-                write!(formatter, "Duplicate const param definition: `{}`", name)
+            Self::EmbeddedQuantifier => {
+                formatter.write_str("`for` quantifier within the scope of another `for` quantifier")
             }
-            Self::DuplicateTypeParam { name, .. } => {
-                write!(formatter, "Duplicate type param definition: `{}`", name)
+
+            Self::FreeLengthVar(name) => {
+                write!(
+                    formatter,
+                    "Length param `{}` is not scoped by function definition",
+                    name
+                )
             }
-            Self::UndefinedConst(name) => {
-                write!(formatter, "Undefined const param `{}`", name)
+            Self::FreeTypeVar(name) => {
+                write!(
+                    formatter,
+                    "Type param `{}` is not scoped by function definition",
+                    name
+                )
             }
-            Self::UndefinedTypeParam(name) => {
-                write!(formatter, "Undefined type param `{}`", name)
+
+            Self::UnusedLength(name) => {
+                write!(formatter, "Unused length param `{}`", name)
             }
-            Self::InvalidConstraint(name) => {
-                write!(formatter, "Invalid type constraint: `{}`", name)
+            Self::UnusedTypeParam(name) => {
+                write!(formatter, "Unused type param `{}`", name)
             }
         }
     }
@@ -139,88 +143,81 @@ impl<Span: fmt::Debug> std::error::Error for ConversionError<Span> {
     }
 }
 
-impl<'a> TypeConstraintsAst<'a> {
-    fn try_convert<Prim>(&self) -> Result<Prim::Constraints, ConversionError<&'a str>>
-    where
-        Prim: PrimitiveType,
-    {
-        self.constraints
-            .iter()
-            .try_fold(Prim::Constraints::default(), |mut acc, input| {
-                let input_str = *input.fragment();
-                let partial = Prim::Constraints::from_str(input_str).map_err(|_| {
-                    ConversionErrorKind::InvalidConstraint(input_str.to_owned()).with_span(*input)
-                })?;
-                acc |= &partial;
-                Ok(acc)
-            })
-    }
-}
-
 /// Intermediate conversion state.
 #[derive(Debug, Default, Clone)]
 struct ConversionState<'a> {
-    const_params: HashMap<&'a str, (InputSpan<'a>, usize)>,
-    type_params: HashMap<&'a str, (InputSpan<'a>, usize)>,
+    len_params: HashMap<&'a str, usize>,
+    type_params: HashMap<&'a str, usize>,
 }
 
 impl<'a> ConversionState<'a> {
-    fn insert_const_param(&mut self, param: InputSpan<'a>) -> Result<(), ConversionError<&'a str>> {
-        let new_idx = self.const_params.len();
-        let name = *param.fragment();
-        if let Some((previous, _)) = self.const_params.insert(name, (param, new_idx)) {
-            let err = ConversionErrorKind::DuplicateConst {
-                name: name.to_owned(),
-                previous: LocatedSpan::from(previous).map_fragment(str::len),
-            };
-            Err(err.with_span(param))
-        } else {
-            Ok(())
+    fn type_param_idx(&mut self, param_name: &'a str) -> usize {
+        let type_param_count = self.type_params.len();
+        *self
+            .type_params
+            .entry(param_name)
+            .or_insert(type_param_count)
+    }
+
+    fn len_param_idx(&mut self, param_name: &'a str) -> usize {
+        let len_param_count = self.len_params.len();
+        *self.len_params.entry(param_name).or_insert(len_param_count)
+    }
+}
+
+impl<'a, Prim: PrimitiveType> ConstraintsAst<'a, Prim> {
+    fn try_convert(
+        &self,
+        state: &ConversionState<'a>,
+    ) -> Result<ParamConstraints<Prim>, ConversionError<&'a str>> {
+        let mut dyn_lengths = HashSet::with_capacity(self.dyn_lengths.len());
+        for dyn_length in &self.dyn_lengths {
+            let name = *dyn_length.fragment();
+            if let Some(index) = state.len_params.get(name) {
+                dyn_lengths.insert(*index);
+            } else {
+                let err = ConversionErrorKind::UnusedLength(name.to_owned()).with_span(*dyn_length);
+                return Err(err);
+            }
         }
-    }
 
-    fn insert_type_param(&mut self, param: InputSpan<'a>) -> Result<(), ConversionError<&'a str>> {
-        let new_idx = self.type_params.len();
-        let name = *param.fragment();
-        if let Some((previous, _)) = self.type_params.insert(name, (param, new_idx)) {
-            let err = ConversionErrorKind::DuplicateTypeParam {
-                name: name.to_owned(),
-                previous: LocatedSpan::from(previous).map_fragment(str::len),
-            };
-            Err(err.with_span(param))
-        } else {
-            Ok(())
+        let mut type_params = HashMap::with_capacity(self.type_params.len());
+        for (param, constraints) in &self.type_params {
+            let name = *param.fragment();
+            if let Some(index) = state.type_params.get(name) {
+                type_params.insert(*index, constraints.computed.clone());
+            } else {
+                let err = ConversionErrorKind::UnusedTypeParam(name.to_owned()).with_span(*param);
+                return Err(err);
+            }
         }
-    }
 
-    fn type_param_idx(&self, param_name: &str) -> Option<usize> {
-        self.type_params.get(param_name).map(|(_, idx)| *idx)
-    }
-
-    fn const_param_idx(&self, param_name: &str) -> Option<usize> {
-        self.const_params.get(param_name).map(|(_, idx)| *idx)
+        Ok(ParamConstraints {
+            dyn_lengths,
+            type_params,
+        })
     }
 }
 
 impl<'a, Prim: PrimitiveType> TupleAst<'a, Prim> {
     fn try_convert(
         &self,
-        state: &ConversionState<'a>,
+        mut state: Option<&mut ConversionState<'a>>,
     ) -> Result<Tuple<Prim>, ConversionError<&'a str>> {
         let start = self
             .start
             .iter()
-            .map(|element| element.try_convert(state))
+            .map(|element| element.try_convert(state.as_deref_mut()))
             .collect::<Result<Vec<_>, _>>()?;
         let middle = self
             .middle
             .as_ref()
-            .map(|middle| middle.try_convert(state))
+            .map(|middle| middle.try_convert(state.as_deref_mut()))
             .transpose()?;
         let end = self
             .end
             .iter()
-            .map(|element| element.try_convert(state))
+            .map(|element| element.try_convert(state.as_deref_mut()))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Tuple::from_parts(start, middle, end))
     }
@@ -229,16 +226,19 @@ impl<'a, Prim: PrimitiveType> TupleAst<'a, Prim> {
 impl<'a, Prim: PrimitiveType> SliceAst<'a, Prim> {
     fn try_convert(
         &self,
-        state: &ConversionState<'a>,
+        mut state: Option<&mut ConversionState<'a>>,
     ) -> Result<Slice<Prim>, ConversionError<&'a str>> {
-        let element = self.element.try_convert(state)?;
+        let element = self.element.try_convert(state.as_deref_mut())?;
         let converted_length = match &self.length {
             TupleLenAst::Ident(ident) => {
                 let name = *ident.fragment();
-                let const_param = state.const_param_idx(name).ok_or_else(|| {
-                    ConversionErrorKind::UndefinedConst(name.to_owned()).with_span(*ident)
-                })?;
-                UnknownLen::Param(const_param)
+                let const_param = if let Some(state) = state {
+                    state.len_param_idx(name)
+                } else {
+                    let err = ConversionErrorKind::FreeLengthVar(name.to_owned()).with_span(*ident);
+                    return Err(err);
+                };
+                UnknownLen::param(const_param)
             }
             TupleLenAst::Some => UnknownLen::Some,
             TupleLenAst::Dynamic => UnknownLen::Dynamic,
@@ -251,23 +251,46 @@ impl<'a, Prim: PrimitiveType> SliceAst<'a, Prim> {
 impl<'a, Prim: PrimitiveType> ValueTypeAst<'a, Prim> {
     fn try_convert(
         &self,
-        state: &ConversionState<'a>,
+        state: Option<&mut ConversionState<'a>>,
     ) -> Result<ValueType<Prim>, ConversionError<&'a str>> {
         Ok(match self {
             Self::Any => ValueType::Some,
             Self::Prim(prim) => ValueType::Prim(prim.to_owned()),
 
-            Self::Ident(ident) => {
+            Self::Param(ident) => {
                 let name = *ident.fragment();
-                let idx = state.type_param_idx(name).ok_or_else(|| {
-                    ConversionErrorKind::UndefinedTypeParam(name.to_owned()).with_span(*ident)
-                })?;
-                ValueType::Param(idx)
+                let idx = if let Some(state) = state {
+                    state.type_param_idx(name)
+                } else {
+                    let err = ConversionErrorKind::FreeTypeVar(name.to_owned()).with_span(*ident);
+                    return Err(err);
+                };
+                ValueType::param(idx)
             }
 
-            Self::Function(fn_type) => {
-                let converted_fn = fn_type.try_convert(state.clone())?;
-                ValueType::Function(Box::new(converted_fn))
+            Self::Function {
+                constraints,
+                function,
+            } => {
+                if let Some(state) = state {
+                    if let Some(constraints) = constraints {
+                        let err = ConversionErrorKind::EmbeddedQuantifier
+                            .with_span(constraints.for_keyword);
+                        return Err(err);
+                    }
+                    function.try_convert(state)?.into()
+                } else {
+                    let mut state = ConversionState::default();
+                    let mut converted_fn = function.try_convert(&mut state)?;
+
+                    let constraints = if let Some(constraints) = constraints {
+                        constraints.try_convert(&state)?
+                    } else {
+                        ParamConstraints::default()
+                    };
+                    ParamQuantifier::set_params(&mut converted_fn, constraints);
+                    converted_fn.into()
+                }
             }
 
             Self::Tuple(tuple) => tuple.try_convert(state)?.into(),
@@ -280,12 +303,12 @@ impl<'a, Prim: PrimitiveType> TryFrom<ValueTypeAst<'a, Prim>> for ValueType<Prim
     type Error = ConversionError<&'a str>;
 
     fn try_from(value: ValueTypeAst<'a, Prim>) -> Result<Self, Self::Error> {
-        value.try_convert(&ConversionState::default())
+        value.try_convert(None)
     }
 }
 
 impl<Prim: PrimitiveType> ValueType<Prim> {
-    /// Parses type from `input`.
+    /// Parses type from `input`. This parser can be composed using `nom` infrastructure.
     pub fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
         parse_inner(ValueTypeAst::parse, input, false)
     }
@@ -344,37 +367,11 @@ impl<Prim: PrimitiveType> FromStr for ValueType<Prim> {
 impl<'a, Prim: PrimitiveType> FnTypeAst<'a, Prim> {
     fn try_convert(
         &self,
-        mut state: ConversionState<'a>,
+        state: &mut ConversionState<'a>,
     ) -> Result<FnType<Prim>, ConversionError<&'a str>> {
-        // Check params for consistency.
-        for (param, _) in &self.len_params {
-            state.insert_const_param(*param)?;
-        }
-        for (param, _) in &self.type_params {
-            state.insert_type_param(*param)?;
-        }
-
-        let args = self.args.try_convert(&state)?;
-
-        let const_params = self.len_params.iter().map(|(name, ty)| {
-            (
-                state.const_param_idx(name.fragment()).unwrap(),
-                (*ty).into(),
-            )
-        });
-
-        let type_params = self.type_params.iter().map(|(name, constraints)| {
-            let constraints = constraints.try_convert::<Prim>()?;
-            Ok((
-                state.type_param_idx(name.fragment()).unwrap(),
-                TypeParamDescription::new(constraints),
-            ))
-        });
-
-        let fn_type = FnType::new(args, self.return_type.try_convert(&state)?)
-            .with_len_params(const_params.collect())
-            .with_type_params(type_params.collect::<Result<Vec<_>, _>>()?);
-        Ok(fn_type)
+        let args = self.args.try_convert(Some(state))?;
+        let return_type = self.return_type.try_convert(Some(state))?;
+        Ok(FnType::new(args, return_type))
     }
 }
 
@@ -382,12 +379,13 @@ impl<'a, Prim: PrimitiveType> TryFrom<FnTypeAst<'a, Prim>> for FnType<Prim> {
     type Error = ConversionError<&'a str>;
 
     fn try_from(value: FnTypeAst<'a, Prim>) -> Result<Self, Self::Error> {
-        value.try_convert(ConversionState::default())
+        value.try_convert(&mut ConversionState::default())
     }
 }
 
 impl<Prim: PrimitiveType> FnType<Prim> {
-    /// Parses a functional type from `input`.
+    /// Parses a functional type from `input`. This parser can be composed using
+    /// `nom` infrastructure.
     pub fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
         parse_inner(FnTypeAst::parse, input, false)
     }
@@ -410,7 +408,7 @@ mod tests {
 
     #[test]
     fn converting_raw_fn_type() {
-        let input = InputSpan::new("fn<len N; T>([T; N], fn(T) -> Bool) -> Bool");
+        let input = InputSpan::new("(['T; N], ('T) -> Bool) -> Bool");
         let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
         let fn_type = FnType::try_from(fn_type).unwrap();
 
@@ -418,107 +416,90 @@ mod tests {
     }
 
     #[test]
-    fn converting_raw_fn_type_with_constraint() {
-        let input = InputSpan::new("fn<len N; T: Lin>([T; N], fn(T) -> Bool) -> Bool");
-        let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
-        let fn_type = FnType::try_from(fn_type).unwrap();
+    fn converting_fn_type_with_constraint() {
+        let input = InputSpan::new("for<'T: Lin> (['T; N], ('T) -> Bool) -> Bool");
+        let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
+        let fn_type = ValueType::try_from(ast).unwrap();
 
         assert_eq!(fn_type.to_string(), *input.fragment());
     }
 
     #[test]
-    fn converting_raw_fn_type_duplicate_type() {
-        let input = InputSpan::new("fn<T, T>([T; N], fn(T) -> Bool) -> Bool");
-        let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
-        let err = FnType::try_from(fn_type).unwrap_err();
+    fn converting_fn_type_unused_type() {
+        let input = InputSpan::new("for<'T: Lin> (Num) -> Bool");
+        let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
+        let err = ValueType::try_from(ast).unwrap_err();
+
+        assert_eq!(err.main_span().location_offset(), 5);
+        assert_matches!(
+            err.kind(),
+            ConversionErrorKind::UnusedTypeParam(name) if name == "T"
+        );
+    }
+
+    #[test]
+    fn converting_fn_type_unused_length() {
+        let input = InputSpan::new("for<len N*> (Num) -> Bool");
+        let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
+        let err = ValueType::try_from(ast).unwrap_err();
+
+        assert_eq!(err.main_span().location_offset(), 8);
+        assert_matches!(
+            err.kind(),
+            ConversionErrorKind::UnusedLength(name) if name == "N"
+        );
+    }
+
+    #[test]
+    fn converting_fn_type_free_type_param() {
+        let input = InputSpan::new("(Num, 'T)");
+        let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
+        let err = ValueType::try_from(ast).unwrap_err();
+
+        assert_eq!(err.main_span().location_offset(), 7);
+        assert_matches!(
+            err.kind(),
+            ConversionErrorKind::FreeTypeVar(name) if name == "T"
+        );
+    }
+
+    #[test]
+    fn converting_fn_type_free_length() {
+        let input = InputSpan::new("[Num; N]");
+        let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
+        let err = ValueType::try_from(ast).unwrap_err();
 
         assert_eq!(err.main_span().location_offset(), 6);
         assert_matches!(
             err.kind(),
-            ConversionErrorKind::DuplicateTypeParam { name, previous }
-                if name == "T" && previous.location_offset() == 3
+            ConversionErrorKind::FreeLengthVar(name) if name == "N"
         );
     }
 
     #[test]
-    fn converting_raw_fn_type_duplicate_type_in_embedded_fn() {
-        let input = InputSpan::new("fn<len N; T>([T; N], fn<T>(T) -> Bool) -> Bool");
-        let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
-        let err = FnType::try_from(fn_type).unwrap_err();
+    fn converting_fn_type_invalid_constraint() {
+        let input = InputSpan::new("for<'T: Bug> fn(['T; _]) -> Bool");
+        let err = match <ValueTypeAst>::parse(input).unwrap_err() {
+            NomErr::Failure(err) => err,
+            other => panic!("Unexpected error type: {:?}", other),
+        };
 
-        assert_eq!(err.main_span().location_offset(), 24);
+        assert_eq!(*err.span().fragment(), "Bug");
         assert_matches!(
             err.kind(),
-            ConversionErrorKind::DuplicateTypeParam { name, previous }
-                if name == "T" && previous.location_offset() == 10
+            ParseErrorKind::Type(err) if err.to_string() == "Cannot parse type constraint"
         );
     }
 
     #[test]
-    fn converting_raw_fn_type_duplicate_const() {
-        let input = InputSpan::new("fn<len N, N; T>([T; N], fn(T) -> Bool) -> Bool");
-        let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
-        let err = FnType::try_from(fn_type).unwrap_err();
+    fn embedded_type_with_constraints() {
+        let input = InputSpan::new("('T, for<'U: Lin> ('U) -> 'U) -> ()");
+        let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
+        let err = ValueType::try_from(ast).unwrap_err();
 
-        assert_eq!(err.main_span().location_offset(), 10);
-        assert_matches!(
-            err.kind(),
-            ConversionErrorKind::DuplicateConst { name, previous }
-                if name == "N" && previous.location_offset() == 7
-        );
-    }
-
-    #[test]
-    fn converting_raw_fn_type_duplicate_const_in_embedded_fn() {
-        let input = InputSpan::new("fn<len N; T>([T; N], fn<len N>(T) -> Bool) -> Bool");
-        let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
-        let err = FnType::try_from(fn_type).unwrap_err();
-
-        assert_eq!(err.main_span().location_offset(), 28);
-        assert_matches!(
-            err.kind(),
-            ConversionErrorKind::DuplicateConst { name, previous }
-                if name == "N" && previous.location_offset() == 7
-        );
-    }
-
-    #[test]
-    fn converting_raw_fn_type_undefined_type() {
-        let input = InputSpan::new("fn<len N>([T; N], fn(T) -> Bool) -> Bool");
-        let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
-        let err = FnType::try_from(fn_type).unwrap_err();
-
-        assert_eq!(err.main_span().location_offset(), 11);
-        assert_matches!(
-            err.kind(),
-            ConversionErrorKind::UndefinedTypeParam(name) if name == "T"
-        );
-    }
-
-    #[test]
-    fn converting_raw_fn_type_undefined_const() {
-        let input = InputSpan::new("fn<T>([T; N], fn(T) -> Bool) -> Bool");
-        let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
-        let err = FnType::try_from(fn_type).unwrap_err();
-
-        assert_eq!(err.main_span().location_offset(), 10);
-        assert_matches!(
-            err.kind(),
-            ConversionErrorKind::UndefinedConst(name) if name == "N"
-        );
-    }
-
-    #[test]
-    fn converting_raw_fn_type_invalid_constraint() {
-        let input = InputSpan::new("fn<T: Bug>([T; _]) -> Bool");
-        let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
-        let err = FnType::try_from(fn_type).unwrap_err();
-
-        assert_eq!(err.main_span().location_offset(), 6);
-        assert_matches!(
-            err.kind(),
-            ConversionErrorKind::InvalidConstraint(name) if name == "Bug"
-        );
+        assert_eq!(*err.main_span().fragment(), "for");
+        assert_eq!(err.main_span().location_offset(), 5);
+        assert_matches!(err.kind(), ConversionErrorKind::EmbeddedQuantifier);
     }
 
     #[test]
@@ -553,48 +534,41 @@ mod tests {
 
     #[test]
     fn parsing_functional_value_type() {
-        let ty: ValueType = "fn<len N; T, U>([T; N], fn(T) -> U) -> U".parse().unwrap();
+        let ty: ValueType = "(['T; N], ('T) -> 'U) -> 'U".parse().unwrap();
         let ty = match ty {
             ValueType::Function(fn_type) => *fn_type,
             _ => panic!("Unexpected type: {:?}", ty),
         };
 
-        assert_eq!(ty.len_params.len(), 1);
-        assert_eq!(ty.type_params.len(), 2);
-        assert_eq!(ty.return_type, ValueType::Param(1));
+        assert_eq!(ty.params.as_ref().unwrap().len_params.len(), 1);
+        assert_eq!(ty.params.as_ref().unwrap().type_params.len(), 2);
+        assert_eq!(ty.return_type, ValueType::param(1));
     }
 
     #[test]
     fn parsing_functional_type_with_varargs() {
-        let ty: ValueType = "fn<len N>(...[Num; N]) -> Num".parse().unwrap();
+        let ty: ValueType = "(...[Num; N]) -> Num".parse().unwrap();
         let ty = match ty {
             ValueType::Function(fn_type) => *fn_type,
             _ => panic!("Unexpected type: {:?}", ty),
         };
 
-        assert_eq!(ty.len_params.len(), 1);
-        assert!(ty.type_params.is_empty());
+        assert_eq!(ty.params.as_ref().unwrap().len_params.len(), 1);
+        assert!(ty.params.as_ref().unwrap().type_params.is_empty());
         let args_slice = ty.args.as_slice().unwrap();
         assert_eq!(*args_slice.element(), ValueType::NUM);
-        assert_eq!(args_slice.len(), UnknownLen::Param(0).into());
+        assert_eq!(args_slice.len(), UnknownLen::param(0).into());
     }
 
     #[test]
     fn parsing_incomplete_value_type() {
         const INCOMPLETE_TYPES: &[&str] = &[
-            "fn<",
-            "fn<co",
-            "fn<len N;",
-            "fn<len N; T",
-            "fn<len N; T,",
-            "fn<len N; T, U>",
-            "fn<len N; T, U>(",
-            "fn<len N; T, U>([T; ",
-            "fn<len N; T, U>([T; N], fn(",
-            "fn<len N; T, U>([T; N], fn(T)",
-            "fn<len N; T, U>([T; N], fn(T)",
-            "fn<len N; T, U>([T; N], fn(T)) -",
-            "fn<len N; T, U>([T; N], fn(T)) ->",
+            "fn(",
+            "fn(['T; ",
+            "fn(['T; N], fn(",
+            "fn(['T; N], fn('T)",
+            "fn(['T; N], fn('T)) -",
+            "fn(['T; N], fn('T)) ->",
         ];
 
         for &input in INCOMPLETE_TYPES {
@@ -605,13 +579,13 @@ mod tests {
 
     #[test]
     fn parsing_value_type_with_conversion_error() {
-        let input = "[T; _]";
+        let input = "['T; _]";
         let err = input.parse::<ValueType>().unwrap_err();
-        assert_eq!(err.span().location_offset(), 1);
+        assert_eq!(err.span().location_offset(), 2);
         let err = match err.kind() {
             ParseErrorKind::Type(err) => err.downcast_ref::<ConversionErrorKind>().unwrap(),
             _ => panic!("Unexpected error type: {:?}", err),
         };
-        assert_matches!(err, ConversionErrorKind::UndefinedTypeParam(name) if name == "T");
+        assert_matches!(err, ConversionErrorKind::FreeTypeVar(name) if name == "T");
     }
 }

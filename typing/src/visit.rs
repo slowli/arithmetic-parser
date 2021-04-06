@@ -1,6 +1,6 @@
 //! Visitor traits allowing to traverse [`ValueType`] and related types.
 
-use crate::{FnType, PrimitiveType, Tuple, TupleLen, ValueType};
+use crate::{FnType, PrimitiveType, Tuple, TupleLen, TypeVar, ValueType};
 
 /// Recursive traversal across the shared reference to a [`ValueType`].
 ///
@@ -11,7 +11,7 @@ use crate::{FnType, PrimitiveType, Tuple, TupleLen, ValueType};
 /// ```
 /// use arithmetic_typing::{
 ///     visit::{self, Visit},
-///     PrimitiveType, Slice, Tuple, UnknownLen, ValueType,
+///     PrimitiveType, Slice, Tuple, UnknownLen, ValueType, TypeVar,
 /// };
 /// # use std::collections::HashMap;
 ///
@@ -23,15 +23,15 @@ use crate::{FnType, PrimitiveType, Tuple, TupleLen, ValueType};
 /// }
 ///
 /// impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for Mentions {
-///     fn visit_param(&mut self, index: usize) {
-///         *self.types.entry(index).or_default() += 1;
+///     fn visit_var(&mut self, var: TypeVar) {
+///         *self.types.entry(var.index()).or_default() += 1;
 ///     }
 ///
 ///     fn visit_tuple(&mut self, tuple: &'a Tuple<Prim>) {
 ///         let (_, middle, _) = tuple.parts();
 ///         let len = middle.and_then(|middle| middle.len().components().0);
-///         if let Some(UnknownLen::Param(idx)) = len {
-///             *self.lengths.entry(idx).or_default() += 1;
+///         if let Some(UnknownLen::Var(var)) = len {
+///             *self.lengths.entry(var.index()).or_default() += 1;
 ///         }
 ///         visit::visit_tuple(self, tuple);
 ///     }
@@ -39,7 +39,7 @@ use crate::{FnType, PrimitiveType, Tuple, TupleLen, ValueType};
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let value_type: ValueType =
-///     "fn<len N; T, U>(...[T; N], fn(T) -> U) -> [(T, U); N]".parse()?;
+///     "(...['T; N], ('T) -> 'U) -> [('T, 'U); N]".parse()?;
 /// let mut mentions = Mentions::default();
 /// mentions.visit_type(&value_type);
 /// assert_eq!(mentions.lengths[&0], 2); // `N` is mentioned twice
@@ -61,14 +61,7 @@ pub trait Visit<'ast, Prim: PrimitiveType> {
     /// Visits a type variable.
     ///
     /// The default implementation does nothing.
-    fn visit_var(&mut self, index: usize) {
-        // Does nothing.
-    }
-
-    /// Visits a type parameter.
-    ///
-    /// The default implementation does nothing.
-    fn visit_param(&mut self, index: usize) {
+    fn visit_var(&mut self, var: TypeVar) {
         // Does nothing.
     }
 
@@ -104,8 +97,7 @@ where
 {
     match ty {
         ValueType::Some => { /* Do nothing. */ }
-        ValueType::Var(index) => visitor.visit_var(*index),
-        ValueType::Param(index) => visitor.visit_param(*index),
+        ValueType::Var(var) => visitor.visit_var(*var),
         ValueType::Prim(primitive) => visitor.visit_primitive(primitive),
         ValueType::Tuple(tuple) => visitor.visit_tuple(tuple),
         ValueType::Function(function) => visitor.visit_function(function.as_ref()),
@@ -161,9 +153,9 @@ where
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let mut ty: ValueType =
-///     "(Num, Bool, fn(Num) -> (Bool, Num))".parse()?;
+///     "(Num, Bool, (Num) -> (Bool, Num))".parse()?;
 /// Replacer.visit_type_mut(&mut ty);
-/// assert_eq!(ty.to_string(), "(Num, Num, fn(Num) -> (Num, Num))");
+/// assert_eq!(ty.to_string(), "(Num, Num, (Num) -> (Num, Num))");
 /// # Ok(())
 /// # }
 /// ```
@@ -209,7 +201,7 @@ where
     V: VisitMut<Prim> + ?Sized,
 {
     match ty {
-        ValueType::Some | ValueType::Var(_) | ValueType::Param(_) | ValueType::Prim(_) => {}
+        ValueType::Some | ValueType::Var(_) | ValueType::Prim(_) => {}
         ValueType::Tuple(tuple) => visitor.visit_tuple_mut(tuple),
         ValueType::Function(function) => visitor.visit_function_mut(function.as_mut()),
     }

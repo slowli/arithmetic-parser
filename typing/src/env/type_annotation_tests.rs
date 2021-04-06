@@ -18,7 +18,7 @@ fn type_hint_within_tuple() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<T>((Num, Num), fn(Num) -> T) -> T"
+        "((Num, Num), (Num) -> 'T) -> 'T"
     );
 }
 
@@ -36,7 +36,7 @@ fn type_hint_in_fn_arg() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn((Num, Bool), fn() -> Num) -> Bool"
+        "((Num, Bool), () -> Num) -> Bool"
     );
 }
 
@@ -79,7 +79,7 @@ fn contradicting_type_hint_with_slice() {
 
 #[test]
 fn valid_type_hint_with_fn_arg() {
-    let code = "foo = |xs, map_fn: fn(Num) -> _| xs.map(map_fn);";
+    let code = "foo = |xs, map_fn: (Num) -> _| xs.map(map_fn);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("map", Prelude::Map);
@@ -87,13 +87,13 @@ fn valid_type_hint_with_fn_arg() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<len N; T>([Num; N], fn(Num) -> T) -> [T; N]"
+        "([Num; N], (Num) -> 'T) -> ['T; N]"
     );
 }
 
 #[test]
 fn invalid_type_hint_with_fn_arg() {
-    let code = "foo = |xs, map_fn: fn(_, _) -> _| xs.map(map_fn);";
+    let code = "foo = |xs, map_fn: (_, _) -> _| xs.map(map_fn);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("map", Prelude::Map);
@@ -111,18 +111,18 @@ fn invalid_type_hint_with_fn_arg() {
 
 #[test]
 fn valid_type_hint_with_fn_declaration() {
-    let code = "foo: fn(Num) -> _ = |x| x + 3;";
+    let code = "foo: (Num) -> _ = |x| x + 3;";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("map", Prelude::Map);
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(type_env["foo"].to_string(), "fn(Num) -> Num");
+    assert_eq!(type_env["foo"].to_string(), "(Num) -> Num");
 }
 
 #[test]
 fn invalid_type_hint_with_fn_declaration() {
-    let code = "foo: fn(_) -> Bool = |x| x + 3;";
+    let code = "foo: (_) -> Bool = |x| x + 3;";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("map", Prelude::Map);
@@ -142,7 +142,7 @@ fn widening_type_hint_with_generic_slice_arg() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "fn<len N; T: Lin>([T; N]) -> [T; N]"
+        "for<'T: Lin> (['T; N]) -> ['T; N]"
     );
 }
 
@@ -155,45 +155,42 @@ fn widening_type_hint_with_slice_arg() {
     type_env.insert("map", Prelude::Map);
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(
-        type_env["foo"].to_string(),
-        "fn<len N>([Num; N]) -> [Num; N]"
-    );
+    assert_eq!(type_env["foo"].to_string(), "([Num; N]) -> [Num; N]");
 }
 
 #[test]
 fn unsupported_type_param_in_generic_fn() {
-    let code = "identity: fn<Arg>(Arg) -> Arg = |x| x;";
+    let code = "identity: ('Arg) -> 'Arg = |x| x;";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_eq!(*err.span().fragment(), "fn<Arg>(Arg) -> Arg");
+    assert_eq!(*err.span().fragment(), "('Arg) -> 'Arg");
     assert_matches!(err.kind(), TypeErrorKind::UnsupportedParam);
 }
 
 #[test]
 fn unsupported_const_param_in_generic_fn() {
-    let code = "identity: fn<len N>([Num; N]) -> [Num; N] = |x| x;";
+    let code = "identity: ([Num; N]) -> [Num; N] = |x| x;";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_eq!(*err.span().fragment(), "fn<len N>([Num; N]) -> [Num; N]");
+    assert_eq!(*err.span().fragment(), "([Num; N]) -> [Num; N]");
     assert_matches!(err.kind(), TypeErrorKind::UnsupportedParam);
 }
 
 #[test]
 fn fn_narrowed_via_type_hint() {
     let code = r#"
-        identity: fn(Num) -> _ = |x| x;
+        identity: (Num) -> _ = |x| x;
         identity((1, 2));
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_eq!(type_env["identity"].to_string(), "fn(Num) -> Num");
+    assert_eq!(type_env["identity"].to_string(), "(Num) -> Num");
     assert_incompatible_types(
         &err.kind(),
         &ValueType::NUM,
@@ -203,7 +200,7 @@ fn fn_narrowed_via_type_hint() {
 
 #[test]
 fn fn_incorrectly_narrowed_via_type_hint() {
-    let code = "identity: fn(Num) -> Bool = |x| x;";
+    let code = "identity: (Num) -> Bool = |x| x;";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err();
@@ -214,14 +211,14 @@ fn fn_incorrectly_narrowed_via_type_hint() {
 #[test]
 fn fn_instantiated_via_type_hint() {
     let code = r#"
-        identity: fn(_) -> _ = |x| x;
+        identity: (_) -> _ = |x| x;
         identity(5) == 5;
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(type_env["identity"].to_string(), "fn(Num) -> Num");
+    assert_eq!(type_env["identity"].to_string(), "(Num) -> Num");
     assert!(type_env["identity"].is_concrete());
 }
 
@@ -258,10 +255,7 @@ fn assigning_to_a_slice_and_then_narrowing() {
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(
-        type_env["slice_fn"].to_string(),
-        "fn((Num, Num, Num)) -> Num"
-    );
+    assert_eq!(type_env["slice_fn"].to_string(), "((Num, Num, Num)) -> Num");
 }
 
 #[test]
@@ -342,7 +336,7 @@ fn unifying_tuples_with_middle() {
 
         // Check basic destructuring.
         (...xs_head: Num, _) = xs;
-        (_, _, _: fn(_) -> _) = ys;
+        (_, _, _: (_) -> _) = ys;
         (_, ...zs_middle, _) = zs;
     "#;
 
@@ -351,7 +345,7 @@ fn unifying_tuples_with_middle() {
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(type_env["xs"].to_string(), "(Num, Num, Num)");
-    assert_eq!(type_env["ys"].to_string(), "(Num, Num, fn<T>(T) -> T)");
+    assert_eq!(type_env["ys"].to_string(), "(Num, Num, ('T) -> 'T)");
     assert_eq!(type_env["zs"].to_string(), "(Num, ...[Num; _], Num)");
     assert_eq!(type_env["xs_head"].to_string(), "(Num, Num)");
     assert_eq!(type_env["zs_middle"].to_string(), "[Num; _]");
@@ -380,7 +374,7 @@ fn unifying_tuples_with_dyn_lengths() {
 fn fn_with_varargs() {
     let code = r#"
         sum = |...xs: Num| xs.fold(0, |acc, x| acc + x);
-        sum_spec: fn(Num, Num, Num) -> _ = sum;
+        sum_spec: (Num, Num, Num) -> _ = sum;
         tuple_sum = |init, ...xs: (_, _)| xs.fold((init, init), |acc, x| acc + x);
     "#;
 
@@ -389,10 +383,10 @@ fn fn_with_varargs() {
     type_env.insert("fold", Prelude::Fold);
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(type_env["sum"].to_string(), "fn<len N>(...[Num; N]) -> Num");
-    assert_eq!(type_env["sum_spec"].to_string(), "fn(Num, Num, Num) -> Num");
+    assert_eq!(type_env["sum"].to_string(), "(...[Num; N]) -> Num");
+    assert_eq!(type_env["sum_spec"].to_string(), "(Num, Num, Num) -> Num");
     assert_eq!(
         type_env["tuple_sum"].to_string(),
-        "fn<len N; T: Lin>(T, ...[(T, T); N]) -> (T, T)"
+        "for<'T: Lin> ('T, ...[('T, 'T); N]) -> ('T, 'T)"
     );
 }

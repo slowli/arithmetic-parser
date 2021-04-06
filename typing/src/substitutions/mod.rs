@@ -10,7 +10,7 @@ use crate::{
     arith::TypeConstraints,
     visit::{self, Visit, VisitMut},
     FnType, LengthKind, PrimitiveType, Tuple, TupleLen, TupleLenMismatchContext, TypeErrorKind,
-    UnknownLen, ValueType,
+    TypeVar, UnknownLen, ValueType,
 };
 
 mod fns;
@@ -35,7 +35,7 @@ pub struct Substitutions<Prim: PrimitiveType> {
     /// Constraints on type variables.
     constraints: HashMap<usize, Prim::Constraints>,
     /// Number of length variables.
-    const_var_count: usize,
+    len_var_count: usize,
     /// Length variable equations.
     length_eqs: HashMap<usize, TupleLen>,
     /// Length variable known to be dynamic.
@@ -48,7 +48,7 @@ impl<Prim: PrimitiveType> Default for Substitutions<Prim> {
             type_var_count: 0,
             eqs: HashMap::new(),
             constraints: HashMap::new(),
-            const_var_count: 0,
+            len_var_count: 0,
             length_eqs: HashMap::new(),
             dyn_lengths: HashSet::new(),
         }
@@ -56,14 +56,6 @@ impl<Prim: PrimitiveType> Default for Substitutions<Prim> {
 }
 
 impl<Prim: PrimitiveType> Substitutions<Prim> {
-    pub(crate) fn type_constraints(&self) -> &HashMap<usize, Prim::Constraints> {
-        &self.constraints
-    }
-
-    pub(crate) fn dyn_lengths(&self) -> &HashSet<usize> {
-        &self.dyn_lengths
-    }
-
     /// Inserts `constraints` for a type var with the specified index and all vars
     /// it is equivalent to.
     pub fn insert_constraints(&mut self, var_idx: usize, constraints: &Prim::Constraints) {
@@ -76,13 +68,14 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     /// Returns type var indexes that are equivalent to the provided `var_idx`,
     /// including `var_idx` itself.
     fn equivalent_vars(&self, var_idx: usize) -> Vec<usize> {
-        let ty = ValueType::Var(var_idx);
+        let ty = ValueType::free_var(var_idx);
         let mut ty = &ty;
         let mut equivalent_vars = vec![];
 
-        while let ValueType::Var(idx) = ty {
-            equivalent_vars.push(*idx);
-            if let Some(resolved) = self.eqs.get(idx) {
+        while let ValueType::Var(var) = ty {
+            debug_assert!(var.is_free());
+            equivalent_vars.push(var.index());
+            if let Some(resolved) = self.eqs.get(&var.index()) {
                 ty = resolved;
             } else {
                 break;
@@ -93,8 +86,13 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
     /// Resolves the type by following established equality links between type variables.
     pub fn fast_resolve<'a>(&'a self, mut ty: &'a ValueType<Prim>) -> &'a ValueType<Prim> {
-        while let ValueType::Var(idx) = ty {
-            if let Some(resolved) = self.eqs.get(idx) {
+        while let ValueType::Var(var) = ty {
+            if !var.is_free() {
+                // Bound variables cannot be resolved further.
+                break;
+            }
+
+            if let Some(resolved) = self.eqs.get(&var.index()) {
                 ty = resolved;
             } else {
                 break;
@@ -112,8 +110,12 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
     fn resolve_len(&self, len: TupleLen) -> TupleLen {
         let mut resolved = len;
-        while let (Some(UnknownLen::Var(idx)), exact) = resolved.components() {
-            if let Some(eq_rhs) = self.length_eqs.get(&idx) {
+        while let (Some(UnknownLen::Var(var)), exact) = resolved.components() {
+            if !var.is_free() {
+                break;
+            }
+
+            if let Some(eq_rhs) = self.length_eqs.get(&var.index()) {
                 resolved = eq_rhs.to_owned() + exact;
             } else {
                 break;
@@ -146,10 +148,10 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         };
 
         if is_dynamic {
-            self.dyn_lengths.insert(self.const_var_count);
+            self.dyn_lengths.insert(self.len_var_count);
         }
-        *target_len = UnknownLen::Var(self.const_var_count);
-        self.const_var_count += 1;
+        *target_len = UnknownLen::free_var(self.len_var_count);
+        self.len_var_count += 1;
     }
 
     /// Unifies types in `lhs` and `rhs`.
@@ -165,7 +167,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         lhs: &ValueType<Prim>,
         rhs: &ValueType<Prim>,
     ) -> Result<(), TypeErrorKind<Prim>> {
-        use self::ValueType::{Function, Param, Tuple, Var};
+        use self::ValueType::{Function, Tuple, Var};
 
         let resolved_lhs = self.fast_resolve(lhs).to_owned();
         let resolved_rhs = self.fast_resolve(rhs).to_owned();
@@ -179,9 +181,13 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 Ok(())
             }
 
-            (Var(idx), ty) | (ty, Var(idx)) => self.unify_var(*idx, ty),
-
-            (Param(_), _) | (_, Param(_)) => Err(TypeErrorKind::UnresolvedParam),
+            (Var(var), ty) | (ty, Var(var)) => {
+                if var.is_free() {
+                    self.unify_var(var.index(), ty)
+                } else {
+                    Err(TypeErrorKind::UnresolvedParam)
+                }
+            }
 
             (Tuple(lhs_tuple), Tuple(rhs_tuple)) => {
                 self.unify_tuples(lhs_tuple, rhs_tuple, TupleLenMismatchContext::Assignment)
@@ -293,12 +299,12 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         is_lhs: bool,
     ) -> Result<TupleLen, LenErrorKind> {
         let var_idx = match simple_len {
-            UnknownLen::Var(idx) => idx,
+            UnknownLen::Var(var) if var.is_free() => var.index(),
             _ => return Err(LenErrorKind::UnresolvedParam),
         };
         let source_var_idx = match source.components().0 {
             None => None,
-            Some(UnknownLen::Var(idx)) => Some(idx),
+            Some(UnknownLen::Var(var)) if var.is_free() => Some(var.index()),
             Some(_) => return Err(LenErrorKind::UnresolvedParam),
         };
 
@@ -389,39 +395,39 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             // Fast path: just clone the function type.
             return fn_type.clone();
         }
+        let fn_params = fn_type.params.as_ref().expect("fn with params");
 
         // Map type vars in the function into newly created type vars.
         let mapping = ParamMapping {
-            types: fn_type
+            types: fn_params
                 .type_params
                 .iter()
                 .enumerate()
                 .map(|(i, (var_idx, _))| (*var_idx, self.type_var_count + i))
                 .collect(),
-            lengths: fn_type
+            lengths: fn_params
                 .len_params
                 .iter()
                 .enumerate()
-                .map(|(i, (var_idx, _))| (*var_idx, self.const_var_count + i))
+                .map(|(i, (var_idx, _))| (*var_idx, self.len_var_count + i))
                 .collect(),
         };
-        self.type_var_count += fn_type.type_params.len();
-        self.const_var_count += fn_type.len_params.len();
+        self.type_var_count += fn_params.type_params.len();
+        self.len_var_count += fn_params.len_params.len();
 
         let mut instantiated_fn_type = fn_type.clone();
-        MonoTypeTransformer::new(&mapping).visit_function_mut(&mut instantiated_fn_type);
+        MonoTypeTransformer::transform(&mapping, &mut instantiated_fn_type);
 
         // Copy constraints on the newly generated const and type vars from the function definition.
-        for (original_idx, description) in &fn_type.len_params {
-            if description.kind == LengthKind::Dynamic {
+        for (original_idx, kind) in &fn_params.len_params {
+            if *kind == LengthKind::Dynamic {
                 let new_idx = mapping.lengths[original_idx];
                 self.dyn_lengths.insert(new_idx);
             }
         }
-        for (original_idx, description) in &fn_type.type_params {
+        for (original_idx, constraints) in &fn_params.type_params {
             let new_idx = mapping.types[original_idx];
-            self.constraints
-                .insert(new_idx, description.constraints.to_owned());
+            self.constraints.insert(new_idx, constraints.to_owned());
         }
 
         instantiated_fn_type
@@ -439,8 +445,8 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     ) -> Result<(), TypeErrorKind<Prim>> {
         // variables should be resolved in `unify`.
         debug_assert!(!self.eqs.contains_key(&var_idx));
-        debug_assert!(if let ValueType::Var(idx) = ty {
-            !self.eqs.contains_key(idx)
+        debug_assert!(if let ValueType::Var(var) = ty {
+            !self.eqs.contains_key(&var.index())
         } else {
             true
         });
@@ -499,10 +505,10 @@ impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for OccurrenceChecker<'a, Prim> {
         }
     }
 
-    fn visit_var(&mut self, index: usize) {
-        if index == self.var_idx {
+    fn visit_var(&mut self, var: TypeVar) {
+        if var.index() == self.var_idx {
             self.is_recursive = true;
-        } else if let Some(ty) = self.substitutions.eqs.get(&index) {
+        } else if let Some(ty) = self.substitutions.eqs.get(&var.index()) {
             self.visit_type(ty);
         }
     }
@@ -518,8 +524,8 @@ struct TypeSanitizer {
 impl<Prim: PrimitiveType> VisitMut<Prim> for TypeSanitizer {
     fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
         match ty {
-            ValueType::Var(idx) if *idx == self.fixed_idx => {
-                *ty = ValueType::Param(0);
+            ValueType::Var(var) if var.index() == self.fixed_idx => {
+                *ty = ValueType::param(0);
             }
             _ => visit::visit_type_mut(self, ty),
         }
@@ -541,7 +547,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeAssigner<'_, Prim> {
 
         match ty {
             ValueType::Some => {
-                *ty = ValueType::Var(self.substitutions.type_var_count);
+                *ty = ValueType::free_var(self.substitutions.type_var_count);
                 self.substitutions.type_var_count += 1;
             }
             _ => visit::visit_type_mut(self, ty),
@@ -557,7 +563,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeAssigner<'_, Prim> {
             // Can occur, for example, with function declarations:
             //
             // ```
-            // identity: fn<T>(T) -> T = |x| x;
+            // identity: ('T) -> 'T = |x| x;
             // ```
             //
             // We don't handle such cases yet, because unifying functions with type params

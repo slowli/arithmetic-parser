@@ -58,7 +58,7 @@
 //! // Evaluate `code` to get the inferred `sum` function signature.
 //! let output_type = env.process_statements(&ast)?;
 //! assert!(output_type.is_void());
-//! assert_eq!(env["sum"].to_string(), "fn<len N>([Num; N]) -> Num");
+//! assert_eq!(env["sum"].to_string(), "([Num; N]) -> Num");
 //! # Ok(())
 //! # }
 //! ```
@@ -80,7 +80,7 @@
 //! assert!(output_type.is_void());
 //! assert_eq!(
 //!     env["sum_with"].to_string(),
-//!     "fn<len N; T: Lin>([T; N], T) -> T"
+//!     "for<'T: Lin> (['T; N], 'T) -> 'T"
 //! );
 //! // Note that `sum_with` is parametric by the element of the slice
 //! // (for which the linearity constraint is applied based on the arg usage)
@@ -133,7 +133,10 @@ pub use self::{
     error::{TupleLenMismatchContext, TypeError, TypeErrorKind, TypeResult},
     substitutions::Substitutions,
     type_map::{Assertions, Prelude},
-    types::{FnType, FnTypeBuilder, LengthKind, Slice, Tuple, TupleLen, UnknownLen, ValueType},
+    types::{
+        FnType, FnTypeBuilder, FnWithConstraints, LengthKind, LengthVar, Slice, Tuple, TupleLen,
+        TypeVar, UnknownLen, ValueType,
+    },
 };
 
 use self::arith::{LinConstraints, LinearType, TypeConstraints, WithBoolean};
@@ -210,7 +213,7 @@ use self::arith::{LinConstraints, LinearType, TypeConstraints, WithBoolean};
 pub trait PrimitiveType:
     Clone + PartialEq + fmt::Debug + fmt::Display + FromStr + Send + Sync + 'static
 {
-    /// Constraints that can be placed on type parameters.
+    /// Constraints that can be placed on type variables.
     type Constraints: TypeConstraints<Self>;
 }
 

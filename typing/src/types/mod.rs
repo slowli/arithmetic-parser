@@ -5,13 +5,77 @@ use std::{borrow::Cow, fmt};
 use crate::{arith::WithBoolean, Num, PrimitiveType};
 
 mod fn_type;
+mod quantifier;
 mod tuple;
 
-pub(crate) use self::fn_type::TypeParamDescription;
-pub use self::{
-    fn_type::{FnType, FnTypeBuilder},
-    tuple::{LengthKind, Slice, Tuple, TupleLen, UnknownLen},
+pub(crate) use self::{
+    fn_type::{FnParams, ParamConstraints},
+    quantifier::ParamQuantifier,
 };
+pub use self::{
+    fn_type::{FnType, FnTypeBuilder, FnWithConstraints},
+    tuple::{LengthKind, LengthVar, Slice, Tuple, TupleLen, UnknownLen},
+};
+
+/// Type variable.
+///
+/// A variable represents a certain unknown type. Variables can be either *free*
+/// or *bound* to a [function](FnType) (these are known as type params in Rust).
+/// Types input to a [`TypeEnvironment`] can only have bounded variables (this is
+/// verified in runtime), but types output by the inference process can contain both.
+///
+/// # Notation
+///
+/// - Bounded type variables are represented as `'T`, `'U`, `'V`, etc.
+///   The tick is inspired by lifetimes in Rust and implicit type params in [F*]. It allows
+///   to easily distinguish between vars and primitive types.
+/// - Free variables are represented as `_`.
+///
+/// [`TypeEnvironment`]: crate::TypeEnvironment
+/// [F*]: http://www.fstar-lang.org/tutorial/
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TypeVar {
+    index: usize,
+    is_free: bool,
+}
+
+impl fmt::Display for TypeVar {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_free {
+            formatter.write_str("_")
+        } else {
+            write!(formatter, "'{}", Self::param_str(self.index))
+        }
+    }
+}
+
+impl TypeVar {
+    fn param_str(index: usize) -> Cow<'static, str> {
+        const PARAM_NAMES: &str = "TUVXYZ";
+        PARAM_NAMES.get(index..=index).map_or_else(
+            || Cow::from(format!("T{}", index - PARAM_NAMES.len())),
+            Cow::from,
+        )
+    }
+
+    /// Creates a bounded type variable that can be used to [build functions](FnTypeBuilder).
+    pub const fn param(index: usize) -> Self {
+        Self {
+            index,
+            is_free: false,
+        }
+    }
+
+    /// Returns the 0-based index of this variable.
+    pub fn index(self) -> usize {
+        self.index
+    }
+
+    /// Is this variable free (not bounded in a function declaration)?
+    pub fn is_free(self) -> bool {
+        self.is_free
+    }
+}
 
 /// Enumeration encompassing all types supported by the type system.
 ///
@@ -19,10 +83,10 @@ pub use self::{
 ///
 /// # Notation
 ///
-/// - [`Self::Some`] and [`Self::Var`] are represented as `_`.
+/// - [`Self::Some`] is represented as `_`.
 /// - [`Prim`](Self::Prim)itive types are represented using the [`Display`](fmt::Display)
 ///   implementation of the corresponding [`PrimitiveType`].
-/// - [`Param`](Self::Param)s are represented as `T`, `U`, `V` etc.
+/// - [`Var`](Self::Var)s are represented as documented in [`TypeVar`].
 /// - Notation for [functional](FnType) and [tuple](Tuple) types is documented separately.
 ///
 /// # Examples
@@ -33,14 +97,13 @@ pub use self::{
 /// # use arithmetic_typing::{FnType, UnknownLen, ValueType};
 /// let tuple: ValueType = (ValueType::BOOL, ValueType::NUM).into();
 /// assert_eq!(tuple.to_string(), "(Bool, Num)");
-/// let slice = tuple.repeat(UnknownLen::Param(0));
-/// assert_eq!(slice.to_string(), "[(Bool, Num); N]");
+/// let slice = tuple.repeat(UnknownLen::Some);
+/// assert_eq!(slice.to_string(), "[(Bool, Num); _]");
 /// let fn_type: ValueType = FnType::builder()
-///     .with_len_params(&[0])
 ///     .with_arg(slice)
 ///     .returning(ValueType::NUM)
 ///     .into();
-/// assert_eq!(fn_type.to_string(), "fn<len N>([(Bool, Num); N]) -> Num");
+/// assert_eq!(fn_type.to_string(), "([(Bool, Num); _]) -> Num");
 /// ```
 ///
 /// A `ValueType` can also be parsed from a string:
@@ -51,7 +114,7 @@ pub use self::{
 /// # fn main() -> anyhow::Result<()> {
 /// let slice: ValueType = "[(Bool, Num); _]".parse()?;
 /// assert_matches!(slice, ValueType::Tuple(t) if t.as_slice().is_some());
-/// let fn_type: ValueType = "fn<len N>([(Bool, Num); N]) -> Num".parse()?;
+/// let fn_type: ValueType = "([(Bool, Num); N]) -> Num".parse()?;
 /// assert_matches!(fn_type, ValueType::Function(_));
 /// # Ok(())
 /// # }
@@ -68,12 +131,8 @@ pub enum ValueType<Prim: PrimitiveType = Num> {
     Function(Box<FnType<Prim>>),
     /// Tuple type.
     Tuple(Tuple<Prim>),
-    /// Type parameter in a function definition.
-    Param(usize),
-
-    /// Type variable. In contrast to `Param`s, `Var`s are used exclusively during
-    /// inference and cannot occur in standalone function signatures.
-    Var(usize),
+    /// Type variable.
+    Var(TypeVar),
 }
 
 impl<Prim: PrimitiveType> PartialEq for ValueType<Prim> {
@@ -81,7 +140,7 @@ impl<Prim: PrimitiveType> PartialEq for ValueType<Prim> {
         match (self, other) {
             (Self::Some, _) | (_, Self::Some) => true,
             (Self::Prim(x), Self::Prim(y)) => x == y,
-            (Self::Var(x), Self::Var(y)) | (Self::Param(x), Self::Param(y)) => x == y,
+            (Self::Var(x), Self::Var(y)) => x == y,
             (Self::Tuple(xs), Self::Tuple(ys)) => xs == ys,
             (Self::Function(x), Self::Function(y)) => x == y,
             _ => false,
@@ -92,8 +151,8 @@ impl<Prim: PrimitiveType> PartialEq for ValueType<Prim> {
 impl<Prim: PrimitiveType> fmt::Display for ValueType<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Some | Self::Var(_) => formatter.write_str("_"),
-            Self::Param(idx) => formatter.write_str(type_param(*idx).as_ref()),
+            Self::Some => formatter.write_str("_"),
+            Self::Var(var) => fmt::Display::fmt(var, formatter),
             Self::Prim(num) => fmt::Display::fmt(num, formatter),
             Self::Function(fn_type) => fmt::Display::fmt(fn_type, formatter),
             Self::Tuple(tuple) => fmt::Display::fmt(tuple, formatter),
@@ -145,14 +204,6 @@ impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A);
 impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A, 8: B);
 impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A, 8: B, 9: C);
 
-fn type_param(index: usize) -> Cow<'static, str> {
-    const PARAM_NAMES: &str = "TUVXYZ";
-    PARAM_NAMES.get(index..=index).map_or_else(
-        || Cow::from(format!("T{}", index - PARAM_NAMES.len())),
-        Cow::from,
-    )
-}
-
 impl ValueType {
     /// Numeric primitive type.
     pub const NUM: Self = ValueType::Prim(Num::Num);
@@ -167,6 +218,18 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
     /// Returns a void type (an empty tuple).
     pub fn void() -> Self {
         Self::Tuple(Tuple::empty())
+    }
+
+    /// Creates a bounded type variable with the specified `index`.
+    pub fn param(index: usize) -> Self {
+        Self::Var(TypeVar::param(index))
+    }
+
+    pub(crate) fn free_var(index: usize) -> Self {
+        Self::Var(TypeVar {
+            index,
+            is_free: true,
+        })
     }
 
     /// Creates a slice type.
@@ -200,9 +263,8 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
     /// non-concrete types.
     pub fn is_concrete(&self) -> bool {
         match self {
-            Self::Var(_) | Self::Some => false,
-            Self::Param(_) | Self::Prim(_) => true,
-
+            Self::Var(var) => !var.is_free,
+            Self::Some | Self::Prim(_) => true,
             Self::Function(fn_type) => fn_type.is_concrete(),
             Self::Tuple(tuple) => tuple.is_concrete(),
         }
@@ -220,8 +282,8 @@ mod tests {
             "(Num, Bool)",
             "[Num; _]",
             "(Num, ...[Bool; _])",
-            "fn(Num) -> Num",
-            "fn<len N; T: Lin>([T; N]) -> T",
+            "(Num) -> Num",
+            "for<'T: Lin> (['T; _]) -> 'T",
         ];
 
         for &sample_type in SAMPLE_TYPES {
@@ -233,10 +295,10 @@ mod tests {
     #[test]
     fn equality_is_preserved_on_renaming_params() {
         const EQUAL_FNS: &[&str] = &[
-            "fn<len N; T: Lin>([T; N]) -> T",
-            "fn<len L; T: Lin>([T; L]) -> T",
-            "fn<len N; Ty: Lin>([Ty; N]) -> Ty",
-            "fn<len T; N: Lin>([N; T]) -> N",
+            "for<'T: Lin> (['T; N]) -> 'T",
+            "for<'T: Lin> (['T; L]) -> 'T",
+            "for<'Ty: Lin> (['Ty; N]) -> 'Ty",
+            "for<'N: Lin> (['N; T]) -> 'N",
         ];
 
         let functions: Vec<ValueType> = EQUAL_FNS.iter().map(|s| s.parse().unwrap()).collect();
@@ -250,11 +312,11 @@ mod tests {
     #[test]
     fn unequal_functions() {
         const FUNCTIONS: &[&str] = &[
-            "fn<len N; T: Lin>([T; N]) -> T",
-            "fn<len N*; T: Lin>([T; N]) -> T",
-            "fn<len N; T>([T; N]) -> T",
-            "fn<len N; T: Lin>([T; N], T) -> T",
-            "fn<len N; T: Lin>([T; N]) -> (T)",
+            "for<'T: Lin> (['T; N]) -> 'T",
+            "for<len N*; 'T: Lin> (['T; N]) -> 'T",
+            "(['T; N]) -> 'T",
+            "for<'T: Lin> (['T; N], 'T) -> 'T",
+            "for<'T: Lin> (['T; N]) -> ('T)",
         ];
 
         let functions: Vec<ValueType> = FUNCTIONS.iter().map(|s| s.parse().unwrap()).collect();

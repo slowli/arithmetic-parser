@@ -9,6 +9,7 @@ use std::{
 
 use crate::{
     arith::{BinaryOpSpans, MapPrimitiveType, NumArithmetic, TypeArithmetic, UnaryOpSpans},
+    types::{ParamConstraints, ParamQuantifier},
     visit::VisitMut,
     FnType, Num, PrimitiveType, Slice, Substitutions, Tuple, TypeError, TypeErrorKind, TypeResult,
     UnknownLen, ValueType,
@@ -97,6 +98,18 @@ impl<Prim: PrimitiveType> TypeEnvironment<Prim> {
         self.variables.iter().map(|(name, ty)| (name.as_str(), ty))
     }
 
+    fn prepare_type(ty: impl Into<ValueType<Prim>>) -> ValueType<Prim> {
+        let mut ty = ty.into();
+        assert!(ty.is_concrete(), "Type {} is not concrete", ty);
+
+        if let ValueType::Function(function) = &mut ty {
+            if function.params.is_none() {
+                ParamQuantifier::set_params(function, ParamConstraints::default());
+            }
+        }
+        ty
+    }
+
     /// Sets type of a variable.
     ///
     /// # Panics
@@ -104,13 +117,8 @@ impl<Prim: PrimitiveType> TypeEnvironment<Prim> {
     /// - Will panic if `value_type` is not [concrete](ValueType::is_concrete()). Non-concrete
     ///   types are tied to the environment; inserting them into an env is a logical error.
     pub fn insert(&mut self, name: &str, value_type: impl Into<ValueType<Prim>>) -> &mut Self {
-        let value_type = value_type.into();
-        assert!(
-            value_type.is_concrete(),
-            "Type {} is not concrete",
-            value_type
-        );
-        self.variables.insert(name.to_owned(), value_type);
+        self.variables
+            .insert(name.to_owned(), Self::prepare_type(value_type));
         self
     }
 
@@ -162,11 +170,8 @@ where
     S: Into<String>,
     Ty: Into<ValueType<Prim>>,
 {
-    iter.into_iter().map(|(name, ty)| {
-        let ty: ValueType<Prim> = ty.into();
-        assert!(ty.is_concrete(), "Type {} is not concrete", ty);
-        (name.into(), ty)
-    })
+    iter.into_iter()
+        .map(|(name, ty)| (name.into(), TypeEnvironment::prepare_type(ty)))
 }
 
 impl<Prim: PrimitiveType, S, Ty> FromIterator<(S, Ty)> for TypeEnvironment<Prim>

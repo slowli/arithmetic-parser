@@ -138,8 +138,8 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
             return Ok(());
         }
 
-        let resolved_ty = if let ValueType::Var(idx) = ty {
-            substitutions.insert_constraints(*idx, self);
+        let resolved_ty = if let ValueType::Var(var) = ty {
+            substitutions.insert_constraints(var.index(), self);
             substitutions.fast_resolve(ty)
         } else {
             ty
@@ -149,7 +149,7 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
             // `Var`s are taken care of previously.
             ValueType::Var(_) | ValueType::Prim(NumOrBytesType::Num) => Ok(()),
 
-            ValueType::Some | ValueType::Param(_) => unreachable!(),
+            ValueType::Some => unreachable!(),
 
             ValueType::Prim(NumOrBytesType::Bool) | ValueType::Function(_) => Err(
                 TypeErrorKind::failed_constraint(ty.to_owned(), self.to_owned()),
@@ -246,12 +246,12 @@ fn main() -> anyhow::Result<()> {
     assert_eq!(env["x"], ValueType::Prim(NumOrBytesType::Num));
     assert_eq!(env["y"].to_string(), "Bytes");
     assert_eq!(env["z"].to_string(), "(Num, Bytes)");
-    assert_eq!(env["sum"].to_string(), "fn<len N; T: Sum>([T; N], T) -> T");
+    assert_eq!(env["sum"].to_string(), "for<'T: Sum> (['T; N], 'T) -> 'T");
     assert_eq!(env["sum_of_bytes"].to_string(), "Bytes");
     assert_eq!(env["sum_of_tuples"].to_string(), "(Num, Num)");
     assert_eq!(
         env["product"].to_string(),
-        "fn<len N; T: Lin>([T; N], T) -> T"
+        "for<'T: Lin> (['T; N], 'T) -> 'T"
     );
     assert_eq!(env["product_of_ints"].to_string(), "Num");
 
@@ -271,7 +271,7 @@ fn main() -> anyhow::Result<()> {
 
     assert_eq!(
         err.to_string(),
-        "1:0: Type `fn(Num) -> Num` fails constraint Sum"
+        "1:0: Type `(Num) -> Num` fails constraint Sum"
     );
 
     env.insert("true", ValueType::BOOL);

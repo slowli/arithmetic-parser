@@ -121,7 +121,7 @@ fn complex_tuples() {
 
 #[test]
 fn embedded_complex_tuple() {
-    let input = InputSpan::new("(Num, ...[Num; _], (...['T; N], fn() -> 'T))");
+    let input = InputSpan::new("(Num, ...[Num; _], (...['T; N], () -> 'T))");
     let (rest, tuple) = tuple_definition::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
@@ -202,7 +202,7 @@ fn embedded_slice_type() {
 
 #[test]
 fn simple_fn_type() {
-    let input = InputSpan::new("fn() -> Num");
+    let input = InputSpan::new("() -> Num");
     let (rest, fn_type) = fn_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
@@ -212,7 +212,7 @@ fn simple_fn_type() {
 
 #[test]
 fn simple_fn_type_with_args() {
-    let input = InputSpan::new("fn((Num, Num), Bool) -> Num");
+    let input = InputSpan::new("((Num, Num), Bool) -> Num");
     let (rest, fn_type) = fn_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
@@ -231,7 +231,7 @@ fn simple_fn_type_with_args() {
 
 #[test]
 fn fn_type_with_type_params() {
-    let input = InputSpan::new("fn(Bool, 'T, 'T) -> 'T");
+    let input = InputSpan::new("(Bool, 'T, 'T) -> 'T");
     let (rest, fn_type) = fn_definition::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
@@ -242,7 +242,7 @@ fn fn_type_with_type_params() {
 
 #[test]
 fn fn_type_accepting_fn_arg() {
-    let input = InputSpan::new("fn(['T; N], fn('T) -> Bool) -> Bool");
+    let input = InputSpan::new("(['T; N], ('T) -> Bool) -> Bool");
     let (rest, fn_type) = fn_definition::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
@@ -262,7 +262,7 @@ fn fn_type_accepting_fn_arg() {
 
 #[test]
 fn fn_type_returning_fn_arg() {
-    let input = InputSpan::new("fn(Num) -> fn(Bool) -> Num");
+    let input = InputSpan::new("(Num) -> (Bool) -> Num");
     let (rest, fn_type) = fn_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
@@ -278,7 +278,7 @@ fn fn_type_returning_fn_arg() {
 
 #[test]
 fn fn_type_with_rest_params() {
-    let input = InputSpan::new("fn(Bool, ...[Num; N]) -> Num");
+    let input = InputSpan::new("(Bool, ...[Num; N]) -> Num");
     let (rest, fn_type) = fn_definition::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
@@ -291,7 +291,7 @@ fn fn_type_with_rest_params() {
 
 #[test]
 fn fn_type_with_constraints() {
-    let input = InputSpan::new("for<'T: Lin> fn('T) -> 'T");
+    let input = InputSpan::new("for<'T: Lin> ('T) -> 'T");
     let (rest, (constraints, fn_type)) = fn_definition_with_constraints::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
@@ -305,7 +305,7 @@ fn fn_type_with_constraints() {
 
 #[test]
 fn multiple_fns_with_constraints() {
-    let input = InputSpan::new("(for<'T: Lin> fn('T) -> 'T, for<'T: Lin> fn(...['T; _]))");
+    let input = InputSpan::new("(for<'T: Lin> ('T) -> 'T, for<'T: Lin> (...['T; _]) -> ())");
     let (rest, ty) = type_definition::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
@@ -337,5 +337,5 @@ fn multiple_fns_with_constraints() {
         *second_fn.args.middle.unwrap().element,
         ValueTypeAst::Param(id) if *id.fragment() == "T"
     );
-    assert_eq!(second_fn.return_type, ValueTypeAst::void());
+    assert_matches!(second_fn.return_type, ValueTypeAst::Tuple(t) if t.start.is_empty());
 }

@@ -405,7 +405,7 @@ mod tests {
 
     #[test]
     fn converting_raw_fn_type() {
-        let input = InputSpan::new("fn(['T; N], fn('T) -> Bool) -> Bool");
+        let input = InputSpan::new("(['T; N], ('T) -> Bool) -> Bool");
         let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
         let fn_type = FnType::try_from(fn_type).unwrap();
 
@@ -414,19 +414,16 @@ mod tests {
 
     #[test]
     fn converting_fn_type_with_constraint() {
-        let input = InputSpan::new("for<'T: Lin> fn(['T; N], fn('T) -> Bool) -> Bool");
+        let input = InputSpan::new("for<'T: Lin> (['T; N], ('T) -> Bool) -> Bool");
         let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
         let fn_type = ValueType::try_from(ast).unwrap();
 
-        assert_eq!(
-            fn_type.to_string(),
-            "for<'T: Lin> fn(['T; N], fn('T) -> Bool) -> Bool"
-        );
+        assert_eq!(fn_type.to_string(), *input.fragment());
     }
 
     #[test]
     fn converting_fn_type_unused_type() {
-        let input = InputSpan::new("for<'T: Lin> fn(Num) -> Bool");
+        let input = InputSpan::new("for<'T: Lin> (Num) -> Bool");
         let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
         let err = ValueType::try_from(ast).unwrap_err();
 
@@ -439,7 +436,7 @@ mod tests {
 
     #[test]
     fn converting_fn_type_unused_length() {
-        let input = InputSpan::new("for<len N*> fn(Num) -> Bool");
+        let input = InputSpan::new("for<len N*> (Num) -> Bool");
         let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
         let err = ValueType::try_from(ast).unwrap_err();
 
@@ -493,12 +490,12 @@ mod tests {
 
     #[test]
     fn embedded_type_with_constraints() {
-        let input = InputSpan::new("fn('T, for<'U: Lin> fn('U) -> 'U)");
+        let input = InputSpan::new("('T, for<'U: Lin> ('U) -> 'U) -> ()");
         let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
         let err = ValueType::try_from(ast).unwrap_err();
 
         assert_eq!(*err.main_span().fragment(), "for");
-        assert_eq!(err.main_span().location_offset(), 7);
+        assert_eq!(err.main_span().location_offset(), 5);
         assert_matches!(err.kind(), ConversionErrorKind::EmbeddedQuantifier);
     }
 
@@ -534,7 +531,7 @@ mod tests {
 
     #[test]
     fn parsing_functional_value_type() {
-        let ty: ValueType = "fn(['T; N], fn('T) -> 'U) -> 'U".parse().unwrap();
+        let ty: ValueType = "(['T; N], ('T) -> 'U) -> 'U".parse().unwrap();
         let ty = match ty {
             ValueType::Function(fn_type) => *fn_type,
             _ => panic!("Unexpected type: {:?}", ty),
@@ -547,7 +544,7 @@ mod tests {
 
     #[test]
     fn parsing_functional_type_with_varargs() {
-        let ty: ValueType = "fn(...[Num; N]) -> Num".parse().unwrap();
+        let ty: ValueType = "(...[Num; N]) -> Num".parse().unwrap();
         let ty = match ty {
             ValueType::Function(fn_type) => *fn_type,
             _ => panic!("Unexpected type: {:?}", ty),

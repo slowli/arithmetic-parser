@@ -78,14 +78,6 @@ pub enum ValueTypeAst<'a, Prim: PrimitiveType = Num> {
 }
 
 impl<'a, Prim: PrimitiveType> ValueTypeAst<'a, Prim> {
-    fn void() -> Self {
-        Self::Tuple(TupleAst {
-            start: Vec::new(),
-            middle: None,
-            end: Vec::new(),
-        })
-    }
-
     /// Parses `input` as a type. This parser can be composed using `nom` infrastructure.
     pub fn parse(input: InputSpan<'a>) -> NomResult<'a, Self> {
         type_definition(input)
@@ -380,19 +372,31 @@ fn constraints<Prim: PrimitiveType>(
     )(input)
 }
 
-fn fn_definition<Prim: PrimitiveType>(input: InputSpan<'_>) -> NomResult<'_, FnTypeAst<'_, Prim>> {
-    let return_type = preceded(tuple((ws, tag("->"), ws)), type_definition);
-    let fn_parser = tuple((
-        tuple_definition,
-        map(opt(return_type), |ty| ty.unwrap_or_else(ValueTypeAst::void)),
-    ));
+fn return_type<Prim: PrimitiveType>(input: InputSpan<'_>) -> NomResult<'_, ValueTypeAst<'_, Prim>> {
+    preceded(tuple((ws, tag("->"), ws)), cut(type_definition))(input)
+}
 
-    preceded(
-        terminated(tag("fn"), ws),
-        map(fn_parser, |(args, return_type)| FnTypeAst {
-            args,
-            return_type,
-        }),
+#[allow(clippy::option_if_let_else)] // false positive; `args` is moved into both clauses
+fn fn_or_tuple<Prim: PrimitiveType>(input: InputSpan<'_>) -> NomResult<'_, ValueTypeAst<'_, Prim>> {
+    map(
+        tuple((tuple_definition, opt(return_type))),
+        |(args, return_type)| {
+            if let Some(return_type) = return_type {
+                ValueTypeAst::Function {
+                    function: Box::new(FnTypeAst { args, return_type }),
+                    constraints: None,
+                }
+            } else {
+                ValueTypeAst::Tuple(args)
+            }
+        },
+    )(input)
+}
+
+fn fn_definition<Prim: PrimitiveType>(input: InputSpan<'_>) -> NomResult<'_, FnTypeAst<'_, Prim>> {
+    map(
+        tuple((tuple_definition, return_type)),
+        |(args, return_type)| FnTypeAst { args, return_type },
     )(input)
 }
 
@@ -424,10 +428,7 @@ fn type_definition<Prim: PrimitiveType>(
     input: InputSpan<'_>,
 ) -> NomResult<'_, ValueTypeAst<'_, Prim>> {
     alt((
-        map(fn_definition, |fn_type| ValueTypeAst::Function {
-            constraints: None,
-            function: Box::new(fn_type),
-        }),
+        fn_or_tuple,
         map(fn_definition_with_constraints, |(constraints, fn_type)| {
             ValueTypeAst::Function {
                 constraints: Some(constraints),
@@ -435,8 +436,7 @@ fn type_definition<Prim: PrimitiveType>(
             }
         }),
         map(type_param_ident, ValueTypeAst::Param),
-        free_ident,
-        map(tuple_definition, ValueTypeAst::Tuple),
         map(slice_definition, ValueTypeAst::Slice),
+        free_ident,
     ))(input)
 }

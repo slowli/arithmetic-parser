@@ -177,12 +177,8 @@ impl<Prim: PrimitiveType> fmt::Display for FnType<Prim> {
             }
         }
 
-        formatter.write_str("fn")?;
-
         self.args.format_as_tuple(formatter)?;
-        if !self.return_type.is_void() {
-            write!(formatter, " -> {}", self.return_type)?;
-        }
+        write!(formatter, " -> {}", self.return_type)?;
         Ok(())
     }
 }
@@ -435,7 +431,7 @@ mod tests {
             .with_arg(ValueType::param(0).repeat(UnknownLen::Some))
             .returning(ValueType::param(0))
             .with_constraints(&[0], &LinConstraints::LIN);
-        assert_eq!(sum_fn.to_string(), "for<'T: Lin> fn(['T; _]) -> 'T");
+        assert_eq!(sum_fn.to_string(), "for<'T: Lin> (['T; _]) -> 'T");
     }
 
     #[test]
@@ -445,7 +441,7 @@ mod tests {
             .returning(ValueType::NUM)
             .with_constraints(&[], &LinConstraints::LIN)
             .into();
-        assert_eq!(sum_fn.to_string(), "fn([Num; N]) -> Num");
+        assert_eq!(sum_fn.to_string(), "([Num; N]) -> Num");
 
         let complex_fn: FnType = FnType::builder()
             .with_arg(ValueType::NUM)
@@ -453,10 +449,7 @@ mod tests {
             .returning(ValueType::NUM)
             .with_constraints(&[], &LinConstraints::LIN)
             .into();
-        assert_eq!(
-            complex_fn.to_string(),
-            "fn(Num, fn([Num; N]) -> Num) -> Num"
-        );
+        assert_eq!(complex_fn.to_string(), "(Num, ([Num; N]) -> Num) -> Num");
 
         let other_complex_fn: FnType = FnType::builder()
             .with_varargs(ValueType::NUM, UnknownLen::param(0))
@@ -466,7 +459,7 @@ mod tests {
             .into();
         assert_eq!(
             other_complex_fn.to_string(),
-            "fn(...[Num; N], fn([Num; N]) -> Num) -> Num"
+            "(...[Num; N], ([Num; N]) -> Num) -> Num"
         );
     }
 }

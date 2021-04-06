@@ -47,7 +47,7 @@ fn push_fn_in_other_fn_definition() {
 
     assert_eq!(
         type_env["push_fork"].to_string(),
-        "fn(...['T; N], 'T) -> (['T; N], ['T; N + 1])"
+        "(...['T; N], 'T) -> (['T; N], ['T; N + 1])"
     );
     assert_eq!(
         type_env["xs"],
@@ -73,7 +73,7 @@ fn several_push_applications() {
 
     assert_eq!(
         type_env["push2"].to_string(),
-        "fn(['T; N], 'T, 'T) -> ['T; N + 2]"
+        "(['T; N], 'T, 'T) -> ['T; N + 2]"
     );
     assert_eq!(type_env["head"], ValueType::NUM);
     assert_eq!(
@@ -98,15 +98,15 @@ fn comparing_lengths_after_push() {
 
     assert_eq!(
         type_env["simple"].to_string(),
-        "fn([Num; N], [Num; N]) -> Bool"
+        "([Num; N], [Num; N]) -> Bool"
     );
     assert_eq!(
         type_env["asymmetric"].to_string(),
-        "fn([Num; N + 1], [Num; N]) -> Bool"
+        "([Num; N + 1], [Num; N]) -> Bool"
     );
     assert_eq!(
         type_env["complex"].to_string(),
-        "fn([Num; N + 1], [Num; N]) -> [Num; N + 2]"
+        "([Num; N + 1], [Num; N]) -> [Num; N + 2]"
     );
 }
 
@@ -148,11 +148,11 @@ fn requirements_on_len_via_destructuring() {
 
     assert_eq!(
         type_env["len_at_least2"].to_string(),
-        "fn(('T, 'U, ...['V; N])) -> ('T, 'U, ...['V; N])"
+        "(('T, 'U, ...['V; N])) -> ('T, 'U, ...['V; N])"
     );
-    assert_eq!(type_env["test_fn"].to_string(), "fn([Num; N + 2]) -> Num");
+    assert_eq!(type_env["test_fn"].to_string(), "([Num; N + 2]) -> Num");
     assert_eq!(
         type_env["other_test_fn"].to_string(),
-        "fn([(Num, Bool); N + 2]) -> [Num; N + 1]"
+        "([(Num, Bool); N + 2]) -> [Num; N + 1]"
     );
 }

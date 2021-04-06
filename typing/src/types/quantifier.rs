@@ -310,7 +310,7 @@ mod tests {
         assert_eq!(placement.len_params, expected_len_params);
 
         placement.visit_function_mut(&mut map_fn);
-        assert_eq!(map_fn.to_string(), "fn(['T; N], fn('T) -> 'U) -> ['U; N]");
+        assert_eq!(map_fn.to_string(), "(['T; N], ('T) -> 'U) -> ['U; N]");
     }
 
     #[test]
@@ -322,7 +322,7 @@ mod tests {
         ParamQuantifier::set_params(&mut merge_fn, ParamConstraints::default());
         assert_eq!(
             merge_fn.to_string(),
-            "for<len L*> fn(['T; N], ['T; M]) -> ['T; L]"
+            "for<len L*> (['T; N], ['T; M]) -> ['T; L]"
         );
     }
 

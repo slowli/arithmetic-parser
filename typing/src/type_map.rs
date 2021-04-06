@@ -247,13 +247,13 @@ mod tests {
     const EXPECTED_PRELUDE_TYPES: &[(&str, &str)] = &[
         ("false", "Bool"),
         ("true", "Bool"),
-        ("if", "fn(Bool, 'T, 'T) -> 'T"),
-        ("while", "fn('T, fn('T) -> Bool, fn('T) -> 'T) -> 'T"),
-        ("map", "fn(['T; N], fn('T) -> 'U) -> ['U; N]"),
-        ("filter", "fn(['T; N], fn('T) -> Bool) -> ['T]"),
-        ("fold", "fn(['T; N], 'U, fn('U, 'T) -> 'U) -> 'U"),
-        ("push", "fn(['T; N], 'T) -> ['T; N + 1]"),
-        ("merge", "fn(['T; N], ['T; M]) -> ['T]"),
+        ("if", "(Bool, 'T, 'T) -> 'T"),
+        ("while", "('T, ('T) -> Bool, ('T) -> 'T) -> 'T"),
+        ("map", "(['T; N], ('T) -> 'U) -> ['U; N]"),
+        ("filter", "(['T; N], ('T) -> Bool) -> ['T]"),
+        ("fold", "(['T; N], 'U, ('U, 'T) -> 'U) -> 'U"),
+        ("push", "(['T; N], 'T) -> ['T; N + 1]"),
+        ("merge", "(['T; N], ['T; M]) -> ['T]"),
     ];
 
     #[test]

@@ -84,6 +84,7 @@ impl TypeVar {
 /// # Notation
 ///
 /// - [`Self::Some`] is represented as `_`.
+/// - [`Self::Any`] is represented as `any`.
 /// - [`Prim`](Self::Prim)itive types are represented using the [`Display`](fmt::Display)
 ///   implementation of the corresponding [`PrimitiveType`].
 /// - [`Var`](Self::Var)s are represented as documented in [`TypeVar`].
@@ -119,6 +120,38 @@ impl TypeVar {
 /// # Ok(())
 /// # }
 /// ```
+///
+/// ## Any Type
+///
+/// [`Self::Any`], denoted as `any`, is a catch-all type similar to `any` in TypeScript.
+/// It allows to circumvent type system limitations at the cost of being exteremely imprecise.
+///
+/// ```
+/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// # use arithmetic_typing::{Annotated, TypeEnvironment, ValueType};
+/// # use assert_matches::assert_matches;
+/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
+///
+/// # fn main() -> anyhow::Result<()> {
+/// let code = r#"
+///     wildcard: any = 1; // `any` can be assigned from anything
+///     wildcard == 1 && wildcard == (2, 3);
+///     (x, y, ...) = wildcard; // destructuring `any` always succeeds
+///     wildcard(1, |x| x + 1); // calling `any` as a funcion works as well
+/// "#;
+/// let ast = Parser::parse_statements(code)?;
+/// let mut env = TypeEnvironment::new();
+/// env.process_statements(&ast)?;
+///
+/// // Destructure outputs are certain types, not `any`!
+/// assert_matches!(env["x"], ValueType::Var(_));
+/// let bogus_usage_code = "x + 1 == 2; x(1)";
+/// let ast = Parser::parse_statements(bogus_usage_code)?;
+/// let err = env.process_statements(&ast).unwrap_err();
+/// assert_eq!(*err.span().fragment(), "x(1)");
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum ValueType<Prim: PrimitiveType = Num> {
@@ -126,7 +159,8 @@ pub enum ValueType<Prim: PrimitiveType = Num> {
     /// in Rust.
     Some,
     /// Any type aka "I'll think about typing later". Similar to `any` type in TypeScript.
-    /// `any` type can be used in any context (destructured, called with any params, etc.).
+    /// `any` type can be used in any context (destructured, called with args of any quantity
+    /// and type, etc.).
     Any,
     /// Primitive type.
     Prim(Prim),

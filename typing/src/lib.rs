@@ -6,6 +6,9 @@
 //! Type inference is *partially* compatible with the interpreter from [`arithmetic-eval`];
 //! if the inference algorithm succeeds on a certain expression / statement / block,
 //! it will execute successfully, but not all successfully executing items pass type inference.
+//! (An exception here is [`ValueType::Any`], which is specifically designed to circumvent
+//! the type system limitations. If `Any` is used too liberally, it can result in code passing
+//! type checks, but failing during execution.)
 //!
 //! # Type system
 //!

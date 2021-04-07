@@ -58,7 +58,10 @@ pub use self::conversion::{ConversionError, ConversionErrorKind};
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum ValueTypeAst<'a, Prim: PrimitiveType = Num> {
-    /// Type placeholder (`_`). Corresponds to any single type.
+    /// Type placeholder (`_`). Corresponds to a certain type that is not specified, like `_`
+    /// in type annotations in Rust.
+    Some,
+    /// Any type (`any`).
     Any,
     /// Primitive types.
     Prim(Prim),
@@ -410,14 +413,18 @@ fn fn_definition_with_constraints<Prim: PrimitiveType>(
 fn free_ident<Prim: PrimitiveType>(input: InputSpan<'_>) -> NomResult<'_, ValueTypeAst<'_, Prim>> {
     let (rest, ident) = ident(input)?;
 
-    let output = if let Ok(res) = ident.fragment().parse::<Prim>() {
-        ValueTypeAst::Prim(res)
-    } else if *ident.fragment() == "_" {
-        ValueTypeAst::Any
-    } else {
-        let err = anyhow::anyhow!("Unknown type name: {}", ident.fragment());
-        let err = ParserErrorKind::Type(err).with_span(&ident.into());
-        return Err(NomErr::Failure(err));
+    let output = match *ident.fragment() {
+        "_" => ValueTypeAst::Some,
+        "any" => ValueTypeAst::Any,
+        ident_str => {
+            if let Ok(res) = ident_str.parse::<Prim>() {
+                ValueTypeAst::Prim(res)
+            } else {
+                let err = anyhow::anyhow!("Unknown type name: {}", ident_str);
+                let err = ParserErrorKind::Type(err).with_span(&ident.into());
+                return Err(NomErr::Failure(err));
+            }
+        }
     };
     Ok((rest, output))
 }

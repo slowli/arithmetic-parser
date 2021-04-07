@@ -174,8 +174,8 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         // accuracy of error reporting, and for some cases of type inference (e.g.,
         // instantiation of parametric functions).
         match (&resolved_lhs, &resolved_rhs) {
-            // Variables should be assigned *before* the equality check to account for
-            // `var <- some` assignment.
+            // Variables should be assigned *before* the equality check and dealing with `Any`
+            // to account for `Var <- Any` assignment.
             (ValueType::Var(var), ty) => {
                 if var.is_free() {
                     self.unify_var(var.index(), ty, true)
@@ -191,6 +191,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 }
             }
 
+            // This takes care of `Any` types because they are equal to anything.
             (ty, other_ty) if ty == other_ty => {
                 // We already know that types are equal.
                 Ok(())
@@ -460,8 +461,8 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 return Ok(());
             }
         }
-        if matches!(ty, ValueType::Some) && !is_lhs {
-            // `Some` <- `Var` assignment; we shouldn't create a type var equation.
+        if matches!(ty, ValueType::Any) && !is_lhs {
+            // `Any` <- `Var` assignment; we shouldn't create a type var equation.
             return Ok(());
         }
 

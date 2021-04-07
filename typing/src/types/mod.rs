@@ -125,6 +125,9 @@ pub enum ValueType<Prim: PrimitiveType = Num> {
     /// Wildcard type, i.e. some type that is not specified. Similar to `_` in type annotations
     /// in Rust.
     Some,
+    /// Any type aka "I'll think about typing later". Similar to `any` type in TypeScript.
+    /// `any` type can be used in any context (destructured, called with any params, etc.).
+    Any,
     /// Primitive type.
     Prim(Prim),
     /// Functional type.
@@ -138,7 +141,7 @@ pub enum ValueType<Prim: PrimitiveType = Num> {
 impl<Prim: PrimitiveType> PartialEq for ValueType<Prim> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Some, _) | (_, Self::Some) => true,
+            (Self::Some, Self::Some) | (Self::Any, _) | (_, Self::Any) => true,
             (Self::Prim(x), Self::Prim(y)) => x == y,
             (Self::Var(x), Self::Var(y)) => x == y,
             (Self::Tuple(xs), Self::Tuple(ys)) => xs == ys,
@@ -152,6 +155,7 @@ impl<Prim: PrimitiveType> fmt::Display for ValueType<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Some => formatter.write_str("_"),
+            Self::Any => formatter.write_str("any"),
             Self::Var(var) => fmt::Display::fmt(var, formatter),
             Self::Prim(num) => fmt::Display::fmt(num, formatter),
             Self::Function(fn_type) => fmt::Display::fmt(fn_type, formatter),
@@ -264,7 +268,8 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
     pub fn is_concrete(&self) -> bool {
         match self {
             Self::Var(var) => !var.is_free,
-            Self::Some | Self::Prim(_) => true,
+            Self::Some => false,
+            Self::Any | Self::Prim(_) => true,
             Self::Function(fn_type) => fn_type.is_concrete(),
             Self::Tuple(tuple) => tuple.is_concrete(),
         }
@@ -324,6 +329,38 @@ mod tests {
             for other_function in &functions[(i + 1)..] {
                 assert_ne!(function, other_function);
             }
+        }
+    }
+
+    #[test]
+    fn concrete_types() {
+        let sample_types = &[
+            ValueType::NUM,
+            ValueType::BOOL,
+            ValueType::Any,
+            (ValueType::BOOL, ValueType::NUM).into(),
+            "for<'T: Lin> (['T; N]) -> 'T".parse().unwrap(),
+        ];
+
+        for ty in sample_types {
+            assert!(ty.is_concrete(), "{:?}", ty);
+        }
+    }
+
+    #[test]
+    fn non_concrete_types() {
+        let sample_types = &[
+            ValueType::Some,
+            ValueType::free_var(2),
+            (ValueType::NUM, ValueType::Some).into(),
+            FnType::builder()
+                .with_arg(ValueType::Some)
+                .returning(ValueType::void())
+                .into(),
+        ];
+
+        for ty in sample_types {
+            assert!(!ty.is_concrete(), "{:?}", ty);
         }
     }
 }

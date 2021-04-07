@@ -224,9 +224,9 @@ fn unifying_complex_tuples() {
 }
 
 #[test]
-fn some_can_be_unified_with_anything() {
+fn any_can_be_unified_with_anything() {
     let mut substitutions = Substitutions::<Num>::default();
-    substitutions.eqs.insert(0, ValueType::Some);
+    substitutions.eqs.insert(0, ValueType::Any);
 
     let rhs_samples = &[
         ValueType::NUM,
@@ -239,6 +239,7 @@ fn some_can_be_unified_with_anything() {
             ValueType::void(),
         )
         .into(),
+        ValueType::Any,
     ];
     for rhs in rhs_samples {
         substitutions.unify(&ValueType::free_var(0), rhs).unwrap();

@@ -25,7 +25,7 @@ pub fn assert_incompatible_types<Prim: PrimitiveType>(
 
 fn hash_fn_type() -> FnType<Num> {
     FnType {
-        args: Slice::new(ValueType::Some, UnknownLen::param(0)).into(),
+        args: Slice::new(ValueType::Any, UnknownLen::param(0)).into(),
         return_type: ValueType::NUM,
         params: None,
     }
@@ -33,7 +33,7 @@ fn hash_fn_type() -> FnType<Num> {
 
 #[test]
 fn hash_fn_type_display() {
-    assert_eq!(hash_fn_type().to_string(), "(...[_; N]) -> Num");
+    assert_eq!(hash_fn_type().to_string(), "(...[any; N]) -> Num");
 }
 
 /// `zip` function signature:
@@ -711,10 +711,10 @@ fn function_passed_as_arg_invalid_arg_type() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_incompatible_types(
-        &err.kind(),
-        &ValueType::NUM,
-        &ValueType::Tuple(vec![ValueType::Some; 2].into()),
+    assert_matches!(
+        err.kind(),
+        TypeErrorKind::TypeMismatch(ValueType::Tuple(t), rhs)
+            if t.len() == TupleLen::from(2) && *rhs == ValueType::NUM
     );
 }
 
@@ -962,17 +962,19 @@ fn constraint_passed_to_wrapping_fn() {
 }
 
 #[test]
-fn some_can_be_unified_with_anything() {
+fn any_can_be_unified_with_anything() {
     let code = r#"
         any == 5 && any == (2, 3);
         any(2, (3, 5)) == any(7);
+        any + 2;
+        any * (3, 5);
         any.map(|x| x + 3) == (2, 4, 5); // could be valid
         any.map(|x| x + 3) == (1 == 2); // cannot be valid; the output is a slice of numbers
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env
-        .insert("any", ValueType::Some)
+        .insert("any", ValueType::Any)
         .insert("map", Prelude::Map)
         .process_statements(&block)
         .unwrap_err();
@@ -987,43 +989,63 @@ fn some_can_be_unified_with_anything() {
 }
 
 #[test]
-fn some_can_be_copied_and_unified_with_anything() {
+fn any_propagates_via_fn_params() {
     let code = r#"
-        any = some;
+        identity = |x| x;
+        identity(any) == 5 && identity(any) == (2, 3, 1 == 1);
+        val = identity(any);
+        val == 5 && val == (7, 8) // works: `val: any`
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env
+        .insert("any", ValueType::Any)
+        .process_statements(&block)
+        .unwrap();
+
+    assert_eq!(type_env["val"], ValueType::Any);
+}
+
+#[test]
+fn any_can_be_copied_and_unified_with_anything() {
+    let code = r#"
+        any = any_other;
         any == 5 && any == (2, 3);
+        any + 3;
         any(2, (3, 5)) == any(7);
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env
-        .insert("some", ValueType::Some)
+        .insert("any_other", ValueType::Any)
         .process_statements(&block)
         .unwrap();
 }
 
 #[test]
-fn some_can_be_destructured_and_unified_with_anything() {
+fn any_can_be_destructured_and_unified_with_anything() {
     let code = r#"
         (any, ...) = some_tuple;
         any == 5 && any == (2, 3);
+        any + 3;
         any(2, (3, 5)) == any(7);
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env
-        .insert("some_tuple", ValueType::Some.repeat(3))
+        .insert("some_tuple", ValueType::Any.repeat(3))
         .process_statements(&block)
         .unwrap();
 }
 
 #[test]
-fn unifying_types_containing_some() {
+fn unifying_types_containing_any() {
     let code = "digest(1, (2, 3), |x| x + 1)";
     let block = F32Grammar::parse_statements(code).unwrap();
 
     let digest_type = FnType::builder()
         .with_arg(ValueType::NUM)
-        .with_varargs(ValueType::Some, UnknownLen::param(0))
+        .with_varargs(ValueType::Any, UnknownLen::param(0))
         .returning(ValueType::NUM);
     let mut type_env = TypeEnvironment::new();
     let output = type_env

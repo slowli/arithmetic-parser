@@ -125,8 +125,11 @@ impl TypeVar {
 ///
 /// # `Any` type
 ///
-/// [`Self::Any`], denoted as `any`, is a catch-all type similar to `any` in TypeScript.
+/// [`Self::any()`], denoted as `any`, is a catch-all type similar to `any` in TypeScript.
 /// It allows to circumvent type system limitations at the cost of being exteremely imprecise.
+/// `any` type can be used in any context (destructured, called with args of any quantity
+/// and type and so on), with each application of the type evaluated independently.
+/// Thus, the same `any` variable can be treated as a function, a tuple, a primitive type, etc.
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
@@ -145,7 +148,8 @@ impl TypeVar {
 /// let mut env = TypeEnvironment::new();
 /// env.process_statements(&ast)?;
 ///
-/// // Destructure outputs are certain types, not `any`!
+/// // Destructure outputs are certain types that can be inferred
+/// // from their usage, rather than `any`!
 /// assert_matches!(env["x"], ValueType::Var(_));
 /// let bogus_usage_code = "x + 1 == 2; x(1)";
 /// let ast = Parser::parse_statements(bogus_usage_code)?;
@@ -158,7 +162,7 @@ impl TypeVar {
 /// ## `Any` with constraints
 ///
 /// [`Self::Any`] can have [`TypeConstraints`]. This is denoted as a suffix after `any`,
-/// for example, `any Lin`. A constrained `any` is actually more restricted than a "default" one;
+/// for example, `any Lin`. A constrained `any` is more restricted than the "default" one;
 /// on assignment to or from `any _`, the types will be checked / set to satisfy the constraints.
 ///
 /// ```
@@ -181,7 +185,7 @@ impl TypeVar {
 /// # }
 /// ```
 ///
-/// One of primary cases of `any _` is restricting varargs of a function:
+/// One of primary use cases of `any _` is restricting varargs of a function:
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
@@ -189,7 +193,8 @@ impl TypeVar {
 /// # use assert_matches::assert_matches;
 /// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// # fn main() -> anyhow::Result<()> {
-/// // Function that accepts any linear args and returns a number.
+/// // Function that accepts any amount of linear args (not necessarily
+/// // of the same type) and returns a number.
 /// let digest_fn: ValueType = "(...[any Lin; N]) -> Num".parse()?;
 /// let mut env = TypeEnvironment::new();
 /// env.insert("true", Prelude::True).insert("digest", digest_fn);
@@ -212,8 +217,7 @@ pub enum ValueType<Prim: PrimitiveType = Num> {
     /// in Rust.
     Some,
     /// Any type aka "I'll think about typing later". Similar to `any` type in TypeScript.
-    /// `any` type can be used in any context (destructured, called with args of any quantity
-    /// and type, etc.).
+    /// See [the dedicated section](#any-type) for more details.
     Any(Prim::Constraints),
     /// Primitive type.
     Prim(Prim),

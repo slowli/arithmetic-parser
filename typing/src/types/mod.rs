@@ -84,11 +84,13 @@ impl TypeVar {
 /// # Notation
 ///
 /// - [`Self::Some`] is represented as `_`.
-/// - [`Self::Any`] is represented as `any`.
+/// - [`Self::Any`] is represented as `any` with an optional [`TypeConstraints`] suffix.
 /// - [`Prim`](Self::Prim)itive types are represented using the [`Display`](fmt::Display)
 ///   implementation of the corresponding [`PrimitiveType`].
 /// - [`Var`](Self::Var)s are represented as documented in [`TypeVar`].
 /// - Notation for [functional](FnType) and [tuple](Tuple) types is documented separately.
+///
+/// [`TypeConstraints`]: crate::arith::TypeConstraints
 ///
 /// # Examples
 ///
@@ -121,7 +123,7 @@ impl TypeVar {
 /// # }
 /// ```
 ///
-/// ## Any Type
+/// # `Any` type
 ///
 /// [`Self::Any`], denoted as `any`, is a catch-all type similar to `any` in TypeScript.
 /// It allows to circumvent type system limitations at the cost of being exteremely imprecise.
@@ -149,6 +151,57 @@ impl TypeVar {
 /// let ast = Parser::parse_statements(bogus_usage_code)?;
 /// let err = env.process_statements(&ast).unwrap_err();
 /// assert_eq!(*err.span().fragment(), "x(1)");
+/// # Ok(())
+/// # }
+/// ```
+///
+/// ## `Any` with constraints
+///
+/// [`Self::Any`] can have [`TypeConstraints`]. This is denoted as a suffix after `any`,
+/// for example, `any Lin`. A constrained `any` is actually more restricted than a "default" one;
+/// on assignment to or from `any _`, the types will be checked / set to satisfy the constraints.
+///
+/// ```
+/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// # use arithmetic_typing::{Annotated, TypeEnvironment, TypeErrorKind, ValueType};
+/// # use assert_matches::assert_matches;
+/// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
+/// # fn main() -> anyhow::Result<()> {
+/// let code = r#"
+///     lin_tuple: [any Lin; _] = (1, (2, 3), (4, (5, 6)));
+///     (x, ...) = lin_tuple; // OK; `x` is some linear type
+///     x(1) // fails: none of linear types is a function
+/// "#;
+/// let ast = Parser::parse_statements(code)?;
+/// let mut env = TypeEnvironment::new();
+/// let err = env.process_statements(&ast).unwrap_err();
+/// assert_eq!(*err.span().fragment(), "x(1)");
+/// assert_matches!(err.kind(), TypeErrorKind::FailedConstraint { .. });
+/// # Ok(())
+/// # }
+/// ```
+///
+/// One of primary cases of `any _` is restricting varargs of a function:
+///
+/// ```
+/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// # use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, TypeErrorKind, ValueType};
+/// # use assert_matches::assert_matches;
+/// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
+/// # fn main() -> anyhow::Result<()> {
+/// // Function that accepts any linear args and returns a number.
+/// let digest_fn: ValueType = "(...[any Lin; N]) -> Num".parse()?;
+/// let mut env = TypeEnvironment::new();
+/// env.insert("true", Prelude::True).insert("digest", digest_fn);
+///
+/// let code = r#"
+///     digest(1, 2, (3, 4), (5, (6, 7))) == 1;
+///     digest(3, true) == 0; // fails: `true` is not linear
+/// "#;
+/// let ast = Parser::parse_statements(code)?;
+/// let err = env.process_statements(&ast).unwrap_err();
+/// assert_eq!(*err.span().fragment(), "digest(3, true)");
+/// assert_matches!(err.kind(), TypeErrorKind::FailedConstraint { .. });
 /// # Ok(())
 /// # }
 /// ```

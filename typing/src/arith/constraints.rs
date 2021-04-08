@@ -140,7 +140,7 @@ impl<Prim: LinearType> TypeConstraints<Prim> for LinConstraints {
             ValueType::Some => unreachable!(),
 
             // `Var`s are taken care of previously. `Any` satisfies any constraints.
-            ValueType::Any | ValueType::Var(_) => Ok(()),
+            ValueType::Any(_) | ValueType::Var(_) => Ok(()),
 
             ValueType::Prim(lit) if lit.is_linear() => Ok(()),
 

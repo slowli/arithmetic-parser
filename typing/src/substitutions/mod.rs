@@ -191,6 +191,10 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 }
             }
 
+            (ValueType::Any(constraints), ty) | (ty, ValueType::Any(constraints)) => {
+                self.unify_any(constraints, ty)
+            }
+
             // This takes care of `Any` types because they are equal to anything.
             (ty, other_ty) if ty == other_ty => {
                 // We already know that types are equal.
@@ -461,10 +465,12 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 return Ok(());
             }
         }
-        if matches!(ty, ValueType::Any) && !is_lhs {
-            // `Any` <- `Var` assignment; we shouldn't create a type var equation.
-            return Ok(());
-        }
+        let needs_equation = if let ValueType::Any(constraints) = ty {
+            self.unify_any(constraints, &ValueType::free_var(var_idx))?;
+            is_lhs
+        } else {
+            true
+        };
 
         // variables should be resolved in `unify`.
         debug_assert!(!self.eqs.contains_key(&var_idx));
@@ -490,9 +496,21 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             if let Some(constraints) = self.constraints.get(&var_idx).cloned() {
                 constraints.apply(ty, self)?;
             }
-            self.eqs.insert(var_idx, ty.clone());
+            if needs_equation {
+                self.eqs.insert(var_idx, ty.clone());
+            }
             Ok(())
         }
+    }
+
+    /// Unifies `Any(constraints)` with `ty`.
+    #[inline]
+    fn unify_any(
+        &mut self,
+        constraints: &Prim::Constraints,
+        ty: &ValueType<Prim>,
+    ) -> Result<(), TypeErrorKind<Prim>> {
+        constraints.apply(ty, self)
     }
 
     /// Returns the return type of the function.

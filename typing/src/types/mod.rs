@@ -161,7 +161,7 @@ pub enum ValueType<Prim: PrimitiveType = Num> {
     /// Any type aka "I'll think about typing later". Similar to `any` type in TypeScript.
     /// `any` type can be used in any context (destructured, called with args of any quantity
     /// and type, etc.).
-    Any,
+    Any(Prim::Constraints),
     /// Primitive type.
     Prim(Prim),
     /// Functional type.
@@ -175,7 +175,8 @@ pub enum ValueType<Prim: PrimitiveType = Num> {
 impl<Prim: PrimitiveType> PartialEq for ValueType<Prim> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Some, Self::Some) | (Self::Any, _) | (_, Self::Any) => true,
+            (Self::Some, Self::Some) => true,
+            (Self::Any(x), Self::Any(y)) => x == y,
             (Self::Prim(x), Self::Prim(y)) => x == y,
             (Self::Var(x), Self::Var(y)) => x == y,
             (Self::Tuple(xs), Self::Tuple(ys)) => xs == ys,
@@ -189,7 +190,13 @@ impl<Prim: PrimitiveType> fmt::Display for ValueType<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Some => formatter.write_str("_"),
-            Self::Any => formatter.write_str("any"),
+            Self::Any(constraints) => {
+                if *constraints == Prim::Constraints::default() {
+                    formatter.write_str("any")
+                } else {
+                    write!(formatter, "any {}", constraints)
+                }
+            }
             Self::Var(var) => fmt::Display::fmt(var, formatter),
             Self::Prim(num) => fmt::Display::fmt(num, formatter),
             Self::Function(fn_type) => fmt::Display::fmt(fn_type, formatter),
@@ -263,6 +270,11 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
         Self::Var(TypeVar::param(index))
     }
 
+    /// Creates an unbounded `any` type.
+    pub fn any() -> Self {
+        Self::Any(Prim::Constraints::default())
+    }
+
     pub(crate) fn free_var(index: usize) -> Self {
         Self::Var(TypeVar {
             index,
@@ -303,7 +315,7 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
         match self {
             Self::Var(var) => !var.is_free,
             Self::Some => false,
-            Self::Any | Self::Prim(_) => true,
+            Self::Any(_) | Self::Prim(_) => true,
             Self::Function(fn_type) => fn_type.is_concrete(),
             Self::Tuple(tuple) => tuple.is_concrete(),
         }
@@ -371,7 +383,7 @@ mod tests {
         let sample_types = &[
             ValueType::NUM,
             ValueType::BOOL,
-            ValueType::Any,
+            ValueType::any(),
             (ValueType::BOOL, ValueType::NUM).into(),
             "for<'T: Lin> (['T; N]) -> 'T".parse().unwrap(),
         ];

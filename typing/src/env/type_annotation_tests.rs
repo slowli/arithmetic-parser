@@ -418,9 +418,9 @@ fn type_with_tuple_of_any() {
         TypeErrorKind::TypeMismatch(lhs, rhs)
             if lhs.to_string() == "(Num) -> _" && rhs.to_string() == "(any, any, any)"
     );
-    assert_matches!(type_env["x"], ValueType::Any);
-    assert_matches!(type_env["y"], ValueType::Any);
-    assert_matches!(type_env["z"], ValueType::Any);
+    assert_eq!(type_env["x"], ValueType::any());
+    assert_eq!(type_env["y"], ValueType::any());
+    assert_eq!(type_env["z"], ValueType::any());
 }
 
 #[test]
@@ -441,4 +441,25 @@ fn type_with_any_fn() {
             if *lhs == TupleLen::from(1) && *rhs == TupleLen::from(2)
     );
     assert_eq!(type_env["fun"].to_string(), "(any) -> Bool");
+}
+
+#[test]
+fn any_fn_with_constraints() {
+    let code = r#"
+        lin_tuple: [any Lin; _] = (1, (2, 5), 9);
+        bogus_tuple: [any Lin; _] = (1, 2, 3 == 4);
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env.process_statements(&block).unwrap_err();
+
+    assert!(err.span().fragment().starts_with("bogus_tuple"));
+    assert_matches!(
+        err.kind(),
+        TypeErrorKind::FailedConstraint { ty, .. } if *ty == ValueType::BOOL
+    );
+    assert_eq!(
+        type_env["lin_tuple"].to_string(),
+        "(any Lin, any Lin, any Lin)"
+    );
 }

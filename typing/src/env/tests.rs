@@ -25,7 +25,7 @@ pub fn assert_incompatible_types<Prim: PrimitiveType>(
 
 fn hash_fn_type() -> FnType<Num> {
     FnType {
-        args: Slice::new(ValueType::Any, UnknownLen::param(0)).into(),
+        args: Slice::new(ValueType::Any(LinConstraints::LIN), UnknownLen::param(0)).into(),
         return_type: ValueType::NUM,
         params: None,
     }
@@ -33,7 +33,7 @@ fn hash_fn_type() -> FnType<Num> {
 
 #[test]
 fn hash_fn_type_display() {
-    assert_eq!(hash_fn_type().to_string(), "(...[any; N]) -> Num");
+    assert_eq!(hash_fn_type().to_string(), "(...[any Lin; N]) -> Num");
 }
 
 /// `zip` function signature:
@@ -108,7 +108,7 @@ fn function_definition() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env.get("sign").unwrap().to_string(),
-        "(Num, 'T) -> (Num, Num)"
+        "for<'T: Lin> (Num, 'T) -> (Num, Num)"
     );
 }
 
@@ -131,11 +131,11 @@ fn non_linear_types_in_function() {
     );
     assert_eq!(
         type_env.get("compare_hash").unwrap().to_string(),
-        "(Num, 'T) -> Bool"
+        "for<'T: Lin> (Num, 'T) -> Bool"
     );
     assert_eq!(
         type_env.get("add_hashes").unwrap().to_string(),
-        "('T, 'U) -> Num"
+        "for<'T: Lin, 'U: Lin> ('T, 'U) -> Num"
     );
 }
 
@@ -974,7 +974,7 @@ fn any_can_be_unified_with_anything() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env
-        .insert("any", ValueType::Any)
+        .insert("any", ValueType::any())
         .insert("map", Prelude::Map)
         .process_statements(&block)
         .unwrap_err();
@@ -999,11 +999,11 @@ fn any_propagates_via_fn_params() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env
-        .insert("any", ValueType::Any)
+        .insert("any", ValueType::any())
         .process_statements(&block)
         .unwrap();
 
-    assert_eq!(type_env["val"], ValueType::Any);
+    assert_eq!(type_env["val"], ValueType::any());
 }
 
 #[test]
@@ -1017,7 +1017,7 @@ fn any_can_be_copied_and_unified_with_anything() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env
-        .insert("any_other", ValueType::Any)
+        .insert("any_other", ValueType::any())
         .process_statements(&block)
         .unwrap();
 }
@@ -1033,7 +1033,7 @@ fn any_can_be_destructured_and_unified_with_anything() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env
-        .insert("some_tuple", ValueType::Any.repeat(3))
+        .insert("some_tuple", ValueType::any().repeat(3))
         .process_statements(&block)
         .unwrap();
 }
@@ -1045,7 +1045,7 @@ fn unifying_types_containing_any() {
 
     let digest_type = FnType::builder()
         .with_arg(ValueType::NUM)
-        .with_varargs(ValueType::Any, UnknownLen::param(0))
+        .with_varargs(ValueType::any(), UnknownLen::param(0))
         .returning(ValueType::NUM);
     let mut type_env = TypeEnvironment::new();
     let output = type_env
@@ -1060,4 +1060,52 @@ fn unifying_types_containing_any() {
     let err = type_env.process_statements(&bogus_block).unwrap_err();
 
     assert_incompatible_types(err.kind(), &ValueType::NUM, &ValueType::BOOL);
+}
+
+#[test]
+fn any_type_with_bound_with_bogus_function_call() {
+    let code = "hash(1, |x| x + 1)";
+    let block = F32Grammar::parse_statements(code).unwrap();
+
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env
+        .insert("hash", hash_fn_type())
+        .process_statements(&block)
+        .unwrap_err();
+
+    assert_matches!(
+        err.kind(),
+        TypeErrorKind::FailedConstraint {
+            ty: ValueType::Function(_),
+            ..
+        }
+    );
+}
+
+#[test]
+fn any_type_with_bound_in_tuple() {
+    let mut type_env = TypeEnvironment::new();
+    type_env.insert("some_lin", ValueType::Any(LinConstraints::LIN));
+
+    let bogus_call = "some_lin(1)";
+    let bogus_call = F32Grammar::parse_statements(bogus_call).unwrap();
+    let err = type_env.process_statements(&bogus_call).unwrap_err();
+
+    assert_matches!(
+        err.kind(),
+        TypeErrorKind::FailedConstraint {
+            ty: ValueType::Function(_),
+            ..
+        }
+    );
+
+    let destructure = "(x, y) = some_lin; !x";
+    let destructure = F32Grammar::parse_statements(destructure).unwrap();
+    let err = type_env.process_statements(&destructure).unwrap_err();
+
+    assert_eq!(*err.span().fragment(), "x");
+    assert_matches!(
+        err.kind(),
+        TypeErrorKind::FailedConstraint { ty, .. } if *ty == ValueType::BOOL
+    );
 }

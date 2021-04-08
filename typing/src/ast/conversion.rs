@@ -255,7 +255,7 @@ impl<'a, Prim: PrimitiveType> ValueTypeAst<'a, Prim> {
     ) -> Result<ValueType<Prim>, ConversionError<&'a str>> {
         Ok(match self {
             Self::Some => ValueType::Some,
-            Self::Any => ValueType::Any,
+            Self::Any(constraints) => ValueType::Any(constraints.computed.clone()),
             Self::Prim(prim) => ValueType::Prim(prim.to_owned()),
 
             Self::Param(ident) => {

@@ -346,5 +346,27 @@ fn any_type() {
     let (rest, ty) = type_definition::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_matches!(ty, ValueTypeAst::Any);
+    assert_matches!(ty, ValueTypeAst::Any(constraints) if constraints.terms.is_empty());
+}
+
+#[test]
+fn any_type_with_bound() {
+    let input = InputSpan::new("any Lin");
+    let (rest, ty) = type_definition::<Num>(input).unwrap();
+
+    assert!(rest.fragment().is_empty());
+    assert_matches!(ty, ValueTypeAst::Any(constraints) if constraints.terms.len() == 1);
+
+    let bogus_input = InputSpan::new("anyLin");
+    let err = type_definition::<Num>(bogus_input).unwrap_err();
+    let err = match err {
+        NomErr::Failure(err) => err,
+        _ => panic!("Unexpected error type: {:?}", err),
+    };
+
+    assert_eq!(*err.span().fragment(), "anyLin");
+    assert_matches!(
+        err.kind(),
+        ParseErrorKind::Type(e) if e.to_string() == "Unknown type name: anyLin"
+    );
 }

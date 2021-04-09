@@ -3,7 +3,7 @@
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
-    ptr,
+    ops, ptr,
 };
 
 use crate::{
@@ -508,7 +508,13 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 constraints.apply(ty, self)?;
             }
             if needs_equation {
-                self.eqs.insert(var_idx, ty.clone());
+                let mut ty = ty.to_owned();
+                if !is_lhs {
+                    // We need to swap `any` types / lengths with new vars so that this type
+                    // can be specified further.
+                    TypeSpecifier::new(self).visit_type_mut(&mut ty);
+                }
+                self.eqs.insert(var_idx, ty);
             }
             Ok(())
         }
@@ -627,7 +633,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeAssigner<'_, Prim> {
     }
 }
 
-/// Mutable visitor that performs type resolution based on `Substitutions`.
+/// Visitor that performs type resolution based on `Substitutions`.
 #[derive(Debug, Clone, Copy)]
 struct TypeResolver<'a, Prim: PrimitiveType> {
     substitutions: &'a Substitutions<Prim>,
@@ -644,5 +650,78 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeResolver<'_, Prim> {
 
     fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
         *len = self.substitutions.resolve_len(*len);
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Variance {
+    Co,
+    Contra,
+}
+
+impl ops::Not for Variance {
+    type Output = Self;
+
+    fn not(self) -> Self {
+        match self {
+            Self::Co => Self::Contra,
+            Self::Contra => Self::Co,
+        }
+    }
+}
+
+/// Visitor that swaps `any` types / lengths with new vars, but only if they are in a covariant
+/// position (return types, args of arg functions, etc.).
+#[derive(Debug)]
+struct TypeSpecifier<'a, Prim: PrimitiveType> {
+    substitutions: &'a mut Substitutions<Prim>,
+    variance: Variance,
+}
+
+impl<'a, Prim: PrimitiveType> TypeSpecifier<'a, Prim> {
+    fn new(substitutions: &'a mut Substitutions<Prim>) -> Self {
+        Self {
+            substitutions,
+            variance: Variance::Co,
+        }
+    }
+}
+
+impl<Prim: PrimitiveType> VisitMut<Prim> for TypeSpecifier<'_, Prim> {
+    fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
+        if let ValueType::Any(constraints) = ty {
+            if self.variance == Variance::Co {
+                let var_idx = self.substitutions.type_var_count;
+                self.substitutions
+                    .constraints
+                    .insert(var_idx, constraints.to_owned());
+                *ty = ValueType::free_var(var_idx);
+                self.substitutions.type_var_count += 1;
+            }
+        } else {
+            visit::visit_type_mut(self, ty);
+        }
+    }
+
+    fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
+        if self.variance != Variance::Co {
+            return;
+        }
+        if let (Some(var_len @ UnknownLen::Dynamic), _) = len.components_mut() {
+            let var_idx = self.substitutions.len_var_count;
+            self.substitutions.len_var_count += 1;
+            *var_len = UnknownLen::free_var(var_idx);
+        }
+    }
+
+    fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {
+        // Since the visiting order doesn't matter, we visit the return type (which preserves
+        // variance) first.
+        self.visit_type_mut(&mut function.return_type);
+
+        let old_variance = self.variance;
+        self.variance = !self.variance;
+        self.visit_tuple_mut(&mut function.args);
+        self.variance = old_variance;
     }
 }

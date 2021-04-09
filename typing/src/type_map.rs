@@ -124,7 +124,7 @@ impl<Prim: WithBoolean> From<Prelude> for ValueType<Prim> {
                     .returning(ValueType::BOOL);
 
                 FnType::builder()
-                    .with_arg(ValueType::param(0).repeat(UnknownLen::param(0)))
+                    .with_arg(ValueType::param(0).repeat(UnknownLen::Dynamic))
                     .with_arg(predicate_arg)
                     .returning(ValueType::param(0).repeat(UnknownLen::Dynamic))
                     .into()
@@ -138,7 +138,7 @@ impl<Prim: WithBoolean> From<Prelude> for ValueType<Prim> {
                     .returning(ValueType::param(1));
 
                 FnType::builder()
-                    .with_arg(ValueType::param(0).repeat(UnknownLen::param(0)))
+                    .with_arg(ValueType::param(0).repeat(UnknownLen::Dynamic))
                     .with_arg(ValueType::param(1))
                     .with_arg(fold_arg)
                     .returning(ValueType::param(1))
@@ -152,8 +152,8 @@ impl<Prim: WithBoolean> From<Prelude> for ValueType<Prim> {
                 .into(),
 
             Prelude::Merge => FnType::builder()
-                .with_arg(ValueType::param(0).repeat(UnknownLen::param(0)))
-                .with_arg(ValueType::param(0).repeat(UnknownLen::param(1)))
+                .with_arg(ValueType::param(0).repeat(UnknownLen::Dynamic))
+                .with_arg(ValueType::param(0).repeat(UnknownLen::Dynamic))
                 .returning(ValueType::param(0).repeat(UnknownLen::Dynamic))
                 .into(),
         }
@@ -250,10 +250,10 @@ mod tests {
         ("if", "(Bool, 'T, 'T) -> 'T"),
         ("while", "('T, ('T) -> Bool, ('T) -> 'T) -> 'T"),
         ("map", "(['T; N], ('T) -> 'U) -> ['U; N]"),
-        ("filter", "(['T; N], ('T) -> Bool) -> ['T]"),
-        ("fold", "(['T; N], 'U, ('U, 'T) -> 'U) -> 'U"),
+        ("filter", "(['T], ('T) -> Bool) -> ['T]"),
+        ("fold", "(['T], 'U, ('U, 'T) -> 'U) -> 'U"),
         ("push", "(['T; N], 'T) -> ['T; N + 1]"),
-        ("merge", "(['T; N], ['T; M]) -> ['T]"),
+        ("merge", "(['T], ['T]) -> ['T]"),
     ];
 
     #[test]

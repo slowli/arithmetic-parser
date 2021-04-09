@@ -868,6 +868,27 @@ fn dynamically_sized_slices_with_map() {
 }
 
 #[test]
+fn mix_of_static_and_dynamic_slices() {
+    let code = "|xs| { _unused: [_] = xs; xs + (1, 2) }";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let output = type_env.process_statements(&block).unwrap();
+    assert_eq!(output.to_string(), "((Num, Num)) -> (Num, Num)");
+}
+
+#[test]
+fn mix_of_static_and_dynamic_slices_via_fn() {
+    let code = "|xs| { xs.filter(|x| x != 1); xs + (1, 2) }";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let output = type_env
+        .insert("filter", Prelude::Filter)
+        .process_statements(&block)
+        .unwrap();
+    assert_eq!(output.to_string(), "((Num, Num)) -> (Num, Num)");
+}
+
+#[test]
 fn cannot_destructure_dynamic_slice() {
     let code = "(x, y) = (1, 2, 3).filter(|x| x != 1);";
     let block = F32Grammar::parse_statements(code).unwrap();

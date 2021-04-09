@@ -229,8 +229,8 @@ fn assigning_to_dynamically_sized_slice() {
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(type_env["slice"].to_string(), "[Num; _]");
-    assert!(!type_env["slice"].is_concrete());
+    assert_eq!(type_env["slice"].to_string(), "[Num]");
+    assert!(type_env["slice"].is_concrete());
 
     let bogus_code = "(x, y) = slice;";
     let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
@@ -270,7 +270,7 @@ fn adding_dynamically_typed_slices() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
+    assert_matches!(err.kind(), TypeErrorKind::FailedConstraint { .. });
 }
 
 #[test]
@@ -285,45 +285,6 @@ fn unifying_dynamic_slices_error() {
     type_env.insert("zip_with", zip_fn_type());
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
-}
-
-#[test]
-fn unifying_dynamic_slices_in_arithmetic_op_error() {
-    let code = r#"
-        xs: [Num] = (1, 2);
-        ys: [Num] = (3, 4, 5);
-        xs + xs; // should work (dyn lengths are the same)
-        xs + xs.map(|x| x - 1); // should work (`map` retains length)
-        xs + ys
-    "#;
-    let block = F32Grammar::parse_statements(code).unwrap();
-    let mut type_env = TypeEnvironment::new();
-    type_env.insert("map", Prelude::Map);
-    let err = type_env.process_statements(&block).unwrap_err();
-
-    assert_eq!(*err.span().fragment(), "xs + ys");
-    assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
-}
-
-#[test]
-fn unifying_dynamic_slices_in_fn_error() {
-    let code = r#"
-        // This should work because the dynamic length is the same.
-        xs = (1, 2, 3).filter(|x| x != 2);
-        xs.zip_with(xs);
-        // This one shouldn't because dynamic lengths are different.
-        xs.zip_with(xs.filter(|x| x == 1));
-    "#;
-
-    let block = F32Grammar::parse_statements(code).unwrap();
-    let mut type_env = TypeEnvironment::new();
-    type_env
-        .insert("zip_with", zip_fn_type())
-        .insert("filter", Prelude::Filter);
-    let err = type_env.process_statements(&block).unwrap_err();
-
-    assert_eq!(*err.span().fragment(), "xs.zip_with(xs.filter(|x| x == 1))");
     assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
 }
 
@@ -346,9 +307,9 @@ fn unifying_tuples_with_middle() {
 
     assert_eq!(type_env["xs"].to_string(), "(Num, Num, Num)");
     assert_eq!(type_env["ys"].to_string(), "(Num, Num, ('T) -> 'T)");
-    assert_eq!(type_env["zs"].to_string(), "(Num, ...[Num; _], Num)");
+    assert_eq!(type_env["zs"].to_string(), "(Num, ...[Num], Num)");
     assert_eq!(type_env["xs_head"].to_string(), "(Num, Num)");
-    assert_eq!(type_env["zs_middle"].to_string(), "[Num; _]");
+    assert_eq!(type_env["zs_middle"].to_string(), "[Num]");
 }
 
 #[test]
@@ -366,8 +327,8 @@ fn unifying_tuples_with_dyn_lengths() {
 
     assert!(err.span().fragment().starts_with("zs:"));
     assert_incompatible_types(err.kind(), &ValueType::BOOL, &ValueType::NUM);
-    assert_eq!(type_env["xs"].to_string(), "(Bool, ...[Num; _], Num)");
-    assert_eq!(type_env["ys"].to_string(), "[Num; _]");
+    assert_eq!(type_env["xs"].to_string(), "(Bool, ...[Num], Num)");
+    assert_eq!(type_env["ys"].to_string(), "[Num]");
 }
 
 #[test]

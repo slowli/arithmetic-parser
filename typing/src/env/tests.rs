@@ -39,7 +39,7 @@ fn hash_fn_type_display() {
 /// `zip` function signature:
 ///
 /// ```text
-/// fn([T; N], [U; N]) -> [(T, U); N]
+/// ([T; N], [U; N]) -> [(T, U); N]
 /// ```
 pub fn zip_fn_type() -> FnType<Num> {
     FnType::builder()
@@ -341,14 +341,13 @@ fn destructuring_for_fn_args() {
 }
 
 #[test]
-fn fn_args_cannot_be_unified_with_concrete_length() {
-    let code = "bogus = |...xs| { (x, y) = xs; x };";
+fn fn_args_can_be_unified_with_concrete_length() {
+    let code = "weird = |...xs| { (x, y) = xs; x };";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block).unwrap_err();
+    type_env.process_statements(&block).unwrap();
 
-    assert_eq!(*err.span().fragment(), "(x, y) = xs");
-    assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
+    assert_eq!(type_env["weird"].to_string(), "('T, 'T) -> 'T");
 }
 
 #[test]
@@ -828,11 +827,10 @@ fn dynamically_sized_slices_basics() {
     type_env.insert("filter", Prelude::Filter);
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(type_env["filtered"].to_string(), "[Num; _]");
+    assert_eq!(type_env["filtered"].to_string(), "[Num]");
 
     let new_code = r#"
         mapped = filtered.map(|x| x + 3);
-        filtered + mapped; // check that `map` preserves type
         sum = mapped.fold(0, |acc, x| acc + x);
     "#;
     type_env
@@ -865,10 +863,7 @@ fn dynamically_sized_slices_with_map() {
     type_env.insert("map", Prelude::Map);
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(
-        type_env["foo"].to_string(),
-        "for<len M*> ([Num; N]) -> [Num; M]"
-    );
+    assert_eq!(type_env["foo"].to_string(), "([Num; N]) -> [Num]");
 }
 
 #[test]
@@ -913,7 +908,7 @@ fn comparisons_when_switched_on() {
     };
 
     assert_eq!(*slice.element(), ValueType::NUM);
-    assert_matches!(slice.len().components(), (Some(UnknownLen::Var(_)), 0));
+    assert_matches!(slice.len().components(), (Some(UnknownLen::Dynamic), 0));
 }
 
 #[test]

@@ -71,8 +71,7 @@ pub enum UnknownLen {
     /// Wildcard length, i.e. some length that is not specified. Similar to `_` in type annotations
     /// in Rust. Unlike [`Self::Dynamic`], this length can be found during type inference.
     Some,
-    /// *Dynamic* wildcard length. Unlike [`Self::Some`], this length can vary at runtime,
-    /// i.e., it cannot be unified with any other length during type inference.
+    /// *Dynamic* wildcard length.
     Dynamic,
     /// Length variable.
     Var(LengthVar),

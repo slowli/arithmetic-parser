@@ -385,7 +385,7 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
     fn process_destructure_rest<'a>(
         &mut self,
         rest: &DestructureRest<'a, ValueType<Prim>>,
-        is_fn_args: bool,
+        _is_fn_args: bool, // FIXME: remove
     ) -> Result<Slice<Prim>, TypeError<'a, Prim>> {
         let ty = match rest {
             DestructureRest::Unnamed => None,
@@ -399,11 +399,7 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
             .map_err(|err| err.with_span(ty.as_ref().unwrap()))?;
         // `unwrap` is safe: an error can only occur with a type annotation present.
 
-        let mut length = if is_fn_args {
-            UnknownLen::Dynamic.into()
-        } else {
-            UnknownLen::Some.into()
-        };
+        let mut length = UnknownLen::Some.into();
         self.root_scope.substitutions.assign_new_len(&mut length);
 
         if let DestructureRest::Named { variable, .. } = rest {

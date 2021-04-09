@@ -156,3 +156,30 @@ fn requirements_on_len_via_destructuring() {
         "([(Num, Bool); N + 2]) -> [Num; N + 1]"
     );
 }
+
+#[test]
+fn reversing_a_slice() {
+    let code = r#"
+        reverse = |xs| {
+            empty: [_] = ();
+            xs.fold(empty, |acc, x| (x,).merge(acc))
+        };
+        ys = (2, 3, 4).reverse().map(|x| x == 1);
+        (_, ...) = ys;
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+
+    let mut type_env = TypeEnvironment::new();
+    type_env
+        .insert("fold", Prelude::Fold)
+        .insert("map", Prelude::Map)
+        .insert("merge", Prelude::Merge);
+    let err = type_env.process_statements(&block).unwrap_err();
+
+    assert_eq!(*err.span().fragment(), "(_, ...) = ys");
+    assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
+    assert_eq!(type_env["reverse"].to_string(), "(['T; N]) -> ['T]");
+    assert_eq!(type_env["ys"].to_string(), "[Bool]");
+}
+
+// FIXME: test square [['T; N]; N]

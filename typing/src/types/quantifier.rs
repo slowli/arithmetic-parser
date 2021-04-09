@@ -8,7 +8,7 @@ use std::{
 use crate::{
     types::{FnParams, ParamConstraints},
     visit::{self, Visit, VisitMut},
-    FnType, LengthKind, PrimitiveType, Tuple, TupleLen, UnknownLen, ValueType,
+    FnType, LengthKind, PrimitiveType, Tuple, UnknownLen, ValueType,
 };
 
 #[derive(Debug, Default)]
@@ -172,32 +172,20 @@ struct ParamPlacement<Prim: PrimitiveType> {
     type_params: HashMap<usize, Vec<usize>>,
     // Grouped by function index.
     len_params: HashMap<usize, Vec<usize>>,
-    next_len_param: usize,
     function_count: usize,
     current_function_idx: usize,
     constraints: ParamConstraints<Prim>,
 }
 
 impl<Prim: PrimitiveType> ParamPlacement<Prim> {
-    fn next_param(params: &HashMap<usize, Vec<usize>>) -> usize {
-        params
-            .values()
-            .flatten()
-            .copied()
-            .max()
-            .map_or(0, |idx| idx + 1)
-    }
-
     fn new(
         type_params: HashMap<usize, Vec<usize>>,
         len_params: HashMap<usize, Vec<usize>>,
         constraints: ParamConstraints<Prim>,
     ) -> Self {
-        let next_len_param = Self::next_param(&len_params);
         Self {
             type_params,
             len_params,
-            next_len_param,
             function_count: 0,
             current_function_idx: usize::MAX,
             constraints,
@@ -206,21 +194,6 @@ impl<Prim: PrimitiveType> ParamPlacement<Prim> {
 }
 
 impl<Prim: PrimitiveType> VisitMut<Prim> for ParamPlacement<Prim> {
-    fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
-        let target_len = match len.components_mut().0 {
-            Some(target_len @ UnknownLen::Dynamic) => target_len,
-            _ => return,
-        };
-
-        *target_len = UnknownLen::param(self.next_len_param);
-        self.len_params
-            .entry(self.current_function_idx)
-            .or_default()
-            .push(self.next_len_param);
-        self.constraints.dyn_lengths.insert(self.next_len_param);
-        self.next_len_param += 1;
-    }
-
     // FIXME: what if the params are already present on the `function`?
     fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {
         let this_function_idx = self.function_count;
@@ -311,19 +284,6 @@ mod tests {
 
         placement.visit_function_mut(&mut map_fn);
         assert_eq!(map_fn.to_string(), "(['T; N], ('T) -> 'U) -> ['U; N]");
-    }
-
-    #[test]
-    fn transforming_wildcards_into_params() {
-        let mut merge_fn = <FnType>::builder()
-            .with_arg(ValueType::param(0).repeat(UnknownLen::param(0)))
-            .with_arg(ValueType::param(0).repeat(UnknownLen::param(1)))
-            .returning(ValueType::param(0).repeat(UnknownLen::Dynamic));
-        ParamQuantifier::set_params(&mut merge_fn, ParamConstraints::default());
-        assert_eq!(
-            merge_fn.to_string(),
-            "for<len L*> (['T; N], ['T; M]) -> ['T; L]"
-        );
     }
 
     #[test]

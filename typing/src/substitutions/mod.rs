@@ -1,16 +1,12 @@
 //! Substitutions type and dependencies.
 
-use std::{
-    cmp::Ordering,
-    collections::{HashMap, HashSet},
-    ptr,
-};
+use std::{cmp::Ordering, collections::HashMap, ptr};
 
 use crate::{
     arith::TypeConstraints,
     visit::{self, Visit, VisitMut},
-    FnType, LengthKind, PrimitiveType, Tuple, TupleLen, TupleLenMismatchContext, TypeErrorKind,
-    TypeVar, UnknownLen, ValueType,
+    FnType, PrimitiveType, Tuple, TupleLen, TupleLenMismatchContext, TypeErrorKind, TypeVar,
+    UnknownLen, ValueType,
 };
 
 mod fns;
@@ -38,8 +34,6 @@ pub struct Substitutions<Prim: PrimitiveType> {
     len_var_count: usize,
     /// Length variable equations.
     length_eqs: HashMap<usize, TupleLen>,
-    /// Length variable known to be dynamic.
-    dyn_lengths: HashSet<usize>,
 }
 
 impl<Prim: PrimitiveType> Default for Substitutions<Prim> {
@@ -50,7 +44,6 @@ impl<Prim: PrimitiveType> Default for Substitutions<Prim> {
             constraints: HashMap::new(),
             len_var_count: 0,
             length_eqs: HashMap::new(),
-            dyn_lengths: HashSet::new(),
         }
     }
 }
@@ -137,21 +130,10 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     }
 
     pub(crate) fn assign_new_len(&mut self, len: &mut TupleLen) {
-        let target_len = match len.components_mut().0 {
-            Some(target_len) => target_len,
-            None => return,
-        };
-        let is_dynamic = match target_len {
-            UnknownLen::Some => false,
-            UnknownLen::Dynamic => true,
-            _ => return,
-        };
-
-        if is_dynamic {
-            self.dyn_lengths.insert(self.len_var_count);
+        if let Some(target_len @ UnknownLen::Some) = len.components_mut().0 {
+            *target_len = UnknownLen::free_var(self.len_var_count);
+            self.len_var_count += 1;
         }
-        *target_len = UnknownLen::free_var(self.len_var_count);
-        self.len_var_count += 1;
     }
 
     /// Unifies types in `lhs` and `rhs`.
@@ -312,67 +294,55 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         source: TupleLen,
         is_lhs: bool,
     ) -> Result<TupleLen, LenErrorKind> {
-        let var_idx = match simple_len {
-            UnknownLen::Var(var) if var.is_free() => var.index(),
-            _ => return Err(LenErrorKind::UnresolvedParam),
-        };
-        let source_var_idx = match source.components().0 {
-            None => None,
-            Some(UnknownLen::Var(var)) if var.is_free() => Some(var.index()),
-            Some(_) => return Err(LenErrorKind::UnresolvedParam),
-        };
+        match simple_len {
+            UnknownLen::Var(var) if var.is_free() => self.unify_var_length(var.index(), source),
+            UnknownLen::Dynamic => self.unify_dyn_length(source, is_lhs),
+            _ => Err(LenErrorKind::UnresolvedParam),
+        }
+    }
 
-        let (is_dyn, is_source_dyn) = match source_var_idx {
-            // Same length variable.
-            Some(idx) if idx == var_idx => {
-                return if source.components().1 == 0 {
-                    Ok(source) // lengths are already unified
-                } else {
-                    // x = x + C, C > 0: cannot be unified
-                    Err(LenErrorKind::Mismatch)
-                };
-            }
-            // Different length variables.
-            Some(source_var_idx) => {
-                let is_dyn = self.dyn_lengths.contains(&var_idx);
-                let is_source_dyn = self.dyn_lengths.contains(&source_var_idx);
-                (is_dyn, is_source_dyn)
-            }
-            // No length variable.
-            None => {
-                let is_dyn = self.dyn_lengths.contains(&var_idx);
-                (is_dyn, false)
-            }
-        };
+    #[inline]
+    fn unify_var_length(
+        &mut self,
+        var_idx: usize,
+        source: TupleLen,
+    ) -> Result<TupleLen, LenErrorKind> {
+        // Check that the source is valid.
+        match source.components() {
+            (Some(UnknownLen::Some), _) => Err(LenErrorKind::UnresolvedParam),
+            (Some(UnknownLen::Var(var)), _) if !var.is_free() => Err(LenErrorKind::UnresolvedParam),
 
-        let (is_lhs_dyn, is_rhs_dyn) = if is_lhs {
-            (is_dyn, is_source_dyn)
-        } else {
-            (is_source_dyn, is_dyn)
-        };
-
-        match (is_lhs_dyn, is_rhs_dyn) {
-            // Dynamic vars are different, hence cannot be unified.
-            (true, true) => Err(LenErrorKind::Mismatch),
-            // LHS is dynamic, RHS is not.
-            (true, false) => {
-                // Check additionally that LHS does not have a non-zero exact part.
-                let is_valid = is_lhs || source.components().1 == 0;
-                if is_valid {
-                    Ok(source) // no new equation required
-                } else {
-                    Err(LenErrorKind::Mismatch)
-                }
-            }
-            // LHS is not dynamic; RHS may or may not be.
-            (false, _) => {
-                if is_dyn {
-                    Err(LenErrorKind::Mismatch)
-                } else {
-                    self.length_eqs.insert(var_idx, source);
+            // Special case is uniting a var with self.
+            (Some(UnknownLen::Var(var)), offset) if var.index() == var_idx => {
+                if offset == 0 {
                     Ok(source)
+                } else {
+                    Err(LenErrorKind::Mismatch)
                 }
             }
+
+            _ => {
+                self.length_eqs.insert(var_idx, source);
+                Ok(source)
+            }
+        }
+    }
+
+    #[inline]
+    fn unify_dyn_length(
+        &mut self,
+        source: TupleLen,
+        is_lhs: bool,
+    ) -> Result<TupleLen, LenErrorKind> {
+        if is_lhs {
+            Ok(source) // assignment to dyn length always succeeds
+        } else {
+            let source_var_idx = match source.components() {
+                (Some(UnknownLen::Var(var)), 0) if var.is_free() => var.index(),
+                (Some(UnknownLen::Dynamic), 0) => return Ok(source),
+                _ => return Err(LenErrorKind::Mismatch),
+            };
+            self.unify_var_length(source_var_idx, UnknownLen::Dynamic.into())
         }
     }
 
@@ -433,12 +403,6 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         MonoTypeTransformer::transform(&mapping, &mut instantiated_fn_type);
 
         // Copy constraints on the newly generated const and type vars from the function definition.
-        for (original_idx, kind) in &fn_params.len_params {
-            if *kind == LengthKind::Dynamic {
-                let new_idx = mapping.lengths[original_idx];
-                self.dyn_lengths.insert(new_idx);
-            }
-        }
         for (original_idx, constraints) in &fn_params.type_params {
             let new_idx = mapping.types[original_idx];
             self.constraints.insert(new_idx, constraints.to_owned());

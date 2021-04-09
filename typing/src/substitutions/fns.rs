@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     types::{ParamConstraints, ParamQuantifier},
     visit::{self, VisitMut},
-    FnType, PrimitiveType, Slice, Substitutions, TupleLen, UnknownLen, ValueType,
+    FnType, PrimitiveType, Substitutions, TupleLen, UnknownLen, ValueType,
 };
 
 impl<Prim: PrimitiveType> FnType<Prim> {
@@ -16,7 +16,6 @@ impl<Prim: PrimitiveType> FnType<Prim> {
         let mut transformer = PolyTypeTransformer::default();
         transformer.visit_function_mut(self);
         let mapping = transformer.mapping;
-        let vararg_lengths = transformer.vararg_lengths;
 
         // 2. Extract constraints on type params and lengths.
         let type_params = mapping
@@ -31,28 +30,12 @@ impl<Prim: PrimitiveType> FnType<Prim> {
             })
             .collect();
 
-        // `vararg_lengths` are dynamic within function context, but must be set to non-dynamic
-        // for the function definition.
-        let dyn_lengths = mapping
-            .lengths
-            .into_iter()
-            .filter_map(|(var_idx, param_idx)| {
-                if substitutions.dyn_lengths.contains(&var_idx)
-                    && !vararg_lengths.contains(&var_idx)
-                {
-                    Some(param_idx)
-                } else {
-                    None
-                }
-            })
-            .collect();
-
         // 3. Set constraints for the function.
         ParamQuantifier::set_params(
             self,
             ParamConstraints {
                 type_params,
-                dyn_lengths,
+                dyn_lengths: HashSet::new(),
             },
         );
     }
@@ -68,7 +51,6 @@ pub(super) struct ParamMapping {
 #[derive(Debug, Default)]
 struct PolyTypeTransformer {
     mapping: ParamMapping,
-    vararg_lengths: HashSet<usize>,
 }
 
 impl<Prim: PrimitiveType> VisitMut<Prim> for PolyTypeTransformer {
@@ -94,21 +76,6 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for PolyTypeTransformer {
             let param_idx = *self.mapping.lengths.entry(var.index()).or_insert(len_count);
             *target_len = UnknownLen::param(param_idx);
         }
-    }
-
-    fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {
-        let (_, vararg, _) = function.args.parts();
-        let vararg_len = vararg
-            .map(Slice::len)
-            .and_then(|len| match len.components() {
-                (Some(UnknownLen::Var(var)), _) => Some(var.index()),
-                _ => None,
-            });
-        if let Some(vararg_len) = vararg_len {
-            self.vararg_lengths.insert(vararg_len);
-        }
-
-        visit::visit_function_mut(self, function);
     }
 }
 

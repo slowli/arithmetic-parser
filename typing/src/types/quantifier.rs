@@ -8,7 +8,7 @@ use std::{
 use crate::{
     types::{FnParams, ParamConstraints},
     visit::{self, Visit, VisitMut},
-    FnType, LengthKind, PrimitiveType, Tuple, UnknownLen, ValueType,
+    FnType, PrimitiveType, Tuple, UnknownLen, ValueType,
 };
 
 #[derive(Debug, Default)]
@@ -221,12 +221,8 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for ParamPlacement<Prim> {
             params.len_params = len_params
                 .into_iter()
                 .map(|idx| {
-                    let kind = if self.constraints.static_lengths.contains(&idx) {
-                        LengthKind::Static
-                    } else {
-                        LengthKind::Dynamic
-                    };
-                    (idx, kind)
+                    let is_static = self.constraints.static_lengths.contains(&idx);
+                    (idx, is_static)
                 })
                 .collect();
         }

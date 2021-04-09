@@ -14,7 +14,7 @@ pub(crate) use self::{
 };
 pub use self::{
     fn_type::{FnType, FnTypeBuilder, FnWithConstraints},
-    tuple::{LengthKind, LengthVar, Slice, Tuple, TupleLen, UnknownLen},
+    tuple::{LengthVar, Slice, Tuple, TupleLen, UnknownLen},
 };
 
 /// Type variable.

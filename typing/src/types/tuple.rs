@@ -199,17 +199,6 @@ impl TupleLen {
     }
 }
 
-/// Kind of a length parameter.
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[non_exhaustive]
-pub enum LengthKind {
-    /// Length is static (can be found during type inference / "in compile time").
-    Static,
-    /// Length is dynamic (can vary at runtime). Dynamic lengths cannot be unified with
-    /// any other length during type inference.
-    Dynamic,
-}
-
 /// Tuple type.
 ///
 /// Most generally, a tuple type consists of three fragments: *start*,

@@ -7,8 +7,7 @@ use std::{
 };
 
 use crate::{
-    types::ParamQuantifier, LengthKind, LengthVar, Num, PrimitiveType, Tuple, TupleLen, TypeVar,
-    ValueType,
+    types::ParamQuantifier, LengthVar, Num, PrimitiveType, Tuple, TupleLen, TypeVar, ValueType,
 };
 
 #[derive(Debug, Clone)]
@@ -78,7 +77,7 @@ pub(crate) struct FnParams<Prim: PrimitiveType> {
     /// Type params associated with this function. Filled in by `FnQuantifier`.
     pub type_params: Vec<(usize, Prim::Constraints)>,
     /// Length params associated with this function. Filled in by `FnQuantifier`.
-    pub len_params: Vec<(usize, LengthKind)>,
+    pub len_params: Vec<(usize, bool)>,
     /// Constraints for params of this function and child functions.
     pub constraints: Option<ParamConstraints<Prim>>,
 }
@@ -140,7 +139,7 @@ impl<Prim: PrimitiveType> FnParams<Prim> {
 /// [length params]: crate::LengthVar
 /// [type params]: crate::TypeVar
 /// [constraint]: crate::TypeConstraints
-/// [dynamic length]: crate::LengthKind::Dynamic
+/// [dynamic length]: crate::TupleLen#static-lengths
 ///
 /// # Construction
 ///
@@ -155,7 +154,7 @@ impl<Prim: PrimitiveType> FnParams<Prim> {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_typing::{LengthKind, FnType, Slice, ValueType};
+/// # use arithmetic_typing::{FnType, Slice, ValueType};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// let fn_type: FnType = "([Num; N]) -> Num".parse()?;

@@ -9,8 +9,8 @@ use std::{
 use crate::{
     arith::TypeConstraints,
     visit::{self, Visit, VisitMut},
-    FnType, LengthKind, PrimitiveType, Tuple, TupleLen, TupleLenMismatchContext, TypeErrorKind,
-    TypeVar, UnknownLen, ValueType,
+    FnType, PrimitiveType, Tuple, TupleLen, TupleLenMismatchContext, TypeErrorKind, TypeVar,
+    UnknownLen, ValueType,
 };
 
 mod fns;
@@ -444,8 +444,8 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         MonoTypeTransformer::transform(&mapping, &mut instantiated_fn_type);
 
         // Copy constraints on the newly generated const and type vars from the function definition.
-        for (original_idx, kind) in &fn_params.len_params {
-            if *kind == LengthKind::Static {
+        for (original_idx, is_static) in &fn_params.len_params {
+            if *is_static {
                 let new_idx = mapping.lengths[original_idx];
                 self.static_lengths.insert(new_idx);
             }

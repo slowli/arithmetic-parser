@@ -28,45 +28,35 @@ type FnArgsAndOutput<Prim> = (Tuple<Prim>, ValueType<Prim>);
 
 /// Environment containing type information on named variables.
 ///
+/// # Examples
+///
+/// See [the crate docs](index.html#examples) for examples of usage.
+///
 /// # Concrete and partially specified types
 ///
 /// The environment retains full info on the types even if the type is not
-/// [concrete](ValueType::is_concrete()). Consider the following example:
+/// [concrete](ValueType::is_concrete()). Non-concrete types are tied to an environment.
+/// An environment will panic on inserting a non-concrete type via [`Self::insert()`]
+/// or other methods.
 ///
 /// ```
-/// # use arithmetic_parser::grammars::{NumGrammar, Typed, Parse};
-/// # use arithmetic_typing::{arith::NumArithmetic, Annotated, Prelude, TypeEnvironment};
+/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// # use arithmetic_typing::{Annotated, Prelude, TypeEnvironment};
+/// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// # fn main() -> anyhow::Result<()> {
-/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
+/// // An easy way to get a non-concrete type is to involve `any`.
 /// let code = r#"
-///     xs = (1, 2, 3, 4, 5);
-///     filtered = xs.filter(|x| x > 1);
-///     mapped = filtered.map(|x| x * 2);
-///     (filtered, mapped)
+///     lin: any Lin = (1, 2, 3);
+///     (x, ...) = lin;
 /// "#;
+/// let code = Parser::parse_statements(code)?;
 ///
 /// let mut env: TypeEnvironment = Prelude::iter().collect();
-/// let output = env.process_with_arithmetic(
-///     &NumArithmetic::with_comparisons(),
-///     &Parser::parse_statements(code)?,
-/// )?;
-/// assert_eq!(output.to_string(), "([Num; _], [Num; _])");
-///
-/// // We have additional information in `env` that both elements
-/// // of the tuple have the same length (albeit a dynamic one).
-/// assert_eq!(env["filtered"], env["mapped"]);
-/// // This means that the following code works.
-/// let output = env.process_with_arithmetic(
-///     &NumArithmetic::with_comparisons(),
-///     &Parser::parse_statements("filtered + mapped")?,
-/// )?;
-/// assert_eq!(output.to_string(), "[Num; _]");
+/// env.process_statements(&code)?;
+/// assert!(!env["x"].is_concrete());
 /// # Ok(())
 /// # }
 /// ```
-///
-/// Non-concrete types are tied to an environment. An environment will panic
-/// on inserting a non-concrete type via [`Self::insert()`] or other methods.
 #[derive(Debug, Clone)]
 pub struct TypeEnvironment<Prim: PrimitiveType = Num> {
     variables: HashMap<String, ValueType<Prim>>,

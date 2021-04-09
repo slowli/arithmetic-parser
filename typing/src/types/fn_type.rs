@@ -112,17 +112,16 @@ impl<Prim: PrimitiveType> FnParams<Prim> {
 /// Functional types are denoted as follows:
 ///
 /// ```text
-/// for<len M*; 'T: Lin> (['T; N], 'T) -> ['T; M]
+/// for<len! M; 'T: Lin> (['T; N], 'T) -> ['T; M]
 /// ```
 ///
 /// Here:
 ///
-/// - `len M*` and `'T: Lin` are constraints on [length params] and [type params], respectively.
+/// - `len! M` and `'T: Lin` are constraints on [length params] and [type params], respectively.
 ///   Length and/or type params constraints may be empty. Unconstrained type / length params
 ///   (such as length `N` in the example) do not need to be mentioned.
+/// - `len! M` means that `M` is a [static length](TupleLen#static-lengths).
 /// - `Lin` is a [constraint] on the type param.
-/// - `*` after `M` denotes that `M` is a [dynamic length] (i.e., cannot be unified with
-///   any other length during type inference).
 /// - `N`, `M` and `'T` are parameter names. The args and the return type may reference these
 ///   parameters.
 /// - `['T; N]` and `'T` are types of the function arguments.
@@ -359,7 +358,6 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 ///
 /// ```
 /// # use arithmetic_typing::{FnType, UnknownLen, ValueType, TypeEnvironment};
-/// # use std::iter;
 /// let sum_fn_type = FnType::builder()
 ///     .with_arg(ValueType::NUM.repeat(UnknownLen::param(0)))
 ///     .returning(ValueType::NUM);
@@ -370,7 +368,6 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 ///
 /// ```
 /// # use arithmetic_typing::{arith::NumConstraints, FnType, UnknownLen, ValueType};
-/// # use std::iter;
 /// // Definition of the mapping arg.
 /// let map_fn_arg = <FnType>::builder()
 ///     .with_arg(ValueType::param(0))
@@ -380,7 +377,7 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 ///     .with_arg(ValueType::param(0).repeat(UnknownLen::param(0)))
 ///     .with_arg(map_fn_arg)
 ///     .returning(ValueType::param(1).repeat(UnknownLen::Dynamic))
-///     .with_constraints(&[1], &NumConstraints::LIN);
+///     .with_constraints(&[1], &NumConstraints::Lin);
 /// assert_eq!(
 ///     map_fn_type.to_string(),
 ///     "for<'U: Lin> (['T; N], ('T) -> 'U) -> ['U]"
@@ -391,7 +388,6 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 ///
 /// ```
 /// # use arithmetic_typing::{arith::NumConstraints, FnType, UnknownLen, ValueType};
-/// # use std::iter;
 /// let fn_type = <FnType>::builder()
 ///     .with_varargs(ValueType::param(0), UnknownLen::param(0))
 ///     .with_arg(ValueType::BOOL)

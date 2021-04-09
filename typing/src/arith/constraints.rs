@@ -10,7 +10,7 @@ use crate::{
 ///
 /// Constraints can be placed on [function](crate::FnType) type variables, and can be applied
 /// to types in [`TypeArithmetic`] impls. For example, [`NumArithmetic`] places
-/// a [linearity constraint](LinConstraints::LIN) on types involved in arithmetic ops.
+/// a [linearity constraint](NumConstraints::Lin) on types involved in arithmetic ops.
 ///
 /// The constraint mechanism is similar to trait constraints in Rust, but is much more limited:
 ///

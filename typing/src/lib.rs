@@ -24,7 +24,7 @@
 //! - Functions are first-class types. Functions can have type and/or const params.
 //! - Type params can be constrained. Constraints are expressed via [`TypeConstraints`].
 //!   As an example, [`Num`] has an only supported constraint – type *linearity*
-//!   (via [`LinConstraints`]).
+//!   (via [`NumConstraints`]).
 //! - Const params always specify tuple length.
 //!
 //! # Inference rules
@@ -83,7 +83,7 @@
 //! assert!(output_type.is_void());
 //! assert_eq!(
 //!     env["sum_with"].to_string(),
-//!     "for<'T: Lin> (['T; N], 'T) -> 'T"
+//!     "for<'T: Ops> (['T; N], 'T) -> 'T"
 //! );
 //! // Note that `sum_with` is parametric by the element of the slice
 //! // (for which the linearity constraint is applied based on the arg usage)

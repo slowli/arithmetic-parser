@@ -69,9 +69,9 @@ impl LengthVar {
 #[non_exhaustive]
 pub enum UnknownLen {
     /// Wildcard length, i.e. some length that is not specified. Similar to `_` in type annotations
-    /// in Rust. Unlike [`Self::Dynamic`], this length can be found during type inference.
+    /// in Rust.
     Some,
-    /// *Dynamic* wildcard length.
+    /// Length that can vary at runtime, similar to lengths of slices in Rust.
     Dynamic,
     /// Length variable.
     Var(LengthVar),
@@ -117,6 +117,24 @@ impl UnknownLen {
 /// A tuple length consists of the two components: an unknown / variable length,
 /// such as [`UnknownLen::Var`], and a non-negative increment.
 /// These components can be obtained via [`Self::components()`].
+///
+/// # Static lengths
+///
+/// Tuple lengths can be either *static* or *dynamic*. Dynamic lengths are lengths
+/// that contain [`UnknownLen::Dynamic`].
+///
+/// Functions, [`TypeArithmetic`]s, etc. can specify constraints on lengths being static.
+/// For example, this is a part of [`NumConstraints::Ops`];
+/// dynamically sized slices such as `[Num]` cannot be added / multiplied / etc.,
+/// even if they are of the same type. This constraint is denoted as `len! N, M, ...`
+/// in the function quantifier, e.g., `for<len! N> (['T; N]) -> 'T`.
+///
+/// If the constraint fails, an error will be raised with the [kind](crate::TypeError::kind)
+/// set to [`TypeErrorKind::DynamicLen`].
+///
+/// [`TypeArithmetic`]: crate::arith::TypeArithmetic
+/// [`NumConstraints::Ops`]: crate::arith::NumConstraints::Ops
+/// [`TypeErrorKind::DynamicLen`]: crate::TypeErrorKind::DynamicLen
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TupleLen {
     var: Option<UnknownLen>,

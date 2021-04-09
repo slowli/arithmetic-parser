@@ -128,7 +128,7 @@ impl ops::BitOrAssign<&Self> for Constraints {
 }
 
 impl TypeConstraints<NumOrBytesType> for Constraints {
-    // Constraints are applied recursively, similar to `LinConstraints`.
+    // Constraints are applied recursively, similar to `NumConstraints`.
     fn apply(
         &self,
         ty: &ValueType<NumOrBytesType>,

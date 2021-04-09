@@ -54,7 +54,7 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
         /// Failing constraint(s).
         constraint: Prim::Constraints,
     },
-    /// Length is required to be static but is actually dynamic (contains [`UnknownLen::Dynamic`]).
+    /// Length with the static constraint is actually dynamic (contains [`UnknownLen::Dynamic`]).
     ///
     /// [`UnknownLen::Dynamic`]: crate::UnknownLen::Dynamic
     DynamicLen(TupleLen),

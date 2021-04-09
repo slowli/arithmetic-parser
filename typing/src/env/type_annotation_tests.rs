@@ -270,7 +270,7 @@ fn adding_dynamically_typed_slices() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_matches!(err.kind(), TypeErrorKind::FailedConstraint { .. });
+    assert_matches!(err.kind(), TypeErrorKind::DynamicLen(_));
 }
 
 #[test]

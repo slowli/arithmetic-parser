@@ -2,7 +2,7 @@
 
 use std::{fmt, ops, str::FromStr};
 
-use crate::{PrimitiveType, Substitutions, TypeErrorKind, UnknownLen, ValueType};
+use crate::{PrimitiveType, Slice, Substitutions, TypeErrorKind, ValueType};
 
 /// Container for constraints that can be placed on type variables.
 ///
@@ -150,18 +150,13 @@ impl<Prim: LinearType> TypeConstraints<Prim> for LinConstraints {
             )),
 
             ValueType::Tuple(tuple) => {
-                let middle_len = tuple
-                    .parts()
-                    .1
-                    .and_then(|middle| middle.len().components().0);
-                if let Some(UnknownLen::Dynamic) = middle_len {
-                    return Err(TypeErrorKind::failed_constraint(
-                        ty.to_owned(),
-                        self.to_owned(),
-                    ));
+                let tuple = tuple.to_owned();
+                let middle_len = tuple.parts().1.map(Slice::len);
+                if let Some(middle_len) = middle_len {
+                    substitutions.apply_static_len(middle_len)?;
                 }
 
-                for element in tuple.to_owned().element_types() {
+                for element in tuple.element_types() {
                     self.apply(element, substitutions)?;
                 }
                 Ok(())

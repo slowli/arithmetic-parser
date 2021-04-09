@@ -221,10 +221,10 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for ParamPlacement<Prim> {
             params.len_params = len_params
                 .into_iter()
                 .map(|idx| {
-                    let kind = if self.constraints.dyn_lengths.contains(&idx) {
-                        LengthKind::Dynamic
-                    } else {
+                    let kind = if self.constraints.static_lengths.contains(&idx) {
                         LengthKind::Static
+                    } else {
+                        LengthKind::Dynamic
                     };
                     (idx, kind)
                 })

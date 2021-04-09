@@ -1,6 +1,6 @@
 //! Functional type substitutions.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::{
     types::{ParamConstraints, ParamQuantifier},
@@ -30,12 +30,24 @@ impl<Prim: PrimitiveType> FnType<Prim> {
             })
             .collect();
 
+        let static_lengths = mapping
+            .lengths
+            .into_iter()
+            .filter_map(|(var_idx, param_idx)| {
+                if substitutions.static_lengths.contains(&var_idx) {
+                    Some(param_idx)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
         // 3. Set constraints for the function.
         ParamQuantifier::set_params(
             self,
             ParamConstraints {
                 type_params,
-                dyn_lengths: HashSet::new(),
+                static_lengths,
             },
         );
     }

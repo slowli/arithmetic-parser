@@ -193,7 +193,7 @@ impl<'a, Prim: PrimitiveType> ConstraintsAst<'a, Prim> {
         }
 
         Ok(ParamConstraints {
-            dyn_lengths,
+            static_lengths: dyn_lengths,
             type_params,
         })
     }

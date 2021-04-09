@@ -245,4 +245,83 @@ fn any_can_be_unified_with_anything() {
     }
 }
 
-// FIXME: test ['T; N] + ['T; M]
+#[test]
+fn static_length_restrictions() {
+    let mut substitutions = Substitutions::<Num>::default();
+
+    let positive_samples = &[
+        TupleLen::from(0),
+        TupleLen::from(3),
+        UnknownLen::free_var(0).into(),
+        UnknownLen::free_var(1) + 2,
+    ];
+    for &sample in positive_samples {
+        substitutions.apply_static_len(sample).unwrap();
+    }
+    assert_eq!(
+        substitutions.static_lengths,
+        vec![0, 1].into_iter().collect::<HashSet<_>>()
+    );
+
+    let negative_samples = &[UnknownLen::Dynamic.into(), UnknownLen::Dynamic + 2];
+    for &sample in negative_samples {
+        let err = substitutions.apply_static_len(sample).unwrap_err();
+        assert_matches!(err, TypeErrorKind::DynamicLen(_));
+    }
+}
+
+#[test]
+fn marking_length_as_static_and_then_failing_unification() {
+    let mut substitutions = Substitutions::<Num>::default();
+    substitutions.static_lengths.insert(0);
+
+    let positive_samples: &[(TupleLen, _)] = &[
+        (UnknownLen::Dynamic.into(), UnknownLen::free_var(0).into()),
+        (UnknownLen::Dynamic.into(), UnknownLen::free_var(0) + 1),
+    ];
+    for &(lhs, rhs) in positive_samples {
+        substitutions.unify_lengths(lhs, rhs, Assignment).unwrap();
+        assert!(substitutions.length_eqs.is_empty());
+    }
+
+    let failing_samples: &[(TupleLen, _)] = &[
+        (UnknownLen::free_var(0).into(), UnknownLen::Dynamic + 2),
+        (UnknownLen::free_var(0).into(), UnknownLen::Dynamic.into()),
+        (UnknownLen::free_var(0) + 1, UnknownLen::Dynamic + 2),
+    ];
+    for &(lhs, rhs) in failing_samples {
+        let err = substitutions
+            .unify_lengths(lhs, rhs, Assignment)
+            .unwrap_err();
+        assert_matches!(err, TypeErrorKind::DynamicLen(_));
+    }
+}
+
+#[test]
+fn marking_length_as_static_and_then_propagating() {
+    let mut substitutions = Substitutions::<Num>::default();
+    substitutions.static_lengths.insert(0);
+    substitutions
+        .unify_lengths(
+            UnknownLen::free_var(1).into(),
+            UnknownLen::free_var(0).into(),
+            Assignment,
+        )
+        .unwrap();
+
+    assert_eq!(substitutions.length_eqs[&1], UnknownLen::free_var(0).into());
+    assert_eq!(substitutions.static_lengths.len(), 1);
+
+    let mut substitutions = Substitutions::<Num>::default();
+    substitutions.static_lengths.insert(0);
+    substitutions
+        .unify_lengths(
+            UnknownLen::free_var(0).into(),
+            UnknownLen::free_var(1).into(),
+            Assignment,
+        )
+        .unwrap();
+
+    assert_eq!(substitutions.length_eqs[&0], UnknownLen::free_var(1).into());
+    assert!(substitutions.static_lengths.contains(&1));
+}

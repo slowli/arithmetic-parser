@@ -1,12 +1,16 @@
 //! Substitutions type and dependencies.
 
-use std::{cmp::Ordering, collections::HashMap, ptr};
+use std::{
+    cmp::Ordering,
+    collections::{HashMap, HashSet},
+    ptr,
+};
 
 use crate::{
     arith::TypeConstraints,
     visit::{self, Visit, VisitMut},
-    FnType, PrimitiveType, Tuple, TupleLen, TupleLenMismatchContext, TypeErrorKind, TypeVar,
-    UnknownLen, ValueType,
+    FnType, LengthKind, PrimitiveType, Tuple, TupleLen, TupleLenMismatchContext, TypeErrorKind,
+    TypeVar, UnknownLen, ValueType,
 };
 
 mod fns;
@@ -19,6 +23,7 @@ mod tests;
 enum LenErrorKind {
     UnresolvedParam,
     Mismatch,
+    Dynamic(TupleLen),
 }
 
 /// Set of equations and constraints on type variables.
@@ -34,6 +39,8 @@ pub struct Substitutions<Prim: PrimitiveType> {
     len_var_count: usize,
     /// Length variable equations.
     length_eqs: HashMap<usize, TupleLen>,
+    /// Lengths that have static restriction.
+    static_lengths: HashSet<usize>,
 }
 
 impl<Prim: PrimitiveType> Default for Substitutions<Prim> {
@@ -44,6 +51,7 @@ impl<Prim: PrimitiveType> Default for Substitutions<Prim> {
             constraints: HashMap::new(),
             len_var_count: 0,
             length_eqs: HashMap::new(),
+            static_lengths: HashSet::new(),
         }
     }
 }
@@ -75,6 +83,35 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             }
         }
         equivalent_vars
+    }
+
+    /// Marks `len` as static, i.e., not containing [`UnknownLen::Dynamic`] components.
+    #[allow(clippy::missing_panics_doc)]
+    pub fn apply_static_len(&mut self, len: TupleLen) -> Result<(), TypeErrorKind<Prim>> {
+        let resolved = self.resolve_len(len);
+        self.apply_static_len_inner(resolved)
+            .map_err(|err| match err {
+                LenErrorKind::UnresolvedParam => TypeErrorKind::UnresolvedParam,
+                LenErrorKind::Dynamic(len) => TypeErrorKind::DynamicLen(len),
+                LenErrorKind::Mismatch => unreachable!(),
+            })
+    }
+
+    // Assumes that `len` is resolved.
+    fn apply_static_len_inner(&mut self, len: TupleLen) -> Result<(), LenErrorKind> {
+        match len.components().0 {
+            None => Ok(()),
+            Some(UnknownLen::Some) => Err(LenErrorKind::UnresolvedParam),
+            Some(UnknownLen::Dynamic) => Err(LenErrorKind::Dynamic(len)),
+            Some(UnknownLen::Var(var)) => {
+                if var.is_free() {
+                    self.static_lengths.insert(var.index());
+                    Ok(())
+                } else {
+                    Err(LenErrorKind::UnresolvedParam)
+                }
+            }
+        }
     }
 
     /// Resolves the type by following established equality links between type variables.
@@ -242,6 +279,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                     rhs: resolved_rhs,
                     context,
                 },
+                LenErrorKind::Dynamic(len) => TypeErrorKind::DynamicLen(len),
             })
     }
 
@@ -322,6 +360,9 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             }
 
             _ => {
+                if self.static_lengths.contains(&var_idx) {
+                    self.apply_static_len_inner(source)?;
+                }
                 self.length_eqs.insert(var_idx, source);
                 Ok(source)
             }
@@ -403,6 +444,12 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         MonoTypeTransformer::transform(&mapping, &mut instantiated_fn_type);
 
         // Copy constraints on the newly generated const and type vars from the function definition.
+        for (original_idx, kind) in &fn_params.len_params {
+            if *kind == LengthKind::Static {
+                let new_idx = mapping.lengths[original_idx];
+                self.static_lengths.insert(new_idx);
+            }
+        }
         for (original_idx, constraints) in &fn_params.type_params {
             let new_idx = mapping.types[original_idx];
             self.constraints.insert(new_idx, constraints.to_owned());

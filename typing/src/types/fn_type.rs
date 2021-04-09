@@ -14,25 +14,25 @@ use crate::{
 #[derive(Debug, Clone)]
 pub(crate) struct ParamConstraints<Prim: PrimitiveType> {
     pub type_params: HashMap<usize, Prim::Constraints>,
-    pub dyn_lengths: HashSet<usize>,
+    pub static_lengths: HashSet<usize>,
 }
 
 impl<Prim: PrimitiveType> Default for ParamConstraints<Prim> {
     fn default() -> Self {
         Self {
             type_params: HashMap::new(),
-            dyn_lengths: HashSet::new(),
+            static_lengths: HashSet::new(),
         }
     }
 }
 
 impl<Prim: PrimitiveType> fmt::Display for ParamConstraints<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if !self.dyn_lengths.is_empty() {
-            formatter.write_str("len ")?;
-            for (i, len) in self.dyn_lengths.iter().enumerate() {
-                write!(formatter, "{}*", LengthVar::param_str(*len))?;
-                if i + 1 < self.dyn_lengths.len() {
+        if !self.static_lengths.is_empty() {
+            formatter.write_str("len! ")?;
+            for (i, len) in self.static_lengths.iter().enumerate() {
+                write!(formatter, "{}", LengthVar::param_str(*len))?;
+                if i + 1 < self.static_lengths.len() {
                     formatter.write_str(", ")?;
                 }
             }
@@ -56,7 +56,7 @@ impl<Prim: PrimitiveType> fmt::Display for ParamConstraints<Prim> {
 
 impl<Prim: PrimitiveType> ParamConstraints<Prim> {
     fn is_empty(&self) -> bool {
-        self.type_params.is_empty() && self.dyn_lengths.is_empty()
+        self.type_params.is_empty() && self.static_lengths.is_empty()
     }
 
     // Sort params by ascending index to have a consistent `Display` presentation.
@@ -268,7 +268,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
             function: self,
             constraints: ParamConstraints {
                 type_params,
-                dyn_lengths: HashSet::new(),
+                static_lengths: HashSet::new(),
             },
         }
     }
@@ -415,15 +415,15 @@ mod tests {
     fn constraints_display() {
         let constraints: ParamConstraints<Num> = ParamConstraints {
             type_params: vec![(0, LinConstraints::LIN)].into_iter().collect(),
-            dyn_lengths: HashSet::new(),
+            static_lengths: HashSet::new(),
         };
         assert_eq!(constraints.to_string(), "'T: Lin");
 
         let constraints: ParamConstraints<Num> = ParamConstraints {
             type_params: vec![(0, LinConstraints::LIN)].into_iter().collect(),
-            dyn_lengths: vec![0].into_iter().collect(),
+            static_lengths: vec![0].into_iter().collect(),
         };
-        assert_eq!(constraints.to_string(), "len N*; 'T: Lin");
+        assert_eq!(constraints.to_string(), "len! N; 'T: Lin");
     }
 
     #[test]

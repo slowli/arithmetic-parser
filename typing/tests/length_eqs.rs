@@ -106,7 +106,7 @@ fn comparing_lengths_after_push() {
     );
     assert_eq!(
         type_env["complex"].to_string(),
-        "([Num; N + 1], [Num; N]) -> [Num; N + 2]"
+        "for<len! N> ([Num; N + 1], [Num; N]) -> [Num; N + 2]"
     );
 }
 
@@ -180,6 +180,34 @@ fn reversing_a_slice() {
     assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
     assert_eq!(type_env["reverse"].to_string(), "(['T; N]) -> ['T]");
     assert_eq!(type_env["ys"].to_string(), "[Bool]");
+}
+
+#[test]
+fn errors_when_adding_dynamic_slices() {
+    let setup_code = r#"
+        slice: [_] = (1, 2, 3);
+        other_slice: [_] = (4, 5);
+    "#;
+    let setup_block = F32Grammar::parse_statements(setup_code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.process_statements(&setup_block).unwrap();
+
+    let invalid_code = r#"
+        slice + slice;
+        slice + other_slice;
+        (7,) + slice;
+        other_slice + 8;
+    "#;
+    for line in invalid_code.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        let line = F32Grammar::parse_statements(line).unwrap();
+        let err = type_env.process_statements(&line).unwrap_err();
+        assert_matches!(err.kind(), TypeErrorKind::DynamicLen(_));
+    }
 }
 
 // FIXME: test square [['T; N]; N]

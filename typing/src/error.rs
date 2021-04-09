@@ -54,6 +54,10 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
         /// Failing constraint(s).
         constraint: Prim::Constraints,
     },
+    /// Length is required to be static but is actually dynamic (contains [`UnknownLen::Dynamic`]).
+    ///
+    /// [`UnknownLen::Dynamic`]: crate::UnknownLen::Dynamic
+    DynamicLen(TupleLen),
 
     /// Language construct not supported by type inference logic.
     Unsupported(UnsupportedType),
@@ -114,6 +118,9 @@ impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
 
             Self::FailedConstraint { ty, constraint } => {
                 write!(formatter, "Type `{}` fails constraint {}", ty, constraint)
+            }
+            Self::DynamicLen(len) => {
+                write!(formatter, "Length `{}` is not static", len)
             }
 
             Self::Unsupported(ty) => write!(formatter, "Unsupported {}", ty),

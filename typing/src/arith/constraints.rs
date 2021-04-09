@@ -2,7 +2,9 @@
 
 use std::{fmt, ops, str::FromStr};
 
-use crate::{PrimitiveType, Slice, Substitutions, TypeErrorKind, ValueType};
+use crate::{
+    arith::OpConstraintSettings, PrimitiveType, Slice, Substitutions, TypeErrorKind, ValueType,
+};
 
 /// Container for constraints that can be placed on type variables.
 ///
@@ -62,68 +64,84 @@ where
     ) -> Result<(), TypeErrorKind<Prim>>;
 }
 
-/// Linearity constraints. In particular, this is [`TypeConstraints`] associated
+/// Numeric constraints. In particular, this is [`TypeConstraints`] associated
 /// with the [`Num`](crate::Num) literal.
-///
-/// There is only one supported constraint: [linearity](Self::LIN). Linear types are types
-/// that can be used as arguments of arithmetic ops.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct LinConstraints {
-    is_linear: bool,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NumConstraints {
+    /// No constraints.
+    None,
+    /// Type can be subject to unary `-` and can participate in `T op Num` / `Num op T` operations.
+    ///
+    /// Defined recursively as linear primitive types and tuples consisting of `Lin` types.
+    Lin,
+    /// Type can participate in binary arithmetic ops (`T op T`).
+    ///
+    /// Defined as a subset of `Lin` types without dynamically sized slices and
+    /// any types containing dynamically sized slices.
+    Ops,
 }
 
-impl fmt::Display for LinConstraints {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.is_linear {
-            formatter.write_str("Lin")
-        } else {
-            Ok(())
-        }
+impl Default for NumConstraints {
+    fn default() -> Self {
+        Self::None
     }
 }
 
-impl FromStr for LinConstraints {
+impl fmt::Display for NumConstraints {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::None => "",
+            Self::Lin => "Lin",
+            Self::Ops => "Ops",
+        })
+    }
+}
+
+impl FromStr for NumConstraints {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "Lin" => Ok(Self { is_linear: true }),
-            _ => Err(anyhow::anyhow!("Expected `Lin`")),
+            "Lin" => Ok(Self::Lin),
+            "Ops" => Ok(Self::Ops),
+            _ => Err(anyhow::anyhow!("Expected `Lin` or `Ops`")),
         }
     }
 }
 
-impl ops::BitOrAssign<&Self> for LinConstraints {
-    #[allow(clippy::suspicious_op_assign_impl)] // "logical or" is intentional
+impl ops::BitOrAssign<&Self> for NumConstraints {
     fn bitor_assign(&mut self, rhs: &Self) {
-        self.is_linear = self.is_linear || rhs.is_linear;
+        *self = match (*self, rhs) {
+            (Self::Ops, _) | (_, Self::Ops) => Self::Ops,
+            (Self::Lin, _) | (_, Self::Lin) => Self::Lin,
+            _ => Self::None,
+        };
     }
 }
 
-impl LinConstraints {
-    /// Encumbered type is linear; it can be used as an argument in arithmetic ops.
-    /// Recursively defined as primitive types for which [`LinearType::is_linear()`]
-    /// returns `true`, and tuples in which all elements are linear.
-    ///
-    /// Displayed as `Lin`.
-    pub const LIN: Self = Self { is_linear: true };
+impl NumConstraints {
+    /// Default constraint settings for arithmetic ops.
+    pub const OP_SETTINGS: OpConstraintSettings<'static, Self> = OpConstraintSettings {
+        lin: &Self::Lin,
+        ops: &Self::Ops,
+    };
 }
 
 /// Primitive type which supports a notion of *linearity*. Linear types are types that
 /// can be used in arithmetic ops.
-pub trait LinearType: PrimitiveType<Constraints = LinConstraints> {
+pub trait LinearType: PrimitiveType<Constraints =NumConstraints> {
     /// Returns `true` iff this type is linear.
     fn is_linear(&self) -> bool;
 }
 
-impl<Prim: LinearType> TypeConstraints<Prim> for LinConstraints {
+impl<Prim: LinearType> TypeConstraints<Prim> for NumConstraints {
     // TODO: extract common logic for it to be reusable?
     fn apply(
         &self,
         ty: &ValueType<Prim>,
         substitutions: &mut Substitutions<Prim>,
     ) -> Result<(), TypeErrorKind<Prim>> {
-        if !self.is_linear {
+        if *self == Self::None {
             // The default constraint: does nothing.
             return Ok(());
         }
@@ -151,9 +169,12 @@ impl<Prim: LinearType> TypeConstraints<Prim> for LinConstraints {
 
             ValueType::Tuple(tuple) => {
                 let tuple = tuple.to_owned();
-                let middle_len = tuple.parts().1.map(Slice::len);
-                if let Some(middle_len) = middle_len {
-                    substitutions.apply_static_len(middle_len)?;
+
+                if *self == Self::Ops {
+                    let middle_len = tuple.parts().1.map(Slice::len);
+                    if let Some(middle_len) = middle_len {
+                        substitutions.apply_static_len(middle_len)?;
+                    }
                 }
 
                 for element in tuple.element_types() {

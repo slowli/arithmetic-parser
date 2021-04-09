@@ -187,6 +187,8 @@ fn errors_when_adding_dynamic_slices() {
     let setup_code = r#"
         slice: [_] = (1, 2, 3);
         other_slice: [_] = (4, 5);
+        slice = -slice;
+        other_slice * 8; // works: dynamic slices are linear
     "#;
     let setup_block = F32Grammar::parse_statements(setup_code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -196,7 +198,6 @@ fn errors_when_adding_dynamic_slices() {
         slice + slice;
         slice + other_slice;
         (7,) + slice;
-        other_slice + 8;
     "#;
     for line in invalid_code.lines() {
         let line = line.trim();

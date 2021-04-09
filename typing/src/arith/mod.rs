@@ -8,7 +8,7 @@ use arithmetic_parser::{BinaryOp, Spanned, UnaryOp};
 
 mod constraints;
 
-pub use self::constraints::{LinConstraints, LinearType, NoConstraints, TypeConstraints};
+pub use self::constraints::{NumConstraints, LinearType, NoConstraints, TypeConstraints};
 
 /// Maps a literal value from a certain [`Grammar`] to its type. This assumes that all literals
 /// are primitive.
@@ -140,6 +140,26 @@ impl<Prim: WithBoolean> TypeArithmetic<Prim> for BoolArithmetic {
     }
 }
 
+/// Settings for constraints placed on arguments of binary arithmetic operations.
+#[derive(Debug)]
+pub struct OpConstraintSettings<'a, C> {
+    /// Constraint applied to the argument of `T op Num` / `Num op T` ops.
+    pub lin: &'a C,
+    /// Constraint applied to the arguments of in-kind binary arithmetic ops (`T op T`).
+    pub ops: &'a C,
+}
+
+impl<C> Clone for OpConstraintSettings<'_, C> {
+    fn clone(&self) -> Self {
+        Self {
+            lin: self.lin,
+            ops: self.ops,
+        }
+    }
+}
+
+impl<C> Copy for OpConstraintSettings<'_, C> {}
+
 /// Arithmetic on [`Num`]bers.
 ///
 /// # Type inference for literals
@@ -190,16 +210,13 @@ impl NumArithmetic {
     ///
     /// # Arguments
     ///
-    /// - `constraints` are applied to arguments of arithmetic ops.
+    /// - `settings` are applied to arguments of arithmetic ops.
     pub fn unify_binary_op<Prim: PrimitiveType>(
         substitutions: &mut Substitutions<Prim>,
         lhs_ty: &ValueType<Prim>,
         rhs_ty: &ValueType<Prim>,
-        constraints: &Prim::Constraints,
+        settings: OpConstraintSettings<'_, Prim::Constraints>,
     ) -> Result<ValueType<Prim>, TypeErrorKind<Prim>> {
-        constraints.apply(lhs_ty, substitutions)?;
-        constraints.apply(rhs_ty, substitutions)?;
-
         let resolved_lhs_ty = substitutions.fast_resolve(lhs_ty);
         let resolved_rhs_ty = substitutions.fast_resolve(rhs_ty);
 
@@ -207,9 +224,21 @@ impl NumArithmetic {
             resolved_lhs_ty.is_primitive(),
             resolved_rhs_ty.is_primitive(),
         ) {
-            (Some(true), Some(false)) => Ok(resolved_rhs_ty.to_owned()),
-            (Some(false), Some(true)) => Ok(resolved_lhs_ty.to_owned()),
+            (Some(true), Some(false)) => {
+                let resolved_rhs_ty = resolved_rhs_ty.to_owned();
+                settings.lin.apply(lhs_ty, substitutions)?;
+                settings.lin.apply(rhs_ty, substitutions)?;
+                Ok(resolved_rhs_ty)
+            }
+            (Some(false), Some(true)) => {
+                let resolved_lhs_ty = resolved_lhs_ty.to_owned();
+                settings.lin.apply(lhs_ty, substitutions)?;
+                settings.lin.apply(rhs_ty, substitutions)?;
+                Ok(resolved_lhs_ty)
+            }
             _ => {
+                settings.ops.apply(lhs_ty, substitutions)?;
+                settings.ops.apply(rhs_ty, substitutions)?;
                 substitutions.unify(lhs_ty, rhs_ty)?;
                 Ok(lhs_ty.to_owned())
             }
@@ -256,7 +285,7 @@ impl NumArithmetic {
         substitutions: &mut Substitutions<Prim>,
         spans: BinaryOpSpans<'a, Prim>,
         comparable_type: Option<Prim>,
-        constraints: &Prim::Constraints,
+        settings: OpConstraintSettings<'_, Prim::Constraints>,
     ) -> TypeResult<'a, Prim> {
         let op = spans.op.extra;
         let lhs_ty = &spans.lhs.extra;
@@ -268,7 +297,7 @@ impl NumArithmetic {
             }
 
             BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Power => {
-                Self::unify_binary_op(substitutions, lhs_ty, rhs_ty, constraints)
+                Self::unify_binary_op(substitutions, lhs_ty, rhs_ty, settings)
                     .map_err(|err| err.with_span(&spans.total))
             }
 
@@ -309,7 +338,7 @@ impl TypeArithmetic<Num> for NumArithmetic {
         substitutions: &mut Substitutions<Num>,
         spans: UnaryOpSpans<'a, Num>,
     ) -> TypeResult<'a, Num> {
-        Self::process_unary_op(substitutions, spans, &LinConstraints::LIN)
+        Self::process_unary_op(substitutions, spans, &NumConstraints::Lin)
     }
 
     fn process_binary_op<'a>(
@@ -322,6 +351,12 @@ impl TypeArithmetic<Num> for NumArithmetic {
         } else {
             None
         };
-        Self::process_binary_op(substitutions, spans, comparable_type, &LinConstraints::LIN)
+
+        Self::process_binary_op(
+            substitutions,
+            spans,
+            comparable_type,
+            NumConstraints::OP_SETTINGS,
+        )
     }
 }

@@ -142,7 +142,7 @@ pub use self::{
     },
 };
 
-use self::arith::{LinConstraints, LinearType, TypeConstraints, WithBoolean};
+use self::arith::{NumConstraints, LinearType, TypeConstraints, WithBoolean};
 
 /// Primitive types in a certain type system.
 ///
@@ -251,7 +251,7 @@ impl FromStr for Num {
 }
 
 impl PrimitiveType for Num {
-    type Constraints = LinConstraints;
+    type Constraints = NumConstraints;
 }
 
 impl WithBoolean for Num {

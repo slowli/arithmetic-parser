@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 
 use super::*;
-use crate::{arith::LinConstraints, Num};
+use crate::{arith::NumConstraints, Num};
 
 #[test]
 fn fn_const_params() {
@@ -297,7 +297,7 @@ fn fn_type_with_constraints() {
     assert!(rest.fragment().is_empty());
     assert!(constraints.dyn_lengths.is_empty());
     assert_eq!(constraints.type_params.len(), 1);
-    assert_eq!(constraints.type_params[0].1.computed, LinConstraints::LIN);
+    assert_eq!(constraints.type_params[0].1.computed, NumConstraints::Lin);
     assert_eq!(fn_type.args.start.len(), 1);
     assert_matches!(fn_type.args.start[0], ValueTypeAst::Param(id) if *id.fragment() == "T");
     assert_matches!(fn_type.return_type, ValueTypeAst::Param(id) if *id.fragment() == "T");

@@ -348,7 +348,7 @@ fn fn_with_varargs() {
     assert_eq!(type_env["sum_spec"].to_string(), "(Num, Num, Num) -> Num");
     assert_eq!(
         type_env["tuple_sum"].to_string(),
-        "for<'T: Lin> ('T, ...[('T, 'T); N]) -> ('T, 'T)"
+        "for<'T: Ops> ('T, ...[('T, 'T); N]) -> ('T, 'T)"
     );
 }
 

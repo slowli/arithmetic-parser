@@ -40,7 +40,7 @@ impl FromStr for StrType {
 }
 
 impl PrimitiveType for StrType {
-    type Constraints = LinConstraints;
+    type Constraints = NumConstraints;
 }
 
 impl WithBoolean for StrType {
@@ -122,10 +122,13 @@ impl TypeArithmetic<StrType> for StrArithmetic {
         let lhs_ty = &spans.lhs.extra;
         let rhs_ty = &spans.rhs.extra;
         match spans.op.extra {
-            BinaryOp::Add => {
-                NumArithmetic::unify_binary_op(substitutions, lhs_ty, rhs_ty, &LinConstraints::LIN)
-                    .map_err(|err| err.with_span(&spans.total))
-            }
+            BinaryOp::Add => NumArithmetic::unify_binary_op(
+                substitutions,
+                lhs_ty,
+                rhs_ty,
+                NumConstraints::OP_SETTINGS,
+            )
+            .map_err(|err| err.with_span(&spans.total)),
 
             BinaryOp::Gt | BinaryOp::Lt | BinaryOp::Ge | BinaryOp::Le => {
                 substitutions

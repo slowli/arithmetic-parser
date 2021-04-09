@@ -2,7 +2,7 @@ use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
 use assert_matches::assert_matches;
 
 use super::*;
-use crate::{arith::LinConstraints, Annotated, Num, Prelude, TupleLen, TupleLenMismatchContext};
+use crate::{arith::NumConstraints, Annotated, Num, Prelude, TupleLen, TupleLenMismatchContext};
 
 pub type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
 
@@ -25,7 +25,7 @@ pub fn assert_incompatible_types<Prim: PrimitiveType>(
 
 fn hash_fn_type() -> FnType<Num> {
     FnType {
-        args: Slice::new(ValueType::Any(LinConstraints::LIN), UnknownLen::param(0)).into(),
+        args: Slice::new(ValueType::Any(NumConstraints::Lin), UnknownLen::param(0)).into(),
         return_type: ValueType::NUM,
         params: None,
     }
@@ -454,7 +454,7 @@ fn varargs_in_embedded_fn() {
 
     assert_eq!(
         type_env["create_sum"].to_string(),
-        "for<'T: Lin> ('T) -> (...['T; N]) -> 'T"
+        "for<'T: Ops> ('T) -> (...['T; N]) -> 'T"
     );
     assert_eq!(type_env["sum"].to_string(), "(...[Num; N]) -> Num");
     assert_eq!(
@@ -500,7 +500,7 @@ fn function_as_arg_with_more_constraints() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env["mapper"].to_string(),
-        "for<'U: Lin> (('T, 'T), ('T) -> 'U) -> 'U"
+        "for<'U: Ops> (('T, 'T), ('T) -> 'U) -> 'U"
     );
 }
 
@@ -512,7 +512,7 @@ fn function_as_arg_with_even_more_constraints() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env["mapper"].to_string(),
-        "for<'T: Lin> (('T, 'T), ('T) -> 'T) -> 'T"
+        "for<'T: Ops> (('T, 'T), ('T) -> 'T) -> 'T"
     );
 }
 
@@ -542,7 +542,7 @@ fn function_as_arg_within_tuple() {
 
     assert_eq!(
         type_env.get("test_fn").unwrap().to_string(),
-        "for<'T: Lin> (((Num) -> 'T, Num), 'T) -> 'T"
+        "for<'T: Ops> (((Num) -> 'T, Num), 'T) -> 'T"
     );
 }
 
@@ -672,7 +672,7 @@ fn type_params_in_fn_with_multiple_fn_args() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env.get("test").unwrap().to_string(),
-        "for<'T: Lin> ('T, ('T) -> 'U, ('T) -> 'U) -> Bool"
+        "for<'T: Ops> ('T, ('T) -> 'U, ('T) -> 'U) -> Bool"
     );
 }
 
@@ -782,7 +782,7 @@ fn slice_narrowed_to_tuple() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "for<'U: Lin> (('T, 'T, 'T), ('T) -> 'U) -> 'U"
+        "for<'U: Ops> (('T, 'T, 'T), ('T) -> 'U) -> 'U"
     );
 }
 
@@ -815,7 +815,7 @@ fn unifying_length_vars() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "for<'T: Lin> (['T; N], ['T; N]) -> ['T; N]"
+        "for<'T: Ops> (['T; N], ['T; N]) -> ['T; N]"
     );
 }
 
@@ -939,7 +939,7 @@ fn constraint_error() {
         err.kind(),
         TypeErrorKind::FailedConstraint {
             ty,
-            constraint: LinConstraints::LIN,
+            constraint: NumConstraints::Ops,
         } if *ty == ValueType::BOOL
     );
 }
@@ -953,7 +953,7 @@ fn constraint_passed_to_wrapping_fn() {
         .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
         .unwrap();
 
-    assert_eq!(double_fn.to_string(), "for<'T: Lin> ('T) -> 'T");
+    assert_eq!(double_fn.to_string(), "for<'T: Ops> ('T) -> 'T");
 }
 
 #[test]
@@ -1080,7 +1080,7 @@ fn any_type_with_bound_with_bogus_function_call() {
 #[test]
 fn any_type_with_bound_in_tuple() {
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("some_lin", ValueType::Any(LinConstraints::LIN));
+    type_env.insert("some_lin", ValueType::Any(NumConstraints::Lin));
 
     let bogus_call = "some_lin(1)";
     let bogus_call = F32Grammar::parse_statements(bogus_call).unwrap();

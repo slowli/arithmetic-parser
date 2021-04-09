@@ -341,7 +341,7 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 /// Signature for a slice mapping function:
 ///
 /// ```
-/// # use arithmetic_typing::{arith::LinConstraints, FnType, UnknownLen, ValueType};
+/// # use arithmetic_typing::{arith::NumConstraints, FnType, UnknownLen, ValueType};
 /// # use std::iter;
 /// // Definition of the mapping arg.
 /// let map_fn_arg = <FnType>::builder()
@@ -352,7 +352,7 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 ///     .with_arg(ValueType::param(0).repeat(UnknownLen::param(0)))
 ///     .with_arg(map_fn_arg)
 ///     .returning(ValueType::param(1).repeat(UnknownLen::Dynamic))
-///     .with_constraints(&[1], &LinConstraints::LIN);
+///     .with_constraints(&[1], &NumConstraints::LIN);
 /// assert_eq!(
 ///     map_fn_type.to_string(),
 ///     "for<'U: Lin> (['T; N], ('T) -> 'U) -> ['U]"
@@ -362,7 +362,7 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 /// Signature of a function with varargs:
 ///
 /// ```
-/// # use arithmetic_typing::{arith::LinConstraints, FnType, UnknownLen, ValueType};
+/// # use arithmetic_typing::{arith::NumConstraints, FnType, UnknownLen, ValueType};
 /// # use std::iter;
 /// let fn_type = <FnType>::builder()
 ///     .with_varargs(ValueType::param(0), UnknownLen::param(0))
@@ -409,18 +409,18 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{arith::LinConstraints, UnknownLen};
+    use crate::{arith::NumConstraints, UnknownLen};
 
     #[test]
     fn constraints_display() {
         let constraints: ParamConstraints<Num> = ParamConstraints {
-            type_params: vec![(0, LinConstraints::LIN)].into_iter().collect(),
+            type_params: vec![(0, NumConstraints::Lin)].into_iter().collect(),
             static_lengths: HashSet::new(),
         };
         assert_eq!(constraints.to_string(), "'T: Lin");
 
         let constraints: ParamConstraints<Num> = ParamConstraints {
-            type_params: vec![(0, LinConstraints::LIN)].into_iter().collect(),
+            type_params: vec![(0, NumConstraints::Lin)].into_iter().collect(),
             static_lengths: vec![0].into_iter().collect(),
         };
         assert_eq!(constraints.to_string(), "len! N; 'T: Lin");
@@ -431,7 +431,7 @@ mod tests {
         let sum_fn = <FnType>::builder()
             .with_arg(ValueType::param(0).repeat(UnknownLen::Some))
             .returning(ValueType::param(0))
-            .with_constraints(&[0], &LinConstraints::LIN);
+            .with_constraints(&[0], &NumConstraints::Lin);
         assert_eq!(sum_fn.to_string(), "for<'T: Lin> (['T; _]) -> 'T");
     }
 
@@ -440,7 +440,7 @@ mod tests {
         let sum_fn: FnType = FnType::builder()
             .with_arg(ValueType::NUM.repeat(UnknownLen::param(0)))
             .returning(ValueType::NUM)
-            .with_constraints(&[], &LinConstraints::LIN)
+            .with_constraints(&[], &NumConstraints::Lin)
             .into();
         assert_eq!(sum_fn.to_string(), "([Num; N]) -> Num");
 
@@ -448,7 +448,7 @@ mod tests {
             .with_arg(ValueType::NUM)
             .with_arg(sum_fn.clone())
             .returning(ValueType::NUM)
-            .with_constraints(&[], &LinConstraints::LIN)
+            .with_constraints(&[], &NumConstraints::Lin)
             .into();
         assert_eq!(complex_fn.to_string(), "(Num, ([Num; N]) -> Num) -> Num");
 
@@ -456,7 +456,7 @@ mod tests {
             .with_varargs(ValueType::NUM, UnknownLen::param(0))
             .with_arg(sum_fn)
             .returning(ValueType::NUM)
-            .with_constraints(&[], &LinConstraints::LIN)
+            .with_constraints(&[], &NumConstraints::Lin)
             .into();
         assert_eq!(
             other_complex_fn.to_string(),

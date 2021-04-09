@@ -212,13 +212,18 @@ impl TypeArithmetic<NumOrBytesType> for NumOrBytesArithmetic {
         substitutions: &mut Substitutions<NumOrBytesType>,
         spans: BinaryOpSpans<'a, NumOrBytesType>,
     ) -> TypeResult<'a, NumOrBytesType> {
-        let constraints = if let BinaryOp::Add = spans.op.extra {
+        let op_constraints = if let BinaryOp::Add = spans.op.extra {
             Constraints::Summable
         } else {
             Constraints::Lin
         };
+        let settings = OpConstraintSettings {
+            lin: &Constraints::Lin,
+            ops: &op_constraints,
+        };
+
         let comparable_type = Some(NumOrBytesType::Num);
-        NumArithmetic::process_binary_op(substitutions, spans, comparable_type, &constraints)
+        NumArithmetic::process_binary_op(substitutions, spans, comparable_type, settings)
     }
 }
 

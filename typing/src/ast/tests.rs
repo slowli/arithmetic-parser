@@ -70,9 +70,9 @@ fn simple_tuple() {
         tuple.start,
         vec![
             ValueTypeAst::Prim(Num::Num),
-            ValueTypeAst::Any,
+            ValueTypeAst::Some,
             ValueTypeAst::Prim(Num::Bool),
-            ValueTypeAst::Any,
+            ValueTypeAst::Some,
         ]
     );
 }
@@ -90,7 +90,7 @@ fn complex_tuples() {
     const SAMPLES: &[TupleSample] = &[
         TupleSample {
             input: "(Num, _, ...[Bool; _])",
-            start: &[ValueTypeAst::Prim(Num::Num), ValueTypeAst::Any],
+            start: &[ValueTypeAst::Prim(Num::Num), ValueTypeAst::Some],
             middle_element: ValueTypeAst::Prim(Num::Bool),
             end: &[],
         },
@@ -102,7 +102,7 @@ fn complex_tuples() {
         },
         TupleSample {
             input: "(_, ...[Bool; _], Num)",
-            start: &[ValueTypeAst::Any],
+            start: &[ValueTypeAst::Some],
             middle_element: ValueTypeAst::Prim(Num::Bool),
             end: &[ValueTypeAst::Prim(Num::Num)],
         },
@@ -338,4 +338,35 @@ fn multiple_fns_with_constraints() {
         ValueTypeAst::Param(id) if *id.fragment() == "T"
     );
     assert_matches!(second_fn.return_type, ValueTypeAst::Tuple(t) if t.start.is_empty());
+}
+
+#[test]
+fn any_type() {
+    let input = InputSpan::new("any");
+    let (rest, ty) = type_definition::<Num>(input).unwrap();
+
+    assert!(rest.fragment().is_empty());
+    assert_matches!(ty, ValueTypeAst::Any(constraints) if constraints.terms.is_empty());
+}
+
+#[test]
+fn any_type_with_bound() {
+    let input = InputSpan::new("any Lin");
+    let (rest, ty) = type_definition::<Num>(input).unwrap();
+
+    assert!(rest.fragment().is_empty());
+    assert_matches!(ty, ValueTypeAst::Any(constraints) if constraints.terms.len() == 1);
+
+    let bogus_input = InputSpan::new("anyLin");
+    let err = type_definition::<Num>(bogus_input).unwrap_err();
+    let err = match err {
+        NomErr::Failure(err) => err,
+        _ => panic!("Unexpected error type: {:?}", err),
+    };
+
+    assert_eq!(*err.span().fragment(), "anyLin");
+    assert_matches!(
+        err.kind(),
+        ParseErrorKind::Type(e) if e.to_string() == "Unknown type name: anyLin"
+    );
 }

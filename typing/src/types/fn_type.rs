@@ -43,9 +43,9 @@ impl<Prim: PrimitiveType> fmt::Display for ParamConstraints<Prim> {
         }
 
         let type_param_count = self.type_params.len();
-        for (&idx, constraints) in &self.type_params {
+        for (i, (idx, constraints)) in self.type_params().enumerate() {
             write!(formatter, "'{}: {}", TypeVar::param_str(idx), constraints)?;
-            if idx + 1 < type_param_count {
+            if i + 1 < type_param_count {
                 formatter.write_str(", ")?;
             }
         }
@@ -57,6 +57,19 @@ impl<Prim: PrimitiveType> fmt::Display for ParamConstraints<Prim> {
 impl<Prim: PrimitiveType> ParamConstraints<Prim> {
     fn is_empty(&self) -> bool {
         self.type_params.is_empty() && self.dyn_lengths.is_empty()
+    }
+
+    // Sort params by ascending index to have a consistent `Display` presentation.
+    #[cfg(test)]
+    fn type_params(&self) -> impl Iterator<Item = (usize, &Prim::Constraints)> + '_ {
+        let mut type_params: Vec<_> = self.type_params.iter().map(|(&idx, c)| (idx, c)).collect();
+        type_params.sort_unstable_by_key(|(idx, _)| *idx);
+        type_params.into_iter()
+    }
+
+    #[cfg(not(test))]
+    fn type_params(&self) -> impl Iterator<Item = (usize, &Prim::Constraints)> + '_ {
+        self.type_params.iter().map(|(&idx, c)| (idx, c))
     }
 }
 

@@ -137,12 +137,12 @@ impl<Prim: LinearType> TypeConstraints<Prim> for LinConstraints {
         };
 
         match resolved_ty {
-            // `Var`s are taken care of previously.
-            ValueType::Var(_) => Ok(()),
+            ValueType::Some => unreachable!(),
+
+            // `Var`s are taken care of previously. `Any` satisfies any constraints.
+            ValueType::Any(_) | ValueType::Var(_) => Ok(()),
 
             ValueType::Prim(lit) if lit.is_linear() => Ok(()),
-
-            ValueType::Some => unreachable!(),
 
             ValueType::Function(_) | ValueType::Prim(_) => Err(TypeErrorKind::failed_constraint(
                 ty.to_owned(),

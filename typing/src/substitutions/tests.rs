@@ -222,3 +222,26 @@ fn unifying_complex_tuples() {
         assert_eq!(substitutions.eqs[&i], ValueType::NUM);
     }
 }
+
+#[test]
+fn any_can_be_unified_with_anything() {
+    let mut substitutions = Substitutions::<Num>::default();
+    substitutions.eqs.insert(0, ValueType::any());
+
+    let rhs_samples = &[
+        ValueType::NUM,
+        ValueType::BOOL,
+        (ValueType::BOOL, ValueType::NUM).into(),
+        ValueType::NUM.repeat(3).into(),
+        ValueType::NUM.repeat(UnknownLen::free_var(0)).into(),
+        FnType::new(
+            vec![ValueType::BOOL, ValueType::NUM].into(),
+            ValueType::void(),
+        )
+        .into(),
+        ValueType::any(),
+    ];
+    for rhs in rhs_samples {
+        substitutions.unify(&ValueType::free_var(0), rhs).unwrap();
+    }
+}

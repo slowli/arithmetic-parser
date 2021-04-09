@@ -390,3 +390,76 @@ fn fn_with_varargs() {
         "for<'T: Lin> ('T, ...[('T, 'T); N]) -> ('T, 'T)"
     );
 }
+
+#[test]
+fn any_type() {
+    let code = "test: any = 1; test(1, 2) && test == (3, |x| x)";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let output = type_env.process_statements(&block).unwrap();
+
+    assert_eq!(output, ValueType::BOOL);
+}
+
+#[test]
+fn type_with_tuple_of_any() {
+    let code = r#"
+        test: [any; _] = (1, 1 == 2, |x| x + 1);
+        (x, y, z) = test;
+        test(1) // should fail: slices are not callable
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env.process_statements(&block).unwrap_err();
+
+    assert_eq!(*err.span().fragment(), "test(1)");
+    assert_matches!(
+        err.kind(),
+        TypeErrorKind::TypeMismatch(lhs, rhs)
+            if lhs.to_string() == "(Num) -> _" && rhs.to_string() == "(any, any, any)"
+    );
+    assert_eq!(type_env["x"], ValueType::any());
+    assert_eq!(type_env["y"], ValueType::any());
+    assert_eq!(type_env["z"], ValueType::any());
+}
+
+#[test]
+fn type_with_any_fn() {
+    let code = r#"
+        fun: (any) -> _ = |x| x == 1;
+        fun(1 == 1) && fun((1, 2, 3)) && fun(|x| x + 1);
+        fun(1, 2) // should fail: function is only callable with 1 arg
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env.process_statements(&block).unwrap_err();
+
+    assert_eq!(*err.span().fragment(), "fun(1, 2)");
+    assert_matches!(
+        err.kind(),
+        TypeErrorKind::TupleLenMismatch { lhs, rhs, .. }
+            if *lhs == TupleLen::from(1) && *rhs == TupleLen::from(2)
+    );
+    assert_eq!(type_env["fun"].to_string(), "(any) -> Bool");
+}
+
+#[test]
+fn any_fn_with_constraints() {
+    let code = r#"
+        lin_tuple: [any Lin; _] = (1, (2, 5), 9);
+        bogus_tuple: [any Lin; _] = (1, 2, 3 == 4);
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env.process_statements(&block).unwrap_err();
+
+    assert!(err.span().fragment().starts_with("bogus_tuple"));
+    assert_matches!(
+        err.kind(),
+        TypeErrorKind::FailedConstraint { ty, .. } if *ty == ValueType::BOOL
+    );
+    assert_eq!(
+        type_env["lin_tuple"].to_string(),
+        "(any Lin, any Lin, any Lin)"
+    );
+}

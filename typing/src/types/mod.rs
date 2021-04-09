@@ -84,10 +84,13 @@ impl TypeVar {
 /// # Notation
 ///
 /// - [`Self::Some`] is represented as `_`.
+/// - [`Self::Any`] is represented as `any` with an optional [`TypeConstraints`] suffix.
 /// - [`Prim`](Self::Prim)itive types are represented using the [`Display`](fmt::Display)
 ///   implementation of the corresponding [`PrimitiveType`].
 /// - [`Var`](Self::Var)s are represented as documented in [`TypeVar`].
 /// - Notation for [functional](FnType) and [tuple](Tuple) types is documented separately.
+///
+/// [`TypeConstraints`]: crate::arith::TypeConstraints
 ///
 /// # Examples
 ///
@@ -119,12 +122,103 @@ impl TypeVar {
 /// # Ok(())
 /// # }
 /// ```
+///
+/// # `Any` type
+///
+/// [`Self::any()`], denoted as `any`, is a catch-all type similar to `any` in TypeScript.
+/// It allows to circumvent type system limitations at the cost of being exteremely imprecise.
+/// `any` type can be used in any context (destructured, called with args of any quantity
+/// and type and so on), with each application of the type evaluated independently.
+/// Thus, the same `any` variable can be treated as a function, a tuple, a primitive type, etc.
+///
+/// ```
+/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// # use arithmetic_typing::{Annotated, TypeEnvironment, ValueType};
+/// # use assert_matches::assert_matches;
+/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
+///
+/// # fn main() -> anyhow::Result<()> {
+/// let code = r#"
+///     wildcard: any = 1; // `any` can be assigned from anything
+///     wildcard == 1 && wildcard == (2, 3);
+///     (x, y, ...) = wildcard; // destructuring `any` always succeeds
+///     wildcard(1, |x| x + 1); // calling `any` as a funcion works as well
+/// "#;
+/// let ast = Parser::parse_statements(code)?;
+/// let mut env = TypeEnvironment::new();
+/// env.process_statements(&ast)?;
+///
+/// // Destructure outputs are certain types that can be inferred
+/// // from their usage, rather than `any`!
+/// assert_matches!(env["x"], ValueType::Var(_));
+/// let bogus_usage_code = "x + 1 == 2; x(1)";
+/// let ast = Parser::parse_statements(bogus_usage_code)?;
+/// let err = env.process_statements(&ast).unwrap_err();
+/// assert_eq!(*err.span().fragment(), "x(1)");
+/// # Ok(())
+/// # }
+/// ```
+///
+/// ## `Any` with constraints
+///
+/// [`Self::Any`] can have [`TypeConstraints`]. This is denoted as a suffix after `any`,
+/// for example, `any Lin`. A constrained `any` is more restricted than the "default" one;
+/// on assignment to or from `any _`, the types will be checked / set to satisfy the constraints.
+///
+/// ```
+/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// # use arithmetic_typing::{Annotated, TypeEnvironment, TypeErrorKind, ValueType};
+/// # use assert_matches::assert_matches;
+/// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
+/// # fn main() -> anyhow::Result<()> {
+/// let code = r#"
+///     lin_tuple: [any Lin; _] = (1, (2, 3), (4, (5, 6)));
+///     (x, ...) = lin_tuple; // OK; `x` is some linear type
+///     x(1) // fails: none of linear types is a function
+/// "#;
+/// let ast = Parser::parse_statements(code)?;
+/// let mut env = TypeEnvironment::new();
+/// let err = env.process_statements(&ast).unwrap_err();
+/// assert_eq!(*err.span().fragment(), "x(1)");
+/// assert_matches!(err.kind(), TypeErrorKind::FailedConstraint { .. });
+/// # Ok(())
+/// # }
+/// ```
+///
+/// One of primary use cases of `any _` is restricting varargs of a function:
+///
+/// ```
+/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// # use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, TypeErrorKind, ValueType};
+/// # use assert_matches::assert_matches;
+/// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
+/// # fn main() -> anyhow::Result<()> {
+/// // Function that accepts any amount of linear args (not necessarily
+/// // of the same type) and returns a number.
+/// let digest_fn: ValueType = "(...[any Lin; N]) -> Num".parse()?;
+/// let mut env = TypeEnvironment::new();
+/// env.insert("true", Prelude::True).insert("digest", digest_fn);
+///
+/// let code = r#"
+///     digest(1, 2, (3, 4), (5, (6, 7))) == 1;
+///     digest(3, true) == 0; // fails: `true` is not linear
+/// "#;
+/// let ast = Parser::parse_statements(code)?;
+/// let err = env.process_statements(&ast).unwrap_err();
+/// assert_eq!(*err.span().fragment(), "digest(3, true)");
+/// assert_matches!(err.kind(), TypeErrorKind::FailedConstraint { .. });
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum ValueType<Prim: PrimitiveType = Num> {
     /// Wildcard type, i.e. some type that is not specified. Similar to `_` in type annotations
     /// in Rust.
     Some,
+    /// Any type aka "I'll think about typing later". Similar to `any` type in TypeScript.
+    /// See [the dedicated section](#any-type) for more details.
+    Any(Prim::Constraints),
     /// Primitive type.
     Prim(Prim),
     /// Functional type.
@@ -138,7 +232,8 @@ pub enum ValueType<Prim: PrimitiveType = Num> {
 impl<Prim: PrimitiveType> PartialEq for ValueType<Prim> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Some, _) | (_, Self::Some) => true,
+            (Self::Some, Self::Some) => true,
+            (Self::Any(x), Self::Any(y)) => x == y,
             (Self::Prim(x), Self::Prim(y)) => x == y,
             (Self::Var(x), Self::Var(y)) => x == y,
             (Self::Tuple(xs), Self::Tuple(ys)) => xs == ys,
@@ -152,6 +247,13 @@ impl<Prim: PrimitiveType> fmt::Display for ValueType<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Some => formatter.write_str("_"),
+            Self::Any(constraints) => {
+                if *constraints == Prim::Constraints::default() {
+                    formatter.write_str("any")
+                } else {
+                    write!(formatter, "any {}", constraints)
+                }
+            }
             Self::Var(var) => fmt::Display::fmt(var, formatter),
             Self::Prim(num) => fmt::Display::fmt(num, formatter),
             Self::Function(fn_type) => fmt::Display::fmt(fn_type, formatter),
@@ -225,6 +327,11 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
         Self::Var(TypeVar::param(index))
     }
 
+    /// Creates an unbounded `any` type.
+    pub fn any() -> Self {
+        Self::Any(Prim::Constraints::default())
+    }
+
     pub(crate) fn free_var(index: usize) -> Self {
         Self::Var(TypeVar {
             index,
@@ -264,7 +371,8 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
     pub fn is_concrete(&self) -> bool {
         match self {
             Self::Var(var) => !var.is_free,
-            Self::Some | Self::Prim(_) => true,
+            Self::Some => false,
+            Self::Any(_) | Self::Prim(_) => true,
             Self::Function(fn_type) => fn_type.is_concrete(),
             Self::Tuple(tuple) => tuple.is_concrete(),
         }
@@ -324,6 +432,38 @@ mod tests {
             for other_function in &functions[(i + 1)..] {
                 assert_ne!(function, other_function);
             }
+        }
+    }
+
+    #[test]
+    fn concrete_types() {
+        let sample_types = &[
+            ValueType::NUM,
+            ValueType::BOOL,
+            ValueType::any(),
+            (ValueType::BOOL, ValueType::NUM).into(),
+            "for<'T: Lin> (['T; N]) -> 'T".parse().unwrap(),
+        ];
+
+        for ty in sample_types {
+            assert!(ty.is_concrete(), "{:?}", ty);
+        }
+    }
+
+    #[test]
+    fn non_concrete_types() {
+        let sample_types = &[
+            ValueType::Some,
+            ValueType::free_var(2),
+            (ValueType::NUM, ValueType::Some).into(),
+            FnType::builder()
+                .with_arg(ValueType::Some)
+                .returning(ValueType::void())
+                .into(),
+        ];
+
+        for ty in sample_types {
+            assert!(!ty.is_concrete(), "{:?}", ty);
         }
     }
 }

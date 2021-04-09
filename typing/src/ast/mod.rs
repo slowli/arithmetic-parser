@@ -10,7 +10,7 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take_until, take_while, take_while1, take_while_m_n},
     character::complete::char as tag_char,
-    combinator::{cut, map, opt, peek, recognize},
+    combinator::{cut, map, not, opt, peek, recognize},
     multi::{many0, separated_list0, separated_list1},
     sequence::{delimited, preceded, terminated, tuple},
     Err as NomErr,
@@ -19,7 +19,7 @@ use nom::{
 use std::str::FromStr;
 
 use crate::{Num, PrimitiveType};
-use arithmetic_parser::{ErrorKind as ParserErrorKind, InputSpan, NomResult};
+use arithmetic_parser::{ErrorKind as ParseErrorKind, InputSpan, NomResult};
 
 mod conversion;
 #[cfg(test)]
@@ -58,8 +58,11 @@ pub use self::conversion::{ConversionError, ConversionErrorKind};
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum ValueTypeAst<'a, Prim: PrimitiveType = Num> {
-    /// Type placeholder (`_`). Corresponds to any single type.
-    Any,
+    /// Type placeholder (`_`). Corresponds to a certain type that is not specified, like `_`
+    /// in type annotations in Rust.
+    Some,
+    /// Any type (`any`).
+    Any(TypeConstraintsAst<'a, Prim>),
     /// Primitive types.
     Prim(Prim),
     /// Ticked identifier, e.g., `'T`.
@@ -170,13 +173,22 @@ pub struct ConstraintsAst<'a, Prim: PrimitiveType> {
 }
 
 /// Bounds that can be placed on a type variable.
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct TypeConstraintsAst<'a, Prim: PrimitiveType> {
     /// Spans corresponding to constraints, e.g. `Foo` and `Bar` in `Foo + Bar`.
     pub terms: Vec<InputSpan<'a>>,
     /// Computed constraint.
     pub computed: Prim::Constraints,
+}
+
+impl<Prim: PrimitiveType> Default for TypeConstraintsAst<'_, Prim> {
+    fn default() -> Self {
+        Self {
+            terms: vec![],
+            computed: Prim::Constraints::default(),
+        }
+    }
 }
 
 /// Whitespace and comments.
@@ -316,7 +328,7 @@ fn type_bounds<Prim: PrimitiveType>(
             let input_str = *input.fragment();
             let partial = Prim::Constraints::from_str(input_str).map_err(|_| {
                 let err = anyhow::anyhow!("Cannot parse type constraint");
-                ParserErrorKind::Type(err).with_span(&input.into())
+                ParseErrorKind::Type(err).with_span(&input.into())
             })?;
             acc |= &partial;
             Ok(acc)
@@ -407,17 +419,35 @@ fn fn_definition_with_constraints<Prim: PrimitiveType>(
     )(input)
 }
 
+fn any_type<Prim: PrimitiveType>(
+    input: InputSpan<'_>,
+) -> NomResult<'_, TypeConstraintsAst<'_, Prim>> {
+    let not_ident_char = peek(not(take_while_m_n(1, 1, |c: char| {
+        c.is_ascii_alphanumeric() || c == '_'
+    })));
+    map(
+        preceded(
+            terminated(tag("any"), not_ident_char),
+            opt(preceded(ws, type_bounds)),
+        ),
+        Option::unwrap_or_default,
+    )(input)
+}
+
 fn free_ident<Prim: PrimitiveType>(input: InputSpan<'_>) -> NomResult<'_, ValueTypeAst<'_, Prim>> {
     let (rest, ident) = ident(input)?;
 
-    let output = if let Ok(res) = ident.fragment().parse::<Prim>() {
-        ValueTypeAst::Prim(res)
-    } else if *ident.fragment() == "_" {
-        ValueTypeAst::Any
-    } else {
-        let err = anyhow::anyhow!("Unknown type name: {}", ident.fragment());
-        let err = ParserErrorKind::Type(err).with_span(&ident.into());
-        return Err(NomErr::Failure(err));
+    let output = match *ident.fragment() {
+        "_" => ValueTypeAst::Some,
+        ident_str => {
+            if let Ok(res) = ident_str.parse::<Prim>() {
+                ValueTypeAst::Prim(res)
+            } else {
+                let err = anyhow::anyhow!("Unknown type name: {}", ident_str);
+                let err = ParseErrorKind::Type(err).with_span(&ident.into());
+                return Err(NomErr::Failure(err));
+            }
+        }
     };
     Ok((rest, output))
 }
@@ -435,6 +465,7 @@ fn type_definition<Prim: PrimitiveType>(
         }),
         map(type_param_ident, ValueTypeAst::Param),
         map(slice_definition, ValueTypeAst::Slice),
+        map(any_type, ValueTypeAst::Any),
         free_ident,
     ))(input)
 }

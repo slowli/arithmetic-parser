@@ -254,7 +254,8 @@ impl<'a, Prim: PrimitiveType> ValueTypeAst<'a, Prim> {
         state: Option<&mut ConversionState<'a>>,
     ) -> Result<ValueType<Prim>, ConversionError<&'a str>> {
         Ok(match self {
-            Self::Any => ValueType::Some,
+            Self::Some => ValueType::Some,
+            Self::Any(constraints) => ValueType::Any(constraints.computed.clone()),
             Self::Prim(prim) => ValueType::Prim(prim.to_owned()),
 
             Self::Param(ident) => {

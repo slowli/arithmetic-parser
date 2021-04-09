@@ -36,11 +36,7 @@ fn hash_fn_type_display() {
     assert_eq!(hash_fn_type().to_string(), "(...[any Lin; N]) -> Num");
 }
 
-/// `zip` function signature:
-///
-/// ```text
-/// ([T; N], [U; N]) -> [(T, U); N]
-/// ```
+/// `zip` function signature.
 pub fn zip_fn_type() -> FnType<Num> {
     FnType::builder()
         .with_arg(ValueType::param(0).repeat(UnknownLen::param(0)))
@@ -49,12 +45,17 @@ pub fn zip_fn_type() -> FnType<Num> {
             (ValueType::param(0), ValueType::param(1)),
             UnknownLen::param(0),
         ))
+        .with_static_lengths(&[0])
+        .into()
 }
 
 #[test]
 fn zip_fn_type_display() {
     let zip_fn_string = zip_fn_type().to_string();
-    assert_eq!(zip_fn_string, "(['T; N], ['U; N]) -> [('T, 'U); N]");
+    assert_eq!(
+        zip_fn_string,
+        "for<len! N> (['T; N], ['U; N]) -> [('T, 'U); N]"
+    );
 }
 
 #[test]
@@ -815,7 +816,7 @@ fn unifying_length_vars() {
 
     assert_eq!(
         type_env["foo"].to_string(),
-        "for<'T: Ops> (['T; N], ['T; N]) -> ['T; N]"
+        "for<len! N; 'T: Ops> (['T; N], ['T; N]) -> ['T; N]"
     );
 }
 

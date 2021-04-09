@@ -8,7 +8,7 @@ use arithmetic_parser::{BinaryOp, Spanned, UnaryOp};
 
 mod constraints;
 
-pub use self::constraints::{NumConstraints, LinearType, NoConstraints, TypeConstraints};
+pub use self::constraints::{LinearType, NoConstraints, NumConstraints, TypeConstraints};
 
 /// Maps a literal value from a certain [`Grammar`] to its type. This assumes that all literals
 /// are primitive.

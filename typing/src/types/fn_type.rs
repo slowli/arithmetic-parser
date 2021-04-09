@@ -272,6 +272,27 @@ impl<Prim: PrimitiveType> FnType<Prim> {
             },
         }
     }
+
+    /// Marks lengths with the specified `indexes` as static.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if parameters were already computed for the function.
+    pub fn with_static_lengths(self, indexes: &[usize]) -> FnWithConstraints<Prim> {
+        assert!(
+            self.params.is_none(),
+            "Cannot attach constraints to a function with computed params: `{}`",
+            self
+        );
+
+        FnWithConstraints {
+            function: self,
+            constraints: ParamConstraints {
+                type_params: HashMap::new(),
+                static_lengths: indexes.iter().copied().collect(),
+            },
+        }
+    }
 }
 
 /// Function together with constraints on type variables contained either in the function itself
@@ -302,6 +323,13 @@ impl<Prim: PrimitiveType> FnWithConstraints<Prim> {
             let new_constraints = indexes.iter().map(|&idx| (idx, constraints.clone()));
             self.constraints.type_params.extend(new_constraints);
         }
+        self
+    }
+
+    /// Marks lengths with the specified `indexes` as static.
+    pub fn with_static_lengths(mut self, indexes: &[usize]) -> FnWithConstraints<Prim> {
+        let indexes = indexes.iter().copied();
+        self.constraints.static_lengths.extend(indexes);
         self
     }
 }

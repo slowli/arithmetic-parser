@@ -285,7 +285,7 @@ fn unifying_dynamic_slices_error() {
     type_env.insert("zip_with", zip_fn_type());
     let err = type_env.process_statements(&block).unwrap_err();
 
-    assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
+    assert_matches!(err.kind(), TypeErrorKind::DynamicLen(_));
 }
 
 #[test]

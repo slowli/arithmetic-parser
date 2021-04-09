@@ -129,7 +129,7 @@ impl NumConstraints {
 
 /// Primitive type which supports a notion of *linearity*. Linear types are types that
 /// can be used in arithmetic ops.
-pub trait LinearType: PrimitiveType<Constraints =NumConstraints> {
+pub trait LinearType: PrimitiveType<Constraints = NumConstraints> {
     /// Returns `true` iff this type is linear.
     fn is_linear(&self) -> bool;
 }

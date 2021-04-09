@@ -142,7 +142,7 @@ pub use self::{
     },
 };
 
-use self::arith::{NumConstraints, LinearType, TypeConstraints, WithBoolean};
+use self::arith::{LinearType, NumConstraints, TypeConstraints, WithBoolean};
 
 /// Primitive types in a certain type system.
 ///

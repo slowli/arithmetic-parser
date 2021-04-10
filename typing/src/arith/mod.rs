@@ -4,7 +4,7 @@
 use num_traits::NumOps;
 
 use crate::{
-    error::{TypeErrorKind, TypeResult},
+    error::{TypeErrorKind, TypeErrors},
     Num, PrimitiveType, Substitutions, ValueType,
 };
 use arithmetic_parser::{BinaryOp, Spanned, UnaryOp};
@@ -27,21 +27,22 @@ pub trait MapPrimitiveType<Val> {
 
 /// Arithmetic allowing to customize primitive types and how unary and binary operations are handled
 /// during type inference.
-// FIXME: change signature!
 pub trait TypeArithmetic<Prim: PrimitiveType> {
     /// Handles a unary operation.
     fn process_unary_op<'a>(
         &self,
         substitutions: &mut Substitutions<Prim>,
         spans: UnaryOpSpans<'a, Prim>,
-    ) -> TypeResult<'a, Prim>;
+        errors: &mut TypeErrors<'a, Prim>,
+    ) -> ValueType<Prim>;
 
     /// Handles a binary operation.
     fn process_binary_op<'a>(
         &self,
         substitutions: &mut Substitutions<Prim>,
         spans: BinaryOpSpans<'a, Prim>,
-    ) -> TypeResult<'a, Prim>;
+        errors: &mut TypeErrors<'a, Prim>,
+    ) -> ValueType<Prim>;
 }
 
 /// Code spans related to a unary operation.
@@ -92,17 +93,20 @@ impl<Prim: WithBoolean> TypeArithmetic<Prim> for BoolArithmetic {
         &self,
         substitutions: &mut Substitutions<Prim>,
         spans: UnaryOpSpans<'a, Prim>,
-    ) -> TypeResult<'a, Prim> {
+        errors: &mut TypeErrors<'a, Prim>,
+    ) -> ValueType<Prim> {
         let op = spans.op.extra;
-        match op {
-            UnaryOp::Not => {
-                substitutions
-                    .unify(&ValueType::BOOL, &spans.inner.extra)
-                    .map_err(|err| err.with_span(&spans.inner))?;
-                Ok(ValueType::BOOL)
-            }
-
-            _ => Err(TypeErrorKind::unsupported(op).with_span(&spans.op)),
+        if op == UnaryOp::Not {
+            substitutions.unify(
+                &ValueType::BOOL,
+                &spans.inner.extra,
+                &mut errors.with_span(&spans.inner),
+            );
+            ValueType::BOOL
+        } else {
+            let err = TypeErrorKind::unsupported(op).with_span(&spans.op);
+            errors.push(err);
+            substitutions.new_type_var()
         }
     }
 
@@ -116,30 +120,29 @@ impl<Prim: WithBoolean> TypeArithmetic<Prim> for BoolArithmetic {
         &self,
         substitutions: &mut Substitutions<Prim>,
         spans: BinaryOpSpans<'a, Prim>,
-    ) -> TypeResult<'a, Prim> {
+        errors: &mut TypeErrors<'a, Prim>,
+    ) -> ValueType<Prim> {
         let op = spans.op.extra;
         let lhs_ty = &spans.lhs.extra;
         let rhs_ty = &spans.rhs.extra;
 
         match op {
             BinaryOp::Eq | BinaryOp::NotEq => {
-                substitutions
-                    .unify(&lhs_ty, &rhs_ty)
-                    .map_err(|err| err.with_span(&spans.total))?;
-                Ok(ValueType::BOOL)
+                substitutions.unify(&lhs_ty, &rhs_ty, &mut errors.with_span(&spans.total));
+                ValueType::BOOL
             }
 
             BinaryOp::And | BinaryOp::Or => {
-                substitutions
-                    .unify(&ValueType::BOOL, lhs_ty)
-                    .map_err(|err| err.with_span(&spans.lhs))?;
-                substitutions
-                    .unify(&ValueType::BOOL, rhs_ty)
-                    .map_err(|err| err.with_span(&spans.rhs))?;
-                Ok(ValueType::BOOL)
+                substitutions.unify(&ValueType::BOOL, lhs_ty, &mut errors.with_span(&spans.lhs));
+                substitutions.unify(&ValueType::BOOL, rhs_ty, &mut errors.with_span(&spans.rhs));
+                ValueType::BOOL
             }
 
-            _ => Err(TypeErrorKind::unsupported(op).with_span(&spans.op)),
+            _ => {
+                let err = TypeErrorKind::unsupported(op).with_span(&spans.op);
+                errors.push(err);
+                substitutions.new_type_var()
+            }
         }
     }
 }
@@ -215,12 +218,14 @@ impl NumArithmetic {
     /// # Arguments
     ///
     /// - `settings` are applied to arguments of arithmetic ops.
-    pub fn unify_binary_op<Prim: PrimitiveType>(
+    pub fn unify_binary_op<'a, Prim: PrimitiveType>(
         substitutions: &mut Substitutions<Prim>,
-        lhs_ty: &ValueType<Prim>,
-        rhs_ty: &ValueType<Prim>,
+        spans: &BinaryOpSpans<'a, Prim>,
+        errors: &mut TypeErrors<'a, Prim>,
         settings: OpConstraintSettings<'_, Prim::Constraints>,
-    ) -> Result<ValueType<Prim>, TypeErrorKind<Prim>> {
+    ) -> ValueType<Prim> {
+        let lhs_ty = &spans.lhs.extra;
+        let rhs_ty = &spans.rhs.extra;
         let resolved_lhs_ty = substitutions.fast_resolve(lhs_ty);
         let resolved_rhs_ty = substitutions.fast_resolve(rhs_ty);
 
@@ -230,21 +235,33 @@ impl NumArithmetic {
         ) {
             (Some(true), Some(false)) => {
                 let resolved_rhs_ty = resolved_rhs_ty.to_owned();
-                settings.lin.apply(lhs_ty, substitutions)?;
-                settings.lin.apply(rhs_ty, substitutions)?;
-                Ok(resolved_rhs_ty)
+                settings
+                    .lin
+                    .apply(lhs_ty, substitutions, &mut errors.with_span(&spans.lhs));
+                settings
+                    .lin
+                    .apply(rhs_ty, substitutions, &mut errors.with_span(&spans.rhs));
+                resolved_rhs_ty
             }
             (Some(false), Some(true)) => {
                 let resolved_lhs_ty = resolved_lhs_ty.to_owned();
-                settings.lin.apply(lhs_ty, substitutions)?;
-                settings.lin.apply(rhs_ty, substitutions)?;
-                Ok(resolved_lhs_ty)
+                settings
+                    .lin
+                    .apply(lhs_ty, substitutions, &mut errors.with_span(&spans.lhs));
+                settings
+                    .lin
+                    .apply(rhs_ty, substitutions, &mut errors.with_span(&spans.rhs));
+                resolved_lhs_ty
             }
             _ => {
-                settings.ops.apply(lhs_ty, substitutions)?;
-                settings.ops.apply(rhs_ty, substitutions)?;
-                substitutions.unify(lhs_ty, rhs_ty)?;
-                Ok(lhs_ty.to_owned())
+                settings
+                    .ops
+                    .apply(lhs_ty, substitutions, &mut errors.with_span(&spans.lhs));
+                settings
+                    .ops
+                    .apply(rhs_ty, substitutions, &mut errors.with_span(&spans.rhs));
+                substitutions.unify(lhs_ty, rhs_ty, &mut errors.with_span(&spans.total));
+                lhs_ty.to_owned()
             }
         }
     }
@@ -256,22 +273,25 @@ impl NumArithmetic {
     pub fn process_unary_op<'a, Prim: WithBoolean>(
         substitutions: &mut Substitutions<Prim>,
         spans: UnaryOpSpans<'a, Prim>,
+        errors: &mut TypeErrors<'a, Prim>,
         constraints: &Prim::Constraints,
-    ) -> TypeResult<'a, Prim> {
+    ) -> ValueType<Prim> {
         let op = spans.op.extra;
         let inner_ty = &spans.inner.extra;
 
         match op {
-            UnaryOp::Not => BoolArithmetic.process_unary_op(substitutions, spans),
+            UnaryOp::Not => BoolArithmetic.process_unary_op(substitutions, spans, errors),
 
             UnaryOp::Neg => {
-                constraints
-                    .apply(inner_ty, substitutions)
-                    .map_err(|err| err.with_span(&spans.inner))?;
-                Ok(spans.inner.extra)
+                constraints.apply(inner_ty, substitutions, &mut errors.with_span(&spans.inner));
+                spans.inner.extra
             }
 
-            _ => Err(TypeErrorKind::unsupported(op).with_span(&spans.op)),
+            _ => {
+                let err = TypeErrorKind::unsupported(op).with_span(&spans.op);
+                errors.push(err);
+                substitutions.new_type_var()
+            }
         }
     }
 
@@ -288,39 +308,40 @@ impl NumArithmetic {
     pub fn process_binary_op<'a, Prim: WithBoolean>(
         substitutions: &mut Substitutions<Prim>,
         spans: BinaryOpSpans<'a, Prim>,
+        errors: &mut TypeErrors<'a, Prim>,
         comparable_type: Option<Prim>,
         settings: OpConstraintSettings<'_, Prim::Constraints>,
-    ) -> TypeResult<'a, Prim> {
+    ) -> ValueType<Prim> {
         let op = spans.op.extra;
         let lhs_ty = &spans.lhs.extra;
         let rhs_ty = &spans.rhs.extra;
 
         match op {
             BinaryOp::And | BinaryOp::Or | BinaryOp::Eq | BinaryOp::NotEq => {
-                BoolArithmetic.process_binary_op(substitutions, spans)
+                BoolArithmetic.process_binary_op(substitutions, spans, errors)
             }
 
             BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Power => {
-                Self::unify_binary_op(substitutions, lhs_ty, rhs_ty, settings)
-                    .map_err(|err| err.with_span(&spans.total))
+                Self::unify_binary_op(substitutions, &spans, errors, settings)
             }
 
             BinaryOp::Ge | BinaryOp::Le | BinaryOp::Lt | BinaryOp::Gt => {
                 if let Some(ty) = comparable_type {
                     let ty = ValueType::Prim(ty);
-                    substitutions
-                        .unify(&ty, lhs_ty)
-                        .map_err(|err| err.with_span(&spans.lhs))?;
-                    substitutions
-                        .unify(&ty, rhs_ty)
-                        .map_err(|err| err.with_span(&spans.rhs))?;
-                    Ok(ValueType::BOOL)
+                    substitutions.unify(&ty, lhs_ty, &mut errors.with_span(&spans.lhs));
+                    substitutions.unify(&ty, rhs_ty, &mut errors.with_span(&spans.rhs));
                 } else {
-                    Err(TypeErrorKind::unsupported(op).with_span(&spans.op))
+                    let err = TypeErrorKind::unsupported(op).with_span(&spans.op);
+                    errors.push(err);
                 }
+                ValueType::BOOL
             }
 
-            _ => Err(TypeErrorKind::unsupported(op).with_span(&spans.op)),
+            _ => {
+                let err = TypeErrorKind::unsupported(op).with_span(&spans.op);
+                errors.push(err);
+                substitutions.new_type_var()
+            }
         }
     }
 }
@@ -341,15 +362,17 @@ impl TypeArithmetic<Num> for NumArithmetic {
         &self,
         substitutions: &mut Substitutions<Num>,
         spans: UnaryOpSpans<'a, Num>,
-    ) -> TypeResult<'a, Num> {
-        Self::process_unary_op(substitutions, spans, &NumConstraints::Lin)
+        errors: &mut TypeErrors<'a, Num>,
+    ) -> ValueType<Num> {
+        Self::process_unary_op(substitutions, spans, errors, &NumConstraints::Lin)
     }
 
     fn process_binary_op<'a>(
         &self,
         substitutions: &mut Substitutions<Num>,
         spans: BinaryOpSpans<'a, Num>,
-    ) -> TypeResult<'a, Num> {
+        errors: &mut TypeErrors<'a, Num>,
+    ) -> ValueType<Num> {
         let comparable_type = if self.comparisons_enabled {
             Some(Num::Num)
         } else {
@@ -359,6 +382,7 @@ impl TypeArithmetic<Num> for NumArithmetic {
         Self::process_binary_op(
             substitutions,
             spans,
+            errors,
             comparable_type,
             NumConstraints::OP_SETTINGS,
         )

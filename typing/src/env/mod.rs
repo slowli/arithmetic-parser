@@ -250,12 +250,7 @@ where
 
     /// Creates a new type variable.
     fn new_type(&mut self) -> ValueType<Prim> {
-        let mut new_type = ValueType::Some;
-        self.root_scope
-            .substitutions
-            .assign_new_type(&mut new_type)
-            .unwrap();
-        new_type
+        self.root_scope.substitutions.new_type_var()
     }
 
     fn process_expr_inner<T>(&mut self, expr: &SpannedExpr<'a, T>) -> ValueType<Prim>
@@ -444,13 +439,11 @@ where
         T: Grammar<Lit = Val, Type = ValueType<Prim>>,
     {
         let arg_types: Vec<_> = args.map(|arg| self.process_expr_inner(arg)).collect();
-        self.root_scope
-            .substitutions
-            .unify_fn_call(fn_type, arg_types)
-            .unwrap_or_else(|err| {
-                self.errors.push(err.with_span(call_expr));
-                self.new_type()
-            })
+        self.root_scope.substitutions.unify_fn_call(
+            fn_type,
+            arg_types,
+            &mut self.errors.with_span(call_expr),
+        )
     }
 
     #[inline]
@@ -470,12 +463,11 @@ where
             inner: inner.copy_with_extra(inner_ty),
         };
 
-        self.arithmetic
-            .process_unary_op(&mut self.root_scope.substitutions, spans)
-            .unwrap_or_else(|err| {
-                self.errors.push(err);
-                self.new_type()
-            })
+        self.arithmetic.process_unary_op(
+            &mut self.root_scope.substitutions,
+            spans,
+            &mut self.errors,
+        )
     }
 
     #[inline]
@@ -497,12 +489,11 @@ where
             lhs: lhs.copy_with_extra(lhs_ty),
             rhs: rhs.copy_with_extra(rhs_ty),
         };
-        self.arithmetic
-            .process_binary_op(&mut self.root_scope.substitutions, spans)
-            .unwrap_or_else(|err| {
-                self.errors.push(err);
-                self.new_type()
-            })
+        self.arithmetic.process_binary_op(
+            &mut self.root_scope.substitutions,
+            spans,
+            &mut self.errors,
+        )
     }
 
     fn process_fn_def<T>(&mut self, def: &FnDefinition<'a, T>) -> FnType<Prim>
@@ -537,9 +528,11 @@ where
             Statement::Assignment { lhs, rhs } => {
                 let rhs_ty = self.process_expr_inner(rhs);
                 let lhs_ty = self.process_lvalue(lhs);
-                if let Err(err) = self.root_scope.substitutions.unify(&lhs_ty, &rhs_ty) {
-                    self.errors.push(err.with_span(statement));
-                }
+                self.root_scope.substitutions.unify(
+                    &lhs_ty,
+                    &rhs_ty,
+                    &mut self.errors.with_span(statement),
+                );
                 ValueType::void()
             }
 

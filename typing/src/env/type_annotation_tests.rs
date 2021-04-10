@@ -270,9 +270,17 @@ fn adding_dynamically_typed_slices() {
 
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block).unwrap_err().single();
+    let errors: Vec<_> = type_env
+        .process_statements(&block)
+        .unwrap_err()
+        .into_iter()
+        .collect();
 
-    assert_matches!(err.kind(), TypeErrorKind::DynamicLen(_));
+    assert_eq!(errors.len(), 2);
+    assert_eq!(*errors[0].span().fragment(), "x");
+    assert_matches!(errors[0].kind(), TypeErrorKind::DynamicLen(_));
+    assert_eq!(*errors[1].span().fragment(), "y");
+    assert_matches!(errors[1].kind(), TypeErrorKind::DynamicLen(_));
 }
 
 #[test]
@@ -285,9 +293,15 @@ fn unifying_dynamic_slices_error() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("zip_with", zip_fn_type());
-    let err = type_env.process_statements(&block).unwrap_err().single();
+    let errors: Vec<_> = type_env
+        .process_statements(&block)
+        .unwrap_err()
+        .into_iter()
+        .collect();
 
-    assert_matches!(err.kind(), TypeErrorKind::DynamicLen(_));
+    assert_eq!(errors.len(), 2);
+    assert_matches!(errors[0].kind(), TypeErrorKind::DynamicLen(_));
+    assert_matches!(errors[1].kind(), TypeErrorKind::DynamicLen(_));
 }
 
 #[test]

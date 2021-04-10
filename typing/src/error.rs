@@ -183,6 +183,11 @@ impl<'a, Prim: PrimitiveType> TypeError<'a, Prim> {
         &self.inner.extra
     }
 
+    #[cfg(test)]
+    pub(crate) fn into_kind(self) -> TypeErrorKind<Prim> {
+        self.inner.extra
+    }
+
     /// Gets the code span of this error.
     pub fn span(&self) -> Spanned<'a> {
         self.inner.with_no_extra()
@@ -219,6 +224,17 @@ impl<'a, Prim: PrimitiveType> TypeErrors<'a, Prim> {
         self.inner.iter()
     }
 
+    /// Mutably borrows these errors associating them with the provided span.
+    pub fn with_span<'err, T>(
+        &'err mut self,
+        spanned: &Spanned<'a, T>,
+    ) -> SpannedTypeErrors<'err, 'a, Prim> {
+        SpannedTypeErrors {
+            errors: self,
+            span: spanned.with_no_extra(),
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn single(mut self) -> TypeError<'a, Prim> {
         if self.len() == 1 {
@@ -239,6 +255,29 @@ impl<Prim: PrimitiveType> fmt::Display for TypeErrors<'_, Prim> {
 }
 
 impl<Prim: PrimitiveType> std::error::Error for TypeErrors<'_, Prim> {}
+
+impl<'a, Prim: PrimitiveType> IntoIterator for TypeErrors<'a, Prim> {
+    type Item = TypeError<'a, Prim>;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner.into_iter()
+    }
+}
+
+/// Mutable borrow of [`TypeErrors`] together with a code span.
+#[derive(Debug)]
+pub struct SpannedTypeErrors<'err, 'a, Prim: PrimitiveType> {
+    errors: &'err mut TypeErrors<'a, Prim>,
+    span: Spanned<'a>,
+}
+
+impl<Prim: PrimitiveType> SpannedTypeErrors<'_, '_, Prim> {
+    /// Adds a new `error` into this the error list.
+    pub fn push(&mut self, error: TypeErrorKind<Prim>) {
+        self.errors.push(error.with_span(&self.span));
+    }
+}
 
 /// Result of inferring type for a certain expression.
 pub type TypeResult<'a, Prim> = Result<ValueType<Prim>, TypeError<'a, Prim>>;

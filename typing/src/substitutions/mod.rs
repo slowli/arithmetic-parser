@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     arith::TypeConstraints,
-    error::{TupleLenMismatchContext, TypeErrorKind},
+    error::{SpannedTypeErrors, TupleLenMismatchContext, TypeErrorKind},
     visit::{self, Visit, VisitMut},
     FnType, PrimitiveType, Tuple, TupleLen, TypeVar, UnknownLen, ValueType,
 };
@@ -154,6 +154,13 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         resolved
     }
 
+    /// Creates and returns a new type variable.
+    pub fn new_type_var(&mut self) -> ValueType<Prim> {
+        let new_type = ValueType::free_var(self.type_var_count);
+        self.type_var_count += 1;
+        new_type
+    }
+
     // FIXME: change to produce a reasonable output in case of errors?
     pub(crate) fn assign_new_type(
         &mut self,
@@ -182,12 +189,12 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     /// # Errors
     ///
     /// Returns an error if unification is impossible.
-    // FIXME: change signature
     pub fn unify(
         &mut self,
         lhs: &ValueType<Prim>,
         rhs: &ValueType<Prim>,
-    ) -> Result<(), TypeErrorKind<Prim>> {
+        errors: &mut SpannedTypeErrors<'_, '_, Prim>,
+    ) {
         let resolved_lhs = self.fast_resolve(lhs).to_owned();
         let resolved_rhs = self.fast_resolve(rhs).to_owned();
 
@@ -199,35 +206,37 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             // to account for `Var <- Any` assignment.
             (ValueType::Var(var), ty) => {
                 if var.is_free() {
-                    self.unify_var(var.index(), ty, true)
+                    self.unify_var(var.index(), ty, true, errors);
                 } else {
-                    Err(TypeErrorKind::UnresolvedParam)
+                    errors.push(TypeErrorKind::UnresolvedParam);
                 }
             }
             (ty, ValueType::Var(var)) => {
                 if var.is_free() {
-                    self.unify_var(var.index(), ty, false)
+                    self.unify_var(var.index(), ty, false, errors);
                 } else {
-                    Err(TypeErrorKind::UnresolvedParam)
+                    errors.push(TypeErrorKind::UnresolvedParam);
                 }
             }
 
             (ValueType::Any(constraints), ty) | (ty, ValueType::Any(constraints)) => {
-                self.unify_any(constraints, ty)
+                self.unify_any(constraints, ty, errors);
             }
 
             // This takes care of `Any` types because they are equal to anything.
             (ty, other_ty) if ty == other_ty => {
                 // We already know that types are equal.
-                Ok(())
             }
 
-            (ValueType::Tuple(lhs_tuple), ValueType::Tuple(rhs_tuple)) => {
-                self.unify_tuples(lhs_tuple, rhs_tuple, TupleLenMismatchContext::Assignment)
-            }
+            (ValueType::Tuple(lhs_tuple), ValueType::Tuple(rhs_tuple)) => self.unify_tuples(
+                lhs_tuple,
+                rhs_tuple,
+                TupleLenMismatchContext::Assignment,
+                errors,
+            ),
 
             (ValueType::Function(lhs_fn), ValueType::Function(rhs_fn)) => {
-                self.unify_fn_types(lhs_fn, rhs_fn)
+                self.unify_fn_types(lhs_fn, rhs_fn, errors)
             }
 
             (ty, other_ty) => {
@@ -236,7 +245,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 resolver.visit_type_mut(&mut ty);
                 let mut other_ty = other_ty.to_owned();
                 resolver.visit_type_mut(&mut other_ty);
-                Err(TypeErrorKind::TypeMismatch(ty, other_ty))
+                errors.push(TypeErrorKind::TypeMismatch(ty, other_ty));
             }
         }
     }
@@ -246,21 +255,27 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         lhs: &Tuple<Prim>,
         rhs: &Tuple<Prim>,
         context: TupleLenMismatchContext,
-    ) -> Result<(), TypeErrorKind<Prim>> {
-        let resolved_len = self.unify_lengths(lhs.len(), rhs.len(), context)?;
+        errors: &mut SpannedTypeErrors<'_, '_, Prim>,
+    ) {
+        let resolved_len = self.unify_lengths(lhs.len(), rhs.len(), context);
+        let resolved_len = match resolved_len {
+            Ok(len) => len,
+            Err(err) => {
+                errors.push(err);
+                return; // continuing unification is most probably incorrect
+            }
+        };
 
         if let (None, exact) = resolved_len.components() {
             for (lhs_elem, rhs_elem) in lhs.equal_elements_static(rhs, exact) {
-                self.unify(lhs_elem, rhs_elem)?;
+                self.unify(lhs_elem, rhs_elem, errors);
             }
         } else {
             // FIXME: is this always applicable?
             for (lhs_elem, rhs_elem) in lhs.equal_elements_dyn(rhs) {
-                self.unify(lhs_elem, rhs_elem)?;
+                self.unify(lhs_elem, rhs_elem, errors);
             }
         }
-
-        Ok(())
     }
 
     /// Returns the resolved length that `lhs` and `rhs` are equal to.
@@ -393,9 +408,11 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         &mut self,
         lhs: &FnType<Prim>,
         rhs: &FnType<Prim>,
-    ) -> Result<(), TypeErrorKind<Prim>> {
+        errors: &mut SpannedTypeErrors<'_, '_, Prim>,
+    ) {
         if lhs.is_parametric() {
-            return Err(TypeErrorKind::UnsupportedParam);
+            errors.push(TypeErrorKind::UnsupportedParam);
+            return;
         }
 
         let instantiated_lhs = self.instantiate_function(lhs);
@@ -411,9 +428,14 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             &instantiated_rhs.args,
             &instantiated_lhs.args,
             TupleLenMismatchContext::FnArgs,
-        )?;
+            errors,
+        );
 
-        self.unify(&instantiated_lhs.return_type, &instantiated_rhs.return_type)
+        self.unify(
+            &instantiated_lhs.return_type,
+            &instantiated_rhs.return_type,
+            errors,
+        )
     }
 
     /// Instantiates a functional type by replacing all type arguments with new type vars.
@@ -461,25 +483,23 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     }
 
     /// Unifies a type variable with the specified index and the specified type.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the unification is impossible.
     fn unify_var(
         &mut self,
         var_idx: usize,
         ty: &ValueType<Prim>,
         is_lhs: bool,
-    ) -> Result<(), TypeErrorKind<Prim>> {
+        errors: &mut SpannedTypeErrors<'_, '_, Prim>,
+    ) {
         if let ValueType::Var(var) = ty {
             if !var.is_free() {
-                return Err(TypeErrorKind::UnresolvedParam);
+                errors.push(TypeErrorKind::UnresolvedParam);
+                return;
             } else if var.index() == var_idx {
-                return Ok(());
+                return;
             }
         }
         let needs_equation = if let ValueType::Any(constraints) = ty {
-            self.unify_any(constraints, &ValueType::free_var(var_idx))?;
+            self.constraints.insert(var_idx, constraints.to_owned());
             is_lhs
         } else {
             true
@@ -504,10 +524,10 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             let mut resolved_ty = ty.to_owned();
             self.resolver().visit_type_mut(&mut resolved_ty);
             TypeSanitizer { fixed_idx: var_idx }.visit_type_mut(&mut resolved_ty);
-            Err(TypeErrorKind::RecursiveType(resolved_ty))
+            errors.push(TypeErrorKind::RecursiveType(resolved_ty));
         } else {
             if let Some(constraints) = self.constraints.get(&var_idx).cloned() {
-                constraints.apply(ty, self)?;
+                constraints.apply(ty, self, errors);
             }
             if needs_equation {
                 let mut ty = ty.to_owned();
@@ -518,7 +538,6 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 }
                 self.eqs.insert(var_idx, ty);
             }
-            Ok(())
         }
     }
 
@@ -528,23 +547,22 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         &mut self,
         constraints: &Prim::Constraints,
         ty: &ValueType<Prim>,
-    ) -> Result<(), TypeErrorKind<Prim>> {
-        constraints.apply(ty, self)
+        errors: &mut SpannedTypeErrors<'_, '_, Prim>,
+    ) {
+        constraints.apply(ty, self, errors);
     }
 
     /// Returns the return type of the function.
-    // FIXME: change signature
     pub(crate) fn unify_fn_call(
         &mut self,
         definition: &ValueType<Prim>,
         arg_types: Vec<ValueType<Prim>>,
-    ) -> Result<ValueType<Prim>, TypeErrorKind<Prim>> {
-        let mut return_type = ValueType::Some;
-        self.assign_new_type(&mut return_type)?;
-
+        errors: &mut SpannedTypeErrors<'_, '_, Prim>,
+    ) -> ValueType<Prim> {
+        let return_type = self.new_type_var();
         let called_fn_type = FnType::new(arg_types.into(), return_type.clone());
-        self.unify(&called_fn_type.into(), definition)
-            .map(|()| return_type)
+        self.unify(&called_fn_type.into(), definition, errors);
+        return_type
     }
 }
 

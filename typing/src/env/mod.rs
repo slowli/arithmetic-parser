@@ -296,7 +296,6 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
         }
     }
 
-    // TODO: handle `Some` type specially? (Assign new type on each call.)
     #[inline]
     fn process_var<'a, T>(&self, name: &Spanned<'a, T>) -> TypeResult<'a, Prim> {
         let var_name = *name.fragment();
@@ -337,7 +336,7 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
             }
 
             Lvalue::Tuple(destructure) => {
-                let element_types = self.process_destructure(destructure, false)?;
+                let element_types = self.process_destructure(destructure)?;
                 Ok(ValueType::Tuple(element_types))
             }
 
@@ -349,7 +348,6 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
     fn process_destructure<'a>(
         &mut self,
         destructure: &Destructure<'a, ValueType<Prim>>,
-        is_fn_args: bool,
     ) -> Result<Tuple<Prim>, TypeError<'a, Prim>> {
         let start = destructure
             .start
@@ -358,7 +356,7 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
             .collect::<Result<Vec<_>, _>>()?;
 
         let middle = if let Some(middle) = &destructure.middle {
-            Some(self.process_destructure_rest(&middle.extra, is_fn_args)?)
+            Some(self.process_destructure_rest(&middle.extra)?)
         } else {
             None
         };
@@ -375,7 +373,6 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
     fn process_destructure_rest<'a>(
         &mut self,
         rest: &DestructureRest<'a, ValueType<Prim>>,
-        _is_fn_args: bool, // FIXME: remove
     ) -> Result<Slice<Prim>, TypeError<'a, Prim>> {
         let ty = match rest {
             DestructureRest::Unnamed => None,
@@ -498,7 +495,7 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
     where
         T: Grammar<Lit = Val, Type = ValueType<Prim>>,
     {
-        let arg_types = self.process_destructure(&def.args.extra, true)?;
+        let arg_types = self.process_destructure(&def.args.extra)?;
         let return_type = self.process_block(&def.body)?;
         Ok((arg_types, return_type))
     }

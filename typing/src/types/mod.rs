@@ -421,7 +421,7 @@ mod tests {
     fn unequal_functions() {
         const FUNCTIONS: &[&str] = &[
             "for<'T: Lin> (['T; N]) -> 'T",
-            "for<len N*; 'T: Lin> (['T; N]) -> 'T",
+            "for<len! N; 'T: Lin> (['T; N]) -> 'T",
             "(['T; N]) -> 'T",
             "for<'T: Lin> (['T; N], 'T) -> 'T",
             "for<'T: Lin> (['T; N]) -> ('T)",

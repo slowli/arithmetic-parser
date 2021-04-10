@@ -160,14 +160,14 @@ pub enum TupleLenAst<'a> {
     Ident(InputSpan<'a>),
 }
 
-/// Parameter constraints, e.g. `for<len N*; T: Lin>`.
+/// Parameter constraints, e.g. `for<len! N; T: Lin>`.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct ConstraintsAst<'a, Prim: PrimitiveType> {
     /// Span of the `for` keyword.
     pub for_keyword: InputSpan<'a>,
-    /// Dynamic lengths, e.g., `N` in `for<len N*>`.
-    pub dyn_lengths: Vec<InputSpan<'a>>,
+    /// Static lengths, e.g., `N` in `for<len! N>`.
+    pub static_lengths: Vec<InputSpan<'a>>,
     /// Type constraints.
     pub type_params: Vec<(InputSpan<'a>, TypeConstraintsAst<'a, Prim>)>,
 }
@@ -352,16 +352,15 @@ fn constraints<Prim: PrimitiveType>(
 ) -> NomResult<'_, ConstraintsAst<'_, Prim>> {
     let semicolon = tuple((ws, tag_char(';'), ws));
 
-    let len_param = terminated(ident, tag_char('*'));
     let len_params = preceded(
-        terminated(tag("len"), ws),
-        separated_list1(comma_sep, len_param),
+        terminated(tag("len!"), ws),
+        separated_list1(comma_sep, ident),
     );
 
     let params_parser = alt((
         map(
             tuple((len_params, opt(preceded(semicolon, type_params)))),
-            |(dyn_lengths, type_params)| (dyn_lengths, type_params.unwrap_or_default()),
+            |(static_lengths, type_params)| (static_lengths, type_params.unwrap_or_default()),
         ),
         map(type_params, |type_params| (vec![], type_params)),
     ));
@@ -374,9 +373,9 @@ fn constraints<Prim: PrimitiveType>(
 
     map(
         constraints_parser,
-        |(for_keyword, _, (dyn_lengths, type_params))| ConstraintsAst {
+        |(for_keyword, _, (static_lengths, type_params))| ConstraintsAst {
             for_keyword,
-            dyn_lengths,
+            static_lengths,
             type_params,
         },
     )(input)

@@ -125,7 +125,7 @@ use arithmetic_parser::{
 pub mod arith;
 pub mod ast;
 mod env;
-mod error;
+pub mod error;
 mod substitutions;
 mod type_map;
 mod types;
@@ -133,7 +133,6 @@ pub mod visit;
 
 pub use self::{
     env::TypeEnvironment,
-    error::{TupleLenMismatchContext, TypeError, TypeErrorKind, TypeResult},
     substitutions::Substitutions,
     type_map::{Assertions, Prelude},
     types::{

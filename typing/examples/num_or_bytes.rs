@@ -7,8 +7,9 @@ use arithmetic_parser::{
     BinaryOp, InputSpan, NomResult,
 };
 use arithmetic_typing::{
-    arith::*, Annotated, Prelude, PrimitiveType, Substitutions, TypeEnvironment, TypeErrorKind,
-    TypeResult, ValueType,
+    arith::*,
+    error::{TypeErrorKind, TypeResult},
+    Annotated, Prelude, PrimitiveType, Substitutions, TypeEnvironment, ValueType,
 };
 
 /// Literal for arithmetic: either an integer or a byte buffer.

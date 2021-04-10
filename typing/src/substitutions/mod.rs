@@ -8,9 +8,9 @@ use std::{
 
 use crate::{
     arith::TypeConstraints,
+    error::{TupleLenMismatchContext, TypeErrorKind},
     visit::{self, Visit, VisitMut},
-    FnType, PrimitiveType, Tuple, TupleLen, TupleLenMismatchContext, TypeErrorKind, TypeVar,
-    UnknownLen, ValueType,
+    FnType, PrimitiveType, Tuple, TupleLen, TypeVar, UnknownLen, ValueType,
 };
 
 mod fns;
@@ -154,6 +154,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         resolved
     }
 
+    // FIXME: change to produce a reasonable output in case of errors?
     pub(crate) fn assign_new_type(
         &mut self,
         ty: &mut ValueType<Prim>,
@@ -181,6 +182,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     /// # Errors
     ///
     /// Returns an error if unification is impossible.
+    // FIXME: change signature
     pub fn unify(
         &mut self,
         lhs: &ValueType<Prim>,
@@ -531,6 +533,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     }
 
     /// Returns the return type of the function.
+    // FIXME: change signature
     pub(crate) fn unify_fn_call(
         &mut self,
         definition: &ValueType<Prim>,

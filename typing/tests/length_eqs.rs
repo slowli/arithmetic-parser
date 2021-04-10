@@ -4,8 +4,8 @@ use assert_matches::assert_matches;
 
 use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
 use arithmetic_typing::{
-    Annotated, FnType, Prelude, TupleLen, TupleLenMismatchContext, TypeEnvironment, TypeErrorKind,
-    UnknownLen, ValueType,
+    error::{TupleLenMismatchContext, TypeErrorKind},
+    Annotated, FnType, Prelude, TupleLen, TypeEnvironment, UnknownLen, ValueType,
 };
 
 pub type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;

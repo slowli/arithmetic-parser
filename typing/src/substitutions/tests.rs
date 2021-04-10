@@ -3,7 +3,7 @@
 use assert_matches::assert_matches;
 
 use super::*;
-use crate::{Num, TupleLenMismatchContext::Assignment};
+use crate::{error::TupleLenMismatchContext::Assignment, Num};
 
 #[test]
 fn unifying_lengths_success_without_side_effects() {

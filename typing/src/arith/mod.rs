@@ -3,7 +3,10 @@
 
 use num_traits::NumOps;
 
-use crate::{Num, PrimitiveType, Substitutions, TypeErrorKind, TypeResult, ValueType};
+use crate::{
+    error::{TypeErrorKind, TypeResult},
+    Num, PrimitiveType, Substitutions, ValueType,
+};
 use arithmetic_parser::{BinaryOp, Spanned, UnaryOp};
 
 mod constraints;
@@ -24,6 +27,7 @@ pub trait MapPrimitiveType<Val> {
 
 /// Arithmetic allowing to customize primitive types and how unary and binary operations are handled
 /// during type inference.
+// FIXME: change signature!
 pub trait TypeArithmetic<Prim: PrimitiveType> {
     /// Handles a unary operation.
     fn process_unary_op<'a>(

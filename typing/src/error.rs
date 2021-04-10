@@ -189,5 +189,56 @@ impl<'a, Prim: PrimitiveType> TypeError<'a, Prim> {
     }
 }
 
+/// List of [`TypeError`]s.
+#[derive(Debug, Clone)]
+pub struct TypeErrors<'a, Prim: PrimitiveType> {
+    inner: Vec<TypeError<'a, Prim>>,
+}
+
+impl<'a, Prim: PrimitiveType> TypeErrors<'a, Prim> {
+    pub(crate) fn new() -> Self {
+        Self { inner: vec![] }
+    }
+
+    pub(crate) fn push(&mut self, err: TypeError<'a, Prim>) {
+        self.inner.push(err);
+    }
+
+    /// Returns the number of errors in this list.
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    /// Checks if this list is empty.
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    /// Iterates over errors contained in this list.
+    pub fn iter(&self) -> impl Iterator<Item = &TypeError<'a, Prim>> + '_ {
+        self.inner.iter()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn single(mut self) -> TypeError<'a, Prim> {
+        if self.len() == 1 {
+            self.inner.pop().unwrap()
+        } else {
+            panic!("Expected 1 error, got {:?}", self)
+        }
+    }
+}
+
+impl<Prim: PrimitiveType> fmt::Display for TypeErrors<'_, Prim> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for error in &self.inner {
+            writeln!(formatter, "{}", error)?;
+        }
+        Ok(())
+    }
+}
+
+impl<Prim: PrimitiveType> std::error::Error for TypeErrors<'_, Prim> {}
+
 /// Result of inferring type for a certain expression.
 pub type TypeResult<'a, Prim> = Result<ValueType<Prim>, TypeError<'a, Prim>>;

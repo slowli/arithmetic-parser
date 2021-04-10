@@ -3,7 +3,8 @@
 use std::{fmt, ops, str::FromStr};
 
 use crate::{
-    arith::OpConstraintSettings, PrimitiveType, Slice, Substitutions, TypeErrorKind, ValueType,
+    arith::OpConstraintSettings, error::TypeErrorKind, PrimitiveType, Slice, Substitutions,
+    ValueType,
 };
 
 /// Container for constraints that can be placed on type variables.

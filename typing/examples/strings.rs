@@ -8,7 +8,8 @@ use arithmetic_parser::{
     BinaryOp, InputSpan, NomResult,
 };
 use arithmetic_typing::{
-    arith::*, Assertions, PrimitiveType, Substitutions, TypeEnvironment, TypeResult, ValueType,
+    arith::*, error::TypeResult, Assertions, PrimitiveType, Substitutions, TypeEnvironment,
+    ValueType,
 };
 
 /// Primitive type: string or boolean.

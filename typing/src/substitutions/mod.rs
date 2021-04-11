@@ -261,13 +261,14 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         let resolved_len = match resolved_len {
             Ok(len) => len,
             Err(err) => {
+                self.unify_tuples_after_error(lhs, rhs, &err, errors);
                 errors.push(err);
-                return; // continuing unification is most probably incorrect
+                return;
             }
         };
 
         if let (None, exact) = resolved_len.components() {
-            for (lhs_elem, rhs_elem) in lhs.equal_elements_static(rhs, exact) {
+            for (lhs_elem, rhs_elem) in lhs.iter(exact).zip(rhs.iter(exact)) {
                 self.unify(lhs_elem, rhs_elem, errors);
             }
         } else {
@@ -275,6 +276,47 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             for (lhs_elem, rhs_elem) in lhs.equal_elements_dyn(rhs) {
                 self.unify(lhs_elem, rhs_elem, errors);
             }
+        }
+    }
+
+    /// Tries to unify tuple elements after an error has occurred when unifying their lengths.
+    fn unify_tuples_after_error(
+        &mut self,
+        lhs: &Tuple<Prim>,
+        rhs: &Tuple<Prim>,
+        err: &TypeErrorKind<Prim>,
+        errors: &mut SpannedTypeErrors<'_, '_, Prim>,
+    ) {
+        let (lhs_len, rhs_len) = match err {
+            TypeErrorKind::TupleLenMismatch {
+                lhs: lhs_len,
+                rhs: rhs_len,
+                ..
+            } => (*lhs_len, *rhs_len),
+            _ => return,
+        };
+        let (lhs_var, lhs_exact) = lhs_len.components();
+        let (rhs_var, rhs_exact) = rhs_len.components();
+
+        match (lhs_var, rhs_var) {
+            (None, None) => {
+                // We've attempted to unify tuples with different known lengths.
+                // Iterate over common elements and unify them.
+                debug_assert_ne!(lhs_exact, rhs_exact);
+                for (lhs_elem, rhs_elem) in lhs.iter(lhs_exact).zip(rhs.iter(rhs_exact)) {
+                    self.unify(lhs_elem, rhs_elem, errors);
+                }
+            }
+
+            (None, Some(UnknownLen::Dynamic)) => {
+                // We've attempted to unify static LHS w/ a dynamic RHS
+                // e.g., `(x, y) = filter(...)`.
+                for (lhs_elem, rhs_elem) in lhs.iter(lhs_exact).zip(rhs.iter(rhs_exact)) {
+                    self.unify(lhs_elem, rhs_elem, errors);
+                }
+            }
+
+            _ => { /* Do nothing. */ }
         }
     }
 
@@ -435,7 +477,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             &instantiated_lhs.return_type,
             &instantiated_rhs.return_type,
             errors,
-        )
+        );
     }
 
     /// Instantiates a functional type by replacing all type arguments with new type vars.

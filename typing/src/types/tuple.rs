@@ -258,7 +258,7 @@ impl<Prim: PrimitiveType> PartialEq for Tuple<Prim> {
         if this_len != other.len() {
             false
         } else if let (None, len) = this_len.components() {
-            self.equal_elements_static(other, len).all(|(x, y)| x == y)
+            self.iter(len).zip(other.iter(len)).all(|(x, y)| x == y)
         } else {
             self.equal_elements_dyn(other).all(|(x, y)| x == y)
         }
@@ -423,28 +423,13 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
         self.middle = Some(Slice::new(element, len));
     }
 
-    /// Returns pairs of elements of this and `other` tuple that should be equal to each other.
-    ///
-    /// This method is specialized for the case when the length of middles is known.
-    pub(crate) fn equal_elements_static<'a>(
-        &'a self,
-        other: &'a Self,
-        total_len: usize,
-    ) -> impl Iterator<Item = (&'a ValueType<Prim>, &'a ValueType<Prim>)> + 'a {
+    /// Returns iterator over elements of this tuple assuming it has the given total length.
+    pub(crate) fn iter(&self, total_len: usize) -> impl Iterator<Item = &ValueType<Prim>> + '_ {
         let middle_len = total_len - self.start.len() - self.end.len();
-        let other_middle_len = total_len - other.start.len() - other.end.len();
-
-        let this_iter = self
-            .start
+        self.start
             .iter()
             .chain(iter::repeat(self.middle_element()).take(middle_len))
-            .chain(&self.end);
-        let other_iter = other
-            .start
-            .iter()
-            .chain(iter::repeat(other.middle_element()).take(other_middle_len))
-            .chain(&other.end);
-        this_iter.zip(other_iter)
+            .chain(&self.end)
     }
 
     /// Returns pairs of elements of this and `other` tuple that should be equal to each other.
@@ -456,7 +441,6 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     ) -> impl Iterator<Item = (&'a ValueType<Prim>, &'a ValueType<Prim>)> + 'a {
         let middle_elem = self.middle.as_ref().unwrap().element.as_ref();
         let other_middle_elem = other.middle.as_ref().unwrap().element.as_ref();
-        // `unwrap`s are safe due to checks above.
         let iter = iter::once((middle_elem, other_middle_elem));
 
         let borders_iter = self
@@ -680,12 +664,12 @@ mod tests {
             ValueType::BOOL,
             ValueType::free_var(0),
         ]);
-        let other_tuple = Tuple::from(vec![
+        let other_tuple = <Tuple>::from(vec![
             ValueType::free_var(1),
             ValueType::BOOL,
             ValueType::free_var(0),
         ]);
-        let equal_elements: Vec<_> = tuple.equal_elements_static(&other_tuple, 3).collect();
+        let equal_elements: Vec<_> = tuple.iter(3).zip(other_tuple.iter(3)).collect();
 
         assert_eq!(
             equal_elements,
@@ -704,8 +688,8 @@ mod tests {
             ValueType::BOOL,
             ValueType::free_var(0),
         ]);
-        let slice = Tuple::from(Slice::new(ValueType::free_var(1), UnknownLen::free_var(0)));
-        let equal_elements: Vec<_> = tuple.equal_elements_static(&slice, 3).collect();
+        let slice = <Tuple>::from(Slice::new(ValueType::free_var(1), UnknownLen::free_var(0)));
+        let equal_elements: Vec<_> = tuple.iter(3).zip(slice.iter(3)).collect();
 
         assert_eq!(
             equal_elements,
@@ -719,7 +703,7 @@ mod tests {
 
     #[test]
     fn equal_elements_static_slice_and_complex_tuple() {
-        let slice = Tuple::from(Slice::new(ValueType::free_var(1), UnknownLen::free_var(0)));
+        let slice = <Tuple>::from(Slice::new(ValueType::free_var(1), UnknownLen::free_var(0)));
         let tuple = Tuple {
             start: vec![ValueType::NUM],
             middle: Some(Slice::new(ValueType::free_var(0), UnknownLen::free_var(1))),
@@ -732,20 +716,23 @@ mod tests {
             (ValueType::free_var(1), ValueType::free_var(2)),
         ];
         let equal_elements: Vec<_> = slice
-            .equal_elements_static(&tuple, 3)
+            .iter(3)
+            .zip(tuple.iter(3))
             .map(|(x, y)| (x.to_owned(), y.to_owned()))
             .collect();
         assert_eq!(equal_elements, expected_pairs);
 
         let equal_elements: Vec<_> = slice
-            .equal_elements_static(&tuple, 4)
+            .iter(4)
+            .zip(tuple.iter(4))
             .map(|(x, y)| (x.to_owned(), y.to_owned()))
             .collect();
         expected_pairs.insert(1, (ValueType::free_var(1), ValueType::free_var(0)));
         assert_eq!(equal_elements, expected_pairs);
 
         let equal_elements: Vec<_> = slice
-            .equal_elements_static(&tuple, 5)
+            .iter(5)
+            .zip(tuple.iter(5))
             .map(|(x, y)| (x.to_owned(), y.to_owned()))
             .collect();
         expected_pairs.insert(2, (ValueType::free_var(1), ValueType::free_var(0)));
@@ -770,7 +757,7 @@ mod tests {
     fn equal_elements_static_two_complex_tuples() {
         let (tuple, other_tuple) = create_test_tuples();
 
-        let equal_elements: Vec<_> = tuple.equal_elements_static(&other_tuple, 3).collect();
+        let equal_elements: Vec<_> = tuple.iter(3).zip(other_tuple.iter(3)).collect();
         assert_eq!(
             equal_elements,
             vec![
@@ -780,7 +767,7 @@ mod tests {
             ]
         );
 
-        let equal_elements: Vec<_> = tuple.equal_elements_static(&other_tuple, 4).collect();
+        let equal_elements: Vec<_> = tuple.iter(4).zip(other_tuple.iter(4)).collect();
         assert_eq!(
             equal_elements,
             vec![

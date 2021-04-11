@@ -254,14 +254,21 @@ impl NumArithmetic {
                 resolved_lhs_ty
             }
             _ => {
-                settings
-                    .ops
-                    .apply(lhs_ty, substitutions, &mut errors.with_span(&spans.lhs));
-                settings
-                    .ops
-                    .apply(rhs_ty, substitutions, &mut errors.with_span(&spans.rhs));
-                substitutions.unify(lhs_ty, rhs_ty, &mut errors.with_span(&spans.total));
-                lhs_ty.to_owned()
+                let lhs_is_valid = errors
+                    .with_span(&spans.lhs)
+                    .check(|errors| settings.ops.apply(lhs_ty, substitutions, errors));
+                let rhs_is_valid = errors
+                    .with_span(&spans.rhs)
+                    .check(|errors| settings.ops.apply(rhs_ty, substitutions, errors));
+
+                if lhs_is_valid && rhs_is_valid {
+                    substitutions.unify(lhs_ty, rhs_ty, &mut errors.with_span(&spans.total));
+                }
+                if lhs_is_valid {
+                    lhs_ty.to_owned()
+                } else {
+                    rhs_ty.to_owned()
+                }
             }
         }
     }

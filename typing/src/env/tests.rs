@@ -949,21 +949,16 @@ fn comparison_type_errors() {
     let code = "(2 <= 1) + 3";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let mut errors = type_env
+    let err = type_env
         .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
         .unwrap_err()
-        .into_iter();
+        .single();
 
-    let err = errors.next().unwrap();
+    assert_eq!(*err.span().fragment(), "(2 <= 1)");
     assert_matches!(
         err.kind(),
         TypeErrorKind::FailedConstraint { ty, .. } if *ty == ValueType::BOOL
     );
-
-    let err = errors.next().unwrap();
-    assert_incompatible_types(err.kind(), &ValueType::BOOL, &ValueType::NUM);
-
-    assert!(errors.next().is_none());
 }
 
 #[test]

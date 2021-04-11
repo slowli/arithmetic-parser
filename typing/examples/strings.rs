@@ -8,7 +8,7 @@ use arithmetic_parser::{
     BinaryOp, InputSpan, NomResult,
 };
 use arithmetic_typing::{
-    arith::*, error::TypeResult, Assertions, PrimitiveType, Substitutions, TypeEnvironment,
+    arith::*, error::TypeErrors, Assertions, PrimitiveType, Substitutions, TypeEnvironment,
     ValueType,
 };
 
@@ -111,37 +111,43 @@ impl TypeArithmetic<StrType> for StrArithmetic {
         &self,
         substitutions: &mut Substitutions<StrType>,
         spans: UnaryOpSpans<'a, StrType>,
-    ) -> TypeResult<'a, StrType> {
-        BoolArithmetic.process_unary_op(substitutions, spans)
+        errors: &mut TypeErrors<'a, StrType>,
+    ) -> ValueType<StrType> {
+        BoolArithmetic.process_unary_op(substitutions, spans, errors)
     }
 
     fn process_binary_op<'a>(
         &self,
         substitutions: &mut Substitutions<StrType>,
         spans: BinaryOpSpans<'a, StrType>,
-    ) -> TypeResult<'a, StrType> {
-        let lhs_ty = &spans.lhs.extra;
-        let rhs_ty = &spans.rhs.extra;
+        errors: &mut TypeErrors<'a, StrType>,
+    ) -> ValueType<StrType> {
         match spans.op.extra {
             BinaryOp::Add => NumArithmetic::unify_binary_op(
                 substitutions,
-                lhs_ty,
-                rhs_ty,
+                &spans,
+                errors,
                 NumConstraints::OP_SETTINGS,
-            )
-            .map_err(|err| err.with_span(&spans.total)),
+            ),
 
             BinaryOp::Gt | BinaryOp::Lt | BinaryOp::Ge | BinaryOp::Le => {
-                substitutions
-                    .unify(&ValueType::Prim(StrType::Str), lhs_ty)
-                    .map_err(|err| err.with_span(&spans.lhs))?;
-                substitutions
-                    .unify(&ValueType::Prim(StrType::Str), rhs_ty)
-                    .map_err(|err| err.with_span(&spans.rhs))?;
-                Ok(ValueType::BOOL)
+                let lhs_ty = &spans.lhs.extra;
+                let rhs_ty = &spans.rhs.extra;
+
+                substitutions.unify(
+                    &ValueType::Prim(StrType::Str),
+                    lhs_ty,
+                    &mut errors.with_span(&spans.lhs),
+                );
+                substitutions.unify(
+                    &ValueType::Prim(StrType::Str),
+                    rhs_ty,
+                    &mut errors.with_span(&spans.rhs),
+                );
+                ValueType::BOOL
             }
 
-            _ => BoolArithmetic.process_binary_op(substitutions, spans),
+            _ => BoolArithmetic.process_binary_op(substitutions, spans, errors),
         }
     }
 }

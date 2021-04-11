@@ -247,8 +247,11 @@ impl<'a, Prim: PrimitiveType> TypeErrors<'a, Prim> {
 
 impl<Prim: PrimitiveType> fmt::Display for TypeErrors<'_, Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for error in &self.inner {
-            writeln!(formatter, "{}", error)?;
+        for (i, error) in self.inner.iter().enumerate() {
+            write!(formatter, "{}", error)?;
+            if i + 1 < self.inner.len() {
+                formatter.write_str("\n")?;
+            }
         }
         Ok(())
     }

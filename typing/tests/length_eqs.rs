@@ -4,11 +4,25 @@ use assert_matches::assert_matches;
 
 use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
 use arithmetic_typing::{
-    error::{TupleLenMismatchContext, TypeErrorKind},
-    Annotated, FnType, Prelude, TupleLen, TypeEnvironment, UnknownLen, ValueType,
+    error::{TupleLenMismatchContext, TypeError, TypeErrorKind, TypeErrors},
+    Annotated, FnType, Num, Prelude, TupleLen, TypeEnvironment, UnknownLen, ValueType,
 };
 
-pub type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
+type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
+
+trait SingleError<'a> {
+    fn single(self) -> TypeError<'a, Num>;
+}
+
+impl<'a> SingleError<'a> for TypeErrors<'a, Num> {
+    fn single(self) -> TypeError<'a, Num> {
+        if self.len() == 1 {
+            self.into_iter().next().unwrap()
+        } else {
+            panic!("Expected one error, got {:?}", self);
+        }
+    }
+}
 
 #[test]
 fn push_fn_basics() {
@@ -33,7 +47,7 @@ fn push_fn_in_other_fn_definition() {
 
     let mut type_env = TypeEnvironment::new();
     type_env.insert("push", Prelude::Push);
-    let err = type_env.process_statements(&block).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(*err.span().fragment(), "(_, (_, z)) = push_fork(4)");
     assert_matches!(
@@ -134,7 +148,7 @@ fn requirements_on_len_via_destructuring() {
     type_env
         .insert("fold", Prelude::Fold)
         .insert("map", Prelude::Map);
-    let err = type_env.process_statements(&block).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(*err.span().fragment(), "(1,).len_at_least2()");
     assert_matches!(
@@ -174,7 +188,7 @@ fn reversing_a_slice() {
         .insert("fold", Prelude::Fold)
         .insert("map", Prelude::Map)
         .insert("merge", Prelude::Merge);
-    let err = type_env.process_statements(&block).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(*err.span().fragment(), "(_, ...) = ys");
     assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
@@ -206,7 +220,8 @@ fn errors_when_adding_dynamic_slices() {
         }
 
         let line = F32Grammar::parse_statements(line).unwrap();
-        let err = type_env.process_statements(&line).unwrap_err();
+        let errors = type_env.process_statements(&line).unwrap_err();
+        let err = errors.into_iter().next().unwrap();
         assert_matches!(err.kind(), TypeErrorKind::DynamicLen(_));
     }
 }
@@ -231,7 +246,8 @@ fn square_function() {
     type_env
         .insert("true", Prelude::True)
         .insert("is_square", square_fn);
-    let err = type_env.process_statements(&block).unwrap_err();
+    let errors = type_env.process_statements(&block).unwrap_err();
+    let err = errors.into_iter().next().unwrap();
 
     assert_eq!(
         *err.span().fragment(),
@@ -278,7 +294,8 @@ fn column_row_equality_fn() {
     ];
     for &bogus_line in bogus_lines {
         let bogus_line = F32Grammar::parse_statements(bogus_line).unwrap();
-        let err = type_env.process_statements(&bogus_line).unwrap_err();
+        let errors = type_env.process_statements(&bogus_line).unwrap_err();
+        let err = errors.into_iter().next().unwrap();
         assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
     }
 
@@ -288,7 +305,10 @@ fn column_row_equality_fn() {
         zs.push((3, 4, 5)); // fail: `zs` elements are `(Num, Num)`
     "#;
     let test_code = F32Grammar::parse_statements(test_code).unwrap();
-    let err = type_env.process_statements(&test_code).unwrap_err();
+    let err = type_env
+        .process_statements(&test_code)
+        .unwrap_err()
+        .single();
     assert_eq!(*err.span().fragment(), "zs.push((3, 4, 5))");
     assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
 }

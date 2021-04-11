@@ -96,7 +96,7 @@ impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
             } => write!(
                 formatter,
                 "Function expects {} args, but is called with {} args",
-                rhs, lhs
+                lhs, rhs
             ),
             Self::TupleLenMismatch { lhs, rhs, .. } => write!(
                 formatter,
@@ -276,6 +276,14 @@ impl<Prim: PrimitiveType> SpannedTypeErrors<'_, '_, Prim> {
     /// Adds a new `error` into this the error list.
     pub fn push(&mut self, error: TypeErrorKind<Prim>) {
         self.errors.push(error.with_span(&self.span));
+    }
+
+    /// Invokes the provided closure and returns `false` if new errors were
+    /// added during the closure execution.
+    pub fn check(&mut self, check: impl FnOnce(&mut Self)) -> bool {
+        let error_count = self.errors.inner.len();
+        check(self);
+        self.errors.inner.len() == error_count
     }
 }
 

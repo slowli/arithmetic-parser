@@ -708,7 +708,7 @@ fn function_passed_as_arg_invalid_arity() {
     );
     assert_eq!(
         err.kind().to_string(),
-        "Function expects 1 args, but is called with 2 args"
+        "Function expects 2 args, but is called with 1 args"
     );
 }
 

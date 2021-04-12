@@ -7,7 +7,7 @@ use super::{
     *,
 };
 use crate::{
-    error::{TupleLenMismatchContext, TypeErrorKind},
+    error::{ErrorLocation, TupleLenMismatchContext, TypeErrorKind},
     Prelude, TupleLen,
 };
 use arithmetic_parser::grammars::Parse;
@@ -344,8 +344,15 @@ fn unifying_tuples_with_dyn_lengths() {
     type_env.insert("true", ValueType::BOOL);
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert!(err.span().fragment().starts_with("zs:"));
+    assert_eq!(*err.span().fragment(), "zs");
+    assert_eq!(err.location(), [ErrorLocation::TupleElement(3)]); // FIXME
+    assert_matches!(
+        err.context(),
+        ErrorContext::Assignment { lhs, rhs }
+            if lhs.to_string() == "(...[Num], Num, Num)" && *rhs == type_env["xs"]
+    );
     assert_incompatible_types(err.kind(), &ValueType::BOOL, &ValueType::NUM);
+
     assert_eq!(type_env["xs"].to_string(), "(Bool, ...[Num], Num)");
     assert_eq!(type_env["ys"].to_string(), "[Num]");
 }

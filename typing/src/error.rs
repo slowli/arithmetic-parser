@@ -4,6 +4,7 @@ use std::{fmt, ops};
 
 use crate::{
     arith::{BinaryOpContext, UnaryOpContext},
+    visit::VisitMut,
     PrimitiveType, TupleLen, ValueType,
 };
 use arithmetic_parser::{
@@ -114,7 +115,7 @@ impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
 
             Self::RecursiveType(ty) => write!(
                 formatter,
-                "Trying to unify a type `T` with a type containing it: {}",
+                "Cannot unify type 'T with a type containing it: {}",
                 ty
             ),
 
@@ -166,7 +167,7 @@ impl<Prim: PrimitiveType> fmt::Display for TypeError<'_, Prim> {
             formatter,
             "{}:{}: {}",
             self.span().location_line(),
-            self.span().location_offset(),
+            self.span().get_column(),
             self.kind()
         )
     }
@@ -218,6 +219,11 @@ impl<'a, Prim: PrimitiveType> TypeError<'a, Prim> {
         self.inner.with_no_extra()
     }
 
+    /// Top-level operation that has errored.
+    pub fn context(&self) -> &ErrorContext<Prim> {
+        &self.context
+    }
+
     /// Gets the location of this error relative to the spanned type.
     pub fn location(&self) -> &[ErrorLocation] {
         &self.location
@@ -256,6 +262,14 @@ impl<'a, Prim: PrimitiveType> TypeErrors<'a, Prim> {
     /// Iterates over errors contained in this list.
     pub fn iter(&self) -> impl Iterator<Item = &TypeError<'a, Prim>> + '_ {
         self.inner.iter()
+    }
+
+    /// Post-processes these errors, resolving the contained `ValueType`s using
+    /// the provided `type_resolver`.
+    pub(crate) fn post_process(&mut self, type_resolver: &mut impl VisitMut<Prim>) {
+        for error in &mut self.inner {
+            error.context.map_types(type_resolver);
+        }
     }
 
     #[cfg(test)]
@@ -558,5 +572,28 @@ impl<Prim: PrimitiveType> From<UnaryOpContext<Prim>> for ErrorContext<Prim> {
 impl<Prim: PrimitiveType> From<BinaryOpContext<Prim>> for ErrorContext<Prim> {
     fn from(value: BinaryOpContext<Prim>) -> Self {
         Self::BinaryOp(value)
+    }
+}
+
+impl<Prim: PrimitiveType> ErrorContext<Prim> {
+    fn map_types(&mut self, mapper: &mut impl VisitMut<Prim>) {
+        match self {
+            Self::None => { /* Do nothing. */ }
+            Self::Lvalue(lvalue) => mapper.visit_type_mut(lvalue),
+            Self::FnCall {
+                definition,
+                call_signature,
+            } => {
+                mapper.visit_type_mut(definition);
+                mapper.visit_type_mut(call_signature);
+            }
+            Self::Assignment { lhs, rhs } | Self::BinaryOp(BinaryOpContext { lhs, rhs, .. }) => {
+                mapper.visit_type_mut(lhs);
+                mapper.visit_type_mut(rhs);
+            }
+            Self::UnaryOp(UnaryOpContext { arg, .. }) => {
+                mapper.visit_type_mut(arg);
+            }
+        }
     }
 }

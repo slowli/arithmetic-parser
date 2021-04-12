@@ -572,8 +572,6 @@ where
     {
         let mut return_value = self.process_block(block);
 
-        // FIXME: resolve all types in errors.
-        // FIXME: is resolving still applicable on errors?
         debug_assert!(self.inner_scopes.is_empty());
         let mut resolver = self.root_scope.substitutions.resolver();
         for (name, var_type) in &mut self.root_scope.variables {
@@ -586,6 +584,8 @@ where
         if self.errors.is_empty() {
             Ok(return_value)
         } else {
+            // TODO: remove all vars and reset substitutions beyond the first failing statement.
+            self.errors.post_process(&mut resolver);
             Err(self.errors)
         }
     }

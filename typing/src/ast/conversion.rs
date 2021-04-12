@@ -170,11 +170,11 @@ impl<'a, Prim: PrimitiveType> ConstraintsAst<'a, Prim> {
         &self,
         state: &ConversionState<'a>,
     ) -> Result<ParamConstraints<Prim>, ConversionError<&'a str>> {
-        let mut dyn_lengths = HashSet::with_capacity(self.dyn_lengths.len());
-        for dyn_length in &self.dyn_lengths {
+        let mut static_lengths = HashSet::with_capacity(self.static_lengths.len());
+        for dyn_length in &self.static_lengths {
             let name = *dyn_length.fragment();
             if let Some(index) = state.len_params.get(name) {
-                dyn_lengths.insert(*index);
+                static_lengths.insert(*index);
             } else {
                 let err = ConversionErrorKind::UnusedLength(name.to_owned()).with_span(*dyn_length);
                 return Err(err);
@@ -193,7 +193,7 @@ impl<'a, Prim: PrimitiveType> ConstraintsAst<'a, Prim> {
         }
 
         Ok(ParamConstraints {
-            dyn_lengths,
+            static_lengths,
             type_params,
         })
     }
@@ -440,11 +440,11 @@ mod tests {
 
     #[test]
     fn converting_fn_type_unused_length() {
-        let input = InputSpan::new("for<len N*> (Num) -> Bool");
+        let input = InputSpan::new("for<len! N> (Num) -> Bool");
         let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
         let err = ValueType::try_from(ast).unwrap_err();
 
-        assert_eq!(err.main_span().location_offset(), 8);
+        assert_eq!(err.main_span().location_offset(), 9);
         assert_matches!(
             err.kind(),
             ConversionErrorKind::UnusedLength(name) if name == "N"

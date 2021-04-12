@@ -3,14 +3,14 @@
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
-    ptr,
+    ops, ptr,
 };
 
 use crate::{
     arith::TypeConstraints,
     visit::{self, Visit, VisitMut},
-    FnType, LengthKind, PrimitiveType, Tuple, TupleLen, TupleLenMismatchContext, TypeErrorKind,
-    TypeVar, UnknownLen, ValueType,
+    FnType, PrimitiveType, Tuple, TupleLen, TupleLenMismatchContext, TypeErrorKind, TypeVar,
+    UnknownLen, ValueType,
 };
 
 mod fns;
@@ -23,6 +23,7 @@ mod tests;
 enum LenErrorKind {
     UnresolvedParam,
     Mismatch,
+    Dynamic(TupleLen),
 }
 
 /// Set of equations and constraints on type variables.
@@ -38,8 +39,8 @@ pub struct Substitutions<Prim: PrimitiveType> {
     len_var_count: usize,
     /// Length variable equations.
     length_eqs: HashMap<usize, TupleLen>,
-    /// Length variable known to be dynamic.
-    dyn_lengths: HashSet<usize>,
+    /// Lengths that have static restriction.
+    static_lengths: HashSet<usize>,
 }
 
 impl<Prim: PrimitiveType> Default for Substitutions<Prim> {
@@ -50,7 +51,7 @@ impl<Prim: PrimitiveType> Default for Substitutions<Prim> {
             constraints: HashMap::new(),
             len_var_count: 0,
             length_eqs: HashMap::new(),
-            dyn_lengths: HashSet::new(),
+            static_lengths: HashSet::new(),
         }
     }
 }
@@ -82,6 +83,35 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             }
         }
         equivalent_vars
+    }
+
+    /// Marks `len` as static, i.e., not containing [`UnknownLen::Dynamic`] components.
+    #[allow(clippy::missing_panics_doc)]
+    pub fn apply_static_len(&mut self, len: TupleLen) -> Result<(), TypeErrorKind<Prim>> {
+        let resolved = self.resolve_len(len);
+        self.apply_static_len_inner(resolved)
+            .map_err(|err| match err {
+                LenErrorKind::UnresolvedParam => TypeErrorKind::UnresolvedParam,
+                LenErrorKind::Dynamic(len) => TypeErrorKind::DynamicLen(len),
+                LenErrorKind::Mismatch => unreachable!(),
+            })
+    }
+
+    // Assumes that `len` is resolved.
+    fn apply_static_len_inner(&mut self, len: TupleLen) -> Result<(), LenErrorKind> {
+        match len.components().0 {
+            None => Ok(()),
+            Some(UnknownLen::Some) => Err(LenErrorKind::UnresolvedParam),
+            Some(UnknownLen::Dynamic) => Err(LenErrorKind::Dynamic(len)),
+            Some(UnknownLen::Var(var)) => {
+                if var.is_free() {
+                    self.static_lengths.insert(var.index());
+                    Ok(())
+                } else {
+                    Err(LenErrorKind::UnresolvedParam)
+                }
+            }
+        }
     }
 
     /// Resolves the type by following established equality links between type variables.
@@ -137,21 +167,10 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     }
 
     pub(crate) fn assign_new_len(&mut self, len: &mut TupleLen) {
-        let target_len = match len.components_mut().0 {
-            Some(target_len) => target_len,
-            None => return,
-        };
-        let is_dynamic = match target_len {
-            UnknownLen::Some => false,
-            UnknownLen::Dynamic => true,
-            _ => return,
-        };
-
-        if is_dynamic {
-            self.dyn_lengths.insert(self.len_var_count);
+        if let Some(target_len @ UnknownLen::Some) = len.components_mut().0 {
+            *target_len = UnknownLen::free_var(self.len_var_count);
+            self.len_var_count += 1;
         }
-        *target_len = UnknownLen::free_var(self.len_var_count);
-        self.len_var_count += 1;
     }
 
     /// Unifies types in `lhs` and `rhs`.
@@ -260,6 +279,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                     rhs: resolved_rhs,
                     context,
                 },
+                LenErrorKind::Dynamic(len) => TypeErrorKind::DynamicLen(len),
             })
     }
 
@@ -312,67 +332,58 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         source: TupleLen,
         is_lhs: bool,
     ) -> Result<TupleLen, LenErrorKind> {
-        let var_idx = match simple_len {
-            UnknownLen::Var(var) if var.is_free() => var.index(),
-            _ => return Err(LenErrorKind::UnresolvedParam),
-        };
-        let source_var_idx = match source.components().0 {
-            None => None,
-            Some(UnknownLen::Var(var)) if var.is_free() => Some(var.index()),
-            Some(_) => return Err(LenErrorKind::UnresolvedParam),
-        };
+        match simple_len {
+            UnknownLen::Var(var) if var.is_free() => self.unify_var_length(var.index(), source),
+            UnknownLen::Dynamic => self.unify_dyn_length(source, is_lhs),
+            _ => Err(LenErrorKind::UnresolvedParam),
+        }
+    }
 
-        let (is_dyn, is_source_dyn) = match source_var_idx {
-            // Same length variable.
-            Some(idx) if idx == var_idx => {
-                return if source.components().1 == 0 {
-                    Ok(source) // lengths are already unified
-                } else {
-                    // x = x + C, C > 0: cannot be unified
-                    Err(LenErrorKind::Mismatch)
-                };
-            }
-            // Different length variables.
-            Some(source_var_idx) => {
-                let is_dyn = self.dyn_lengths.contains(&var_idx);
-                let is_source_dyn = self.dyn_lengths.contains(&source_var_idx);
-                (is_dyn, is_source_dyn)
-            }
-            // No length variable.
-            None => {
-                let is_dyn = self.dyn_lengths.contains(&var_idx);
-                (is_dyn, false)
-            }
-        };
+    #[inline]
+    fn unify_var_length(
+        &mut self,
+        var_idx: usize,
+        source: TupleLen,
+    ) -> Result<TupleLen, LenErrorKind> {
+        // Check that the source is valid.
+        match source.components() {
+            (Some(UnknownLen::Some), _) => Err(LenErrorKind::UnresolvedParam),
+            (Some(UnknownLen::Var(var)), _) if !var.is_free() => Err(LenErrorKind::UnresolvedParam),
 
-        let (is_lhs_dyn, is_rhs_dyn) = if is_lhs {
-            (is_dyn, is_source_dyn)
-        } else {
-            (is_source_dyn, is_dyn)
-        };
-
-        match (is_lhs_dyn, is_rhs_dyn) {
-            // Dynamic vars are different, hence cannot be unified.
-            (true, true) => Err(LenErrorKind::Mismatch),
-            // LHS is dynamic, RHS is not.
-            (true, false) => {
-                // Check additionally that LHS does not have a non-zero exact part.
-                let is_valid = is_lhs || source.components().1 == 0;
-                if is_valid {
-                    Ok(source) // no new equation required
-                } else {
-                    Err(LenErrorKind::Mismatch)
-                }
-            }
-            // LHS is not dynamic; RHS may or may not be.
-            (false, _) => {
-                if is_dyn {
-                    Err(LenErrorKind::Mismatch)
-                } else {
-                    self.length_eqs.insert(var_idx, source);
+            // Special case is uniting a var with self.
+            (Some(UnknownLen::Var(var)), offset) if var.index() == var_idx => {
+                if offset == 0 {
                     Ok(source)
+                } else {
+                    Err(LenErrorKind::Mismatch)
                 }
             }
+
+            _ => {
+                if self.static_lengths.contains(&var_idx) {
+                    self.apply_static_len_inner(source)?;
+                }
+                self.length_eqs.insert(var_idx, source);
+                Ok(source)
+            }
+        }
+    }
+
+    #[inline]
+    fn unify_dyn_length(
+        &mut self,
+        source: TupleLen,
+        is_lhs: bool,
+    ) -> Result<TupleLen, LenErrorKind> {
+        if is_lhs {
+            Ok(source) // assignment to dyn length always succeeds
+        } else {
+            let source_var_idx = match source.components() {
+                (Some(UnknownLen::Var(var)), 0) if var.is_free() => var.index(),
+                (Some(UnknownLen::Dynamic), 0) => return Ok(source),
+                _ => return Err(LenErrorKind::Mismatch),
+            };
+            self.unify_var_length(source_var_idx, UnknownLen::Dynamic.into())
         }
     }
 
@@ -433,10 +444,10 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         MonoTypeTransformer::transform(&mapping, &mut instantiated_fn_type);
 
         // Copy constraints on the newly generated const and type vars from the function definition.
-        for (original_idx, kind) in &fn_params.len_params {
-            if *kind == LengthKind::Dynamic {
+        for (original_idx, is_static) in &fn_params.len_params {
+            if *is_static {
                 let new_idx = mapping.lengths[original_idx];
-                self.dyn_lengths.insert(new_idx);
+                self.static_lengths.insert(new_idx);
             }
         }
         for (original_idx, constraints) in &fn_params.type_params {
@@ -497,7 +508,13 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 constraints.apply(ty, self)?;
             }
             if needs_equation {
-                self.eqs.insert(var_idx, ty.clone());
+                let mut ty = ty.to_owned();
+                if !is_lhs {
+                    // We need to swap `any` types / lengths with new vars so that this type
+                    // can be specified further.
+                    TypeSpecifier::new(self).visit_type_mut(&mut ty);
+                }
+                self.eqs.insert(var_idx, ty);
             }
             Ok(())
         }
@@ -616,7 +633,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeAssigner<'_, Prim> {
     }
 }
 
-/// Mutable visitor that performs type resolution based on `Substitutions`.
+/// Visitor that performs type resolution based on `Substitutions`.
 #[derive(Debug, Clone, Copy)]
 struct TypeResolver<'a, Prim: PrimitiveType> {
     substitutions: &'a Substitutions<Prim>,
@@ -633,5 +650,78 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeResolver<'_, Prim> {
 
     fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
         *len = self.substitutions.resolve_len(*len);
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Variance {
+    Co,
+    Contra,
+}
+
+impl ops::Not for Variance {
+    type Output = Self;
+
+    fn not(self) -> Self {
+        match self {
+            Self::Co => Self::Contra,
+            Self::Contra => Self::Co,
+        }
+    }
+}
+
+/// Visitor that swaps `any` types / lengths with new vars, but only if they are in a covariant
+/// position (return types, args of arg functions, etc.).
+#[derive(Debug)]
+struct TypeSpecifier<'a, Prim: PrimitiveType> {
+    substitutions: &'a mut Substitutions<Prim>,
+    variance: Variance,
+}
+
+impl<'a, Prim: PrimitiveType> TypeSpecifier<'a, Prim> {
+    fn new(substitutions: &'a mut Substitutions<Prim>) -> Self {
+        Self {
+            substitutions,
+            variance: Variance::Co,
+        }
+    }
+}
+
+impl<Prim: PrimitiveType> VisitMut<Prim> for TypeSpecifier<'_, Prim> {
+    fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
+        if let ValueType::Any(constraints) = ty {
+            if self.variance == Variance::Co {
+                let var_idx = self.substitutions.type_var_count;
+                self.substitutions
+                    .constraints
+                    .insert(var_idx, constraints.to_owned());
+                *ty = ValueType::free_var(var_idx);
+                self.substitutions.type_var_count += 1;
+            }
+        } else {
+            visit::visit_type_mut(self, ty);
+        }
+    }
+
+    fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
+        if self.variance != Variance::Co {
+            return;
+        }
+        if let (Some(var_len @ UnknownLen::Dynamic), _) = len.components_mut() {
+            let var_idx = self.substitutions.len_var_count;
+            self.substitutions.len_var_count += 1;
+            *var_len = UnknownLen::free_var(var_idx);
+        }
+    }
+
+    fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {
+        // Since the visiting order doesn't matter, we visit the return type (which preserves
+        // variance) first.
+        self.visit_type_mut(&mut function.return_type);
+
+        let old_variance = self.variance;
+        self.variance = !self.variance;
+        self.visit_tuple_mut(&mut function.args);
+        self.variance = old_variance;
     }
 }

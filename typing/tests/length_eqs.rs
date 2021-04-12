@@ -4,8 +4,8 @@ use assert_matches::assert_matches;
 
 use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
 use arithmetic_typing::{
-    Annotated, Prelude, TupleLen, TupleLenMismatchContext, TypeEnvironment, TypeErrorKind,
-    ValueType,
+    Annotated, FnType, Prelude, TupleLen, TupleLenMismatchContext, TypeEnvironment, TypeErrorKind,
+    UnknownLen, ValueType,
 };
 
 pub type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
@@ -106,7 +106,7 @@ fn comparing_lengths_after_push() {
     );
     assert_eq!(
         type_env["complex"].to_string(),
-        "([Num; N + 1], [Num; N]) -> [Num; N + 2]"
+        "for<len! N> ([Num; N + 1], [Num; N]) -> [Num; N + 2]"
     );
 }
 
@@ -155,4 +155,158 @@ fn requirements_on_len_via_destructuring() {
         type_env["other_test_fn"].to_string(),
         "([(Num, Bool); N + 2]) -> [Num; N + 1]"
     );
+}
+
+#[test]
+fn reversing_a_slice() {
+    let code = r#"
+        reverse = |xs| {
+            empty: [_] = ();
+            xs.fold(empty, |acc, x| (x,).merge(acc))
+        };
+        ys = (2, 3, 4).reverse().map(|x| x == 1);
+        (_, ...) = ys;
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+
+    let mut type_env = TypeEnvironment::new();
+    type_env
+        .insert("fold", Prelude::Fold)
+        .insert("map", Prelude::Map)
+        .insert("merge", Prelude::Merge);
+    let err = type_env.process_statements(&block).unwrap_err();
+
+    assert_eq!(*err.span().fragment(), "(_, ...) = ys");
+    assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
+    assert_eq!(type_env["reverse"].to_string(), "(['T; N]) -> ['T]");
+    assert_eq!(type_env["ys"].to_string(), "[Bool]");
+}
+
+#[test]
+fn errors_when_adding_dynamic_slices() {
+    let setup_code = r#"
+        slice: [_] = (1, 2, 3);
+        other_slice: [_] = (4, 5);
+        slice = -slice;
+        other_slice * 8; // works: dynamic slices are linear
+    "#;
+    let setup_block = F32Grammar::parse_statements(setup_code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.process_statements(&setup_block).unwrap();
+
+    let invalid_code = r#"
+        slice + slice;
+        slice + other_slice;
+        (7,) + slice;
+    "#;
+    for line in invalid_code.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        let line = F32Grammar::parse_statements(line).unwrap();
+        let err = type_env.process_statements(&line).unwrap_err();
+        assert_matches!(err.kind(), TypeErrorKind::DynamicLen(_));
+    }
+}
+
+#[test]
+fn square_function() {
+    let square =
+        ValueType::slice(ValueType::param(0), UnknownLen::param(0)).repeat(UnknownLen::param(0));
+    let square_fn = FnType::builder()
+        .with_arg(square)
+        .returning(ValueType::void())
+        .with_static_lengths(&[0]);
+    assert_eq!(square_fn.to_string(), "for<len! N> ([['T; N]; N]) -> ()");
+
+    let code = r#"
+        ((1, 2), (3, 4)).is_square();
+        ((true,),).is_square();
+        ((1, 2), (3, 4), (5, 6)).is_square();
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env
+        .insert("true", Prelude::True)
+        .insert("is_square", square_fn);
+    let err = type_env.process_statements(&block).unwrap_err();
+
+    assert_eq!(
+        *err.span().fragment(),
+        "((1, 2), (3, 4), (5, 6)).is_square()"
+    );
+    assert_matches!(
+        err.kind(),
+        TypeErrorKind::TupleLenMismatch { lhs, rhs, .. }
+            if *lhs == TupleLen::from(3) && *rhs == TupleLen::from(2)
+    );
+}
+
+#[test]
+fn column_row_equality_fn() {
+    let code = r#"
+        first_col = |xs| xs.map(|row| { (x, ...) = row; x });
+        // Slice annotations are not required, but result in simpler signatures.
+        row_eq_col = |xs: [_; _]| {
+            (first_row: [_; _], ...) = xs;
+            first_row == xs.first_col()
+        };
+
+        col: [Bool] = ((true, 1), (false, 5), (true, 9)).first_col();
+        ((1, 2), (3, 4)).row_eq_col();
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env: TypeEnvironment = Prelude::iter().collect();
+    type_env.process_statements(&block).unwrap();
+
+    assert_eq!(
+        type_env["first_col"].to_string(),
+        "([('T, ...['U; M]); N]) -> ['T; N]"
+    );
+    assert_eq!(
+        type_env["row_eq_col"].to_string(),
+        "([['T; N + 1]; N + 1]) -> Bool"
+    );
+
+    let bogus_lines = &[
+        "((1, 2), (3, 4), (5, 6)).row_eq_col()",
+        "((1, 2, 3), (4, 5, 6)).row_eq_col()",
+        // Doesn't work: we require `N + 1 == *`, which cannot be solved for `N`.
+        "zs: [[Num]] = ((1, 2), (3, 4)); zs.row_eq_col()",
+    ];
+    for &bogus_line in bogus_lines {
+        let bogus_line = F32Grammar::parse_statements(bogus_line).unwrap();
+        let err = type_env.process_statements(&bogus_line).unwrap_err();
+        assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
+    }
+
+    let test_code = r#"
+        zs: [[Num; _]] = ((1, 2), (3, 4));
+        zs.push((5, 6)).row_eq_col(); // works: `N` can be unified with `*`
+        zs.push((3, 4, 5)); // fail: `zs` elements are `(Num, Num)`
+    "#;
+    let test_code = F32Grammar::parse_statements(test_code).unwrap();
+    let err = type_env.process_statements(&test_code).unwrap_err();
+    assert_eq!(*err.span().fragment(), "zs.push((3, 4, 5))");
+    assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
+}
+
+#[test]
+fn total_sum() {
+    let code = r#"
+        total_sum = |xs| xs.fold(0, |acc, row| acc + row.fold(0, |acc, x| acc + x));
+        xs: [[_]] = ((1, 2), (3, 4, 5), (6,));
+        xs.total_sum()
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let output = type_env
+        .insert("fold", Prelude::Fold)
+        .process_statements(&block)
+        .unwrap();
+
+    assert_eq!(output, ValueType::NUM);
+    assert_eq!(type_env["total_sum"].to_string(), "([[Num; M]; N]) -> Num");
 }

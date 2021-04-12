@@ -14,7 +14,7 @@ pub(crate) use self::{
 };
 pub use self::{
     fn_type::{FnType, FnTypeBuilder, FnWithConstraints},
-    tuple::{LengthKind, LengthVar, Slice, Tuple, TupleLen, UnknownLen},
+    tuple::{LengthVar, Slice, Tuple, TupleLen, UnknownLen},
 };
 
 /// Type variable.
@@ -421,7 +421,7 @@ mod tests {
     fn unequal_functions() {
         const FUNCTIONS: &[&str] = &[
             "for<'T: Lin> (['T; N]) -> 'T",
-            "for<len N*; 'T: Lin> (['T; N]) -> 'T",
+            "for<len! N; 'T: Lin> (['T; N]) -> 'T",
             "(['T; N]) -> 'T",
             "for<'T: Lin> (['T; N], 'T) -> 'T",
             "for<'T: Lin> (['T; N]) -> ('T)",

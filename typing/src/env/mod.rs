@@ -28,45 +28,35 @@ type FnArgsAndOutput<Prim> = (Tuple<Prim>, ValueType<Prim>);
 
 /// Environment containing type information on named variables.
 ///
+/// # Examples
+///
+/// See [the crate docs](index.html#examples) for examples of usage.
+///
 /// # Concrete and partially specified types
 ///
 /// The environment retains full info on the types even if the type is not
-/// [concrete](ValueType::is_concrete()). Consider the following example:
+/// [concrete](ValueType::is_concrete()). Non-concrete types are tied to an environment.
+/// An environment will panic on inserting a non-concrete type via [`Self::insert()`]
+/// or other methods.
 ///
 /// ```
-/// # use arithmetic_parser::grammars::{NumGrammar, Typed, Parse};
-/// # use arithmetic_typing::{arith::NumArithmetic, Annotated, Prelude, TypeEnvironment};
+/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// # use arithmetic_typing::{Annotated, Prelude, TypeEnvironment};
+/// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// # fn main() -> anyhow::Result<()> {
-/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
+/// // An easy way to get a non-concrete type is to involve `any`.
 /// let code = r#"
-///     xs = (1, 2, 3, 4, 5);
-///     filtered = xs.filter(|x| x > 1);
-///     mapped = filtered.map(|x| x * 2);
-///     (filtered, mapped)
+///     lin: any Lin = (1, 2, 3);
+///     (x, ...) = lin;
 /// "#;
+/// let code = Parser::parse_statements(code)?;
 ///
 /// let mut env: TypeEnvironment = Prelude::iter().collect();
-/// let output = env.process_with_arithmetic(
-///     &NumArithmetic::with_comparisons(),
-///     &Parser::parse_statements(code)?,
-/// )?;
-/// assert_eq!(output.to_string(), "([Num; _], [Num; _])");
-///
-/// // We have additional information in `env` that both elements
-/// // of the tuple have the same length (albeit a dynamic one).
-/// assert_eq!(env["filtered"], env["mapped"]);
-/// // This means that the following code works.
-/// let output = env.process_with_arithmetic(
-///     &NumArithmetic::with_comparisons(),
-///     &Parser::parse_statements("filtered + mapped")?,
-/// )?;
-/// assert_eq!(output.to_string(), "[Num; _]");
+/// env.process_statements(&code)?;
+/// assert!(!env["x"].is_concrete());
 /// # Ok(())
 /// # }
 /// ```
-///
-/// Non-concrete types are tied to an environment. An environment will panic
-/// on inserting a non-concrete type via [`Self::insert()`] or other methods.
 #[derive(Debug, Clone)]
 pub struct TypeEnvironment<Prim: PrimitiveType = Num> {
     variables: HashMap<String, ValueType<Prim>>,
@@ -306,7 +296,6 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
         }
     }
 
-    // TODO: handle `Some` type specially? (Assign new type on each call.)
     #[inline]
     fn process_var<'a, T>(&self, name: &Spanned<'a, T>) -> TypeResult<'a, Prim> {
         let var_name = *name.fragment();
@@ -347,7 +336,7 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
             }
 
             Lvalue::Tuple(destructure) => {
-                let element_types = self.process_destructure(destructure, false)?;
+                let element_types = self.process_destructure(destructure)?;
                 Ok(ValueType::Tuple(element_types))
             }
 
@@ -359,7 +348,6 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
     fn process_destructure<'a>(
         &mut self,
         destructure: &Destructure<'a, ValueType<Prim>>,
-        is_fn_args: bool,
     ) -> Result<Tuple<Prim>, TypeError<'a, Prim>> {
         let start = destructure
             .start
@@ -368,7 +356,7 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
             .collect::<Result<Vec<_>, _>>()?;
 
         let middle = if let Some(middle) = &destructure.middle {
-            Some(self.process_destructure_rest(&middle.extra, is_fn_args)?)
+            Some(self.process_destructure_rest(&middle.extra)?)
         } else {
             None
         };
@@ -385,7 +373,6 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
     fn process_destructure_rest<'a>(
         &mut self,
         rest: &DestructureRest<'a, ValueType<Prim>>,
-        is_fn_args: bool,
     ) -> Result<Slice<Prim>, TypeError<'a, Prim>> {
         let ty = match rest {
             DestructureRest::Unnamed => None,
@@ -399,11 +386,7 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
             .map_err(|err| err.with_span(ty.as_ref().unwrap()))?;
         // `unwrap` is safe: an error can only occur with a type annotation present.
 
-        let mut length = if is_fn_args {
-            UnknownLen::Dynamic.into()
-        } else {
-            UnknownLen::Some.into()
-        };
+        let mut length = UnknownLen::Some.into();
         self.root_scope.substitutions.assign_new_len(&mut length);
 
         if let DestructureRest::Named { variable, .. } = rest {
@@ -512,7 +495,7 @@ impl<Val: fmt::Debug + Clone, Prim: PrimitiveType> TypeProcessor<'_, Val, Prim> 
     where
         T: Grammar<Lit = Val, Type = ValueType<Prim>>,
     {
-        let arg_types = self.process_destructure(&def.args.extra, true)?;
+        let arg_types = self.process_destructure(&def.args.extra)?;
         let return_type = self.process_block(&def.body)?;
         Ok((arg_types, return_type))
     }

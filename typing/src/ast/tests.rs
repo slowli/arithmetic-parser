@@ -1,28 +1,28 @@
 use assert_matches::assert_matches;
 
 use super::*;
-use crate::{arith::LinConstraints, Num};
+use crate::{arith::NumConstraints, Num};
 
 #[test]
 fn fn_const_params() {
-    let input = InputSpan::new("for<len N*>");
+    let input = InputSpan::new("for<len! N>");
     let (rest, constraints) = constraints::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
     assert!(constraints.type_params.is_empty());
-    assert_eq!(constraints.dyn_lengths.len(), 1);
-    assert_eq!(*constraints.dyn_lengths[0].fragment(), "N");
+    assert_eq!(constraints.static_lengths.len(), 1);
+    assert_eq!(*constraints.static_lengths[0].fragment(), "N");
 }
 
 #[test]
-fn multiple_dyn_lengths() {
-    let input = InputSpan::new("for<len N*, M*>");
+fn multiple_static_lengths() {
+    let input = InputSpan::new("for<len! N, M>");
     let (rest, constraints) = constraints::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
     assert!(constraints.type_params.is_empty());
-    assert_eq!(constraints.dyn_lengths.len(), 2);
-    assert_eq!(*constraints.dyn_lengths[1].fragment(), "M");
+    assert_eq!(constraints.static_lengths.len(), 2);
+    assert_eq!(*constraints.static_lengths[1].fragment(), "M");
 }
 
 #[test]
@@ -31,7 +31,7 @@ fn type_param_constraints() {
     let (rest, constraints) = constraints::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert!(constraints.dyn_lengths.is_empty());
+    assert!(constraints.static_lengths.is_empty());
     assert_eq!(
         constraints
             .type_params
@@ -44,12 +44,12 @@ fn type_param_constraints() {
 
 #[test]
 fn mixed_constraints() {
-    let input = InputSpan::new("for<len N*; 'T: Lin>");
+    let input = InputSpan::new("for<len! N; 'T: Lin>");
     let (rest, constraints) = constraints::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_eq!(constraints.dyn_lengths.len(), 1);
-    assert_eq!(*constraints.dyn_lengths[0].fragment(), "N");
+    assert_eq!(constraints.static_lengths.len(), 1);
+    assert_eq!(*constraints.static_lengths[0].fragment(), "N");
     assert_eq!(
         constraints
             .type_params
@@ -295,9 +295,9 @@ fn fn_type_with_constraints() {
     let (rest, (constraints, fn_type)) = fn_definition_with_constraints::<Num>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert!(constraints.dyn_lengths.is_empty());
+    assert!(constraints.static_lengths.is_empty());
     assert_eq!(constraints.type_params.len(), 1);
-    assert_eq!(constraints.type_params[0].1.computed, LinConstraints::LIN);
+    assert_eq!(constraints.type_params[0].1.computed, NumConstraints::Lin);
     assert_eq!(fn_type.args.start.len(), 1);
     assert_matches!(fn_type.args.start[0], ValueTypeAst::Param(id) if *id.fragment() == "T");
     assert_matches!(fn_type.return_type, ValueTypeAst::Param(id) if *id.fragment() == "T");

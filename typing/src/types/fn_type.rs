@@ -7,32 +7,31 @@ use std::{
 };
 
 use crate::{
-    types::ParamQuantifier, LengthKind, LengthVar, Num, PrimitiveType, Tuple, TupleLen, TypeVar,
-    ValueType,
+    types::ParamQuantifier, LengthVar, Num, PrimitiveType, Tuple, TupleLen, TypeVar, ValueType,
 };
 
 #[derive(Debug, Clone)]
 pub(crate) struct ParamConstraints<Prim: PrimitiveType> {
     pub type_params: HashMap<usize, Prim::Constraints>,
-    pub dyn_lengths: HashSet<usize>,
+    pub static_lengths: HashSet<usize>,
 }
 
 impl<Prim: PrimitiveType> Default for ParamConstraints<Prim> {
     fn default() -> Self {
         Self {
             type_params: HashMap::new(),
-            dyn_lengths: HashSet::new(),
+            static_lengths: HashSet::new(),
         }
     }
 }
 
 impl<Prim: PrimitiveType> fmt::Display for ParamConstraints<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if !self.dyn_lengths.is_empty() {
-            formatter.write_str("len ")?;
-            for (i, len) in self.dyn_lengths.iter().enumerate() {
-                write!(formatter, "{}*", LengthVar::param_str(*len))?;
-                if i + 1 < self.dyn_lengths.len() {
+        if !self.static_lengths.is_empty() {
+            formatter.write_str("len! ")?;
+            for (i, len) in self.static_lengths.iter().enumerate() {
+                write!(formatter, "{}", LengthVar::param_str(*len))?;
+                if i + 1 < self.static_lengths.len() {
                     formatter.write_str(", ")?;
                 }
             }
@@ -56,7 +55,7 @@ impl<Prim: PrimitiveType> fmt::Display for ParamConstraints<Prim> {
 
 impl<Prim: PrimitiveType> ParamConstraints<Prim> {
     fn is_empty(&self) -> bool {
-        self.type_params.is_empty() && self.dyn_lengths.is_empty()
+        self.type_params.is_empty() && self.static_lengths.is_empty()
     }
 
     // Sort params by ascending index to have a consistent `Display` presentation.
@@ -78,7 +77,7 @@ pub(crate) struct FnParams<Prim: PrimitiveType> {
     /// Type params associated with this function. Filled in by `FnQuantifier`.
     pub type_params: Vec<(usize, Prim::Constraints)>,
     /// Length params associated with this function. Filled in by `FnQuantifier`.
-    pub len_params: Vec<(usize, LengthKind)>,
+    pub len_params: Vec<(usize, bool)>,
     /// Constraints for params of this function and child functions.
     pub constraints: Option<ParamConstraints<Prim>>,
 }
@@ -112,17 +111,16 @@ impl<Prim: PrimitiveType> FnParams<Prim> {
 /// Functional types are denoted as follows:
 ///
 /// ```text
-/// for<len M*; 'T: Lin> (['T; N], 'T) -> ['T; M]
+/// for<len! M; 'T: Lin> (['T; N], 'T) -> ['T; M]
 /// ```
 ///
 /// Here:
 ///
-/// - `len M*` and `'T: Lin` are constraints on [length params] and [type params], respectively.
+/// - `len! M` and `'T: Lin` are constraints on [length params] and [type params], respectively.
 ///   Length and/or type params constraints may be empty. Unconstrained type / length params
 ///   (such as length `N` in the example) do not need to be mentioned.
+/// - `len! M` means that `M` is a [static length](TupleLen#static-lengths).
 /// - `Lin` is a [constraint] on the type param.
-/// - `*` after `M` denotes that `M` is a [dynamic length] (i.e., cannot be unified with
-///   any other length during type inference).
 /// - `N`, `M` and `'T` are parameter names. The args and the return type may reference these
 ///   parameters.
 /// - `['T; N]` and `'T` are types of the function arguments.
@@ -141,7 +139,7 @@ impl<Prim: PrimitiveType> FnParams<Prim> {
 /// [length params]: crate::LengthVar
 /// [type params]: crate::TypeVar
 /// [constraint]: crate::TypeConstraints
-/// [dynamic length]: crate::LengthKind::Dynamic
+/// [dynamic length]: crate::TupleLen#static-lengths
 ///
 /// # Construction
 ///
@@ -156,7 +154,7 @@ impl<Prim: PrimitiveType> FnParams<Prim> {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_typing::{LengthKind, FnType, Slice, ValueType};
+/// # use arithmetic_typing::{FnType, Slice, ValueType};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// let fn_type: FnType = "([Num; N]) -> Num".parse()?;
@@ -268,7 +266,28 @@ impl<Prim: PrimitiveType> FnType<Prim> {
             function: self,
             constraints: ParamConstraints {
                 type_params,
-                dyn_lengths: HashSet::new(),
+                static_lengths: HashSet::new(),
+            },
+        }
+    }
+
+    /// Marks lengths with the specified `indexes` as static.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if parameters were already computed for the function.
+    pub fn with_static_lengths(self, indexes: &[usize]) -> FnWithConstraints<Prim> {
+        assert!(
+            self.params.is_none(),
+            "Cannot attach constraints to a function with computed params: `{}`",
+            self
+        );
+
+        FnWithConstraints {
+            function: self,
+            constraints: ParamConstraints {
+                type_params: HashMap::new(),
+                static_lengths: indexes.iter().copied().collect(),
             },
         }
     }
@@ -304,6 +323,13 @@ impl<Prim: PrimitiveType> FnWithConstraints<Prim> {
         }
         self
     }
+
+    /// Marks lengths with the specified `indexes` as static.
+    pub fn with_static_lengths(mut self, indexes: &[usize]) -> FnWithConstraints<Prim> {
+        let indexes = indexes.iter().copied();
+        self.constraints.static_lengths.extend(indexes);
+        self
+    }
 }
 
 impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for FnType<Prim> {
@@ -331,7 +357,6 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 ///
 /// ```
 /// # use arithmetic_typing::{FnType, UnknownLen, ValueType, TypeEnvironment};
-/// # use std::iter;
 /// let sum_fn_type = FnType::builder()
 ///     .with_arg(ValueType::NUM.repeat(UnknownLen::param(0)))
 ///     .returning(ValueType::NUM);
@@ -341,8 +366,7 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 /// Signature for a slice mapping function:
 ///
 /// ```
-/// # use arithmetic_typing::{arith::LinConstraints, FnType, UnknownLen, ValueType};
-/// # use std::iter;
+/// # use arithmetic_typing::{arith::NumConstraints, FnType, UnknownLen, ValueType};
 /// // Definition of the mapping arg.
 /// let map_fn_arg = <FnType>::builder()
 ///     .with_arg(ValueType::param(0))
@@ -352,7 +376,7 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 ///     .with_arg(ValueType::param(0).repeat(UnknownLen::param(0)))
 ///     .with_arg(map_fn_arg)
 ///     .returning(ValueType::param(1).repeat(UnknownLen::Dynamic))
-///     .with_constraints(&[1], &LinConstraints::LIN);
+///     .with_constraints(&[1], &NumConstraints::Lin);
 /// assert_eq!(
 ///     map_fn_type.to_string(),
 ///     "for<'U: Lin> (['T; N], ('T) -> 'U) -> ['U]"
@@ -362,8 +386,7 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 /// Signature of a function with varargs:
 ///
 /// ```
-/// # use arithmetic_typing::{arith::LinConstraints, FnType, UnknownLen, ValueType};
-/// # use std::iter;
+/// # use arithmetic_typing::{arith::NumConstraints, FnType, UnknownLen, ValueType};
 /// let fn_type = <FnType>::builder()
 ///     .with_varargs(ValueType::param(0), UnknownLen::param(0))
 ///     .with_arg(ValueType::BOOL)
@@ -409,21 +432,21 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{arith::LinConstraints, UnknownLen};
+    use crate::{arith::NumConstraints, UnknownLen};
 
     #[test]
     fn constraints_display() {
         let constraints: ParamConstraints<Num> = ParamConstraints {
-            type_params: vec![(0, LinConstraints::LIN)].into_iter().collect(),
-            dyn_lengths: HashSet::new(),
+            type_params: vec![(0, NumConstraints::Lin)].into_iter().collect(),
+            static_lengths: HashSet::new(),
         };
         assert_eq!(constraints.to_string(), "'T: Lin");
 
         let constraints: ParamConstraints<Num> = ParamConstraints {
-            type_params: vec![(0, LinConstraints::LIN)].into_iter().collect(),
-            dyn_lengths: vec![0].into_iter().collect(),
+            type_params: vec![(0, NumConstraints::Lin)].into_iter().collect(),
+            static_lengths: vec![0].into_iter().collect(),
         };
-        assert_eq!(constraints.to_string(), "len N*; 'T: Lin");
+        assert_eq!(constraints.to_string(), "len! N; 'T: Lin");
     }
 
     #[test]
@@ -431,7 +454,7 @@ mod tests {
         let sum_fn = <FnType>::builder()
             .with_arg(ValueType::param(0).repeat(UnknownLen::Some))
             .returning(ValueType::param(0))
-            .with_constraints(&[0], &LinConstraints::LIN);
+            .with_constraints(&[0], &NumConstraints::Lin);
         assert_eq!(sum_fn.to_string(), "for<'T: Lin> (['T; _]) -> 'T");
     }
 
@@ -440,7 +463,7 @@ mod tests {
         let sum_fn: FnType = FnType::builder()
             .with_arg(ValueType::NUM.repeat(UnknownLen::param(0)))
             .returning(ValueType::NUM)
-            .with_constraints(&[], &LinConstraints::LIN)
+            .with_constraints(&[], &NumConstraints::Lin)
             .into();
         assert_eq!(sum_fn.to_string(), "([Num; N]) -> Num");
 
@@ -448,7 +471,7 @@ mod tests {
             .with_arg(ValueType::NUM)
             .with_arg(sum_fn.clone())
             .returning(ValueType::NUM)
-            .with_constraints(&[], &LinConstraints::LIN)
+            .with_constraints(&[], &NumConstraints::Lin)
             .into();
         assert_eq!(complex_fn.to_string(), "(Num, ([Num; N]) -> Num) -> Num");
 
@@ -456,7 +479,7 @@ mod tests {
             .with_varargs(ValueType::NUM, UnknownLen::param(0))
             .with_arg(sum_fn)
             .returning(ValueType::NUM)
-            .with_constraints(&[], &LinConstraints::LIN)
+            .with_constraints(&[], &NumConstraints::Lin)
             .into();
         assert_eq!(
             other_complex_fn.to_string(),

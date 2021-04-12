@@ -4,22 +4,21 @@ use assert_matches::assert_matches;
 
 use super::*;
 use crate::{
-    error::{TupleLenMismatchContext, TypeErrors},
+    error::{TupleLenMismatchContext},
     Num,
 };
-use arithmetic_parser::Spanned;
 
 fn extract_errors<Prim: PrimitiveType>(
-    action: impl FnOnce(&mut SpannedTypeErrors<'_, '_, Prim>),
+    action: impl FnOnce(SpannedTypeErrors<'_, Prim>),
 ) -> Result<(), TypeErrorKind<Prim>> {
-    let mut errors = TypeErrors::new();
-    let dummy_span = Spanned::from_str("dummy", ..);
-    action(&mut errors.with_span(&dummy_span));
+    let mut errors = SpannedTypeErrors::new();
+    action(errors.by_ref());
+    let mut errors = errors.into_vec();
 
-    if errors.is_empty() {
-        Ok(())
-    } else {
-        Err(errors.single().into_kind())
+    match errors.len() {
+        0 => Ok(()),
+        1 => Err(errors.pop().unwrap()),
+        _ => panic!("Unexpected multiple errors: {:?}", errors),
     }
 }
 

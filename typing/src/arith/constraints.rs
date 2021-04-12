@@ -63,7 +63,7 @@ where
         &self,
         ty: &ValueType<Prim>,
         substitutions: &mut Substitutions<Prim>,
-        errors: &mut SpannedTypeErrors<'_, '_, Prim>,
+        errors: SpannedTypeErrors<'_, Prim>,
     );
 }
 
@@ -143,7 +143,7 @@ impl<Prim: LinearType> TypeConstraints<Prim> for NumConstraints {
         &self,
         ty: &ValueType<Prim>,
         substitutions: &mut Substitutions<Prim>,
-        errors: &mut SpannedTypeErrors<'_, '_, Prim>,
+        mut errors: SpannedTypeErrors<'_, Prim>,
     ) {
         if *self == Self::None {
             // The default constraint: does nothing.
@@ -185,7 +185,7 @@ impl<Prim: LinearType> TypeConstraints<Prim> for NumConstraints {
                 }
 
                 for element in tuple.element_types() {
-                    self.apply(element, substitutions, errors);
+                    self.apply(element, substitutions, errors.by_ref());
                 }
             }
         }
@@ -224,7 +224,7 @@ where
         &self,
         _ty: &ValueType<Prim>,
         _substitutions: &mut Substitutions<Prim>,
-        _errors: &mut SpannedTypeErrors<'_, '_, Prim>,
+        _errors: SpannedTypeErrors<'_, Prim>,
     ) {
         // Do nothing
     }

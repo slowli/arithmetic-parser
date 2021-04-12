@@ -7,9 +7,11 @@ use std::{
     mem, ops,
 };
 
+use crate::arith::{BinaryOpContext, UnaryOpContext};
+use crate::error::{SpannedTypeErrors, TypeError};
 use crate::{
-    arith::{BinaryOpSpans, MapPrimitiveType, NumArithmetic, TypeArithmetic, UnaryOpSpans},
-    error::{TypeErrorKind, TypeErrors},
+    arith::{MapPrimitiveType, NumArithmetic, TypeArithmetic},
+    error::{ErrorContext, TypeErrors},
     types::{ParamConstraints, ParamQuantifier},
     visit::VisitMut,
     FnType, Num, PrimitiveType, Slice, Substitutions, Tuple, UnknownLen, ValueType,
@@ -272,7 +274,7 @@ where
 
             Expr::Function { name, args } => {
                 let fn_type = self.process_expr_inner(name);
-                self.process_fn_call(expr, &fn_type, args.iter())
+                self.process_fn_call(expr, fn_type, args.iter())
             }
 
             Expr::Method {
@@ -282,7 +284,7 @@ where
             } => {
                 let fn_type = self.process_var(name);
                 let all_args = iter::once(receiver.as_ref()).chain(args);
-                self.process_fn_call(expr, &fn_type, all_args)
+                self.process_fn_call(expr, fn_type, all_args)
             }
 
             Expr::Block(block) => {
@@ -294,13 +296,12 @@ where
 
             Expr::FnDefinition(def) => self.process_fn_def(def).into(),
 
-            Expr::Unary { op, inner } => self.process_unary_op(expr, *op, inner),
+            Expr::Unary { op, inner } => self.process_unary_op(expr, op.extra, inner),
 
-            Expr::Binary { lhs, rhs, op } => self.process_binary_op(expr, *op, lhs, rhs),
+            Expr::Binary { lhs, rhs, op } => self.process_binary_op(expr, op.extra, lhs, rhs),
 
             _ => {
-                let err = TypeErrorKind::unsupported(expr.extra.ty()).with_span(expr);
-                self.errors.push(err);
+                self.errors.push(TypeError::unsupported(expr.extra.ty(), expr));
                 // No better choice than to go with `Some` type.
                 self.new_type()
             }
@@ -315,8 +316,7 @@ where
         if let Some(ty) = self.get_type(var_name) {
             ty.clone()
         } else {
-            let err = TypeErrorKind::UndefinedVar(var_name.to_owned()).with_span(name);
-            self.errors.push(err);
+            self.errors.push(TypeError::undefined_var(name));
             // No better choice than to go with `Some` type.
             self.new_type()
         }
@@ -348,8 +348,9 @@ where
                     .assign_new_type(&mut value_type);
 
                 if let Err(err) = result {
-                    self.errors.push(err.with_span(ty.as_ref().unwrap()));
+                    let ty = ty.as_ref().unwrap();
                     // ^-- `unwrap` is safe: an error can only occur with a type annotation present.
+                    self.errors.push(TypeError::lvalue(err, ty));
                     // FIXME: remove once `assign_new_type` is improved
                     value_type = self.new_type();
                 }
@@ -364,8 +365,7 @@ where
             }
 
             _ => {
-                let err = TypeErrorKind::unsupported(lvalue.extra.ty()).with_span(lvalue);
-                self.errors.push(err);
+                self.errors.push(TypeError::unsupported(lvalue.extra.ty(), lvalue));
                 // No better choice than to go with `Some` type.
                 self.new_type()
             }
@@ -408,11 +408,9 @@ where
         let mut element = ty.map_or(ValueType::Some, |ty| ty.extra.to_owned());
 
         if let Err(err) = self.root_scope.substitutions.assign_new_type(&mut element) {
-            let err = err.with_span(ty.as_ref().unwrap());
+            let ty = ty.unwrap();
             // ^ `unwrap` is safe: an error can only occur with a type annotation present.
-            self.errors.push(err);
-
-            // FIXME: remove once `assign_new_type` is improved
+            self.errors.push(TypeError::lvalue(err, ty));
             element = self.new_type();
         }
 
@@ -431,7 +429,7 @@ where
     fn process_fn_call<'it, T>(
         &mut self,
         call_expr: &SpannedExpr<'a, T>,
-        fn_type: &ValueType<Prim>,
+        definition: ValueType<Prim>,
         args: impl Iterator<Item = &'it SpannedExpr<'a, T>>,
     ) -> ValueType<Prim>
     where
@@ -439,42 +437,50 @@ where
         T: Grammar<Lit = Val, Type = ValueType<Prim>>,
     {
         let arg_types: Vec<_> = args.map(|arg| self.process_expr_inner(arg)).collect();
-        self.root_scope.substitutions.unify_fn_call(
-            fn_type,
-            arg_types,
-            &mut self.errors.with_span(call_expr),
-        )
+        let return_type = self.new_type();
+        let call_signature = FnType::new(arg_types.into(), return_type.clone()).into();
+
+        let mut errors = SpannedTypeErrors::new();
+        self.root_scope
+            .substitutions
+            .unify(&call_signature, &definition, errors.by_ref());
+        let context = ErrorContext::FnCall {
+            definition,
+            call_signature,
+        };
+        self.errors.extend(errors.contextualize(context, call_expr));
+        return_type
     }
 
     #[inline]
     fn process_unary_op<T>(
         &mut self,
         unary_expr: &SpannedExpr<'a, T>,
-        op: Spanned<'a, UnaryOp>,
+        op: UnaryOp,
         inner: &SpannedExpr<'a, T>,
     ) -> ValueType<Prim>
     where
         T: Grammar<Lit = Val, Type = ValueType<Prim>>,
     {
         let inner_ty = self.process_expr_inner(inner);
-        let spans = UnaryOpSpans {
-            total: unary_expr.with_no_extra(),
-            op,
-            inner: inner.copy_with_extra(inner_ty),
-        };
+        let context = UnaryOpContext { op, arg: inner_ty };
 
-        self.arithmetic.process_unary_op(
+        let mut errors = SpannedTypeErrors::new();
+        let output = self.arithmetic.process_unary_op(
             &mut self.root_scope.substitutions,
-            spans,
-            &mut self.errors,
-        )
+            &context,
+            errors.by_ref(),
+        );
+        self.errors
+            .extend(errors.contextualize(context, unary_expr));
+        output
     }
 
     #[inline]
     fn process_binary_op<T>(
         &mut self,
         binary_expr: &SpannedExpr<'a, T>,
-        op: Spanned<'a, BinaryOp>,
+        op: BinaryOp,
         lhs: &SpannedExpr<'a, T>,
         rhs: &SpannedExpr<'a, T>,
     ) -> ValueType<Prim>
@@ -483,17 +489,21 @@ where
     {
         let lhs_ty = self.process_expr_inner(lhs);
         let rhs_ty = self.process_expr_inner(rhs);
-        let spans = BinaryOpSpans {
-            total: binary_expr.with_no_extra(),
+        let context = BinaryOpContext {
             op,
-            lhs: lhs.copy_with_extra(lhs_ty),
-            rhs: rhs.copy_with_extra(rhs_ty),
+            lhs: lhs_ty,
+            rhs: rhs_ty,
         };
-        self.arithmetic.process_binary_op(
+
+        let mut errors = SpannedTypeErrors::new();
+        let output = self.arithmetic.process_binary_op(
             &mut self.root_scope.substitutions,
-            spans,
-            &mut self.errors,
-        )
+            &context,
+            errors.by_ref(),
+        );
+        self.errors
+            .extend(errors.contextualize(context, binary_expr));
+        output
     }
 
     fn process_fn_def<T>(&mut self, def: &FnDefinition<'a, T>) -> FnType<Prim>
@@ -528,17 +538,21 @@ where
             Statement::Assignment { lhs, rhs } => {
                 let rhs_ty = self.process_expr_inner(rhs);
                 let lhs_ty = self.process_lvalue(lhs);
-                self.root_scope.substitutions.unify(
-                    &lhs_ty,
-                    &rhs_ty,
-                    &mut self.errors.with_span(statement),
-                );
+
+                let mut errors = SpannedTypeErrors::new();
+                self.root_scope
+                    .substitutions
+                    .unify(&lhs_ty, &rhs_ty, errors.by_ref());
+                let context = ErrorContext::Assignment {
+                    lhs: lhs_ty,
+                    rhs: rhs_ty,
+                };
+                self.errors.extend(errors.contextualize(context, statement));
                 ValueType::void()
             }
 
             _ => {
-                let err = TypeErrorKind::unsupported(statement.extra.ty()).with_span(statement);
-                self.errors.push(err);
+                self.errors.push(TypeError::unsupported(statement.extra.ty(), statement));
                 // No better choice than to go with `Some` type.
                 self.new_type()
             }
@@ -554,6 +568,7 @@ where
     {
         let mut return_value = self.process_block(block);
 
+        // FIXME: resolve all types in errors.
         // FIXME: is resolving still applicable on errors?
         debug_assert!(self.inner_scopes.is_empty());
         let mut resolver = self.root_scope.substitutions.resolver();

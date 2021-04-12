@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     arith::TypeConstraints,
-    error::{SpannedTypeErrors, TupleLenMismatchContext, TypeErrorKind},
+    error::{ErrorLocation, SpannedTypeErrors, TupleLenMismatchContext, TypeErrorKind},
     visit::{self, Visit, VisitMut},
     FnType, PrimitiveType, Tuple, TupleLen, TypeVar, UnknownLen, ValueType,
 };
@@ -193,7 +193,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         &mut self,
         lhs: &ValueType<Prim>,
         rhs: &ValueType<Prim>,
-        errors: &mut SpannedTypeErrors<'_, '_, Prim>,
+        mut errors: SpannedTypeErrors<'_, Prim>,
     ) {
         let resolved_lhs = self.fast_resolve(lhs).to_owned();
         let resolved_rhs = self.fast_resolve(rhs).to_owned();
@@ -255,27 +255,39 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         lhs: &Tuple<Prim>,
         rhs: &Tuple<Prim>,
         context: TupleLenMismatchContext,
-        errors: &mut SpannedTypeErrors<'_, '_, Prim>,
+        mut errors: SpannedTypeErrors<'_, Prim>,
     ) {
         let resolved_len = self.unify_lengths(lhs.len(), rhs.len(), context);
         let resolved_len = match resolved_len {
             Ok(len) => len,
             Err(err) => {
-                self.unify_tuples_after_error(lhs, rhs, &err, errors);
+                self.unify_tuples_after_error(lhs, rhs, &err, context, errors.by_ref());
                 errors.push(err);
                 return;
             }
         };
 
         if let (None, exact) = resolved_len.components() {
-            for (lhs_elem, rhs_elem) in lhs.iter(exact).zip(rhs.iter(exact)) {
-                self.unify(lhs_elem, rhs_elem, errors);
-            }
+            self.unify_tuple_elements(lhs.iter(exact).zip(rhs.iter(exact)), context, errors);
         } else {
             // FIXME: is this always applicable?
-            for (lhs_elem, rhs_elem) in lhs.equal_elements_dyn(rhs) {
-                self.unify(lhs_elem, rhs_elem, errors);
-            }
+            self.unify_tuple_elements(lhs.equal_elements_dyn(rhs), context, errors);
+        }
+    }
+
+    #[inline]
+    fn unify_tuple_elements<'it>(
+        &mut self,
+        pairs: impl Iterator<Item = (&'it ValueType<Prim>, &'it ValueType<Prim>)>,
+        context: TupleLenMismatchContext,
+        mut errors: SpannedTypeErrors<'_, Prim>,
+    ) {
+        for (i, (lhs_elem, rhs_elem)) in pairs.enumerate() {
+            let location = match context {
+                TupleLenMismatchContext::Assignment => ErrorLocation::TupleElement(i),
+                TupleLenMismatchContext::FnArgs => ErrorLocation::FnArg(i),
+            };
+            self.unify(lhs_elem, rhs_elem, errors.with_location(location));
         }
     }
 
@@ -285,7 +297,8 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         lhs: &Tuple<Prim>,
         rhs: &Tuple<Prim>,
         err: &TypeErrorKind<Prim>,
-        errors: &mut SpannedTypeErrors<'_, '_, Prim>,
+        context: TupleLenMismatchContext,
+        errors: SpannedTypeErrors<'_, Prim>,
     ) {
         let (lhs_len, rhs_len) = match err {
             TypeErrorKind::TupleLenMismatch {
@@ -303,17 +316,21 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 // We've attempted to unify tuples with different known lengths.
                 // Iterate over common elements and unify them.
                 debug_assert_ne!(lhs_exact, rhs_exact);
-                for (lhs_elem, rhs_elem) in lhs.iter(lhs_exact).zip(rhs.iter(rhs_exact)) {
-                    self.unify(lhs_elem, rhs_elem, errors);
-                }
+                self.unify_tuple_elements(
+                    lhs.iter(lhs_exact).zip(rhs.iter(rhs_exact)),
+                    context,
+                    errors,
+                );
             }
 
             (None, Some(UnknownLen::Dynamic)) => {
                 // We've attempted to unify static LHS w/ a dynamic RHS
                 // e.g., `(x, y) = filter(...)`.
-                for (lhs_elem, rhs_elem) in lhs.iter(lhs_exact).zip(rhs.iter(rhs_exact)) {
-                    self.unify(lhs_elem, rhs_elem, errors);
-                }
+                self.unify_tuple_elements(
+                    lhs.iter(lhs_exact).zip(rhs.iter(rhs_exact)),
+                    context,
+                    errors,
+                );
             }
 
             _ => { /* Do nothing. */ }
@@ -450,7 +467,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         &mut self,
         lhs: &FnType<Prim>,
         rhs: &FnType<Prim>,
-        errors: &mut SpannedTypeErrors<'_, '_, Prim>,
+        mut errors: SpannedTypeErrors<'_, Prim>,
     ) {
         if lhs.is_parametric() {
             errors.push(TypeErrorKind::UnsupportedParam);
@@ -470,13 +487,13 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             &instantiated_rhs.args,
             &instantiated_lhs.args,
             TupleLenMismatchContext::FnArgs,
-            errors,
+            errors.by_ref(),
         );
 
         self.unify(
             &instantiated_lhs.return_type,
             &instantiated_rhs.return_type,
-            errors,
+            errors.with_location(ErrorLocation::FnReturnType),
         );
     }
 
@@ -530,7 +547,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         var_idx: usize,
         ty: &ValueType<Prim>,
         is_lhs: bool,
-        errors: &mut SpannedTypeErrors<'_, '_, Prim>,
+        mut errors: SpannedTypeErrors<'_, Prim>,
     ) {
         if let ValueType::Var(var) = ty {
             if !var.is_free() {
@@ -589,22 +606,9 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         &mut self,
         constraints: &Prim::Constraints,
         ty: &ValueType<Prim>,
-        errors: &mut SpannedTypeErrors<'_, '_, Prim>,
+        errors: SpannedTypeErrors<'_, Prim>,
     ) {
         constraints.apply(ty, self, errors);
-    }
-
-    /// Returns the return type of the function.
-    pub(crate) fn unify_fn_call(
-        &mut self,
-        definition: &ValueType<Prim>,
-        arg_types: Vec<ValueType<Prim>>,
-        errors: &mut SpannedTypeErrors<'_, '_, Prim>,
-    ) -> ValueType<Prim> {
-        let return_type = self.new_type_var();
-        let called_fn_type = FnType::new(arg_types.into(), return_type.clone());
-        self.unify(&called_fn_type.into(), definition, errors);
-        return_type
     }
 }
 

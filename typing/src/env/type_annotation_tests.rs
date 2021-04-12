@@ -6,7 +6,10 @@ use super::{
     tests::{assert_incompatible_types, zip_fn_type, F32Grammar},
     *,
 };
-use crate::{error::TupleLenMismatchContext, Prelude, TupleLen};
+use crate::{
+    error::{TupleLenMismatchContext, TypeErrorKind},
+    Prelude, TupleLen,
+};
 use arithmetic_parser::grammars::Parse;
 
 #[test]

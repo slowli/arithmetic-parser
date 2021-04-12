@@ -3,7 +3,9 @@ use assert_matches::assert_matches;
 
 use super::*;
 use crate::{
-    arith::NumConstraints, error::TupleLenMismatchContext, Annotated, Num, Prelude, TupleLen,
+    arith::NumConstraints,
+    error::{TupleLenMismatchContext, TypeErrorKind},
+    Annotated, Num, Prelude, TupleLen,
 };
 
 pub type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;

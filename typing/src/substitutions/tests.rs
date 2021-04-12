@@ -3,10 +3,7 @@
 use assert_matches::assert_matches;
 
 use super::*;
-use crate::{
-    error::{TupleLenMismatchContext},
-    Num,
-};
+use crate::{error::TupleLenMismatchContext, Num};
 
 fn extract_errors<Prim: PrimitiveType>(
     action: impl FnOnce(SpannedTypeErrors<'_, Prim>),

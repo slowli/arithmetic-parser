@@ -271,6 +271,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             self.unify_tuple_elements(lhs.iter(exact).zip(rhs.iter(exact)), context, errors);
         } else {
             // FIXME: is this always applicable?
+            // FIXME: this leads to incorrect error locations!
             self.unify_tuple_elements(lhs.equal_elements_dyn(rhs), context, errors);
         }
     }

@@ -301,7 +301,8 @@ where
             Expr::Binary { lhs, rhs, op } => self.process_binary_op(expr, op.extra, lhs, rhs),
 
             _ => {
-                self.errors.push(TypeError::unsupported(expr.extra.ty(), expr));
+                self.errors
+                    .push(TypeError::unsupported(expr.extra.ty(), expr));
                 // No better choice than to go with `Some` type.
                 self.new_type()
             }
@@ -365,7 +366,8 @@ where
             }
 
             _ => {
-                self.errors.push(TypeError::unsupported(lvalue.extra.ty(), lvalue));
+                self.errors
+                    .push(TypeError::unsupported(lvalue.extra.ty(), lvalue));
                 // No better choice than to go with `Some` type.
                 self.new_type()
             }
@@ -547,12 +549,14 @@ where
                     lhs: lhs_ty,
                     rhs: rhs_ty,
                 };
-                self.errors.extend(errors.contextualize(context, statement));
+                self.errors
+                    .extend(errors.contextualize_assignment(&context, lhs));
                 ValueType::void()
             }
 
             _ => {
-                self.errors.push(TypeError::unsupported(statement.extra.ty(), statement));
+                self.errors
+                    .push(TypeError::unsupported(statement.extra.ty(), statement));
                 // No better choice than to go with `Some` type.
                 self.new_type()
             }

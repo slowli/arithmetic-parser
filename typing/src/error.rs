@@ -6,7 +6,9 @@ use crate::{
     arith::{BinaryOpContext, UnaryOpContext},
     PrimitiveType, TupleLen, ValueType,
 };
-use arithmetic_parser::{Spanned, UnsupportedType};
+use arithmetic_parser::{
+    grammars::Grammar, Expr, Spanned, SpannedExpr, SpannedLvalue, UnsupportedType,
+};
 
 /// Context for [`TypeErrorKind::TupleLenMismatch`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -237,8 +239,8 @@ impl<'a, Prim: PrimitiveType> TypeErrors<'a, Prim> {
         self.inner.push(err);
     }
 
-    pub(crate) fn extend(&mut self, errors: impl Iterator<Item = TypeError<'a, Prim>>) {
-        self.inner.extend(errors);
+    pub(crate) fn extend(&mut self, errors: Vec<TypeError<'a, Prim>>) {
+        self.inner.extend(errors.into_iter());
     }
 
     /// Returns the number of errors in this list.
@@ -349,24 +351,41 @@ impl<Prim: PrimitiveType> SpannedTypeErrors<'static, Prim> {
         }
     }
 
-    pub(crate) fn contextualize<'a, T>(
+    pub(crate) fn contextualize<'a, T: Grammar>(
         self,
         context: impl Into<ErrorContext<Prim>>,
-        span: &Spanned<'a, T>,
-    ) -> impl Iterator<Item = TypeError<'a, Prim>> {
+        span: &SpannedExpr<'a, T>,
+    ) -> Vec<TypeError<'a, Prim>> {
         let errors = match self.errors {
             Goat::Owned(errors) => errors,
             Goat::Borrowed(_) => unreachable!(),
         };
 
         let context = context.into();
-        let span = span.with_no_extra();
         errors
             .into_iter()
-            .map(move |item| item.into_error(context.clone(), span))
+            .map(|item| item.into_expr_error(context.clone(), span))
+            .collect()
+    }
+
+    pub(crate) fn contextualize_assignment<'a>(
+        self,
+        context: &ErrorContext<Prim>,
+        span: &SpannedLvalue<'a, ValueType<Prim>>,
+    ) -> Vec<TypeError<'a, Prim>> {
+        let errors = match self.errors {
+            Goat::Owned(errors) => errors,
+            Goat::Borrowed(_) => unreachable!(),
+        };
+
+        errors
+            .into_iter()
+            .map(|item| item.into_assignment_error(context.clone(), span))
+            .collect()
     }
 }
 
+/// Analogue of `Cow` with a mutable ref.
 #[derive(Debug)]
 enum Goat<'a, T> {
     Owned(T),
@@ -400,14 +419,25 @@ struct TypeErrorPrecursor<Prim: PrimitiveType> {
 }
 
 impl<Prim: PrimitiveType> TypeErrorPrecursor<Prim> {
-    // TODO: narrow down span based on `self.location` and `root_span`.
-    fn into_error(
+    fn into_expr_error<'a, T: Grammar>(
         self,
         context: ErrorContext<Prim>,
-        root_span: Spanned<'_>,
-    ) -> TypeError<'_, Prim> {
+        root_expr: &SpannedExpr<'a, T>,
+    ) -> TypeError<'a, Prim> {
         TypeError {
-            inner: root_span.copy_with_extra(self.kind),
+            inner: ErrorLocation::walk_expr(&self.location, root_expr).copy_with_extra(self.kind),
+            context,
+            location: self.location,
+        }
+    }
+
+    fn into_assignment_error<'a>(
+        self,
+        context: ErrorContext<Prim>,
+        root_lvalue: &SpannedLvalue<'a, ValueType<Prim>>,
+    ) -> TypeError<'a, Prim> {
+        TypeError {
+            inner: root_lvalue.copy_with_extra(self.kind),
             context,
             location: self.location,
         }
@@ -431,6 +461,64 @@ pub enum ErrorLocation {
     Lhs,
     /// Right-hand side of a binary operation.
     Rhs,
+}
+
+impl ErrorLocation {
+    /// Walks the provided `expr` and returns the most exact span found in it.
+    fn walk_expr<'a, T: Grammar>(mut location: &[Self], expr: &SpannedExpr<'a, T>) -> Spanned<'a> {
+        let mut located = expr;
+        while !location.is_empty() {
+            if let Some(refinement) = location[0].step_into_expr(located) {
+                located = refinement;
+                location = &location[1..];
+            } else {
+                break;
+            }
+        }
+        located.with_no_extra()
+    }
+
+    fn step_into_expr<'r, 'a, T: Grammar>(
+        self,
+        expr: &'r SpannedExpr<'a, T>,
+    ) -> Option<&'r SpannedExpr<'a, T>> {
+        match self {
+            Self::FnArg(index) => match &expr.extra {
+                Expr::Function { args, .. } => Some(&args[index]),
+                Expr::Method { receiver, args, .. } => Some(if index == 0 {
+                    receiver.as_ref()
+                } else {
+                    &args[index - 1]
+                }),
+                _ => None,
+            },
+
+            Self::Lhs => {
+                if let Expr::Binary { lhs, .. } = &expr.extra {
+                    Some(lhs.as_ref())
+                } else {
+                    None
+                }
+            }
+            Self::Rhs => {
+                if let Expr::Binary { rhs, .. } = &expr.extra {
+                    Some(rhs.as_ref())
+                } else {
+                    None
+                }
+            }
+
+            Self::TupleElement(index) => {
+                if let Expr::Tuple(elements) = &expr.extra {
+                    Some(&elements[index])
+                } else {
+                    None
+                }
+            }
+
+            _ => None,
+        }
+    }
 }
 
 /// Context of a [`TypeError`] corresponding to the top-level operation that has errored.

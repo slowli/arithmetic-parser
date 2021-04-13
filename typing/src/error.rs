@@ -459,6 +459,7 @@ impl<Prim: PrimitiveType> TypeErrorPrecursor<Prim> {
 }
 
 /// Result of inferring type for a certain expression.
+// TODO: remove?
 pub type TypeResult<'a, Prim> = Result<ValueType<Prim>, TypeError<'a, Prim>>;
 
 /// Fragment of an error location.

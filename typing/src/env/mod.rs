@@ -1,7 +1,7 @@
 //! `TypeEnvironment` and related types.
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fmt,
     iter::{self, FromIterator},
     mem, ops,
@@ -23,8 +23,6 @@ use arithmetic_parser::{
 
 #[cfg(test)]
 mod tests;
-#[cfg(test)]
-mod type_annotation_tests;
 
 /// Environment containing type information on named variables.
 ///
@@ -112,7 +110,7 @@ impl<Prim: PrimitiveType> TypeEnvironment<Prim> {
         self
     }
 
-    /// Processes statements with the default type arithmetic. After processing, the context
+    /// Processes statements with the default type arithmetic. After processing, the environment
     /// will contain type info about newly declared vars.
     ///
     /// This method is a shortcut for calling `process_with_arithmetic` with
@@ -128,8 +126,14 @@ impl<Prim: PrimitiveType> TypeEnvironment<Prim> {
         self.process_with_arithmetic(&NumArithmetic::without_comparisons(), block)
     }
 
-    /// Processes statements with a given `arithmetic`. After processing, the context will contain
-    /// type info about newly declared vars.
+    /// Processes statements with a given `arithmetic`. After processing, the environment
+    /// will contain type info about newly declared vars.
+    ///
+    /// # Errors
+    ///
+    /// Even if there are any type errors, all statements in the `block` will be executed
+    /// to completion and all errors will be reported. However, the environment will **not**
+    /// include any vars beyond the first failing statement.
     pub fn process_with_arithmetic<'a, T, A>(
         &mut self,
         arithmetic: &A,
@@ -200,9 +204,9 @@ impl<Val, Prim: PrimitiveType, T> FullArithmetic<Val, Prim> for T where
 
 /// Processor for deriving type information.
 struct TypeProcessor<'a, 'env, Val, Prim: PrimitiveType> {
-    root_scope: &'env mut TypeEnvironment<Prim>,
-    unresolved_root_vars: HashSet<String>,
-    inner_scopes: Vec<HashMap<String, ValueType<Prim>>>,
+    env: &'env mut TypeEnvironment<Prim>,
+    scopes: Vec<HashMap<String, ValueType<Prim>>>,
+    scope_before_first_error: Option<HashMap<String, ValueType<Prim>>>,
     arithmetic: &'env dyn FullArithmetic<Val, Prim>,
     is_in_function: bool,
     errors: TypeErrors<'a, Prim>,
@@ -214,9 +218,9 @@ impl<'env, Val, Prim: PrimitiveType> TypeProcessor<'_, 'env, Val, Prim> {
         arithmetic: &'env dyn FullArithmetic<Val, Prim>,
     ) -> Self {
         Self {
-            root_scope: env,
-            unresolved_root_vars: HashSet::new(),
-            inner_scopes: vec![],
+            env,
+            scopes: vec![HashMap::new()],
+            scope_before_first_error: None,
             arithmetic,
             is_in_function: false,
             errors: TypeErrors::new(),
@@ -230,29 +234,22 @@ where
     Prim: PrimitiveType,
 {
     fn get_type(&self, name: &str) -> Option<&ValueType<Prim>> {
-        self.inner_scopes
+        self.scopes
             .iter()
             .rev()
             .flat_map(|scope| scope.get(name))
             .next()
-            .or_else(|| self.root_scope.get(name))
+            .or_else(|| self.env.get(name))
     }
 
     fn insert_type(&mut self, name: &str, ty: ValueType<Prim>) {
-        let scope = self
-            .inner_scopes
-            .last_mut()
-            .unwrap_or(&mut self.root_scope.variables);
+        let scope = self.scopes.last_mut().unwrap();
         scope.insert(name.to_owned(), ty);
-
-        if self.inner_scopes.is_empty() {
-            self.unresolved_root_vars.insert(name.to_owned());
-        }
     }
 
     /// Creates a new type variable.
     fn new_type(&mut self) -> ValueType<Prim> {
-        self.root_scope.substitutions.new_type_var()
+        self.env.substitutions.new_type_var()
     }
 
     fn process_expr_inner<T>(&mut self, expr: &SpannedExpr<'a, T>) -> ValueType<Prim>
@@ -288,9 +285,9 @@ where
             }
 
             Expr::Block(block) => {
-                self.inner_scopes.push(HashMap::new());
+                self.scopes.push(HashMap::new());
                 let result = self.process_block(block);
-                self.inner_scopes.pop(); // intentionally called even on failure
+                self.scopes.pop(); // intentionally called even on failure
                 result
             }
 
@@ -343,10 +340,7 @@ where
         match &lvalue.extra {
             Lvalue::Variable { ty } => {
                 let mut value_type = ty.as_ref().map_or(ValueType::Some, |ty| ty.extra.clone());
-                let result = self
-                    .root_scope
-                    .substitutions
-                    .assign_new_type(&mut value_type);
+                let result = self.env.substitutions.assign_new_type(&mut value_type);
 
                 if let Err(err) = result {
                     let ty = ty.as_ref().unwrap();
@@ -409,7 +403,7 @@ where
         };
         let mut element = ty.map_or(ValueType::Some, |ty| ty.extra.to_owned());
 
-        if let Err(err) = self.root_scope.substitutions.assign_new_type(&mut element) {
+        if let Err(err) = self.env.substitutions.assign_new_type(&mut element) {
             let ty = ty.unwrap();
             // ^ `unwrap` is safe: an error can only occur with a type annotation present.
             self.errors.push(TypeError::lvalue(err, ty));
@@ -417,7 +411,7 @@ where
         }
 
         let mut length = UnknownLen::Some.into();
-        self.root_scope.substitutions.assign_new_len(&mut length);
+        self.env.substitutions.assign_new_len(&mut length);
 
         if let DestructureRest::Named { variable, .. } = rest {
             self.insert_type(
@@ -443,7 +437,7 @@ where
         let call_signature = FnType::new(arg_types.into(), return_type.clone()).into();
 
         let mut errors = SpannedTypeErrors::new();
-        self.root_scope
+        self.env
             .substitutions
             .unify(&call_signature, &definition, errors.by_ref());
         let context = ErrorContext::FnCall {
@@ -469,7 +463,7 @@ where
 
         let mut errors = SpannedTypeErrors::new();
         let output = self.arithmetic.process_unary_op(
-            &mut self.root_scope.substitutions,
+            &mut self.env.substitutions,
             &context,
             errors.by_ref(),
         );
@@ -499,7 +493,7 @@ where
 
         let mut errors = SpannedTypeErrors::new();
         let output = self.arithmetic.process_binary_op(
-            &mut self.root_scope.substitutions,
+            &mut self.env.substitutions,
             &context,
             errors.by_ref(),
         );
@@ -512,16 +506,16 @@ where
     where
         T: Grammar<Lit = Val, Type = ValueType<Prim>>,
     {
-        self.inner_scopes.push(HashMap::new());
+        self.scopes.push(HashMap::new());
         let was_in_function = mem::replace(&mut self.is_in_function, true);
         let arg_types = self.process_destructure(&def.args.extra);
         let return_type = self.process_block(&def.body);
 
-        self.inner_scopes.pop();
+        self.scopes.pop();
         self.is_in_function = was_in_function;
 
         let mut fn_type = FnType::new(arg_types, return_type);
-        let substitutions = &self.root_scope.substitutions;
+        let substitutions = &self.env.substitutions;
         substitutions.resolver().visit_function_mut(&mut fn_type);
 
         if !self.is_in_function {
@@ -534,7 +528,14 @@ where
     where
         T: Grammar<Lit = Val, Type = ValueType<Prim>>,
     {
-        match &statement.extra {
+        // Backup assignments in the root scope if there are no errors yet.
+        let backup = if self.scopes.len() == 1 && self.errors.is_empty() {
+            self.scopes.first().cloned()
+        } else {
+            None
+        };
+
+        let output = match &statement.extra {
             Statement::Expr(expr) => self.process_expr_inner(expr),
 
             Statement::Assignment { lhs, rhs } => {
@@ -542,7 +543,7 @@ where
                 let lhs_ty = self.process_lvalue(lhs);
 
                 let mut errors = SpannedTypeErrors::new();
-                self.root_scope
+                self.env
                     .substitutions
                     .unify(&lhs_ty, &rhs_ty, errors.by_ref());
                 let context = ErrorContext::Assignment {
@@ -560,7 +561,12 @@ where
                 // No better choice than to go with `Some` type.
                 self.new_type()
             }
+        };
+
+        if backup.is_some() && !self.errors.is_empty() {
+            self.scope_before_first_error = backup;
         }
+        output
     }
 
     fn process_statements<T>(
@@ -572,19 +578,22 @@ where
     {
         let mut return_value = self.process_block(block);
 
-        debug_assert!(self.inner_scopes.is_empty());
-        let mut resolver = self.root_scope.substitutions.resolver();
-        for (name, var_type) in &mut self.root_scope.variables {
-            if self.unresolved_root_vars.contains(name) {
-                resolver.visit_type_mut(var_type);
-            }
+        let mut scopes = self.scopes;
+        debug_assert_eq!(scopes.len(), 1);
+        let mut new_root_vars = self
+            .scope_before_first_error
+            .unwrap_or_else(|| scopes.pop().unwrap());
+
+        let mut resolver = self.env.substitutions.resolver();
+        for var_type in new_root_vars.values_mut() {
+            resolver.visit_type_mut(var_type);
         }
         resolver.visit_type_mut(&mut return_value);
+        self.env.variables.extend(new_root_vars);
 
         if self.errors.is_empty() {
             Ok(return_value)
         } else {
-            // TODO: remove all vars and reset substitutions beyond the first failing statement.
             self.errors.post_process(&mut resolver);
             Err(self.errors)
         }

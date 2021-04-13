@@ -220,7 +220,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             }
 
             (ValueType::Any(constraints), ty) | (ty, ValueType::Any(constraints)) => {
-                self.unify_any(constraints, ty, errors);
+                constraints.apply(ty, self, errors);
             }
 
             // This takes care of `Any` types because they are equal to anything.
@@ -599,17 +599,6 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 self.eqs.insert(var_idx, ty);
             }
         }
-    }
-
-    /// Unifies `Any(constraints)` with `ty`.
-    #[inline]
-    fn unify_any(
-        &mut self,
-        constraints: &Prim::Constraints,
-        ty: &ValueType<Prim>,
-        errors: SpannedTypeErrors<'_, Prim>,
-    ) {
-        constraints.apply(ty, self, errors);
     }
 }
 

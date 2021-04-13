@@ -7,11 +7,9 @@ use std::{
     mem, ops,
 };
 
-use crate::arith::{BinaryOpContext, UnaryOpContext};
-use crate::error::{SpannedTypeErrors, TypeError};
 use crate::{
-    arith::{MapPrimitiveType, NumArithmetic, TypeArithmetic},
-    error::{ErrorContext, TypeErrors},
+    arith::{BinaryOpContext, MapPrimitiveType, NumArithmetic, TypeArithmetic, UnaryOpContext},
+    error::{ErrorContext, ErrorLocation, OpTypeErrors, TypeError, TypeErrorKind, TypeErrors},
     types::{ParamConstraints, ParamQuantifier},
     visit::VisitMut,
     FnType, Num, PrimitiveType, Slice, Substitutions, Tuple, UnknownLen, ValueType,
@@ -336,32 +334,28 @@ where
     }
 
     /// Processes an lvalue type by replacing `Some` types with newly created type vars.
-    fn process_lvalue(&mut self, lvalue: &SpannedLvalue<'a, ValueType<Prim>>) -> ValueType<Prim> {
+    fn process_lvalue(
+        &mut self,
+        lvalue: &SpannedLvalue<'a, ValueType<Prim>>,
+        mut errors: OpTypeErrors<'_, Prim>,
+    ) -> ValueType<Prim> {
         match &lvalue.extra {
             Lvalue::Variable { ty } => {
                 let mut value_type = ty.as_ref().map_or(ValueType::Some, |ty| ty.extra.clone());
-                let result = self.env.substitutions.assign_new_type(&mut value_type);
-
-                if let Err(err) = result {
-                    let ty = ty.as_ref().unwrap();
-                    // ^-- `unwrap` is safe: an error can only occur with a type annotation present.
-                    self.errors.push(TypeError::lvalue(err, ty));
-                    // FIXME: remove once `assign_new_type` is improved
-                    value_type = self.new_type();
-                }
-
+                self.env
+                    .substitutions
+                    .assign_new_type(&mut value_type, errors);
                 self.insert_type(lvalue.fragment(), value_type.clone());
                 value_type
             }
 
             Lvalue::Tuple(destructure) => {
-                let element_types = self.process_destructure(destructure);
+                let element_types = self.process_destructure(destructure, errors);
                 ValueType::Tuple(element_types)
             }
 
             _ => {
-                self.errors
-                    .push(TypeError::unsupported(lvalue.extra.ty(), lvalue));
+                errors.push(TypeErrorKind::unsupported(lvalue.extra.ty()));
                 // No better choice than to go with `Some` type.
                 self.new_type()
             }
@@ -372,22 +366,31 @@ where
     fn process_destructure(
         &mut self,
         destructure: &Destructure<'a, ValueType<Prim>>,
+        mut errors: OpTypeErrors<'_, Prim>,
     ) -> Tuple<Prim> {
         let start = destructure
             .start
             .iter()
-            .map(|element| self.process_lvalue(element))
+            .enumerate()
+            .map(|(i, element)| {
+                let loc = ErrorLocation::TupleElement(i);
+                self.process_lvalue(element, errors.with_location(loc))
+            })
             .collect();
 
-        let middle = destructure
-            .middle
-            .as_ref()
-            .map(|middle| self.process_destructure_rest(&middle.extra));
+        let middle = destructure.middle.as_ref().map(|middle| {
+            let loc = ErrorLocation::TupleMiddle;
+            self.process_destructure_rest(&middle.extra, errors.with_location(loc))
+        });
 
         let end = destructure
             .end
             .iter()
-            .map(|element| self.process_lvalue(element))
+            .enumerate()
+            .map(|(i, element)| {
+                let loc = ErrorLocation::TupleEnd(i);
+                self.process_lvalue(element, errors.with_location(loc))
+            })
             .collect();
 
         Tuple::from_parts(start, middle, end)
@@ -396,6 +399,7 @@ where
     fn process_destructure_rest(
         &mut self,
         rest: &DestructureRest<'a, ValueType<Prim>>,
+        errors: OpTypeErrors<'_, Prim>,
     ) -> Slice<Prim> {
         let ty = match rest {
             DestructureRest::Unnamed => None,
@@ -403,13 +407,7 @@ where
         };
         let mut element = ty.map_or(ValueType::Some, |ty| ty.extra.to_owned());
 
-        if let Err(err) = self.env.substitutions.assign_new_type(&mut element) {
-            let ty = ty.unwrap();
-            // ^ `unwrap` is safe: an error can only occur with a type annotation present.
-            self.errors.push(TypeError::lvalue(err, ty));
-            element = self.new_type();
-        }
-
+        self.env.substitutions.assign_new_type(&mut element, errors);
         let mut length = UnknownLen::Some.into();
         self.env.substitutions.assign_new_len(&mut length);
 
@@ -436,7 +434,7 @@ where
         let return_type = self.new_type();
         let call_signature = FnType::new(arg_types.into(), return_type.clone()).into();
 
-        let mut errors = SpannedTypeErrors::new();
+        let mut errors = OpTypeErrors::new();
         self.env
             .substitutions
             .unify(&call_signature, &definition, errors.by_ref());
@@ -444,7 +442,7 @@ where
             definition,
             call_signature,
         };
-        self.errors.extend(errors.contextualize(context, call_expr));
+        self.errors.extend(errors.contextualize(call_expr, context));
         return_type
     }
 
@@ -461,14 +459,14 @@ where
         let inner_ty = self.process_expr_inner(inner);
         let context = UnaryOpContext { op, arg: inner_ty };
 
-        let mut errors = SpannedTypeErrors::new();
+        let mut errors = OpTypeErrors::new();
         let output = self.arithmetic.process_unary_op(
             &mut self.env.substitutions,
             &context,
             errors.by_ref(),
         );
         self.errors
-            .extend(errors.contextualize(context, unary_expr));
+            .extend(errors.contextualize(unary_expr, context));
         output
     }
 
@@ -491,14 +489,14 @@ where
             rhs: rhs_ty,
         };
 
-        let mut errors = SpannedTypeErrors::new();
+        let mut errors = OpTypeErrors::new();
         let output = self.arithmetic.process_binary_op(
             &mut self.env.substitutions,
             &context,
             errors.by_ref(),
         );
         self.errors
-            .extend(errors.contextualize(context, binary_expr));
+            .extend(errors.contextualize(binary_expr, context));
         output
     }
 
@@ -508,7 +506,14 @@ where
     {
         self.scopes.push(HashMap::new());
         let was_in_function = mem::replace(&mut self.is_in_function, true);
-        let arg_types = self.process_destructure(&def.args.extra);
+
+        let mut errors = OpTypeErrors::new();
+        let arg_types = self.process_destructure(&def.args.extra, errors.by_ref());
+        let errors = errors.contextualize_destructure(&def.args, || ErrorContext::FnDefinition {
+            args: arg_types.clone(),
+        });
+        self.errors.extend(errors);
+
         let return_type = self.process_block(&def.body);
 
         self.scopes.pop();
@@ -540,9 +545,9 @@ where
 
             Statement::Assignment { lhs, rhs } => {
                 let rhs_ty = self.process_expr_inner(rhs);
-                let lhs_ty = self.process_lvalue(lhs);
 
-                let mut errors = SpannedTypeErrors::new();
+                let mut errors = OpTypeErrors::new();
+                let lhs_ty = self.process_lvalue(lhs, errors.by_ref());
                 self.env
                     .substitutions
                     .unify(&lhs_ty, &rhs_ty, errors.by_ref());
@@ -551,7 +556,7 @@ where
                     rhs: rhs_ty,
                 };
                 self.errors
-                    .extend(errors.contextualize_assignment(&context, lhs));
+                    .extend(errors.contextualize_assignment(lhs, &context));
                 ValueType::void()
             }
 

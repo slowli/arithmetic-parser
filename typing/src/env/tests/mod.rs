@@ -1005,7 +1005,7 @@ fn comparisons_when_switched_off() {
     assert_eq!(*err.span().fragment(), "x > 1");
     assert!(err.location().is_empty());
     assert_matches!(err.context(), ErrorContext::BinaryOp(_));
-    assert_matches!(err.kind(), TypeErrorKind::Unsupported(_));
+    assert_matches!(err.kind(), TypeErrorKind::UnsupportedFeature(_));
     assert_eq!(
         err.kind().to_string(),
         "Unsupported binary op: greater comparison"

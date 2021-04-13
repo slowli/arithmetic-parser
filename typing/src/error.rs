@@ -5,10 +5,10 @@ use std::{fmt, ops};
 use crate::{
     arith::{BinaryOpContext, UnaryOpContext},
     visit::VisitMut,
-    PrimitiveType, TupleLen, ValueType,
+    PrimitiveType, Tuple, TupleLen, ValueType,
 };
 use arithmetic_parser::{
-    grammars::Grammar, Expr, Spanned, SpannedExpr, SpannedLvalue, UnsupportedType,
+    grammars::Grammar, Destructure, Expr, Spanned, SpannedExpr, SpannedLvalue, UnsupportedType,
 };
 
 /// Context for [`TypeErrorKind::TupleLenMismatch`].
@@ -65,9 +65,8 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
     /// [`UnknownLen::Dynamic`]: crate::UnknownLen::Dynamic
     DynamicLen(TupleLen),
 
-    /// Language construct not supported by type inference logic.
-    // TODO: rename to `UnsupportedFeature`?
-    Unsupported(UnsupportedType),
+    /// Language feature not supported by type inference logic.
+    UnsupportedFeature(UnsupportedType),
 
     /// Type not supported by type inference logic. For example,
     /// a [`TypeArithmetic`] or [`TypeConstraints`] implementations may return this error
@@ -130,7 +129,7 @@ impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
                 write!(formatter, "Length `{}` is required to be static", len)
             }
 
-            Self::Unsupported(ty) => write!(formatter, "Unsupported {}", ty),
+            Self::UnsupportedFeature(ty) => write!(formatter, "Unsupported {}", ty),
             Self::UnsupportedType(ty) => write!(formatter, "Unsupported type: {}", ty),
             Self::UnsupportedParam => {
                 formatter.write_str("Params in declared function types are not supported yet")
@@ -144,7 +143,7 @@ impl<Prim: PrimitiveType> std::error::Error for TypeErrorKind<Prim> {}
 impl<Prim: PrimitiveType> TypeErrorKind<Prim> {
     /// Creates an error for an lvalue type not supported by the interpreter.
     pub fn unsupported<T: Into<UnsupportedType>>(ty: T) -> Self {
-        Self::Unsupported(ty.into())
+        Self::UnsupportedFeature(ty.into())
     }
 
     /// Creates a "failed constraint" error.
@@ -180,14 +179,6 @@ impl<Prim: PrimitiveType> std::error::Error for TypeError<'_, Prim> {
 }
 
 impl<'a, Prim: PrimitiveType> TypeError<'a, Prim> {
-    pub(crate) fn lvalue(kind: TypeErrorKind<Prim>, span: &Spanned<'a, ValueType<Prim>>) -> Self {
-        Self {
-            inner: span.copy_with_extra(kind),
-            context: ErrorContext::Lvalue(span.extra.clone()),
-            location: vec![],
-        }
-    }
-
     pub(crate) fn unsupported<T>(
         unsupported: impl Into<UnsupportedType>,
         span: &Spanned<'a, T>,
@@ -305,14 +296,14 @@ impl<'a, Prim: PrimitiveType> IntoIterator for TypeErrors<'a, Prim> {
     }
 }
 
-/// Mutable borrow of [`TypeErrors`] together with a code span.
+/// Error container tied to a particular top-level operation.
 #[derive(Debug)]
-pub struct SpannedTypeErrors<'a, Prim: PrimitiveType> {
+pub struct OpTypeErrors<'a, Prim: PrimitiveType> {
     errors: Goat<'a, Vec<TypeErrorPrecursor<Prim>>>,
     current_location: Vec<ErrorLocation>,
 }
 
-impl<Prim: PrimitiveType> SpannedTypeErrors<'_, Prim> {
+impl<Prim: PrimitiveType> OpTypeErrors<'_, Prim> {
     /// Adds a new `error` into this the error list.
     pub fn push(&mut self, kind: TypeErrorKind<Prim>) {
         self.errors.push(TypeErrorPrecursor {
@@ -323,25 +314,25 @@ impl<Prim: PrimitiveType> SpannedTypeErrors<'_, Prim> {
 
     /// Invokes the provided closure and returns `false` if new errors were
     /// added during the closure execution.
-    pub fn check(&mut self, check: impl FnOnce(SpannedTypeErrors<'_, Prim>)) -> bool {
+    pub fn check(&mut self, check: impl FnOnce(OpTypeErrors<'_, Prim>)) -> bool {
         let error_count = self.errors.len();
         check(self.by_ref());
         self.errors.len() == error_count
     }
 
-    /// FIXME
-    pub fn by_ref(&mut self) -> SpannedTypeErrors<'_, Prim> {
-        SpannedTypeErrors {
+    /// Mutably borrows this container allowing to use it multiple times.
+    pub fn by_ref(&mut self) -> OpTypeErrors<'_, Prim> {
+        OpTypeErrors {
             errors: Goat::Borrowed(&mut *self.errors),
             current_location: self.current_location.clone(),
         }
     }
 
     /// Narrows down the location of the error.
-    pub fn with_location(&mut self, location: ErrorLocation) -> SpannedTypeErrors<'_, Prim> {
+    pub fn with_location(&mut self, location: ErrorLocation) -> OpTypeErrors<'_, Prim> {
         let mut current_location = self.current_location.clone();
         current_location.push(location);
-        SpannedTypeErrors {
+        OpTypeErrors {
             errors: Goat::Borrowed(&mut *self.errors),
             current_location,
         }
@@ -357,7 +348,7 @@ impl<Prim: PrimitiveType> SpannedTypeErrors<'_, Prim> {
     }
 }
 
-impl<Prim: PrimitiveType> SpannedTypeErrors<'static, Prim> {
+impl<Prim: PrimitiveType> OpTypeErrors<'static, Prim> {
     pub(crate) fn new() -> Self {
         Self {
             errors: Goat::Owned(vec![]),
@@ -367,35 +358,47 @@ impl<Prim: PrimitiveType> SpannedTypeErrors<'static, Prim> {
 
     pub(crate) fn contextualize<'a, T: Grammar>(
         self,
-        context: impl Into<ErrorContext<Prim>>,
         span: &SpannedExpr<'a, T>,
+        context: impl Into<ErrorContext<Prim>>,
+    ) -> Vec<TypeError<'a, Prim>> {
+        let context = context.into();
+        self.do_contextualize(|item| item.into_expr_error(context.clone(), span))
+    }
+
+    fn do_contextualize<'a>(
+        self,
+        map_fn: impl Fn(TypeErrorPrecursor<Prim>) -> TypeError<'a, Prim>,
     ) -> Vec<TypeError<'a, Prim>> {
         let errors = match self.errors {
             Goat::Owned(errors) => errors,
             Goat::Borrowed(_) => unreachable!(),
         };
-
-        let context = context.into();
-        errors
-            .into_iter()
-            .map(|item| item.into_expr_error(context.clone(), span))
-            .collect()
+        errors.into_iter().map(map_fn).collect()
     }
 
     pub(crate) fn contextualize_assignment<'a>(
         self,
-        context: &ErrorContext<Prim>,
         span: &SpannedLvalue<'a, ValueType<Prim>>,
+        context: &ErrorContext<Prim>,
     ) -> Vec<TypeError<'a, Prim>> {
-        let errors = match self.errors {
-            Goat::Owned(errors) => errors,
-            Goat::Borrowed(_) => unreachable!(),
-        };
+        if self.errors.is_empty() {
+            vec![]
+        } else {
+            self.do_contextualize(|item| item.into_assignment_error(context.clone(), span))
+        }
+    }
 
-        errors
-            .into_iter()
-            .map(|item| item.into_assignment_error(context.clone(), span))
-            .collect()
+    pub(crate) fn contextualize_destructure<'a>(
+        self,
+        span: &Spanned<'a, Destructure<'a, ValueType<Prim>>>,
+        create_context: impl FnOnce() -> ErrorContext<Prim>,
+    ) -> Vec<TypeError<'a, Prim>> {
+        if self.errors.is_empty() {
+            vec![]
+        } else {
+            let context = create_context();
+            self.do_contextualize(|item| item.into_destructure_error(context.clone(), span))
+        }
     }
 }
 
@@ -445,6 +448,7 @@ impl<Prim: PrimitiveType> TypeErrorPrecursor<Prim> {
         }
     }
 
+    // FIXME: walk lvalue to narrow down error span.
     fn into_assignment_error<'a>(
         self,
         context: ErrorContext<Prim>,
@@ -456,11 +460,20 @@ impl<Prim: PrimitiveType> TypeErrorPrecursor<Prim> {
             location: self.location,
         }
     }
-}
 
-/// Result of inferring type for a certain expression.
-// TODO: remove?
-pub type TypeResult<'a, Prim> = Result<ValueType<Prim>, TypeError<'a, Prim>>;
+    // FIXME: walk lvalue to narrow down error span.
+    fn into_destructure_error<'a>(
+        self,
+        context: ErrorContext<Prim>,
+        root_destructure: &Spanned<'a, Destructure<'a, ValueType<Prim>>>,
+    ) -> TypeError<'a, Prim> {
+        TypeError {
+            inner: root_destructure.copy_with_extra(self.kind),
+            context,
+            location: self.location,
+        }
+    }
+}
 
 /// Fragment of an error location.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -472,6 +485,10 @@ pub enum ErrorLocation {
     FnReturnType,
     /// Tuple element (0-based).
     TupleElement(usize),
+    /// Tuple middle.
+    TupleMiddle,
+    /// Tuple end element (0-based).
+    TupleEnd(usize),
     /// Left-hand side of a binary operation.
     Lhs,
     /// Right-hand side of a binary operation.
@@ -544,6 +561,11 @@ pub enum ErrorContext<Prim: PrimitiveType> {
     None,
     /// Processing lvalue (before assignment).
     Lvalue(ValueType<Prim>),
+    /// Function definition.
+    FnDefinition {
+        /// Types of function arguments.
+        args: Tuple<Prim>,
+    },
     /// Function call.
     FnCall {
         /// Function definition. Note that this is not necessarily a [`FnType`].
@@ -581,6 +603,7 @@ impl<Prim: PrimitiveType> ErrorContext<Prim> {
         match self {
             Self::None => { /* Do nothing. */ }
             Self::Lvalue(lvalue) => mapper.visit_type_mut(lvalue),
+            Self::FnDefinition { args } => mapper.visit_tuple_mut(args),
             Self::FnCall {
                 definition,
                 call_signature,

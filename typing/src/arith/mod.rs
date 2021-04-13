@@ -4,7 +4,7 @@
 use num_traits::NumOps;
 
 use crate::{
-    error::{ErrorLocation, SpannedTypeErrors, TypeErrorKind},
+    error::{ErrorLocation, OpTypeErrors, TypeErrorKind},
     Num, PrimitiveType, Substitutions, ValueType,
 };
 use arithmetic_parser::{BinaryOp, UnaryOp};
@@ -33,7 +33,7 @@ pub trait TypeArithmetic<Prim: PrimitiveType> {
         &self,
         substitutions: &mut Substitutions<Prim>,
         context: &UnaryOpContext<Prim>,
-        errors: SpannedTypeErrors<'_, Prim>,
+        errors: OpTypeErrors<'_, Prim>,
     ) -> ValueType<Prim>;
 
     /// Handles a binary operation.
@@ -41,7 +41,7 @@ pub trait TypeArithmetic<Prim: PrimitiveType> {
         &self,
         substitutions: &mut Substitutions<Prim>,
         context: &BinaryOpContext<Prim>,
-        errors: SpannedTypeErrors<'_, Prim>,
+        errors: OpTypeErrors<'_, Prim>,
     ) -> ValueType<Prim>;
 }
 
@@ -89,7 +89,7 @@ impl<Prim: WithBoolean> TypeArithmetic<Prim> for BoolArithmetic {
         &self,
         substitutions: &mut Substitutions<Prim>,
         context: &UnaryOpContext<Prim>,
-        mut errors: SpannedTypeErrors<'_, Prim>,
+        mut errors: OpTypeErrors<'_, Prim>,
     ) -> ValueType<Prim> {
         let op = context.op;
         if op == UnaryOp::Not {
@@ -112,7 +112,7 @@ impl<Prim: WithBoolean> TypeArithmetic<Prim> for BoolArithmetic {
         &self,
         substitutions: &mut Substitutions<Prim>,
         context: &BinaryOpContext<Prim>,
-        mut errors: SpannedTypeErrors<'_, Prim>,
+        mut errors: OpTypeErrors<'_, Prim>,
     ) -> ValueType<Prim> {
         match context.op {
             BinaryOp::Eq | BinaryOp::NotEq => {
@@ -216,7 +216,7 @@ impl NumArithmetic {
     pub fn unify_binary_op<Prim: PrimitiveType>(
         substitutions: &mut Substitutions<Prim>,
         context: &BinaryOpContext<Prim>,
-        mut errors: SpannedTypeErrors<'_, Prim>,
+        mut errors: OpTypeErrors<'_, Prim>,
         settings: OpConstraintSettings<'_, Prim::Constraints>,
     ) -> ValueType<Prim> {
         let lhs_ty = &context.lhs;
@@ -283,7 +283,7 @@ impl NumArithmetic {
     pub fn process_unary_op<Prim: WithBoolean>(
         substitutions: &mut Substitutions<Prim>,
         context: &UnaryOpContext<Prim>,
-        mut errors: SpannedTypeErrors<'_, Prim>,
+        mut errors: OpTypeErrors<'_, Prim>,
         constraints: &Prim::Constraints,
     ) -> ValueType<Prim> {
         match context.op {
@@ -312,7 +312,7 @@ impl NumArithmetic {
     pub fn process_binary_op<Prim: WithBoolean>(
         substitutions: &mut Substitutions<Prim>,
         context: &BinaryOpContext<Prim>,
-        mut errors: SpannedTypeErrors<'_, Prim>,
+        mut errors: OpTypeErrors<'_, Prim>,
         comparable_type: Option<Prim>,
         settings: OpConstraintSettings<'_, Prim::Constraints>,
     ) -> ValueType<Prim> {
@@ -369,7 +369,7 @@ impl TypeArithmetic<Num> for NumArithmetic {
         &self,
         substitutions: &mut Substitutions<Num>,
         context: &UnaryOpContext<Num>,
-        errors: SpannedTypeErrors<'_, Num>,
+        errors: OpTypeErrors<'_, Num>,
     ) -> ValueType<Num> {
         Self::process_unary_op(substitutions, context, errors, &NumConstraints::Lin)
     }
@@ -378,7 +378,7 @@ impl TypeArithmetic<Num> for NumArithmetic {
         &self,
         substitutions: &mut Substitutions<Num>,
         context: &BinaryOpContext<Num>,
-        errors: SpannedTypeErrors<'_, Num>,
+        errors: OpTypeErrors<'_, Num>,
     ) -> ValueType<Num> {
         let comparable_type = if self.comparisons_enabled {
             Some(Num::Num)

@@ -4,7 +4,7 @@ use std::{fmt, ops, str::FromStr};
 
 use crate::{
     arith::OpConstraintSettings,
-    error::{SpannedTypeErrors, TypeErrorKind},
+    error::{OpTypeErrors, TypeErrorKind},
     PrimitiveType, Slice, Substitutions, ValueType,
 };
 
@@ -63,7 +63,7 @@ where
         &self,
         ty: &ValueType<Prim>,
         substitutions: &mut Substitutions<Prim>,
-        errors: SpannedTypeErrors<'_, Prim>,
+        errors: OpTypeErrors<'_, Prim>,
     );
 }
 
@@ -143,7 +143,7 @@ impl<Prim: LinearType> TypeConstraints<Prim> for NumConstraints {
         &self,
         ty: &ValueType<Prim>,
         substitutions: &mut Substitutions<Prim>,
-        mut errors: SpannedTypeErrors<'_, Prim>,
+        mut errors: OpTypeErrors<'_, Prim>,
     ) {
         if *self == Self::None {
             // The default constraint: does nothing.
@@ -224,7 +224,7 @@ where
         &self,
         _ty: &ValueType<Prim>,
         _substitutions: &mut Substitutions<Prim>,
-        _errors: SpannedTypeErrors<'_, Prim>,
+        _errors: OpTypeErrors<'_, Prim>,
     ) {
         // Do nothing
     }

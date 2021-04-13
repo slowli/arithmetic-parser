@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     arith::TypeConstraints,
-    error::{ErrorLocation, SpannedTypeErrors, TupleLenMismatchContext, TypeErrorKind},
+    error::{ErrorLocation, OpTypeErrors, TupleLenMismatchContext, TypeErrorKind},
     visit::{self, Visit, VisitMut},
     FnType, PrimitiveType, Tuple, TupleLen, TypeVar, UnknownLen, ValueType,
 };
@@ -161,17 +161,16 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         new_type
     }
 
-    // FIXME: change to produce a reasonable output in case of errors?
     pub(crate) fn assign_new_type(
         &mut self,
         ty: &mut ValueType<Prim>,
-    ) -> Result<(), TypeErrorKind<Prim>> {
+        errors: OpTypeErrors<'_, Prim>,
+    ) {
         let mut assigner = TypeAssigner {
             substitutions: self,
-            outcome: Ok(()),
+            errors,
         };
         assigner.visit_type_mut(ty);
-        assigner.outcome
     }
 
     pub(crate) fn assign_new_len(&mut self, len: &mut TupleLen) {
@@ -193,7 +192,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         &mut self,
         lhs: &ValueType<Prim>,
         rhs: &ValueType<Prim>,
-        mut errors: SpannedTypeErrors<'_, Prim>,
+        mut errors: OpTypeErrors<'_, Prim>,
     ) {
         let resolved_lhs = self.fast_resolve(lhs).to_owned();
         let resolved_rhs = self.fast_resolve(rhs).to_owned();
@@ -255,7 +254,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         lhs: &Tuple<Prim>,
         rhs: &Tuple<Prim>,
         context: TupleLenMismatchContext,
-        mut errors: SpannedTypeErrors<'_, Prim>,
+        mut errors: OpTypeErrors<'_, Prim>,
     ) {
         let resolved_len = self.unify_lengths(lhs.len(), rhs.len(), context);
         let resolved_len = match resolved_len {
@@ -281,7 +280,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         &mut self,
         pairs: impl Iterator<Item = (&'it ValueType<Prim>, &'it ValueType<Prim>)>,
         context: TupleLenMismatchContext,
-        mut errors: SpannedTypeErrors<'_, Prim>,
+        mut errors: OpTypeErrors<'_, Prim>,
     ) {
         for (i, (lhs_elem, rhs_elem)) in pairs.enumerate() {
             let location = match context {
@@ -299,7 +298,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         rhs: &Tuple<Prim>,
         err: &TypeErrorKind<Prim>,
         context: TupleLenMismatchContext,
-        errors: SpannedTypeErrors<'_, Prim>,
+        errors: OpTypeErrors<'_, Prim>,
     ) {
         let (lhs_len, rhs_len) = match err {
             TypeErrorKind::TupleLenMismatch {
@@ -468,7 +467,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         &mut self,
         lhs: &FnType<Prim>,
         rhs: &FnType<Prim>,
-        mut errors: SpannedTypeErrors<'_, Prim>,
+        mut errors: OpTypeErrors<'_, Prim>,
     ) {
         if lhs.is_parametric() {
             errors.push(TypeErrorKind::UnsupportedParam);
@@ -548,7 +547,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         var_idx: usize,
         ty: &ValueType<Prim>,
         is_lhs: bool,
-        mut errors: SpannedTypeErrors<'_, Prim>,
+        mut errors: OpTypeErrors<'_, Prim>,
     ) {
         if let ValueType::Var(var) = ty {
             if !var.is_free() {
@@ -651,19 +650,24 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeSanitizer {
 #[derive(Debug)]
 struct TypeAssigner<'a, Prim: PrimitiveType> {
     substitutions: &'a mut Substitutions<Prim>,
-    outcome: Result<(), TypeErrorKind<Prim>>,
+    errors: OpTypeErrors<'a, Prim>,
 }
 
 impl<Prim: PrimitiveType> VisitMut<Prim> for TypeAssigner<'_, Prim> {
     fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
-        if self.outcome.is_err() {
-            return;
-        }
-
         match ty {
-            ValueType::Some => {
-                *ty = ValueType::free_var(self.substitutions.type_var_count);
-                self.substitutions.type_var_count += 1;
+            ValueType::Some => *ty = self.substitutions.new_type_var(),
+            ValueType::Function(function) if function.is_parametric() => {
+                // Can occur, for example, with function declarations:
+                //
+                // ```
+                // identity: ('T) -> 'T = |x| x;
+                // ```
+                //
+                // We don't handle such cases yet, because unifying functions with type params
+                // is quite difficult.
+                self.errors.push(TypeErrorKind::UnsupportedParam);
+                *ty = self.substitutions.new_type_var();
             }
             _ => visit::visit_type_mut(self, ty),
         }
@@ -671,22 +675,6 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeAssigner<'_, Prim> {
 
     fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
         self.substitutions.assign_new_len(len);
-    }
-
-    fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {
-        if function.is_parametric() {
-            // Can occur, for example, with function declarations:
-            //
-            // ```
-            // identity: ('T) -> 'T = |x| x;
-            // ```
-            //
-            // We don't handle such cases yet, because unifying functions with type params
-            // is quite difficult.
-            self.outcome = Err(TypeErrorKind::UnsupportedParam);
-        } else {
-            visit::visit_function_mut(self, function);
-        }
     }
 }
 

@@ -6,9 +6,9 @@ use super::*;
 use crate::{error::TupleLenMismatchContext, Num};
 
 fn extract_errors<Prim: PrimitiveType>(
-    action: impl FnOnce(SpannedTypeErrors<'_, Prim>),
+    action: impl FnOnce(OpTypeErrors<'_, Prim>),
 ) -> Result<(), TypeErrorKind<Prim>> {
-    let mut errors = SpannedTypeErrors::new();
+    let mut errors = OpTypeErrors::new();
     action(errors.by_ref());
     let mut errors = errors.into_vec();
 

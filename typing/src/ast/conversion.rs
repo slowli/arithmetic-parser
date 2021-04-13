@@ -56,9 +56,9 @@ pub enum ConversionErrorKind {
     FreeLengthVar(String),
     /// Type param not scoped by a function.
     FreeTypeVar(String),
-    /// Undefined const param.
+    /// Unused length param.
     UnusedLength(String),
-    /// Undefined type param.
+    /// Unused length param.
     UnusedTypeParam(String),
 }
 

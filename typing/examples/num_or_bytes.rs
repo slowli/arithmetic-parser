@@ -8,7 +8,7 @@ use arithmetic_parser::{
 };
 use arithmetic_typing::{
     arith::*,
-    error::{SpannedTypeErrors, TypeErrorKind, TypeErrors},
+    error::{OpTypeErrors, TypeErrorKind, TypeErrors},
     Annotated, Prelude, PrimitiveType, Substitutions, TypeEnvironment, ValueType,
 };
 
@@ -134,7 +134,7 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
         &self,
         ty: &ValueType<NumOrBytesType>,
         substitutions: &mut Substitutions<NumOrBytesType>,
-        errors: &mut SpannedTypeErrors<'_, '_, NumOrBytesType>,
+        errors: &mut OpTypeErrors<'_, '_, NumOrBytesType>,
     ) {
         if *self == Self::None {
             return;

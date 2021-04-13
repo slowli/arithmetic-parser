@@ -5,8 +5,6 @@ use nom::{
     multi::fold_many1,
 };
 
-use core::fmt;
-
 use super::*;
 use crate::{
     alloc::String,
@@ -148,7 +146,7 @@ impl ParseLiteral for FieldGrammarBase {
     }
 }
 
-impl Grammar for FieldGrammarBase {
+impl Grammar<'_> for FieldGrammarBase {
     type Type = ValueType;
 
     fn parse_type(span: InputSpan<'_>) -> NomResult<'_, Self::Type> {
@@ -1440,7 +1438,7 @@ fn fn_defs_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse for SimpleGrammar {
+    impl Parse<'_> for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::FN_DEFINITIONS);
@@ -1456,7 +1454,7 @@ fn tuples_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse for SimpleGrammar {
+    impl Parse<'_> for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::TUPLES);
@@ -1476,7 +1474,7 @@ fn blocks_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse for SimpleGrammar {
+    impl Parse<'_> for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::BLOCKS);
@@ -1496,7 +1494,7 @@ fn methods_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse for SimpleGrammar {
+    impl Parse<'_> for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::METHODS);
@@ -1516,7 +1514,7 @@ fn order_comparisons_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse for SimpleGrammar {
+    impl Parse<'_> for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::ORDER_COMPARISONS);
@@ -1529,12 +1527,11 @@ fn order_comparisons_when_switched_off() {
 
 fn assert_binary_op_is_not_parsed<T>(op: BinaryOp)
 where
-    T: Parse,
-    T::Base: fmt::Debug,
+    T: for<'a> Parse<'a>,
 {
     let input = format!("x {} 1;", op.as_str());
     let input = InputSpan::new(&input);
-    let err = statement::<T, Complete>(input).unwrap_err();
+    let err = statement::<T, Complete>(input).map(drop).unwrap_err();
     let spanned_err = match err {
         NomErr::Failure(spanned) => spanned,
         _ => panic!("Unexpected error: {}", err),
@@ -1552,7 +1549,7 @@ fn boolean_ops_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse for SimpleGrammar {
+    impl Parse<'_> for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::BOOLEAN_OPS);

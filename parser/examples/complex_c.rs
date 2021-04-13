@@ -209,7 +209,7 @@ impl<'a> Context<'a> {
         code
     }
 
-    fn eval_function(fn_def: &FnDefinition<'_, ComplexGrammar>, name: &str) -> String {
+    fn eval_function(fn_def: &FnDefinition<'a, ComplexGrammar>, name: &str) -> String {
         let mut context = Self::new();
         let mut evaluated = format!("float2 {}(", name);
         let args = &fn_def.args.extra.start;

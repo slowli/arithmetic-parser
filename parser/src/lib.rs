@@ -160,7 +160,7 @@ mod spans;
 /// Arithmetic expression with an abstract types for type annotations and literals.
 #[derive(Debug)]
 #[non_exhaustive]
-pub enum Expr<'a, T: Grammar> {
+pub enum Expr<'a, T: Grammar<'a>> {
     /// Variable use, e.g., `x`.
     Variable,
 
@@ -214,9 +214,9 @@ pub enum Expr<'a, T: Grammar> {
     Block(Block<'a, T>),
 }
 
-impl<T: Grammar> Expr<'_, T> {
+impl<'a, T: Grammar<'a>> Expr<'a, T> {
     /// Returns LHS of the binary expression. If this is not a binary expression, returns `None`.
-    pub fn binary_lhs(&self) -> Option<&SpannedExpr<'_, T>> {
+    pub fn binary_lhs(&self) -> Option<&SpannedExpr<'a, T>> {
         match self {
             Expr::Binary { ref lhs, .. } => Some(lhs),
             _ => None,
@@ -224,7 +224,7 @@ impl<T: Grammar> Expr<'_, T> {
     }
 
     /// Returns RHS of the binary expression. If this is not a binary expression, returns `None`.
-    pub fn binary_rhs(&self) -> Option<&SpannedExpr<'_, T>> {
+    pub fn binary_rhs(&self) -> Option<&SpannedExpr<'a, T>> {
         match self {
             Expr::Binary { ref rhs, .. } => Some(rhs),
             _ => None,
@@ -247,7 +247,7 @@ impl<T: Grammar> Expr<'_, T> {
     }
 }
 
-impl<T: Grammar> Clone for Expr<'_, T> {
+impl<'a, T: Grammar<'a>> Clone for Expr<'a, T> {
     fn clone(&self) -> Self {
         match self {
             Self::Variable => Self::Variable,
@@ -281,9 +281,9 @@ impl<T: Grammar> Clone for Expr<'_, T> {
     }
 }
 
-impl<T> PartialEq for Expr<'_, T>
+impl<'a, T> PartialEq for Expr<'a, T>
 where
-    T: Grammar,
+    T: Grammar<'a>,
     T::Lit: PartialEq,
     T::Type: PartialEq,
 {
@@ -518,7 +518,7 @@ impl fmt::Display for LvalueType {
 /// Statement: an expression or a variable assignment.
 #[derive(Debug)]
 #[non_exhaustive]
-pub enum Statement<'a, T: Grammar> {
+pub enum Statement<'a, T: Grammar<'a>> {
     /// Expression, e.g., `x + (1, 2)`.
     Expr(SpannedExpr<'a, T>),
 
@@ -531,7 +531,7 @@ pub enum Statement<'a, T: Grammar> {
     },
 }
 
-impl<T: Grammar> Statement<'_, T> {
+impl<'a, T: Grammar<'a>> Statement<'a, T> {
     /// Returns the type of this statement.
     pub fn ty(&self) -> StatementType {
         match self {
@@ -541,7 +541,7 @@ impl<T: Grammar> Statement<'_, T> {
     }
 }
 
-impl<T: Grammar> Clone for Statement<'_, T> {
+impl<'a, T: Grammar<'a>> Clone for Statement<'a, T> {
     fn clone(&self) -> Self {
         match self {
             Self::Expr(expr) => Self::Expr(expr.clone()),
@@ -553,9 +553,9 @@ impl<T: Grammar> Clone for Statement<'_, T> {
     }
 }
 
-impl<T> PartialEq for Statement<'_, T>
+impl<'a, T> PartialEq for Statement<'a, T>
 where
-    T: Grammar,
+    T: Grammar<'a>,
     T::Lit: PartialEq,
     T::Type: PartialEq,
 {
@@ -603,14 +603,14 @@ impl fmt::Display for StatementType {
 /// A block may end with a return expression, e.g., `{ x = 1; x }`.
 #[derive(Debug)]
 #[non_exhaustive]
-pub struct Block<'a, T: Grammar> {
+pub struct Block<'a, T: Grammar<'a>> {
     /// Statements in the block.
     pub statements: Vec<SpannedStatement<'a, T>>,
     /// The last statement in the block which is returned from the block.
     pub return_value: Option<Box<SpannedExpr<'a, T>>>,
 }
 
-impl<T: Grammar> Clone for Block<'_, T> {
+impl<'a, T: Grammar<'a>> Clone for Block<'a, T> {
     fn clone(&self) -> Self {
         Self {
             statements: self.statements.clone(),
@@ -619,9 +619,9 @@ impl<T: Grammar> Clone for Block<'_, T> {
     }
 }
 
-impl<T> PartialEq for Block<'_, T>
+impl<'a, T> PartialEq for Block<'a, T>
 where
-    T: Grammar,
+    T: Grammar<'a>,
     T::Lit: PartialEq,
     T::Type: PartialEq,
 {
@@ -630,7 +630,7 @@ where
     }
 }
 
-impl<T: Grammar> Block<'_, T> {
+impl<'a, T: Grammar<'a>> Block<'a, T> {
     /// Creates an empty block.
     pub fn empty() -> Self {
         Self {
@@ -645,14 +645,14 @@ impl<T: Grammar> Block<'_, T> {
 /// A function definition consists of a list of arguments and the function body.
 #[derive(Debug)]
 #[non_exhaustive]
-pub struct FnDefinition<'a, T: Grammar> {
+pub struct FnDefinition<'a, T: Grammar<'a>> {
     /// Function arguments, e.g., `x, y`.
     pub args: Spanned<'a, Destructure<'a, T::Type>>,
     /// Function body, e.g., `x + y`.
     pub body: Block<'a, T>,
 }
 
-impl<T: Grammar> Clone for FnDefinition<'_, T> {
+impl<'a, T: Grammar<'a>> Clone for FnDefinition<'a, T> {
     fn clone(&self) -> Self {
         Self {
             args: self.args.clone(),
@@ -661,9 +661,9 @@ impl<T: Grammar> Clone for FnDefinition<'_, T> {
     }
 }
 
-impl<T> PartialEq for FnDefinition<'_, T>
+impl<'a, T> PartialEq for FnDefinition<'a, T>
 where
-    T: Grammar,
+    T: Grammar<'a>,
     T::Lit: PartialEq,
     T::Type: PartialEq,
 {

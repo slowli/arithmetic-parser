@@ -152,9 +152,9 @@ pub fn is_valid_variable_name(name: &str) -> bool {
 /// # Return value
 ///
 /// The second component of the returned tuple is set to `true` if the list is `,`-terminated.
-fn fn_args<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, (Vec<SpannedExpr<'_, T::Base>>, bool)>
+fn fn_args<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, (Vec<SpannedExpr<'a, T::Base>>, bool)>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
     let maybe_comma = map(opt(preceded(ws::<Ty>, tag_char(','))), |c| c.is_some());
@@ -171,9 +171,9 @@ where
 
 /// Expression enclosed in parentheses. This may be a simple value (e.g., `(1 + 2)`)
 /// or a tuple (e.g., `(x, y)`), depending on the number of comma-separated terms.
-fn paren_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
+fn paren_expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
     with_span(fn_args::<T, Ty>)(input).and_then(|(rest, parsed)| {
@@ -200,9 +200,9 @@ where
 }
 
 /// Parses a block and wraps it into an `Expr`.
-fn block_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
+fn block_expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
     map(with_span(block::<T, Ty>), |spanned| {
@@ -211,9 +211,9 @@ where
 }
 
 /// Parses a function definition and wraps it into an `Expr`.
-fn fn_def_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
+fn fn_def_expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
     map(with_span(fn_def::<T, Ty>), |spanned| {
@@ -225,12 +225,15 @@ where
 ///
 /// From the construction, the evaluation priorities within such an expression are always higher
 /// than for possible binary ops surrounding it.
-fn simplest_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
+fn simplest_expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
-    fn error<T: Parse>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>> {
+    fn error<'b, T>(input: InputSpan<'b>) -> NomResult<'b, SpannedExpr<'b, T::Base>>
+    where
+        T: Parse<'b>,
+    {
         let e = ErrorKind::Leftovers.with_span(&input.into());
         Err(NomErr::Error(e))
     }
@@ -273,22 +276,22 @@ where
 }
 
 #[derive(Debug)]
-struct MethodOrFnCall<'a, T: Grammar> {
+struct MethodOrFnCall<'a, T: Grammar<'a>> {
     fn_name: Option<InputSpan<'a>>,
     args: Vec<SpannedExpr<'a, T>>,
 }
 
-impl<T: Grammar> MethodOrFnCall<'_, T> {
+impl<'a, T: Grammar<'a>> MethodOrFnCall<'a, T> {
     fn is_method(&self) -> bool {
         self.fn_name.is_some()
     }
 }
 
-type MethodParseResult<'a, T> = NomResult<'a, MethodOrFnCall<'a, <T as Parse>::Base>>;
+type MethodParseResult<'a, T> = NomResult<'a, MethodOrFnCall<'a, <T as Parse<'a>>::Base>>;
 
-fn fn_call<T, Ty>(input: InputSpan<'_>) -> MethodParseResult<'_, T>
+fn fn_call<'a, T, Ty>(input: InputSpan<'a>) -> MethodParseResult<'a, T>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
     map(fn_args::<T, Ty>, |(args, _)| MethodOrFnCall {
@@ -297,9 +300,9 @@ where
     })(input)
 }
 
-fn method_or_fn_call<T, Ty>(input: InputSpan<'_>) -> MethodParseResult<'_, T>
+fn method_or_fn_call<'a, T, Ty>(input: InputSpan<'a>) -> MethodParseResult<'a, T>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
     let method_parser = map(
@@ -317,9 +320,9 @@ where
 }
 
 /// Simple expression, which includes, besides `simplest_expr`s, function calls.
-fn simple_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
+fn simple_expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
     let method_or_fn_call = if T::FEATURES.contains(Features::METHODS) {
@@ -339,10 +342,10 @@ where
 
 #[allow(clippy::option_if_let_else, clippy::range_plus_one)]
 // ^-- See explanations in the function code.
-fn fold_args<'a, T: Grammar>(
+fn fold_args<'a, T: Grammar<'a>>(
     input: InputSpan<'a>,
     mut base: SpannedExpr<'a, T>,
-    calls: Vec<Spanned<'_, MethodOrFnCall<'a, T>>>,
+    calls: Vec<Spanned<'a, MethodOrFnCall<'a, T>>>,
 ) -> Result<SpannedExpr<'a, T>, NomErr<Error<'a>>> {
     // Do we need to reorder unary op application and method calls? This is only applicable if:
     //
@@ -417,9 +420,9 @@ fn fold_args<'a, T: Grammar>(
 
 /// Parses an expression with binary operations into a tree with the hierarchy reflecting
 /// the evaluation order of the operations.
-fn binary_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
+fn binary_expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
     // First, we parse the expression into a list with simple expressions interspersed
@@ -490,7 +493,7 @@ where
 // 1   *
 //    / \
 //   2  foo(x, y)
-fn fold_binary_expr<'a, T: Grammar>(
+fn fold_binary_expr<'a, T: Grammar<'a>>(
     input: InputSpan<'a>,
     first: SpannedExpr<'a, T>,
     rest: Vec<(Spanned<'a, BinaryOp>, SpannedExpr<'a, T>)>,
@@ -554,9 +557,9 @@ fn fold_binary_expr<'a, T: Grammar>(
     })
 }
 
-fn expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
+fn expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
     context(Context::Expr.to_str(), binary_expr::<T, Ty>)(input)
@@ -566,19 +569,21 @@ fn comma_sep<Ty: GrammarType>(input: InputSpan<'_>) -> NomResult<'_, char> {
     delimited(ws::<Ty>, tag_char(','), ws::<Ty>)(input)
 }
 
-fn comma_separated_lvalues<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, Vec<GrammarLvalue<'_, T>>>
+fn comma_separated_lvalues<'a, T, Ty>(
+    input: InputSpan<'a>,
+) -> NomResult<'a, Vec<GrammarLvalue<'a, T>>>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
     separated_list0(comma_sep::<Ty>, lvalue::<T, Ty>)(input)
 }
 
-fn destructure_rest<T, Ty>(
-    input: InputSpan<'_>,
-) -> NomResult<'_, Spanned<'_, DestructureRest<'_, <T::Base as Grammar>::Type>>>
+fn destructure_rest<'a, T, Ty>(
+    input: InputSpan<'a>,
+) -> NomResult<'a, Spanned<'a, DestructureRest<'a, <T::Base as Grammar<'a>>::Type>>>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
     map(
@@ -605,11 +610,11 @@ type DestructureTail<'a, T> = (
     Option<Vec<SpannedLvalue<'a, T>>>,
 );
 
-fn destructure_tail<T, Ty>(
-    input: InputSpan<'_>,
-) -> NomResult<'_, DestructureTail<'_, <T::Base as Grammar>::Type>>
+fn destructure_tail<'a, T, Ty>(
+    input: InputSpan<'a>,
+) -> NomResult<'a, DestructureTail<'a, <T::Base as Grammar>::Type>>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
     tuple((
@@ -619,11 +624,11 @@ where
 }
 
 /// Parse the destructuring *without* the surrounding delimiters.
-fn destructure<T, Ty>(
-    input: InputSpan<'_>,
-) -> NomResult<'_, Destructure<'_, <T::Base as Grammar>::Type>>
+fn destructure<'a, T, Ty>(
+    input: InputSpan<'a>,
+) -> NomResult<'a, Destructure<'a, <T::Base as Grammar>::Type>>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
     let main_parser = alt((
@@ -654,12 +659,12 @@ where
     })(input)
 }
 
-type GrammarLvalue<'a, T> = SpannedLvalue<'a, <<T as Parse>::Base as Grammar>::Type>;
+type GrammarLvalue<'a, T> = SpannedLvalue<'a, <<T as Parse<'a>>::Base as Grammar<'a>>::Type>;
 
 /// Simple lvalue with an optional type annotation, e.g., `x` or `x: Num`.
-fn simple_lvalue_with_type<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, GrammarLvalue<'_, T>>
+fn simple_lvalue_with_type<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, GrammarLvalue<'a, T>>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
     map(
@@ -674,9 +679,9 @@ where
     )(input)
 }
 
-fn simple_lvalue_without_type<T>(input: InputSpan<'_>) -> NomResult<'_, GrammarLvalue<'_, T>>
+fn simple_lvalue_without_type<'a, T>(input: InputSpan<'a>) -> NomResult<'a, GrammarLvalue<'a, T>>
 where
-    T: Parse,
+    T: Parse<'a>,
 {
     map(var_name, |name| {
         Spanned::new(name, Lvalue::Variable { ty: None })
@@ -684,9 +689,9 @@ where
 }
 
 /// Parses an `Lvalue`.
-fn lvalue<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, GrammarLvalue<'_, T>>
+fn lvalue<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, GrammarLvalue<'a, T>>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
     let simple_lvalue = if T::FEATURES.contains(Features::TYPE_ANNOTATIONS) {
@@ -713,9 +718,9 @@ where
 }
 
 #[allow(clippy::option_if_let_else)]
-fn statement<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedStatement<'_, T::Base>>
+fn statement<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedStatement<'a, T::Base>>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
     let assignment = tuple((tag("="), peek(not(tag_char('=')))));
@@ -741,9 +746,9 @@ where
 }
 
 /// Parses a complete list of statements.
-pub(crate) fn statements<T>(input_span: InputSpan<'_>) -> Result<Block<'_, T::Base>, Error<'_>>
+pub(crate) fn statements<'a, T>(input_span: InputSpan<'a>) -> Result<Block<'a, T::Base>, Error<'a>>
 where
-    T: Parse,
+    T: Parse<'a>,
 {
     if !input_span.fragment().is_ascii() {
         return Err(Error::new(input_span, ErrorKind::NonAsciiInput));
@@ -752,11 +757,11 @@ where
 }
 
 /// Parses a potentially incomplete list of statements.
-pub(crate) fn streaming_statements<T>(
-    input_span: InputSpan<'_>,
-) -> Result<Block<'_, T::Base>, Error<'_>>
+pub(crate) fn streaming_statements<'a, T>(
+    input_span: InputSpan<'a>,
+) -> Result<Block<'a, T::Base>, Error<'a>>
 where
-    T: Parse,
+    T: Parse<'a>,
 {
     if !input_span.fragment().is_ascii() {
         return Err(Error::new(input_span, ErrorKind::NonAsciiInput));
@@ -766,9 +771,9 @@ where
         .or_else(|_| statements_inner::<T, Streaming>(input_span))
 }
 
-fn statements_inner<T, Ty>(input_span: InputSpan<'_>) -> Result<Block<'_, T::Base>, Error<'_>>
+fn statements_inner<'a, T, Ty>(input_span: InputSpan<'a>) -> Result<Block<'a, T::Base>, Error<'a>>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
     delimited(ws::<Ty>, separated_statements::<T, Ty>, ws::<Ty>)(input_span)
@@ -785,18 +790,20 @@ where
         })
 }
 
-fn separated_statement<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedStatement<'_, T::Base>>
+fn separated_statement<'a, T, Ty>(
+    input: InputSpan<'a>,
+) -> NomResult<'a, SpannedStatement<'a, T::Base>>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
     terminated(statement::<T, Ty>, preceded(ws::<Ty>, tag_char(';')))(input)
 }
 
 /// List of statements separated by semicolons.
-fn separated_statements<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, Block<'_, T::Base>>
+fn separated_statements<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, Block<'a, T::Base>>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
     map(
@@ -812,9 +819,9 @@ where
 }
 
 /// Block of statements, e.g., `{ x = 3; x + y }`.
-fn block<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, Block<'_, T::Base>>
+fn block<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, Block<'a, T::Base>>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
     preceded(
@@ -827,9 +834,9 @@ where
 }
 
 /// Function definition, e.g., `|x, y: Sc| { x + y }`.
-fn fn_def<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, FnDefinition<'_, T::Base>>
+fn fn_def<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, FnDefinition<'a, T::Base>>
 where
-    T: Parse,
+    T: Parse<'a>,
     Ty: GrammarType,
 {
     let body_parser = alt((

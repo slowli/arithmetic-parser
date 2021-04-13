@@ -8,9 +8,12 @@ use crate::{
     Annotated, Num, Prelude, TupleLen,
 };
 
-pub type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
+mod annotations;
+mod error_handling;
 
-pub fn assert_incompatible_types<Prim: PrimitiveType>(
+type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
+
+fn assert_incompatible_types<Prim: PrimitiveType>(
     err: &TypeErrorKind<Prim>,
     first: &ValueType<Prim>,
     second: &ValueType<Prim>,

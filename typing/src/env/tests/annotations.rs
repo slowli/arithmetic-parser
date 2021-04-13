@@ -2,13 +2,10 @@
 
 use assert_matches::assert_matches;
 
-use super::{
-    tests::{assert_incompatible_types, zip_fn_type, F32Grammar},
-    *,
-};
+use super::{assert_incompatible_types, zip_fn_type, F32Grammar};
 use crate::{
-    error::{ErrorLocation, TupleLenMismatchContext, TypeErrorKind},
-    Prelude, TupleLen,
+    error::{ErrorContext, ErrorLocation, TupleLenMismatchContext, TypeErrorKind},
+    Prelude, TupleLen, TypeEnvironment, UnknownLen, ValueType,
 };
 use arithmetic_parser::grammars::Parse;
 

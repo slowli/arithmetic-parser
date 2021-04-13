@@ -200,7 +200,7 @@ impl<'a, T: Clone + fmt::Debug> ExecutableModule<'a, T> {
     ) -> Result<ExecutableModuleBuilder<'a, T>, Error<'a>>
     where
         Id: ModuleId,
-        G: Grammar<Lit = T>,
+        G: Grammar<'a, Lit = T>,
     {
         let (module, import_spans) = Compiler::compile_module(id, block)?;
         Ok(ExecutableModuleBuilder::new(module, import_spans))

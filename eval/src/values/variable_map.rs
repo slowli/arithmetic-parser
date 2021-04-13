@@ -25,7 +25,7 @@ pub trait VariableMap<'a, T> {
     ) -> Result<ExecutableModule<'a, T>, Error<'a>>
     where
         Id: ModuleId,
-        G: Grammar<Lit = T>,
+        G: Grammar<'a, Lit = T>,
         T: Clone + fmt::Debug,
     {
         ExecutableModule::builder(id, block)?

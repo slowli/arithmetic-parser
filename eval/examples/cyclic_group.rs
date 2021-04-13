@@ -359,7 +359,7 @@ const DSA_SIGNATURES: &str = r#"
 #[derive(Debug, Clone, Copy)]
 struct GroupGrammar;
 
-impl Parse for GroupGrammar {
+impl Parse<'_> for GroupGrammar {
     type Base = Untyped<NumGrammar<GroupLiteral>>;
 
     // Disable comparisons in the parser.

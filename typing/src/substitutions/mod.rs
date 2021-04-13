@@ -673,6 +673,29 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeAssigner<'_, Prim> {
         }
     }
 
+    fn visit_tuple_mut(&mut self, tuple: &mut Tuple<Prim>) {
+        let (start, middle, end) = tuple.parts_mut();
+
+        for (i, ty) in start.iter_mut().enumerate() {
+            self.errors.push_location(ErrorLocation::TupleElement(i));
+            self.visit_type_mut(ty);
+            self.errors.pop_location();
+        }
+
+        if let Some(middle) = middle {
+            self.errors.push_location(ErrorLocation::TupleMiddle);
+            self.visit_middle_len_mut(middle.len_mut());
+            self.visit_type_mut(middle.element_mut());
+            self.errors.pop_location();
+        }
+
+        for (i, ty) in end.iter_mut().enumerate() {
+            self.errors.push_location(ErrorLocation::TupleEnd(i));
+            self.visit_type_mut(ty);
+            self.errors.pop_location();
+        }
+    }
+
     fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
         self.substitutions.assign_new_len(len);
     }

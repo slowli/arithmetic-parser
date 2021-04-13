@@ -338,6 +338,15 @@ impl<Prim: PrimitiveType> OpTypeErrors<'_, Prim> {
         }
     }
 
+    // Sort of unsafe (the user shouldn't forget to call `pop_location`, hence not public).
+    pub(crate) fn push_location(&mut self, location: ErrorLocation) {
+        self.current_location.push(location);
+    }
+
+    pub(crate) fn pop_location(&mut self) {
+        self.current_location.pop();
+    }
+
     #[cfg(test)]
     pub(crate) fn into_vec(self) -> Vec<TypeErrorKind<Prim>> {
         let errors = match self.errors {

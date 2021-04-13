@@ -574,6 +574,10 @@ impl<Prim: PrimitiveType> Slice<Prim> {
         self.element.as_ref()
     }
 
+    pub(crate) fn element_mut(&mut self) -> &mut ValueType<Prim> {
+        self.element.as_mut()
+    }
+
     /// Returns the length of this slice.
     pub fn len(&self) -> TupleLen {
         self.length

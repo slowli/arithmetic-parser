@@ -165,8 +165,29 @@ fn unsupported_type_param_in_generic_fn() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
+    assert!(err.location().is_empty());
+    assert_matches!(err.context(), ErrorContext::Assignment { .. });
     assert_eq!(*err.span().fragment(), "('Arg) -> 'Arg");
     assert_matches!(err.kind(), TypeErrorKind::UnsupportedParam);
+}
+
+#[test]
+fn unsupported_type_param_location() {
+    let code_samples = &[
+        "identity: (_, ('Arg) -> 'Arg) = (3, |x| x);",
+        "(_, identity: ('Arg) -> 'Arg) = (3, |x| x);",
+    ];
+
+    for &code in code_samples {
+        let block = F32Grammar::parse_statements(code).unwrap();
+        let mut type_env = TypeEnvironment::new();
+        let err = type_env.process_statements(&block).unwrap_err().single();
+
+        assert_eq!(err.location(), [ErrorLocation::TupleElement(1)]);
+        assert_matches!(err.context(), ErrorContext::Assignment { .. });
+        assert_eq!(*err.span().fragment(), "('Arg) -> 'Arg");
+        assert_matches!(err.kind(), TypeErrorKind::UnsupportedParam);
+    }
 }
 
 #[test]

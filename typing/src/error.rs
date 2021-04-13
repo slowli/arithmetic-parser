@@ -8,7 +8,8 @@ use crate::{
     PrimitiveType, Tuple, TupleLen, ValueType,
 };
 use arithmetic_parser::{
-    grammars::Grammar, Destructure, Expr, Spanned, SpannedExpr, SpannedLvalue, UnsupportedType,
+    grammars::Grammar, Destructure, DestructureRest, Expr, Lvalue, Spanned, SpannedExpr,
+    SpannedLvalue, UnsupportedType,
 };
 
 /// Context for [`TypeErrorKind::TupleLenMismatch`].
@@ -457,27 +458,27 @@ impl<Prim: PrimitiveType> TypeErrorPrecursor<Prim> {
         }
     }
 
-    // FIXME: walk lvalue to narrow down error span.
     fn into_assignment_error<'a>(
         self,
         context: ErrorContext<Prim>,
         root_lvalue: &SpannedLvalue<'a, ValueType<Prim>>,
     ) -> TypeError<'a, Prim> {
         TypeError {
-            inner: root_lvalue.copy_with_extra(self.kind),
+            inner: ErrorLocation::walk_lvalue(&self.location, root_lvalue)
+                .copy_with_extra(self.kind),
             context,
             location: self.location,
         }
     }
 
-    // FIXME: walk lvalue to narrow down error span.
     fn into_destructure_error<'a>(
         self,
         context: ErrorContext<Prim>,
         root_destructure: &Spanned<'a, Destructure<'a, ValueType<Prim>>>,
     ) -> TypeError<'a, Prim> {
         TypeError {
-            inner: root_destructure.copy_with_extra(self.kind),
+            inner: ErrorLocation::walk_destructure(&self.location, root_destructure)
+                .copy_with_extra(self.kind),
             context,
             location: self.location,
         }
@@ -506,17 +507,21 @@ pub enum ErrorLocation {
 
 impl ErrorLocation {
     /// Walks the provided `expr` and returns the most exact span found in it.
-    fn walk_expr<'a, T: Grammar>(mut location: &[Self], expr: &SpannedExpr<'a, T>) -> Spanned<'a> {
-        let mut located = expr;
+    fn walk_expr<'a, T: Grammar>(location: &[Self], expr: &SpannedExpr<'a, T>) -> Spanned<'a> {
+        Self::walk(location, expr, Self::step_into_expr).with_no_extra()
+    }
+
+    fn walk<T: Copy>(mut location: &[Self], init: T, refine: impl Fn(Self, T) -> Option<T>) -> T {
+        let mut refined = init;
         while !location.is_empty() {
-            if let Some(refinement) = location[0].step_into_expr(located) {
-                located = refinement;
+            if let Some(refinement) = refine(location[0], refined) {
+                refined = refinement;
                 location = &location[1..];
             } else {
                 break;
             }
         }
-        located.with_no_extra()
+        refined
     }
 
     fn step_into_expr<'r, 'a, T: Grammar>(
@@ -559,6 +564,104 @@ impl ErrorLocation {
 
             _ => None,
         }
+    }
+
+    fn walk_lvalue<'a, Prim: PrimitiveType>(
+        location: &[Self],
+        lvalue: &SpannedLvalue<'a, ValueType<Prim>>,
+    ) -> Spanned<'a> {
+        Self::walk(location, LvalueTree::Lvalue(lvalue), Self::step_into_lvalue)
+            .refine_lvalue()
+            .with_no_extra()
+    }
+
+    fn walk_destructure<'a, Prim: PrimitiveType>(
+        location: &[Self],
+        destructure: &Spanned<'a, Destructure<'a, ValueType<Prim>>>,
+    ) -> Spanned<'a> {
+        let destructure = LvalueTree::Destructure(destructure);
+        Self::walk(location, destructure, Self::step_into_lvalue)
+            .refine_lvalue()
+            .with_no_extra()
+    }
+
+    fn step_into_lvalue<'r, 'a, T>(
+        self,
+        lvalue: LvalueTree<'r, 'a, T>,
+    ) -> Option<LvalueTree<'r, 'a, T>> {
+        match lvalue {
+            LvalueTree::Type(ty) => self.step_into_type(&ty.extra),
+            LvalueTree::Destructure(destructure) => self.step_into_destructure(&destructure.extra),
+            LvalueTree::Lvalue(lvalue) => match &lvalue.extra {
+                Lvalue::Tuple(destructure) => self.step_into_destructure(destructure),
+                Lvalue::Variable { ty: Some(ty) } => self.step_into_type(&ty.extra),
+                _ => None,
+            },
+        }
+    }
+
+    #[allow(clippy::unused_self)] // FIXME
+    fn step_into_type<'r, 'a, T>(self, _ty: &'r T) -> Option<LvalueTree<'r, 'a, T>> {
+        None
+    }
+
+    fn step_into_destructure<'r, 'a, T>(
+        self,
+        destructure: &'r Destructure<'a, T>,
+    ) -> Option<LvalueTree<'r, 'a, T>> {
+        match self {
+            Self::TupleElement(index) => destructure.start.get(index).map(LvalueTree::Lvalue),
+            Self::TupleEnd(index) => destructure.end.get(index).map(LvalueTree::Lvalue),
+            Self::TupleMiddle => {
+                let middle = &destructure.middle.as_ref()?.extra;
+                if let DestructureRest::Named { ty, .. } = middle {
+                    ty.as_ref().map(LvalueTree::Type)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+}
+
+/// Enumeration of all types encountered on the lvalue side of assignments.
+#[derive(Debug)]
+enum LvalueTree<'r, 'a, T> {
+    Lvalue(&'r SpannedLvalue<'a, T>),
+    Destructure(&'r Spanned<'a, Destructure<'a, T>>),
+    Type(&'r Spanned<'a, T>),
+}
+
+impl<T> Clone for LvalueTree<'_, '_, T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Lvalue(lvalue) => Self::Lvalue(*lvalue),
+            Self::Destructure(destructure) => Self::Destructure(*destructure),
+            Self::Type(ty) => Self::Type(*ty),
+        }
+    }
+}
+
+impl<T> Copy for LvalueTree<'_, '_, T> {}
+
+impl<'a, T> LvalueTree<'_, 'a, T> {
+    fn with_no_extra(self) -> Spanned<'a> {
+        match self {
+            Self::Lvalue(lvalue) => lvalue.with_no_extra(),
+            Self::Destructure(destructure) => destructure.with_no_extra(),
+            Self::Type(ty) => ty.with_no_extra(),
+        }
+    }
+
+    /// Refines the `Lvalue` variant if it is a variable with an annotation.
+    fn refine_lvalue(mut self) -> Self {
+        if let Self::Lvalue(lvalue) = self {
+            if let Lvalue::Variable { ty: Some(ty) } = &lvalue.extra {
+                self = Self::Type(ty);
+            }
+        }
+        self
     }
 }
 

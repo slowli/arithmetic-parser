@@ -362,7 +362,7 @@ fn unifying_tuples_with_dyn_lengths() {
     type_env.insert("true", ValueType::BOOL);
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.span().fragment(), "zs");
+    assert_eq!(*err.span().fragment(), "(...[_; _], _, Num)");
     assert_eq!(err.location(), [ErrorLocation::TupleElement(3)]); // FIXME
     assert_matches!(
         err.context(),
@@ -458,7 +458,7 @@ fn any_fn_with_constraints() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert!(err.span().fragment().starts_with("bogus_tuple"));
+    assert_eq!(*err.span().fragment(), "[any Lin; _]");
     assert_matches!(
         err.kind(),
         TypeErrorKind::FailedConstraint { ty, .. } if *ty == ValueType::BOOL

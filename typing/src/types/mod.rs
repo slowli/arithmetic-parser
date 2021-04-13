@@ -382,9 +382,12 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::ValueTypeAst;
+
+    use std::convert::TryFrom;
 
     #[test]
-    fn value_types_are_equal_to_self() {
+    fn value_types_are_equal_to_self() -> anyhow::Result<()> {
         const SAMPLE_TYPES: &[&str] = &[
             "Num",
             "(Num, Bool)",
@@ -395,9 +398,10 @@ mod tests {
         ];
 
         for &sample_type in SAMPLE_TYPES {
-            let ty: ValueType = sample_type.parse().unwrap();
+            let ty = ValueTypeAst::try_from(sample_type)?.try_convert::<Num>()?;
             assert!(ty.eq(&ty), "Type is not equal to self: {}", ty);
         }
+        Ok(())
     }
 
     #[test]
@@ -409,7 +413,10 @@ mod tests {
             "for<'N: Lin> (['N; T]) -> 'N",
         ];
 
-        let functions: Vec<ValueType> = EQUAL_FNS.iter().map(|s| s.parse().unwrap()).collect();
+        let functions: Vec<ValueType> = EQUAL_FNS
+            .iter()
+            .map(|&s| ValueTypeAst::try_from(s).unwrap().try_convert().unwrap())
+            .collect();
         for (i, function) in functions.iter().enumerate() {
             for other_function in &functions[(i + 1)..] {
                 assert_eq!(function, other_function);
@@ -427,7 +434,10 @@ mod tests {
             "for<'T: Lin> (['T; N]) -> ('T)",
         ];
 
-        let functions: Vec<ValueType> = FUNCTIONS.iter().map(|s| s.parse().unwrap()).collect();
+        let functions: Vec<ValueType> = FUNCTIONS
+            .iter()
+            .map(|&s| ValueTypeAst::try_from(s).unwrap().try_convert().unwrap())
+            .collect();
         for (i, function) in functions.iter().enumerate() {
             for other_function in &functions[(i + 1)..] {
                 assert_ne!(function, other_function);
@@ -442,7 +452,10 @@ mod tests {
             ValueType::BOOL,
             ValueType::any(),
             (ValueType::BOOL, ValueType::NUM).into(),
-            "for<'T: Lin> (['T; N]) -> 'T".parse().unwrap(),
+            ValueTypeAst::try_from("for<'T: Lin> (['T; N]) -> 'T")
+                .unwrap()
+                .try_convert()
+                .unwrap(),
         ];
 
         for ty in sample_types {

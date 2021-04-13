@@ -141,7 +141,10 @@ pub use self::{
     },
 };
 
-use self::arith::{LinearType, NumConstraints, TypeConstraints, WithBoolean};
+use self::{
+    arith::{LinearType, NumConstraints, TypeConstraints, WithBoolean},
+    ast::ValueTypeAst,
+};
 
 /// Primitive types in a certain type system.
 ///
@@ -281,9 +284,9 @@ impl LinearType for Num {
 /// # }
 /// ```
 #[derive(Debug)]
-pub struct Annotated<T, Prim = Num>(PhantomData<(T, Prim)>);
+pub struct Annotated<T>(PhantomData<T>);
 
-impl<T: ParseLiteral, Prim: PrimitiveType> ParseLiteral for Annotated<T, Prim> {
+impl<T: ParseLiteral> ParseLiteral for Annotated<T> {
     type Lit = T::Lit;
 
     fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
@@ -291,10 +294,10 @@ impl<T: ParseLiteral, Prim: PrimitiveType> ParseLiteral for Annotated<T, Prim> {
     }
 }
 
-impl<T: ParseLiteral, Prim: PrimitiveType> Grammar for Annotated<T, Prim> {
-    type Type = ValueType<Prim>;
+impl<'a, T: ParseLiteral> Grammar<'a> for Annotated<T> {
+    type Type = ValueTypeAst<'a>;
 
-    fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
-        ValueType::<Prim>::parse(input)
+    fn parse_type(input: InputSpan<'a>) -> NomResult<'a, Self::Type> {
+        ValueTypeAst::parse(input)
     }
 }

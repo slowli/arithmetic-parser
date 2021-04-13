@@ -4,11 +4,12 @@ use std::{fmt, ops};
 
 use crate::{
     arith::{BinaryOpContext, UnaryOpContext},
+    ast::{ConversionError, ValueTypeAst},
     visit::VisitMut,
     PrimitiveType, Tuple, TupleLen, ValueType,
 };
 use arithmetic_parser::{
-    grammars::Grammar, Destructure, DestructureRest, Expr, Lvalue, Spanned, SpannedExpr,
+    grammars::Grammar, Destructure, DestructureRest, Expr, InputSpan, Lvalue, Spanned, SpannedExpr,
     SpannedLvalue, UnsupportedType,
 };
 
@@ -86,6 +87,9 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
     /// identity: ('T) -> 'T = |x| x;
     /// ```
     UnsupportedParam,
+
+    /// Error while instantiating a type from AST.
+    Conversion(ConversionError),
 }
 
 impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
@@ -135,6 +139,12 @@ impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
             Self::UnsupportedParam => {
                 formatter.write_str("Params in declared function types are not supported yet")
             }
+
+            Self::Conversion(err) => write!(
+                formatter,
+                "Error instantiating type from annotation: {}",
+                err
+            ),
         }
     }
 }
@@ -196,6 +206,15 @@ impl<'a, Prim: PrimitiveType> TypeError<'a, Prim> {
         let ident = (*span.fragment()).to_owned();
         Self {
             inner: span.copy_with_extra(TypeErrorKind::UndefinedVar(ident)),
+            context: ErrorContext::None,
+            location: vec![],
+        }
+    }
+
+    pub(crate) fn conversion(kind: ConversionError, span: InputSpan<'a>) -> Self {
+        let kind = TypeErrorKind::Conversion(kind);
+        Self {
+            inner: Spanned::from(span).copy_with_extra(kind),
             context: ErrorContext::None,
             location: vec![],
         }
@@ -366,7 +385,7 @@ impl<Prim: PrimitiveType> OpTypeErrors<'static, Prim> {
         }
     }
 
-    pub(crate) fn contextualize<'a, T: Grammar>(
+    pub(crate) fn contextualize<'a, T: Grammar<'a>>(
         self,
         span: &SpannedExpr<'a, T>,
         context: impl Into<ErrorContext<Prim>>,
@@ -388,7 +407,7 @@ impl<Prim: PrimitiveType> OpTypeErrors<'static, Prim> {
 
     pub(crate) fn contextualize_assignment<'a>(
         self,
-        span: &SpannedLvalue<'a, ValueType<Prim>>,
+        span: &SpannedLvalue<'a, ValueTypeAst<'a>>,
         context: &ErrorContext<Prim>,
     ) -> Vec<TypeError<'a, Prim>> {
         if self.errors.is_empty() {
@@ -400,7 +419,7 @@ impl<Prim: PrimitiveType> OpTypeErrors<'static, Prim> {
 
     pub(crate) fn contextualize_destructure<'a>(
         self,
-        span: &Spanned<'a, Destructure<'a, ValueType<Prim>>>,
+        span: &Spanned<'a, Destructure<'a, ValueTypeAst<'a>>>,
         create_context: impl FnOnce() -> ErrorContext<Prim>,
     ) -> Vec<TypeError<'a, Prim>> {
         if self.errors.is_empty() {
@@ -446,7 +465,7 @@ struct TypeErrorPrecursor<Prim: PrimitiveType> {
 }
 
 impl<Prim: PrimitiveType> TypeErrorPrecursor<Prim> {
-    fn into_expr_error<'a, T: Grammar>(
+    fn into_expr_error<'a, T: Grammar<'a>>(
         self,
         context: ErrorContext<Prim>,
         root_expr: &SpannedExpr<'a, T>,
@@ -461,7 +480,7 @@ impl<Prim: PrimitiveType> TypeErrorPrecursor<Prim> {
     fn into_assignment_error<'a>(
         self,
         context: ErrorContext<Prim>,
-        root_lvalue: &SpannedLvalue<'a, ValueType<Prim>>,
+        root_lvalue: &SpannedLvalue<'a, ValueTypeAst<'a>>,
     ) -> TypeError<'a, Prim> {
         TypeError {
             inner: ErrorLocation::walk_lvalue(&self.location, root_lvalue)
@@ -474,7 +493,7 @@ impl<Prim: PrimitiveType> TypeErrorPrecursor<Prim> {
     fn into_destructure_error<'a>(
         self,
         context: ErrorContext<Prim>,
-        root_destructure: &Spanned<'a, Destructure<'a, ValueType<Prim>>>,
+        root_destructure: &Spanned<'a, Destructure<'a, ValueTypeAst<'a>>>,
     ) -> TypeError<'a, Prim> {
         TypeError {
             inner: ErrorLocation::walk_destructure(&self.location, root_destructure)
@@ -507,7 +526,7 @@ pub enum ErrorLocation {
 
 impl ErrorLocation {
     /// Walks the provided `expr` and returns the most exact span found in it.
-    fn walk_expr<'a, T: Grammar>(location: &[Self], expr: &SpannedExpr<'a, T>) -> Spanned<'a> {
+    fn walk_expr<'a, T: Grammar<'a>>(location: &[Self], expr: &SpannedExpr<'a, T>) -> Spanned<'a> {
         Self::walk(location, expr, Self::step_into_expr).with_no_extra()
     }
 
@@ -524,7 +543,7 @@ impl ErrorLocation {
         refined
     }
 
-    fn step_into_expr<'r, 'a, T: Grammar>(
+    fn step_into_expr<'r, 'a, T: Grammar<'a>>(
         self,
         expr: &'r SpannedExpr<'a, T>,
     ) -> Option<&'r SpannedExpr<'a, T>> {
@@ -566,18 +585,18 @@ impl ErrorLocation {
         }
     }
 
-    fn walk_lvalue<'a, Prim: PrimitiveType>(
+    fn walk_lvalue<'a>(
         location: &[Self],
-        lvalue: &SpannedLvalue<'a, ValueType<Prim>>,
+        lvalue: &SpannedLvalue<'a, ValueTypeAst<'a>>,
     ) -> Spanned<'a> {
         Self::walk(location, LvalueTree::Lvalue(lvalue), Self::step_into_lvalue)
             .refine_lvalue()
             .with_no_extra()
     }
 
-    fn walk_destructure<'a, Prim: PrimitiveType>(
+    fn walk_destructure<'a>(
         location: &[Self],
-        destructure: &Spanned<'a, Destructure<'a, ValueType<Prim>>>,
+        destructure: &Spanned<'a, Destructure<'a, ValueTypeAst<'a>>>,
     ) -> Spanned<'a> {
         let destructure = LvalueTree::Destructure(destructure);
         Self::walk(location, destructure, Self::step_into_lvalue)

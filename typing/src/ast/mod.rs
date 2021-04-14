@@ -8,7 +8,7 @@
 
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_until, take_while, take_while1, take_while_m_n},
+    bytes::complete::{tag, take, take_until, take_while, take_while1, take_while_m_n},
     character::complete::char as tag_char,
     combinator::{cut, map, not, opt, peek, recognize},
     multi::{many0, separated_list0, separated_list1},
@@ -109,7 +109,7 @@ pub struct SliceAst<'a> {
     /// Element of this slice; for example, `Num` in `[Num; N]`.
     pub element: Box<SpannedTypeAst<'a>>,
     /// Length of this slice; for example, `N` in `[Num; N]`.
-    pub length: TupleLenAst<'a>,
+    pub length: Spanned<'a, TupleLenAst>,
 }
 
 /// Parsed functional type.
@@ -154,13 +154,14 @@ impl<'a> FnTypeAst<'a> {
 /// Parsed tuple length.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-pub enum TupleLenAst<'a> {
+pub enum TupleLenAst {
     /// Length placeholder (`_`). Corresponds to any single length.
     Some,
-    /// Dynamic tuple length. This length is *implicit*, as in `[Num]`.
+    /// Dynamic tuple length. This length is *implicit*, as in `[Num]`. As such, it has
+    /// an empty span.
     Dynamic,
     /// Reference to a length; for example, `N` in `[Num; N]`.
-    Ident(Spanned<'a>),
+    Ident,
 }
 
 /// Parameter constraints, e.g. `for<len! N; T: Lin>`.
@@ -283,17 +284,19 @@ fn tuple_definition(input: InputSpan<'_>) -> NomResult<'_, TupleAst<'_>> {
     )(input)
 }
 
-fn slice_definition(input: InputSpan<'_>) -> NomResult<'_, SliceAst<'_>> {
+fn tuple_len(input: InputSpan<'_>) -> NomResult<'_, Spanned<'_, TupleLenAst>> {
     let semicolon = tuple((ws, tag_char(';'), ws));
-    let tuple_len = map(
-        opt(preceded(semicolon, ident)),
-        |maybe_ident| match maybe_ident {
-            Some(ident) if *ident.fragment() == "_" => TupleLenAst::Some,
-            Some(ident) => TupleLenAst::Ident(ident),
-            None => TupleLenAst::Dynamic,
-        },
-    );
+    let empty = map(take(0_usize), Spanned::from);
+    map(alt((preceded(semicolon, ident), empty)), |id| {
+        id.map_extra(|()| match *id.fragment() {
+            "_" => TupleLenAst::Some,
+            "" => TupleLenAst::Dynamic,
+            _ => TupleLenAst::Ident,
+        })
+    })(input)
+}
 
+fn slice_definition(input: InputSpan<'_>) -> NomResult<'_, SliceAst<'_>> {
     preceded(
         terminated(tag_char('['), ws),
         // Once we've encountered the opening `[`, the input *must* correspond to the parser.

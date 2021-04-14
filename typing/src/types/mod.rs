@@ -115,7 +115,7 @@ impl TypeVar {
 /// # use std::convert::TryFrom;
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
-/// let slice = <Type>::try_from(&TypeAst::try_from("[(Bool, Num); _]")?)?;
+/// let slice = <Type>::try_from(&TypeAst::try_from("[(Bool, Num)]")?)?;
 /// assert_matches!(slice, Type::Tuple(t) if t.as_slice().is_some());
 /// let fn_type = <Type>::try_from(&TypeAst::try_from("([(Bool, Num); N]) -> Num")?)?;
 /// assert_matches!(fn_type, Type::Function(_));
@@ -395,10 +395,9 @@ mod tests {
         const SAMPLE_TYPES: &[&str] = &[
             "Num",
             "(Num, Bool)",
-            "[Num; _]",
-            "(Num, ...[Bool; _])",
+            "(Num, ...[Bool; N]) -> ()",
             "(Num) -> Num",
-            "for<'T: Lin> (['T; _]) -> 'T",
+            "for<'T: Lin> (['T; N]) -> 'T",
         ];
 
         for &sample_type in SAMPLE_TYPES {

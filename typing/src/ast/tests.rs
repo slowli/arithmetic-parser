@@ -161,7 +161,7 @@ fn simple_slice_with_length() {
 
     assert!(rest.fragment().is_empty());
     assert_matches!(slice.element.extra, TypeAst::Ident);
-    assert_matches!(slice.length, TupleLenAst::Ident(id) if *id.fragment() == "N");
+    assert_eq!(slice.length, sp(input, 6..7, TupleLenAst::Ident));
 }
 
 #[test]
@@ -171,7 +171,7 @@ fn simple_slice_without_length() {
 
     assert!(rest.fragment().is_empty());
     assert_matches!(slice.element.extra, TypeAst::Param);
-    assert_eq!(slice.length, TupleLenAst::Dynamic);
+    assert_eq!(slice.length, sp(input, 3..3, TupleLenAst::Dynamic));
 }
 
 #[test]
@@ -191,7 +191,7 @@ fn complex_slice_type() {
             end: vec![],
         })
     );
-    assert_matches!(slice.length, TupleLenAst::Ident(ident) if *ident.fragment() == "M");
+    assert_eq!(slice.length, sp(input, 14..15, TupleLenAst::Ident));
 }
 
 #[test]
@@ -200,15 +200,15 @@ fn embedded_slice_type() {
     let (rest, slice) = slice_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_matches!(slice.length, TupleLenAst::Ident(ident) if *ident.fragment() == "M");
+    assert_eq!(slice.length, sp(input, 16..17, TupleLenAst::Ident));
     let first_element = match &slice.element.extra {
         TypeAst::Tuple(tuple) => &tuple.start[1].extra,
         _ => panic!("Unexpected slice element: {:?}", slice.element),
     };
     assert_matches!(
         first_element,
-        TypeAst::Slice(SliceAst { element, length: TupleLenAst::Dynamic })
-            if element.extra == TypeAst::Ident
+        TypeAst::Slice(SliceAst { element, length })
+            if element.extra == TypeAst::Ident && length.extra == TupleLenAst::Dynamic
     );
 }
 
@@ -310,7 +310,7 @@ fn fn_type_with_rest_params() {
     assert_eq!(fn_type.args.extra.start[0], sp(input, 1..5, TypeAst::Ident));
     let middle = fn_type.args.extra.middle.unwrap().extra;
     assert_eq!(*middle.element, sp(input, 11..14, TypeAst::Ident));
-    assert_matches!(middle.length, TupleLenAst::Ident(id) if *id.fragment() == "N");
+    assert_eq!(middle.length, sp(input, 16..17, TupleLenAst::Ident));
 }
 
 #[test]

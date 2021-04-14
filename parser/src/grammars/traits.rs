@@ -147,7 +147,7 @@ pub trait ParseLiteral: 'static {
 /// #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// struct Num;
 ///
-/// impl Grammar for IntegerGrammar {
+/// impl Grammar<'_> for IntegerGrammar {
 ///     type Type = Num;
 ///
 ///     fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
@@ -234,7 +234,7 @@ impl<'a> IntoInputSpan<'a> for &'a str {
 /// #   }
 /// }
 ///
-/// impl Parse for IntegerGrammar {
+/// impl Parse<'_> for IntegerGrammar {
 ///     type Base = Untyped<Self>;
 ///     const FEATURES: Features = Features::empty();
 /// }

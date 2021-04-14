@@ -4,11 +4,13 @@
 use std::{fmt, str::FromStr};
 
 use arithmetic_parser::{
-    grammars::{Grammar, Parse, ParseLiteral, Typed},
+    grammars::{Parse, ParseLiteral, Typed},
     BinaryOp, InputSpan, NomResult,
 };
 use arithmetic_typing::{
-    arith::*, error::Errors, Assertions, PrimitiveType, Substitutions, Type, TypeEnvironment,
+    arith::*,
+    error::{ErrorLocation, OpErrors},
+    Annotated, Assertions, PrimitiveType, Substitutions, Type, TypeEnvironment,
 };
 
 /// Primitive type: string or boolean.
@@ -86,14 +88,6 @@ impl ParseLiteral for StrGrammar {
     }
 }
 
-impl Grammar for StrGrammar {
-    type Type = Type<StrType>;
-
-    fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
-        Type::parse(input)
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 struct StrArithmetic;
 
@@ -109,47 +103,49 @@ impl TypeArithmetic<StrType> for StrArithmetic {
     fn process_unary_op<'a>(
         &self,
         substitutions: &mut Substitutions<StrType>,
-        spans: UnaryOpSpans<'a, StrType>,
-        errors: &mut Errors<'a, StrType>,
+        context: &UnaryOpContext<StrType>,
+        errors: OpErrors<'a, StrType>,
     ) -> Type<StrType> {
-        BoolArithmetic.process_unary_op(substitutions, spans, errors)
+        BoolArithmetic.process_unary_op(substitutions, context, errors)
     }
 
     fn process_binary_op<'a>(
         &self,
         substitutions: &mut Substitutions<StrType>,
-        spans: BinaryOpSpans<'a, StrType>,
-        errors: &mut Errors<'a, StrType>,
+        context: &BinaryOpContext<StrType>,
+        mut errors: OpErrors<'a, StrType>,
     ) -> Type<StrType> {
-        match spans.op.extra {
+        match context.op {
             BinaryOp::Add => NumArithmetic::unify_binary_op(
                 substitutions,
-                &spans,
+                context,
                 errors,
                 NumConstraints::OP_SETTINGS,
             ),
 
             BinaryOp::Gt | BinaryOp::Lt | BinaryOp::Ge | BinaryOp::Le => {
-                let lhs_ty = &spans.lhs.extra;
-                let rhs_ty = &spans.rhs.extra;
+                let lhs_ty = &context.lhs;
+                let rhs_ty = &context.rhs;
 
                 substitutions.unify(
                     &Type::Prim(StrType::Str),
                     lhs_ty,
-                    &mut errors.with_span(&spans.lhs),
+                    errors.with_location(ErrorLocation::Lhs),
                 );
                 substitutions.unify(
                     &Type::Prim(StrType::Str),
                     rhs_ty,
-                    &mut errors.with_span(&spans.rhs),
+                    errors.with_location(ErrorLocation::Rhs),
                 );
                 Type::BOOL
             }
 
-            _ => BoolArithmetic.process_binary_op(substitutions, spans, errors),
+            _ => BoolArithmetic.process_binary_op(substitutions, context, errors),
         }
     }
 }
+
+type Parser = Typed<Annotated<StrGrammar>>;
 
 fn main() -> anyhow::Result<()> {
     let code = r#"
@@ -160,7 +156,7 @@ fn main() -> anyhow::Result<()> {
         assert("bar" != "baz");
         assert("foo" > "bar" && "foo" <= "quux");
     "#;
-    let ast = Typed::<StrGrammar>::parse_statements(code)?;
+    let ast = Parser::parse_statements(code)?;
 
     let mut env = TypeEnvironment::<StrType>::new();
     env.insert("assert", Assertions::Assert);
@@ -169,11 +165,11 @@ fn main() -> anyhow::Result<()> {
     assert_eq!(env["y"].to_string(), "(Str, Str)");
 
     let bogus_code = r#""foo" - "bar""#;
-    let bogus_ast = Typed::<StrGrammar>::parse_statements(bogus_code)?;
+    let bogus_ast = Parser::parse_statements(bogus_code)?;
     let err = env
         .process_with_arithmetic(&StrArithmetic, &bogus_ast)
         .unwrap_err();
-    assert_eq!(err.to_string(), "1:6: Unsupported binary op: subtraction");
+    assert_eq!(err.to_string(), "1:1: Unsupported binary op: subtraction");
 
     Ok(())
 }

@@ -111,6 +111,7 @@ impl fmt::Display for AstConversionError {
 impl std::error::Error for AstConversionError {}
 
 /// Intermediate conversion state.
+// FIXME: disallow creating vars and record error if parsing type from string
 #[derive(Debug)]
 pub(crate) struct AstConversionState<'r, 'a, Prim: PrimitiveType> {
     env: &'r mut TypeEnvironment<Prim>,

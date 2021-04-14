@@ -2,10 +2,14 @@
 
 use assert_matches::assert_matches;
 
+use std::collections::HashSet;
+
 use super::{assert_incompatible_types, zip_fn_type, F32Grammar};
 use crate::{
+    arith::NumArithmetic,
+    ast::AstConversionError,
     error::{ErrorContext, ErrorKind, ErrorLocation, TupleLenMismatchContext},
-    Prelude, TupleLen, Type, TypeEnvironment, UnknownLen,
+    Assertions, Prelude, TupleLen, Type, TypeEnvironment, UnknownLen,
 };
 use arithmetic_parser::grammars::Parse;
 
@@ -540,4 +544,47 @@ fn annotations_for_fns_with_slices_in_contravariant_position() {
     let output = type_env.process_statements(&block).unwrap();
 
     assert_eq!(output.to_string(), "(([Num]) -> (Num, Num)) -> Num");
+}
+
+#[test]
+fn recovery_after_bogus_annotations() {
+    let code = r#"
+        fun: for<'T: Bogus, 'U: Lin> ('T) -> () = |x| assert(x > 1 && x < 10);
+        other_fun = |x: 'T| x + 1;
+        other_fun((4, 5));
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.insert("assert", Assertions::Assert);
+    let errors = type_env
+        .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
+        .unwrap_err();
+
+    let expected_messages = &[
+        "2:22: Error instantiating type from annotation: Unknown constraint `Bogus`",
+        "2:30: Error instantiating type from annotation: Unused type param `U`",
+        "2:14: Params in declared function types are not supported yet",
+        "3:25: Error instantiating type from annotation: \
+        Type param `T` is not scoped by function definition",
+        "4:19: Type `(Num, Num)` is not assignable to type `Num`",
+    ];
+    let expected_messages: HashSet<_> = expected_messages.iter().copied().collect();
+    let actual_messages: Vec<_> = errors.iter().map(ToString::to_string).collect();
+    let actual_messages: HashSet<_> = actual_messages.iter().map(String::as_str).collect();
+    assert_eq!(actual_messages, expected_messages);
+}
+
+#[test]
+fn bogus_annotation_in_fn_definition() {
+    let code = "|x: Bogus| x + 1";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env.process_statements(&block).unwrap_err().single();
+
+    assert_eq!(*err.span().fragment(), "Bogus");
+    assert_matches!(
+        err.kind(),
+        ErrorKind::AstConversion(AstConversionError::UnknownType(ty))
+            if ty == "Bogus"
+    );
 }

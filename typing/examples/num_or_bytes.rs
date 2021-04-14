@@ -8,7 +8,7 @@ use arithmetic_parser::{
 };
 use arithmetic_typing::{
     arith::*,
-    error::{ErrorKind, Errors, OpErrors},
+    error::{ErrorKind, OpErrors},
     Annotated, Prelude, PrimitiveType, Substitutions, Type, TypeEnvironment,
 };
 
@@ -134,7 +134,7 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
         &self,
         ty: &Type<NumOrBytesType>,
         substitutions: &mut Substitutions<NumOrBytesType>,
-        errors: &mut OpErrors<'_, '_, NumOrBytesType>,
+        mut errors: OpErrors<'_, NumOrBytesType>,
     ) {
         if *self == Self::None {
             return;
@@ -164,8 +164,9 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
 
             Type::Tuple(tuple) => {
                 let tuple = tuple.to_owned();
+                // FIXME: fix locations
                 for element in tuple.element_types() {
-                    self.apply(element, substitutions, errors);
+                    self.apply(element, substitutions, errors.by_ref());
                 }
             }
 
@@ -198,19 +199,19 @@ impl TypeArithmetic<NumOrBytesType> for NumOrBytesArithmetic {
     fn process_unary_op<'a>(
         &self,
         substitutions: &mut Substitutions<NumOrBytesType>,
-        spans: UnaryOpSpans<'a, NumOrBytesType>,
-        errors: &mut Errors<'a, NumOrBytesType>,
+        context: &UnaryOpContext<NumOrBytesType>,
+        errors: OpErrors<'a, NumOrBytesType>,
     ) -> Type<NumOrBytesType> {
-        NumArithmetic::process_unary_op(substitutions, spans, errors, &Constraints::Lin)
+        NumArithmetic::process_unary_op(substitutions, context, errors, &Constraints::Lin)
     }
 
     fn process_binary_op<'a>(
         &self,
         substitutions: &mut Substitutions<NumOrBytesType>,
-        spans: BinaryOpSpans<'a, NumOrBytesType>,
-        errors: &mut Errors<'a, NumOrBytesType>,
+        context: &BinaryOpContext<NumOrBytesType>,
+        errors: OpErrors<'a, NumOrBytesType>,
     ) -> Type<NumOrBytesType> {
-        let op_constraints = if let BinaryOp::Add = spans.op.extra {
+        let op_constraints = if let BinaryOp::Add = context.op {
             Constraints::Summable
         } else {
             Constraints::Lin
@@ -221,11 +222,11 @@ impl TypeArithmetic<NumOrBytesType> for NumOrBytesArithmetic {
         };
 
         let comparable_type = Some(NumOrBytesType::Num);
-        NumArithmetic::process_binary_op(substitutions, spans, errors, comparable_type, settings)
+        NumArithmetic::process_binary_op(substitutions, context, errors, comparable_type, settings)
     }
 }
 
-type Parser = Typed<Annotated<NumGrammar<NumOrBytes>, NumOrBytesType>>;
+type Parser = Typed<Annotated<NumGrammar<NumOrBytes>>>;
 
 fn main() -> anyhow::Result<()> {
     let code = r#"
@@ -264,7 +265,7 @@ fn main() -> anyhow::Result<()> {
         .process_with_arithmetic(&NumOrBytesArithmetic, &bogus_ast)
         .unwrap_err();
 
-    assert_eq!(err.to_string(), "1:0: Type `Bytes` fails constraint Lin");
+    assert_eq!(err.to_string(), "1:2: Type `Bytes` fails constraint `Lin`");
 
     let bogus_code = "(|x| x + 1, |x| x - 5).sum(|x| x)";
     let bogus_ast = Parser::parse_statements(bogus_code)?;
@@ -274,7 +275,7 @@ fn main() -> anyhow::Result<()> {
 
     assert_eq!(
         err.to_string(),
-        "1:0: Type `(Num) -> Num` fails constraint Sum"
+        "1:2: Type `(Num) -> Num` fails constraint `Sum`"
     );
 
     env.insert("true", Type::BOOL);
@@ -284,7 +285,6 @@ fn main() -> anyhow::Result<()> {
         .process_with_arithmetic(&NumOrBytesArithmetic, &bogus_ast)
         .unwrap_err();
 
-    assert_eq!(err.to_string(), "1:0: Type `Bool` fails constraint Sum");
-
+    assert_eq!(err.to_string(), "1:2: Type `Bool` fails constraint `Sum`");
     Ok(())
 }

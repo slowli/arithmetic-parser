@@ -159,8 +159,6 @@ impl<Prim: LinearType> TypeConstraints<Prim> for NumConstraints {
         };
 
         match resolved_ty {
-            ValueType::Some => unreachable!(),
-
             // `Var`s are taken care of previously. `Any` satisfies any constraints.
             ValueType::Any(_) | ValueType::Var(_) => {}
             ValueType::Prim(lit) if lit.is_linear() => {}

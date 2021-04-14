@@ -452,10 +452,10 @@ mod tests {
     #[test]
     fn fn_with_constraints_display() {
         let sum_fn = <FnType>::builder()
-            .with_arg(ValueType::param(0).repeat(UnknownLen::Some))
+            .with_arg(ValueType::param(0).repeat(UnknownLen::param(0)))
             .returning(ValueType::param(0))
             .with_constraints(&[0], &NumConstraints::Lin);
-        assert_eq!(sum_fn.to_string(), "for<'T: Lin> (['T; _]) -> 'T");
+        assert_eq!(sum_fn.to_string(), "for<'T: Lin> (['T; N]) -> 'T");
     }
 
     #[test]

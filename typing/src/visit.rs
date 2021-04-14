@@ -96,7 +96,7 @@ where
     V: Visit<'ast, Prim> + ?Sized,
 {
     match ty {
-        ValueType::Some | ValueType::Any(_) => { /* Do nothing. */ }
+        ValueType::Any(_) => { /* Do nothing. */ }
         ValueType::Var(var) => visitor.visit_var(*var),
         ValueType::Prim(primitive) => visitor.visit_primitive(primitive),
         ValueType::Tuple(tuple) => visitor.visit_tuple(tuple),
@@ -201,7 +201,7 @@ where
     V: VisitMut<Prim> + ?Sized,
 {
     match ty {
-        ValueType::Some | ValueType::Any(_) | ValueType::Var(_) | ValueType::Prim(_) => {}
+        ValueType::Any(_) | ValueType::Var(_) | ValueType::Prim(_) => {}
         ValueType::Tuple(tuple) => visitor.visit_tuple_mut(tuple),
         ValueType::Function(function) => visitor.visit_function_mut(function.as_mut()),
     }

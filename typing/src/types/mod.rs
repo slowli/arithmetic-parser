@@ -213,9 +213,6 @@ impl TypeVar {
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum ValueType<Prim: PrimitiveType = Num> {
-    /// Wildcard type, i.e. some type that is not specified. Similar to `_` in type annotations
-    /// in Rust.
-    Some,
     /// Any type aka "I'll think about typing later". Similar to `any` type in TypeScript.
     /// See [the dedicated section](#any-type) for more details.
     Any(Prim::Constraints),
@@ -232,7 +229,6 @@ pub enum ValueType<Prim: PrimitiveType = Num> {
 impl<Prim: PrimitiveType> PartialEq for ValueType<Prim> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Some, Self::Some) => true,
             (Self::Any(x), Self::Any(y)) => x == y,
             (Self::Prim(x), Self::Prim(y)) => x == y,
             (Self::Var(x), Self::Var(y)) => x == y,
@@ -246,7 +242,6 @@ impl<Prim: PrimitiveType> PartialEq for ValueType<Prim> {
 impl<Prim: PrimitiveType> fmt::Display for ValueType<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Some => formatter.write_str("_"),
             Self::Any(constraints) => {
                 if *constraints == Prim::Constraints::default() {
                     formatter.write_str("any")
@@ -371,7 +366,6 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
     pub fn is_concrete(&self) -> bool {
         match self {
             Self::Var(var) => !var.is_free,
-            Self::Some => false,
             Self::Any(_) | Self::Prim(_) => true,
             Self::Function(fn_type) => fn_type.is_concrete(),
             Self::Tuple(tuple) => tuple.is_concrete(),
@@ -466,11 +460,10 @@ mod tests {
     #[test]
     fn non_concrete_types() {
         let sample_types = &[
-            ValueType::Some,
             ValueType::free_var(2),
-            (ValueType::NUM, ValueType::Some).into(),
+            (ValueType::NUM, ValueType::free_var(0)).into(),
             FnType::builder()
-                .with_arg(ValueType::Some)
+                .with_arg(ValueType::free_var(0))
                 .returning(ValueType::void())
                 .into(),
         ];

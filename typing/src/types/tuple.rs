@@ -68,9 +68,6 @@ impl LengthVar {
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum UnknownLen {
-    /// Wildcard length, i.e. some length that is not specified. Similar to `_` in type annotations
-    /// in Rust.
-    Some,
     /// Length that can vary at runtime, similar to lengths of slices in Rust.
     Dynamic,
     /// Length variable.
@@ -80,7 +77,6 @@ pub enum UnknownLen {
 impl fmt::Display for UnknownLen {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Some => formatter.write_str("_"),
             Self::Dynamic => formatter.write_str("*"),
             Self::Var(var) => fmt::Display::fmt(var, formatter),
         }
@@ -361,12 +357,6 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
             .map_or(TupleLen::ZERO, |middle| middle.length)
     }
 
-    fn middle_element(&self) -> &ValueType<Prim> {
-        self.middle
-            .as_ref()
-            .map_or(&ValueType::Some, |middle| middle.element.as_ref())
-    }
-
     /// Returns shared references to the parts comprising this tuple: start, middle, and end.
     #[allow(clippy::type_complexity)]
     pub fn parts(&self) -> (&[ValueType<Prim>], Option<&Slice<Prim>>, &[ValueType<Prim>]) {
@@ -426,9 +416,11 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     /// Returns iterator over elements of this tuple assuming it has the given total length.
     pub(crate) fn iter(&self, total_len: usize) -> impl Iterator<Item = &ValueType<Prim>> + '_ {
         let middle_len = total_len - self.start.len() - self.end.len();
+        let middle_element = self.middle.as_ref().map(Slice::element);
+
         self.start
             .iter()
-            .chain(iter::repeat(self.middle_element()).take(middle_len))
+            .chain(iter::repeat_with(move || middle_element.unwrap()).take(middle_len))
             .chain(&self.end)
     }
 
@@ -572,10 +564,6 @@ impl<Prim: PrimitiveType> Slice<Prim> {
     /// Returns the element type of this slice.
     pub fn element(&self) -> &ValueType<Prim> {
         self.element.as_ref()
-    }
-
-    pub(crate) fn element_mut(&mut self) -> &mut ValueType<Prim> {
-        self.element.as_mut()
     }
 
     /// Returns the length of this slice.

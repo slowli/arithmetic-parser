@@ -13,7 +13,7 @@ use crate::{
     error::{ErrorContext, ErrorLocation, OpTypeErrors, TypeError, TypeErrorKind, TypeErrors},
     types::{ParamConstraints, ParamQuantifier},
     visit::VisitMut,
-    FnType, Num, PrimitiveType, Slice, Substitutions, Tuple, UnknownLen, ValueType,
+    FnType, Num, PrimitiveType, Slice, Substitutions, Tuple, ValueType,
 };
 use arithmetic_parser::{
     grammars::Grammar, BinaryOp, Block, Destructure, DestructureRest, Expr, FnDefinition, Lvalue,
@@ -56,8 +56,8 @@ mod tests;
 /// ```
 #[derive(Debug, Clone)]
 pub struct TypeEnvironment<Prim: PrimitiveType = Num> {
+    pub(crate) substitutions: Substitutions<Prim>,
     variables: HashMap<String, ValueType<Prim>>,
-    substitutions: Substitutions<Prim>,
 }
 
 impl<Prim: PrimitiveType> Default for TypeEnvironment<Prim> {
@@ -342,13 +342,9 @@ where
     ) -> ValueType<Prim> {
         match &lvalue.extra {
             Lvalue::Variable { ty } => {
-                let mut value_type = ty.as_ref().map_or(ValueType::Some, |ty| {
-                    let mut state = ConversionState::new(&mut self.env, &mut self.errors);
-                    ty.extra.convert(&mut state)
-                });
-                self.env
-                    .substitutions
-                    .assign_new_type(&mut value_type, errors);
+                let ty = ty.as_ref().map_or(&ValueTypeAst::Some, |ty| &ty.extra);
+                let mut state = ConversionState::new(&mut self.env, &mut self.errors);
+                let value_type = ty.convert(&mut state);
                 self.insert_type(lvalue.fragment(), value_type.clone());
                 value_type
             }
@@ -382,10 +378,10 @@ where
             })
             .collect();
 
-        let middle = destructure.middle.as_ref().map(|middle| {
-            let loc = ErrorLocation::TupleMiddle;
-            self.process_destructure_rest(&middle.extra, errors.with_location(loc))
-        });
+        let middle = destructure
+            .middle
+            .as_ref()
+            .map(|middle| self.process_destructure_rest(&middle.extra));
 
         let end = destructure
             .end
@@ -403,20 +399,16 @@ where
     fn process_destructure_rest(
         &mut self,
         rest: &DestructureRest<'a, ValueTypeAst<'a>>,
-        errors: OpTypeErrors<'_, Prim>,
     ) -> Slice<Prim> {
         let ty = match rest {
             DestructureRest::Unnamed => None,
             DestructureRest::Named { ty, .. } => ty.as_ref(),
         };
-        let mut element = ty.map_or(ValueType::Some, |ty| {
-            let mut state = ConversionState::new(&mut self.env, &mut self.errors);
-            ty.extra.convert(&mut state)
-        });
+        let ty = ty.map_or(&ValueTypeAst::Some, |ty| &ty.extra);
 
-        self.env.substitutions.assign_new_type(&mut element, errors);
-        let mut length = UnknownLen::Some.into();
-        self.env.substitutions.assign_new_len(&mut length);
+        let mut state = ConversionState::new(&mut self.env, &mut self.errors);
+        let element = ty.convert(&mut state);
+        let length = self.env.substitutions.new_len_var();
 
         if let DestructureRest::Named { variable, .. } = rest {
             self.insert_type(

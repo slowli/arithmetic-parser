@@ -122,8 +122,7 @@ impl ParamQuantifier {
 impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for ParamQuantifier {
     fn visit_type(&mut self, ty: &'a ValueType<Prim>) {
         match ty {
-            ValueType::Var(var) => {
-                assert!(!var.is_free(), "Free vars should be forbidden earlier");
+            ValueType::Var(var) if !var.is_free() => {
                 let stats = self.type_params.entry(var.index()).or_default();
                 stats.mentioning_fns.insert(self.current_function_idx);
             }
@@ -142,9 +141,10 @@ impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for ParamQuantifier {
         };
 
         if let UnknownLen::Var(var) = middle_len {
-            assert!(!var.is_free(), "Free vars should be forbidden earlier");
-            let stats = self.len_params.entry(var.index()).or_default();
-            stats.mentioning_fns.insert(self.current_function_idx);
+            if !var.is_free() {
+                let stats = self.len_params.entry(var.index()).or_default();
+                stats.mentioning_fns.insert(self.current_function_idx);
+            }
         }
         visit::visit_tuple(self, tuple);
     }

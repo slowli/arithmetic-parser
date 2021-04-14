@@ -9,8 +9,8 @@ use crate::{
     PrimitiveType, Tuple, TupleLen, ValueType,
 };
 use arithmetic_parser::{
-    grammars::Grammar, Destructure, DestructureRest, Expr, InputSpan, Lvalue, Spanned, SpannedExpr,
-    SpannedLvalue, UnsupportedType,
+    grammars::Grammar, Destructure, Expr, InputSpan, Lvalue, Spanned, SpannedExpr, SpannedLvalue,
+    UnsupportedType,
 };
 
 /// Context for [`TypeErrorKind::TupleLenMismatch`].
@@ -358,15 +358,6 @@ impl<Prim: PrimitiveType> OpTypeErrors<'_, Prim> {
         }
     }
 
-    // Sort of unsafe (the user shouldn't forget to call `pop_location`, hence not public).
-    pub(crate) fn push_location(&mut self, location: ErrorLocation) {
-        self.current_location.push(location);
-    }
-
-    pub(crate) fn pop_location(&mut self) {
-        self.current_location.pop();
-    }
-
     #[cfg(test)]
     pub(crate) fn into_vec(self) -> Vec<TypeErrorKind<Prim>> {
         let errors = match self.errors {
@@ -514,8 +505,6 @@ pub enum ErrorLocation {
     FnReturnType,
     /// Tuple element (0-based).
     TupleElement(usize),
-    /// Tuple middle.
-    TupleMiddle,
     /// Tuple end element (0-based).
     TupleEnd(usize),
     /// Left-hand side of a binary operation.
@@ -631,14 +620,6 @@ impl ErrorLocation {
         match self {
             Self::TupleElement(index) => destructure.start.get(index).map(LvalueTree::Lvalue),
             Self::TupleEnd(index) => destructure.end.get(index).map(LvalueTree::Lvalue),
-            Self::TupleMiddle => {
-                let middle = &destructure.middle.as_ref()?.extra;
-                if let DestructureRest::Named { ty, .. } = middle {
-                    ty.as_ref().map(LvalueTree::Type)
-                } else {
-                    None
-                }
-            }
             _ => None,
         }
     }

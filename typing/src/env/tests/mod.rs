@@ -5,7 +5,7 @@ use super::*;
 use crate::{
     arith::NumConstraints,
     error::{ErrorLocation, TupleLenMismatchContext, TypeErrorKind},
-    Annotated, Num, Prelude, TupleLen,
+    Annotated, Num, Prelude, TupleLen, UnknownLen,
 };
 
 mod annotations;

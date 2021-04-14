@@ -137,6 +137,14 @@ impl<'r, 'a, Prim: PrimitiveType> ConversionState<'r, 'a, Prim> {
         let len_param_count = self.len_params.len();
         *self.len_params.entry(param_name).or_insert(len_param_count)
     }
+
+    fn new_type(&mut self) -> ValueType<Prim> {
+        self.env.substitutions.new_type_var()
+    }
+
+    fn new_len(&mut self) -> UnknownLen {
+        self.env.substitutions.new_len_var()
+    }
 }
 
 impl<'a> TypeConstraintsAst<'a> {
@@ -230,10 +238,10 @@ impl<'a> SliceAst<'a> {
                 } else {
                     let err = ConversionError::FreeLengthVar(name.to_owned());
                     state.errors.push(TypeError::conversion(err, *ident));
-                    UnknownLen::Some
+                    state.new_len()
                 }
             }
-            TupleLenAst::Some => UnknownLen::Some,
+            TupleLenAst::Some => state.new_len(),
             TupleLenAst::Dynamic => UnknownLen::Dynamic,
         };
 
@@ -247,7 +255,7 @@ impl<'a> ValueTypeAst<'a> {
         state: &mut ConversionState<'_, 'a, Prim>,
     ) -> ValueType<Prim> {
         match self {
-            Self::Some => ValueType::Some,
+            Self::Some => state.new_type(),
             Self::Any(constraints) => ValueType::Any(constraints.convert(state)),
             Self::Ident(prim) => {
                 let ident = *prim.fragment();
@@ -256,7 +264,7 @@ impl<'a> ValueTypeAst<'a> {
                 } else {
                     let err = ConversionError::UnknownType(ident.to_owned());
                     state.errors.push(TypeError::conversion(err, *prim));
-                    ValueType::Some
+                    state.new_type()
                 }
             }
 
@@ -268,7 +276,7 @@ impl<'a> ValueTypeAst<'a> {
                 } else {
                     let err = ConversionError::FreeTypeVar(name.to_owned());
                     state.errors.push(TypeError::conversion(err, *ident));
-                    ValueType::Some
+                    state.new_type()
                 }
             }
 
@@ -396,7 +404,7 @@ mod tests {
     use assert_matches::assert_matches;
 
     use super::*;
-    use crate::{error::TypeErrorKind, Num, TupleLen};
+    use crate::{error::TypeErrorKind, Num};
 
     #[test]
     fn converting_raw_fn_type() {
@@ -509,7 +517,7 @@ mod tests {
             tuple_type,
             ValueType::from((
                 ValueType::NUM,
-                ValueType::Tuple(vec![ValueType::BOOL, ValueType::Some].into()),
+                ValueType::Tuple(vec![ValueType::BOOL, ValueType::free_var(0)].into()),
             ))
         );
 
@@ -521,9 +529,12 @@ mod tests {
 
         assert_eq!(
             *slice_type.element(),
-            ValueType::from((ValueType::NUM, ValueType::Some))
+            ValueType::from((ValueType::NUM, ValueType::free_var(0)))
         );
-        assert_eq!(slice_type.len(), TupleLen::from(UnknownLen::Some));
+        assert_matches!(
+            slice_type.len().components(),
+            (Some(UnknownLen::Var(var)), 0) if var.is_free()
+        );
         Ok(())
     }
 

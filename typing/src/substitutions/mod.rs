@@ -101,7 +101,6 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     fn apply_static_len_inner(&mut self, len: TupleLen) -> Result<(), LenErrorKind> {
         match len.components().0 {
             None => Ok(()),
-            Some(UnknownLen::Some) => Err(LenErrorKind::UnresolvedParam),
             Some(UnknownLen::Dynamic) => Err(LenErrorKind::Dynamic(len)),
             Some(UnknownLen::Var(var)) => {
                 if var.is_free() {
@@ -155,29 +154,17 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     }
 
     /// Creates and returns a new type variable.
-    pub fn new_type_var(&mut self) -> ValueType<Prim> {
+    pub(crate) fn new_type_var(&mut self) -> ValueType<Prim> {
         let new_type = ValueType::free_var(self.type_var_count);
         self.type_var_count += 1;
         new_type
     }
 
-    pub(crate) fn assign_new_type(
-        &mut self,
-        ty: &mut ValueType<Prim>,
-        errors: OpTypeErrors<'_, Prim>,
-    ) {
-        let mut assigner = TypeAssigner {
-            substitutions: self,
-            errors,
-        };
-        assigner.visit_type_mut(ty);
-    }
-
-    pub(crate) fn assign_new_len(&mut self, len: &mut TupleLen) {
-        if let Some(target_len @ UnknownLen::Some) = len.components_mut().0 {
-            *target_len = UnknownLen::free_var(self.len_var_count);
-            self.len_var_count += 1;
-        }
+    /// Creates and returns a new length variable
+    pub(crate) fn new_len_var(&mut self) -> UnknownLen {
+        let new_length = UnknownLen::free_var(self.len_var_count);
+        self.len_var_count += 1;
+        new_length
     }
 
     /// Unifies types in `lhs` and `rhs`.
@@ -423,7 +410,6 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     ) -> Result<TupleLen, LenErrorKind> {
         // Check that the source is valid.
         match source.components() {
-            (Some(UnknownLen::Some), _) => Err(LenErrorKind::UnresolvedParam),
             (Some(UnknownLen::Var(var)), _) if !var.is_free() => Err(LenErrorKind::UnresolvedParam),
 
             // Special case is uniting a var with self.
@@ -646,61 +632,6 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeSanitizer {
     }
 }
 
-/// Replaces `ValueType::Some` and `TupleLen::Some` with new variables.
-#[derive(Debug)]
-struct TypeAssigner<'a, Prim: PrimitiveType> {
-    substitutions: &'a mut Substitutions<Prim>,
-    errors: OpTypeErrors<'a, Prim>,
-}
-
-impl<Prim: PrimitiveType> VisitMut<Prim> for TypeAssigner<'_, Prim> {
-    fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
-        match ty {
-            ValueType::Some => *ty = self.substitutions.new_type_var(),
-            ValueType::Function(function) if function.is_parametric() => {
-                // Can occur, for example, with function declarations:
-                //
-                // ```
-                // identity: ('T) -> 'T = |x| x;
-                // ```
-                //
-                // We don't handle such cases yet, because unifying functions with type params
-                // is quite difficult.
-                self.errors.push(TypeErrorKind::UnsupportedParam);
-                *ty = self.substitutions.new_type_var();
-            }
-            _ => visit::visit_type_mut(self, ty),
-        }
-    }
-
-    fn visit_tuple_mut(&mut self, tuple: &mut Tuple<Prim>) {
-        let (start, middle, end) = tuple.parts_mut();
-
-        for (i, ty) in start.iter_mut().enumerate() {
-            self.errors.push_location(ErrorLocation::TupleElement(i));
-            self.visit_type_mut(ty);
-            self.errors.pop_location();
-        }
-
-        if let Some(middle) = middle {
-            self.errors.push_location(ErrorLocation::TupleMiddle);
-            self.visit_middle_len_mut(middle.len_mut());
-            self.visit_type_mut(middle.element_mut());
-            self.errors.pop_location();
-        }
-
-        for (i, ty) in end.iter_mut().enumerate() {
-            self.errors.push_location(ErrorLocation::TupleEnd(i));
-            self.visit_type_mut(ty);
-            self.errors.pop_location();
-        }
-    }
-
-    fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
-        self.substitutions.assign_new_len(len);
-    }
-}
-
 /// Visitor that performs type resolution based on `Substitutions`.
 #[derive(Debug, Clone, Copy)]
 struct TypeResolver<'a, Prim: PrimitiveType> {
@@ -740,6 +671,8 @@ impl ops::Not for Variance {
 
 /// Visitor that swaps `any` types / lengths with new vars, but only if they are in a covariant
 /// position (return types, args of arg functions, etc.).
+///
+/// This is used when assigning to a type containing `any`.
 #[derive(Debug)]
 struct TypeSpecifier<'a, Prim: PrimitiveType> {
     substitutions: &'a mut Substitutions<Prim>,
@@ -776,9 +709,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeSpecifier<'_, Prim> {
             return;
         }
         if let (Some(var_len @ UnknownLen::Dynamic), _) = len.components_mut() {
-            let var_idx = self.substitutions.len_var_count;
-            self.substitutions.len_var_count += 1;
-            *var_len = UnknownLen::free_var(var_idx);
+            *var_len = self.substitutions.new_len_var();
         }
     }
 

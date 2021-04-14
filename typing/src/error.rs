@@ -175,6 +175,7 @@ impl<Prim: PrimitiveType> ErrorKind<Prim> {
 #[derive(Debug, Clone)]
 pub struct Error<'a, Prim: PrimitiveType> {
     inner: Spanned<'a, ErrorKind<Prim>>,
+    root_span: Spanned<'a>,
     context: ErrorContext<Prim>,
     location: Vec<ErrorLocation>,
 }
@@ -205,6 +206,7 @@ impl<'a, Prim: PrimitiveType> Error<'a, Prim> {
         let kind = ErrorKind::unsupported(unsupported);
         Self {
             inner: span.copy_with_extra(kind),
+            root_span: span.with_no_extra(),
             context: ErrorContext::None,
             location: vec![],
         }
@@ -214,6 +216,7 @@ impl<'a, Prim: PrimitiveType> Error<'a, Prim> {
         let ident = (*span.fragment()).to_owned();
         Self {
             inner: span.copy_with_extra(ErrorKind::UndefinedVar(ident)),
+            root_span: span.with_no_extra(),
             context: ErrorContext::None,
             location: vec![],
         }
@@ -223,6 +226,7 @@ impl<'a, Prim: PrimitiveType> Error<'a, Prim> {
         let kind = ErrorKind::AstConversion(kind);
         Self {
             inner: span.copy_with_extra(kind),
+            root_span: span.with_no_extra(),
             context: ErrorContext::None,
             location: vec![],
         }
@@ -238,12 +242,18 @@ impl<'a, Prim: PrimitiveType> Error<'a, Prim> {
         self.inner.with_no_extra()
     }
 
-    /// Gets the context for a top-level operation that has failed.
+    /// Gets the root code span of the failed operation. May coincide with [`Self::span()`].
+    pub fn root_span(&self) -> Spanned<'a> {
+        self.root_span
+    }
+
+    /// Gets the context for an operation that has failed.
     pub fn context(&self) -> &ErrorContext<Prim> {
         &self.context
     }
 
     /// Gets the location of this error relative to the failed top-level operation.
+    /// This can be used for highlighting relevant parts of types in [`Self::context()`].
     pub fn location(&self) -> &[ErrorLocation] {
         &self.location
     }
@@ -505,6 +515,7 @@ impl<Prim: PrimitiveType> ErrorPrecursor<Prim> {
     ) -> Error<'a, Prim> {
         Error {
             inner: ErrorLocation::walk_expr(&self.location, root_expr).copy_with_extra(self.kind),
+            root_span: root_expr.with_no_extra(),
             context,
             location: self.location,
         }
@@ -518,6 +529,7 @@ impl<Prim: PrimitiveType> ErrorPrecursor<Prim> {
         Error {
             inner: ErrorLocation::walk_lvalue(&self.location, root_lvalue)
                 .copy_with_extra(self.kind),
+            root_span: root_lvalue.with_no_extra(),
             context,
             location: self.location,
         }
@@ -531,6 +543,7 @@ impl<Prim: PrimitiveType> ErrorPrecursor<Prim> {
         Error {
             inner: ErrorLocation::walk_destructure(&self.location, root_destructure)
                 .copy_with_extra(self.kind),
+            root_span: root_destructure.with_no_extra(),
             context,
             location: self.location,
         }
@@ -697,6 +710,8 @@ impl<'a> LvalueTree<'_, 'a> {
 }
 
 /// Context of a [`Error`] corresponding to a top-level operation that has errored.
+/// Generally, contains resolved types concerning the operation, such as operands of
+/// a binary arithmetic op.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum ErrorContext<Prim: PrimitiveType> {

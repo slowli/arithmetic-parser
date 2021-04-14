@@ -512,7 +512,6 @@ where
         self.errors.extend(errors);
 
         let return_type = self.process_block(&def.body);
-
         self.scopes.pop();
         self.is_in_function = was_in_function;
 

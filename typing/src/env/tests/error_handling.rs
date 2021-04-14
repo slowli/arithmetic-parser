@@ -18,6 +18,7 @@ fn vars_are_not_assigned_beyond_first_error() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(*err.span().fragment(), "x");
+    assert_eq!(*err.root_span().fragment(), "x.map(x)");
     assert_matches!(err.kind(), ErrorKind::TypeMismatch(..));
     assert_eq!(type_env["x"], Type::slice(Type::NUM, 2));
     assert!(type_env.get("y").is_none());
@@ -69,6 +70,7 @@ fn errors_in_inner_scopes_are_handled_adequately() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(*err.span().fragment(), "bogus");
+    assert_eq!(*err.root_span().fragment(), "x.map(bogus)");
     assert_matches!(err.kind(), ErrorKind::TypeMismatch(..));
     assert_eq!(type_env["x"], Type::slice(Type::NUM, 2));
     assert!(type_env.get("y").is_none());

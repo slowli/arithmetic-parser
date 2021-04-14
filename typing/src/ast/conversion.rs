@@ -12,7 +12,7 @@ use std::{
 use crate::ast::TypeConstraintsAst;
 use crate::{
     ast::{ConstraintsAst, FnTypeAst, SliceAst, SpannedTypeAst, TupleAst, TupleLenAst, TypeAst},
-    error::{TypeError, TypeErrors},
+    error::{Error, Errors},
     types::{ParamConstraints, ParamQuantifier},
     FnType, PrimitiveType, Slice, Tuple, Type, TypeEnvironment, UnknownLen,
 };
@@ -23,14 +23,14 @@ use arithmetic_parser::{ErrorKind as ParseErrorKind, InputSpan, NomResult, Spann
 /// During type inference, errors of this type are wrapped into the [`AstConversion`]
 /// variant of typing errors.
 ///
-/// [`AstConversion`]: crate::error::TypeErrorKind::AstConversion
+/// [`AstConversion`]: crate::ErrorKind::AstConversion
 ///
 /// # Examples
 ///
 /// ```
 /// use arithmetic_parser::grammars::{Parse, NumGrammar, Typed};
 /// use arithmetic_typing::{
-///     ast::AstConversionError, error::TypeErrorKind, Annotated, TypeEnvironment,
+///     ast::AstConversionError, ErrorKind, Annotated, TypeEnvironment,
 /// };
 /// # use assert_matches::assert_matches;
 ///
@@ -45,7 +45,7 @@ use arithmetic_parser::{ErrorKind as ParseErrorKind, InputSpan, NomResult, Spann
 /// assert_eq!(*err.span().fragment(), "'T");
 /// assert_matches!(
 ///     err.kind(),
-///     TypeErrorKind::AstConversion(AstConversionError::FreeTypeVar(id))
+///     ErrorKind::AstConversion(AstConversionError::FreeTypeVar(id))
 ///         if id == "T"
 /// );
 /// # Ok(())
@@ -114,14 +114,14 @@ impl std::error::Error for AstConversionError {}
 #[derive(Debug)]
 pub(crate) struct AstConversionState<'r, 'a, Prim: PrimitiveType> {
     env: &'r mut TypeEnvironment<Prim>,
-    errors: &'r mut TypeErrors<'a, Prim>,
+    errors: &'r mut Errors<'a, Prim>,
     len_params: HashMap<&'a str, usize>,
     type_params: HashMap<&'a str, usize>,
     is_in_function: bool,
 }
 
 impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
-    pub fn new(env: &'r mut TypeEnvironment<Prim>, errors: &'r mut TypeErrors<'a, Prim>) -> Self {
+    pub fn new(env: &'r mut TypeEnvironment<Prim>, errors: &'r mut Errors<'a, Prim>) -> Self {
         Self {
             env,
             errors,
@@ -162,7 +162,7 @@ impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
                     Type::Prim(prim_type)
                 } else {
                     let err = AstConversionError::UnknownType(ident.to_owned());
-                    self.errors.push(TypeError::conversion(err, ty));
+                    self.errors.push(Error::conversion(err, ty));
                     self.new_type()
                 }
             }
@@ -174,7 +174,7 @@ impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
                     Type::param(idx)
                 } else {
                     let err = AstConversionError::FreeTypeVar(name.to_owned());
-                    self.errors.push(TypeError::conversion(err, ty));
+                    self.errors.push(Error::conversion(err, ty));
                     self.new_type()
                 }
             }
@@ -198,7 +198,7 @@ impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
         if self.is_in_function {
             if let Some(constraints) = constraints {
                 let err = AstConversionError::EmbeddedQuantifier;
-                self.errors.push(TypeError::conversion(err, constraints));
+                self.errors.push(Error::conversion(err, constraints));
             }
             function.convert(self).into()
         } else {
@@ -226,7 +226,7 @@ impl<'a> TypeConstraintsAst<'a> {
                 let partial = Prim::Constraints::from_str(input_str)
                     .map_err(|_| {
                         let err = AstConversionError::UnknownConstraint(input_str.to_owned());
-                        state.errors.push(TypeError::conversion(err, input));
+                        state.errors.push(Error::conversion(err, input));
                     })
                     .unwrap_or_default();
                 acc |= &partial;
@@ -247,7 +247,7 @@ impl<'a> ConstraintsAst<'a> {
                 static_lengths.insert(*index);
             } else {
                 let err = AstConversionError::UnusedLength(name.to_owned());
-                state.errors.push(TypeError::conversion(err, dyn_length));
+                state.errors.push(Error::conversion(err, dyn_length));
             }
         }
 
@@ -258,7 +258,7 @@ impl<'a> ConstraintsAst<'a> {
                 type_params.insert(*index, constraints.convert(state));
             } else {
                 let err = AstConversionError::UnusedTypeParam(name.to_owned());
-                state.errors.push(TypeError::conversion(err, param));
+                state.errors.push(Error::conversion(err, param));
             }
         }
 
@@ -307,7 +307,7 @@ impl<'a> SliceAst<'a> {
                     UnknownLen::param(const_param)
                 } else {
                     let err = AstConversionError::FreeLengthVar(name.to_owned());
-                    state.errors.push(TypeError::conversion(err, ident));
+                    state.errors.push(Error::conversion(err, ident));
                     state.new_len()
                 }
             }
@@ -330,12 +330,12 @@ impl<'a> FnTypeAst<'a> {
     }
 
     /// Tries to convert this type into [`FnType`].
-    pub fn try_convert<Prim>(&self) -> Result<FnType<Prim>, TypeErrors<'a, Prim>>
+    pub fn try_convert<Prim>(&self) -> Result<FnType<Prim>, Errors<'a, Prim>>
     where
         Prim: PrimitiveType,
     {
         let mut env = TypeEnvironment::new();
-        let mut errors = TypeErrors::new();
+        let mut errors = Errors::new();
         let mut state = AstConversionState::new(&mut env, &mut errors);
         state.is_in_function = true;
 
@@ -382,11 +382,11 @@ impl<'a> TypeAst<'a> {
 }
 
 impl<'a, Prim: PrimitiveType> TryFrom<&SpannedTypeAst<'a>> for Type<Prim> {
-    type Error = TypeErrors<'a, Prim>;
+    type Error = Errors<'a, Prim>;
 
     fn try_from(ast: &SpannedTypeAst<'a>) -> Result<Self, Self::Error> {
         let mut env = TypeEnvironment::new();
-        let mut errors = TypeErrors::new();
+        let mut errors = Errors::new();
         let mut state = AstConversionState::new(&mut env, &mut errors);
 
         let output = state.convert_type(ast);
@@ -411,7 +411,7 @@ mod tests {
     use assert_matches::assert_matches;
 
     use super::*;
-    use crate::{error::TypeErrorKind, Num};
+    use crate::{ErrorKind, Num};
 
     #[test]
     fn converting_raw_fn_type() {
@@ -440,7 +440,7 @@ mod tests {
         assert_eq!(err.span().location_offset(), 5);
         assert_matches!(
             err.kind(),
-            TypeErrorKind::AstConversion(AstConversionError::UnusedTypeParam(name)) if name == "T"
+            ErrorKind::AstConversion(AstConversionError::UnusedTypeParam(name)) if name == "T"
         );
     }
 
@@ -453,7 +453,7 @@ mod tests {
         assert_eq!(err.span().location_offset(), 9);
         assert_matches!(
             err.kind(),
-            TypeErrorKind::AstConversion(AstConversionError::UnusedLength(name)) if name == "N"
+            ErrorKind::AstConversion(AstConversionError::UnusedLength(name)) if name == "N"
         );
     }
 
@@ -466,7 +466,7 @@ mod tests {
         assert_eq!(err.span().location_offset(), 6);
         assert_matches!(
             err.kind(),
-            TypeErrorKind::AstConversion(AstConversionError::FreeTypeVar(name)) if name == "T"
+            ErrorKind::AstConversion(AstConversionError::FreeTypeVar(name)) if name == "T"
         );
     }
 
@@ -479,7 +479,7 @@ mod tests {
         assert_eq!(err.span().location_offset(), 6);
         assert_matches!(
             err.kind(),
-            TypeErrorKind::AstConversion(AstConversionError::FreeLengthVar(name)) if name == "N"
+            ErrorKind::AstConversion(AstConversionError::FreeLengthVar(name)) if name == "N"
         );
     }
 
@@ -492,7 +492,7 @@ mod tests {
         assert_eq!(*err.span().fragment(), "Bug");
         assert_matches!(
             err.kind(),
-            TypeErrorKind::AstConversion(AstConversionError::UnknownConstraint(id))
+            ErrorKind::AstConversion(AstConversionError::UnknownConstraint(id))
                 if id == "Bug"
         );
     }
@@ -507,7 +507,7 @@ mod tests {
         assert_eq!(err.span().location_offset(), 5);
         assert_matches!(
             err.kind(),
-            TypeErrorKind::AstConversion(AstConversionError::EmbeddedQuantifier)
+            ErrorKind::AstConversion(AstConversionError::EmbeddedQuantifier)
         );
     }
 

@@ -4,7 +4,7 @@ use std::{fmt, ops, str::FromStr};
 
 use crate::{
     arith::OpConstraintSettings,
-    error::{OpTypeErrors, TypeErrorKind},
+    error::{ErrorKind, OpErrors},
     PrimitiveType, Slice, Substitutions, Type,
 };
 
@@ -63,7 +63,7 @@ where
         &self,
         ty: &Type<Prim>,
         substitutions: &mut Substitutions<Prim>,
-        errors: OpTypeErrors<'_, Prim>,
+        errors: OpErrors<'_, Prim>,
     );
 }
 
@@ -143,7 +143,7 @@ impl<Prim: LinearType> TypeConstraints<Prim> for NumConstraints {
         &self,
         ty: &Type<Prim>,
         substitutions: &mut Substitutions<Prim>,
-        mut errors: OpTypeErrors<'_, Prim>,
+        mut errors: OpErrors<'_, Prim>,
     ) {
         if *self == Self::None {
             // The default constraint: does nothing.
@@ -164,10 +164,7 @@ impl<Prim: LinearType> TypeConstraints<Prim> for NumConstraints {
             Type::Prim(lit) if lit.is_linear() => {}
 
             Type::Function(_) | Type::Prim(_) => {
-                errors.push(TypeErrorKind::failed_constraint(
-                    ty.to_owned(),
-                    self.to_owned(),
-                ));
+                errors.push(ErrorKind::failed_constraint(ty.to_owned(), self.to_owned()));
             }
 
             Type::Tuple(tuple) => {
@@ -222,7 +219,7 @@ where
         &self,
         _ty: &Type<Prim>,
         _substitutions: &mut Substitutions<Prim>,
-        _errors: OpTypeErrors<'_, Prim>,
+        _errors: OpErrors<'_, Prim>,
     ) {
         // Do nothing
     }

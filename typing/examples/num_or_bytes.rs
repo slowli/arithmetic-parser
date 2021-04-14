@@ -8,7 +8,7 @@ use arithmetic_parser::{
 };
 use arithmetic_typing::{
     arith::*,
-    error::{OpTypeErrors, TypeErrorKind, TypeErrors},
+    error::{ErrorKind, Errors, OpErrors},
     Annotated, Prelude, PrimitiveType, Substitutions, Type, TypeEnvironment,
 };
 
@@ -134,7 +134,7 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
         &self,
         ty: &Type<NumOrBytesType>,
         substitutions: &mut Substitutions<NumOrBytesType>,
-        errors: &mut OpTypeErrors<'_, '_, NumOrBytesType>,
+        errors: &mut OpErrors<'_, '_, NumOrBytesType>,
     ) {
         if *self == Self::None {
             return;
@@ -151,17 +151,14 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
             // `Var`s are taken care of previously.
             Type::Var(_) | Type::Prim(NumOrBytesType::Num) => {}
 
-            Type::Prim(NumOrBytesType::Bool) | Type::Function(_) => errors.push(
-                TypeErrorKind::failed_constraint(ty.to_owned(), self.to_owned()),
-            ),
+            Type::Prim(NumOrBytesType::Bool) | Type::Function(_) => {
+                errors.push(ErrorKind::failed_constraint(ty.to_owned(), self.to_owned()))
+            }
 
             // Bytes are summable, but not linear.
             Type::Prim(NumOrBytesType::Bytes) => {
                 if *self != Self::Summable {
-                    errors.push(TypeErrorKind::failed_constraint(
-                        ty.to_owned(),
-                        self.to_owned(),
-                    ));
+                    errors.push(ErrorKind::failed_constraint(ty.to_owned(), self.to_owned()));
                 }
             }
 
@@ -173,7 +170,7 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
             }
 
             other => {
-                errors.push(TypeErrorKind::UnsupportedType(other.to_owned()));
+                errors.push(ErrorKind::UnsupportedType(other.to_owned()));
             }
         }
     }
@@ -202,7 +199,7 @@ impl TypeArithmetic<NumOrBytesType> for NumOrBytesArithmetic {
         &self,
         substitutions: &mut Substitutions<NumOrBytesType>,
         spans: UnaryOpSpans<'a, NumOrBytesType>,
-        errors: &mut TypeErrors<'a, NumOrBytesType>,
+        errors: &mut Errors<'a, NumOrBytesType>,
     ) -> Type<NumOrBytesType> {
         NumArithmetic::process_unary_op(substitutions, spans, errors, &Constraints::Lin)
     }
@@ -211,7 +208,7 @@ impl TypeArithmetic<NumOrBytesType> for NumOrBytesArithmetic {
         &self,
         substitutions: &mut Substitutions<NumOrBytesType>,
         spans: BinaryOpSpans<'a, NumOrBytesType>,
-        errors: &mut TypeErrors<'a, NumOrBytesType>,
+        errors: &mut Errors<'a, NumOrBytesType>,
     ) -> Type<NumOrBytesType> {
         let op_constraints = if let BinaryOp::Add = spans.op.extra {
             Constraints::Summable

@@ -169,7 +169,7 @@ impl TypeVar {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-/// # use arithmetic_typing::{error::TypeErrorKind, Annotated, TypeEnvironment, Type};
+/// # use arithmetic_typing::{ErrorKind, Annotated, TypeEnvironment, Type};
 /// # use assert_matches::assert_matches;
 /// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// # fn main() -> anyhow::Result<()> {
@@ -184,7 +184,7 @@ impl TypeVar {
 ///
 /// let err = errors.iter().next().unwrap();
 /// assert_eq!(*err.span().fragment(), "x(1)");
-/// assert_matches!(err.kind(), TypeErrorKind::FailedConstraint { .. });
+/// assert_matches!(err.kind(), ErrorKind::FailedConstraint { .. });
 /// # Ok(())
 /// # }
 /// ```
@@ -194,7 +194,7 @@ impl TypeVar {
 /// ```
 /// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
 /// # use arithmetic_typing::{
-/// #     ast::TypeAst, error::TypeErrorKind, Annotated, Prelude, TypeEnvironment, Type
+/// #     ast::TypeAst, ErrorKind, Annotated, Prelude, TypeEnvironment, Type
 /// # };
 /// # use std::convert::TryFrom;
 /// # use assert_matches::assert_matches;
@@ -216,7 +216,7 @@ impl TypeVar {
 ///
 /// let err = errors.iter().next().unwrap();
 /// assert_eq!(*err.span().fragment(), "true");
-/// assert_matches!(err.kind(), TypeErrorKind::FailedConstraint { .. });
+/// assert_matches!(err.kind(), ErrorKind::FailedConstraint { .. });
 /// # Ok(())
 /// # }
 /// ```

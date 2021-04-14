@@ -4,18 +4,18 @@ use assert_matches::assert_matches;
 
 use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
 use arithmetic_typing::{
-    error::{TupleLenMismatchContext, TypeError, TypeErrorKind, TypeErrors},
+    error::{Error, ErrorKind, Errors, TupleLenMismatchContext},
     Annotated, FnType, Num, Prelude, TupleLen, Type, TypeEnvironment, UnknownLen,
 };
 
 type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
 
 trait SingleError<'a> {
-    fn single(self) -> TypeError<'a, Num>;
+    fn single(self) -> Error<'a, Num>;
 }
 
-impl<'a> SingleError<'a> for TypeErrors<'a, Num> {
-    fn single(self) -> TypeError<'a, Num> {
+impl<'a> SingleError<'a> for Errors<'a, Num> {
+    fn single(self) -> Error<'a, Num> {
         if self.len() == 1 {
             self.into_iter().next().unwrap()
         } else {
@@ -52,7 +52,7 @@ fn push_fn_in_other_fn_definition() {
     assert_eq!(*err.span().fragment(), "(_, (_, z)) = push_fork(4)");
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch {
+        ErrorKind::TupleLenMismatch {
             lhs,
             rhs,
             context: TupleLenMismatchContext::Assignment,
@@ -144,7 +144,7 @@ fn requirements_on_len_via_destructuring() {
     assert_eq!(*err.span().fragment(), "(1,).len_at_least2()");
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch {
+        ErrorKind::TupleLenMismatch {
             lhs,
             rhs,
             context: TupleLenMismatchContext::Assignment,
@@ -182,7 +182,7 @@ fn reversing_a_slice() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(*err.span().fragment(), "(_, ...) = ys");
-    assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
+    assert_matches!(err.kind(), ErrorKind::TupleLenMismatch { .. });
     assert_eq!(type_env["reverse"].to_string(), "(['T; N]) -> ['T]");
     assert_eq!(type_env["ys"].to_string(), "[Bool]");
 }
@@ -213,7 +213,7 @@ fn errors_when_adding_dynamic_slices() {
         let line = F32Grammar::parse_statements(line).unwrap();
         let errors = type_env.process_statements(&line).unwrap_err();
         let err = errors.into_iter().next().unwrap();
-        assert_matches!(err.kind(), TypeErrorKind::DynamicLen(_));
+        assert_matches!(err.kind(), ErrorKind::DynamicLen(_));
     }
 }
 
@@ -245,7 +245,7 @@ fn square_function() {
     );
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch { lhs, rhs, .. }
+        ErrorKind::TupleLenMismatch { lhs, rhs, .. }
             if *lhs == TupleLen::from(3) && *rhs == TupleLen::from(2)
     );
 }
@@ -286,7 +286,7 @@ fn column_row_equality_fn() {
         let bogus_line = F32Grammar::parse_statements(bogus_line).unwrap();
         let errors = type_env.process_statements(&bogus_line).unwrap_err();
         let err = errors.into_iter().next().unwrap();
-        assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
+        assert_matches!(err.kind(), ErrorKind::TupleLenMismatch { .. });
     }
 
     let test_code = r#"
@@ -300,7 +300,7 @@ fn column_row_equality_fn() {
         .unwrap_err()
         .single();
     assert_eq!(*err.span().fragment(), "zs.push((3, 4, 5))");
-    assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
+    assert_matches!(err.kind(), ErrorKind::TupleLenMismatch { .. });
 }
 
 #[test]

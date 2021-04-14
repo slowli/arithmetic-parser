@@ -4,7 +4,7 @@ use assert_matches::assert_matches;
 use super::*;
 use crate::{
     arith::NumConstraints,
-    error::{ErrorLocation, TupleLenMismatchContext, TypeErrorKind},
+    error::{ErrorKind, ErrorLocation, TupleLenMismatchContext},
     Annotated, Num, Prelude, TupleLen, UnknownLen,
 };
 
@@ -14,12 +14,12 @@ mod error_handling;
 type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
 
 fn assert_incompatible_types<Prim: PrimitiveType>(
-    err: &TypeErrorKind<Prim>,
+    err: &ErrorKind<Prim>,
     first: &Type<Prim>,
     second: &Type<Prim>,
 ) {
     let (x, y) = match err {
-        TypeErrorKind::TypeMismatch(x, y) => (x, y),
+        ErrorKind::TypeMismatch(x, y) => (x, y),
         _ => panic!("Unexpected error type: {:?}", err),
     };
     assert!(
@@ -159,7 +159,7 @@ fn type_recursion() {
     assert_matches!(err.context(), ErrorContext::BinaryOp(_));
     assert_matches!(
         err.kind(),
-        TypeErrorKind::RecursiveType(ref ty) if ty.to_string() == "('T, Num)"
+        ErrorKind::RecursiveType(ref ty) if ty.to_string() == "('T, Num)"
     );
     assert_eq!(
         err.kind().to_string(),
@@ -179,7 +179,7 @@ fn indirect_type_recursion() {
     let err = type_env.process_statements(&block).unwrap_err().single();
     assert_matches!(
         err.kind(),
-        TypeErrorKind::RecursiveType(ref ty) if ty.to_string() == "(Num, 'T)"
+        ErrorKind::RecursiveType(ref ty) if ty.to_string() == "(Num, 'T)"
     );
 }
 
@@ -191,7 +191,7 @@ fn recursion_via_fn() {
     let err = type_env.process_statements(&block).unwrap_err().single();
     assert_matches!(
         err.kind(),
-        TypeErrorKind::RecursiveType(ref ty) if ty.to_string() == "(Num, 'T) -> _"
+        ErrorKind::RecursiveType(ref ty) if ty.to_string() == "(Num, 'T) -> _"
     );
 }
 
@@ -221,7 +221,7 @@ fn unknown_method() {
     assert_eq!(*err.span().fragment(), "do_something");
     assert!(err.location().is_empty());
     assert_matches!(err.context(), ErrorContext::None);
-    assert_matches!(err.kind(), TypeErrorKind::UndefinedVar(name) if name == "do_something");
+    assert_matches!(err.kind(), ErrorKind::UndefinedVar(name) if name == "do_something");
     assert_eq!(
         err.kind().to_string(),
         "Variable `do_something` is not defined"
@@ -255,7 +255,7 @@ fn immediately_invoked_function_with_invalid_arg() {
     );
     assert_matches!(
         err.kind(),
-        TypeErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
+        ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
     );
     assert_eq!(err.kind().to_string(), "Type `Bool` fails constraint `Ops`");
 }
@@ -321,7 +321,7 @@ fn destructuring_error_on_assignment() {
     );
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch { lhs, rhs, .. }
+        ErrorKind::TupleLenMismatch { lhs, rhs, .. }
             if lhs.to_string() == "_ + 2" && *rhs == TupleLen::from(1)
     );
     assert_eq!(
@@ -355,7 +355,7 @@ fn destructuring_for_fn_args() {
             .process_statements(&bogus_block)
             .unwrap_err()
             .single();
-        assert_matches!(err.kind(), TypeErrorKind::TypeMismatch(..));
+        assert_matches!(err.kind(), ErrorKind::TypeMismatch(..));
     }
     {
         let bogus_code = "shift(1, 1 == 2, 1 == 1)";
@@ -364,7 +364,7 @@ fn destructuring_for_fn_args() {
             .process_statements(&bogus_block)
             .unwrap_err()
             .single();
-        assert_matches!(err.kind(), TypeErrorKind::FailedConstraint { .. });
+        assert_matches!(err.kind(), ErrorKind::FailedConstraint { .. });
     }
 
     let bogus_code = "(x, _, _) = 1.shift(2, 3);";
@@ -375,7 +375,7 @@ fn destructuring_for_fn_args() {
         .single();
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch {
+        ErrorKind::TupleLenMismatch {
             lhs,
             rhs,
             ..
@@ -512,7 +512,7 @@ fn incorrect_tuple_length_returned_from_fn() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch {
+        ErrorKind::TupleLenMismatch {
             lhs,
             rhs,
             context: TupleLenMismatchContext::Assignment,
@@ -687,7 +687,7 @@ fn parametric_fn_passed_as_arg_with_recursive_requirements() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_matches!(err.kind(), TypeErrorKind::RecursiveType(_));
+    assert_matches!(err.kind(), ErrorKind::RecursiveType(_));
 }
 
 #[test]
@@ -738,7 +738,7 @@ fn function_passed_as_arg_invalid_arity() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch {
+        ErrorKind::TupleLenMismatch {
             lhs,
             rhs,
             context: TupleLenMismatchContext::FnArgs,
@@ -762,7 +762,7 @@ fn function_passed_as_arg_invalid_arg_type() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TypeMismatch(Type::Tuple(t), rhs)
+        ErrorKind::TypeMismatch(Type::Tuple(t), rhs)
             if t.len() == TupleLen::from(2) && *rhs == Type::NUM
     );
 }
@@ -874,7 +874,7 @@ fn unifying_length_vars_error() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch {
+        ErrorKind::TupleLenMismatch {
             lhs,
             rhs,
             context: TupleLenMismatchContext::Assignment,
@@ -975,7 +975,7 @@ fn cannot_destructure_dynamic_slice() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch { lhs, .. } if *lhs == TupleLen::from(2)
+        ErrorKind::TupleLenMismatch { lhs, .. } if *lhs == TupleLen::from(2)
     );
 }
 
@@ -990,7 +990,7 @@ fn comparisons_when_switched_off() {
     assert_eq!(*err.span().fragment(), "x > 1");
     assert!(err.location().is_empty());
     assert_matches!(err.context(), ErrorContext::BinaryOp(_));
-    assert_matches!(err.kind(), TypeErrorKind::UnsupportedFeature(_));
+    assert_matches!(err.kind(), ErrorKind::UnsupportedFeature(_));
     assert_eq!(
         err.kind().to_string(),
         "Unsupported binary op: greater comparison"
@@ -1031,7 +1031,7 @@ fn comparison_type_errors() {
     assert_matches!(err.context(), ErrorContext::BinaryOp(_));
     assert_matches!(
         err.kind(),
-        TypeErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
+        ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
     );
 }
 
@@ -1048,7 +1048,7 @@ fn constraint_error() {
     assert_eq!(*err.span().fragment(), "1 == 2");
     assert_matches!(
         err.kind(),
-        TypeErrorKind::FailedConstraint {
+        ErrorKind::FailedConstraint {
             ty,
             constraint: NumConstraints::Ops,
         } if *ty == Type::BOOL
@@ -1087,7 +1087,7 @@ fn any_can_be_unified_with_anything() {
         .single();
 
     let lhs_slice = match err.kind() {
-        TypeErrorKind::TypeMismatch(Type::Tuple(tuple), bool) if *bool == Type::BOOL => {
+        ErrorKind::TypeMismatch(Type::Tuple(tuple), bool) if *bool == Type::BOOL => {
             tuple.as_slice().unwrap()
         }
         _ => panic!("Unexpected error: {:?}", err),
@@ -1194,7 +1194,7 @@ fn any_type_with_bound_with_bogus_function_call() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::FailedConstraint {
+        ErrorKind::FailedConstraint {
             ty: Type::Function(_),
             ..
         }
@@ -1215,7 +1215,7 @@ fn any_type_with_bound_in_tuple() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::FailedConstraint {
+        ErrorKind::FailedConstraint {
             ty: Type::Function(_),
             ..
         }
@@ -1233,7 +1233,7 @@ fn any_type_with_bound_in_tuple() {
     assert_matches!(err.context(), ErrorContext::UnaryOp(_));
     assert_matches!(
         err.kind(),
-        TypeErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
+        ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
     );
     assert_eq!(err.kind().to_string(), "Type `Bool` fails constraint `Lin`");
     // TODO: store where constraint comes from?

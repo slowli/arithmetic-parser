@@ -133,6 +133,7 @@ pub mod visit;
 
 pub use self::{
     env::TypeEnvironment,
+    error::{Error, ErrorKind},
     substitutions::Substitutions,
     type_map::{Assertions, Prelude},
     types::{

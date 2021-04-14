@@ -4,7 +4,7 @@ use assert_matches::assert_matches;
 
 use super::{assert_incompatible_types, zip_fn_type, F32Grammar};
 use crate::{
-    error::{ErrorContext, ErrorLocation, TupleLenMismatchContext, TypeErrorKind},
+    error::{ErrorContext, ErrorKind, ErrorLocation, TupleLenMismatchContext},
     Prelude, TupleLen, Type, TypeEnvironment, UnknownLen,
 };
 use arithmetic_parser::grammars::Parse;
@@ -49,7 +49,7 @@ fn contradicting_type_hint() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch {
+        ErrorKind::TupleLenMismatch {
             lhs,
             rhs,
             context: TupleLenMismatchContext::Assignment,
@@ -101,7 +101,7 @@ fn invalid_type_hint_with_fn_arg() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch {
+        ErrorKind::TupleLenMismatch {
             lhs,
             rhs,
             context: TupleLenMismatchContext::FnArgs,
@@ -168,7 +168,7 @@ fn unsupported_type_param_in_generic_fn() {
     assert!(err.location().is_empty());
     assert_matches!(err.context(), ErrorContext::Assignment { .. });
     assert_eq!(*err.span().fragment(), "(('Arg,)) -> ('Arg,)");
-    assert_matches!(err.kind(), TypeErrorKind::UnsupportedParam);
+    assert_matches!(err.kind(), ErrorKind::UnsupportedParam);
 }
 
 #[test]
@@ -186,7 +186,7 @@ fn unsupported_type_param_location() {
         assert_eq!(err.location(), [ErrorLocation::TupleElement(1)]);
         assert_matches!(err.context(), ErrorContext::Assignment { .. });
         assert_eq!(*err.span().fragment(), "(('Arg,)) -> ('Arg,)");
-        assert_matches!(err.kind(), TypeErrorKind::UnsupportedParam);
+        assert_matches!(err.kind(), ErrorKind::UnsupportedParam);
     }
 }
 
@@ -198,7 +198,7 @@ fn unsupported_const_param_in_generic_fn() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(*err.span().fragment(), "([Num; N]) -> [Num; N]");
-    assert_matches!(err.kind(), TypeErrorKind::UnsupportedParam);
+    assert_matches!(err.kind(), ErrorKind::UnsupportedParam);
 }
 
 #[test]
@@ -260,7 +260,7 @@ fn assigning_to_dynamically_sized_slice() {
         .unwrap_err()
         .single();
 
-    assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
+    assert_matches!(err.kind(), ErrorKind::TupleLenMismatch { .. });
 }
 
 #[test]
@@ -299,9 +299,9 @@ fn adding_dynamically_typed_slices() {
 
     assert_eq!(errors.len(), 2);
     assert_eq!(*errors[0].span().fragment(), "x");
-    assert_matches!(errors[0].kind(), TypeErrorKind::DynamicLen(_));
+    assert_matches!(errors[0].kind(), ErrorKind::DynamicLen(_));
     assert_eq!(*errors[1].span().fragment(), "y");
-    assert_matches!(errors[1].kind(), TypeErrorKind::DynamicLen(_));
+    assert_matches!(errors[1].kind(), ErrorKind::DynamicLen(_));
 }
 
 #[test]
@@ -321,8 +321,8 @@ fn unifying_dynamic_slices_error() {
         .collect();
 
     assert_eq!(errors.len(), 2);
-    assert_matches!(errors[0].kind(), TypeErrorKind::DynamicLen(_));
-    assert_matches!(errors[1].kind(), TypeErrorKind::DynamicLen(_));
+    assert_matches!(errors[0].kind(), ErrorKind::DynamicLen(_));
+    assert_matches!(errors[1].kind(), ErrorKind::DynamicLen(_));
 }
 
 #[test]
@@ -420,7 +420,7 @@ fn type_with_tuple_of_any() {
     assert_eq!(*err.span().fragment(), "test(1)");
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TypeMismatch(lhs, rhs)
+        ErrorKind::TypeMismatch(lhs, rhs)
             if lhs.to_string() == "(Num) -> _" && rhs.to_string() == "(any, any, any)"
     );
     assert_eq!(type_env["x"], Type::any());
@@ -442,7 +442,7 @@ fn type_with_any_fn() {
     assert_eq!(*err.span().fragment(), "fun(1, 2)");
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch { lhs, rhs, .. }
+        ErrorKind::TupleLenMismatch { lhs, rhs, .. }
             if *lhs == TupleLen::from(1) && *rhs == TupleLen::from(2)
     );
     assert_eq!(type_env["fun"].to_string(), "(any) -> Bool");
@@ -461,7 +461,7 @@ fn any_fn_with_constraints() {
     assert_eq!(*err.span().fragment(), "[any Lin; _]");
     assert_matches!(
         err.kind(),
-        TypeErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
+        ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
     );
     assert_eq!(
         type_env["lin_tuple"].to_string(),
@@ -516,7 +516,7 @@ fn annotations_for_fns_with_slices() {
     assert_eq!(err.span().location_line(), 4);
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch { lhs, rhs, .. }
+        ErrorKind::TupleLenMismatch { lhs, rhs, .. }
             if *lhs == TupleLen::from(2) && *rhs == TupleLen::from(UnknownLen::Dynamic)
     );
 

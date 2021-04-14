@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     arith::TypeConstraints,
-    error::{ErrorLocation, OpTypeErrors, TupleLenMismatchContext, TypeErrorKind},
+    error::{ErrorKind, ErrorLocation, OpErrors, TupleLenMismatchContext},
     visit::{self, Visit, VisitMut},
     FnType, PrimitiveType, Tuple, TupleLen, Type, TypeVar, UnknownLen,
 };
@@ -87,12 +87,12 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
     /// Marks `len` as static, i.e., not containing [`UnknownLen::Dynamic`] components.
     #[allow(clippy::missing_panics_doc)]
-    pub fn apply_static_len(&mut self, len: TupleLen) -> Result<(), TypeErrorKind<Prim>> {
+    pub fn apply_static_len(&mut self, len: TupleLen) -> Result<(), ErrorKind<Prim>> {
         let resolved = self.resolve_len(len);
         self.apply_static_len_inner(resolved)
             .map_err(|err| match err {
-                LenErrorKind::UnresolvedParam => TypeErrorKind::UnresolvedParam,
-                LenErrorKind::Dynamic(len) => TypeErrorKind::DynamicLen(len),
+                LenErrorKind::UnresolvedParam => ErrorKind::UnresolvedParam,
+                LenErrorKind::Dynamic(len) => ErrorKind::DynamicLen(len),
                 LenErrorKind::Mismatch => unreachable!(),
             })
     }
@@ -172,15 +172,8 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     /// - LHS corresponds to the lvalue in assignments and to called function signature in fn calls.
     /// - RHS corresponds to the rvalue in assignments and to the type of the called function.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if unification is impossible.
-    pub fn unify(
-        &mut self,
-        lhs: &Type<Prim>,
-        rhs: &Type<Prim>,
-        mut errors: OpTypeErrors<'_, Prim>,
-    ) {
+    /// If unification is impossible, the corresponding error(s) will be put into `errors`.
+    pub fn unify(&mut self, lhs: &Type<Prim>, rhs: &Type<Prim>, mut errors: OpErrors<'_, Prim>) {
         let resolved_lhs = self.fast_resolve(lhs).to_owned();
         let resolved_rhs = self.fast_resolve(rhs).to_owned();
 
@@ -194,14 +187,14 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 if var.is_free() {
                     self.unify_var(var.index(), ty, true, errors);
                 } else {
-                    errors.push(TypeErrorKind::UnresolvedParam);
+                    errors.push(ErrorKind::UnresolvedParam);
                 }
             }
             (ty, Type::Var(var)) => {
                 if var.is_free() {
                     self.unify_var(var.index(), ty, false, errors);
                 } else {
-                    errors.push(TypeErrorKind::UnresolvedParam);
+                    errors.push(ErrorKind::UnresolvedParam);
                 }
             }
 
@@ -231,7 +224,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 resolver.visit_type_mut(&mut ty);
                 let mut other_ty = other_ty.to_owned();
                 resolver.visit_type_mut(&mut other_ty);
-                errors.push(TypeErrorKind::TypeMismatch(ty, other_ty));
+                errors.push(ErrorKind::TypeMismatch(ty, other_ty));
             }
         }
     }
@@ -241,7 +234,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         lhs: &Tuple<Prim>,
         rhs: &Tuple<Prim>,
         context: TupleLenMismatchContext,
-        mut errors: OpTypeErrors<'_, Prim>,
+        mut errors: OpErrors<'_, Prim>,
     ) {
         let resolved_len = self.unify_lengths(lhs.len(), rhs.len(), context);
         let resolved_len = match resolved_len {
@@ -267,7 +260,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         &mut self,
         pairs: impl Iterator<Item = (&'it Type<Prim>, &'it Type<Prim>)>,
         context: TupleLenMismatchContext,
-        mut errors: OpTypeErrors<'_, Prim>,
+        mut errors: OpErrors<'_, Prim>,
     ) {
         for (i, (lhs_elem, rhs_elem)) in pairs.enumerate() {
             let location = match context {
@@ -283,12 +276,12 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         &mut self,
         lhs: &Tuple<Prim>,
         rhs: &Tuple<Prim>,
-        err: &TypeErrorKind<Prim>,
+        err: &ErrorKind<Prim>,
         context: TupleLenMismatchContext,
-        errors: OpTypeErrors<'_, Prim>,
+        errors: OpErrors<'_, Prim>,
     ) {
         let (lhs_len, rhs_len) = match err {
-            TypeErrorKind::TupleLenMismatch {
+            ErrorKind::TupleLenMismatch {
                 lhs: lhs_len,
                 rhs: rhs_len,
                 ..
@@ -330,19 +323,19 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         lhs: TupleLen,
         rhs: TupleLen,
         context: TupleLenMismatchContext,
-    ) -> Result<TupleLen, TypeErrorKind<Prim>> {
+    ) -> Result<TupleLen, ErrorKind<Prim>> {
         let resolved_lhs = self.resolve_len(lhs);
         let resolved_rhs = self.resolve_len(rhs);
 
         self.unify_lengths_inner(resolved_lhs, resolved_rhs)
             .map_err(|err| match err {
-                LenErrorKind::UnresolvedParam => TypeErrorKind::UnresolvedParam,
-                LenErrorKind::Mismatch => TypeErrorKind::TupleLenMismatch {
+                LenErrorKind::UnresolvedParam => ErrorKind::UnresolvedParam,
+                LenErrorKind::Mismatch => ErrorKind::TupleLenMismatch {
                     lhs: resolved_lhs,
                     rhs: resolved_rhs,
                     context,
                 },
-                LenErrorKind::Dynamic(len) => TypeErrorKind::DynamicLen(len),
+                LenErrorKind::Dynamic(len) => ErrorKind::DynamicLen(len),
             })
     }
 
@@ -453,10 +446,10 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         &mut self,
         lhs: &FnType<Prim>,
         rhs: &FnType<Prim>,
-        mut errors: OpTypeErrors<'_, Prim>,
+        mut errors: OpErrors<'_, Prim>,
     ) {
         if lhs.is_parametric() {
-            errors.push(TypeErrorKind::UnsupportedParam);
+            errors.push(ErrorKind::UnsupportedParam);
             return;
         }
 
@@ -533,11 +526,11 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         var_idx: usize,
         ty: &Type<Prim>,
         is_lhs: bool,
-        mut errors: OpTypeErrors<'_, Prim>,
+        mut errors: OpErrors<'_, Prim>,
     ) {
         if let Type::Var(var) = ty {
             if !var.is_free() {
-                errors.push(TypeErrorKind::UnresolvedParam);
+                errors.push(ErrorKind::UnresolvedParam);
                 return;
             } else if var.index() == var_idx {
                 return;
@@ -569,7 +562,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             let mut resolved_ty = ty.to_owned();
             self.resolver().visit_type_mut(&mut resolved_ty);
             TypeSanitizer { fixed_idx: var_idx }.visit_type_mut(&mut resolved_ty);
-            errors.push(TypeErrorKind::RecursiveType(resolved_ty));
+            errors.push(ErrorKind::RecursiveType(resolved_ty));
         } else {
             if let Some(constraints) = self.constraints.get(&var_idx).cloned() {
                 constraints.apply(ty, self, errors);
@@ -615,7 +608,7 @@ impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for OccurrenceChecker<'a, Prim> {
 }
 
 /// Removes excessive information about type vars. This method is used when types are
-/// provided to `TypeError`.
+/// provided to `Error`.
 #[derive(Debug)]
 struct TypeSanitizer {
     fixed_idx: usize,

@@ -36,7 +36,7 @@ use crate::{arith::WithBoolean, FnType, Type, UnknownLen};
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-/// # use arithmetic_typing::{error::TypeErrorKind, Annotated, Prelude, TypeEnvironment, Type};
+/// # use arithmetic_typing::{ErrorKind, Annotated, Prelude, TypeEnvironment, Type};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// type Parser = Typed<Annotated<NumGrammar<f32>>>;
@@ -53,7 +53,7 @@ use crate::{arith::WithBoolean, FnType, Type, UnknownLen};
 /// assert_eq!(errors.len(), 1);
 /// let err = errors.iter().next().unwrap();
 /// assert_eq!(*err.span().fragment(), "(_, _, _, z)");
-/// # assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
+/// # assert_matches!(err.kind(), ErrorKind::TupleLenMismatch { .. });
 /// # Ok(())
 /// # }
 /// ```

@@ -4,8 +4,7 @@ use assert_matches::assert_matches;
 
 use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
 use arithmetic_typing::{
-    arith::NumConstraints, error::TypeErrorKind, Annotated, Prelude, TupleLen, Type,
-    TypeEnvironment,
+    arith::NumConstraints, error::ErrorKind, Annotated, Prelude, TupleLen, Type, TypeEnvironment,
 };
 
 type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
@@ -30,28 +29,28 @@ fn multiple_independent_errors() {
     assert_eq!(*errors[0].span().fragment(), "true");
     assert_matches!(
         errors[0].kind(),
-        TypeErrorKind::FailedConstraint { ty, constraint }
+        ErrorKind::FailedConstraint { ty, constraint }
             if *ty == Type::BOOL && *constraint == NumConstraints::Ops
     );
 
     assert_eq!(*errors[1].span().fragment(), "(1, 2).filter(|x| x + 1)");
     assert_matches!(
         errors[1].kind(),
-        TypeErrorKind::TypeMismatch(lhs, rhs)
+        ErrorKind::TypeMismatch(lhs, rhs)
             if *lhs == Type::BOOL && *rhs == Type::NUM
     );
 
     assert_eq!(*errors[2].span().fragment(), "(1, false).map(6)");
     assert_matches!(
         errors[2].kind(),
-        TypeErrorKind::TypeMismatch(lhs, rhs)
+        ErrorKind::TypeMismatch(lhs, rhs)
             if *lhs == Type::NUM && *rhs == Type::BOOL
     );
 
     assert_eq!(*errors[3].span().fragment(), "(1, false).map(6)");
     assert_matches!(
         errors[3].kind(),
-        TypeErrorKind::TypeMismatch(Type::Function(_), rhs)
+        ErrorKind::TypeMismatch(Type::Function(_), rhs)
             if *rhs == Type::NUM
     );
 }
@@ -76,27 +75,27 @@ fn recovery_after_error() {
     assert_eq!(*errors[0].span().fragment(), "x");
     assert_matches!(
         errors[0].kind(),
-        TypeErrorKind::UndefinedVar(id) if id == "x"
+        ErrorKind::UndefinedVar(id) if id == "x"
     );
 
     assert_eq!(*errors[1].span().fragment(), "(x == 3)");
     assert_matches!(
         errors[1].kind(),
-        TypeErrorKind::FailedConstraint { ty, constraint }
+        ErrorKind::FailedConstraint { ty, constraint }
             if *ty == Type::BOOL && *constraint == NumConstraints::Ops
     );
 
     assert_eq!(*errors[2].span().fragment(), "(1, false).map(|x| x + 1)");
     assert_matches!(
         errors[2].kind(),
-        TypeErrorKind::TypeMismatch(lhs, rhs)
+        ErrorKind::TypeMismatch(lhs, rhs)
             if *lhs == Type::NUM && *rhs == Type::BOOL
     );
 
     assert!(errors[3].span().fragment().starts_with("(x, y, z) ="));
     assert_matches!(
         errors[3].kind(),
-        TypeErrorKind::TupleLenMismatch { lhs, rhs, .. }
+        ErrorKind::TupleLenMismatch { lhs, rhs, .. }
             if *lhs == TupleLen::from(3) && *rhs == TupleLen::from(2)
     );
 }
@@ -123,21 +122,21 @@ fn recovery_in_fn_definition() {
     assert_eq!(*errors[0].span().fragment(), "xs.filter(|x| x + 1)");
     assert_matches!(
         errors[0].kind(),
-        TypeErrorKind::TypeMismatch(lhs, rhs)
+        ErrorKind::TypeMismatch(lhs, rhs)
             if *lhs == Type::BOOL && *rhs == Type::NUM
     );
 
     assert_eq!(*errors[1].span().fragment(), "bogus(true)");
     assert_matches!(
         errors[1].kind(),
-        TypeErrorKind::TypeMismatch(lhs, rhs)
+        ErrorKind::TypeMismatch(lhs, rhs)
             if *lhs == Type::NUM && *rhs == Type::BOOL
     );
 
     assert_eq!(*errors[2].span().fragment(), "(1, 2, 3).bogus()");
     assert_matches!(
         errors[2].kind(),
-        TypeErrorKind::TypeMismatch(lhs, Type::Tuple(_)) if *lhs == Type::NUM
+        ErrorKind::TypeMismatch(lhs, Type::Tuple(_)) if *lhs == Type::NUM
     );
 }
 
@@ -161,28 +160,28 @@ fn recovery_in_mangled_fn_definition() {
     assert_eq!(*errors[0].span().fragment(), "xs.filter(|x| x, 1)");
     assert_matches!(
         errors[0].kind(),
-        TypeErrorKind::TupleLenMismatch { lhs, rhs, .. }
+        ErrorKind::TupleLenMismatch { lhs, rhs, .. }
             if *lhs == TupleLen::from(2) && *rhs == TupleLen::from(3)
     );
 
     assert_eq!(*errors[1].span().fragment(), "bogus(1, 2)");
     assert_matches!(
         errors[1].kind(),
-        TypeErrorKind::TypeMismatch(lhs, rhs)
+        ErrorKind::TypeMismatch(lhs, rhs)
             if *lhs == Type::BOOL && *rhs == Type::NUM
     );
 
     assert_eq!(*errors[2].span().fragment(), "bogus(1, 2)");
     assert_matches!(
         errors[2].kind(),
-        TypeErrorKind::TypeMismatch(lhs, rhs)
+        ErrorKind::TypeMismatch(lhs, rhs)
             if *lhs == Type::BOOL && *rhs == Type::NUM
     );
 
     assert_eq!(*errors[3].span().fragment(), "bogus(1, 2) == (3,)");
     assert_matches!(
         errors[3].kind(),
-        TypeErrorKind::TypeMismatch(lhs, rhs)
+        ErrorKind::TypeMismatch(lhs, rhs)
             if *lhs == Type::BOOL && *rhs == Type::NUM
     );
 }
@@ -207,14 +206,14 @@ fn recovery_in_fn_with_insufficient_args() {
     assert_eq!(*errors[0].span().fragment(), "(1, 2, 3).map()");
     assert_matches!(
         errors[0].kind(),
-        TypeErrorKind::TupleLenMismatch { lhs, rhs, .. }
+        ErrorKind::TupleLenMismatch { lhs, rhs, .. }
             if *lhs == TupleLen::from(2) && *rhs == TupleLen::from(1)
     );
 
     assert_eq!(*errors[1].span().fragment(), "xs == (false, true)");
     assert_matches!(
         errors[1].kind(),
-        TypeErrorKind::TupleLenMismatch { lhs, rhs, .. }
+        ErrorKind::TupleLenMismatch { lhs, rhs, .. }
             if *lhs == TupleLen::from(3) && *rhs == TupleLen::from(2)
     );
 }

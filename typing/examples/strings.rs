@@ -8,7 +8,7 @@ use arithmetic_parser::{
     BinaryOp, InputSpan, NomResult,
 };
 use arithmetic_typing::{
-    arith::*, error::TypeErrors, Assertions, PrimitiveType, Substitutions, Type, TypeEnvironment,
+    arith::*, error::Errors, Assertions, PrimitiveType, Substitutions, Type, TypeEnvironment,
 };
 
 /// Primitive type: string or boolean.
@@ -110,7 +110,7 @@ impl TypeArithmetic<StrType> for StrArithmetic {
         &self,
         substitutions: &mut Substitutions<StrType>,
         spans: UnaryOpSpans<'a, StrType>,
-        errors: &mut TypeErrors<'a, StrType>,
+        errors: &mut Errors<'a, StrType>,
     ) -> Type<StrType> {
         BoolArithmetic.process_unary_op(substitutions, spans, errors)
     }
@@ -119,7 +119,7 @@ impl TypeArithmetic<StrType> for StrArithmetic {
         &self,
         substitutions: &mut Substitutions<StrType>,
         spans: BinaryOpSpans<'a, StrType>,
-        errors: &mut TypeErrors<'a, StrType>,
+        errors: &mut Errors<'a, StrType>,
     ) -> Type<StrType> {
         match spans.op.extra {
             BinaryOp::Add => NumArithmetic::unify_binary_op(

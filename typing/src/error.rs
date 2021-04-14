@@ -1,7 +1,5 @@
 //! Errors related to type inference.
 
-// TODO: shorten `TypeError` -> `Error` + re-export from root
-
 use std::{fmt, ops};
 
 use crate::{
@@ -15,7 +13,7 @@ use arithmetic_parser::{
     UnsupportedType,
 };
 
-/// Context for [`TypeErrorKind::TupleLenMismatch`].
+/// Context for [`ErrorKind::TupleLenMismatch`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum TupleLenMismatchContext {
@@ -25,10 +23,10 @@ pub enum TupleLenMismatchContext {
     FnArgs,
 }
 
-/// Errors that can occur during type inference.
+/// Kinds of errors that can occur during type inference.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
-pub enum TypeErrorKind<Prim: PrimitiveType> {
+pub enum ErrorKind<Prim: PrimitiveType> {
     /// Trying to unify incompatible types. The first type is LHS, the second one is RHS.
     TypeMismatch(Type<Prim>, Type<Prim>),
     /// Incompatible tuple lengths.
@@ -86,7 +84,7 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
     /// of code that triggers this error:
     ///
     /// ```text
-    /// identity: ('T) -> 'T = |x| x;
+    /// identity: (('T,)) -> ('T,) = |x| x;
     /// ```
     UnsupportedParam,
 
@@ -94,7 +92,7 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
     AstConversion(AstConversionError),
 }
 
-impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
+impl<Prim: PrimitiveType> fmt::Display for ErrorKind<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::TypeMismatch(lhs, rhs) => write!(
@@ -151,7 +149,7 @@ impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
     }
 }
 
-impl<Prim: PrimitiveType> std::error::Error for TypeErrorKind<Prim> {
+impl<Prim: PrimitiveType> std::error::Error for ErrorKind<Prim> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::AstConversion(err) => Some(err),
@@ -160,7 +158,7 @@ impl<Prim: PrimitiveType> std::error::Error for TypeErrorKind<Prim> {
     }
 }
 
-impl<Prim: PrimitiveType> TypeErrorKind<Prim> {
+impl<Prim: PrimitiveType> ErrorKind<Prim> {
     /// Creates an error for an lvalue type not supported by the interpreter.
     pub fn unsupported<T: Into<UnsupportedType>>(ty: T) -> Self {
         Self::UnsupportedFeature(ty.into())
@@ -175,13 +173,13 @@ impl<Prim: PrimitiveType> TypeErrorKind<Prim> {
 /// Type error together with the corresponding code span.
 // TODO: implement `StripCode`?
 #[derive(Debug, Clone)]
-pub struct TypeError<'a, Prim: PrimitiveType> {
-    inner: Spanned<'a, TypeErrorKind<Prim>>,
+pub struct Error<'a, Prim: PrimitiveType> {
+    inner: Spanned<'a, ErrorKind<Prim>>,
     context: ErrorContext<Prim>,
     location: Vec<ErrorLocation>,
 }
 
-impl<Prim: PrimitiveType> fmt::Display for TypeError<'_, Prim> {
+impl<Prim: PrimitiveType> fmt::Display for Error<'_, Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
@@ -193,18 +191,18 @@ impl<Prim: PrimitiveType> fmt::Display for TypeError<'_, Prim> {
     }
 }
 
-impl<Prim: PrimitiveType> std::error::Error for TypeError<'_, Prim> {
+impl<Prim: PrimitiveType> std::error::Error for Error<'_, Prim> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(self.kind())
     }
 }
 
-impl<'a, Prim: PrimitiveType> TypeError<'a, Prim> {
+impl<'a, Prim: PrimitiveType> Error<'a, Prim> {
     pub(crate) fn unsupported<T>(
         unsupported: impl Into<UnsupportedType>,
         span: &Spanned<'a, T>,
     ) -> Self {
-        let kind = TypeErrorKind::unsupported(unsupported);
+        let kind = ErrorKind::unsupported(unsupported);
         Self {
             inner: span.copy_with_extra(kind),
             context: ErrorContext::None,
@@ -215,14 +213,14 @@ impl<'a, Prim: PrimitiveType> TypeError<'a, Prim> {
     pub(crate) fn undefined_var<T>(span: &Spanned<'a, T>) -> Self {
         let ident = (*span.fragment()).to_owned();
         Self {
-            inner: span.copy_with_extra(TypeErrorKind::UndefinedVar(ident)),
+            inner: span.copy_with_extra(ErrorKind::UndefinedVar(ident)),
             context: ErrorContext::None,
             location: vec![],
         }
     }
 
     pub(crate) fn conversion<T>(kind: AstConversionError, span: &Spanned<'a, T>) -> Self {
-        let kind = TypeErrorKind::AstConversion(kind);
+        let kind = ErrorKind::AstConversion(kind);
         Self {
             inner: span.copy_with_extra(kind),
             context: ErrorContext::None,
@@ -231,42 +229,70 @@ impl<'a, Prim: PrimitiveType> TypeError<'a, Prim> {
     }
 
     /// Gets the kind of this error.
-    pub fn kind(&self) -> &TypeErrorKind<Prim> {
+    pub fn kind(&self) -> &ErrorKind<Prim> {
         &self.inner.extra
     }
 
-    /// Gets the code span of this error.
+    /// Gets the most specific code span of this error.
     pub fn span(&self) -> Spanned<'a> {
         self.inner.with_no_extra()
     }
 
-    /// Top-level operation that has errored.
+    /// Gets the context for a top-level operation that has failed.
     pub fn context(&self) -> &ErrorContext<Prim> {
         &self.context
     }
 
-    /// Gets the location of this error relative to the spanned type.
+    /// Gets the location of this error relative to the failed top-level operation.
     pub fn location(&self) -> &[ErrorLocation] {
         &self.location
     }
 }
 
-/// List of [`TypeError`]s.
+/// List of [`Error`]s.
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// # use arithmetic_typing::{error::Errors, Annotated, Prelude, TypeEnvironment};
+/// # use std::collections::HashSet;
+/// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
+/// # fn main() -> anyhow::Result<()> {
+/// let buggy_code = Parser::parse_statements(r#"
+///     numbers: ['T; _] = (1, 2, 3);
+///     numbers.filter(|x| x, 1)
+/// "#)?;
+/// let mut env: TypeEnvironment = Prelude::iter().collect();
+/// let errors: Errors<_> = env.process_statements(&buggy_code).unwrap_err();
+/// assert_eq!(errors.len(), 3);
+///
+/// let messages: HashSet<_> = errors.iter().map(ToString::to_string).collect();
+/// assert!(messages
+///     .iter()
+///     .any(|msg| msg.contains("Type param `T` is not scoped by function definition")));
+/// assert!(messages
+///     .contains("3:20: Type `Num` is not assignable to type `Bool`"));
+/// assert!(messages
+///     .contains("3:5: Function expects 2 args, but is called with 3 args"));
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone)]
-pub struct TypeErrors<'a, Prim: PrimitiveType> {
-    inner: Vec<TypeError<'a, Prim>>,
+pub struct Errors<'a, Prim: PrimitiveType> {
+    inner: Vec<Error<'a, Prim>>,
 }
 
-impl<'a, Prim: PrimitiveType> TypeErrors<'a, Prim> {
+impl<'a, Prim: PrimitiveType> Errors<'a, Prim> {
     pub(crate) fn new() -> Self {
         Self { inner: vec![] }
     }
 
-    pub(crate) fn push(&mut self, err: TypeError<'a, Prim>) {
+    pub(crate) fn push(&mut self, err: Error<'a, Prim>) {
         self.inner.push(err);
     }
 
-    pub(crate) fn extend(&mut self, errors: Vec<TypeError<'a, Prim>>) {
+    pub(crate) fn extend(&mut self, errors: Vec<Error<'a, Prim>>) {
         self.inner.extend(errors.into_iter());
     }
 
@@ -275,13 +301,13 @@ impl<'a, Prim: PrimitiveType> TypeErrors<'a, Prim> {
         self.inner.len()
     }
 
-    /// Checks if this list is empty.
+    /// Checks if this list is empty (there are no errors).
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
 
     /// Iterates over errors contained in this list.
-    pub fn iter(&self) -> impl Iterator<Item = &TypeError<'a, Prim>> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = &Error<'a, Prim>> + '_ {
         self.inner.iter()
     }
 
@@ -294,16 +320,16 @@ impl<'a, Prim: PrimitiveType> TypeErrors<'a, Prim> {
     }
 
     #[cfg(test)]
-    pub(crate) fn single(mut self) -> TypeError<'a, Prim> {
+    pub(crate) fn single(mut self) -> Error<'a, Prim> {
         if self.len() == 1 {
             self.inner.pop().unwrap()
         } else {
-            panic!("Expected 1 error, got {:?}", self)
+            panic!("Expected 1 error, got {:?}", self);
         }
     }
 }
 
-impl<Prim: PrimitiveType> fmt::Display for TypeErrors<'_, Prim> {
+impl<Prim: PrimitiveType> fmt::Display for Errors<'_, Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (i, error) in self.inner.iter().enumerate() {
             write!(formatter, "{}", error)?;
@@ -315,10 +341,10 @@ impl<Prim: PrimitiveType> fmt::Display for TypeErrors<'_, Prim> {
     }
 }
 
-impl<Prim: PrimitiveType> std::error::Error for TypeErrors<'_, Prim> {}
+impl<Prim: PrimitiveType> std::error::Error for Errors<'_, Prim> {}
 
-impl<'a, Prim: PrimitiveType> IntoIterator for TypeErrors<'a, Prim> {
-    type Item = TypeError<'a, Prim>;
+impl<'a, Prim: PrimitiveType> IntoIterator for Errors<'a, Prim> {
+    type Item = Error<'a, Prim>;
     type IntoIter = std::vec::IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -326,17 +352,23 @@ impl<'a, Prim: PrimitiveType> IntoIterator for TypeErrors<'a, Prim> {
     }
 }
 
-/// Error container tied to a particular top-level operation.
+/// Error container tied to a particular top-level operation that has a certain span
+/// and [context](ErrorContext).
+///
+/// Supplied as an argument to [`TypeArithmetic`] methods and [`Substitutions::unify()`].
+///
+/// [`TypeArithmetic`]: crate::arith::TypeArithmetic
+/// [`Substitutions::unify()`]: crate::Substitutions::unify()
 #[derive(Debug)]
-pub struct OpTypeErrors<'a, Prim: PrimitiveType> {
-    errors: Goat<'a, Vec<TypeErrorPrecursor<Prim>>>,
+pub struct OpErrors<'a, Prim: PrimitiveType> {
+    errors: Goat<'a, Vec<ErrorPrecursor<Prim>>>,
     current_location: Vec<ErrorLocation>,
 }
 
-impl<Prim: PrimitiveType> OpTypeErrors<'_, Prim> {
+impl<Prim: PrimitiveType> OpErrors<'_, Prim> {
     /// Adds a new `error` into this the error list.
-    pub fn push(&mut self, kind: TypeErrorKind<Prim>) {
-        self.errors.push(TypeErrorPrecursor {
+    pub fn push(&mut self, kind: ErrorKind<Prim>) {
+        self.errors.push(ErrorPrecursor {
             kind,
             location: self.current_location.clone(),
         });
@@ -344,32 +376,32 @@ impl<Prim: PrimitiveType> OpTypeErrors<'_, Prim> {
 
     /// Invokes the provided closure and returns `false` if new errors were
     /// added during the closure execution.
-    pub fn check(&mut self, check: impl FnOnce(OpTypeErrors<'_, Prim>)) -> bool {
+    pub fn check(&mut self, check: impl FnOnce(OpErrors<'_, Prim>)) -> bool {
         let error_count = self.errors.len();
         check(self.by_ref());
         self.errors.len() == error_count
     }
 
     /// Mutably borrows this container allowing to use it multiple times.
-    pub fn by_ref(&mut self) -> OpTypeErrors<'_, Prim> {
-        OpTypeErrors {
+    pub fn by_ref(&mut self) -> OpErrors<'_, Prim> {
+        OpErrors {
             errors: Goat::Borrowed(&mut *self.errors),
             current_location: self.current_location.clone(),
         }
     }
 
     /// Narrows down the location of the error.
-    pub fn with_location(&mut self, location: ErrorLocation) -> OpTypeErrors<'_, Prim> {
+    pub fn with_location(&mut self, location: ErrorLocation) -> OpErrors<'_, Prim> {
         let mut current_location = self.current_location.clone();
         current_location.push(location);
-        OpTypeErrors {
+        OpErrors {
             errors: Goat::Borrowed(&mut *self.errors),
             current_location,
         }
     }
 
     #[cfg(test)]
-    pub(crate) fn into_vec(self) -> Vec<TypeErrorKind<Prim>> {
+    pub(crate) fn into_vec(self) -> Vec<ErrorKind<Prim>> {
         let errors = match self.errors {
             Goat::Owned(errors) => errors,
             Goat::Borrowed(_) => panic!("Attempt to call `into_vec` for borrowed errors"),
@@ -378,7 +410,7 @@ impl<Prim: PrimitiveType> OpTypeErrors<'_, Prim> {
     }
 }
 
-impl<Prim: PrimitiveType> OpTypeErrors<'static, Prim> {
+impl<Prim: PrimitiveType> OpErrors<'static, Prim> {
     pub(crate) fn new() -> Self {
         Self {
             errors: Goat::Owned(vec![]),
@@ -390,15 +422,15 @@ impl<Prim: PrimitiveType> OpTypeErrors<'static, Prim> {
         self,
         span: &SpannedExpr<'a, T>,
         context: impl Into<ErrorContext<Prim>>,
-    ) -> Vec<TypeError<'a, Prim>> {
+    ) -> Vec<Error<'a, Prim>> {
         let context = context.into();
         self.do_contextualize(|item| item.into_expr_error(context.clone(), span))
     }
 
     fn do_contextualize<'a>(
         self,
-        map_fn: impl Fn(TypeErrorPrecursor<Prim>) -> TypeError<'a, Prim>,
-    ) -> Vec<TypeError<'a, Prim>> {
+        map_fn: impl Fn(ErrorPrecursor<Prim>) -> Error<'a, Prim>,
+    ) -> Vec<Error<'a, Prim>> {
         let errors = match self.errors {
             Goat::Owned(errors) => errors,
             Goat::Borrowed(_) => unreachable!(),
@@ -410,7 +442,7 @@ impl<Prim: PrimitiveType> OpTypeErrors<'static, Prim> {
         self,
         span: &SpannedLvalue<'a, TypeAst<'a>>,
         context: &ErrorContext<Prim>,
-    ) -> Vec<TypeError<'a, Prim>> {
+    ) -> Vec<Error<'a, Prim>> {
         if self.errors.is_empty() {
             vec![]
         } else {
@@ -422,7 +454,7 @@ impl<Prim: PrimitiveType> OpTypeErrors<'static, Prim> {
         self,
         span: &Spanned<'a, Destructure<'a, TypeAst<'a>>>,
         create_context: impl FnOnce() -> ErrorContext<Prim>,
-    ) -> Vec<TypeError<'a, Prim>> {
+    ) -> Vec<Error<'a, Prim>> {
         if self.errors.is_empty() {
             vec![]
         } else {
@@ -460,18 +492,18 @@ impl<T> ops::DerefMut for Goat<'_, T> {
 }
 
 #[derive(Debug)]
-struct TypeErrorPrecursor<Prim: PrimitiveType> {
-    kind: TypeErrorKind<Prim>,
+struct ErrorPrecursor<Prim: PrimitiveType> {
+    kind: ErrorKind<Prim>,
     location: Vec<ErrorLocation>,
 }
 
-impl<Prim: PrimitiveType> TypeErrorPrecursor<Prim> {
+impl<Prim: PrimitiveType> ErrorPrecursor<Prim> {
     fn into_expr_error<'a, T: Grammar<'a>>(
         self,
         context: ErrorContext<Prim>,
         root_expr: &SpannedExpr<'a, T>,
-    ) -> TypeError<'a, Prim> {
-        TypeError {
+    ) -> Error<'a, Prim> {
+        Error {
             inner: ErrorLocation::walk_expr(&self.location, root_expr).copy_with_extra(self.kind),
             context,
             location: self.location,
@@ -482,8 +514,8 @@ impl<Prim: PrimitiveType> TypeErrorPrecursor<Prim> {
         self,
         context: ErrorContext<Prim>,
         root_lvalue: &SpannedLvalue<'a, TypeAst<'a>>,
-    ) -> TypeError<'a, Prim> {
-        TypeError {
+    ) -> Error<'a, Prim> {
+        Error {
             inner: ErrorLocation::walk_lvalue(&self.location, root_lvalue)
                 .copy_with_extra(self.kind),
             context,
@@ -495,8 +527,8 @@ impl<Prim: PrimitiveType> TypeErrorPrecursor<Prim> {
         self,
         context: ErrorContext<Prim>,
         root_destructure: &Spanned<'a, Destructure<'a, TypeAst<'a>>>,
-    ) -> TypeError<'a, Prim> {
-        TypeError {
+    ) -> Error<'a, Prim> {
+        Error {
             inner: ErrorLocation::walk_destructure(&self.location, root_destructure)
                 .copy_with_extra(self.kind),
             context,
@@ -664,7 +696,7 @@ impl<'a> LvalueTree<'_, 'a> {
     }
 }
 
-/// Context of a [`TypeError`] corresponding to the top-level operation that has errored.
+/// Context of a [`Error`] corresponding to a top-level operation that has errored.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum ErrorContext<Prim: PrimitiveType> {

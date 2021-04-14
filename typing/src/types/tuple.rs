@@ -125,12 +125,12 @@ impl UnknownLen {
 /// even if they are of the same type. This constraint is denoted as `len! N, M, ...`
 /// in the function quantifier, e.g., `for<len! N> (['T; N]) -> 'T`.
 ///
-/// If the constraint fails, an error will be raised with the [kind](crate::error::TypeError::kind)
-/// set to [`TypeErrorKind::DynamicLen`].
+/// If the constraint fails, an error will be raised with the [kind](crate::Error::kind)
+/// set to [`ErrorKind::DynamicLen`].
 ///
 /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
 /// [`NumConstraints::Ops`]: crate::arith::NumConstraints::Ops
-/// [`TypeErrorKind::DynamicLen`]: crate::error::TypeErrorKind::DynamicLen
+/// [`ErrorKind::DynamicLen`]: crate::ErrorKind::DynamicLen
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TupleLen {
     var: Option<UnknownLen>,

@@ -11,7 +11,7 @@ use crate::ast::SpannedTypeAst;
 use crate::{
     arith::{BinaryOpContext, MapPrimitiveType, NumArithmetic, TypeArithmetic, UnaryOpContext},
     ast::{AstConversionState, TypeAst},
-    error::{ErrorContext, ErrorLocation, OpTypeErrors, TypeError, TypeErrorKind, TypeErrors},
+    error::{Error, ErrorContext, ErrorKind, ErrorLocation, Errors, OpErrors},
     types::{ParamConstraints, ParamQuantifier},
     visit::VisitMut,
     FnType, Num, PrimitiveType, Slice, Substitutions, Tuple, Type,
@@ -118,7 +118,7 @@ impl<Prim: PrimitiveType> TypeEnvironment<Prim> {
     pub fn process_statements<'a, T>(
         &mut self,
         block: &Block<'a, T>,
-    ) -> Result<Type<Prim>, TypeErrors<'a, Prim>>
+    ) -> Result<Type<Prim>, Errors<'a, Prim>>
     where
         T: Grammar<'a, Type = TypeAst<'a>>,
         NumArithmetic: MapPrimitiveType<T::Lit, Prim = Prim> + TypeArithmetic<Prim>,
@@ -138,7 +138,7 @@ impl<Prim: PrimitiveType> TypeEnvironment<Prim> {
         &mut self,
         arithmetic: &A,
         block: &Block<'a, T>,
-    ) -> Result<Type<Prim>, TypeErrors<'a, Prim>>
+    ) -> Result<Type<Prim>, Errors<'a, Prim>>
     where
         T: Grammar<'a, Type = TypeAst<'a>>,
         A: MapPrimitiveType<T::Lit, Prim = Prim> + TypeArithmetic<Prim>,
@@ -209,7 +209,7 @@ struct TypeProcessor<'a, 'env, Val, Prim: PrimitiveType> {
     scope_before_first_error: Option<HashMap<String, Type<Prim>>>,
     arithmetic: &'env dyn FullArithmetic<Val, Prim>,
     is_in_function: bool,
-    errors: TypeErrors<'a, Prim>,
+    errors: Errors<'a, Prim>,
 }
 
 impl<'env, Val, Prim: PrimitiveType> TypeProcessor<'_, 'env, Val, Prim> {
@@ -223,7 +223,7 @@ impl<'env, Val, Prim: PrimitiveType> TypeProcessor<'_, 'env, Val, Prim> {
             scope_before_first_error: None,
             arithmetic,
             is_in_function: false,
-            errors: TypeErrors::new(),
+            errors: Errors::new(),
         }
     }
 }
@@ -307,8 +307,7 @@ where
             Expr::Binary { lhs, rhs, op } => self.process_binary_op(expr, op.extra, lhs, rhs),
 
             _ => {
-                self.errors
-                    .push(TypeError::unsupported(expr.extra.ty(), expr));
+                self.errors.push(Error::unsupported(expr.extra.ty(), expr));
                 // No better choice than to go with `Some` type.
                 self.new_type()
             }
@@ -323,7 +322,7 @@ where
         if let Some(ty) = self.get_type(var_name) {
             ty.clone()
         } else {
-            self.errors.push(TypeError::undefined_var(name));
+            self.errors.push(Error::undefined_var(name));
             // No better choice than to go with `Some` type.
             self.new_type()
         }
@@ -348,7 +347,7 @@ where
     fn process_lvalue(
         &mut self,
         lvalue: &SpannedLvalue<'a, TypeAst<'a>>,
-        mut errors: OpTypeErrors<'_, Prim>,
+        mut errors: OpErrors<'_, Prim>,
     ) -> Type<Prim> {
         match &lvalue.extra {
             Lvalue::Variable { ty } => {
@@ -363,7 +362,7 @@ where
             }
 
             _ => {
-                errors.push(TypeErrorKind::unsupported(lvalue.extra.ty()));
+                errors.push(ErrorKind::unsupported(lvalue.extra.ty()));
                 // No better choice than to go with `Some` type.
                 self.new_type()
             }
@@ -374,7 +373,7 @@ where
     fn process_destructure(
         &mut self,
         destructure: &Destructure<'a, TypeAst<'a>>,
-        mut errors: OpTypeErrors<'_, Prim>,
+        mut errors: OpErrors<'_, Prim>,
     ) -> Tuple<Prim> {
         let start = destructure
             .start
@@ -432,7 +431,7 @@ where
         let return_type = self.new_type();
         let call_signature = FnType::new(arg_types.into(), return_type.clone()).into();
 
-        let mut errors = OpTypeErrors::new();
+        let mut errors = OpErrors::new();
         self.env
             .substitutions
             .unify(&call_signature, &definition, errors.by_ref());
@@ -457,7 +456,7 @@ where
         let inner_ty = self.process_expr_inner(inner);
         let context = UnaryOpContext { op, arg: inner_ty };
 
-        let mut errors = OpTypeErrors::new();
+        let mut errors = OpErrors::new();
         let output = self.arithmetic.process_unary_op(
             &mut self.env.substitutions,
             &context,
@@ -487,7 +486,7 @@ where
             rhs: rhs_ty,
         };
 
-        let mut errors = OpTypeErrors::new();
+        let mut errors = OpErrors::new();
         let output = self.arithmetic.process_binary_op(
             &mut self.env.substitutions,
             &context,
@@ -505,7 +504,7 @@ where
         self.scopes.push(HashMap::new());
         let was_in_function = mem::replace(&mut self.is_in_function, true);
 
-        let mut errors = OpTypeErrors::new();
+        let mut errors = OpErrors::new();
         let arg_types = self.process_destructure(&def.args.extra, errors.by_ref());
         let errors = errors.contextualize_destructure(&def.args, || ErrorContext::FnDefinition {
             args: arg_types.clone(),
@@ -544,7 +543,7 @@ where
             Statement::Assignment { lhs, rhs } => {
                 let rhs_ty = self.process_expr_inner(rhs);
 
-                let mut errors = OpTypeErrors::new();
+                let mut errors = OpErrors::new();
                 let lhs_ty = self.process_lvalue(lhs, errors.by_ref());
                 self.env
                     .substitutions
@@ -560,7 +559,7 @@ where
 
             _ => {
                 self.errors
-                    .push(TypeError::unsupported(statement.extra.ty(), statement));
+                    .push(Error::unsupported(statement.extra.ty(), statement));
                 // No better choice than to go with `Some` type.
                 self.new_type()
             }
@@ -572,10 +571,7 @@ where
         output
     }
 
-    fn process_statements<T>(
-        mut self,
-        block: &Block<'a, T>,
-    ) -> Result<Type<Prim>, TypeErrors<'a, Prim>>
+    fn process_statements<T>(mut self, block: &Block<'a, T>) -> Result<Type<Prim>, Errors<'a, Prim>>
     where
         T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
     {

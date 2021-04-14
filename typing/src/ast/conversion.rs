@@ -11,12 +11,15 @@ use std::{
 
 use crate::ast::TypeConstraintsAst;
 use crate::{
-    ast::{ConstraintsAst, FnTypeAst, SliceAst, TupleAst, TupleLenAst, ValueTypeAst},
+    ast::{
+        ConstraintsAst, FnTypeAst, SliceAst, SpannedValueTypeAst, TupleAst, TupleLenAst,
+        ValueTypeAst,
+    },
     error::{TypeError, TypeErrors},
     types::{ParamConstraints, ParamQuantifier},
     FnType, PrimitiveType, Slice, Tuple, TypeEnvironment, UnknownLen, ValueType,
 };
-use arithmetic_parser::{ErrorKind as ParseErrorKind, InputSpan, NomResult, SpannedError};
+use arithmetic_parser::{ErrorKind as ParseErrorKind, InputSpan, NomResult, Spanned, SpannedError};
 
 /// Kinds of errors that can occur when converting `*Ast` types into their "main" counterparts.
 ///
@@ -145,6 +148,67 @@ impl<'r, 'a, Prim: PrimitiveType> ConversionState<'r, 'a, Prim> {
     fn new_len(&mut self) -> UnknownLen {
         self.env.substitutions.new_len_var()
     }
+
+    pub(crate) fn convert_type(&mut self, ty: &SpannedValueTypeAst<'a>) -> ValueType<Prim> {
+        match &ty.extra {
+            ValueTypeAst::Some => self.new_type(),
+            ValueTypeAst::Any(constraints) => ValueType::Any(constraints.convert(self)),
+            ValueTypeAst::Ident => {
+                let ident = *ty.fragment();
+                if let Ok(prim_type) = Prim::from_str(ident) {
+                    ValueType::Prim(prim_type)
+                } else {
+                    let err = ConversionError::UnknownType(ident.to_owned());
+                    self.errors.push(TypeError::conversion(err, ty));
+                    self.new_type()
+                }
+            }
+
+            ValueTypeAst::Param => {
+                let name = &ty.fragment()[1..];
+                if self.is_in_function {
+                    let idx = self.type_param_idx(name);
+                    ValueType::param(idx)
+                } else {
+                    let err = ConversionError::FreeTypeVar(name.to_owned());
+                    self.errors.push(TypeError::conversion(err, ty));
+                    self.new_type()
+                }
+            }
+
+            ValueTypeAst::Function(function) => self.convert_fn(function, None),
+            ValueTypeAst::FunctionWithConstraints {
+                function,
+                constraints,
+            } => self.convert_fn(&function.extra, Some(constraints)),
+
+            ValueTypeAst::Tuple(tuple) => tuple.convert(self).into(),
+            ValueTypeAst::Slice(slice) => slice.convert(self).into(),
+        }
+    }
+
+    fn convert_fn(
+        &mut self,
+        function: &FnTypeAst<'a>,
+        constraints: Option<&Spanned<'a, ConstraintsAst<'a>>>,
+    ) -> ValueType<Prim> {
+        if self.is_in_function {
+            if let Some(constraints) = constraints {
+                let err = ConversionError::EmbeddedQuantifier;
+                self.errors.push(TypeError::conversion(err, constraints));
+            }
+            function.convert(self).into()
+        } else {
+            self.is_in_function = true;
+            let mut converted_fn = function.convert(self);
+            self.is_in_function = false;
+
+            let constraints =
+                constraints.map_or_else(ParamConstraints::default, |c| c.extra.convert(self));
+            ParamQuantifier::set_params(&mut converted_fn, constraints);
+            converted_fn.into()
+        }
+    }
 }
 
 impl<'a> TypeConstraintsAst<'a> {
@@ -154,7 +218,7 @@ impl<'a> TypeConstraintsAst<'a> {
     ) -> Prim::Constraints {
         self.terms
             .iter()
-            .fold(Prim::Constraints::default(), |mut acc, &input| {
+            .fold(Prim::Constraints::default(), |mut acc, input| {
                 let input_str = *input.fragment();
                 let partial = Prim::Constraints::from_str(input_str)
                     .map_err(|_| {
@@ -180,7 +244,7 @@ impl<'a> ConstraintsAst<'a> {
                 static_lengths.insert(*index);
             } else {
                 let err = ConversionError::UnusedLength(name.to_owned());
-                state.errors.push(TypeError::conversion(err, *dyn_length));
+                state.errors.push(TypeError::conversion(err, dyn_length));
             }
         }
 
@@ -191,7 +255,7 @@ impl<'a> ConstraintsAst<'a> {
                 type_params.insert(*index, constraints.convert(state));
             } else {
                 let err = ConversionError::UnusedTypeParam(name.to_owned());
-                state.errors.push(TypeError::conversion(err, *param));
+                state.errors.push(TypeError::conversion(err, param));
             }
         }
 
@@ -210,7 +274,7 @@ impl<'a> TupleAst<'a> {
         let start = self
             .start
             .iter()
-            .map(|element| element.extra.convert(state))
+            .map(|element| state.convert_type(element))
             .collect();
         let middle = self
             .middle
@@ -219,7 +283,7 @@ impl<'a> TupleAst<'a> {
         let end = self
             .end
             .iter()
-            .map(|element| element.extra.convert(state))
+            .map(|element| state.convert_type(element))
             .collect();
         Tuple::from_parts(start, middle, end)
     }
@@ -230,7 +294,7 @@ impl<'a> SliceAst<'a> {
         &self,
         state: &mut ConversionState<'_, 'a, Prim>,
     ) -> Slice<Prim> {
-        let element = self.element.extra.convert(state);
+        let element = state.convert_type(&self.element);
 
         let converted_length = match &self.length {
             TupleLenAst::Ident(ident) => {
@@ -240,7 +304,7 @@ impl<'a> SliceAst<'a> {
                     UnknownLen::param(const_param)
                 } else {
                     let err = ConversionError::FreeLengthVar(name.to_owned());
-                    state.errors.push(TypeError::conversion(err, *ident));
+                    state.errors.push(TypeError::conversion(err, ident));
                     state.new_len()
                 }
             }
@@ -252,92 +316,13 @@ impl<'a> SliceAst<'a> {
     }
 }
 
-impl<'a> ValueTypeAst<'a> {
-    pub(crate) fn convert<Prim: PrimitiveType>(
-        &self,
-        state: &mut ConversionState<'_, 'a, Prim>,
-    ) -> ValueType<Prim> {
-        match self {
-            Self::Some => state.new_type(),
-            Self::Any(constraints) => ValueType::Any(constraints.convert(state)),
-            Self::Ident(prim) => {
-                let ident = *prim.fragment();
-                if let Ok(prim_type) = Prim::from_str(ident) {
-                    ValueType::Prim(prim_type)
-                } else {
-                    let err = ConversionError::UnknownType(ident.to_owned());
-                    state.errors.push(TypeError::conversion(err, *prim));
-                    state.new_type()
-                }
-            }
-
-            Self::Param(ident) => {
-                let name = *ident.fragment();
-                if state.is_in_function {
-                    let idx = state.type_param_idx(name);
-                    ValueType::param(idx)
-                } else {
-                    let err = ConversionError::FreeTypeVar(name.to_owned());
-                    state.errors.push(TypeError::conversion(err, *ident));
-                    state.new_type()
-                }
-            }
-
-            Self::Function {
-                constraints,
-                function,
-            } => {
-                if state.is_in_function {
-                    if let Some(constraints) = constraints {
-                        let err = ConversionError::EmbeddedQuantifier;
-                        state
-                            .errors
-                            .push(TypeError::conversion(err, constraints.for_keyword));
-                    }
-                    function.convert(state).into()
-                } else {
-                    state.is_in_function = true;
-                    let mut converted_fn = function.convert(state);
-                    state.is_in_function = false;
-
-                    let constraints = constraints
-                        .as_ref()
-                        .map_or_else(ParamConstraints::default, |c| c.convert(state));
-                    ParamQuantifier::set_params(&mut converted_fn, constraints);
-                    converted_fn.into()
-                }
-            }
-
-            Self::Tuple(tuple) => tuple.convert(state).into(),
-            Self::Slice(slice) => slice.convert(state).into(),
-        }
-    }
-
-    /// Tries to convert this type into [`ValueType`].
-    pub fn try_convert<Prim>(&self) -> Result<ValueType<Prim>, TypeErrors<'a, Prim>>
-    where
-        Prim: PrimitiveType,
-    {
-        let mut env = TypeEnvironment::new();
-        let mut errors = TypeErrors::new();
-        let mut state = ConversionState::new(&mut env, &mut errors);
-
-        let output = self.convert(&mut state);
-        if errors.is_empty() {
-            Ok(output)
-        } else {
-            Err(errors)
-        }
-    }
-}
-
 impl<'a> FnTypeAst<'a> {
     fn convert<Prim: PrimitiveType>(
         &self,
         state: &mut ConversionState<'_, 'a, Prim>,
     ) -> FnType<Prim> {
         let args = self.args.extra.convert(state);
-        let return_type = self.return_type.extra.convert(state);
+        let return_type = state.convert_type(&self.return_type);
         FnType::new(args, return_type)
     }
 
@@ -386,11 +371,27 @@ fn from_str<'a, Ast>(
     Ok(ast)
 }
 
-impl<'a> TryFrom<&'a str> for ValueTypeAst<'a> {
-    type Error = SpannedError<&'a str>;
-
-    fn try_from(def: &'a str) -> Result<Self, Self::Error> {
+impl<'a> ValueTypeAst<'a> {
+    /// Parses type AST from a string.
+    pub fn try_from(def: &'a str) -> Result<SpannedValueTypeAst<'a>, SpannedError<&'a str>> {
         from_str(ValueTypeAst::parse, def)
+    }
+}
+
+impl<'a, Prim: PrimitiveType> TryFrom<&SpannedValueTypeAst<'a>> for ValueType<Prim> {
+    type Error = TypeErrors<'a, Prim>;
+
+    fn try_from(ast: &SpannedValueTypeAst<'a>) -> Result<Self, Self::Error> {
+        let mut env = TypeEnvironment::new();
+        let mut errors = TypeErrors::new();
+        let mut state = ConversionState::new(&mut env, &mut errors);
+
+        let output = state.convert_type(ast);
+        if errors.is_empty() {
+            Ok(output)
+        } else {
+            Err(errors)
+        }
     }
 }
 
@@ -422,7 +423,7 @@ mod tests {
     fn converting_fn_type_with_constraint() {
         let input = InputSpan::new("for<'T: Lin> (['T; N], ('T) -> Bool) -> Bool");
         let (_, ast) = ValueTypeAst::parse(input).unwrap();
-        let fn_type = ast.try_convert::<Num>().unwrap();
+        let fn_type = <ValueType>::try_from(&ast).unwrap();
 
         assert_eq!(fn_type.to_string(), *input.fragment());
     }
@@ -431,7 +432,7 @@ mod tests {
     fn converting_fn_type_unused_type() {
         let input = InputSpan::new("for<'T: Lin> (Num) -> Bool");
         let (_, ast) = ValueTypeAst::parse(input).unwrap();
-        let err = ast.try_convert::<Num>().unwrap_err().single();
+        let err = <ValueType>::try_from(&ast).unwrap_err().single();
 
         assert_eq!(err.span().location_offset(), 5);
         assert_matches!(
@@ -443,8 +444,8 @@ mod tests {
     #[test]
     fn converting_fn_type_unused_length() {
         let input = InputSpan::new("for<len! N> (Num) -> Bool");
-        let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
-        let err = ast.try_convert::<Num>().unwrap_err().single();
+        let (_, ast) = ValueTypeAst::parse(input).unwrap();
+        let err = <ValueType>::try_from(&ast).unwrap_err().single();
 
         assert_eq!(err.span().location_offset(), 9);
         assert_matches!(
@@ -456,10 +457,10 @@ mod tests {
     #[test]
     fn converting_fn_type_free_type_param() {
         let input = InputSpan::new("(Num, 'T)");
-        let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
-        let err = ast.try_convert::<Num>().unwrap_err().single();
+        let (_, ast) = ValueTypeAst::parse(input).unwrap();
+        let err = <ValueType>::try_from(&ast).unwrap_err().single();
 
-        assert_eq!(err.span().location_offset(), 7);
+        assert_eq!(err.span().location_offset(), 6);
         assert_matches!(
             err.kind(),
             TypeErrorKind::Conversion(ConversionError::FreeTypeVar(name)) if name == "T"
@@ -470,7 +471,7 @@ mod tests {
     fn converting_fn_type_free_length() {
         let input = InputSpan::new("[Num; N]");
         let (_, ast) = ValueTypeAst::parse(input).unwrap();
-        let err = ast.try_convert::<Num>().unwrap_err().single();
+        let err = <ValueType>::try_from(&ast).unwrap_err().single();
 
         assert_eq!(err.span().location_offset(), 6);
         assert_matches!(
@@ -483,7 +484,7 @@ mod tests {
     fn converting_fn_type_invalid_constraint() {
         let input = InputSpan::new("for<'T: Bug> (['T; _]) -> Bool");
         let (_, ast) = ValueTypeAst::parse(input).unwrap();
-        let err = ast.try_convert::<Num>().unwrap_err().single();
+        let err = <ValueType>::try_from(&ast).unwrap_err().single();
 
         assert_eq!(*err.span().fragment(), "Bug");
         assert_matches!(
@@ -496,10 +497,10 @@ mod tests {
     #[test]
     fn embedded_type_with_constraints() {
         let input = InputSpan::new("('T, for<'U: Lin> ('U) -> 'U) -> ()");
-        let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
-        let err = ast.try_convert::<Num>().unwrap_err().single();
+        let (_, ast) = ValueTypeAst::parse(input).unwrap();
+        let err = <ValueType>::try_from(&ast).unwrap_err().single();
 
-        assert_eq!(*err.span().fragment(), "for");
+        assert_eq!(*err.span().fragment(), "for<'U: Lin>");
         assert_eq!(err.span().location_offset(), 5);
         assert_matches!(
             err.kind(),
@@ -509,13 +510,13 @@ mod tests {
 
     #[test]
     fn parsing_basic_value_types() -> anyhow::Result<()> {
-        let num_type = ValueTypeAst::try_from("Num")?.try_convert::<Num>()?;
+        let num_type = <ValueType>::try_from(&ValueTypeAst::try_from("Num")?)?;
         assert_eq!(num_type, ValueType::NUM);
 
-        let bool_type = ValueTypeAst::try_from("Bool")?.try_convert::<Num>()?;
+        let bool_type = <ValueType>::try_from(&ValueTypeAst::try_from("Bool")?)?;
         assert_eq!(bool_type, ValueType::BOOL);
 
-        let tuple_type = ValueTypeAst::try_from("(Num, (Bool, _))")?.try_convert::<Num>()?;
+        let tuple_type = <ValueType>::try_from(&ValueTypeAst::try_from("(Num, (Bool, _))")?)?;
         assert_eq!(
             tuple_type,
             ValueType::from((
@@ -524,7 +525,7 @@ mod tests {
             ))
         );
 
-        let slice_type = ValueTypeAst::try_from("[(Num, _); _]")?.try_convert::<Num>()?;
+        let slice_type = <ValueType>::try_from(&ValueTypeAst::try_from("[(Num, _); _]")?)?;
         let slice_type = match &slice_type {
             ValueType::Tuple(tuple) => tuple.as_slice().unwrap(),
             _ => panic!("Unexpected type: {:?}", slice_type),
@@ -543,7 +544,7 @@ mod tests {
 
     #[test]
     fn parsing_functional_value_type() -> anyhow::Result<()> {
-        let ty = ValueTypeAst::try_from("(['T; N], ('T) -> 'U) -> 'U")?.try_convert::<Num>()?;
+        let ty = <ValueType>::try_from(&ValueTypeAst::try_from("(['T; N], ('T) -> 'U) -> 'U")?)?;
         let ty = match ty {
             ValueType::Function(fn_type) => *fn_type,
             _ => panic!("Unexpected type: {:?}", ty),
@@ -557,7 +558,7 @@ mod tests {
 
     #[test]
     fn parsing_functional_type_with_varargs() -> anyhow::Result<()> {
-        let ty: ValueType = ValueTypeAst::try_from("(...[Num; N]) -> Num")?.try_convert::<Num>()?;
+        let ty = <ValueType>::try_from(&ValueTypeAst::try_from("(...[Num; N]) -> Num")?)?;
         let ty = match ty {
             ValueType::Function(fn_type) => *fn_type,
             _ => panic!("Unexpected type: {:?}", ty),

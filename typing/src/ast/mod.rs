@@ -61,17 +61,17 @@ pub enum ValueTypeAst<'a> {
     /// Any type (`any`).
     Any(TypeConstraintsAst<'a>),
     /// Non-ticked identifier, e.g., `Bool`.
-    // FIXME: get rid of spans for consistency.
-    Ident(InputSpan<'a>),
+    Ident,
     /// Ticked identifier, e.g., `'T`.
-    Param(InputSpan<'a>),
+    Param,
     /// Functional type.
-    Function {
+    Function(Box<FnTypeAst<'a>>),
+    /// Functional type with constraints.
+    FunctionWithConstraints {
         /// Constraints on function params.
-        constraints: Option<ConstraintsAst<'a>>,
+        constraints: Spanned<'a, ConstraintsAst<'a>>,
         /// Function body.
-        // FIXME: this should be spanned as well (at least if constraints are present)
-        function: Box<FnTypeAst<'a>>,
+        function: Box<Spanned<'a, FnTypeAst<'a>>>,
     },
     /// Tuple type; for example, `(Num, Bool)`.
     Tuple(TupleAst<'a>),
@@ -81,8 +81,8 @@ pub enum ValueTypeAst<'a> {
 
 impl<'a> ValueTypeAst<'a> {
     /// Parses `input` as a type. This parser can be composed using `nom` infrastructure.
-    pub fn parse(input: InputSpan<'a>) -> NomResult<'a, Self> {
-        type_definition(input)
+    pub fn parse(input: InputSpan<'a>) -> NomResult<'a, Spanned<'a, Self>> {
+        with_span(type_definition)(input)
     }
 }
 
@@ -159,19 +159,17 @@ pub enum TupleLenAst<'a> {
     /// Dynamic tuple length. This length is *implicit*, as in `[Num]`.
     Dynamic,
     /// Reference to a length; for example, `N` in `[Num; N]`.
-    Ident(InputSpan<'a>),
+    Ident(Spanned<'a>),
 }
 
 /// Parameter constraints, e.g. `for<len! N; T: Lin>`.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct ConstraintsAst<'a> {
-    /// Span of the `for` keyword.
-    pub for_keyword: InputSpan<'a>,
     /// Static lengths, e.g., `N` in `for<len! N>`.
-    pub static_lengths: Vec<InputSpan<'a>>,
+    pub static_lengths: Vec<Spanned<'a>>,
     /// Type constraints.
-    pub type_params: Vec<(InputSpan<'a>, TypeConstraintsAst<'a>)>,
+    pub type_params: Vec<(Spanned<'a>, TypeConstraintsAst<'a>)>,
 }
 
 /// Bounds that can be placed on a type variable.
@@ -179,7 +177,7 @@ pub struct ConstraintsAst<'a> {
 #[non_exhaustive]
 pub struct TypeConstraintsAst<'a> {
     /// Spans corresponding to constraints, e.g. `Foo` and `Bar` in `Foo + Bar`.
-    pub terms: Vec<InputSpan<'a>>,
+    pub terms: Vec<Spanned<'a>>,
 }
 
 impl Default for TypeConstraintsAst<'_> {
@@ -209,16 +207,19 @@ fn comma_sep(input: InputSpan<'_>) -> NomResult<'_, char> {
     delimited(ws, tag_char(','), ws)(input)
 }
 
-fn ident(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
+fn ident(input: InputSpan<'_>) -> NomResult<'_, Spanned<'_>> {
     preceded(
         peek(take_while_m_n(1, 1, |c: char| {
             c.is_ascii_alphabetic() || c == '_'
         })),
-        take_while1(|c: char| c.is_ascii_alphanumeric() || c == '_'),
+        map(
+            take_while1(|c: char| c.is_ascii_alphanumeric() || c == '_'),
+            Spanned::from,
+        ),
     )(input)
 }
 
-fn type_param_ident(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
+fn type_param_ident(input: InputSpan<'_>) -> NomResult<'_, Spanned<'_>> {
     preceded(tag_char('\''), ident)(input)
 }
 
@@ -314,9 +315,7 @@ fn type_bounds(input: InputSpan<'_>) -> NomResult<'_, TypeConstraintsAst<'_>> {
     Ok((rest, TypeConstraintsAst { terms }))
 }
 
-fn type_params(
-    input: InputSpan<'_>,
-) -> NomResult<'_, Vec<(InputSpan<'_>, TypeConstraintsAst<'_>)>> {
+fn type_params(input: InputSpan<'_>) -> NomResult<'_, Vec<(Spanned<'_>, TypeConstraintsAst<'_>)>> {
     let type_bounds = preceded(tuple((ws, tag_char(':'), ws)), type_bounds);
     let type_param = tuple((type_param_ident, type_bounds));
     separated_list1(comma_sep, type_param)(input)
@@ -347,8 +346,7 @@ fn constraints(input: InputSpan<'_>) -> NomResult<'_, ConstraintsAst<'_>> {
 
     map(
         constraints_parser,
-        |(for_keyword, _, (static_lengths, type_params))| ConstraintsAst {
-            for_keyword,
+        |(_, _, (static_lengths, type_params))| ConstraintsAst {
             static_lengths,
             type_params,
         },
@@ -365,10 +363,7 @@ fn fn_or_tuple(input: InputSpan<'_>) -> NomResult<'_, ValueTypeAst<'_>> {
         tuple((with_span(tuple_definition), opt(return_type))),
         |(args, return_type)| {
             if let Some(return_type) = return_type {
-                ValueTypeAst::Function {
-                    function: Box::new(FnTypeAst { args, return_type }),
-                    constraints: None,
-                }
+                ValueTypeAst::Function(Box::new(FnTypeAst { args, return_type }))
             } else {
                 ValueTypeAst::Tuple(args.extra)
             }
@@ -383,12 +378,13 @@ fn fn_definition(input: InputSpan<'_>) -> NomResult<'_, FnTypeAst<'_>> {
     )(input)
 }
 
-fn fn_definition_with_constraints(
-    input: InputSpan<'_>,
-) -> NomResult<'_, (ConstraintsAst<'_>, FnTypeAst<'_>)> {
+fn fn_definition_with_constraints(input: InputSpan<'_>) -> NomResult<'_, ValueTypeAst> {
     map(
-        tuple((constraints, ws, cut(fn_definition))),
-        |(constraints, _, fn_def)| (constraints, fn_def),
+        tuple((with_span(constraints), ws, cut(with_span(fn_definition)))),
+        |(constraints, _, function)| ValueTypeAst::FunctionWithConstraints {
+            constraints,
+            function: Box::new(function),
+        },
     )(input)
 }
 
@@ -408,20 +404,15 @@ fn any_type(input: InputSpan<'_>) -> NomResult<'_, TypeConstraintsAst<'_>> {
 fn free_ident(input: InputSpan<'_>) -> NomResult<'_, ValueTypeAst<'_>> {
     map(ident, |id| match *id.fragment() {
         "_" => ValueTypeAst::Some,
-        _ => ValueTypeAst::Ident(id),
+        _ => ValueTypeAst::Ident,
     })(input)
 }
 
 fn type_definition(input: InputSpan<'_>) -> NomResult<'_, ValueTypeAst<'_>> {
     alt((
         fn_or_tuple,
-        map(fn_definition_with_constraints, |(constraints, fn_type)| {
-            ValueTypeAst::Function {
-                constraints: Some(constraints),
-                function: Box::new(fn_type),
-            }
-        }),
-        map(type_param_ident, ValueTypeAst::Param),
+        fn_definition_with_constraints,
+        map(type_param_ident, |_| ValueTypeAst::Param),
         map(slice_definition, ValueTypeAst::Slice),
         map(any_type, ValueTypeAst::Any),
         free_ident,

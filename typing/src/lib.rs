@@ -298,6 +298,7 @@ impl<'a, T: ParseLiteral> Grammar<'a> for Annotated<T> {
     type Type = ValueTypeAst<'a>;
 
     fn parse_type(input: InputSpan<'a>) -> NomResult<'a, Self::Type> {
-        ValueTypeAst::parse(input)
+        use nom::combinator::map;
+        map(ValueTypeAst::parse, |ast| ast.extra)(input)
     }
 }

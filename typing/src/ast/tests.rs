@@ -1,5 +1,4 @@
 use assert_matches::assert_matches;
-use nom::Slice;
 
 use std::ops::Range;
 
@@ -75,9 +74,9 @@ fn simple_tuple() {
     assert_eq!(
         tuple.start,
         vec![
-            sp(input, 1..4, ValueTypeAst::Ident(input.slice(1..4))),
+            sp(input, 1..4, ValueTypeAst::Ident),
             sp(input, 6..7, ValueTypeAst::Some),
-            sp(input, 9..13, ValueTypeAst::Ident(input.slice(9..13))),
+            sp(input, 9..13, ValueTypeAst::Ident),
             sp(input, 15..16, ValueTypeAst::Some),
         ]
     );
@@ -101,47 +100,23 @@ fn complex_tuples() {
         TupleSample {
             input: first_input,
             start: vec![
-                sp(
-                    first_input,
-                    1..4,
-                    ValueTypeAst::Ident(first_input.slice(1..4)),
-                ),
+                sp(first_input, 1..4, ValueTypeAst::Ident),
                 sp(first_input, 6..7, ValueTypeAst::Some),
             ],
-            middle_element: sp(
-                first_input,
-                13..17,
-                ValueTypeAst::Ident(first_input.slice(13..17)),
-            ),
+            middle_element: sp(first_input, 13..17, ValueTypeAst::Ident),
             end: vec![],
         },
         TupleSample {
             input: second_input,
             start: vec![],
-            middle_element: sp(
-                second_input,
-                5..9,
-                ValueTypeAst::Ident(second_input.slice(5..9)),
-            ),
-            end: vec![sp(
-                second_input,
-                15..18,
-                ValueTypeAst::Ident(second_input.slice(15..18)),
-            )],
+            middle_element: sp(second_input, 5..9, ValueTypeAst::Ident),
+            end: vec![sp(second_input, 15..18, ValueTypeAst::Ident)],
         },
         TupleSample {
             input: third_input,
             start: vec![sp(third_input, 1..2, ValueTypeAst::Some)],
-            middle_element: sp(
-                third_input,
-                8..12,
-                ValueTypeAst::Ident(third_input.slice(8..12)),
-            ),
-            end: vec![sp(
-                third_input,
-                18..21,
-                ValueTypeAst::Ident(third_input.slice(18..21)),
-            )],
+            middle_element: sp(third_input, 8..12, ValueTypeAst::Ident),
+            end: vec![sp(third_input, 18..21, ValueTypeAst::Ident)],
         },
     ];
 
@@ -164,12 +139,12 @@ fn embedded_complex_tuple() {
     assert!(rest.fragment().is_empty());
     assert_eq!(
         tuple.start.as_slice(),
-        [sp(input, 1..4, ValueTypeAst::Ident(input.slice(1..4)))]
+        [sp(input, 1..4, ValueTypeAst::Ident)]
     );
     let middle = tuple.middle.unwrap();
     assert_eq!(
         *middle.extra.element,
-        sp(input, 10..13, ValueTypeAst::Ident(input.slice(10..13)))
+        sp(input, 10..13, ValueTypeAst::Ident)
     );
     assert_eq!(tuple.end.len(), 1);
 
@@ -180,7 +155,7 @@ fn embedded_complex_tuple() {
     assert!(embedded_tuple.start.is_empty());
     assert_eq!(
         *embedded_tuple.middle.as_ref().unwrap().extra.element,
-        sp(input, 24..26, ValueTypeAst::Param(input.slice(24..26)))
+        sp(input, 24..26, ValueTypeAst::Param)
     );
     assert_matches!(embedded_tuple.end[0].extra, ValueTypeAst::Function { .. });
 }
@@ -191,7 +166,7 @@ fn simple_slice_with_length() {
     let (rest, slice) = slice_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_matches!(slice.element.extra, ValueTypeAst::Ident(id) if *id.fragment() == "Num");
+    assert_matches!(slice.element.extra, ValueTypeAst::Ident);
     assert_matches!(slice.length, TupleLenAst::Ident(id) if *id.fragment() == "N");
 }
 
@@ -201,7 +176,7 @@ fn simple_slice_without_length() {
     let (rest, slice) = slice_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_matches!(slice.element.extra, ValueTypeAst::Param(id) if *id.fragment() == "T");
+    assert_matches!(slice.element.extra, ValueTypeAst::Param);
     assert_eq!(slice.length, TupleLenAst::Dynamic);
 }
 
@@ -211,14 +186,12 @@ fn complex_slice_type() {
     let (rest, slice) = slice_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    let num_id = input.slice(2..5);
-    let bool_id = input.slice(7..11);
     assert_eq!(
         slice.element.extra,
         ValueTypeAst::Tuple(TupleAst {
             start: vec![
-                sp(input, 2..5, ValueTypeAst::Ident(num_id)),
-                sp(input, 7..11, ValueTypeAst::Ident(bool_id)),
+                sp(input, 2..5, ValueTypeAst::Ident),
+                sp(input, 7..11, ValueTypeAst::Ident),
             ],
             middle: None,
             end: vec![],
@@ -241,7 +214,7 @@ fn embedded_slice_type() {
     assert_matches!(
         first_element,
         ValueTypeAst::Slice(SliceAst { element, length: TupleLenAst::Dynamic })
-            if element.extra == ValueTypeAst::Ident(input.slice(8..12))
+            if element.extra == ValueTypeAst::Ident
     );
 }
 
@@ -252,10 +225,7 @@ fn simple_fn_type() {
 
     assert!(rest.fragment().is_empty());
     assert!(fn_type.args.extra.start.is_empty());
-    assert_eq!(
-        fn_type.return_type,
-        sp(input, 6..9, ValueTypeAst::Ident(input.slice(6..9)))
-    );
+    assert_eq!(fn_type.return_type, sp(input, 6..9, ValueTypeAst::Ident));
 }
 
 #[test]
@@ -269,8 +239,8 @@ fn simple_fn_type_with_args() {
         fn_type.args.extra.start[0].extra,
         ValueTypeAst::Tuple(TupleAst {
             start: vec![
-                sp(input, 2..5, ValueTypeAst::Ident(input.slice(2..5))),
-                sp(input, 7..10, ValueTypeAst::Ident(input.slice(7..10))),
+                sp(input, 2..5, ValueTypeAst::Ident),
+                sp(input, 7..10, ValueTypeAst::Ident),
             ],
             middle: None,
             end: vec![],
@@ -278,12 +248,9 @@ fn simple_fn_type_with_args() {
     );
     assert_eq!(
         fn_type.args.extra.start[1],
-        sp(input, 13..17, ValueTypeAst::Ident(input.slice(13..17)))
+        sp(input, 13..17, ValueTypeAst::Ident)
     );
-    assert_eq!(
-        fn_type.return_type,
-        sp(input, 22..25, ValueTypeAst::Ident(input.slice(22..25)))
-    );
+    assert_eq!(fn_type.return_type, sp(input, 22..25, ValueTypeAst::Ident));
 }
 
 #[test]
@@ -295,12 +262,9 @@ fn fn_type_with_type_params() {
     assert_eq!(fn_type.args.extra.start.len(), 3);
     assert_eq!(
         fn_type.args.extra.start[1],
-        sp(input, 7..9, ValueTypeAst::Param(input.slice(8..9)))
+        sp(input, 7..9, ValueTypeAst::Param)
     );
-    assert_eq!(
-        fn_type.return_type,
-        sp(input, 18..20, ValueTypeAst::Param(input.slice(19..20)))
-    );
+    assert_eq!(fn_type.return_type, sp(input, 18..20, ValueTypeAst::Param));
 }
 
 #[test]
@@ -310,23 +274,17 @@ fn fn_type_accepting_fn_arg() {
 
     assert!(rest.fragment().is_empty());
     assert_eq!(fn_type.args.extra.start.len(), 2);
-    assert_eq!(
-        fn_type.return_type,
-        sp(input, 27..31, ValueTypeAst::Ident(input.slice(27..31)))
-    );
+    assert_eq!(fn_type.return_type, sp(input, 27..31, ValueTypeAst::Ident));
 
     let inner_fn = match &fn_type.args.extra.start[1].extra {
-        ValueTypeAst::Function { function, .. } => function.as_ref(),
+        ValueTypeAst::Function(function) => function.as_ref(),
         ty => panic!("Unexpected arg type: {:?}", ty),
     };
     assert_eq!(
         inner_fn.args.extra.start,
-        [sp(input, 11..13, ValueTypeAst::Param(input.slice(12..13)))]
+        [sp(input, 11..13, ValueTypeAst::Param)]
     );
-    assert_eq!(
-        inner_fn.return_type,
-        sp(input, 18..22, ValueTypeAst::Ident(input.slice(18..22)))
-    );
+    assert_eq!(inner_fn.return_type, sp(input, 18..22, ValueTypeAst::Ident));
 }
 
 #[test]
@@ -337,20 +295,20 @@ fn fn_type_returning_fn_arg() {
     assert!(rest.fragment().is_empty());
     assert_eq!(
         fn_type.args.extra.start,
-        vec![sp(input, 1..4, ValueTypeAst::Ident(input.slice(1..4)))]
+        vec![sp(input, 1..4, ValueTypeAst::Ident)]
     );
 
     let returned_fn = match fn_type.return_type.extra {
-        ValueTypeAst::Function { function, .. } => *function,
+        ValueTypeAst::Function(function) => *function,
         ty => panic!("Unexpected return type: {:?}", ty),
     };
     assert_eq!(
         returned_fn.args.extra.start,
-        vec![sp(input, 10..14, ValueTypeAst::Ident(input.slice(10..14)))]
+        vec![sp(input, 10..14, ValueTypeAst::Ident)]
     );
     assert_eq!(
         returned_fn.return_type,
-        sp(input, 19..22, ValueTypeAst::Ident(input.slice(19..22)))
+        sp(input, 19..22, ValueTypeAst::Ident)
     );
 }
 
@@ -363,20 +321,24 @@ fn fn_type_with_rest_params() {
     assert_eq!(fn_type.args.extra.start.len(), 1);
     assert_eq!(
         fn_type.args.extra.start[0],
-        sp(input, 1..5, ValueTypeAst::Ident(input.slice(1..5)))
+        sp(input, 1..5, ValueTypeAst::Ident)
     );
     let middle = fn_type.args.extra.middle.unwrap().extra;
-    assert_eq!(
-        *middle.element,
-        sp(input, 11..14, ValueTypeAst::Ident(input.slice(11..14)))
-    );
+    assert_eq!(*middle.element, sp(input, 11..14, ValueTypeAst::Ident));
     assert_matches!(middle.length, TupleLenAst::Ident(id) if *id.fragment() == "N");
 }
 
 #[test]
 fn fn_type_with_constraints() {
     let input = InputSpan::new("for<'T: Lin> ('T) -> 'T");
-    let (rest, (constraints, fn_type)) = fn_definition_with_constraints(input).unwrap();
+    let (rest, ty) = fn_definition_with_constraints(input).unwrap();
+    let (constraints, fn_type) = match ty {
+        ValueTypeAst::FunctionWithConstraints {
+            constraints,
+            function,
+        } => (constraints.extra, function.extra),
+        _ => panic!("Unexpected type: {:?}", ty),
+    };
 
     assert!(rest.fragment().is_empty());
     assert!(constraints.static_lengths.is_empty());
@@ -384,12 +346,9 @@ fn fn_type_with_constraints() {
     assert_eq!(fn_type.args.extra.start.len(), 1);
     assert_eq!(
         fn_type.args.extra.start[0],
-        sp(input, 14..16, ValueTypeAst::Param(input.slice(15..16)))
+        sp(input, 14..16, ValueTypeAst::Param)
     );
-    assert_eq!(
-        fn_type.return_type,
-        sp(input, 21..23, ValueTypeAst::Param(input.slice(22..23)))
-    );
+    assert_eq!(fn_type.return_type, sp(input, 21..23, ValueTypeAst::Param));
 }
 
 #[test]
@@ -406,28 +365,19 @@ fn multiple_fns_with_constraints() {
     };
 
     let first_fn = match first_fn {
-        ValueTypeAst::Function {
-            constraints: Some(_),
-            function,
-        } => *function,
+        ValueTypeAst::FunctionWithConstraints { function, .. } => function.extra,
         _ => panic!("Unexpected 1st function: {:?}", first_fn),
     };
-    assert_eq!(
-        first_fn.return_type,
-        sp(input, 22..24, ValueTypeAst::Param(input.slice(23..24)))
-    );
+    assert_eq!(first_fn.return_type, sp(input, 22..24, ValueTypeAst::Param));
 
     let second_fn = match second_fn {
-        ValueTypeAst::Function {
-            constraints: Some(_),
-            function,
-        } => *function,
+        ValueTypeAst::FunctionWithConstraints { function, .. } => function.extra,
         _ => panic!("Unexpected 2nd function: {:?}", second_fn),
     };
     assert!(second_fn.args.extra.start.is_empty());
     assert_eq!(
         *second_fn.args.extra.middle.unwrap().extra.element,
-        sp(input, 44..46, ValueTypeAst::Param(input.slice(45..46)))
+        sp(input, 44..46, ValueTypeAst::Param)
     );
     assert_matches!(second_fn.return_type.extra, ValueTypeAst::Tuple(t) if t.start.is_empty());
 }
@@ -453,5 +403,5 @@ fn any_type_with_bound() {
     let (rest, ty) = type_definition(weird_input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_eq!(ty, ValueTypeAst::Ident(weird_input));
+    assert_eq!(ty, ValueTypeAst::Ident);
 }

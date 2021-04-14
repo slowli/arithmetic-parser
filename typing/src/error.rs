@@ -9,7 +9,7 @@ use crate::{
     PrimitiveType, Tuple, TupleLen, ValueType,
 };
 use arithmetic_parser::{
-    grammars::Grammar, Destructure, Expr, InputSpan, Lvalue, Spanned, SpannedExpr, SpannedLvalue,
+    grammars::Grammar, Destructure, Expr, Lvalue, Spanned, SpannedExpr, SpannedLvalue,
     UnsupportedType,
 };
 
@@ -211,10 +211,10 @@ impl<'a, Prim: PrimitiveType> TypeError<'a, Prim> {
         }
     }
 
-    pub(crate) fn conversion(kind: ConversionError, span: InputSpan<'a>) -> Self {
+    pub(crate) fn conversion<T>(kind: ConversionError, span: &Spanned<'a, T>) -> Self {
         let kind = TypeErrorKind::Conversion(kind);
         Self {
-            inner: Spanned::from(span).copy_with_extra(kind),
+            inner: span.copy_with_extra(kind),
             context: ErrorContext::None,
             location: vec![],
         }

@@ -392,7 +392,7 @@ mod tests {
         ];
 
         for &sample_type in SAMPLE_TYPES {
-            let ty = ValueTypeAst::try_from(sample_type)?.try_convert::<Num>()?;
+            let ty = <ValueType>::try_from(&ValueTypeAst::try_from(sample_type)?)?;
             assert!(ty.eq(&ty), "Type is not equal to self: {}", ty);
         }
         Ok(())
@@ -409,7 +409,7 @@ mod tests {
 
         let functions: Vec<ValueType> = EQUAL_FNS
             .iter()
-            .map(|&s| ValueTypeAst::try_from(s).unwrap().try_convert().unwrap())
+            .map(|&s| ValueType::try_from(&ValueTypeAst::try_from(s).unwrap()).unwrap())
             .collect();
         for (i, function) in functions.iter().enumerate() {
             for other_function in &functions[(i + 1)..] {
@@ -430,7 +430,7 @@ mod tests {
 
         let functions: Vec<ValueType> = FUNCTIONS
             .iter()
-            .map(|&s| ValueTypeAst::try_from(s).unwrap().try_convert().unwrap())
+            .map(|&s| ValueType::try_from(&ValueTypeAst::try_from(s).unwrap()).unwrap())
             .collect();
         for (i, function) in functions.iter().enumerate() {
             for other_function in &functions[(i + 1)..] {
@@ -446,9 +446,7 @@ mod tests {
             ValueType::BOOL,
             ValueType::any(),
             (ValueType::BOOL, ValueType::NUM).into(),
-            ValueTypeAst::try_from("for<'T: Lin> (['T; N]) -> 'T")
-                .unwrap()
-                .try_convert()
+            ValueType::try_from(&ValueTypeAst::try_from("for<'T: Lin> (['T; N]) -> 'T").unwrap())
                 .unwrap(),
         ];
 

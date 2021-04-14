@@ -7,6 +7,7 @@ use std::{
     mem, ops,
 };
 
+use crate::ast::SpannedValueTypeAst;
 use crate::{
     arith::{BinaryOpContext, MapPrimitiveType, NumArithmetic, TypeArithmetic, UnaryOpContext},
     ast::{ConversionState, ValueTypeAst},
@@ -251,6 +252,15 @@ where
         self.env.substitutions.new_type_var()
     }
 
+    #[allow(clippy::option_if_let_else)] // false positive; `self` is moved into both clauses
+    fn process_annotation(&mut self, ty: Option<&SpannedValueTypeAst<'a>>) -> ValueType<Prim> {
+        if let Some(ty) = ty {
+            ConversionState::new(&mut self.env, &mut self.errors).convert_type(ty)
+        } else {
+            self.new_type()
+        }
+    }
+
     fn process_expr_inner<T>(&mut self, expr: &SpannedExpr<'a, T>) -> ValueType<Prim>
     where
         T: Grammar<'a, Lit = Val, Type = ValueTypeAst<'a>>,
@@ -342,9 +352,7 @@ where
     ) -> ValueType<Prim> {
         match &lvalue.extra {
             Lvalue::Variable { ty } => {
-                let ty = ty.as_ref().map_or(&ValueTypeAst::Some, |ty| &ty.extra);
-                let mut state = ConversionState::new(&mut self.env, &mut self.errors);
-                let value_type = ty.convert(&mut state);
+                let value_type = self.process_annotation(ty.as_ref());
                 self.insert_type(lvalue.fragment(), value_type.clone());
                 value_type
             }
@@ -404,10 +412,7 @@ where
             DestructureRest::Unnamed => None,
             DestructureRest::Named { ty, .. } => ty.as_ref(),
         };
-        let ty = ty.map_or(&ValueTypeAst::Some, |ty| &ty.extra);
-
-        let mut state = ConversionState::new(&mut self.env, &mut self.errors);
-        let element = ty.convert(&mut state);
+        let element = self.process_annotation(ty);
         let length = self.env.substitutions.new_len_var();
 
         if let DestructureRest::Named { variable, .. } = rest {

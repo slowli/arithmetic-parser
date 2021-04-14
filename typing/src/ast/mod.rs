@@ -21,8 +21,8 @@ mod conversion;
 #[cfg(test)]
 mod tests;
 
-pub use self::conversion::ConversionError;
-pub(crate) use self::conversion::ConversionState;
+pub use self::conversion::AstConversionError;
+pub(crate) use self::conversion::AstConversionState;
 
 /// Type annotation after parsing.
 ///
@@ -40,13 +40,14 @@ pub(crate) use self::conversion::ConversionState;
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let input = InputSpan::new("(Num, ('T) -> ('T, 'T))");
-/// let elements = match TypeAst::parse(input)?.1 {
+/// let (_, ty) = TypeAst::parse(input)?;
+/// let elements = match ty.extra {
 ///     TypeAst::Tuple(elements) => elements,
 ///     _ => unreachable!(),
 /// };
-/// assert_eq!(elements.start[0], TypeAst::Ident(Num::Num));
+/// assert_eq!(elements.start[0].extra, TypeAst::Ident);
 /// assert_matches!(
-///     &elements.start[1],
+///     &elements.start[1].extra,
 ///     TypeAst::Function { .. }
 /// );
 /// # Ok(())
@@ -129,8 +130,8 @@ pub struct SliceAst<'a> {
 /// let input = InputSpan::new("([Num; N]) -> Num");
 /// let (rest, ty) = FnTypeAst::parse(input)?;
 /// assert!(rest.fragment().is_empty());
-/// assert_matches!(ty.args.start.as_slice(), [TypeAst::Slice(_)]);
-/// assert_eq!(ty.return_type, TypeAst::Ident(Num::Num));
+/// assert_matches!(ty.args.extra.start[0].extra, TypeAst::Slice(_));
+/// assert_eq!(ty.return_type.extra, TypeAst::Ident);
 /// # Ok(())
 /// # }
 /// ```

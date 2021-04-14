@@ -36,7 +36,7 @@ use crate::{arith::WithBoolean, FnType, Type, UnknownLen};
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-/// # use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, Type, TypeErrorKind};
+/// # use arithmetic_typing::{error::TypeErrorKind, Annotated, Prelude, TypeEnvironment, Type};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// type Parser = Typed<Annotated<NumGrammar<f32>>>;
@@ -49,8 +49,10 @@ use crate::{arith::WithBoolean, FnType, Type, UnknownLen};
 /// let ast = Parser::parse_statements(code)?;
 ///
 /// let mut env: TypeEnvironment = Prelude::iter().collect();
-/// let err = env.process_statements(&ast).unwrap_err();
-/// assert_eq!(*err.span().fragment(), "(_, _, _, z) = slice");
+/// let errors = env.process_statements(&ast).unwrap_err();
+/// assert_eq!(errors.len(), 1);
+/// let err = errors.iter().next().unwrap();
+/// assert_eq!(*err.span().fragment(), "(_, _, _, z)");
 /// # assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
 /// # Ok(())
 /// # }

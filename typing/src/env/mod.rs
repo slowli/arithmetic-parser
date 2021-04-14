@@ -10,7 +10,7 @@ use std::{
 use crate::ast::SpannedTypeAst;
 use crate::{
     arith::{BinaryOpContext, MapPrimitiveType, NumArithmetic, TypeArithmetic, UnaryOpContext},
-    ast::{ConversionState, TypeAst},
+    ast::{AstConversionState, TypeAst},
     error::{ErrorContext, ErrorLocation, OpTypeErrors, TypeError, TypeErrorKind, TypeErrors},
     types::{ParamConstraints, ParamQuantifier},
     visit::VisitMut,
@@ -255,7 +255,7 @@ where
     #[allow(clippy::option_if_let_else)] // false positive; `self` is moved into both clauses
     fn process_annotation(&mut self, ty: Option<&SpannedTypeAst<'a>>) -> Type<Prim> {
         if let Some(ty) = ty {
-            ConversionState::new(&mut self.env, &mut self.errors).convert_type(ty)
+            AstConversionState::new(&mut self.env, &mut self.errors).convert_type(ty)
         } else {
             self.new_type()
         }

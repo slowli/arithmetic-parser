@@ -1,10 +1,12 @@
 //! Errors related to type inference.
 
+// TODO: shorten `TypeError` -> `Error` + re-export from root
+
 use std::{fmt, ops};
 
 use crate::{
     arith::{BinaryOpContext, UnaryOpContext},
-    ast::{ConversionError, TypeAst},
+    ast::{AstConversionError, TypeAst},
     visit::VisitMut,
     PrimitiveType, Tuple, TupleLen, Type,
 };
@@ -89,7 +91,7 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
     UnsupportedParam,
 
     /// Error while instantiating a type from AST.
-    Conversion(ConversionError),
+    AstConversion(AstConversionError),
 }
 
 impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
@@ -140,7 +142,7 @@ impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
                 formatter.write_str("Params in declared function types are not supported yet")
             }
 
-            Self::Conversion(err) => write!(
+            Self::AstConversion(err) => write!(
                 formatter,
                 "Error instantiating type from annotation: {}",
                 err
@@ -149,7 +151,14 @@ impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
     }
 }
 
-impl<Prim: PrimitiveType> std::error::Error for TypeErrorKind<Prim> {}
+impl<Prim: PrimitiveType> std::error::Error for TypeErrorKind<Prim> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::AstConversion(err) => Some(err),
+            _ => None,
+        }
+    }
+}
 
 impl<Prim: PrimitiveType> TypeErrorKind<Prim> {
     /// Creates an error for an lvalue type not supported by the interpreter.
@@ -164,6 +173,7 @@ impl<Prim: PrimitiveType> TypeErrorKind<Prim> {
 }
 
 /// Type error together with the corresponding code span.
+// TODO: implement `StripCode`?
 #[derive(Debug, Clone)]
 pub struct TypeError<'a, Prim: PrimitiveType> {
     inner: Spanned<'a, TypeErrorKind<Prim>>,
@@ -211,8 +221,8 @@ impl<'a, Prim: PrimitiveType> TypeError<'a, Prim> {
         }
     }
 
-    pub(crate) fn conversion<T>(kind: ConversionError, span: &Spanned<'a, T>) -> Self {
-        let kind = TypeErrorKind::Conversion(kind);
+    pub(crate) fn conversion<T>(kind: AstConversionError, span: &Spanned<'a, T>) -> Self {
+        let kind = TypeErrorKind::AstConversion(kind);
         Self {
             inner: span.copy_with_extra(kind),
             context: ErrorContext::None,
@@ -669,7 +679,7 @@ pub enum ErrorContext<Prim: PrimitiveType> {
     },
     /// Function call.
     FnCall {
-        /// Function definition. Note that this is not necessarily a [`FnType`].
+        /// Function definition. Note that this is not necessarily a [`FnType`](crate::FnType).
         definition: Type<Prim>,
         /// Signature of the call.
         call_signature: Type<Prim>,

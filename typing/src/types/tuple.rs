@@ -125,12 +125,12 @@ impl UnknownLen {
 /// even if they are of the same type. This constraint is denoted as `len! N, M, ...`
 /// in the function quantifier, e.g., `for<len! N> (['T; N]) -> 'T`.
 ///
-/// If the constraint fails, an error will be raised with the [kind](crate::TypeError::kind)
+/// If the constraint fails, an error will be raised with the [kind](crate::error::TypeError::kind)
 /// set to [`TypeErrorKind::DynamicLen`].
 ///
 /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
 /// [`NumConstraints::Ops`]: crate::arith::NumConstraints::Ops
-/// [`TypeErrorKind::DynamicLen`]: crate::TypeErrorKind::DynamicLen
+/// [`TypeErrorKind::DynamicLen`]: crate::error::TypeErrorKind::DynamicLen
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TupleLen {
     var: Option<UnknownLen>,
@@ -236,10 +236,10 @@ impl TupleLen {
 /// let complex_tuple = Tuple::new(
 ///     vec![Type::NUM],
 ///     Type::NUM.repeat(UnknownLen::param(0)),
-///     vec![Type::BOOL, Type::Some],
+///     vec![Type::BOOL, Type::param(0)],
 /// );
 /// assert_matches!(complex_tuple.parts(), ([_], Some(_), [_, _]));
-/// assert_eq!(complex_tuple.to_string(), "(Num, ...[Num; N], Bool, _)");
+/// assert_eq!(complex_tuple.to_string(), "(Num, ...[Num; N], Bool, 'T)");
 /// ```
 #[derive(Debug, Clone)]
 pub struct Tuple<Prim: PrimitiveType = Num> {
@@ -461,12 +461,12 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     /// let complex_tuple = Tuple::new(
     ///     vec![Type::NUM],
     ///     Slice::new(Type::NUM, UnknownLen::param(0)),
-    ///     vec![Type::BOOL, Type::Some],
+    ///     vec![Type::BOOL, Type::param(0)],
     /// );
     /// let elements: Vec<_> = complex_tuple.element_types().collect();
     /// assert_eq!(
     ///     elements.as_slice(),
-    ///     &[&Type::NUM, &Type::NUM, &Type::BOOL, &Type::Some]
+    ///     &[&Type::NUM, &Type::NUM, &Type::BOOL, &Type::param(0)]
     /// );
     /// ```
     pub fn element_types(&self) -> impl Iterator<Item = &Type<Prim>> + '_ {
@@ -523,8 +523,10 @@ impl<Prim: PrimitiveType> From<Vec<Type<Prim>>> for Tuple<Prim> {
 ///                  // it's always possible to add a number to it
 ///     (_, _, z) = xs; // does not work: the tuple length is erased
 /// "#)?;
-/// let err = env.process_statements(&ast).unwrap_err();
-/// assert_eq!(*err.span().fragment(), "(_, _, z) = xs");
+/// let errors = env.process_statements(&ast).unwrap_err();
+///
+/// let err = errors.iter().next().unwrap();
+/// assert_eq!(*err.span().fragment(), "(_, _, z)");
 /// assert_eq!(env["ys"], env["xs"]);
 /// # Ok(())
 /// # }

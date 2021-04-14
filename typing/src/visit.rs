@@ -10,10 +10,10 @@ use crate::{FnType, PrimitiveType, Tuple, TupleLen, Type, TypeVar};
 ///
 /// ```
 /// use arithmetic_typing::{
-///     visit::{self, Visit},
+///     ast::TypeAst, visit::{self, Visit},
 ///     PrimitiveType, Slice, Tuple, UnknownLen, Type, TypeVar,
 /// };
-/// # use std::collections::HashMap;
+/// # use std::{collections::HashMap, convert::TryFrom};
 ///
 /// /// Counts the number of mentions of type / length params in a type.
 /// #[derive(Default)]
@@ -38,10 +38,11 @@ use crate::{FnType, PrimitiveType, Tuple, TupleLen, Type, TypeVar};
 /// }
 ///
 /// # fn main() -> anyhow::Result<()> {
-/// let value_type: Type =
-///     "(...['T; N], ('T) -> 'U) -> [('T, 'U); N]".parse()?;
+/// let ty = TypeAst::try_from("(...['T; N], ('T) -> 'U) -> [('T, 'U); N]")?;
+/// let ty: Type = Type::try_from(&ty)?;
+///
 /// let mut mentions = Mentions::default();
-/// mentions.visit_type(&value_type);
+/// mentions.visit_type(&ty);
 /// assert_eq!(mentions.lengths[&0], 2); // `N` is mentioned twice
 /// assert_eq!(mentions.types[&0], 3); // `T` is mentioned 3 times
 /// assert_eq!(mentions.types[&1], 2); // `U` is mentioned twice
@@ -135,9 +136,9 @@ where
 ///
 /// ```
 /// use arithmetic_typing::{
-///     visit::{self, VisitMut},
-///     Num, Type,
+///     ast::TypeAst, visit::{self, VisitMut}, Num, Type,
 /// };
+/// # use std::convert::TryFrom;
 ///
 /// /// Replaces all primitive types with `Num`.
 /// struct Replacer;
@@ -152,8 +153,8 @@ where
 /// }
 ///
 /// # fn main() -> anyhow::Result<()> {
-/// let mut ty: Type =
-///     "(Num, Bool, (Num) -> (Bool, Num))".parse()?;
+/// let ty = TypeAst::try_from("(Num, Bool, (Num) -> (Bool, Num))")?;
+/// let mut ty = Type::try_from(&ty)?;
 /// Replacer.visit_type_mut(&mut ty);
 /// assert_eq!(ty.to_string(), "(Num, Num, (Num) -> (Num, Num))");
 /// # Ok(())

@@ -154,10 +154,12 @@ impl<Prim: PrimitiveType> FnParams<Prim> {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_typing::{FnType, Slice, Type};
+/// # use arithmetic_typing::{ast::FnTypeAst, FnType, Slice, Type};
+/// # use std::convert::TryFrom;
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
-/// let fn_type: FnType = "([Num; N]) -> Num".parse()?;
+/// let fn_type: FnType = FnTypeAst::try_from("([Num; N]) -> Num")?
+///     .try_convert()?;
 /// assert_eq!(*fn_type.return_type(), Type::NUM);
 /// assert_matches!(
 ///     fn_type.args().parts(),

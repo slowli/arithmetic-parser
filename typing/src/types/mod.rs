@@ -83,7 +83,6 @@ impl TypeVar {
 ///
 /// # Notation
 ///
-/// - [`Self::Some`] is represented as `_`.
 /// - [`Self::Any`] is represented as `any` with an optional [`TypeConstraints`] suffix.
 /// - [`Prim`](Self::Prim)itive types are represented using the [`Display`](fmt::Display)
 ///   implementation of the corresponding [`PrimitiveType`].
@@ -100,24 +99,25 @@ impl TypeVar {
 /// # use arithmetic_typing::{FnType, UnknownLen, Type};
 /// let tuple: Type = (Type::BOOL, Type::NUM).into();
 /// assert_eq!(tuple.to_string(), "(Bool, Num)");
-/// let slice = tuple.repeat(UnknownLen::Some);
-/// assert_eq!(slice.to_string(), "[(Bool, Num); _]");
+/// let slice = tuple.repeat(UnknownLen::param(0));
+/// assert_eq!(slice.to_string(), "[(Bool, Num); N]");
 /// let fn_type: Type = FnType::builder()
 ///     .with_arg(slice)
 ///     .returning(Type::NUM)
 ///     .into();
-/// assert_eq!(fn_type.to_string(), "([(Bool, Num); _]) -> Num");
+/// assert_eq!(fn_type.to_string(), "([(Bool, Num); N]) -> Num");
 /// ```
 ///
 /// A `Type` can also be parsed from a string:
 ///
 /// ```
-/// # use arithmetic_typing::Type;
+/// # use arithmetic_typing::{ast::TypeAst, Type};
+/// # use std::convert::TryFrom;
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
-/// let slice: Type = "[(Bool, Num); _]".parse()?;
+/// let slice = <Type>::try_from(&TypeAst::try_from("[(Bool, Num); _]")?)?;
 /// assert_matches!(slice, Type::Tuple(t) if t.as_slice().is_some());
-/// let fn_type: Type = "([(Bool, Num); N]) -> Num".parse()?;
+/// let fn_type = <Type>::try_from(&TypeAst::try_from("([(Bool, Num); N]) -> Num")?)?;
 /// assert_matches!(fn_type, Type::Function(_));
 /// # Ok(())
 /// # }
@@ -153,7 +153,9 @@ impl TypeVar {
 /// assert_matches!(env["x"], Type::Var(_));
 /// let bogus_usage_code = "x + 1 == 2; x(1)";
 /// let ast = Parser::parse_statements(bogus_usage_code)?;
-/// let err = env.process_statements(&ast).unwrap_err();
+/// let errors = env.process_statements(&ast).unwrap_err();
+/// # assert_eq!(errors.len(), 1);
+/// let err = errors.iter().next().unwrap();
 /// assert_eq!(*err.span().fragment(), "x(1)");
 /// # Ok(())
 /// # }
@@ -167,7 +169,7 @@ impl TypeVar {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-/// # use arithmetic_typing::{Annotated, TypeEnvironment, TypeErrorKind, Type};
+/// # use arithmetic_typing::{error::TypeErrorKind, Annotated, TypeEnvironment, Type};
 /// # use assert_matches::assert_matches;
 /// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// # fn main() -> anyhow::Result<()> {
@@ -178,7 +180,9 @@ impl TypeVar {
 /// "#;
 /// let ast = Parser::parse_statements(code)?;
 /// let mut env = TypeEnvironment::new();
-/// let err = env.process_statements(&ast).unwrap_err();
+/// let errors = env.process_statements(&ast).unwrap_err();
+///
+/// let err = errors.iter().next().unwrap();
 /// assert_eq!(*err.span().fragment(), "x(1)");
 /// assert_matches!(err.kind(), TypeErrorKind::FailedConstraint { .. });
 /// # Ok(())
@@ -189,13 +193,17 @@ impl TypeVar {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-/// # use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, TypeErrorKind, Type};
+/// # use arithmetic_typing::{
+/// #     ast::TypeAst, error::TypeErrorKind, Annotated, Prelude, TypeEnvironment, Type
+/// # };
+/// # use std::convert::TryFrom;
 /// # use assert_matches::assert_matches;
+/// #
 /// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// # fn main() -> anyhow::Result<()> {
 /// // Function that accepts any amount of linear args (not necessarily
 /// // of the same type) and returns a number.
-/// let digest_fn: Type = "(...[any Lin; N]) -> Num".parse()?;
+/// let digest_fn = Type::try_from(&TypeAst::try_from("(...[any Lin; N]) -> Num")?)?;
 /// let mut env = TypeEnvironment::new();
 /// env.insert("true", Prelude::True).insert("digest", digest_fn);
 ///
@@ -204,8 +212,10 @@ impl TypeVar {
 ///     digest(3, true) == 0; // fails: `true` is not linear
 /// "#;
 /// let ast = Parser::parse_statements(code)?;
-/// let err = env.process_statements(&ast).unwrap_err();
-/// assert_eq!(*err.span().fragment(), "digest(3, true)");
+/// let errors = env.process_statements(&ast).unwrap_err();
+///
+/// let err = errors.iter().next().unwrap();
+/// assert_eq!(*err.span().fragment(), "true");
 /// assert_matches!(err.kind(), TypeErrorKind::FailedConstraint { .. });
 /// # Ok(())
 /// # }

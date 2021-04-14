@@ -84,7 +84,7 @@ impl<Prim: WithBoolean> TypeArithmetic<Prim> for BoolArithmetic {
     /// Processes a unary operation.
     ///
     /// - `!` requires a Boolean input and outputs a Boolean.
-    /// - Other operations fail with [`TypeErrorKind::Unsupported`].
+    /// - Other operations fail with [`TypeErrorKind::UnsupportedFeature`].
     fn process_unary_op<'a>(
         &self,
         substitutions: &mut Substitutions<Prim>,
@@ -107,7 +107,7 @@ impl<Prim: WithBoolean> TypeArithmetic<Prim> for BoolArithmetic {
     /// - `==` and `!=` require LHS and RHS to have the same type (no matter which one).
     ///   These ops return `Bool`.
     /// - `&&` and `||` require LHS and RHS to have `Bool` type. These ops return `Bool`.
-    /// - Other operations fail with [`TypeErrorKind::Unsupported`].
+    /// - Other operations fail with [`TypeErrorKind::UnsupportedFeature`].
     fn process_binary_op(
         &self,
         substitutions: &mut Substitutions<Prim>,

@@ -204,11 +204,13 @@ impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
         } else {
             self.is_in_function = true;
             let mut converted_fn = function.convert(self);
-            self.is_in_function = false;
-
             let constraints =
                 constraints.map_or_else(ParamConstraints::default, |c| c.extra.convert(self));
             ParamQuantifier::set_params(&mut converted_fn, constraints);
+
+            self.is_in_function = false;
+            self.type_params.clear();
+            self.len_params.clear();
             converted_fn.into()
         }
     }

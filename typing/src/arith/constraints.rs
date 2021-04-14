@@ -5,7 +5,7 @@ use std::{fmt, ops, str::FromStr};
 use crate::{
     arith::OpConstraintSettings,
     error::{OpTypeErrors, TypeErrorKind},
-    PrimitiveType, Slice, Substitutions, ValueType,
+    PrimitiveType, Slice, Substitutions, Type,
 };
 
 /// Container for constraints that can be placed on type variables.
@@ -61,7 +61,7 @@ where
     /// by recursively traversing and resolving the provided type.
     fn apply(
         &self,
-        ty: &ValueType<Prim>,
+        ty: &Type<Prim>,
         substitutions: &mut Substitutions<Prim>,
         errors: OpTypeErrors<'_, Prim>,
     );
@@ -141,7 +141,7 @@ impl<Prim: LinearType> TypeConstraints<Prim> for NumConstraints {
     // TODO: extract common logic for it to be reusable?
     fn apply(
         &self,
-        ty: &ValueType<Prim>,
+        ty: &Type<Prim>,
         substitutions: &mut Substitutions<Prim>,
         mut errors: OpTypeErrors<'_, Prim>,
     ) {
@@ -150,7 +150,7 @@ impl<Prim: LinearType> TypeConstraints<Prim> for NumConstraints {
             return;
         }
 
-        let resolved_ty = if let ValueType::Var(var) = ty {
+        let resolved_ty = if let Type::Var(var) = ty {
             debug_assert!(var.is_free());
             substitutions.insert_constraints(var.index(), self);
             substitutions.fast_resolve(ty)
@@ -160,17 +160,17 @@ impl<Prim: LinearType> TypeConstraints<Prim> for NumConstraints {
 
         match resolved_ty {
             // `Var`s are taken care of previously. `Any` satisfies any constraints.
-            ValueType::Any(_) | ValueType::Var(_) => {}
-            ValueType::Prim(lit) if lit.is_linear() => {}
+            Type::Any(_) | Type::Var(_) => {}
+            Type::Prim(lit) if lit.is_linear() => {}
 
-            ValueType::Function(_) | ValueType::Prim(_) => {
+            Type::Function(_) | Type::Prim(_) => {
                 errors.push(TypeErrorKind::failed_constraint(
                     ty.to_owned(),
                     self.to_owned(),
                 ));
             }
 
-            ValueType::Tuple(tuple) => {
+            Type::Tuple(tuple) => {
                 let tuple = tuple.to_owned();
 
                 if *self == Self::Ops {
@@ -220,7 +220,7 @@ where
 {
     fn apply(
         &self,
-        _ty: &ValueType<Prim>,
+        _ty: &Type<Prim>,
         _substitutions: &mut Substitutions<Prim>,
         _errors: OpTypeErrors<'_, Prim>,
     ) {

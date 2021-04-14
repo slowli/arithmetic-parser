@@ -8,7 +8,7 @@ use std::{
 use crate::{
     types::{FnParams, ParamConstraints},
     visit::{self, Visit, VisitMut},
-    FnType, PrimitiveType, Tuple, UnknownLen, ValueType,
+    FnType, PrimitiveType, Tuple, Type, UnknownLen,
 };
 
 #[derive(Debug, Default)]
@@ -120,9 +120,9 @@ impl ParamQuantifier {
 }
 
 impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for ParamQuantifier {
-    fn visit_type(&mut self, ty: &'a ValueType<Prim>) {
+    fn visit_type(&mut self, ty: &'a Type<Prim>) {
         match ty {
-            ValueType::Var(var) if !var.is_free() => {
+            Type::Var(var) if !var.is_free() => {
                 let stats = self.type_params.entry(var.index()).or_default();
                 stats.mentioning_fns.insert(self.current_function_idx);
             }
@@ -245,12 +245,12 @@ mod tests {
     #[test]
     fn analyzing_map_fn() {
         let map_arg = FnType::builder()
-            .with_arg(ValueType::param(0))
-            .returning(ValueType::param(1));
+            .with_arg(Type::param(0))
+            .returning(Type::param(1));
         let mut map_fn = <FnType>::builder()
-            .with_arg(ValueType::param(0).repeat(UnknownLen::param(0)))
+            .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
             .with_arg(map_arg)
-            .returning(ValueType::param(1).repeat(UnknownLen::param(0)));
+            .returning(Type::param(1).repeat(UnknownLen::param(0)));
 
         let mut analyzer = ParamQuantifier::new();
         analyzer.visit_function(&map_fn);

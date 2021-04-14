@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use crate::{
     types::{ParamConstraints, ParamQuantifier},
     visit::{self, VisitMut},
-    FnType, PrimitiveType, Substitutions, TupleLen, UnknownLen, ValueType,
+    FnType, PrimitiveType, Substitutions, TupleLen, Type, UnknownLen,
 };
 
 impl<Prim: PrimitiveType> FnType<Prim> {
@@ -66,12 +66,12 @@ struct PolyTypeTransformer {
 }
 
 impl<Prim: PrimitiveType> VisitMut<Prim> for PolyTypeTransformer {
-    fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
+    fn visit_type_mut(&mut self, ty: &mut Type<Prim>) {
         match ty {
-            ValueType::Var(var) if var.is_free() => {
+            Type::Var(var) if var.is_free() => {
                 let type_count = self.mapping.types.len();
                 let param_idx = *self.mapping.types.entry(var.index()).or_insert(type_count);
-                *ty = ValueType::param(param_idx);
+                *ty = Type::param(param_idx);
             }
             _ => visit::visit_type_mut(self, ty),
         }
@@ -105,11 +105,11 @@ impl<'a> MonoTypeTransformer<'a> {
 }
 
 impl<Prim: PrimitiveType> VisitMut<Prim> for MonoTypeTransformer<'_> {
-    fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
+    fn visit_type_mut(&mut self, ty: &mut Type<Prim>) {
         match ty {
-            ValueType::Var(var) if !var.is_free() => {
+            Type::Var(var) if !var.is_free() => {
                 if let Some(mapped_idx) = self.mapping.types.get(&var.index()) {
-                    *ty = ValueType::free_var(*mapped_idx);
+                    *ty = Type::free_var(*mapped_idx);
                 }
             }
             _ => visit::visit_type_mut(self, ty),

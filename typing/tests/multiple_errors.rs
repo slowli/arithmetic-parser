@@ -4,8 +4,8 @@ use assert_matches::assert_matches;
 
 use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
 use arithmetic_typing::{
-    arith::NumConstraints, error::TypeErrorKind, Annotated, Prelude, TupleLen, TypeEnvironment,
-    ValueType,
+    arith::NumConstraints, error::TypeErrorKind, Annotated, Prelude, TupleLen, Type,
+    TypeEnvironment,
 };
 
 type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
@@ -31,28 +31,28 @@ fn multiple_independent_errors() {
     assert_matches!(
         errors[0].kind(),
         TypeErrorKind::FailedConstraint { ty, constraint }
-            if *ty == ValueType::BOOL && *constraint == NumConstraints::Ops
+            if *ty == Type::BOOL && *constraint == NumConstraints::Ops
     );
 
     assert_eq!(*errors[1].span().fragment(), "(1, 2).filter(|x| x + 1)");
     assert_matches!(
         errors[1].kind(),
         TypeErrorKind::TypeMismatch(lhs, rhs)
-            if *lhs == ValueType::BOOL && *rhs == ValueType::NUM
+            if *lhs == Type::BOOL && *rhs == Type::NUM
     );
 
     assert_eq!(*errors[2].span().fragment(), "(1, false).map(6)");
     assert_matches!(
         errors[2].kind(),
         TypeErrorKind::TypeMismatch(lhs, rhs)
-            if *lhs == ValueType::NUM && *rhs == ValueType::BOOL
+            if *lhs == Type::NUM && *rhs == Type::BOOL
     );
 
     assert_eq!(*errors[3].span().fragment(), "(1, false).map(6)");
     assert_matches!(
         errors[3].kind(),
-        TypeErrorKind::TypeMismatch(ValueType::Function(_), rhs)
-            if *rhs == ValueType::NUM
+        TypeErrorKind::TypeMismatch(Type::Function(_), rhs)
+            if *rhs == Type::NUM
     );
 }
 
@@ -83,14 +83,14 @@ fn recovery_after_error() {
     assert_matches!(
         errors[1].kind(),
         TypeErrorKind::FailedConstraint { ty, constraint }
-            if *ty == ValueType::BOOL && *constraint == NumConstraints::Ops
+            if *ty == Type::BOOL && *constraint == NumConstraints::Ops
     );
 
     assert_eq!(*errors[2].span().fragment(), "(1, false).map(|x| x + 1)");
     assert_matches!(
         errors[2].kind(),
         TypeErrorKind::TypeMismatch(lhs, rhs)
-            if *lhs == ValueType::NUM && *rhs == ValueType::BOOL
+            if *lhs == Type::NUM && *rhs == Type::BOOL
     );
 
     assert!(errors[3].span().fragment().starts_with("(x, y, z) ="));
@@ -124,20 +124,20 @@ fn recovery_in_fn_definition() {
     assert_matches!(
         errors[0].kind(),
         TypeErrorKind::TypeMismatch(lhs, rhs)
-            if *lhs == ValueType::BOOL && *rhs == ValueType::NUM
+            if *lhs == Type::BOOL && *rhs == Type::NUM
     );
 
     assert_eq!(*errors[1].span().fragment(), "bogus(true)");
     assert_matches!(
         errors[1].kind(),
         TypeErrorKind::TypeMismatch(lhs, rhs)
-            if *lhs == ValueType::NUM && *rhs == ValueType::BOOL
+            if *lhs == Type::NUM && *rhs == Type::BOOL
     );
 
     assert_eq!(*errors[2].span().fragment(), "(1, 2, 3).bogus()");
     assert_matches!(
         errors[2].kind(),
-        TypeErrorKind::TypeMismatch(lhs, ValueType::Tuple(_)) if *lhs == ValueType::NUM
+        TypeErrorKind::TypeMismatch(lhs, Type::Tuple(_)) if *lhs == Type::NUM
     );
 }
 
@@ -169,21 +169,21 @@ fn recovery_in_mangled_fn_definition() {
     assert_matches!(
         errors[1].kind(),
         TypeErrorKind::TypeMismatch(lhs, rhs)
-            if *lhs == ValueType::BOOL && *rhs == ValueType::NUM
+            if *lhs == Type::BOOL && *rhs == Type::NUM
     );
 
     assert_eq!(*errors[2].span().fragment(), "bogus(1, 2)");
     assert_matches!(
         errors[2].kind(),
         TypeErrorKind::TypeMismatch(lhs, rhs)
-            if *lhs == ValueType::BOOL && *rhs == ValueType::NUM
+            if *lhs == Type::BOOL && *rhs == Type::NUM
     );
 
     assert_eq!(*errors[3].span().fragment(), "bogus(1, 2) == (3,)");
     assert_matches!(
         errors[3].kind(),
         TypeErrorKind::TypeMismatch(lhs, rhs)
-            if *lhs == ValueType::BOOL && *rhs == ValueType::NUM
+            if *lhs == Type::BOOL && *rhs == Type::NUM
     );
 }
 

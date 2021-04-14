@@ -5,7 +5,7 @@ use assert_matches::assert_matches;
 use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
 use arithmetic_typing::{
     error::{TupleLenMismatchContext, TypeError, TypeErrorKind, TypeErrors},
-    Annotated, FnType, Num, Prelude, TupleLen, TypeEnvironment, UnknownLen, ValueType,
+    Annotated, FnType, Num, Prelude, TupleLen, Type, TypeEnvironment, UnknownLen,
 };
 
 type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
@@ -33,7 +33,7 @@ fn push_fn_basics() {
         .process_statements(&block)
         .unwrap();
 
-    assert_eq!(tuple, ValueType::slice(ValueType::NUM, TupleLen::from(4)));
+    assert_eq!(tuple, Type::slice(Type::NUM, TupleLen::from(4)));
 }
 
 #[test]
@@ -63,14 +63,8 @@ fn push_fn_in_other_fn_definition() {
         type_env["push_fork"].to_string(),
         "(...['T; N], 'T) -> (['T; N], ['T; N + 1])"
     );
-    assert_eq!(
-        type_env["xs"],
-        ValueType::slice(ValueType::NUM, TupleLen::from(3))
-    );
-    assert_eq!(
-        type_env["ys"],
-        ValueType::slice(ValueType::NUM, TupleLen::from(4))
-    );
+    assert_eq!(type_env["xs"], Type::slice(Type::NUM, TupleLen::from(3)));
+    assert_eq!(type_env["ys"], Type::slice(Type::NUM, TupleLen::from(4)));
 }
 
 #[test]
@@ -89,11 +83,8 @@ fn several_push_applications() {
         type_env["push2"].to_string(),
         "(['T; N], 'T, 'T) -> ['T; N + 2]"
     );
-    assert_eq!(type_env["head"], ValueType::NUM);
-    assert_eq!(
-        type_env["tail"],
-        ValueType::slice(ValueType::NUM, TupleLen::from(3))
-    );
+    assert_eq!(type_env["head"], Type::NUM);
+    assert_eq!(type_env["tail"], Type::slice(Type::NUM, TupleLen::from(3)));
 }
 
 #[test]
@@ -228,11 +219,10 @@ fn errors_when_adding_dynamic_slices() {
 
 #[test]
 fn square_function() {
-    let square =
-        ValueType::slice(ValueType::param(0), UnknownLen::param(0)).repeat(UnknownLen::param(0));
+    let square = Type::slice(Type::param(0), UnknownLen::param(0)).repeat(UnknownLen::param(0));
     let square_fn = FnType::builder()
         .with_arg(square)
-        .returning(ValueType::void())
+        .returning(Type::void())
         .with_static_lengths(&[0]);
     assert_eq!(square_fn.to_string(), "for<len! N> ([['T; N]; N]) -> ()");
 
@@ -327,6 +317,6 @@ fn total_sum() {
         .process_statements(&block)
         .unwrap();
 
-    assert_eq!(output, ValueType::NUM);
+    assert_eq!(output, Type::NUM);
     assert_eq!(type_env["total_sum"].to_string(), "([[Num; M]; N]) -> Num");
 }

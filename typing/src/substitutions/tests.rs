@@ -41,8 +41,8 @@ fn unify_tuples<Prim: PrimitiveType>(
 
 fn unify<Prim: PrimitiveType>(
     substitutions: &mut Substitutions<Prim>,
-    lhs: &ValueType<Prim>,
-    rhs: &ValueType<Prim>,
+    lhs: &Type<Prim>,
+    rhs: &Type<Prim>,
 ) -> Result<(), TypeErrorKind<Prim>> {
     extract_errors(|errors| substitutions.unify(lhs, rhs, errors))
 }
@@ -189,18 +189,18 @@ fn unresolved_param_error() {
     .unwrap_err();
     assert_matches!(err, TypeErrorKind::UnresolvedParam);
 
-    let err = unify(&mut substitutions, &ValueType::param(2), &ValueType::NUM).unwrap_err();
+    let err = unify(&mut substitutions, &Type::param(2), &Type::NUM).unwrap_err();
     assert_matches!(err, TypeErrorKind::UnresolvedParam);
 }
 
 #[test]
 fn unifying_complex_tuples() {
     let xs = Tuple::new(
-        vec![ValueType::NUM, ValueType::NUM],
-        ValueType::NUM.repeat(UnknownLen::free_var(0)),
+        vec![Type::NUM, Type::NUM],
+        Type::NUM.repeat(UnknownLen::free_var(0)),
         vec![],
     );
-    let ys = Tuple::from(ValueType::NUM.repeat(UnknownLen::free_var(1) + 2));
+    let ys = Tuple::from(Type::NUM.repeat(UnknownLen::free_var(1) + 2));
 
     let mut substitutions = Substitutions::<Num>::default();
     unify_tuples(&mut substitutions, &xs, &ys).unwrap();
@@ -208,23 +208,19 @@ fn unifying_complex_tuples() {
     assert_eq!(substitutions.length_eqs.len(), 1);
     assert_eq!(substitutions.length_eqs[&0], UnknownLen::free_var(1).into());
 
-    let zs = Tuple::from(ValueType::free_var(0).repeat(UnknownLen::free_var(1)));
+    let zs = Tuple::from(Type::free_var(0).repeat(UnknownLen::free_var(1)));
     let mut substitutions = Substitutions::<Num>::default();
     unify_tuples(&mut substitutions, &xs, &zs).unwrap();
 
     assert_eq!(substitutions.length_eqs.len(), 1);
     assert_eq!(substitutions.length_eqs[&1], UnknownLen::free_var(0) + 2);
     assert_eq!(substitutions.eqs.len(), 1);
-    assert_eq!(substitutions.eqs[&0], ValueType::NUM);
+    assert_eq!(substitutions.eqs[&0], Type::NUM);
 
     let us = Tuple::new(
         vec![],
-        ValueType::NUM.repeat(UnknownLen::free_var(1)),
-        vec![
-            ValueType::free_var(0),
-            ValueType::free_var(1),
-            ValueType::free_var(2),
-        ],
+        Type::NUM.repeat(UnknownLen::free_var(1)),
+        vec![Type::free_var(0), Type::free_var(1), Type::free_var(2)],
     );
     let mut substitutions = Substitutions::<Num>::default();
     unify_tuples(&mut substitutions, &xs, &us).unwrap();
@@ -233,30 +229,26 @@ fn unifying_complex_tuples() {
     assert_eq!(substitutions.length_eqs[&0], UnknownLen::free_var(1) + 1);
     assert_eq!(substitutions.eqs.len(), 3);
     for i in 0..3 {
-        assert_eq!(substitutions.eqs[&i], ValueType::NUM);
+        assert_eq!(substitutions.eqs[&i], Type::NUM);
     }
 }
 
 #[test]
 fn any_can_be_unified_with_anything() {
     let mut substitutions = Substitutions::<Num>::default();
-    substitutions.eqs.insert(0, ValueType::any());
+    substitutions.eqs.insert(0, Type::any());
 
     let rhs_samples = &[
-        ValueType::NUM,
-        ValueType::BOOL,
-        (ValueType::BOOL, ValueType::NUM).into(),
-        ValueType::NUM.repeat(3).into(),
-        ValueType::NUM.repeat(UnknownLen::free_var(0)).into(),
-        FnType::new(
-            vec![ValueType::BOOL, ValueType::NUM].into(),
-            ValueType::void(),
-        )
-        .into(),
-        ValueType::any(),
+        Type::NUM,
+        Type::BOOL,
+        (Type::BOOL, Type::NUM).into(),
+        Type::NUM.repeat(3).into(),
+        Type::NUM.repeat(UnknownLen::free_var(0)).into(),
+        FnType::new(vec![Type::BOOL, Type::NUM].into(), Type::void()).into(),
+        Type::any(),
     ];
     for rhs in rhs_samples {
-        unify(&mut substitutions, &ValueType::free_var(0), rhs).unwrap();
+        unify(&mut substitutions, &Type::free_var(0), rhs).unwrap();
     }
 }
 

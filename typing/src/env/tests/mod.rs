@@ -15,8 +15,8 @@ type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
 
 fn assert_incompatible_types<Prim: PrimitiveType>(
     err: &TypeErrorKind<Prim>,
-    first: &ValueType<Prim>,
-    second: &ValueType<Prim>,
+    first: &Type<Prim>,
+    second: &Type<Prim>,
 ) {
     let (x, y) = match err {
         TypeErrorKind::TypeMismatch(x, y) => (x, y),
@@ -32,8 +32,8 @@ fn assert_incompatible_types<Prim: PrimitiveType>(
 
 fn hash_fn_type() -> FnType<Num> {
     FnType {
-        args: Slice::new(ValueType::Any(NumConstraints::Lin), UnknownLen::param(0)).into(),
-        return_type: ValueType::NUM,
+        args: Slice::new(Type::Any(NumConstraints::Lin), UnknownLen::param(0)).into(),
+        return_type: Type::NUM,
         params: None,
     }
 }
@@ -46,10 +46,10 @@ fn hash_fn_type_display() {
 /// `zip` function signature.
 pub fn zip_fn_type() -> FnType<Num> {
     FnType::builder()
-        .with_arg(ValueType::param(0).repeat(UnknownLen::param(0)))
-        .with_arg(ValueType::param(1).repeat(UnknownLen::param(0)))
-        .returning(ValueType::slice(
-            (ValueType::param(0), ValueType::param(1)),
+        .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
+        .with_arg(Type::param(1).repeat(UnknownLen::param(0)))
+        .returning(Type::slice(
+            (Type::param(0), Type::param(1)),
             UnknownLen::param(0),
         ))
         .with_static_lengths(&[0])
@@ -70,9 +70,9 @@ fn statements_with_a_block() {
     let code = "y = { x = 3; 2 * x }; x ^ y == 6 * x;";
     let block = F32Grammar::parse_statements(code).unwrap();
 
-    let mut type_env: TypeEnvironment<Num> = vec![("x", ValueType::NUM)].into_iter().collect();
+    let mut type_env: TypeEnvironment<Num> = vec![("x", Type::NUM)].into_iter().collect();
     type_env.process_statements(&block).unwrap();
-    assert_eq!(*type_env.get("y").unwrap(), ValueType::NUM);
+    assert_eq!(*type_env.get("y").unwrap(), Type::NUM);
 }
 
 #[test]
@@ -80,9 +80,9 @@ fn boolean_statements() {
     let code = "y = x == x ^ 2; y = y || { x = 3; x != 7 };";
     let block = F32Grammar::parse_statements(code).unwrap();
 
-    let mut type_env: TypeEnvironment<Num> = vec![("x", ValueType::NUM)].into_iter().collect();
+    let mut type_env: TypeEnvironment<Num> = vec![("x", Type::NUM)].into_iter().collect();
     type_env.process_statements(&block).unwrap();
-    assert_eq!(type_env["y"], ValueType::BOOL);
+    assert_eq!(type_env["y"], Type::BOOL);
 }
 
 #[test]
@@ -204,11 +204,11 @@ fn method_basics() {
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let plus_type = FnType::new(vec![ValueType::NUM; 2].into(), ValueType::NUM);
+    let plus_type = FnType::new(vec![Type::NUM; 2].into(), Type::NUM);
     type_env.insert("plus", plus_type);
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(*type_env.get("bar").unwrap(), ValueType::NUM);
+    assert_eq!(*type_env.get("bar").unwrap(), Type::NUM);
 }
 
 #[test]
@@ -235,7 +235,7 @@ fn immediately_invoked_function() {
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(*type_env.get("flag").unwrap(), ValueType::BOOL);
+    assert_eq!(*type_env.get("flag").unwrap(), Type::BOOL);
 }
 
 #[test]
@@ -255,7 +255,7 @@ fn immediately_invoked_function_with_invalid_arg() {
     );
     assert_matches!(
         err.kind(),
-        TypeErrorKind::FailedConstraint { ty, .. } if *ty == ValueType::BOOL
+        TypeErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
     );
     assert_eq!(err.kind().to_string(), "Type `Bool` fails constraint `Ops`");
 }
@@ -269,7 +269,7 @@ fn variable_scoping() {
 
     assert_eq!(
         *type_env.get("y").unwrap(),
-        ValueType::Tuple(vec![ValueType::NUM; 2].into())
+        Type::Tuple(vec![Type::NUM; 2].into())
     );
 }
 
@@ -283,17 +283,11 @@ fn destructuring_for_tuple_on_assignment() {
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(type_env["x"], ValueType::NUM);
-    assert_eq!(
-        type_env["ys"],
-        ValueType::slice(ValueType::NUM, TupleLen::from(2))
-    );
-    assert_eq!(
-        type_env["zs"],
-        ValueType::slice(ValueType::NUM, TupleLen::from(3))
-    );
-    assert_matches!(type_env["fn"], ValueType::Function(_));
-    assert_eq!(type_env["flag"], ValueType::BOOL);
+    assert_eq!(type_env["x"], Type::NUM);
+    assert_eq!(type_env["ys"], Type::slice(Type::NUM, TupleLen::from(2)));
+    assert_eq!(type_env["zs"], Type::slice(Type::NUM, TupleLen::from(3)));
+    assert_matches!(type_env["fn"], Type::Function(_));
+    assert_eq!(type_env["flag"], Type::BOOL);
 }
 
 #[test]
@@ -306,9 +300,9 @@ fn destructuring_with_unnamed_middle() {
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(type_env["x"], ValueType::NUM);
-    assert_eq!(type_env["y"], ValueType::NUM);
-    assert_eq!(type_env["z"], ValueType::BOOL);
+    assert_eq!(type_env["x"], Type::NUM);
+    assert_eq!(type_env["y"], Type::NUM);
+    assert_eq!(type_env["z"], Type::BOOL);
 }
 
 #[test]
@@ -412,17 +406,14 @@ fn exact_lengths_for_gathering_fn() {
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(type_env["gather"].to_string(), "(...['T; N]) -> ['T; N]");
-    assert_eq!(type_env["x"], ValueType::NUM);
-    assert_eq!(type_env["y"], ValueType::NUM);
-    assert_eq!(type_env["head"], ValueType::BOOL);
-    assert_eq!(
-        type_env["tail"],
-        ValueType::slice(ValueType::NUM, TupleLen::from(2))
-    );
+    assert_eq!(type_env["x"], Type::NUM);
+    assert_eq!(type_env["y"], Type::NUM);
+    assert_eq!(type_env["head"], Type::BOOL);
+    assert_eq!(type_env["tail"], Type::slice(Type::NUM, TupleLen::from(2)));
 }
 
 #[test]
-fn inferring_value_type_from_embedded_function() {
+fn inferring_type_from_embedded_function() {
     let code = "double = |x| { (x, || (x, 2 * x)) };";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -678,8 +669,8 @@ fn parametric_fn_passed_as_arg_with_unsatisfiable_requirements() {
 
     assert_incompatible_types(
         &err.kind(),
-        &ValueType::NUM,
-        &ValueType::Tuple(vec![ValueType::NUM; 2].into()),
+        &Type::NUM,
+        &Type::Tuple(vec![Type::NUM; 2].into()),
     );
 }
 
@@ -771,8 +762,8 @@ fn function_passed_as_arg_invalid_arg_type() {
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TypeMismatch(ValueType::Tuple(t), rhs)
-            if t.len() == TupleLen::from(2) && *rhs == ValueType::NUM
+        TypeErrorKind::TypeMismatch(Type::Tuple(t), rhs)
+            if t.len() == TupleLen::from(2) && *rhs == Type::NUM
     );
 }
 
@@ -797,7 +788,7 @@ fn function_passed_as_arg_invalid_input() {
             if definition.to_string() == "(('T, 'T), ('T) -> 'U) -> ('U, 'U)"
             || call_signature.to_string() == "((Num, Bool), (Num) -> Num) -> (Num, Num)"
     );
-    assert_incompatible_types(&err.kind(), &ValueType::NUM, &ValueType::BOOL);
+    assert_incompatible_types(&err.kind(), &Type::NUM, &Type::BOOL);
     assert_eq!(
         err.kind().to_string(),
         "Type `Bool` is not assignable to type `Num`"
@@ -812,10 +803,7 @@ fn unifying_slice_and_tuple() {
     type_env.insert("map", Prelude::Map);
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(
-        type_env["xs"],
-        ValueType::Tuple(vec![ValueType::NUM; 2].into())
-    );
+    assert_eq!(type_env["xs"], Type::Tuple(vec![Type::NUM; 2].into()));
 }
 
 #[test]
@@ -827,10 +815,7 @@ fn function_accepting_slices() {
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(type_env["inc"].to_string(), "([Num; N]) -> [Num; N]");
-    assert_eq!(
-        type_env["z"],
-        ValueType::slice(ValueType::NUM, TupleLen::from(3))
-    );
+    assert_eq!(type_env["z"], Type::slice(Type::NUM, TupleLen::from(3)));
 }
 
 #[test]
@@ -853,7 +838,7 @@ fn incorrect_arg_in_slices() {
             if definition.to_string() == "(['T; N], ('T) -> 'U) -> ['U; N]"
             && call_signature.to_string() == "((Num, Bool), ('T) -> 'T) -> (Num, Num)"
     );
-    assert_incompatible_types(&err.kind(), &ValueType::NUM, &ValueType::BOOL);
+    assert_incompatible_types(&err.kind(), &Type::NUM, &Type::BOOL);
 }
 
 #[test]
@@ -939,7 +924,7 @@ fn dynamically_sized_slices_basics() {
     }
 
     assert_eq!(type_env["mapped"], type_env["filtered"]);
-    assert_eq!(type_env["sum"], ValueType::NUM);
+    assert_eq!(type_env["sum"], Type::NUM);
 }
 
 #[test]
@@ -1023,11 +1008,11 @@ fn comparisons_when_switched_on() {
         .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
         .unwrap();
     let slice = match &output {
-        ValueType::Tuple(tuple) => tuple.as_slice().unwrap(),
+        Type::Tuple(tuple) => tuple.as_slice().unwrap(),
         _ => panic!("Unexpected output: {:?}", output),
     };
 
-    assert_eq!(*slice.element(), ValueType::NUM);
+    assert_eq!(*slice.element(), Type::NUM);
     assert_matches!(slice.len().components(), (Some(UnknownLen::Dynamic), 0));
 }
 
@@ -1046,7 +1031,7 @@ fn comparison_type_errors() {
     assert_matches!(err.context(), ErrorContext::BinaryOp(_));
     assert_matches!(
         err.kind(),
-        TypeErrorKind::FailedConstraint { ty, .. } if *ty == ValueType::BOOL
+        TypeErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
     );
 }
 
@@ -1066,7 +1051,7 @@ fn constraint_error() {
         TypeErrorKind::FailedConstraint {
             ty,
             constraint: NumConstraints::Ops,
-        } if *ty == ValueType::BOOL
+        } if *ty == Type::BOOL
     );
 }
 
@@ -1095,19 +1080,19 @@ fn any_can_be_unified_with_anything() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env
-        .insert("any", ValueType::any())
+        .insert("any", Type::any())
         .insert("map", Prelude::Map)
         .process_statements(&block)
         .unwrap_err()
         .single();
 
     let lhs_slice = match err.kind() {
-        TypeErrorKind::TypeMismatch(ValueType::Tuple(tuple), bool) if *bool == ValueType::BOOL => {
+        TypeErrorKind::TypeMismatch(Type::Tuple(tuple), bool) if *bool == Type::BOOL => {
             tuple.as_slice().unwrap()
         }
         _ => panic!("Unexpected error: {:?}", err),
     };
-    assert_eq!(*lhs_slice.element(), ValueType::NUM);
+    assert_eq!(*lhs_slice.element(), Type::NUM);
 }
 
 #[test]
@@ -1121,11 +1106,11 @@ fn any_propagates_via_fn_params() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env
-        .insert("any", ValueType::any())
+        .insert("any", Type::any())
         .process_statements(&block)
         .unwrap();
 
-    assert_eq!(type_env["val"], ValueType::any());
+    assert_eq!(type_env["val"], Type::any());
 }
 
 #[test]
@@ -1139,7 +1124,7 @@ fn any_can_be_copied_and_unified_with_anything() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env
-        .insert("any_other", ValueType::any())
+        .insert("any_other", Type::any())
         .process_statements(&block)
         .unwrap();
 }
@@ -1155,7 +1140,7 @@ fn any_can_be_destructured_and_unified_with_anything() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env
-        .insert("some_tuple", ValueType::any().repeat(3))
+        .insert("some_tuple", Type::any().repeat(3))
         .process_statements(&block)
         .unwrap();
 }
@@ -1166,16 +1151,16 @@ fn unifying_types_containing_any() {
     let block = F32Grammar::parse_statements(code).unwrap();
 
     let digest_type = FnType::builder()
-        .with_arg(ValueType::NUM)
-        .with_varargs(ValueType::any(), UnknownLen::param(0))
-        .returning(ValueType::NUM);
+        .with_arg(Type::NUM)
+        .with_varargs(Type::any(), UnknownLen::param(0))
+        .returning(Type::NUM);
     let mut type_env = TypeEnvironment::new();
     let output = type_env
         .insert("digest", digest_type)
         .process_statements(&block)
         .unwrap();
 
-    assert_eq!(output, ValueType::NUM);
+    assert_eq!(output, Type::NUM);
 
     let bogus_code = "digest(2 == 3, 5)";
     let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
@@ -1184,7 +1169,7 @@ fn unifying_types_containing_any() {
         .unwrap_err()
         .single();
 
-    assert_incompatible_types(err.kind(), &ValueType::NUM, &ValueType::BOOL);
+    assert_incompatible_types(err.kind(), &Type::NUM, &Type::BOOL);
 }
 
 #[test]
@@ -1210,7 +1195,7 @@ fn any_type_with_bound_with_bogus_function_call() {
     assert_matches!(
         err.kind(),
         TypeErrorKind::FailedConstraint {
-            ty: ValueType::Function(_),
+            ty: Type::Function(_),
             ..
         }
     );
@@ -1219,7 +1204,7 @@ fn any_type_with_bound_with_bogus_function_call() {
 #[test]
 fn any_type_with_bound_in_tuple() {
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("some_lin", ValueType::Any(NumConstraints::Lin));
+    type_env.insert("some_lin", Type::Any(NumConstraints::Lin));
 
     let bogus_call = "some_lin(1)";
     let bogus_call = F32Grammar::parse_statements(bogus_call).unwrap();
@@ -1231,7 +1216,7 @@ fn any_type_with_bound_in_tuple() {
     assert_matches!(
         err.kind(),
         TypeErrorKind::FailedConstraint {
-            ty: ValueType::Function(_),
+            ty: Type::Function(_),
             ..
         }
     );
@@ -1248,7 +1233,7 @@ fn any_type_with_bound_in_tuple() {
     assert_matches!(err.context(), ErrorContext::UnaryOp(_));
     assert_matches!(
         err.kind(),
-        TypeErrorKind::FailedConstraint { ty, .. } if *ty == ValueType::BOOL
+        TypeErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
     );
     assert_eq!(err.kind().to_string(), "Type `Bool` fails constraint `Lin`");
     // TODO: store where constraint comes from?

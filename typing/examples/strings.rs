@@ -8,8 +8,7 @@ use arithmetic_parser::{
     BinaryOp, InputSpan, NomResult,
 };
 use arithmetic_typing::{
-    arith::*, error::TypeErrors, Assertions, PrimitiveType, Substitutions, TypeEnvironment,
-    ValueType,
+    arith::*, error::TypeErrors, Assertions, PrimitiveType, Substitutions, Type, TypeEnvironment,
 };
 
 /// Primitive type: string or boolean.
@@ -88,10 +87,10 @@ impl ParseLiteral for StrGrammar {
 }
 
 impl Grammar for StrGrammar {
-    type Type = ValueType<StrType>;
+    type Type = Type<StrType>;
 
     fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
-        ValueType::parse(input)
+        Type::parse(input)
     }
 }
 
@@ -112,7 +111,7 @@ impl TypeArithmetic<StrType> for StrArithmetic {
         substitutions: &mut Substitutions<StrType>,
         spans: UnaryOpSpans<'a, StrType>,
         errors: &mut TypeErrors<'a, StrType>,
-    ) -> ValueType<StrType> {
+    ) -> Type<StrType> {
         BoolArithmetic.process_unary_op(substitutions, spans, errors)
     }
 
@@ -121,7 +120,7 @@ impl TypeArithmetic<StrType> for StrArithmetic {
         substitutions: &mut Substitutions<StrType>,
         spans: BinaryOpSpans<'a, StrType>,
         errors: &mut TypeErrors<'a, StrType>,
-    ) -> ValueType<StrType> {
+    ) -> Type<StrType> {
         match spans.op.extra {
             BinaryOp::Add => NumArithmetic::unify_binary_op(
                 substitutions,
@@ -135,16 +134,16 @@ impl TypeArithmetic<StrType> for StrArithmetic {
                 let rhs_ty = &spans.rhs.extra;
 
                 substitutions.unify(
-                    &ValueType::Prim(StrType::Str),
+                    &Type::Prim(StrType::Str),
                     lhs_ty,
                     &mut errors.with_span(&spans.lhs),
                 );
                 substitutions.unify(
-                    &ValueType::Prim(StrType::Str),
+                    &Type::Prim(StrType::Str),
                     rhs_ty,
                     &mut errors.with_span(&spans.rhs),
                 );
-                ValueType::BOOL
+                Type::BOOL
             }
 
             _ => BoolArithmetic.process_binary_op(substitutions, spans, errors),
@@ -166,7 +165,7 @@ fn main() -> anyhow::Result<()> {
     let mut env = TypeEnvironment::<StrType>::new();
     env.insert("assert", Assertions::Assert);
     env.process_with_arithmetic(&StrArithmetic, &ast)?;
-    assert_eq!(env["x"], ValueType::Prim(StrType::Str));
+    assert_eq!(env["x"], Type::Prim(StrType::Str));
     assert_eq!(env["y"].to_string(), "(Str, Str)");
 
     let bogus_code = r#""foo" - "bar""#;

@@ -9,7 +9,7 @@ use arithmetic_parser::{
 use arithmetic_typing::{
     arith::*,
     error::{OpTypeErrors, TypeErrorKind, TypeErrors},
-    Annotated, Prelude, PrimitiveType, Substitutions, TypeEnvironment, ValueType,
+    Annotated, Prelude, PrimitiveType, Substitutions, Type, TypeEnvironment,
 };
 
 /// Literal for arithmetic: either an integer or a byte buffer.
@@ -78,7 +78,7 @@ impl WithBoolean for NumOrBytesType {
     const BOOL: Self = Self::Bool;
 }
 
-/// Constraints imposed on `ValueType<NumOrBytesType>`. Besides linearity,
+/// Constraints imposed on `Type<NumOrBytesType>`. Besides linearity,
 /// we consider its weaker variant: ability to add values of type `T`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Constraints {
@@ -132,7 +132,7 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
     // Constraints are applied recursively, similar to `NumConstraints`.
     fn apply(
         &self,
-        ty: &ValueType<NumOrBytesType>,
+        ty: &Type<NumOrBytesType>,
         substitutions: &mut Substitutions<NumOrBytesType>,
         errors: &mut OpTypeErrors<'_, '_, NumOrBytesType>,
     ) {
@@ -140,7 +140,7 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
             return;
         }
 
-        let resolved_ty = if let ValueType::Var(var) = ty {
+        let resolved_ty = if let Type::Var(var) = ty {
             substitutions.insert_constraints(var.index(), self);
             substitutions.fast_resolve(ty)
         } else {
@@ -149,14 +149,14 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
 
         match resolved_ty {
             // `Var`s are taken care of previously.
-            ValueType::Var(_) | ValueType::Prim(NumOrBytesType::Num) => {}
+            Type::Var(_) | Type::Prim(NumOrBytesType::Num) => {}
 
-            ValueType::Prim(NumOrBytesType::Bool) | ValueType::Function(_) => errors.push(
+            Type::Prim(NumOrBytesType::Bool) | Type::Function(_) => errors.push(
                 TypeErrorKind::failed_constraint(ty.to_owned(), self.to_owned()),
             ),
 
             // Bytes are summable, but not linear.
-            ValueType::Prim(NumOrBytesType::Bytes) => {
+            Type::Prim(NumOrBytesType::Bytes) => {
                 if *self != Self::Summable {
                     errors.push(TypeErrorKind::failed_constraint(
                         ty.to_owned(),
@@ -165,7 +165,7 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
                 }
             }
 
-            ValueType::Tuple(tuple) => {
+            Type::Tuple(tuple) => {
                 let tuple = tuple.to_owned();
                 for element in tuple.element_types() {
                     self.apply(element, substitutions, errors);
@@ -203,7 +203,7 @@ impl TypeArithmetic<NumOrBytesType> for NumOrBytesArithmetic {
         substitutions: &mut Substitutions<NumOrBytesType>,
         spans: UnaryOpSpans<'a, NumOrBytesType>,
         errors: &mut TypeErrors<'a, NumOrBytesType>,
-    ) -> ValueType<NumOrBytesType> {
+    ) -> Type<NumOrBytesType> {
         NumArithmetic::process_unary_op(substitutions, spans, errors, &Constraints::Lin)
     }
 
@@ -212,7 +212,7 @@ impl TypeArithmetic<NumOrBytesType> for NumOrBytesArithmetic {
         substitutions: &mut Substitutions<NumOrBytesType>,
         spans: BinaryOpSpans<'a, NumOrBytesType>,
         errors: &mut TypeErrors<'a, NumOrBytesType>,
-    ) -> ValueType<NumOrBytesType> {
+    ) -> Type<NumOrBytesType> {
         let op_constraints = if let BinaryOp::Add = spans.op.extra {
             Constraints::Summable
         } else {
@@ -249,7 +249,7 @@ fn main() -> anyhow::Result<()> {
     env.insert("fold", Prelude::Fold);
     env.process_with_arithmetic(&NumOrBytesArithmetic, &ast)?;
 
-    assert_eq!(env["x"], ValueType::Prim(NumOrBytesType::Num));
+    assert_eq!(env["x"], Type::Prim(NumOrBytesType::Num));
     assert_eq!(env["y"].to_string(), "Bytes");
     assert_eq!(env["z"].to_string(), "(Num, Bytes)");
     assert_eq!(env["sum"].to_string(), "for<'T: Sum> (['T; N], 'T) -> 'T");
@@ -280,7 +280,7 @@ fn main() -> anyhow::Result<()> {
         "1:0: Type `(Num) -> Num` fails constraint Sum"
     );
 
-    env.insert("true", ValueType::BOOL);
+    env.insert("true", Type::BOOL);
     let bogus_code = "((1, true), (2, true)).sum((3, true))";
     let bogus_ast = Parser::parse_statements(bogus_code)?;
     let err = env

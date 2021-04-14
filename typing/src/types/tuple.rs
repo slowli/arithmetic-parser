@@ -2,7 +2,7 @@
 
 use std::{borrow::Cow, cmp, fmt, iter, ops};
 
-use crate::{Num, PrimitiveType, ValueType};
+use crate::{Num, PrimitiveType, Type};
 
 /// Length variable.
 ///
@@ -219,33 +219,33 @@ impl TupleLen {
 /// via [`Self::new()`].
 ///
 /// ```
-/// # use arithmetic_typing::{Slice, Tuple, UnknownLen, ValueType};
+/// # use arithmetic_typing::{Slice, Tuple, UnknownLen, Type};
 /// # use assert_matches::assert_matches;
-/// let simple_tuple = Tuple::from(vec![ValueType::NUM, ValueType::BOOL]);
+/// let simple_tuple = Tuple::from(vec![Type::NUM, Type::BOOL]);
 /// assert_matches!(simple_tuple.parts(), ([_, _], None, []));
 /// assert!(simple_tuple.as_slice().is_none());
 /// assert_eq!(simple_tuple.to_string(), "(Num, Bool)");
 ///
 /// let slice_tuple = Tuple::from(
-///    ValueType::NUM.repeat(UnknownLen::param(0)),
+///    Type::NUM.repeat(UnknownLen::param(0)),
 /// );
 /// assert_matches!(slice_tuple.parts(), ([], Some(_), []));
 /// assert!(slice_tuple.as_slice().is_some());
 /// assert_eq!(slice_tuple.to_string(), "[Num; N]");
 ///
 /// let complex_tuple = Tuple::new(
-///     vec![ValueType::NUM],
-///     ValueType::NUM.repeat(UnknownLen::param(0)),
-///     vec![ValueType::BOOL, ValueType::Some],
+///     vec![Type::NUM],
+///     Type::NUM.repeat(UnknownLen::param(0)),
+///     vec![Type::BOOL, Type::Some],
 /// );
 /// assert_matches!(complex_tuple.parts(), ([_], Some(_), [_, _]));
 /// assert_eq!(complex_tuple.to_string(), "(Num, ...[Num; N], Bool, _)");
 /// ```
 #[derive(Debug, Clone)]
 pub struct Tuple<Prim: PrimitiveType = Num> {
-    start: Vec<ValueType<Prim>>,
+    start: Vec<Type<Prim>>,
     middle: Option<Slice<Prim>>,
-    end: Vec<ValueType<Prim>>,
+    end: Vec<Type<Prim>>,
 }
 
 impl<Prim: PrimitiveType> PartialEq for Tuple<Prim> {
@@ -274,19 +274,15 @@ impl<Prim: PrimitiveType> fmt::Display for Tuple<Prim> {
 
 impl<Prim: PrimitiveType> Tuple<Prim> {
     pub(crate) fn from_parts(
-        start: Vec<ValueType<Prim>>,
+        start: Vec<Type<Prim>>,
         middle: Option<Slice<Prim>>,
-        end: Vec<ValueType<Prim>>,
+        end: Vec<Type<Prim>>,
     ) -> Self {
         Self { start, middle, end }
     }
 
     /// Creates a new complex tuple.
-    pub fn new(
-        start: Vec<ValueType<Prim>>,
-        middle: Slice<Prim>,
-        end: Vec<ValueType<Prim>>,
-    ) -> Self {
+    pub fn new(start: Vec<Type<Prim>>, middle: Slice<Prim>, end: Vec<Type<Prim>>) -> Self {
         Self::from_parts(start, Some(middle), end)
     }
 
@@ -299,10 +295,7 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     }
 
     pub(crate) fn is_concrete(&self) -> bool {
-        self.start
-            .iter()
-            .chain(&self.end)
-            .all(ValueType::is_concrete)
+        self.start.iter().chain(&self.end).all(Type::is_concrete)
             && self.middle.as_ref().map_or(true, Slice::is_concrete)
     }
 
@@ -359,7 +352,7 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
 
     /// Returns shared references to the parts comprising this tuple: start, middle, and end.
     #[allow(clippy::type_complexity)]
-    pub fn parts(&self) -> (&[ValueType<Prim>], Option<&Slice<Prim>>, &[ValueType<Prim>]) {
+    pub fn parts(&self) -> (&[Type<Prim>], Option<&Slice<Prim>>, &[Type<Prim>]) {
         (&self.start, self.middle.as_ref(), &self.end)
     }
 
@@ -368,9 +361,9 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     pub fn parts_mut(
         &mut self,
     ) -> (
-        &mut [ValueType<Prim>],
+        &mut [Type<Prim>],
         Option<&mut Slice<Prim>>,
-        &mut [ValueType<Prim>],
+        &mut [Type<Prim>],
     ) {
         (&mut self.start, self.middle.as_mut(), &mut self.end)
     }
@@ -380,15 +373,15 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     /// # Examples
     ///
     /// ```
-    /// # use arithmetic_typing::{Slice, Tuple, ValueType, UnknownLen, TupleLen};
-    /// let tuple = Tuple::from(vec![ValueType::NUM, ValueType::BOOL]);
+    /// # use arithmetic_typing::{Slice, Tuple, Type, UnknownLen, TupleLen};
+    /// let tuple = Tuple::from(vec![Type::NUM, Type::BOOL]);
     /// assert_eq!(tuple.len(), TupleLen::from(2));
     ///
-    /// let slice = Slice::new(ValueType::NUM, UnknownLen::param(0));
+    /// let slice = Slice::new(Type::NUM, UnknownLen::param(0));
     /// let tuple = Tuple::from(slice.clone());
     /// assert_eq!(tuple.len(), TupleLen::from(UnknownLen::param(0)));
     ///
-    /// let tuple = Tuple::new(vec![], slice, vec![ValueType::BOOL]);
+    /// let tuple = Tuple::new(vec![], slice, vec![Type::BOOL]);
     /// assert_eq!(tuple.len(), UnknownLen::param(0) + 1);
     /// ```
     pub fn len(&self) -> TupleLen {
@@ -401,7 +394,7 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
         self.start.is_empty() && self.end.is_empty() && self.resolved_middle_len() == TupleLen::ZERO
     }
 
-    pub(crate) fn push(&mut self, element: ValueType<Prim>) {
+    pub(crate) fn push(&mut self, element: Type<Prim>) {
         if self.middle.is_some() {
             self.end.push(element);
         } else {
@@ -409,12 +402,12 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
         }
     }
 
-    pub(crate) fn set_middle(&mut self, element: ValueType<Prim>, len: TupleLen) {
+    pub(crate) fn set_middle(&mut self, element: Type<Prim>, len: TupleLen) {
         self.middle = Some(Slice::new(element, len));
     }
 
     /// Returns iterator over elements of this tuple assuming it has the given total length.
-    pub(crate) fn iter(&self, total_len: usize) -> impl Iterator<Item = &ValueType<Prim>> + '_ {
+    pub(crate) fn iter(&self, total_len: usize) -> impl Iterator<Item = &Type<Prim>> + '_ {
         let middle_len = total_len - self.start.len() - self.end.len();
         let middle_element = self.middle.as_ref().map(Slice::element);
 
@@ -430,7 +423,7 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     pub(crate) fn equal_elements_dyn<'a>(
         &'a self,
         other: &'a Self,
-    ) -> impl Iterator<Item = (&'a ValueType<Prim>, &'a ValueType<Prim>)> + 'a {
+    ) -> impl Iterator<Item = (&'a Type<Prim>, &'a Type<Prim>)> + 'a {
         let middle_elem = self.middle.as_ref().unwrap().element.as_ref();
         let other_middle_elem = other.middle.as_ref().unwrap().element.as_ref();
         let iter = iter::once((middle_elem, other_middle_elem));
@@ -464,24 +457,24 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     /// # Examples
     ///
     /// ```
-    /// # use arithmetic_typing::{Slice, Tuple, UnknownLen, ValueType};
+    /// # use arithmetic_typing::{Slice, Tuple, UnknownLen, Type};
     /// let complex_tuple = Tuple::new(
-    ///     vec![ValueType::NUM],
-    ///     Slice::new(ValueType::NUM, UnknownLen::param(0)),
-    ///     vec![ValueType::BOOL, ValueType::Some],
+    ///     vec![Type::NUM],
+    ///     Slice::new(Type::NUM, UnknownLen::param(0)),
+    ///     vec![Type::BOOL, Type::Some],
     /// );
     /// let elements: Vec<_> = complex_tuple.element_types().collect();
     /// assert_eq!(
     ///     elements.as_slice(),
-    ///     &[&ValueType::NUM, &ValueType::NUM, &ValueType::BOOL, &ValueType::Some]
+    ///     &[&Type::NUM, &Type::NUM, &Type::BOOL, &Type::Some]
     /// );
     /// ```
-    pub fn element_types(&self) -> impl Iterator<Item = &ValueType<Prim>> + '_ {
+    pub fn element_types(&self) -> impl Iterator<Item = &Type<Prim>> + '_ {
         let middle_element = self.middle.as_ref().map(|slice| slice.element.as_ref());
         self.start.iter().chain(middle_element).chain(&self.end)
     }
 
-    pub(crate) fn element_types_mut(&mut self) -> impl Iterator<Item = &mut ValueType<Prim>> + '_ {
+    pub(crate) fn element_types_mut(&mut self) -> impl Iterator<Item = &mut Type<Prim>> + '_ {
         let middle_element = self.middle.as_mut().map(|slice| slice.element.as_mut());
         self.start
             .iter_mut()
@@ -490,8 +483,8 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     }
 }
 
-impl<Prim: PrimitiveType> From<Vec<ValueType<Prim>>> for Tuple<Prim> {
-    fn from(elements: Vec<ValueType<Prim>>) -> Self {
+impl<Prim: PrimitiveType> From<Vec<Type<Prim>>> for Tuple<Prim> {
+    fn from(elements: Vec<Type<Prim>>) -> Self {
         Self {
             start: elements,
             middle: None,
@@ -514,7 +507,7 @@ impl<Prim: PrimitiveType> From<Vec<ValueType<Prim>>> for Tuple<Prim> {
 ///
 /// ```
 /// use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-/// use arithmetic_typing::{Annotated, TupleLen, TypeEnvironment, ValueType};
+/// use arithmetic_typing::{Annotated, TupleLen, TypeEnvironment, Type};
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// type Parser = Typed<Annotated<NumGrammar<f32>>>;
@@ -538,7 +531,7 @@ impl<Prim: PrimitiveType> From<Vec<ValueType<Prim>>> for Tuple<Prim> {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Slice<Prim: PrimitiveType = Num> {
-    element: Box<ValueType<Prim>>,
+    element: Box<Type<Prim>>,
     length: TupleLen,
 }
 
@@ -554,7 +547,7 @@ impl<Prim: PrimitiveType> fmt::Display for Slice<Prim> {
 
 impl<Prim: PrimitiveType> Slice<Prim> {
     /// Creates a new slice.
-    pub fn new(element: ValueType<Prim>, length: impl Into<TupleLen>) -> Self {
+    pub fn new(element: Type<Prim>, length: impl Into<TupleLen>) -> Self {
         Self {
             element: Box::new(element),
             length: length.into(),
@@ -562,7 +555,7 @@ impl<Prim: PrimitiveType> Slice<Prim> {
     }
 
     /// Returns the element type of this slice.
-    pub fn element(&self) -> &ValueType<Prim> {
+    pub fn element(&self) -> &Type<Prim> {
         self.element.as_ref()
     }
 
@@ -609,103 +602,91 @@ mod tests {
 
     #[test]
     fn slice_display() {
-        let slice = Slice::new(ValueType::NUM, UnknownLen::param(0));
+        let slice = Slice::new(Type::NUM, UnknownLen::param(0));
         assert_eq!(slice.to_string(), "[Num; N]");
-        let slice = Slice::new(ValueType::NUM, UnknownLen::free_var(0));
+        let slice = Slice::new(Type::NUM, UnknownLen::free_var(0));
         assert_eq!(slice.to_string(), "[Num; _]");
-        let slice = Slice::new(ValueType::NUM, TupleLen::from(3));
+        let slice = Slice::new(Type::NUM, TupleLen::from(3));
         assert_eq!(slice.to_string(), "[Num; 3]");
     }
 
     #[test]
     fn tuple_display() {
         // Simple tuples.
-        let tuple = Tuple::from(vec![ValueType::NUM, ValueType::BOOL]);
+        let tuple = Tuple::from(vec![Type::NUM, Type::BOOL]);
         assert_eq!(tuple.to_string(), "(Num, Bool)");
-        let tuple = Tuple::from(Slice::new(ValueType::NUM, UnknownLen::param(0)));
+        let tuple = Tuple::from(Slice::new(Type::NUM, UnknownLen::param(0)));
         assert_eq!(tuple.to_string(), "[Num; N]");
-        let tuple = Tuple::from(Slice::new(ValueType::NUM, TupleLen::from(3)));
+        let tuple = Tuple::from(Slice::new(Type::NUM, TupleLen::from(3)));
         assert_eq!(tuple.to_string(), "(Num, Num, Num)");
 
         let tuple = Tuple {
-            start: vec![ValueType::NUM, ValueType::BOOL],
-            middle: Some(Slice::new(ValueType::NUM, UnknownLen::param(0))),
+            start: vec![Type::NUM, Type::BOOL],
+            middle: Some(Slice::new(Type::NUM, UnknownLen::param(0))),
             end: vec![],
         };
         assert_eq!(tuple.to_string(), "(Num, Bool, ...[Num; N])");
 
         let tuple = Tuple {
-            start: vec![ValueType::NUM, ValueType::BOOL],
-            middle: Some(Slice::new(ValueType::NUM, TupleLen::from(2))),
+            start: vec![Type::NUM, Type::BOOL],
+            middle: Some(Slice::new(Type::NUM, TupleLen::from(2))),
             end: vec![],
         };
         assert_eq!(tuple.to_string(), "(Num, Bool, Num, Num)");
 
         let tuple = Tuple {
-            start: vec![ValueType::NUM, ValueType::BOOL],
-            middle: Some(Slice::new(ValueType::NUM, UnknownLen::param(0))),
-            end: vec![ValueType::param(0)],
+            start: vec![Type::NUM, Type::BOOL],
+            middle: Some(Slice::new(Type::NUM, UnknownLen::param(0))),
+            end: vec![Type::param(0)],
         };
         assert_eq!(tuple.to_string(), "(Num, Bool, ...[Num; N], 'T)");
     }
 
     #[test]
     fn equal_elements_static_two_simple_tuples() {
-        let tuple = Tuple::from(vec![
-            ValueType::NUM,
-            ValueType::BOOL,
-            ValueType::free_var(0),
-        ]);
-        let other_tuple = <Tuple>::from(vec![
-            ValueType::free_var(1),
-            ValueType::BOOL,
-            ValueType::free_var(0),
-        ]);
+        let tuple = Tuple::from(vec![Type::NUM, Type::BOOL, Type::free_var(0)]);
+        let other_tuple = <Tuple>::from(vec![Type::free_var(1), Type::BOOL, Type::free_var(0)]);
         let equal_elements: Vec<_> = tuple.iter(3).zip(other_tuple.iter(3)).collect();
 
         assert_eq!(
             equal_elements,
             vec![
-                (&ValueType::NUM, &ValueType::free_var(1)),
-                (&ValueType::BOOL, &ValueType::BOOL),
-                (&ValueType::free_var(0), &ValueType::free_var(0)),
+                (&Type::NUM, &Type::free_var(1)),
+                (&Type::BOOL, &Type::BOOL),
+                (&Type::free_var(0), &Type::free_var(0)),
             ]
         );
     }
 
     #[test]
     fn equal_elements_static_simple_tuple_and_slice() {
-        let tuple = Tuple::from(vec![
-            ValueType::NUM,
-            ValueType::BOOL,
-            ValueType::free_var(0),
-        ]);
-        let slice = <Tuple>::from(Slice::new(ValueType::free_var(1), UnknownLen::free_var(0)));
+        let tuple = Tuple::from(vec![Type::NUM, Type::BOOL, Type::free_var(0)]);
+        let slice = <Tuple>::from(Slice::new(Type::free_var(1), UnknownLen::free_var(0)));
         let equal_elements: Vec<_> = tuple.iter(3).zip(slice.iter(3)).collect();
 
         assert_eq!(
             equal_elements,
             vec![
-                (&ValueType::NUM, &ValueType::free_var(1)),
-                (&ValueType::BOOL, &ValueType::free_var(1)),
-                (&ValueType::free_var(0), &ValueType::free_var(1)),
+                (&Type::NUM, &Type::free_var(1)),
+                (&Type::BOOL, &Type::free_var(1)),
+                (&Type::free_var(0), &Type::free_var(1)),
             ]
         );
     }
 
     #[test]
     fn equal_elements_static_slice_and_complex_tuple() {
-        let slice = <Tuple>::from(Slice::new(ValueType::free_var(1), UnknownLen::free_var(0)));
+        let slice = <Tuple>::from(Slice::new(Type::free_var(1), UnknownLen::free_var(0)));
         let tuple = Tuple {
-            start: vec![ValueType::NUM],
-            middle: Some(Slice::new(ValueType::free_var(0), UnknownLen::free_var(1))),
-            end: vec![ValueType::BOOL, ValueType::free_var(2)],
+            start: vec![Type::NUM],
+            middle: Some(Slice::new(Type::free_var(0), UnknownLen::free_var(1))),
+            end: vec![Type::BOOL, Type::free_var(2)],
         };
 
         let mut expected_pairs = vec![
-            (ValueType::free_var(1), ValueType::NUM),
-            (ValueType::free_var(1), ValueType::BOOL),
-            (ValueType::free_var(1), ValueType::free_var(2)),
+            (Type::free_var(1), Type::NUM),
+            (Type::free_var(1), Type::BOOL),
+            (Type::free_var(1), Type::free_var(2)),
         ];
         let equal_elements: Vec<_> = slice
             .iter(3)
@@ -719,7 +700,7 @@ mod tests {
             .zip(tuple.iter(4))
             .map(|(x, y)| (x.to_owned(), y.to_owned()))
             .collect();
-        expected_pairs.insert(1, (ValueType::free_var(1), ValueType::free_var(0)));
+        expected_pairs.insert(1, (Type::free_var(1), Type::free_var(0)));
         assert_eq!(equal_elements, expected_pairs);
 
         let equal_elements: Vec<_> = slice
@@ -727,20 +708,20 @@ mod tests {
             .zip(tuple.iter(5))
             .map(|(x, y)| (x.to_owned(), y.to_owned()))
             .collect();
-        expected_pairs.insert(2, (ValueType::free_var(1), ValueType::free_var(0)));
+        expected_pairs.insert(2, (Type::free_var(1), Type::free_var(0)));
         assert_eq!(equal_elements, expected_pairs);
     }
 
     fn create_test_tuples() -> (Tuple, Tuple) {
         let tuple = Tuple {
-            start: vec![ValueType::NUM],
-            middle: Some(Slice::new(ValueType::free_var(0), UnknownLen::free_var(1))),
-            end: vec![ValueType::BOOL, ValueType::free_var(2)],
+            start: vec![Type::NUM],
+            middle: Some(Slice::new(Type::free_var(0), UnknownLen::free_var(1))),
+            end: vec![Type::BOOL, Type::free_var(2)],
         };
         let other_tuple = Tuple {
-            start: vec![ValueType::NUM, ValueType::free_var(3)],
-            middle: Some(Slice::new(ValueType::BOOL, UnknownLen::free_var(1))),
-            end: vec![ValueType::free_var(1)],
+            start: vec![Type::NUM, Type::free_var(3)],
+            middle: Some(Slice::new(Type::BOOL, UnknownLen::free_var(1))),
+            end: vec![Type::free_var(1)],
         };
         (tuple, other_tuple)
     }
@@ -753,9 +734,9 @@ mod tests {
         assert_eq!(
             equal_elements,
             vec![
-                (&ValueType::NUM, &ValueType::NUM),
-                (&ValueType::BOOL, &ValueType::free_var(3)),
-                (&ValueType::free_var(2), &ValueType::free_var(1)),
+                (&Type::NUM, &Type::NUM),
+                (&Type::BOOL, &Type::free_var(3)),
+                (&Type::free_var(2), &Type::free_var(1)),
             ]
         );
 
@@ -763,24 +744,21 @@ mod tests {
         assert_eq!(
             equal_elements,
             vec![
-                (&ValueType::NUM, &ValueType::NUM),
-                (&ValueType::free_var(0), &ValueType::free_var(3)),
-                (&ValueType::BOOL, &ValueType::BOOL),
-                (&ValueType::free_var(2), &ValueType::free_var(1)),
+                (&Type::NUM, &Type::NUM),
+                (&Type::free_var(0), &Type::free_var(3)),
+                (&Type::BOOL, &Type::BOOL),
+                (&Type::free_var(2), &Type::free_var(1)),
             ]
         );
     }
 
     #[test]
     fn equal_elements_dyn_two_slices() {
-        let slice = Tuple::from(Slice::new(ValueType::free_var(0), UnknownLen::free_var(0)));
-        let other_slice = Tuple::from(Slice::new(ValueType::NUM, UnknownLen::free_var(1)));
+        let slice = Tuple::from(Slice::new(Type::free_var(0), UnknownLen::free_var(0)));
+        let other_slice = Tuple::from(Slice::new(Type::NUM, UnknownLen::free_var(1)));
         let equal_elements: Vec<_> = slice.equal_elements_dyn(&other_slice).collect();
 
-        assert_eq!(
-            equal_elements,
-            vec![(&ValueType::free_var(0), &ValueType::NUM)]
-        );
+        assert_eq!(equal_elements, vec![(&Type::free_var(0), &Type::NUM)]);
     }
 
     #[test]
@@ -792,14 +770,14 @@ mod tests {
             equal_elements,
             vec![
                 // Middle elements
-                (&ValueType::free_var(0), &ValueType::BOOL),
+                (&Type::free_var(0), &Type::BOOL),
                 // Borders
-                (&ValueType::NUM, &ValueType::NUM),
-                (&ValueType::free_var(2), &ValueType::free_var(1)),
+                (&Type::NUM, &Type::NUM),
+                (&Type::free_var(2), &Type::free_var(1)),
                 // Non-borders in first tuple.
-                (&ValueType::free_var(0), &ValueType::BOOL),
+                (&Type::free_var(0), &Type::BOOL),
                 // Non-borders in second tuple.
-                (&ValueType::free_var(0), &ValueType::free_var(3)),
+                (&Type::free_var(0), &Type::free_var(3)),
             ]
         );
     }

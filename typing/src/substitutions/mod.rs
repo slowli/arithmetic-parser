@@ -10,7 +10,7 @@ use crate::{
     arith::TypeConstraints,
     error::{ErrorLocation, OpTypeErrors, TupleLenMismatchContext, TypeErrorKind},
     visit::{self, Visit, VisitMut},
-    FnType, PrimitiveType, Tuple, TupleLen, TypeVar, UnknownLen, ValueType,
+    FnType, PrimitiveType, Tuple, TupleLen, Type, TypeVar, UnknownLen,
 };
 
 mod fns;
@@ -32,7 +32,7 @@ pub struct Substitutions<Prim: PrimitiveType> {
     /// Number of type variables.
     type_var_count: usize,
     /// Type variable equations, encoded as `type_var[key] = value`.
-    eqs: HashMap<usize, ValueType<Prim>>,
+    eqs: HashMap<usize, Type<Prim>>,
     /// Constraints on type variables.
     constraints: HashMap<usize, Prim::Constraints>,
     /// Number of length variables.
@@ -69,11 +69,11 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     /// Returns type var indexes that are equivalent to the provided `var_idx`,
     /// including `var_idx` itself.
     fn equivalent_vars(&self, var_idx: usize) -> Vec<usize> {
-        let ty = ValueType::free_var(var_idx);
+        let ty = Type::free_var(var_idx);
         let mut ty = &ty;
         let mut equivalent_vars = vec![];
 
-        while let ValueType::Var(var) = ty {
+        while let Type::Var(var) = ty {
             debug_assert!(var.is_free());
             equivalent_vars.push(var.index());
             if let Some(resolved) = self.eqs.get(&var.index()) {
@@ -114,8 +114,8 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     }
 
     /// Resolves the type by following established equality links between type variables.
-    pub fn fast_resolve<'a>(&'a self, mut ty: &'a ValueType<Prim>) -> &'a ValueType<Prim> {
-        while let ValueType::Var(var) = ty {
+    pub fn fast_resolve<'a>(&'a self, mut ty: &'a Type<Prim>) -> &'a Type<Prim> {
+        while let Type::Var(var) = ty {
             if !var.is_free() {
                 // Bound variables cannot be resolved further.
                 break;
@@ -154,8 +154,8 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     }
 
     /// Creates and returns a new type variable.
-    pub(crate) fn new_type_var(&mut self) -> ValueType<Prim> {
-        let new_type = ValueType::free_var(self.type_var_count);
+    pub(crate) fn new_type_var(&mut self) -> Type<Prim> {
+        let new_type = Type::free_var(self.type_var_count);
         self.type_var_count += 1;
         new_type
     }
@@ -177,8 +177,8 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     /// Returns an error if unification is impossible.
     pub fn unify(
         &mut self,
-        lhs: &ValueType<Prim>,
-        rhs: &ValueType<Prim>,
+        lhs: &Type<Prim>,
+        rhs: &Type<Prim>,
         mut errors: OpTypeErrors<'_, Prim>,
     ) {
         let resolved_lhs = self.fast_resolve(lhs).to_owned();
@@ -190,14 +190,14 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         match (&resolved_lhs, &resolved_rhs) {
             // Variables should be assigned *before* the equality check and dealing with `Any`
             // to account for `Var <- Any` assignment.
-            (ValueType::Var(var), ty) => {
+            (Type::Var(var), ty) => {
                 if var.is_free() {
                     self.unify_var(var.index(), ty, true, errors);
                 } else {
                     errors.push(TypeErrorKind::UnresolvedParam);
                 }
             }
-            (ty, ValueType::Var(var)) => {
+            (ty, Type::Var(var)) => {
                 if var.is_free() {
                     self.unify_var(var.index(), ty, false, errors);
                 } else {
@@ -205,7 +205,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 }
             }
 
-            (ValueType::Any(constraints), ty) | (ty, ValueType::Any(constraints)) => {
+            (Type::Any(constraints), ty) | (ty, Type::Any(constraints)) => {
                 constraints.apply(ty, self, errors);
             }
 
@@ -214,14 +214,14 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 // We already know that types are equal.
             }
 
-            (ValueType::Tuple(lhs_tuple), ValueType::Tuple(rhs_tuple)) => self.unify_tuples(
+            (Type::Tuple(lhs_tuple), Type::Tuple(rhs_tuple)) => self.unify_tuples(
                 lhs_tuple,
                 rhs_tuple,
                 TupleLenMismatchContext::Assignment,
                 errors,
             ),
 
-            (ValueType::Function(lhs_fn), ValueType::Function(rhs_fn)) => {
+            (Type::Function(lhs_fn), Type::Function(rhs_fn)) => {
                 self.unify_fn_types(lhs_fn, rhs_fn, errors)
             }
 
@@ -265,7 +265,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     #[inline]
     fn unify_tuple_elements<'it>(
         &mut self,
-        pairs: impl Iterator<Item = (&'it ValueType<Prim>, &'it ValueType<Prim>)>,
+        pairs: impl Iterator<Item = (&'it Type<Prim>, &'it Type<Prim>)>,
         context: TupleLenMismatchContext,
         mut errors: OpTypeErrors<'_, Prim>,
     ) {
@@ -531,11 +531,11 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     fn unify_var(
         &mut self,
         var_idx: usize,
-        ty: &ValueType<Prim>,
+        ty: &Type<Prim>,
         is_lhs: bool,
         mut errors: OpTypeErrors<'_, Prim>,
     ) {
-        if let ValueType::Var(var) = ty {
+        if let Type::Var(var) = ty {
             if !var.is_free() {
                 errors.push(TypeErrorKind::UnresolvedParam);
                 return;
@@ -543,7 +543,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 return;
             }
         }
-        let needs_equation = if let ValueType::Any(constraints) = ty {
+        let needs_equation = if let Type::Any(constraints) = ty {
             self.constraints.insert(var_idx, constraints.to_owned());
             is_lhs
         } else {
@@ -552,7 +552,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
         // variables should be resolved in `unify`.
         debug_assert!(!self.eqs.contains_key(&var_idx));
-        debug_assert!(if let ValueType::Var(var) = ty {
+        debug_assert!(if let Type::Var(var) = ty {
             !self.eqs.contains_key(&var.index())
         } else {
             true
@@ -597,7 +597,7 @@ struct OccurrenceChecker<'a, Prim: PrimitiveType> {
 }
 
 impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for OccurrenceChecker<'a, Prim> {
-    fn visit_type(&mut self, ty: &'a ValueType<Prim>) {
+    fn visit_type(&mut self, ty: &'a Type<Prim>) {
         if self.is_recursive {
             // Skip recursion; we already have our answer at this point.
         } else {
@@ -622,10 +622,10 @@ struct TypeSanitizer {
 }
 
 impl<Prim: PrimitiveType> VisitMut<Prim> for TypeSanitizer {
-    fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
+    fn visit_type_mut(&mut self, ty: &mut Type<Prim>) {
         match ty {
-            ValueType::Var(var) if var.index() == self.fixed_idx => {
-                *ty = ValueType::param(0);
+            Type::Var(var) if var.index() == self.fixed_idx => {
+                *ty = Type::param(0);
             }
             _ => visit::visit_type_mut(self, ty),
         }
@@ -639,7 +639,7 @@ struct TypeResolver<'a, Prim: PrimitiveType> {
 }
 
 impl<Prim: PrimitiveType> VisitMut<Prim> for TypeResolver<'_, Prim> {
-    fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
+    fn visit_type_mut(&mut self, ty: &mut Type<Prim>) {
         let fast_resolved = self.substitutions.fast_resolve(ty);
         if !ptr::eq(ty, fast_resolved) {
             *ty = fast_resolved.to_owned();
@@ -689,14 +689,14 @@ impl<'a, Prim: PrimitiveType> TypeSpecifier<'a, Prim> {
 }
 
 impl<Prim: PrimitiveType> VisitMut<Prim> for TypeSpecifier<'_, Prim> {
-    fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
-        if let ValueType::Any(constraints) = ty {
+    fn visit_type_mut(&mut self, ty: &mut Type<Prim>) {
+        if let Type::Any(constraints) = ty {
             if self.variance == Variance::Co {
                 let var_idx = self.substitutions.type_var_count;
                 self.substitutions
                     .constraints
                     .insert(var_idx, constraints.to_owned());
-                *ty = ValueType::free_var(var_idx);
+                *ty = Type::free_var(var_idx);
                 self.substitutions.type_var_count += 1;
             }
         } else {

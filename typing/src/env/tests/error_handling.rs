@@ -3,7 +3,7 @@
 use assert_matches::assert_matches;
 
 use super::F32Grammar;
-use crate::{error::TypeErrorKind, Prelude, TypeEnvironment, ValueType};
+use crate::{error::TypeErrorKind, Prelude, Type, TypeEnvironment};
 use arithmetic_parser::grammars::Parse;
 
 #[test]
@@ -19,7 +19,7 @@ fn vars_are_not_assigned_beyond_first_error() {
 
     assert_eq!(*err.span().fragment(), "x");
     assert_matches!(err.kind(), TypeErrorKind::TypeMismatch(..));
-    assert_eq!(type_env["x"], ValueType::slice(ValueType::NUM, 2));
+    assert_eq!(type_env["x"], Type::slice(Type::NUM, 2));
     assert!(type_env.get("y").is_none());
 }
 
@@ -36,7 +36,7 @@ fn vars_are_not_redefined_beyond_first_error() {
 
     assert_eq!(*err.span().fragment(), "x");
     assert_matches!(err.kind(), TypeErrorKind::TypeMismatch(..));
-    assert_eq!(type_env["x"], ValueType::slice(ValueType::NUM, 2));
+    assert_eq!(type_env["x"], Type::slice(Type::NUM, 2));
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn vars_are_not_assigned_beyond_first_error_in_expr() {
 
     assert_eq!(*err.span().fragment(), "x");
     assert_matches!(err.kind(), TypeErrorKind::TypeMismatch(..));
-    assert_eq!(type_env["x"], ValueType::slice(ValueType::NUM, 2));
+    assert_eq!(type_env["x"], Type::slice(Type::NUM, 2));
     assert!(type_env.get("y").is_none());
 }
 
@@ -70,7 +70,7 @@ fn errors_in_inner_scopes_are_handled_adequately() {
 
     assert_eq!(*err.span().fragment(), "bogus");
     assert_matches!(err.kind(), TypeErrorKind::TypeMismatch(..));
-    assert_eq!(type_env["x"], ValueType::slice(ValueType::NUM, 2));
+    assert_eq!(type_env["x"], Type::slice(Type::NUM, 2));
     assert!(type_env.get("y").is_none());
     assert!(type_env.get("bogus").is_none());
 }
@@ -88,7 +88,7 @@ fn errors_in_functions_are_handled_adequately() {
 
     assert_eq!(*err.span().fragment(), "bogus");
     assert_matches!(err.kind(), TypeErrorKind::TypeMismatch(..));
-    assert_eq!(type_env["x"], ValueType::slice(ValueType::NUM, 2));
+    assert_eq!(type_env["x"], Type::slice(Type::NUM, 2));
     assert!(type_env.get("y").is_none());
     assert!(type_env.get("bogus").is_none());
 }

@@ -5,7 +5,7 @@ use assert_matches::assert_matches;
 use super::{assert_incompatible_types, zip_fn_type, F32Grammar};
 use crate::{
     error::{ErrorContext, ErrorLocation, TupleLenMismatchContext, TypeErrorKind},
-    Prelude, TupleLen, TypeEnvironment, UnknownLen, ValueType,
+    Prelude, TupleLen, Type, TypeEnvironment, UnknownLen,
 };
 use arithmetic_parser::grammars::Parse;
 
@@ -74,7 +74,7 @@ fn contradicting_type_hint_with_slice() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_incompatible_types(&err.kind(), &ValueType::NUM, &ValueType::BOOL);
+    assert_incompatible_types(&err.kind(), &Type::NUM, &Type::BOOL);
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn invalid_type_hint_with_fn_declaration() {
     type_env.insert("map", Prelude::Map);
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_incompatible_types(&err.kind(), &ValueType::NUM, &ValueType::BOOL);
+    assert_incompatible_types(&err.kind(), &Type::NUM, &Type::BOOL);
 }
 
 #[test]
@@ -214,8 +214,8 @@ fn fn_narrowed_via_type_hint() {
     assert_eq!(type_env["identity"].to_string(), "(Num) -> Num");
     assert_incompatible_types(
         &err.kind(),
-        &ValueType::NUM,
-        &ValueType::Tuple(vec![ValueType::NUM; 2].into()),
+        &Type::NUM,
+        &Type::Tuple(vec![Type::NUM; 2].into()),
     )
 }
 
@@ -226,7 +226,7 @@ fn fn_incorrectly_narrowed_via_type_hint() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_incompatible_types(&err.kind(), &ValueType::NUM, &ValueType::BOOL);
+    assert_incompatible_types(&err.kind(), &Type::NUM, &Type::BOOL);
 }
 
 #[test]
@@ -359,7 +359,7 @@ fn unifying_tuples_with_dyn_lengths() {
 
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("true", ValueType::BOOL);
+    type_env.insert("true", Type::BOOL);
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(*err.span().fragment(), "(...[_; _], _, Num)");
@@ -369,7 +369,7 @@ fn unifying_tuples_with_dyn_lengths() {
         ErrorContext::Assignment { lhs, rhs }
             if lhs.to_string() == "(...[Num], Num, Num)" && *rhs == type_env["xs"]
     );
-    assert_incompatible_types(err.kind(), &ValueType::BOOL, &ValueType::NUM);
+    assert_incompatible_types(err.kind(), &Type::BOOL, &Type::NUM);
 
     assert_eq!(type_env["xs"].to_string(), "(Bool, ...[Num], Num)");
     assert_eq!(type_env["ys"].to_string(), "[Num]");
@@ -403,7 +403,7 @@ fn any_type() {
     let mut type_env = TypeEnvironment::new();
     let output = type_env.process_statements(&block).unwrap();
 
-    assert_eq!(output, ValueType::BOOL);
+    assert_eq!(output, Type::BOOL);
 }
 
 #[test]
@@ -423,9 +423,9 @@ fn type_with_tuple_of_any() {
         TypeErrorKind::TypeMismatch(lhs, rhs)
             if lhs.to_string() == "(Num) -> _" && rhs.to_string() == "(any, any, any)"
     );
-    assert_eq!(type_env["x"], ValueType::any());
-    assert_eq!(type_env["y"], ValueType::any());
-    assert_eq!(type_env["z"], ValueType::any());
+    assert_eq!(type_env["x"], Type::any());
+    assert_eq!(type_env["y"], Type::any());
+    assert_eq!(type_env["z"], Type::any());
 }
 
 #[test]
@@ -461,7 +461,7 @@ fn any_fn_with_constraints() {
     assert_eq!(*err.span().fragment(), "[any Lin; _]");
     assert_matches!(
         err.kind(),
-        TypeErrorKind::FailedConstraint { ty, .. } if *ty == ValueType::BOOL
+        TypeErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
     );
     assert_eq!(
         type_env["lin_tuple"].to_string(),

@@ -3,7 +3,7 @@
 //! # Overview
 //!
 //! This module contains types representing AST for parsed type annotations; for example,
-//! [`ValueTypeAst`] and [`FnTypeAst`]. These two types expose `parse` method which
+//! [`TypeAst`] and [`FnTypeAst`]. These two types expose `parse` method which
 //! allows to integrate them into `nom` parsing.
 
 use nom::{
@@ -26,35 +26,35 @@ pub(crate) use self::conversion::ConversionState;
 
 /// Type annotation after parsing.
 ///
-/// Compared to [`ValueType`], this enum corresponds to AST, not to the logical presentation
+/// Compared to [`Type`], this enum corresponds to AST, not to the logical presentation
 /// of a type.
 ///
-/// [`ValueType`]: crate::ValueType
+/// [`Type`]: crate::Type
 ///
 /// # Examples
 ///
 /// ```
 /// use arithmetic_parser::InputSpan;
-/// # use arithmetic_typing::{ast::ValueTypeAst, Num};
+/// # use arithmetic_typing::{ast::TypeAst, Num};
 /// # use assert_matches::assert_matches;
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let input = InputSpan::new("(Num, ('T) -> ('T, 'T))");
-/// let elements = match ValueTypeAst::parse(input)?.1 {
-///     ValueTypeAst::Tuple(elements) => elements,
+/// let elements = match TypeAst::parse(input)?.1 {
+///     TypeAst::Tuple(elements) => elements,
 ///     _ => unreachable!(),
 /// };
-/// assert_eq!(elements.start[0], ValueTypeAst::Ident(Num::Num));
+/// assert_eq!(elements.start[0], TypeAst::Ident(Num::Num));
 /// assert_matches!(
 ///     &elements.start[1],
-///     ValueTypeAst::Function { .. }
+///     TypeAst::Function { .. }
 /// );
 /// # Ok(())
 /// # }
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-pub enum ValueTypeAst<'a> {
+pub enum TypeAst<'a> {
     /// Type placeholder (`_`). Corresponds to a certain type that is not specified, like `_`
     /// in type annotations in Rust.
     Some,
@@ -79,34 +79,34 @@ pub enum ValueTypeAst<'a> {
     Slice(SliceAst<'a>),
 }
 
-impl<'a> ValueTypeAst<'a> {
+impl<'a> TypeAst<'a> {
     /// Parses `input` as a type. This parser can be composed using `nom` infrastructure.
     pub fn parse(input: InputSpan<'a>) -> NomResult<'a, Spanned<'a, Self>> {
         with_span(type_definition)(input)
     }
 }
 
-/// Spanned [`ValueTypeAst`].
-pub type SpannedValueTypeAst<'a> = Spanned<'a, ValueTypeAst<'a>>;
+/// Spanned [`TypeAst`].
+pub type SpannedTypeAst<'a> = Spanned<'a, TypeAst<'a>>;
 
 /// Parsed tuple type, such as `(Num, Bool)` or `(fn() -> Num, ...[Num; _])`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TupleAst<'a> {
     /// Elements at the beginning of the tuple, e.g., `Num` and `Bool`
     /// in `(Num, Bool, ...[T; _])`.
-    pub start: Vec<SpannedValueTypeAst<'a>>,
+    pub start: Vec<SpannedTypeAst<'a>>,
     /// Middle of the tuple, e.g., `[T; _]` in `(Num, Bool, ...[T; _])`.
     pub middle: Option<Spanned<'a, SliceAst<'a>>>,
     /// Elements at the end of the tuple, e.g., `Bool` in `(...[Num; _], Bool)`.
     /// Guaranteed to be empty if `middle` is not present.
-    pub end: Vec<SpannedValueTypeAst<'a>>,
+    pub end: Vec<SpannedTypeAst<'a>>,
 }
 
 /// Parsed slice type, such as `[Num; N]`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SliceAst<'a> {
     /// Element of this slice; for example, `Num` in `[Num; N]`.
-    pub element: Box<SpannedValueTypeAst<'a>>,
+    pub element: Box<SpannedTypeAst<'a>>,
     /// Length of this slice; for example, `N` in `[Num; N]`.
     pub length: TupleLenAst<'a>,
 }
@@ -123,14 +123,14 @@ pub struct SliceAst<'a> {
 /// ```
 /// use arithmetic_parser::InputSpan;
 /// # use assert_matches::assert_matches;
-/// # use arithmetic_typing::{ast::{FnTypeAst, ValueTypeAst}, Num};
+/// # use arithmetic_typing::{ast::{FnTypeAst, TypeAst}, Num};
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let input = InputSpan::new("([Num; N]) -> Num");
 /// let (rest, ty) = FnTypeAst::parse(input)?;
 /// assert!(rest.fragment().is_empty());
-/// assert_matches!(ty.args.start.as_slice(), [ValueTypeAst::Slice(_)]);
-/// assert_eq!(ty.return_type, ValueTypeAst::Ident(Num::Num));
+/// assert_matches!(ty.args.start.as_slice(), [TypeAst::Slice(_)]);
+/// assert_eq!(ty.return_type, TypeAst::Ident(Num::Num));
 /// # Ok(())
 /// # }
 /// ```
@@ -140,7 +140,7 @@ pub struct FnTypeAst<'a> {
     /// Function arguments.
     pub args: Spanned<'a, TupleAst<'a>>,
     /// Return type of the function.
-    pub return_type: SpannedValueTypeAst<'a>,
+    pub return_type: SpannedTypeAst<'a>,
 }
 
 impl<'a> FnTypeAst<'a> {
@@ -223,7 +223,7 @@ fn type_param_ident(input: InputSpan<'_>) -> NomResult<'_, Spanned<'_>> {
     preceded(tag_char('\''), ident)(input)
 }
 
-fn comma_separated_types(input: InputSpan<'_>) -> NomResult<'_, Vec<SpannedValueTypeAst<'_>>> {
+fn comma_separated_types(input: InputSpan<'_>) -> NomResult<'_, Vec<SpannedTypeAst<'_>>> {
     separated_list0(delimited(ws, tag_char(','), ws), with_span(type_definition))(input)
 }
 
@@ -231,7 +231,7 @@ fn tuple_middle(input: InputSpan<'_>) -> NomResult<'_, Spanned<'_, SliceAst<'_>>
     preceded(terminated(tag("..."), ws), with_span(slice_definition))(input)
 }
 
-type TupleTailAst<'a> = (Spanned<'a, SliceAst<'a>>, Vec<SpannedValueTypeAst<'a>>);
+type TupleTailAst<'a> = (Spanned<'a, SliceAst<'a>>, Vec<SpannedTypeAst<'a>>);
 
 fn tuple_tail(input: InputSpan<'_>) -> NomResult<'_, TupleTailAst<'_>> {
     tuple((
@@ -353,19 +353,19 @@ fn constraints(input: InputSpan<'_>) -> NomResult<'_, ConstraintsAst<'_>> {
     )(input)
 }
 
-fn return_type(input: InputSpan<'_>) -> NomResult<'_, SpannedValueTypeAst<'_>> {
+fn return_type(input: InputSpan<'_>) -> NomResult<'_, SpannedTypeAst<'_>> {
     preceded(tuple((ws, tag("->"), ws)), cut(with_span(type_definition)))(input)
 }
 
 #[allow(clippy::option_if_let_else)] // false positive; `args` is moved into both clauses
-fn fn_or_tuple(input: InputSpan<'_>) -> NomResult<'_, ValueTypeAst<'_>> {
+fn fn_or_tuple(input: InputSpan<'_>) -> NomResult<'_, TypeAst<'_>> {
     map(
         tuple((with_span(tuple_definition), opt(return_type))),
         |(args, return_type)| {
             if let Some(return_type) = return_type {
-                ValueTypeAst::Function(Box::new(FnTypeAst { args, return_type }))
+                TypeAst::Function(Box::new(FnTypeAst { args, return_type }))
             } else {
-                ValueTypeAst::Tuple(args.extra)
+                TypeAst::Tuple(args.extra)
             }
         },
     )(input)
@@ -378,10 +378,10 @@ fn fn_definition(input: InputSpan<'_>) -> NomResult<'_, FnTypeAst<'_>> {
     )(input)
 }
 
-fn fn_definition_with_constraints(input: InputSpan<'_>) -> NomResult<'_, ValueTypeAst> {
+fn fn_definition_with_constraints(input: InputSpan<'_>) -> NomResult<'_, TypeAst> {
     map(
         tuple((with_span(constraints), ws, cut(with_span(fn_definition)))),
-        |(constraints, _, function)| ValueTypeAst::FunctionWithConstraints {
+        |(constraints, _, function)| TypeAst::FunctionWithConstraints {
             constraints,
             function: Box::new(function),
         },
@@ -401,20 +401,20 @@ fn any_type(input: InputSpan<'_>) -> NomResult<'_, TypeConstraintsAst<'_>> {
     )(input)
 }
 
-fn free_ident(input: InputSpan<'_>) -> NomResult<'_, ValueTypeAst<'_>> {
+fn free_ident(input: InputSpan<'_>) -> NomResult<'_, TypeAst<'_>> {
     map(ident, |id| match *id.fragment() {
-        "_" => ValueTypeAst::Some,
-        _ => ValueTypeAst::Ident,
+        "_" => TypeAst::Some,
+        _ => TypeAst::Ident,
     })(input)
 }
 
-fn type_definition(input: InputSpan<'_>) -> NomResult<'_, ValueTypeAst<'_>> {
+fn type_definition(input: InputSpan<'_>) -> NomResult<'_, TypeAst<'_>> {
     alt((
         fn_or_tuple,
         fn_definition_with_constraints,
-        map(type_param_ident, |_| ValueTypeAst::Param),
-        map(slice_definition, ValueTypeAst::Slice),
-        map(any_type, ValueTypeAst::Any),
+        map(type_param_ident, |_| TypeAst::Param),
+        map(slice_definition, TypeAst::Slice),
+        map(any_type, TypeAst::Any),
         free_ident,
     ))(input)
 }

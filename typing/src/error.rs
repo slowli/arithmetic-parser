@@ -4,9 +4,9 @@ use std::{fmt, ops};
 
 use crate::{
     arith::{BinaryOpContext, UnaryOpContext},
-    ast::{ConversionError, ValueTypeAst},
+    ast::{ConversionError, TypeAst},
     visit::VisitMut,
-    PrimitiveType, Tuple, TupleLen, ValueType,
+    PrimitiveType, Tuple, TupleLen, Type,
 };
 use arithmetic_parser::{
     grammars::Grammar, Destructure, Expr, Lvalue, Spanned, SpannedExpr, SpannedLvalue,
@@ -28,7 +28,7 @@ pub enum TupleLenMismatchContext {
 #[non_exhaustive]
 pub enum TypeErrorKind<Prim: PrimitiveType> {
     /// Trying to unify incompatible types. The first type is LHS, the second one is RHS.
-    TypeMismatch(ValueType<Prim>, ValueType<Prim>),
+    TypeMismatch(Type<Prim>, Type<Prim>),
     /// Incompatible tuple lengths.
     TupleLenMismatch {
         /// Length of the LHS. This is the length determined by type annotations
@@ -43,7 +43,7 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
     /// Undefined variable occurrence.
     UndefinedVar(String),
     /// Trying to unify a type with a type containing it.
-    RecursiveType(ValueType<Prim>),
+    RecursiveType(Type<Prim>),
 
     /// Mention of a bounded type or length variable in a type supplied
     /// to [`Substitutions::unify()`].
@@ -58,7 +58,7 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
     /// Failure when applying constraint to a type.
     FailedConstraint {
         /// Type that fails constraint requirement.
-        ty: ValueType<Prim>,
+        ty: Type<Prim>,
         /// Failing constraint(s).
         constraint: Prim::Constraints,
     },
@@ -72,11 +72,11 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
 
     /// Type not supported by type inference logic. For example,
     /// a [`TypeArithmetic`] or [`TypeConstraints`] implementations may return this error
-    /// if they encounter an unknown [`ValueType`] variant.
+    /// if they encounter an unknown [`Type`] variant.
     ///
     /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
     /// [`TypeConstraints`]: crate::arith::TypeConstraints
-    UnsupportedType(ValueType<Prim>),
+    UnsupportedType(Type<Prim>),
 
     /// Unsupported use of type or length params in a function declaration.
     ///
@@ -158,7 +158,7 @@ impl<Prim: PrimitiveType> TypeErrorKind<Prim> {
     }
 
     /// Creates a "failed constraint" error.
-    pub fn failed_constraint(ty: ValueType<Prim>, constraint: Prim::Constraints) -> Self {
+    pub fn failed_constraint(ty: Type<Prim>, constraint: Prim::Constraints) -> Self {
         Self::FailedConstraint { ty, constraint }
     }
 }
@@ -275,7 +275,7 @@ impl<'a, Prim: PrimitiveType> TypeErrors<'a, Prim> {
         self.inner.iter()
     }
 
-    /// Post-processes these errors, resolving the contained `ValueType`s using
+    /// Post-processes these errors, resolving the contained `Type`s using
     /// the provided `type_resolver`.
     pub(crate) fn post_process(&mut self, type_resolver: &mut impl VisitMut<Prim>) {
         for error in &mut self.inner {
@@ -398,7 +398,7 @@ impl<Prim: PrimitiveType> OpTypeErrors<'static, Prim> {
 
     pub(crate) fn contextualize_assignment<'a>(
         self,
-        span: &SpannedLvalue<'a, ValueTypeAst<'a>>,
+        span: &SpannedLvalue<'a, TypeAst<'a>>,
         context: &ErrorContext<Prim>,
     ) -> Vec<TypeError<'a, Prim>> {
         if self.errors.is_empty() {
@@ -410,7 +410,7 @@ impl<Prim: PrimitiveType> OpTypeErrors<'static, Prim> {
 
     pub(crate) fn contextualize_destructure<'a>(
         self,
-        span: &Spanned<'a, Destructure<'a, ValueTypeAst<'a>>>,
+        span: &Spanned<'a, Destructure<'a, TypeAst<'a>>>,
         create_context: impl FnOnce() -> ErrorContext<Prim>,
     ) -> Vec<TypeError<'a, Prim>> {
         if self.errors.is_empty() {
@@ -471,7 +471,7 @@ impl<Prim: PrimitiveType> TypeErrorPrecursor<Prim> {
     fn into_assignment_error<'a>(
         self,
         context: ErrorContext<Prim>,
-        root_lvalue: &SpannedLvalue<'a, ValueTypeAst<'a>>,
+        root_lvalue: &SpannedLvalue<'a, TypeAst<'a>>,
     ) -> TypeError<'a, Prim> {
         TypeError {
             inner: ErrorLocation::walk_lvalue(&self.location, root_lvalue)
@@ -484,7 +484,7 @@ impl<Prim: PrimitiveType> TypeErrorPrecursor<Prim> {
     fn into_destructure_error<'a>(
         self,
         context: ErrorContext<Prim>,
-        root_destructure: &Spanned<'a, Destructure<'a, ValueTypeAst<'a>>>,
+        root_destructure: &Spanned<'a, Destructure<'a, TypeAst<'a>>>,
     ) -> TypeError<'a, Prim> {
         TypeError {
             inner: ErrorLocation::walk_destructure(&self.location, root_destructure)
@@ -574,10 +574,7 @@ impl ErrorLocation {
         }
     }
 
-    fn walk_lvalue<'a>(
-        location: &[Self],
-        lvalue: &SpannedLvalue<'a, ValueTypeAst<'a>>,
-    ) -> Spanned<'a> {
+    fn walk_lvalue<'a>(location: &[Self], lvalue: &SpannedLvalue<'a, TypeAst<'a>>) -> Spanned<'a> {
         Self::walk(location, LvalueTree::Lvalue(lvalue), Self::step_into_lvalue)
             .refine_lvalue()
             .with_no_extra()
@@ -585,7 +582,7 @@ impl ErrorLocation {
 
     fn walk_destructure<'a>(
         location: &[Self],
-        destructure: &Spanned<'a, Destructure<'a, ValueTypeAst<'a>>>,
+        destructure: &Spanned<'a, Destructure<'a, TypeAst<'a>>>,
     ) -> Spanned<'a> {
         let destructure = LvalueTree::Destructure(destructure);
         Self::walk(location, destructure, Self::step_into_lvalue)
@@ -605,9 +602,9 @@ impl ErrorLocation {
         }
     }
 
-    fn step_into_type<'r, 'a>(self, ty: &'r ValueTypeAst<'a>) -> Option<LvalueTree<'r, 'a>> {
+    fn step_into_type<'r, 'a>(self, ty: &'r TypeAst<'a>) -> Option<LvalueTree<'r, 'a>> {
         let tuple = match ty {
-            ValueTypeAst::Tuple(tuple) => tuple,
+            TypeAst::Tuple(tuple) => tuple,
             _ => return None,
         };
         match self {
@@ -619,7 +616,7 @@ impl ErrorLocation {
 
     fn step_into_destructure<'r, 'a>(
         self,
-        destructure: &'r Destructure<'a, ValueTypeAst<'a>>,
+        destructure: &'r Destructure<'a, TypeAst<'a>>,
     ) -> Option<LvalueTree<'r, 'a>> {
         match self {
             Self::TupleElement(index) => destructure.start.get(index).map(LvalueTree::Lvalue),
@@ -632,9 +629,9 @@ impl ErrorLocation {
 /// Enumeration of all types encountered on the lvalue side of assignments.
 #[derive(Debug, Clone, Copy)]
 enum LvalueTree<'r, 'a> {
-    Lvalue(&'r SpannedLvalue<'a, ValueTypeAst<'a>>),
-    Destructure(&'r Spanned<'a, Destructure<'a, ValueTypeAst<'a>>>),
-    Type(&'r Spanned<'a, ValueTypeAst<'a>>),
+    Lvalue(&'r SpannedLvalue<'a, TypeAst<'a>>),
+    Destructure(&'r Spanned<'a, Destructure<'a, TypeAst<'a>>>),
+    Type(&'r Spanned<'a, TypeAst<'a>>),
 }
 
 impl<'a> LvalueTree<'_, 'a> {
@@ -664,7 +661,7 @@ pub enum ErrorContext<Prim: PrimitiveType> {
     /// No context.
     None,
     /// Processing lvalue (before assignment).
-    Lvalue(ValueType<Prim>),
+    Lvalue(Type<Prim>),
     /// Function definition.
     FnDefinition {
         /// Types of function arguments.
@@ -673,16 +670,16 @@ pub enum ErrorContext<Prim: PrimitiveType> {
     /// Function call.
     FnCall {
         /// Function definition. Note that this is not necessarily a [`FnType`].
-        definition: ValueType<Prim>,
+        definition: Type<Prim>,
         /// Signature of the call.
-        call_signature: ValueType<Prim>,
+        call_signature: Type<Prim>,
     },
     /// Assignment.
     Assignment {
         /// Left-hand side of the assignment.
-        lhs: ValueType<Prim>,
+        lhs: Type<Prim>,
         /// Right-hand side of the assignment.
-        rhs: ValueType<Prim>,
+        rhs: Type<Prim>,
     },
     /// Unary operation.
     UnaryOp(UnaryOpContext<Prim>),

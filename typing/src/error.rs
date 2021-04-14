@@ -593,10 +593,7 @@ impl ErrorLocation {
             .with_no_extra()
     }
 
-    fn step_into_lvalue<'r, 'a, T>(
-        self,
-        lvalue: LvalueTree<'r, 'a, T>,
-    ) -> Option<LvalueTree<'r, 'a, T>> {
+    fn step_into_lvalue<'r, 'a>(self, lvalue: LvalueTree<'r, 'a>) -> Option<LvalueTree<'r, 'a>> {
         match lvalue {
             LvalueTree::Type(ty) => self.step_into_type(&ty.extra),
             LvalueTree::Destructure(destructure) => self.step_into_destructure(&destructure.extra),
@@ -608,15 +605,22 @@ impl ErrorLocation {
         }
     }
 
-    #[allow(clippy::unused_self)] // FIXME
-    fn step_into_type<'r, 'a, T>(self, _ty: &'r T) -> Option<LvalueTree<'r, 'a, T>> {
-        None
+    fn step_into_type<'r, 'a>(self, ty: &'r ValueTypeAst<'a>) -> Option<LvalueTree<'r, 'a>> {
+        let tuple = match ty {
+            ValueTypeAst::Tuple(tuple) => tuple,
+            _ => return None,
+        };
+        match self {
+            Self::TupleElement(index) => tuple.start.get(index).map(LvalueTree::Type),
+            Self::TupleEnd(index) => tuple.end.get(index).map(LvalueTree::Type),
+            _ => None,
+        }
     }
 
-    fn step_into_destructure<'r, 'a, T>(
+    fn step_into_destructure<'r, 'a>(
         self,
-        destructure: &'r Destructure<'a, T>,
-    ) -> Option<LvalueTree<'r, 'a, T>> {
+        destructure: &'r Destructure<'a, ValueTypeAst<'a>>,
+    ) -> Option<LvalueTree<'r, 'a>> {
         match self {
             Self::TupleElement(index) => destructure.start.get(index).map(LvalueTree::Lvalue),
             Self::TupleEnd(index) => destructure.end.get(index).map(LvalueTree::Lvalue),
@@ -626,26 +630,14 @@ impl ErrorLocation {
 }
 
 /// Enumeration of all types encountered on the lvalue side of assignments.
-#[derive(Debug)]
-enum LvalueTree<'r, 'a, T> {
-    Lvalue(&'r SpannedLvalue<'a, T>),
-    Destructure(&'r Spanned<'a, Destructure<'a, T>>),
-    Type(&'r Spanned<'a, T>),
+#[derive(Debug, Clone, Copy)]
+enum LvalueTree<'r, 'a> {
+    Lvalue(&'r SpannedLvalue<'a, ValueTypeAst<'a>>),
+    Destructure(&'r Spanned<'a, Destructure<'a, ValueTypeAst<'a>>>),
+    Type(&'r Spanned<'a, ValueTypeAst<'a>>),
 }
 
-impl<T> Clone for LvalueTree<'_, '_, T> {
-    fn clone(&self) -> Self {
-        match self {
-            Self::Lvalue(lvalue) => Self::Lvalue(*lvalue),
-            Self::Destructure(destructure) => Self::Destructure(*destructure),
-            Self::Type(ty) => Self::Type(*ty),
-        }
-    }
-}
-
-impl<T> Copy for LvalueTree<'_, '_, T> {}
-
-impl<'a, T> LvalueTree<'_, 'a, T> {
+impl<'a> LvalueTree<'_, 'a> {
     fn with_no_extra(self) -> Spanned<'a> {
         match self {
             Self::Lvalue(lvalue) => lvalue.with_no_extra(),

@@ -139,8 +139,8 @@ pub use crate::{
     ops::{BinaryOp, Op, OpPriority, UnaryOp},
     parser::is_valid_variable_name,
     spans::{
-        CodeFragment, InputSpan, LocatedSpan, MaybeSpanned, NomResult, Spanned, StripCode,
-        StripResultExt,
+        with_span, CodeFragment, InputSpan, LocatedSpan, MaybeSpanned, NomResult, Spanned,
+        StripCode, StripResultExt,
     },
 };
 

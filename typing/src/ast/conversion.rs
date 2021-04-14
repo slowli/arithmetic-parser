@@ -210,13 +210,16 @@ impl<'a> TupleAst<'a> {
         let start = self
             .start
             .iter()
-            .map(|element| element.convert(state))
+            .map(|element| element.extra.convert(state))
             .collect();
-        let middle = self.middle.as_ref().map(|middle| middle.convert(state));
+        let middle = self
+            .middle
+            .as_ref()
+            .map(|middle| middle.extra.convert(state));
         let end = self
             .end
             .iter()
-            .map(|element| element.convert(state))
+            .map(|element| element.extra.convert(state))
             .collect();
         Tuple::from_parts(start, middle, end)
     }
@@ -227,7 +230,7 @@ impl<'a> SliceAst<'a> {
         &self,
         state: &mut ConversionState<'_, 'a, Prim>,
     ) -> Slice<Prim> {
-        let element = self.element.convert(state);
+        let element = self.element.extra.convert(state);
 
         let converted_length = match &self.length {
             TupleLenAst::Ident(ident) => {
@@ -333,8 +336,8 @@ impl<'a> FnTypeAst<'a> {
         &self,
         state: &mut ConversionState<'_, 'a, Prim>,
     ) -> FnType<Prim> {
-        let args = self.args.convert(state);
-        let return_type = self.return_type.convert(state);
+        let args = self.args.extra.convert(state);
+        let return_type = self.return_type.extra.convert(state);
         FnType::new(args, return_type)
     }
 

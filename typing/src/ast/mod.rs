@@ -15,7 +15,7 @@ use nom::{
     sequence::{delimited, preceded, terminated, tuple},
 };
 
-use arithmetic_parser::{InputSpan, NomResult};
+use arithmetic_parser::{with_span, InputSpan, NomResult, Spanned};
 
 mod conversion;
 #[cfg(test)]
@@ -61,6 +61,7 @@ pub enum ValueTypeAst<'a> {
     /// Any type (`any`).
     Any(TypeConstraintsAst<'a>),
     /// Non-ticked identifier, e.g., `Bool`.
+    // FIXME: get rid of spans for consistency.
     Ident(InputSpan<'a>),
     /// Ticked identifier, e.g., `'T`.
     Param(InputSpan<'a>),
@@ -69,6 +70,7 @@ pub enum ValueTypeAst<'a> {
         /// Constraints on function params.
         constraints: Option<ConstraintsAst<'a>>,
         /// Function body.
+        // FIXME: this should be spanned as well (at least if constraints are present)
         function: Box<FnTypeAst<'a>>,
     },
     /// Tuple type; for example, `(Num, Bool)`.
@@ -84,24 +86,27 @@ impl<'a> ValueTypeAst<'a> {
     }
 }
 
+/// Spanned [`ValueTypeAst`].
+pub type SpannedValueTypeAst<'a> = Spanned<'a, ValueTypeAst<'a>>;
+
 /// Parsed tuple type, such as `(Num, Bool)` or `(fn() -> Num, ...[Num; _])`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TupleAst<'a> {
     /// Elements at the beginning of the tuple, e.g., `Num` and `Bool`
     /// in `(Num, Bool, ...[T; _])`.
-    pub start: Vec<ValueTypeAst<'a>>,
+    pub start: Vec<SpannedValueTypeAst<'a>>,
     /// Middle of the tuple, e.g., `[T; _]` in `(Num, Bool, ...[T; _])`.
-    pub middle: Option<SliceAst<'a>>,
+    pub middle: Option<Spanned<'a, SliceAst<'a>>>,
     /// Elements at the end of the tuple, e.g., `Bool` in `(...[Num; _], Bool)`.
     /// Guaranteed to be empty if `middle` is not present.
-    pub end: Vec<ValueTypeAst<'a>>,
+    pub end: Vec<SpannedValueTypeAst<'a>>,
 }
 
 /// Parsed slice type, such as `[Num; N]`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SliceAst<'a> {
     /// Element of this slice; for example, `Num` in `[Num; N]`.
-    pub element: Box<ValueTypeAst<'a>>,
+    pub element: Box<SpannedValueTypeAst<'a>>,
     /// Length of this slice; for example, `N` in `[Num; N]`.
     pub length: TupleLenAst<'a>,
 }
@@ -133,9 +138,9 @@ pub struct SliceAst<'a> {
 #[non_exhaustive]
 pub struct FnTypeAst<'a> {
     /// Function arguments.
-    pub args: TupleAst<'a>,
+    pub args: Spanned<'a, TupleAst<'a>>,
     /// Return type of the function.
-    pub return_type: ValueTypeAst<'a>,
+    pub return_type: SpannedValueTypeAst<'a>,
 }
 
 impl<'a> FnTypeAst<'a> {
@@ -217,15 +222,15 @@ fn type_param_ident(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
     preceded(tag_char('\''), ident)(input)
 }
 
-fn comma_separated_types(input: InputSpan<'_>) -> NomResult<'_, Vec<ValueTypeAst<'_>>> {
-    separated_list0(delimited(ws, tag_char(','), ws), type_definition)(input)
+fn comma_separated_types(input: InputSpan<'_>) -> NomResult<'_, Vec<SpannedValueTypeAst<'_>>> {
+    separated_list0(delimited(ws, tag_char(','), ws), with_span(type_definition))(input)
 }
 
-fn tuple_middle(input: InputSpan<'_>) -> NomResult<'_, SliceAst<'_>> {
-    preceded(terminated(tag("..."), ws), slice_definition)(input)
+fn tuple_middle(input: InputSpan<'_>) -> NomResult<'_, Spanned<'_, SliceAst<'_>>> {
+    preceded(terminated(tag("..."), ws), with_span(slice_definition))(input)
 }
 
-type TupleTailAst<'a> = (SliceAst<'a>, Vec<ValueTypeAst<'a>>);
+type TupleTailAst<'a> = (Spanned<'a, SliceAst<'a>>, Vec<SpannedValueTypeAst<'a>>);
 
 fn tuple_tail(input: InputSpan<'_>) -> NomResult<'_, TupleTailAst<'_>> {
     tuple((
@@ -291,12 +296,13 @@ fn slice_definition(input: InputSpan<'_>) -> NomResult<'_, SliceAst<'_>> {
         terminated(tag_char('['), ws),
         // Once we've encountered the opening `[`, the input *must* correspond to the parser.
         cut(terminated(
-            map(tuple((type_definition, tuple_len)), |(element, length)| {
-                SliceAst {
+            map(
+                tuple((with_span(type_definition), tuple_len)),
+                |(element, length)| SliceAst {
                     element: Box::new(element),
                     length,
-                }
-            }),
+                },
+            ),
             tuple((ws, tag_char(']'))),
         )),
     )(input)
@@ -349,14 +355,14 @@ fn constraints(input: InputSpan<'_>) -> NomResult<'_, ConstraintsAst<'_>> {
     )(input)
 }
 
-fn return_type(input: InputSpan<'_>) -> NomResult<'_, ValueTypeAst<'_>> {
-    preceded(tuple((ws, tag("->"), ws)), cut(type_definition))(input)
+fn return_type(input: InputSpan<'_>) -> NomResult<'_, SpannedValueTypeAst<'_>> {
+    preceded(tuple((ws, tag("->"), ws)), cut(with_span(type_definition)))(input)
 }
 
 #[allow(clippy::option_if_let_else)] // false positive; `args` is moved into both clauses
 fn fn_or_tuple(input: InputSpan<'_>) -> NomResult<'_, ValueTypeAst<'_>> {
     map(
-        tuple((tuple_definition, opt(return_type))),
+        tuple((with_span(tuple_definition), opt(return_type))),
         |(args, return_type)| {
             if let Some(return_type) = return_type {
                 ValueTypeAst::Function {
@@ -364,7 +370,7 @@ fn fn_or_tuple(input: InputSpan<'_>) -> NomResult<'_, ValueTypeAst<'_>> {
                     constraints: None,
                 }
             } else {
-                ValueTypeAst::Tuple(args)
+                ValueTypeAst::Tuple(args.extra)
             }
         },
     )(input)
@@ -372,7 +378,7 @@ fn fn_or_tuple(input: InputSpan<'_>) -> NomResult<'_, ValueTypeAst<'_>> {
 
 fn fn_definition(input: InputSpan<'_>) -> NomResult<'_, FnTypeAst<'_>> {
     map(
-        tuple((tuple_definition, return_type)),
+        tuple((with_span(tuple_definition), return_type)),
         |(args, return_type)| FnTypeAst { args, return_type },
     )(input)
 }

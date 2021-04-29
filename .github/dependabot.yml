@@ -1,0 +1,36 @@
+version: 2
+updates:
+- package-ecosystem: cargo
+  directory: "/"
+  schedule:
+    interval: daily
+    time: "03:00"
+  open-pull-requests-limit: 10
+  ignore:
+  - dependency-name: glass_pumpkin
+    versions:
+    - 0.5.0
+  - dependency-name: hashbrown
+    versions:
+    - 0.10.0
+    - 0.11.0
+  - dependency-name: num-complex
+    versions:
+    - 0.4.0
+  - dependency-name: num-bigint
+    versions:
+    - 0.4.0
+  - dependency-name: rustyline
+    versions:
+    - 8.0.0
+  - dependency-name: codespan-reporting
+    versions:
+    - 0.11.0
+    - 0.11.1
+  - dependency-name: codespan
+    versions:
+    - 0.11.0
+    - 0.11.1
+  - dependency-name: rand
+    versions:
+    - 0.8.3

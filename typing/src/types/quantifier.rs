@@ -194,7 +194,7 @@ impl<Prim: PrimitiveType> ParamPlacement<Prim> {
 }
 
 impl<Prim: PrimitiveType> VisitMut<Prim> for ParamPlacement<Prim> {
-    // FIXME: what if the params are already present on the `function`?
+    // TODO: what if the params are already present on the `function`?
     fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {
         let this_function_idx = self.function_count;
         let old_function_idx = mem::replace(&mut self.current_function_idx, this_function_idx);

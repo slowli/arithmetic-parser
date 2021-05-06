@@ -316,8 +316,8 @@ impl<'a> ConstraintsAst<'a> {
         }
 
         ParamConstraints {
-            static_lengths,
             type_params,
+            static_lengths,
         }
     }
 }

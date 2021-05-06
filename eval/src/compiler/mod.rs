@@ -56,7 +56,7 @@ impl Compiler {
 
     fn from_env<T>(module_id: Box<dyn ModuleId>, env: &Registers<'_, T>) -> Self {
         Self {
-            vars_to_registers: env.variables_map().to_owned(),
+            vars_to_registers: env.variables_map().clone(),
             register_count: env.register_count(),
             scope_depth: 0,
             module_id,

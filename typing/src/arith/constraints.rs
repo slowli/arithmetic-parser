@@ -164,11 +164,11 @@ impl<Prim: LinearType> TypeConstraints<Prim> for NumConstraints {
             Type::Prim(lit) if lit.is_linear() => {}
 
             Type::Function(_) | Type::Prim(_) => {
-                errors.push(ErrorKind::failed_constraint(ty.to_owned(), self.to_owned()));
+                errors.push(ErrorKind::failed_constraint(ty.clone(), *self));
             }
 
             Type::Tuple(tuple) => {
-                let tuple = tuple.to_owned();
+                let tuple = tuple.clone();
 
                 if *self == Self::Ops {
                     let middle_len = tuple.parts().1.map(Slice::len);

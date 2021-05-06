@@ -233,7 +233,7 @@ impl NumArithmetic {
             resolved_rhs_ty.is_primitive(),
         ) {
             (Some(true), Some(false)) => {
-                let resolved_rhs_ty = resolved_rhs_ty.to_owned();
+                let resolved_rhs_ty = resolved_rhs_ty.clone();
                 settings.lin.apply(
                     lhs_ty,
                     substitutions,
@@ -247,7 +247,7 @@ impl NumArithmetic {
                 resolved_rhs_ty
             }
             (Some(false), Some(true)) => {
-                let resolved_lhs_ty = resolved_lhs_ty.to_owned();
+                let resolved_lhs_ty = resolved_lhs_ty.clone();
                 settings.lin.apply(
                     lhs_ty,
                     substitutions,
@@ -272,9 +272,9 @@ impl NumArithmetic {
                     substitutions.unify(lhs_ty, rhs_ty, errors);
                 }
                 if lhs_is_valid {
-                    lhs_ty.to_owned()
+                    lhs_ty.clone()
                 } else {
-                    rhs_ty.to_owned()
+                    rhs_ty.clone()
                 }
             }
         }
@@ -294,7 +294,7 @@ impl NumArithmetic {
             UnaryOp::Not => BoolArithmetic.process_unary_op(substitutions, context, errors),
             UnaryOp::Neg => {
                 constraints.apply(&context.arg, substitutions, errors);
-                context.arg.to_owned()
+                context.arg.clone()
             }
             _ => {
                 errors.push(ErrorKind::unsupported(context.op));

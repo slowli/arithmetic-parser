@@ -386,7 +386,7 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     /// ```
     pub fn len(&self) -> TupleLen {
         let increment = self.start.len() + self.end.len();
-        self.resolved_middle_len().to_owned() + increment
+        self.resolved_middle_len() + increment
     }
 
     /// Returns `true` iff this tuple is guaranteed to be empty.
@@ -693,14 +693,14 @@ mod tests {
         let equal_elements: Vec<_> = slice
             .iter(3)
             .zip(tuple.iter(3))
-            .map(|(x, y)| (x.to_owned(), y.to_owned()))
+            .map(|(x, y)| (x.clone(), y.clone()))
             .collect();
         assert_eq!(equal_elements, expected_pairs);
 
         let equal_elements: Vec<_> = slice
             .iter(4)
             .zip(tuple.iter(4))
-            .map(|(x, y)| (x.to_owned(), y.to_owned()))
+            .map(|(x, y)| (x.clone(), y.clone()))
             .collect();
         expected_pairs.insert(1, (Type::free_var(1), Type::free_var(0)));
         assert_eq!(equal_elements, expected_pairs);
@@ -708,7 +708,7 @@ mod tests {
         let equal_elements: Vec<_> = slice
             .iter(5)
             .zip(tuple.iter(5))
-            .map(|(x, y)| (x.to_owned(), y.to_owned()))
+            .map(|(x, y)| (x.clone(), y.clone()))
             .collect();
         expected_pairs.insert(2, (Type::free_var(1), Type::free_var(0)));
         assert_eq!(equal_elements, expected_pairs);

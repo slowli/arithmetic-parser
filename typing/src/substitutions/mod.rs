@@ -145,7 +145,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             }
 
             if let Some(eq_rhs) = self.length_eqs.get(&var.index()) {
-                resolved = eq_rhs.to_owned() + exact;
+                resolved = *eq_rhs + exact;
             } else {
                 break;
             }
@@ -174,8 +174,8 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     ///
     /// If unification is impossible, the corresponding error(s) will be put into `errors`.
     pub fn unify(&mut self, lhs: &Type<Prim>, rhs: &Type<Prim>, mut errors: OpErrors<'_, Prim>) {
-        let resolved_lhs = self.fast_resolve(lhs).to_owned();
-        let resolved_rhs = self.fast_resolve(rhs).to_owned();
+        let resolved_lhs = self.fast_resolve(lhs).clone();
+        let resolved_rhs = self.fast_resolve(rhs).clone();
 
         // **NB.** LHS and RHS should never switch sides; the side is important for
         // accuracy of error reporting, and for some cases of type inference (e.g.,
@@ -220,9 +220,9 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
             (ty, other_ty) => {
                 let mut resolver = self.resolver();
-                let mut ty = ty.to_owned();
+                let mut ty = ty.clone();
                 resolver.visit_type_mut(&mut ty);
-                let mut other_ty = other_ty.to_owned();
+                let mut other_ty = other_ty.clone();
                 resolver.visit_type_mut(&mut other_ty);
                 errors.push(ErrorKind::TypeMismatch(ty, other_ty));
             }
@@ -249,7 +249,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         if let (None, exact) = resolved_len.components() {
             self.unify_tuple_elements(lhs.iter(exact).zip(rhs.iter(exact)), context, errors);
         } else {
-            // FIXME: is this always applicable?
+            // TODO: is this always applicable?
             // FIXME: this leads to incorrect error locations!
             self.unify_tuple_elements(lhs.equal_elements_dyn(rhs), context, errors);
         }
@@ -559,7 +559,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         checker.visit_type(ty);
 
         if checker.is_recursive {
-            let mut resolved_ty = ty.to_owned();
+            let mut resolved_ty = ty.clone();
             self.resolver().visit_type_mut(&mut resolved_ty);
             TypeSanitizer { fixed_idx: var_idx }.visit_type_mut(&mut resolved_ty);
             errors.push(ErrorKind::RecursiveType(resolved_ty));
@@ -568,7 +568,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 constraints.apply(ty, self, errors);
             }
             if needs_equation {
-                let mut ty = ty.to_owned();
+                let mut ty = ty.clone();
                 if !is_lhs {
                     // We need to swap `any` types / lengths with new vars so that this type
                     // can be specified further.
@@ -635,7 +635,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeResolver<'_, Prim> {
     fn visit_type_mut(&mut self, ty: &mut Type<Prim>) {
         let fast_resolved = self.substitutions.fast_resolve(ty);
         if !ptr::eq(ty, fast_resolved) {
-            *ty = fast_resolved.to_owned();
+            *ty = fast_resolved.clone();
         }
         visit::visit_type_mut(self, ty);
     }

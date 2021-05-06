@@ -8,8 +8,8 @@ use nom::{
 use core::fmt;
 
 use crate::{
-    alloc::ToOwned, BinaryOp, ExprType, InputSpan, LocatedSpan, LvalueType, Op, Spanned,
-    StatementType, StripCode, UnaryOp,
+    BinaryOp, ExprType, InputSpan, LocatedSpan, LvalueType, Op, Spanned, StatementType, StripCode,
+    UnaryOp,
 };
 
 /// Parsing context.
@@ -155,7 +155,7 @@ impl ErrorKind {
         match self {
             Self::UnexpectedChar { context }
             | Self::UnexpectedTerm { context }
-            | Self::Other { context, .. } => context.to_owned(),
+            | Self::Other { context, .. } => *context,
             _ => None,
         }
     }

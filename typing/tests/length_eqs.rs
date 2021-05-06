@@ -4,7 +4,7 @@ use assert_matches::assert_matches;
 
 use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
 use arithmetic_typing::{
-    error::{Error, ErrorKind, Errors, TupleLenMismatchContext},
+    error::{Error, ErrorKind, Errors, TupleContext},
     Annotated, FnType, Num, Prelude, TupleLen, Type, TypeEnvironment, UnknownLen,
 };
 
@@ -56,7 +56,7 @@ fn push_fn_in_other_fn_definition() {
         ErrorKind::TupleLenMismatch {
             lhs,
             rhs,
-            context: TupleLenMismatchContext::Assignment,
+            context: TupleContext::Generic,
         } if *lhs == TupleLen::from(2) && *rhs == TupleLen::from(1)
     );
 
@@ -149,7 +149,7 @@ fn requirements_on_len_via_destructuring() {
         ErrorKind::TupleLenMismatch {
             lhs,
             rhs,
-            context: TupleLenMismatchContext::Assignment,
+            context: TupleContext::Generic,
         } if lhs.to_string() == "_ + 2" && *rhs == TupleLen::from(1)
     );
 

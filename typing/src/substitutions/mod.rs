@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     arith::TypeConstraints,
-    error::{ErrorKind, ErrorLocation, OpErrors, TupleLenMismatchContext},
+    error::{ErrorKind, ErrorLocation, OpErrors, TupleContext},
     visit::{self, Visit, VisitMut},
     FnType, PrimitiveType, Tuple, TupleLen, Type, TypeVar, UnknownLen,
 };
@@ -207,12 +207,9 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 // We already know that types are equal.
             }
 
-            (Type::Tuple(lhs_tuple), Type::Tuple(rhs_tuple)) => self.unify_tuples(
-                lhs_tuple,
-                rhs_tuple,
-                TupleLenMismatchContext::Assignment,
-                errors,
-            ),
+            (Type::Tuple(lhs_tuple), Type::Tuple(rhs_tuple)) => {
+                self.unify_tuples(lhs_tuple, rhs_tuple, TupleContext::Generic, errors)
+            }
 
             (Type::Function(lhs_fn), Type::Function(rhs_fn)) => {
                 self.unify_fn_types(lhs_fn, rhs_fn, errors)
@@ -233,7 +230,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         &mut self,
         lhs: &Tuple<Prim>,
         rhs: &Tuple<Prim>,
-        context: TupleLenMismatchContext,
+        context: TupleContext,
         mut errors: OpErrors<'_, Prim>,
     ) {
         let resolved_len = self.unify_lengths(lhs.len(), rhs.len(), context);
@@ -247,26 +244,29 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         };
 
         if let (None, exact) = resolved_len.components() {
-            self.unify_tuple_elements(lhs.iter(exact).zip(rhs.iter(exact)), context, errors);
+            self.unify_tuple_elements(lhs.iter(exact), rhs.iter(exact), context, errors);
         } else {
             // TODO: is this always applicable?
-            // FIXME: this leads to incorrect error locations!
-            self.unify_tuple_elements(lhs.equal_elements_dyn(rhs), context, errors);
+            for (lhs_elem, rhs_elem) in lhs.equal_elements_dyn(rhs) {
+                let elem_errors = errors.with_location(match context {
+                    TupleContext::Generic => ErrorLocation::TupleElement(None),
+                    TupleContext::FnArgs => ErrorLocation::FnArg(None),
+                });
+                self.unify(lhs_elem, rhs_elem, elem_errors);
+            }
         }
     }
 
     #[inline]
     fn unify_tuple_elements<'it>(
         &mut self,
-        pairs: impl Iterator<Item = (&'it Type<Prim>, &'it Type<Prim>)>,
-        context: TupleLenMismatchContext,
+        lhs_elements: impl Iterator<Item = &'it Type<Prim>>,
+        rhs_elements: impl Iterator<Item = &'it Type<Prim>>,
+        context: TupleContext,
         mut errors: OpErrors<'_, Prim>,
     ) {
-        for (i, (lhs_elem, rhs_elem)) in pairs.enumerate() {
-            let location = match context {
-                TupleLenMismatchContext::Assignment => ErrorLocation::TupleElement(i),
-                TupleLenMismatchContext::FnArgs => ErrorLocation::FnArg(i),
-            };
+        for (i, (lhs_elem, rhs_elem)) in lhs_elements.zip(rhs_elements).enumerate() {
+            let location = context.element(i);
             self.unify(lhs_elem, rhs_elem, errors.with_location(location));
         }
     }
@@ -277,7 +277,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         lhs: &Tuple<Prim>,
         rhs: &Tuple<Prim>,
         err: &ErrorKind<Prim>,
-        context: TupleLenMismatchContext,
+        context: TupleContext,
         errors: OpErrors<'_, Prim>,
     ) {
         let (lhs_len, rhs_len) = match err {
@@ -297,17 +297,19 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 // Iterate over common elements and unify them.
                 debug_assert_ne!(lhs_exact, rhs_exact);
                 self.unify_tuple_elements(
-                    lhs.iter(lhs_exact).zip(rhs.iter(rhs_exact)),
+                    lhs.iter(lhs_exact),
+                    rhs.iter(rhs_exact),
                     context,
                     errors,
                 );
             }
 
             (None, Some(UnknownLen::Dynamic)) => {
-                // We've attempted to unify static LHS w/ a dynamic RHS
+                // We've attempted to unify static LHS with a dynamic RHS
                 // e.g., `(x, y) = filter(...)`.
                 self.unify_tuple_elements(
-                    lhs.iter(lhs_exact).zip(rhs.iter(rhs_exact)),
+                    lhs.iter(lhs_exact),
+                    rhs.iter(rhs_exact),
                     context,
                     errors,
                 );
@@ -322,7 +324,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         &mut self,
         lhs: TupleLen,
         rhs: TupleLen,
-        context: TupleLenMismatchContext,
+        context: TupleContext,
     ) -> Result<TupleLen, ErrorKind<Prim>> {
         let resolved_lhs = self.resolve_len(lhs);
         let resolved_rhs = self.resolve_len(rhs);
@@ -465,7 +467,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         self.unify_tuples(
             &instantiated_rhs.args,
             &instantiated_lhs.args,
-            TupleLenMismatchContext::FnArgs,
+            TupleContext::FnArgs,
             errors.by_ref(),
         );
 

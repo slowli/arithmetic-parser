@@ -11,7 +11,7 @@ use crate::ast::SpannedTypeAst;
 use crate::{
     arith::{BinaryOpContext, MapPrimitiveType, NumArithmetic, TypeArithmetic, UnaryOpContext},
     ast::{AstConversionState, TypeAst},
-    error::{Error, ErrorContext, ErrorKind, ErrorLocation, Errors, OpErrors},
+    error::{Error, ErrorContext, ErrorKind, Errors, OpErrors, TupleContext},
     types::{ParamConstraints, ParamQuantifier},
     visit::VisitMut,
     FnType, Num, PrimitiveType, Slice, Substitutions, Tuple, Type,
@@ -357,7 +357,8 @@ where
             }
 
             Lvalue::Tuple(destructure) => {
-                let element_types = self.process_destructure(destructure, errors);
+                let element_types =
+                    self.process_destructure(destructure, TupleContext::Generic, errors);
                 Type::Tuple(element_types)
             }
 
@@ -373,6 +374,7 @@ where
     fn process_destructure(
         &mut self,
         destructure: &Destructure<'a, TypeAst<'a>>,
+        context: TupleContext,
         mut errors: OpErrors<'_, Prim>,
     ) -> Tuple<Prim> {
         let start = destructure
@@ -380,7 +382,7 @@ where
             .iter()
             .enumerate()
             .map(|(i, element)| {
-                let loc = ErrorLocation::TupleElement(i);
+                let loc = context.element(i);
                 self.process_lvalue(element, errors.with_location(loc))
             })
             .collect();
@@ -395,7 +397,7 @@ where
             .iter()
             .enumerate()
             .map(|(i, element)| {
-                let loc = ErrorLocation::TupleEnd(i);
+                let loc = context.end_element(i);
                 self.process_lvalue(element, errors.with_location(loc))
             })
             .collect();
@@ -505,7 +507,8 @@ where
         let was_in_function = mem::replace(&mut self.is_in_function, true);
 
         let mut errors = OpErrors::new();
-        let arg_types = self.process_destructure(&def.args.extra, errors.by_ref());
+        let arg_types =
+            self.process_destructure(&def.args.extra, TupleContext::FnArgs, errors.by_ref());
         let errors = errors.contextualize_destructure(&def.args, || ErrorContext::FnDefinition {
             args: arg_types.clone(),
         });

@@ -8,7 +8,7 @@ use super::{assert_incompatible_types, zip_fn_type, F32Grammar};
 use crate::{
     arith::NumArithmetic,
     ast::AstConversionError,
-    error::{ErrorContext, ErrorKind, ErrorLocation, TupleLenMismatchContext},
+    error::{ErrorContext, ErrorKind, ErrorLocation, TupleContext},
     Assertions, Prelude, TupleLen, Type, TypeEnvironment, UnknownLen,
 };
 use arithmetic_parser::grammars::Parse;
@@ -56,7 +56,7 @@ fn contradicting_type_hint() {
         ErrorKind::TupleLenMismatch {
             lhs,
             rhs,
-            context: TupleLenMismatchContext::Assignment,
+            context: TupleContext::Generic,
         } if *lhs == TupleLen::from(2) && *rhs == TupleLen::from(3)
     );
 }
@@ -108,7 +108,7 @@ fn invalid_type_hint_with_fn_arg() {
         ErrorKind::TupleLenMismatch {
             lhs,
             rhs,
-            context: TupleLenMismatchContext::FnArgs,
+            context: TupleContext::FnArgs,
         } if *lhs == TupleLen::from(2) && *rhs == TupleLen::from(1)
     );
 }
@@ -187,7 +187,7 @@ fn unsupported_type_param_location() {
         let mut type_env = TypeEnvironment::new();
         let err = type_env.process_statements(&block).unwrap_err().single();
 
-        assert_eq!(err.location(), [ErrorLocation::TupleElement(1)]);
+        assert_eq!(err.location(), [TupleContext::Generic.element(1)]);
         assert_matches!(err.context(), ErrorContext::Assignment { .. });
         assert_eq!(*err.span().fragment(), "(('Arg,)) -> ('Arg,)");
         assert_matches!(err.kind(), ErrorKind::UnsupportedParam);
@@ -270,8 +270,6 @@ fn assigning_to_dynamically_sized_slice() {
 #[test]
 fn assigning_to_a_slice_and_then_narrowing() {
     let code = r#"
-        // The arg type annotation is required because otherwise `xs` type will be set
-        // to `[Num]` by unifying it with the type var.
         slice_fn = |xs| {
             _unused: [Num] = xs;
             (x, y, z) = xs;
@@ -367,7 +365,7 @@ fn unifying_tuples_with_dyn_lengths() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(*err.span().fragment(), "(...[_; _], _, Num)");
-    assert_eq!(err.location(), [ErrorLocation::TupleElement(3)]); // FIXME
+    assert_eq!(err.location(), [ErrorLocation::TupleElement(None)]);
     assert_matches!(
         err.context(),
         ErrorContext::Assignment { lhs, rhs }

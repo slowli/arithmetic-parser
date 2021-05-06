@@ -4,7 +4,7 @@ use assert_matches::assert_matches;
 use super::*;
 use crate::{
     arith::NumConstraints,
-    error::{ErrorKind, ErrorLocation, TupleLenMismatchContext},
+    error::{ErrorKind, ErrorLocation, TupleContext},
     Annotated, Num, Prelude, TupleLen, UnknownLen,
 };
 
@@ -246,7 +246,7 @@ fn immediately_invoked_function_with_invalid_arg() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(*err.span().fragment(), "4 == 7");
-    assert_eq!(err.location(), [ErrorLocation::FnArg(0)]);
+    assert_eq!(err.location(), [TupleContext::FnArgs.element(0)]);
     assert_matches!(
         err.context(),
         ErrorContext::FnCall { definition, call_signature }
@@ -515,7 +515,7 @@ fn incorrect_tuple_length_returned_from_fn() {
         ErrorKind::TupleLenMismatch {
             lhs,
             rhs,
-            context: TupleLenMismatchContext::Assignment,
+            context: TupleContext::Generic,
         } if *lhs == TupleLen::from(1) && *rhs == TupleLen::from(2)
     );
 }
@@ -727,7 +727,7 @@ fn function_passed_as_arg_invalid_arity() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(*err.span().fragment(), "|x, y| x + y");
-    assert_eq!(err.location(), [ErrorLocation::FnArg(1)]);
+    assert_eq!(err.location(), [TupleContext::FnArgs.element(1)]);
     let expected_call_signature = "((Num, Num), for<'T: Ops> ('T, 'T) -> 'T) -> (Num, Num)";
     assert_matches!(
         err.context(),
@@ -741,7 +741,7 @@ fn function_passed_as_arg_invalid_arity() {
         ErrorKind::TupleLenMismatch {
             lhs,
             rhs,
-            context: TupleLenMismatchContext::FnArgs,
+            context: TupleContext::FnArgs,
         } if *lhs == TupleLen::from(2) && *rhs == TupleLen::from(1)
     );
     assert_eq!(
@@ -780,7 +780,10 @@ fn function_passed_as_arg_invalid_input() {
     assert_eq!(*err.span().fragment(), "2 != 3");
     assert_eq!(
         err.location(),
-        [ErrorLocation::FnArg(0), ErrorLocation::TupleElement(1)]
+        [
+            TupleContext::FnArgs.element(0),
+            TupleContext::Generic.element(1),
+        ]
     );
     assert_matches!(
         err.context(),
@@ -830,7 +833,10 @@ fn incorrect_arg_in_slices() {
     assert_eq!(*err.span().fragment(), "2 == 3");
     assert_eq!(
         err.location(),
-        [ErrorLocation::FnArg(0), ErrorLocation::TupleElement(1)]
+        [
+            TupleContext::FnArgs.element(0),
+            TupleContext::Generic.element(1),
+        ]
     );
     assert_matches!(
         err.context(),
@@ -864,7 +870,7 @@ fn unifying_length_vars_error() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(*err.span().fragment(), "(3, 4, 5)");
-    assert_eq!(err.location(), [ErrorLocation::FnArg(1)]);
+    assert_eq!(err.location(), [TupleContext::FnArgs.element(1)]);
     assert_matches!(
         err.context(),
         ErrorContext::FnCall { definition, call_signature }
@@ -877,7 +883,7 @@ fn unifying_length_vars_error() {
         ErrorKind::TupleLenMismatch {
             lhs,
             rhs,
-            context: TupleLenMismatchContext::Assignment,
+            context: TupleContext::Generic,
         } if *lhs == TupleLen::from(2) && *rhs == TupleLen::from(3)
     );
 }
@@ -1185,7 +1191,7 @@ fn any_type_with_bound_with_bogus_function_call() {
         .single();
 
     assert_eq!(*err.span().fragment(), "|x| x + 1");
-    assert_eq!(err.location(), [ErrorLocation::FnArg(1)]);
+    assert_eq!(err.location(), [TupleContext::FnArgs.element(1)]);
     assert_matches!(
         err.context(),
         ErrorContext::FnCall { call_signature, .. }

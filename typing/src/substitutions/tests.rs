@@ -3,7 +3,7 @@
 use assert_matches::assert_matches;
 
 use super::*;
-use crate::{error::TupleLenMismatchContext, Num};
+use crate::{error::TupleContext, Num};
 
 fn extract_errors<Prim: PrimitiveType>(
     action: impl FnOnce(OpErrors<'_, Prim>),
@@ -25,7 +25,7 @@ fn unify_lengths<Prim: PrimitiveType>(
     rhs: TupleLen,
 ) -> Result<(), ErrorKind<Prim>> {
     substitutions
-        .unify_lengths(lhs, rhs, TupleLenMismatchContext::Assignment)
+        .unify_lengths(lhs, rhs, TupleContext::Generic)
         .map(drop)
 }
 
@@ -35,7 +35,7 @@ fn unify_tuples<Prim: PrimitiveType>(
     rhs: &Tuple<Prim>,
 ) -> Result<(), ErrorKind<Prim>> {
     extract_errors(|errors| {
-        substitutions.unify_tuples(lhs, rhs, TupleLenMismatchContext::Assignment, errors);
+        substitutions.unify_tuples(lhs, rhs, TupleContext::Generic, errors);
     })
 }
 

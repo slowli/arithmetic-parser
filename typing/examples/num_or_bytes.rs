@@ -287,6 +287,6 @@ fn main() -> anyhow::Result<()> {
         .process_with_arithmetic(&NumOrBytesArithmetic, &bogus_ast)
         .unwrap_err();
 
-    assert_eq!(err.to_string(), "1:2: Type `Bool` fails constraint `Sum`");
+    assert_eq!(err.to_string(), "1:6: Type `Bool` fails constraint `Sum`");
     Ok(())
 }

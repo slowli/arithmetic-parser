@@ -6,14 +6,17 @@ use std::{fmt, ops};
 
 use crate::{
     arith::{BinaryOpContext, UnaryOpContext},
-    ast::{AstConversionError, SpannedTypeAst, TupleAst, TypeAst},
+    ast::{AstConversionError, TypeAst},
     visit::VisitMut,
     PrimitiveType, Tuple, TupleIndex, TupleLen, Type,
 };
 use arithmetic_parser::{
-    grammars::Grammar, Destructure, DestructureRest, Expr, Lvalue, Spanned, SpannedExpr,
-    SpannedLvalue, UnsupportedType,
+    grammars::Grammar, Destructure, Spanned, SpannedExpr, SpannedLvalue, UnsupportedType,
 };
+
+mod location;
+
+pub use self::location::ErrorLocation;
 
 /// Context in which a tuple is used.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -567,202 +570,6 @@ impl<Prim: PrimitiveType> ErrorPrecursor<Prim> {
             context,
             location: self.location,
         }
-    }
-}
-
-impl TupleIndex {
-    fn get_from_tuple<'r, 'a>(self, tuple: &'r TupleAst<'a>) -> Option<&'r SpannedTypeAst<'a>> {
-        match self {
-            Self::Start(i) => tuple.start.get(i),
-            Self::Middle => tuple
-                .middle
-                .as_ref()
-                .map(|middle| middle.extra.element.as_ref()),
-            Self::End(i) => tuple.end.get(i),
-        }
-    }
-
-    fn get_from_destructure<'r, 'a>(
-        self,
-        destructure: &'r Destructure<'a, TypeAst<'a>>,
-    ) -> Option<LvalueTree<'r, 'a>> {
-        match self {
-            Self::Start(i) => destructure.start.get(i).map(LvalueTree::Lvalue),
-            Self::Middle => destructure
-                .middle
-                .as_ref()
-                .and_then(|middle| match &middle.extra {
-                    DestructureRest::Named { ty, .. } => ty.as_ref(),
-                    _ => None,
-                })
-                .map(LvalueTree::Type),
-            Self::End(i) => destructure.end.get(i).map(LvalueTree::Lvalue),
-        }
-    }
-}
-
-/// Fragment of an error location.
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[non_exhaustive]
-pub enum ErrorLocation {
-    /// Function argument with the specified index (0-based; can be `None` if the error cannot
-    /// be attributed to a specific index).
-    FnArg(Option<TupleIndex>),
-    /// Function return type.
-    FnReturnType,
-    /// Tuple element with the specified index (0-based; can be `None` if the error cannot
-    /// be attributed to a specific index).
-    TupleElement(Option<TupleIndex>),
-    /// Left-hand side of a binary operation.
-    Lhs,
-    /// Right-hand side of a binary operation.
-    Rhs,
-}
-
-impl From<TupleIndex> for ErrorLocation {
-    fn from(index: TupleIndex) -> Self {
-        Self::TupleElement(Some(index))
-    }
-}
-
-// TODO: test walking
-impl ErrorLocation {
-    /// Walks the provided `expr` and returns the most exact span found in it.
-    fn walk_expr<'a, T: Grammar<'a>>(location: &[Self], expr: &SpannedExpr<'a, T>) -> Spanned<'a> {
-        Self::walk(location, expr, Self::step_into_expr).with_no_extra()
-    }
-
-    fn walk<T: Copy>(mut location: &[Self], init: T, refine: impl Fn(Self, T) -> Option<T>) -> T {
-        let mut refined = init;
-        while !location.is_empty() {
-            if let Some(refinement) = refine(location[0], refined) {
-                refined = refinement;
-                location = &location[1..];
-            } else {
-                break;
-            }
-        }
-        refined
-    }
-
-    fn step_into_expr<'r, 'a, T: Grammar<'a>>(
-        self,
-        expr: &'r SpannedExpr<'a, T>,
-    ) -> Option<&'r SpannedExpr<'a, T>> {
-        match self {
-            // `TupleIndex::FromEnd` should not occur in this context.
-            Self::FnArg(Some(TupleIndex::Start(index))) => match &expr.extra {
-                Expr::Function { args, .. } => Some(&args[index]),
-                Expr::Method { receiver, args, .. } => Some(if index == 0 {
-                    receiver.as_ref()
-                } else {
-                    &args[index - 1]
-                }),
-                _ => None,
-            },
-
-            Self::Lhs => {
-                if let Expr::Binary { lhs, .. } = &expr.extra {
-                    Some(lhs.as_ref())
-                } else {
-                    None
-                }
-            }
-            Self::Rhs => {
-                if let Expr::Binary { rhs, .. } = &expr.extra {
-                    Some(rhs.as_ref())
-                } else {
-                    None
-                }
-            }
-
-            Self::TupleElement(Some(TupleIndex::Start(index))) => {
-                if let Expr::Tuple(elements) = &expr.extra {
-                    Some(&elements[index])
-                } else {
-                    None
-                }
-            }
-
-            _ => None,
-        }
-    }
-
-    fn walk_lvalue<'a>(location: &[Self], lvalue: &SpannedLvalue<'a, TypeAst<'a>>) -> Spanned<'a> {
-        Self::walk(location, LvalueTree::Lvalue(lvalue), Self::step_into_lvalue)
-            .refine_lvalue()
-            .with_no_extra()
-    }
-
-    fn walk_destructure<'a>(
-        location: &[Self],
-        destructure: &Spanned<'a, Destructure<'a, TypeAst<'a>>>,
-    ) -> Spanned<'a> {
-        let destructure = LvalueTree::Destructure(destructure);
-        Self::walk(location, destructure, Self::step_into_lvalue)
-            .refine_lvalue()
-            .with_no_extra()
-    }
-
-    fn step_into_lvalue<'r, 'a>(self, lvalue: LvalueTree<'r, 'a>) -> Option<LvalueTree<'r, 'a>> {
-        match lvalue {
-            LvalueTree::Type(ty) => self.step_into_type(&ty.extra),
-            LvalueTree::Destructure(destructure) => self.step_into_destructure(&destructure.extra),
-            LvalueTree::Lvalue(lvalue) => match &lvalue.extra {
-                Lvalue::Tuple(destructure) => self.step_into_destructure(destructure),
-                Lvalue::Variable { ty: Some(ty) } => self.step_into_type(&ty.extra),
-                _ => None,
-            },
-        }
-    }
-
-    fn step_into_type<'r, 'a>(self, ty: &'r TypeAst<'a>) -> Option<LvalueTree<'r, 'a>> {
-        let tuple = match ty {
-            TypeAst::Tuple(tuple) => tuple,
-            _ => return None,
-        };
-        match self {
-            Self::TupleElement(Some(i)) => i.get_from_tuple(tuple).map(LvalueTree::Type),
-            _ => None,
-        }
-    }
-
-    fn step_into_destructure<'r, 'a>(
-        self,
-        destructure: &'r Destructure<'a, TypeAst<'a>>,
-    ) -> Option<LvalueTree<'r, 'a>> {
-        match self {
-            Self::TupleElement(Some(i)) => i.get_from_destructure(destructure),
-            _ => None,
-        }
-    }
-}
-
-/// Enumeration of all types encountered on the lvalue side of assignments.
-#[derive(Debug, Clone, Copy)]
-enum LvalueTree<'r, 'a> {
-    Lvalue(&'r SpannedLvalue<'a, TypeAst<'a>>),
-    Destructure(&'r Spanned<'a, Destructure<'a, TypeAst<'a>>>),
-    Type(&'r Spanned<'a, TypeAst<'a>>),
-}
-
-impl<'a> LvalueTree<'_, 'a> {
-    fn with_no_extra(self) -> Spanned<'a> {
-        match self {
-            Self::Lvalue(lvalue) => lvalue.with_no_extra(),
-            Self::Destructure(destructure) => destructure.with_no_extra(),
-            Self::Type(ty) => ty.with_no_extra(),
-        }
-    }
-
-    /// Refines the `Lvalue` variant if it is a variable with an annotation.
-    fn refine_lvalue(mut self) -> Self {
-        if let Self::Lvalue(lvalue) = self {
-            if let Lvalue::Variable { ty: Some(ty) } = &lvalue.extra {
-                self = Self::Type(ty);
-            }
-        }
-        self
     }
 }
 

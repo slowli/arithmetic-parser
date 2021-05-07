@@ -147,7 +147,7 @@ pub trait ParseLiteral: 'static {
 /// #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// struct Num;
 ///
-/// impl Grammar for IntegerGrammar {
+/// impl Grammar<'_> for IntegerGrammar {
 ///     type Type = Num;
 ///
 ///     fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
@@ -173,7 +173,7 @@ pub trait ParseLiteral: 'static {
 /// # Ok(())
 /// # }
 /// ```
-pub trait Grammar: ParseLiteral {
+pub trait Grammar<'a>: ParseLiteral {
     /// Type of the type annotation used in the grammar.
     type Type: Clone + fmt::Debug;
 
@@ -182,7 +182,7 @@ pub trait Grammar: ParseLiteral {
     /// # Return value
     ///
     /// The output should follow `nom` conventions on errors / failures.
-    fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type>;
+    fn parse_type(input: InputSpan<'a>) -> NomResult<'a, Self::Type>;
 }
 
 /// Helper trait allowing `Parse` to accept multiple types as inputs.
@@ -234,7 +234,7 @@ impl<'a> IntoInputSpan<'a> for &'a str {
 /// #   }
 /// }
 ///
-/// impl Parse for IntegerGrammar {
+/// impl Parse<'_> for IntegerGrammar {
 ///     type Base = Untyped<Self>;
 ///     const FEATURES: Features = Features::empty();
 /// }
@@ -247,14 +247,14 @@ impl<'a> IntoInputSpan<'a> for &'a str {
 /// # Ok(())
 /// # }
 /// ```
-pub trait Parse {
+pub trait Parse<'a> {
     /// Base for the grammar providing the literal and type annotation parsers.
-    type Base: Grammar;
+    type Base: Grammar<'a>;
     /// Features supported by this grammar.
     const FEATURES: Features;
 
     /// Parses a list of statements.
-    fn parse_statements<'a, I>(input: I) -> Result<Block<'a, Self::Base>, Error<'a>>
+    fn parse_statements<I>(input: I) -> Result<Block<'a, Self::Base>, Error<'a>>
     where
         I: IntoInputSpan<'a>,
         Self: Sized,
@@ -263,7 +263,7 @@ pub trait Parse {
     }
 
     /// Parses a potentially incomplete list of statements.
-    fn parse_streaming_statements<'a, I>(input: I) -> Result<Block<'a, Self::Base>, Error<'a>>
+    fn parse_streaming_statements<I>(input: I) -> Result<Block<'a, Self::Base>, Error<'a>>
     where
         I: IntoInputSpan<'a>,
         Self: Sized,
@@ -293,7 +293,7 @@ impl<T: ParseLiteral> ParseLiteral for Untyped<T> {
     }
 }
 
-impl<T: ParseLiteral> Grammar for Untyped<T> {
+impl<T: ParseLiteral> Grammar<'_> for Untyped<T> {
     type Type = ();
 
     #[inline]
@@ -304,7 +304,7 @@ impl<T: ParseLiteral> Grammar for Untyped<T> {
     }
 }
 
-impl<T: ParseLiteral> Parse for Untyped<T> {
+impl<T: ParseLiteral> Parse<'_> for Untyped<T> {
     type Base = Self;
 
     const FEATURES: Features = Features::all().without(Features::TYPE_ANNOTATIONS);
@@ -320,7 +320,7 @@ impl<T: ParseLiteral> Parse for Untyped<T> {
 // TODO: consider name change (`Parser`?)
 pub struct Typed<T>(PhantomData<T>);
 
-impl<T: Grammar> Parse for Typed<T> {
+impl<'a, T: Grammar<'a>> Parse<'a> for Typed<T> {
     type Base = T;
 
     const FEATURES: Features = Features::all();

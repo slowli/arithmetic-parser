@@ -239,7 +239,7 @@ impl<'a, T: Clone> Registers<'a, T> {
     pub fn update_from_env(&mut self, env: &Environment<'a, T>) {
         for (var_name, register) in &self.vars {
             if let Some(value) = env.get(var_name) {
-                self.registers[*register] = value.to_owned();
+                self.registers[*register] = value.clone();
             }
         }
     }
@@ -348,7 +348,7 @@ impl<'a, T: Clone> Registers<'a, T> {
                 }
 
                 Command::Annotate { register, name } => {
-                    self.vars.insert((*name).to_owned(), *register);
+                    self.vars.insert(name.clone(), *register);
                 }
 
                 Command::StartInnerScope => {
@@ -463,7 +463,7 @@ impl<'a, T: Clone> Registers<'a, T> {
                     .collect();
 
                 let function =
-                    InterpretedFn::new(fn_executable, captured_values, capture_names.to_owned());
+                    InterpretedFn::new(fn_executable, captured_values, capture_names.clone());
                 Ok(Value::interpreted_fn(function))
             }
         }

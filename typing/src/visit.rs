@@ -1,8 +1,8 @@
-//! Visitor traits allowing to traverse [`ValueType`] and related types.
+//! Visitor traits allowing to traverse [`Type`] and related types.
 
-use crate::{FnType, PrimitiveType, Tuple, TupleLen, TypeVar, ValueType};
+use crate::{FnType, PrimitiveType, Tuple, TupleLen, Type, TypeVar};
 
-/// Recursive traversal across the shared reference to a [`ValueType`].
+/// Recursive traversal across the shared reference to a [`Type`].
 ///
 /// Inspired by the [`Visit` trait from `syn`](https://docs.rs/syn/^1/syn/visit/trait.Visit.html).
 ///
@@ -10,10 +10,10 @@ use crate::{FnType, PrimitiveType, Tuple, TupleLen, TypeVar, ValueType};
 ///
 /// ```
 /// use arithmetic_typing::{
-///     visit::{self, Visit},
-///     PrimitiveType, Slice, Tuple, UnknownLen, ValueType, TypeVar,
+///     ast::TypeAst, visit::{self, Visit},
+///     PrimitiveType, Slice, Tuple, UnknownLen, Type, TypeVar,
 /// };
-/// # use std::collections::HashMap;
+/// # use std::{collections::HashMap, convert::TryFrom};
 ///
 /// /// Counts the number of mentions of type / length params in a type.
 /// #[derive(Default)]
@@ -38,10 +38,11 @@ use crate::{FnType, PrimitiveType, Tuple, TupleLen, TypeVar, ValueType};
 /// }
 ///
 /// # fn main() -> anyhow::Result<()> {
-/// let value_type: ValueType =
-///     "(...['T; N], ('T) -> 'U) -> [('T, 'U); N]".parse()?;
+/// let ty = TypeAst::try_from("(...['T; N], ('T) -> 'U) -> [('T, 'U); N]")?;
+/// let ty: Type = Type::try_from(&ty)?;
+///
 /// let mut mentions = Mentions::default();
-/// mentions.visit_type(&value_type);
+/// mentions.visit_type(&ty);
 /// assert_eq!(mentions.lengths[&0], 2); // `N` is mentioned twice
 /// assert_eq!(mentions.types[&0], 3); // `T` is mentioned 3 times
 /// assert_eq!(mentions.types[&1], 2); // `U` is mentioned twice
@@ -54,7 +55,7 @@ pub trait Visit<'ast, Prim: PrimitiveType> {
     ///
     /// The default implementation calls one of more specific methods corresponding to the `ty`
     /// variant.
-    fn visit_type(&mut self, ty: &'ast ValueType<Prim>) {
+    fn visit_type(&mut self, ty: &'ast Type<Prim>) {
         visit_type(self, ty)
     }
 
@@ -90,17 +91,17 @@ pub trait Visit<'ast, Prim: PrimitiveType> {
 }
 
 /// Default implementation of [`Visit::visit_type()`].
-pub fn visit_type<'ast, Prim, V>(visitor: &mut V, ty: &'ast ValueType<Prim>)
+pub fn visit_type<'ast, Prim, V>(visitor: &mut V, ty: &'ast Type<Prim>)
 where
     Prim: PrimitiveType,
     V: Visit<'ast, Prim> + ?Sized,
 {
     match ty {
-        ValueType::Some | ValueType::Any(_) => { /* Do nothing. */ }
-        ValueType::Var(var) => visitor.visit_var(*var),
-        ValueType::Prim(primitive) => visitor.visit_primitive(primitive),
-        ValueType::Tuple(tuple) => visitor.visit_tuple(tuple),
-        ValueType::Function(function) => visitor.visit_function(function.as_ref()),
+        Type::Any(_) => { /* Do nothing. */ }
+        Type::Var(var) => visitor.visit_var(*var),
+        Type::Prim(primitive) => visitor.visit_primitive(primitive),
+        Type::Tuple(tuple) => visitor.visit_tuple(tuple),
+        Type::Function(function) => visitor.visit_function(function.as_ref()),
     }
 }
 
@@ -110,7 +111,7 @@ where
     Prim: PrimitiveType,
     V: Visit<'ast, Prim> + ?Sized,
 {
-    for ty in tuple.element_types() {
+    for (_, ty) in tuple.element_types() {
         visitor.visit_type(ty);
     }
 }
@@ -125,7 +126,7 @@ where
     visitor.visit_type(&function.return_type);
 }
 
-/// Recursive traversal across the exclusive reference to a [`ValueType`].
+/// Recursive traversal across the exclusive reference to a [`Type`].
 ///
 /// Inspired by the [`VisitMut` trait from `syn`].
 ///
@@ -135,25 +136,25 @@ where
 ///
 /// ```
 /// use arithmetic_typing::{
-///     visit::{self, VisitMut},
-///     Num, ValueType,
+///     ast::TypeAst, visit::{self, VisitMut}, Num, Type,
 /// };
+/// # use std::convert::TryFrom;
 ///
 /// /// Replaces all primitive types with `Num`.
 /// struct Replacer;
 ///
 /// impl VisitMut<Num> for Replacer {
-///     fn visit_type_mut(&mut self, ty: &mut ValueType) {
+///     fn visit_type_mut(&mut self, ty: &mut Type) {
 ///         match ty {
-///             ValueType::Prim(_) => *ty = ValueType::NUM,
+///             Type::Prim(_) => *ty = Type::NUM,
 ///             _ => visit::visit_type_mut(self, ty),
 ///         }
 ///     }
 /// }
 ///
 /// # fn main() -> anyhow::Result<()> {
-/// let mut ty: ValueType =
-///     "(Num, Bool, (Num) -> (Bool, Num))".parse()?;
+/// let ty = TypeAst::try_from("(Num, Bool, (Num) -> (Bool, Num))")?;
+/// let mut ty = Type::try_from(&ty)?;
 /// Replacer.visit_type_mut(&mut ty);
 /// assert_eq!(ty.to_string(), "(Num, Num, (Num) -> (Num, Num))");
 /// # Ok(())
@@ -165,7 +166,7 @@ pub trait VisitMut<Prim: PrimitiveType> {
     ///
     /// The default implementation calls one of more specific methods corresponding to the `ty`
     /// variant. For "simple" types (variables, params, primitive types) does nothing.
-    fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
+    fn visit_type_mut(&mut self, ty: &mut Type<Prim>) {
         visit_type_mut(self, ty)
     }
 
@@ -195,15 +196,15 @@ pub trait VisitMut<Prim: PrimitiveType> {
 }
 
 /// Default implementation of [`VisitMut::visit_type_mut()`].
-pub fn visit_type_mut<Prim, V>(visitor: &mut V, ty: &mut ValueType<Prim>)
+pub fn visit_type_mut<Prim, V>(visitor: &mut V, ty: &mut Type<Prim>)
 where
     Prim: PrimitiveType,
     V: VisitMut<Prim> + ?Sized,
 {
     match ty {
-        ValueType::Some | ValueType::Any(_) | ValueType::Var(_) | ValueType::Prim(_) => {}
-        ValueType::Tuple(tuple) => visitor.visit_tuple_mut(tuple),
-        ValueType::Function(function) => visitor.visit_function_mut(function.as_mut()),
+        Type::Any(_) | Type::Var(_) | Type::Prim(_) => {}
+        Type::Tuple(tuple) => visitor.visit_tuple_mut(tuple),
+        Type::Function(function) => visitor.visit_function_mut(function.as_mut()),
     }
 }
 

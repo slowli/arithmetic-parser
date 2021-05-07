@@ -1,26 +1,46 @@
-//! Errors related to type inference.
+//! `ErrorKind` and tightly related types.
 
 use std::fmt;
 
-use crate::{PrimitiveType, TupleLen, ValueType};
-use arithmetic_parser::{Spanned, UnsupportedType};
+use crate::{
+    ast::AstConversionError, error::ErrorLocation, PrimitiveType, TupleIndex, TupleLen, Type,
+};
+use arithmetic_parser::UnsupportedType;
 
-/// Context for [`TypeErrorKind::TupleLenMismatch`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Context in which a tuple is used.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub enum TupleLenMismatchContext {
-    /// An error has occurred during assignment.
-    Assignment,
-    /// An error has occurred when calling a function.
+pub enum TupleContext {
+    /// Generic tuple use: assignment, destructuring, or creating a tuple from elements.
+    Generic,
+    /// The tuple represents function arguments.
     FnArgs,
 }
 
-/// Errors that can occur during type inference.
+impl TupleContext {
+    pub(crate) fn element(self, index: usize) -> ErrorLocation {
+        let index = TupleIndex::Start(index);
+        match self {
+            Self::Generic => ErrorLocation::TupleElement(Some(index)),
+            Self::FnArgs => ErrorLocation::FnArg(Some(index)),
+        }
+    }
+
+    pub(crate) fn end_element(self, index: usize) -> ErrorLocation {
+        let index = TupleIndex::End(index);
+        match self {
+            Self::Generic => ErrorLocation::TupleElement(Some(index)),
+            Self::FnArgs => ErrorLocation::FnArg(Some(index)),
+        }
+    }
+}
+
+/// Kinds of errors that can occur during type inference.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
-pub enum TypeErrorKind<Prim: PrimitiveType> {
+pub enum ErrorKind<Prim: PrimitiveType> {
     /// Trying to unify incompatible types. The first type is LHS, the second one is RHS.
-    TypeMismatch(ValueType<Prim>, ValueType<Prim>),
+    TypeMismatch(Type<Prim>, Type<Prim>),
     /// Incompatible tuple lengths.
     TupleLenMismatch {
         /// Length of the LHS. This is the length determined by type annotations
@@ -30,12 +50,12 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
         /// and the number of expected args in function calls.
         rhs: TupleLen,
         /// Context in which the error has occurred.
-        context: TupleLenMismatchContext,
+        context: TupleContext,
     },
     /// Undefined variable occurrence.
     UndefinedVar(String),
     /// Trying to unify a type with a type containing it.
-    RecursiveType(ValueType<Prim>),
+    RecursiveType(Type<Prim>),
 
     /// Mention of a bounded type or length variable in a type supplied
     /// to [`Substitutions::unify()`].
@@ -50,7 +70,7 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
     /// Failure when applying constraint to a type.
     FailedConstraint {
         /// Type that fails constraint requirement.
-        ty: ValueType<Prim>,
+        ty: Type<Prim>,
         /// Failing constraint(s).
         constraint: Prim::Constraints,
     },
@@ -59,16 +79,16 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
     /// [`UnknownLen::Dynamic`]: crate::UnknownLen::Dynamic
     DynamicLen(TupleLen),
 
-    /// Language construct not supported by type inference logic.
-    Unsupported(UnsupportedType),
+    /// Language feature not supported by type inference logic.
+    UnsupportedFeature(UnsupportedType),
 
     /// Type not supported by type inference logic. For example,
     /// a [`TypeArithmetic`] or [`TypeConstraints`] implementations may return this error
-    /// if they encounter an unknown [`ValueType`] variant.
+    /// if they encounter an unknown [`Type`] variant.
     ///
     /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
     /// [`TypeConstraints`]: crate::arith::TypeConstraints
-    UnsupportedType(ValueType<Prim>),
+    UnsupportedType(Type<Prim>),
 
     /// Unsupported use of type or length params in a function declaration.
     ///
@@ -76,31 +96,34 @@ pub enum TypeErrorKind<Prim: PrimitiveType> {
     /// of code that triggers this error:
     ///
     /// ```text
-    /// identity: ('T) -> 'T = |x| x;
+    /// identity: (('T,)) -> ('T,) = |x| x;
     /// ```
     UnsupportedParam,
+
+    /// Error while instantiating a type from AST.
+    AstConversion(AstConversionError),
 }
 
-impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
+impl<Prim: PrimitiveType> fmt::Display for ErrorKind<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::TypeMismatch(first, second) => write!(
+            Self::TypeMismatch(lhs, rhs) => write!(
                 formatter,
-                "Trying to unify incompatible types `{}` and `{}`",
-                first, second
+                "Type `{}` is not assignable to type `{}`",
+                rhs, lhs
             ),
             Self::TupleLenMismatch {
                 lhs,
                 rhs,
-                context: TupleLenMismatchContext::FnArgs,
+                context: TupleContext::FnArgs,
             } => write!(
                 formatter,
                 "Function expects {} args, but is called with {} args",
-                rhs, lhs
+                lhs, rhs
             ),
             Self::TupleLenMismatch { lhs, rhs, .. } => write!(
                 formatter,
-                "Trying to unify incompatible lengths {} and {}",
+                "Expected a tuple with {} elements, got one with {} elements",
                 lhs, rhs
             ),
 
@@ -108,7 +131,7 @@ impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
 
             Self::RecursiveType(ty) => write!(
                 formatter,
-                "Trying to unify a type `T` with a type containing it: {}",
+                "Cannot unify type 'T with a type containing it: {}",
                 ty
             ),
 
@@ -117,77 +140,44 @@ impl<Prim: PrimitiveType> fmt::Display for TypeErrorKind<Prim> {
             }
 
             Self::FailedConstraint { ty, constraint } => {
-                write!(formatter, "Type `{}` fails constraint {}", ty, constraint)
+                write!(formatter, "Type `{}` fails constraint `{}`", ty, constraint)
             }
             Self::DynamicLen(len) => {
-                write!(formatter, "Length `{}` is not static", len)
+                write!(formatter, "Length `{}` is required to be static", len)
             }
 
-            Self::Unsupported(ty) => write!(formatter, "Unsupported {}", ty),
+            Self::UnsupportedFeature(ty) => write!(formatter, "Unsupported {}", ty),
             Self::UnsupportedType(ty) => write!(formatter, "Unsupported type: {}", ty),
             Self::UnsupportedParam => {
                 formatter.write_str("Params in declared function types are not supported yet")
             }
+
+            Self::AstConversion(err) => write!(
+                formatter,
+                "Error instantiating type from annotation: {}",
+                err
+            ),
         }
     }
 }
 
-impl<Prim: PrimitiveType> std::error::Error for TypeErrorKind<Prim> {}
+impl<Prim: PrimitiveType> std::error::Error for ErrorKind<Prim> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::AstConversion(err) => Some(err),
+            _ => None,
+        }
+    }
+}
 
-impl<Prim: PrimitiveType> TypeErrorKind<Prim> {
+impl<Prim: PrimitiveType> ErrorKind<Prim> {
     /// Creates an error for an lvalue type not supported by the interpreter.
     pub fn unsupported<T: Into<UnsupportedType>>(ty: T) -> Self {
-        Self::Unsupported(ty.into())
+        Self::UnsupportedFeature(ty.into())
     }
 
     /// Creates a "failed constraint" error.
-    pub fn failed_constraint(ty: ValueType<Prim>, constraint: Prim::Constraints) -> Self {
+    pub fn failed_constraint(ty: Type<Prim>, constraint: Prim::Constraints) -> Self {
         Self::FailedConstraint { ty, constraint }
     }
-
-    /// Creates an error from this error kind and the specified span.
-    pub fn with_span<'a, T>(self, span: &Spanned<'a, T>) -> TypeError<'a, Prim> {
-        TypeError {
-            inner: span.copy_with_extra(self),
-        }
-    }
 }
-
-/// Type error together with the corresponding code span.
-#[derive(Debug, Clone)]
-pub struct TypeError<'a, Prim: PrimitiveType> {
-    inner: Spanned<'a, TypeErrorKind<Prim>>,
-}
-
-impl<Prim: PrimitiveType> fmt::Display for TypeError<'_, Prim> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "{}:{}: {}",
-            self.span().location_line(),
-            self.span().location_offset(),
-            self.kind()
-        )
-    }
-}
-
-impl<Prim: PrimitiveType> std::error::Error for TypeError<'_, Prim> {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(self.kind())
-    }
-}
-
-impl<'a, Prim: PrimitiveType> TypeError<'a, Prim> {
-    /// Gets the kind of this error.
-    pub fn kind(&self) -> &TypeErrorKind<Prim> {
-        &self.inner.extra
-    }
-
-    /// Gets the code span of this error.
-    pub fn span(&self) -> Spanned<'a> {
-        self.inner.with_no_extra()
-    }
-}
-
-/// Result of inferring type for a certain expression.
-pub type TypeResult<'a, Prim> = Result<ValueType<Prim>, TypeError<'a, Prim>>;

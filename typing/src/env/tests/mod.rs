@@ -2,17 +2,24 @@ use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
 use assert_matches::assert_matches;
 
 use super::*;
-use crate::{arith::NumConstraints, Annotated, Num, Prelude, TupleLen, TupleLenMismatchContext};
+use crate::{
+    arith::NumConstraints,
+    error::{ErrorKind, ErrorLocation, TupleContext},
+    Annotated, Num, Prelude, TupleIndex, TupleLen, UnknownLen,
+};
 
-pub type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
+mod annotations;
+mod error_handling;
 
-pub fn assert_incompatible_types<Prim: PrimitiveType>(
-    err: &TypeErrorKind<Prim>,
-    first: &ValueType<Prim>,
-    second: &ValueType<Prim>,
+type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
+
+fn assert_incompatible_types<Prim: PrimitiveType>(
+    err: &ErrorKind<Prim>,
+    first: &Type<Prim>,
+    second: &Type<Prim>,
 ) {
     let (x, y) = match err {
-        TypeErrorKind::TypeMismatch(x, y) => (x, y),
+        ErrorKind::TypeMismatch(x, y) => (x, y),
         _ => panic!("Unexpected error type: {:?}", err),
     };
     assert!(
@@ -25,8 +32,8 @@ pub fn assert_incompatible_types<Prim: PrimitiveType>(
 
 fn hash_fn_type() -> FnType<Num> {
     FnType {
-        args: Slice::new(ValueType::Any(NumConstraints::Lin), UnknownLen::param(0)).into(),
-        return_type: ValueType::NUM,
+        args: Slice::new(Type::Any(NumConstraints::Lin), UnknownLen::param(0)).into(),
+        return_type: Type::NUM,
         params: None,
     }
 }
@@ -39,10 +46,10 @@ fn hash_fn_type_display() {
 /// `zip` function signature.
 pub fn zip_fn_type() -> FnType<Num> {
     FnType::builder()
-        .with_arg(ValueType::param(0).repeat(UnknownLen::param(0)))
-        .with_arg(ValueType::param(1).repeat(UnknownLen::param(0)))
-        .returning(ValueType::slice(
-            (ValueType::param(0), ValueType::param(1)),
+        .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
+        .with_arg(Type::param(1).repeat(UnknownLen::param(0)))
+        .returning(Type::slice(
+            (Type::param(0), Type::param(1)),
             UnknownLen::param(0),
         ))
         .with_static_lengths(&[0])
@@ -63,9 +70,9 @@ fn statements_with_a_block() {
     let code = "y = { x = 3; 2 * x }; x ^ y == 6 * x;";
     let block = F32Grammar::parse_statements(code).unwrap();
 
-    let mut type_env: TypeEnvironment<Num> = vec![("x", ValueType::NUM)].into_iter().collect();
+    let mut type_env: TypeEnvironment<Num> = vec![("x", Type::NUM)].into_iter().collect();
     type_env.process_statements(&block).unwrap();
-    assert_eq!(*type_env.get("y").unwrap(), ValueType::NUM);
+    assert_eq!(*type_env.get("y").unwrap(), Type::NUM);
 }
 
 #[test]
@@ -73,9 +80,9 @@ fn boolean_statements() {
     let code = "y = x == x ^ 2; y = y || { x = 3; x != 7 };";
     let block = F32Grammar::parse_statements(code).unwrap();
 
-    let mut type_env: TypeEnvironment<Num> = vec![("x", ValueType::NUM)].into_iter().collect();
+    let mut type_env: TypeEnvironment<Num> = vec![("x", Type::NUM)].into_iter().collect();
     type_env.process_statements(&block).unwrap();
-    assert_eq!(type_env["y"], ValueType::BOOL);
+    assert_eq!(type_env["y"], Type::BOOL);
 }
 
 #[test]
@@ -145,12 +152,18 @@ fn type_recursion() {
     let code = "bog = |x| x + (x, 2);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(*err.span().fragment(), "x + (x, 2)");
+    assert!(err.location().is_empty());
+    assert_matches!(err.context(), ErrorContext::BinaryOp(_));
     assert_matches!(
         err.kind(),
-        TypeErrorKind::RecursiveType(ref ty) if ty.to_string() == "('T, Num)"
+        ErrorKind::RecursiveType(ref ty) if ty.to_string() == "('T, Num)"
+    );
+    assert_eq!(
+        err.kind().to_string(),
+        "Cannot unify type 'T with a type containing it: ('T, Num)"
     );
 }
 
@@ -163,10 +176,10 @@ fn indirect_type_recursion() {
 
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err().single();
     assert_matches!(
         err.kind(),
-        TypeErrorKind::RecursiveType(ref ty) if ty.to_string() == "(Num, 'T)"
+        ErrorKind::RecursiveType(ref ty) if ty.to_string() == "(Num, 'T)"
     );
 }
 
@@ -175,10 +188,10 @@ fn recursion_via_fn() {
     let code = "func = |bog| bog(1, bog);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err().single();
     assert_matches!(
         err.kind(),
-        TypeErrorKind::RecursiveType(ref ty) if ty.to_string() == "(Num, 'T) -> _"
+        ErrorKind::RecursiveType(ref ty) if ty.to_string() == "(Num, 'T) -> _"
     );
 }
 
@@ -191,11 +204,11 @@ fn method_basics() {
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let plus_type = FnType::new(vec![ValueType::NUM; 2].into(), ValueType::NUM);
+    let plus_type = FnType::new(vec![Type::NUM; 2].into(), Type::NUM);
     type_env.insert("plus", plus_type);
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(*type_env.get("bar").unwrap(), ValueType::NUM);
+    assert_eq!(*type_env.get("bar").unwrap(), Type::NUM);
 }
 
 #[test]
@@ -203,10 +216,16 @@ fn unknown_method() {
     let code = "bar = 3.do_something();";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(*err.span().fragment(), "do_something");
-    assert_matches!(err.kind(), TypeErrorKind::UndefinedVar(name) if name == "do_something");
+    assert!(err.location().is_empty());
+    assert_matches!(err.context(), ErrorContext::None);
+    assert_matches!(err.kind(), ErrorKind::UndefinedVar(name) if name == "do_something");
+    assert_eq!(
+        err.kind().to_string(),
+        "Variable `do_something` is not defined"
+    );
 }
 
 #[test]
@@ -216,7 +235,7 @@ fn immediately_invoked_function() {
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(*type_env.get("flag").unwrap(), ValueType::BOOL);
+    assert_eq!(*type_env.get("flag").unwrap(), Type::BOOL);
 }
 
 #[test]
@@ -224,12 +243,21 @@ fn immediately_invoked_function_with_invalid_arg() {
     let code = "flag = (|x| x + x)(4 == 7);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err().single();
 
+    assert_eq!(*err.span().fragment(), "4 == 7");
+    assert_eq!(err.location(), [TupleContext::FnArgs.element(0)]);
+    assert_matches!(
+        err.context(),
+        ErrorContext::FnCall { definition, call_signature }
+            if definition.to_string() == "for<'T: Ops> ('T) -> 'T"
+            && call_signature.to_string() == "(Bool) -> Bool"
+    );
     assert_matches!(
         err.kind(),
-        TypeErrorKind::FailedConstraint { ty, .. } if *ty == ValueType::BOOL
+        ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
     );
+    assert_eq!(err.kind().to_string(), "Type `Bool` fails constraint `Ops`");
 }
 
 #[test]
@@ -241,7 +269,7 @@ fn variable_scoping() {
 
     assert_eq!(
         *type_env.get("y").unwrap(),
-        ValueType::Tuple(vec![ValueType::NUM; 2].into())
+        Type::Tuple(vec![Type::NUM; 2].into())
     );
 }
 
@@ -255,17 +283,11 @@ fn destructuring_for_tuple_on_assignment() {
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(type_env["x"], ValueType::NUM);
-    assert_eq!(
-        type_env["ys"],
-        ValueType::slice(ValueType::NUM, TupleLen::from(2))
-    );
-    assert_eq!(
-        type_env["zs"],
-        ValueType::slice(ValueType::NUM, TupleLen::from(3))
-    );
-    assert_matches!(type_env["fn"], ValueType::Function(_));
-    assert_eq!(type_env["flag"], ValueType::BOOL);
+    assert_eq!(type_env["x"], Type::NUM);
+    assert_eq!(type_env["ys"], Type::slice(Type::NUM, TupleLen::from(2)));
+    assert_eq!(type_env["zs"], Type::slice(Type::NUM, TupleLen::from(3)));
+    assert_matches!(type_env["fn"], Type::Function(_));
+    assert_eq!(type_env["flag"], Type::BOOL);
 }
 
 #[test]
@@ -278,9 +300,9 @@ fn destructuring_with_unnamed_middle() {
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(type_env["x"], ValueType::NUM);
-    assert_eq!(type_env["y"], ValueType::NUM);
-    assert_eq!(type_env["z"], ValueType::BOOL);
+    assert_eq!(type_env["x"], Type::NUM);
+    assert_eq!(type_env["y"], Type::NUM);
+    assert_eq!(type_env["z"], Type::BOOL);
 }
 
 #[test]
@@ -288,12 +310,23 @@ fn destructuring_error_on_assignment() {
     let bogus_code = "(x, y, ...zs) = (1,);";
     let block = F32Grammar::parse_statements(bogus_code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err().single();
 
+    assert_eq!(*err.span().fragment(), "(x, y, ...zs)");
+    assert!(err.location().is_empty());
+    assert_matches!(
+        err.context(),
+        ErrorContext::Assignment { lhs, rhs }
+            if lhs.to_string() == "(_, _, ...[_; _])" && rhs.to_string() == "(Num)"
+    );
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch { lhs, rhs, .. }
+        ErrorKind::TupleLenMismatch { lhs, rhs, .. }
             if lhs.to_string() == "_ + 2" && *rhs == TupleLen::from(1)
+    );
+    assert_eq!(
+        err.kind().to_string(),
+        "Expected a tuple with _ + 2 elements, got one with 1 elements"
     );
 }
 
@@ -318,22 +351,31 @@ fn destructuring_for_fn_args() {
     {
         let bogus_code = "shift(1, 2, (3, 4))";
         let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
-        let err = type_env.process_statements(&bogus_block).unwrap_err();
-        assert_matches!(err.kind(), TypeErrorKind::TypeMismatch(..));
+        let err = type_env
+            .process_statements(&bogus_block)
+            .unwrap_err()
+            .single();
+        assert_matches!(err.kind(), ErrorKind::TypeMismatch(..));
     }
     {
         let bogus_code = "shift(1, 1 == 2, 1 == 1)";
         let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
-        let err = type_env.process_statements(&bogus_block).unwrap_err();
-        assert_matches!(err.kind(), TypeErrorKind::FailedConstraint { .. });
+        let err = type_env
+            .process_statements(&bogus_block)
+            .unwrap_err()
+            .single();
+        assert_matches!(err.kind(), ErrorKind::FailedConstraint { .. });
     }
 
     let bogus_code = "(x, _, _) = 1.shift(2, 3);";
     let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
-    let err = type_env.process_statements(&bogus_block).unwrap_err();
+    let err = type_env
+        .process_statements(&bogus_block)
+        .unwrap_err()
+        .single();
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch {
+        ErrorKind::TupleLenMismatch {
             lhs,
             rhs,
             ..
@@ -364,17 +406,14 @@ fn exact_lengths_for_gathering_fn() {
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(type_env["gather"].to_string(), "(...['T; N]) -> ['T; N]");
-    assert_eq!(type_env["x"], ValueType::NUM);
-    assert_eq!(type_env["y"], ValueType::NUM);
-    assert_eq!(type_env["head"], ValueType::BOOL);
-    assert_eq!(
-        type_env["tail"],
-        ValueType::slice(ValueType::NUM, TupleLen::from(2))
-    );
+    assert_eq!(type_env["x"], Type::NUM);
+    assert_eq!(type_env["y"], Type::NUM);
+    assert_eq!(type_env["head"], Type::BOOL);
+    assert_eq!(type_env["tail"], Type::slice(Type::NUM, TupleLen::from(2)));
 }
 
 #[test]
-fn inferring_value_type_from_embedded_function() {
+fn inferring_type_from_embedded_function() {
     let code = "double = |x| { (x, || (x, 2 * x)) };";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -465,18 +504,18 @@ fn varargs_in_embedded_fn() {
 }
 
 #[test]
-fn incorrect_function_arity() {
+fn incorrect_tuple_length_returned_from_fn() {
     let code = "double = |x| (x, x); (z,) = double(5);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch {
+        ErrorKind::TupleLenMismatch {
             lhs,
             rhs,
-            context: TupleLenMismatchContext::Assignment,
+            context: TupleContext::Generic,
         } if *lhs == TupleLen::from(1) && *rhs == TupleLen::from(2)
     );
 }
@@ -626,12 +665,12 @@ fn parametric_fn_passed_as_arg_with_unsatisfiable_requirements() {
 
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_incompatible_types(
         &err.kind(),
-        &ValueType::NUM,
-        &ValueType::Tuple(vec![ValueType::NUM; 2].into()),
+        &Type::NUM,
+        &Type::Tuple(vec![Type::NUM; 2].into()),
     );
 }
 
@@ -646,9 +685,9 @@ fn parametric_fn_passed_as_arg_with_recursive_requirements() {
 
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_matches!(err.kind(), TypeErrorKind::RecursiveType(_));
+    assert_matches!(err.kind(), ErrorKind::RecursiveType(_));
 }
 
 #[test]
@@ -685,19 +724,29 @@ fn function_passed_as_arg_invalid_arity() {
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err().single();
+
+    assert_eq!(*err.span().fragment(), "|x, y| x + y");
+    assert_eq!(err.location(), [TupleContext::FnArgs.element(1)]);
+    let expected_call_signature = "((Num, Num), for<'T: Ops> ('T, 'T) -> 'T) -> (Num, Num)";
+    assert_matches!(
+        err.context(),
+        ErrorContext::FnCall { definition, call_signature }
+            if definition.to_string() == "(('T, 'T), ('T) -> 'U) -> ('U, 'U)"
+            && call_signature.to_string() == expected_call_signature
+    );
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch {
+        ErrorKind::TupleLenMismatch {
             lhs,
             rhs,
-            context: TupleLenMismatchContext::FnArgs,
+            context: TupleContext::FnArgs,
         } if *lhs == TupleLen::from(2) && *rhs == TupleLen::from(1)
     );
     assert_eq!(
         err.kind().to_string(),
-        "Function expects 1 args, but is called with 2 args"
+        "Function expects 2 args, but is called with 1 args"
     );
 }
 
@@ -709,12 +758,12 @@ fn function_passed_as_arg_invalid_arg_type() {
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TypeMismatch(ValueType::Tuple(t), rhs)
-            if t.len() == TupleLen::from(2) && *rhs == ValueType::NUM
+        ErrorKind::TypeMismatch(Type::Tuple(t), rhs)
+            if t.len() == TupleLen::from(2) && *rhs == Type::NUM
     );
 }
 
@@ -726,9 +775,27 @@ fn function_passed_as_arg_invalid_input() {
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_incompatible_types(&err.kind(), &ValueType::NUM, &ValueType::BOOL);
+    assert_eq!(*err.span().fragment(), "2 != 3");
+    assert_eq!(
+        err.location(),
+        [
+            TupleContext::FnArgs.element(0),
+            TupleContext::Generic.element(1),
+        ]
+    );
+    assert_matches!(
+        err.context(),
+        ErrorContext::FnCall { definition, call_signature }
+            if definition.to_string() == "(('T, 'T), ('T) -> 'U) -> ('U, 'U)"
+            || call_signature.to_string() == "((Num, Bool), (Num) -> Num) -> (Num, Num)"
+    );
+    assert_incompatible_types(&err.kind(), &Type::NUM, &Type::BOOL);
+    assert_eq!(
+        err.kind().to_string(),
+        "Type `Bool` is not assignable to type `Num`"
+    );
 }
 
 #[test]
@@ -739,10 +806,7 @@ fn unifying_slice_and_tuple() {
     type_env.insert("map", Prelude::Map);
     type_env.process_statements(&block).unwrap();
 
-    assert_eq!(
-        type_env["xs"],
-        ValueType::Tuple(vec![ValueType::NUM; 2].into())
-    );
+    assert_eq!(type_env["xs"], Type::Tuple(vec![Type::NUM; 2].into()));
 }
 
 #[test]
@@ -754,10 +818,7 @@ fn function_accepting_slices() {
     type_env.process_statements(&block).unwrap();
 
     assert_eq!(type_env["inc"].to_string(), "([Num; N]) -> [Num; N]");
-    assert_eq!(
-        type_env["z"],
-        ValueType::slice(ValueType::NUM, TupleLen::from(3))
-    );
+    assert_eq!(type_env["z"], Type::slice(Type::NUM, TupleLen::from(3)));
 }
 
 #[test]
@@ -767,10 +828,23 @@ fn incorrect_arg_in_slices() {
     let mut type_env = TypeEnvironment::new();
     type_env.insert("map", Prelude::Map);
 
-    let err = type_env.process_statements(&block).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err().single();
 
-    // FIXME: error span is incorrect here; should be `(1, 2 == 3)`
-    assert_incompatible_types(&err.kind(), &ValueType::NUM, &ValueType::BOOL);
+    assert_eq!(*err.span().fragment(), "2 == 3");
+    assert_eq!(
+        err.location(),
+        [
+            TupleContext::FnArgs.element(0),
+            TupleContext::Generic.element(1),
+        ]
+    );
+    assert_matches!(
+        err.context(),
+        ErrorContext::FnCall { definition, call_signature }
+            if definition.to_string() == "(['T; N], ('T) -> 'U) -> ['U; N]"
+            && call_signature.to_string() == "((Num, Bool), ('T) -> 'T) -> (Num, Num)"
+    );
+    assert_incompatible_types(&err.kind(), &Type::NUM, &Type::BOOL);
 }
 
 #[test]
@@ -793,14 +867,23 @@ fn unifying_length_vars_error() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("zip_with", zip_fn_type());
+    let err = type_env.process_statements(&block).unwrap_err().single();
 
-    let err = type_env.process_statements(&block).unwrap_err();
+    assert_eq!(*err.span().fragment(), "(3, 4, 5)");
+    assert_eq!(err.location(), [TupleContext::FnArgs.element(1)]);
+    assert_matches!(
+        err.context(),
+        ErrorContext::FnCall { definition, call_signature }
+            if *definition == type_env["zip_with"]
+            && call_signature.to_string().starts_with("((Num, Num), (Num, Num, Num)) ->")
+    );
+
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch {
+        ErrorKind::TupleLenMismatch {
             lhs,
             rhs,
-            context: TupleLenMismatchContext::Assignment,
+            context: TupleContext::Generic,
         } if *lhs == TupleLen::from(2) && *rhs == TupleLen::from(3)
     );
 }
@@ -847,7 +930,7 @@ fn dynamically_sized_slices_basics() {
     }
 
     assert_eq!(type_env["mapped"], type_env["filtered"]);
-    assert_eq!(type_env["sum"], ValueType::NUM);
+    assert_eq!(type_env["sum"], Type::NUM);
 }
 
 #[test]
@@ -894,11 +977,11 @@ fn cannot_destructure_dynamic_slice() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("filter", Prelude::Filter);
-    let err = type_env.process_statements(&block).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::TupleLenMismatch { lhs, .. } if *lhs == TupleLen::from(2)
+        ErrorKind::TupleLenMismatch { lhs, .. } if *lhs == TupleLen::from(2)
     );
 }
 
@@ -908,10 +991,16 @@ fn comparisons_when_switched_off() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("filter", Prelude::Filter);
-    let err = type_env.process_statements(&block).unwrap_err();
+    let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.span().fragment(), ">");
-    assert_matches!(err.kind(), TypeErrorKind::Unsupported(_));
+    assert_eq!(*err.span().fragment(), "x > 1");
+    assert!(err.location().is_empty());
+    assert_matches!(err.context(), ErrorContext::BinaryOp(_));
+    assert_matches!(err.kind(), ErrorKind::UnsupportedFeature(_));
+    assert_eq!(
+        err.kind().to_string(),
+        "Unsupported binary op: greater comparison"
+    );
 }
 
 #[test]
@@ -925,26 +1014,30 @@ fn comparisons_when_switched_on() {
         .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
         .unwrap();
     let slice = match &output {
-        ValueType::Tuple(tuple) => tuple.as_slice().unwrap(),
+        Type::Tuple(tuple) => tuple.as_slice().unwrap(),
         _ => panic!("Unexpected output: {:?}", output),
     };
 
-    assert_eq!(*slice.element(), ValueType::NUM);
+    assert_eq!(*slice.element(), Type::NUM);
     assert_matches!(slice.len().components(), (Some(UnknownLen::Dynamic), 0));
 }
 
 #[test]
-fn comparison_type_error() {
+fn comparison_type_errors() {
     let code = "(2 <= 1) + 3";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env
         .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
-        .unwrap_err();
+        .unwrap_err()
+        .single();
 
+    assert_eq!(*err.span().fragment(), "(2 <= 1)");
+    assert_eq!(err.location(), [ErrorLocation::Lhs]);
+    assert_matches!(err.context(), ErrorContext::BinaryOp(_));
     assert_matches!(
         err.kind(),
-        TypeErrorKind::FailedConstraint { ty, .. } if *ty == ValueType::BOOL
+        ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
     );
 }
 
@@ -955,14 +1048,16 @@ fn constraint_error() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env
         .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
-        .unwrap_err();
+        .unwrap_err()
+        .single();
 
+    assert_eq!(*err.span().fragment(), "1 == 2");
     assert_matches!(
         err.kind(),
-        TypeErrorKind::FailedConstraint {
+        ErrorKind::FailedConstraint {
             ty,
             constraint: NumConstraints::Ops,
-        } if *ty == ValueType::BOOL
+        } if *ty == Type::BOOL
     );
 }
 
@@ -991,18 +1086,19 @@ fn any_can_be_unified_with_anything() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env
-        .insert("any", ValueType::any())
+        .insert("any", Type::any())
         .insert("map", Prelude::Map)
         .process_statements(&block)
-        .unwrap_err();
+        .unwrap_err()
+        .single();
 
     let lhs_slice = match err.kind() {
-        TypeErrorKind::TypeMismatch(ValueType::Tuple(tuple), bool) if *bool == ValueType::BOOL => {
+        ErrorKind::TypeMismatch(Type::Tuple(tuple), bool) if *bool == Type::BOOL => {
             tuple.as_slice().unwrap()
         }
         _ => panic!("Unexpected error: {:?}", err),
     };
-    assert_eq!(*lhs_slice.element(), ValueType::NUM);
+    assert_eq!(*lhs_slice.element(), Type::NUM);
 }
 
 #[test]
@@ -1016,11 +1112,11 @@ fn any_propagates_via_fn_params() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env
-        .insert("any", ValueType::any())
+        .insert("any", Type::any())
         .process_statements(&block)
         .unwrap();
 
-    assert_eq!(type_env["val"], ValueType::any());
+    assert_eq!(type_env["val"], Type::any());
 }
 
 #[test]
@@ -1034,7 +1130,7 @@ fn any_can_be_copied_and_unified_with_anything() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env
-        .insert("any_other", ValueType::any())
+        .insert("any_other", Type::any())
         .process_statements(&block)
         .unwrap();
 }
@@ -1050,7 +1146,7 @@ fn any_can_be_destructured_and_unified_with_anything() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env
-        .insert("some_tuple", ValueType::any().repeat(3))
+        .insert("some_tuple", Type::any().repeat(3))
         .process_statements(&block)
         .unwrap();
 }
@@ -1061,22 +1157,25 @@ fn unifying_types_containing_any() {
     let block = F32Grammar::parse_statements(code).unwrap();
 
     let digest_type = FnType::builder()
-        .with_arg(ValueType::NUM)
-        .with_varargs(ValueType::any(), UnknownLen::param(0))
-        .returning(ValueType::NUM);
+        .with_arg(Type::NUM)
+        .with_varargs(Type::any(), UnknownLen::param(0))
+        .returning(Type::NUM);
     let mut type_env = TypeEnvironment::new();
     let output = type_env
         .insert("digest", digest_type)
         .process_statements(&block)
         .unwrap();
 
-    assert_eq!(output, ValueType::NUM);
+    assert_eq!(output, Type::NUM);
 
     let bogus_code = "digest(2 == 3, 5)";
     let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
-    let err = type_env.process_statements(&bogus_block).unwrap_err();
+    let err = type_env
+        .process_statements(&bogus_block)
+        .unwrap_err()
+        .single();
 
-    assert_incompatible_types(err.kind(), &ValueType::NUM, &ValueType::BOOL);
+    assert_incompatible_types(err.kind(), &Type::NUM, &Type::BOOL);
 }
 
 #[test]
@@ -1088,12 +1187,21 @@ fn any_type_with_bound_with_bogus_function_call() {
     let err = type_env
         .insert("hash", hash_fn_type())
         .process_statements(&block)
-        .unwrap_err();
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "|x| x + 1");
+    assert_eq!(err.location(), [TupleContext::FnArgs.element(1)]);
+    assert_matches!(
+        err.context(),
+        ErrorContext::FnCall { call_signature, .. }
+            if call_signature.to_string() == "(Num, (Num) -> Num) -> Num"
+    );
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::FailedConstraint {
-            ty: ValueType::Function(_),
+        ErrorKind::FailedConstraint {
+            ty: Type::Function(_),
             ..
         }
     );
@@ -1102,27 +1210,81 @@ fn any_type_with_bound_with_bogus_function_call() {
 #[test]
 fn any_type_with_bound_in_tuple() {
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("some_lin", ValueType::Any(NumConstraints::Lin));
+    type_env.insert("some_lin", Type::Any(NumConstraints::Lin));
 
     let bogus_call = "some_lin(1)";
     let bogus_call = F32Grammar::parse_statements(bogus_call).unwrap();
-    let err = type_env.process_statements(&bogus_call).unwrap_err();
+    let err = type_env
+        .process_statements(&bogus_call)
+        .unwrap_err()
+        .single();
 
     assert_matches!(
         err.kind(),
-        TypeErrorKind::FailedConstraint {
-            ty: ValueType::Function(_),
+        ErrorKind::FailedConstraint {
+            ty: Type::Function(_),
             ..
         }
     );
 
     let destructure = "(x, y) = some_lin; !x";
     let destructure = F32Grammar::parse_statements(destructure).unwrap();
-    let err = type_env.process_statements(&destructure).unwrap_err();
+    let err = type_env
+        .process_statements(&destructure)
+        .unwrap_err()
+        .single();
 
-    assert_eq!(*err.span().fragment(), "x");
+    assert_eq!(*err.span().fragment(), "!x");
+    assert_eq!(err.location(), []);
+    assert_matches!(err.context(), ErrorContext::UnaryOp(_));
     assert_matches!(
         err.kind(),
-        TypeErrorKind::FailedConstraint { ty, .. } if *ty == ValueType::BOOL
+        ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
     );
+    assert_eq!(err.kind().to_string(), "Type `Bool` fails constraint `Lin`");
+    // TODO: store where constraint comes from?
+}
+
+#[test]
+fn locating_type_with_failed_constraint() {
+    let mut type_env = TypeEnvironment::new();
+    for &code in &["5 + (1, true)", "(1, true) + 5"] {
+        let block = F32Grammar::parse_statements(code).unwrap();
+        let err = type_env
+            .insert("true", Type::BOOL)
+            .process_statements(&block)
+            .unwrap_err()
+            .single();
+
+        assert_eq!(*err.span().fragment(), "true");
+        assert_eq!(err.location()[1..], [TupleContext::Generic.element(1)]);
+        assert_matches!(err.context(), ErrorContext::BinaryOp(_));
+        assert_matches!(err.kind(), ErrorKind::FailedConstraint { .. });
+        assert_eq!(err.kind().to_string(), "Type `Bool` fails constraint `Lin`");
+    }
+}
+
+#[test]
+fn locating_tuple_middle_with_failed_constraint() {
+    let code = "|xs| { (_: Num, ...flags) = xs; flags.map(|flag| !flag); hash(xs) }";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .insert("map", Prelude::Map)
+        .insert("hash", hash_fn_type())
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "xs");
+    assert_eq!(*err.root_span().fragment(), "hash(xs)");
+    assert_eq!(
+        err.location(),
+        [TupleContext::FnArgs.element(0), TupleIndex::Middle.into()]
+    );
+    assert_matches!(
+        err.context(),
+        ErrorContext::FnCall { call_signature, .. }
+            if call_signature.to_string() == "((Num, ...[Bool; _])) -> Num"
+    );
+    assert_matches!(err.kind(), ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL);
 }

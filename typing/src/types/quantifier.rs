@@ -8,7 +8,7 @@ use std::{
 use crate::{
     types::{FnParams, ParamConstraints},
     visit::{self, Visit, VisitMut},
-    FnType, PrimitiveType, Tuple, UnknownLen, ValueType,
+    FnType, PrimitiveType, Tuple, Type, UnknownLen,
 };
 
 #[derive(Debug, Default)]
@@ -120,10 +120,9 @@ impl ParamQuantifier {
 }
 
 impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for ParamQuantifier {
-    fn visit_type(&mut self, ty: &'a ValueType<Prim>) {
+    fn visit_type(&mut self, ty: &'a Type<Prim>) {
         match ty {
-            ValueType::Var(var) => {
-                assert!(!var.is_free(), "Free vars should be forbidden earlier");
+            Type::Var(var) if !var.is_free() => {
                 let stats = self.type_params.entry(var.index()).or_default();
                 stats.mentioning_fns.insert(self.current_function_idx);
             }
@@ -142,9 +141,10 @@ impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for ParamQuantifier {
         };
 
         if let UnknownLen::Var(var) = middle_len {
-            assert!(!var.is_free(), "Free vars should be forbidden earlier");
-            let stats = self.len_params.entry(var.index()).or_default();
-            stats.mentioning_fns.insert(self.current_function_idx);
+            if !var.is_free() {
+                let stats = self.len_params.entry(var.index()).or_default();
+                stats.mentioning_fns.insert(self.current_function_idx);
+            }
         }
         visit::visit_tuple(self, tuple);
     }
@@ -194,7 +194,7 @@ impl<Prim: PrimitiveType> ParamPlacement<Prim> {
 }
 
 impl<Prim: PrimitiveType> VisitMut<Prim> for ParamPlacement<Prim> {
-    // FIXME: what if the params are already present on the `function`?
+    // TODO: what if the params are already present on the `function`?
     fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {
         let this_function_idx = self.function_count;
         let old_function_idx = mem::replace(&mut self.current_function_idx, this_function_idx);
@@ -245,12 +245,12 @@ mod tests {
     #[test]
     fn analyzing_map_fn() {
         let map_arg = FnType::builder()
-            .with_arg(ValueType::param(0))
-            .returning(ValueType::param(1));
+            .with_arg(Type::param(0))
+            .returning(Type::param(1));
         let mut map_fn = <FnType>::builder()
-            .with_arg(ValueType::param(0).repeat(UnknownLen::param(0)))
+            .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
             .with_arg(map_arg)
-            .returning(ValueType::param(1).repeat(UnknownLen::param(0)));
+            .returning(Type::param(1).repeat(UnknownLen::param(0)));
 
         let mut analyzer = ParamQuantifier::new();
         analyzer.visit_function(&map_fn);

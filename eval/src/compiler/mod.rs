@@ -56,7 +56,7 @@ impl Compiler {
 
     fn from_env<T>(module_id: Box<dyn ModuleId>, env: &Registers<'_, T>) -> Self {
         Self {
-            vars_to_registers: env.variables_map().to_owned(),
+            vars_to_registers: env.variables_map().clone(),
             register_count: env.register_count(),
             scope_depth: 0,
             module_id,
@@ -114,7 +114,7 @@ impl Compiler {
         register
     }
 
-    fn compile_expr<'a, T: Grammar>(
+    fn compile_expr<'a, T: Grammar<'a>>(
         &mut self,
         executable: &mut Executable<'a, T::Lit>,
         expr: &SpannedExpr<'a, T>,
@@ -180,7 +180,7 @@ impl Compiler {
         Ok(expr.copy_with_extra(atom).into())
     }
 
-    fn compile_binary_expr<'a, T: Grammar>(
+    fn compile_binary_expr<'a, T: Grammar<'a>>(
         &mut self,
         executable: &mut Executable<'a, T::Lit>,
         binary_expr: &SpannedExpr<'a, T>,
@@ -201,7 +201,7 @@ impl Compiler {
         Ok(Atom::Register(register))
     }
 
-    fn compile_fn_call<'a, T: Grammar>(
+    fn compile_fn_call<'a, T: Grammar<'a>>(
         &mut self,
         executable: &mut Executable<'a, T::Lit>,
         call_expr: &SpannedExpr<'a, T>,
@@ -230,7 +230,7 @@ impl Compiler {
         Ok(Atom::Register(register))
     }
 
-    fn compile_method_call<'a, T: Grammar>(
+    fn compile_method_call<'a, T: Grammar<'a>>(
         &mut self,
         executable: &mut Executable<'a, T::Lit>,
         call_expr: &SpannedExpr<'a, T>,
@@ -256,7 +256,7 @@ impl Compiler {
         Ok(Atom::Register(register))
     }
 
-    fn compile_block<'a, T: Grammar>(
+    fn compile_block<'a, T: Grammar<'a>>(
         &mut self,
         executable: &mut Executable<'a, T::Lit>,
         block_expr: &SpannedExpr<'a, T>,
@@ -306,7 +306,7 @@ impl Compiler {
         })
     }
 
-    fn compile_block_inner<'a, T: Grammar>(
+    fn compile_block_inner<'a, T: Grammar<'a>>(
         &mut self,
         executable: &mut Executable<'a, T::Lit>,
         block: &Block<'a, T>,
@@ -322,7 +322,7 @@ impl Compiler {
         })
     }
 
-    fn compile_fn_definition<'a, T: Grammar>(
+    fn compile_fn_definition<'a, T: Grammar<'a>>(
         &mut self,
         executable: &mut Executable<'a, T::Lit>,
         def_expr: &SpannedExpr<'a, T>,
@@ -373,7 +373,7 @@ impl Compiler {
             .collect()
     }
 
-    fn compile_function<'a, T: Grammar>(
+    fn compile_function<'a, T: Grammar<'a>>(
         &self,
         def: &FnDefinition<'a, T>,
         captures: &HashMap<&'a str, SpannedAtom<'a, T::Lit>>,
@@ -405,7 +405,7 @@ impl Compiler {
         Ok(executable)
     }
 
-    fn compile_statement<'a, T: Grammar>(
+    fn compile_statement<'a, T: Grammar<'a>>(
         &mut self,
         executable: &mut Executable<'a, T::Lit>,
         statement: &SpannedStatement<'a, T>,
@@ -440,7 +440,7 @@ impl Compiler {
         })
     }
 
-    pub fn compile_module<'a, Id: ModuleId, T: Grammar>(
+    pub fn compile_module<'a, Id: ModuleId, T: Grammar<'a>>(
         module_id: Id,
         block: &Block<'a, T>,
     ) -> Result<(ExecutableModule<'a, T::Lit>, ImportSpans<'a>), Error<'a>> {
@@ -465,7 +465,7 @@ impl Compiler {
         Ok((module, import_spans))
     }
 
-    fn extract_captures<'a, T: Grammar>(
+    fn extract_captures<'a, T: Grammar<'a>>(
         module_id: Box<dyn ModuleId>,
         block: &Block<'a, T>,
     ) -> Result<(Registers<'a, T::Lit>, ImportSpans<'a>), Error<'a>> {
@@ -600,13 +600,13 @@ pub trait CompilerExt<'a> {
     fn undefined_variables(&self) -> Result<HashMap<&'a str, Spanned<'a>>, Error<'a>>;
 }
 
-impl<'a, T: Grammar> CompilerExt<'a> for Block<'a, T> {
+impl<'a, T: Grammar<'a>> CompilerExt<'a> for Block<'a, T> {
     fn undefined_variables(&self) -> Result<HashMap<&'a str, Spanned<'a>>, Error<'a>> {
         CompilerExtTarget::Block(self).get_undefined_variables()
     }
 }
 
-impl<'a, T: Grammar> CompilerExt<'a> for FnDefinition<'a, T> {
+impl<'a, T: Grammar<'a>> CompilerExt<'a> for FnDefinition<'a, T> {
     fn undefined_variables(&self) -> Result<HashMap<&'a str, Spanned<'a>>, Error<'a>> {
         CompilerExtTarget::FnDefinition(self).get_undefined_variables()
     }

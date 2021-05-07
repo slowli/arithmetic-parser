@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    types::ParamQuantifier, LengthVar, Num, PrimitiveType, Tuple, TupleLen, TypeVar, ValueType,
+    types::ParamQuantifier, LengthVar, Num, PrimitiveType, Tuple, TupleLen, Type, TypeVar,
 };
 
 #[derive(Debug, Clone)]
@@ -129,7 +129,7 @@ impl<Prim: PrimitiveType> FnParams<Prim> {
 /// The `for` constraints can only be present on top-level functions, but not in functions
 /// mentioned in args / return types of other functions.
 ///
-/// The `-> _` part is mandatory, even if the function returns [`ValueType::void()`].
+/// The `-> _` part is mandatory, even if the function returns [`Type::void()`].
 ///
 /// A function may accept variable number of arguments of the same type along
 /// with other args. (This construction is known as *varargs*.) This is denoted similarly
@@ -154,15 +154,17 @@ impl<Prim: PrimitiveType> FnParams<Prim> {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_typing::{FnType, Slice, ValueType};
+/// # use arithmetic_typing::{ast::FnTypeAst, FnType, Slice, Type};
+/// # use std::convert::TryFrom;
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
-/// let fn_type: FnType = "([Num; N]) -> Num".parse()?;
-/// assert_eq!(*fn_type.return_type(), ValueType::NUM);
+/// let fn_type: FnType = FnTypeAst::try_from("([Num; N]) -> Num")?
+///     .try_convert()?;
+/// assert_eq!(*fn_type.return_type(), Type::NUM);
 /// assert_matches!(
 ///     fn_type.args().parts(),
-///     ([ValueType::Tuple(t)], None, [])
-///         if t.as_slice().map(Slice::element) == Some(&ValueType::NUM)
+///     ([Type::Tuple(t)], None, [])
+///         if t.as_slice().map(Slice::element) == Some(&Type::NUM)
 /// );
 /// # Ok(())
 /// # }
@@ -172,7 +174,7 @@ pub struct FnType<Prim: PrimitiveType = Num> {
     /// Type of function arguments.
     pub(crate) args: Tuple<Prim>,
     /// Type of the value returned by the function.
-    pub(crate) return_type: ValueType<Prim>,
+    pub(crate) return_type: Type<Prim>,
     /// Cache for function params.
     pub(crate) params: Option<Arc<FnParams<Prim>>>,
 }
@@ -196,7 +198,7 @@ impl<Prim: PrimitiveType> fmt::Display for FnType<Prim> {
 }
 
 impl<Prim: PrimitiveType> FnType<Prim> {
-    pub(crate) fn new(args: Tuple<Prim>, return_type: ValueType<Prim>) -> Self {
+    pub(crate) fn new(args: Tuple<Prim>, return_type: Type<Prim>) -> Self {
         Self {
             args,
             return_type,
@@ -215,7 +217,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
     }
 
     /// Gets the return type of this function.
-    pub fn return_type(&self) -> &ValueType<Prim> {
+    pub fn return_type(&self) -> &Type<Prim> {
         &self.return_type
     }
 
@@ -340,7 +342,7 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for FnType<Prim> {
     }
 }
 
-impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
+impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for Type<Prim> {
     fn from(value: FnWithConstraints<Prim>) -> Self {
         FnType::from(value).into()
     }
@@ -356,26 +358,26 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 /// Signature for a function summing a slice of numbers:
 ///
 /// ```
-/// # use arithmetic_typing::{FnType, UnknownLen, ValueType, TypeEnvironment};
+/// # use arithmetic_typing::{FnType, UnknownLen, Type, TypeEnvironment};
 /// let sum_fn_type = FnType::builder()
-///     .with_arg(ValueType::NUM.repeat(UnknownLen::param(0)))
-///     .returning(ValueType::NUM);
+///     .with_arg(Type::NUM.repeat(UnknownLen::param(0)))
+///     .returning(Type::NUM);
 /// assert_eq!(sum_fn_type.to_string(), "([Num; N]) -> Num");
 /// ```
 ///
 /// Signature for a slice mapping function:
 ///
 /// ```
-/// # use arithmetic_typing::{arith::NumConstraints, FnType, UnknownLen, ValueType};
+/// # use arithmetic_typing::{arith::NumConstraints, FnType, UnknownLen, Type};
 /// // Definition of the mapping arg.
 /// let map_fn_arg = <FnType>::builder()
-///     .with_arg(ValueType::param(0))
-///     .returning(ValueType::param(1));
+///     .with_arg(Type::param(0))
+///     .returning(Type::param(1));
 ///
 /// let map_fn_type = <FnType>::builder()
-///     .with_arg(ValueType::param(0).repeat(UnknownLen::param(0)))
+///     .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
 ///     .with_arg(map_fn_arg)
-///     .returning(ValueType::param(1).repeat(UnknownLen::Dynamic))
+///     .returning(Type::param(1).repeat(UnknownLen::Dynamic))
 ///     .with_constraints(&[1], &NumConstraints::Lin);
 /// assert_eq!(
 ///     map_fn_type.to_string(),
@@ -386,11 +388,11 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for ValueType<Prim> {
 /// Signature of a function with varargs:
 ///
 /// ```
-/// # use arithmetic_typing::{arith::NumConstraints, FnType, UnknownLen, ValueType};
+/// # use arithmetic_typing::{arith::NumConstraints, FnType, UnknownLen, Type};
 /// let fn_type = <FnType>::builder()
-///     .with_varargs(ValueType::param(0), UnknownLen::param(0))
-///     .with_arg(ValueType::BOOL)
-///     .returning(ValueType::param(0));
+///     .with_varargs(Type::param(0), UnknownLen::param(0))
+///     .with_arg(Type::BOOL)
+///     .returning(Type::param(0));
 /// assert_eq!(fn_type.to_string(), "(...['T; N], Bool) -> 'T");
 /// ```
 #[derive(Debug, Clone)]
@@ -408,7 +410,7 @@ impl<Prim: PrimitiveType> Default for FnTypeBuilder<Prim> {
 
 impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
     /// Adds a new argument to the function definition.
-    pub fn with_arg(mut self, arg: impl Into<ValueType<Prim>>) -> Self {
+    pub fn with_arg(mut self, arg: impl Into<Type<Prim>>) -> Self {
         self.args.push(arg.into());
         self
     }
@@ -416,7 +418,7 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
     /// Adds or sets varargs in the function definition.
     pub fn with_varargs(
         mut self,
-        element: impl Into<ValueType<Prim>>,
+        element: impl Into<Type<Prim>>,
         len: impl Into<TupleLen>,
     ) -> Self {
         self.args.set_middle(element.into(), len.into());
@@ -424,7 +426,7 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
     }
 
     /// Declares the return type of the function and builds it.
-    pub fn returning(self, return_type: impl Into<ValueType<Prim>>) -> FnType<Prim> {
+    pub fn returning(self, return_type: impl Into<Type<Prim>>) -> FnType<Prim> {
         FnType::new(self.args, return_type.into())
     }
 }
@@ -452,33 +454,33 @@ mod tests {
     #[test]
     fn fn_with_constraints_display() {
         let sum_fn = <FnType>::builder()
-            .with_arg(ValueType::param(0).repeat(UnknownLen::Some))
-            .returning(ValueType::param(0))
+            .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
+            .returning(Type::param(0))
             .with_constraints(&[0], &NumConstraints::Lin);
-        assert_eq!(sum_fn.to_string(), "for<'T: Lin> (['T; _]) -> 'T");
+        assert_eq!(sum_fn.to_string(), "for<'T: Lin> (['T; N]) -> 'T");
     }
 
     #[test]
     fn fn_builder_with_quantified_arg() {
         let sum_fn: FnType = FnType::builder()
-            .with_arg(ValueType::NUM.repeat(UnknownLen::param(0)))
-            .returning(ValueType::NUM)
+            .with_arg(Type::NUM.repeat(UnknownLen::param(0)))
+            .returning(Type::NUM)
             .with_constraints(&[], &NumConstraints::Lin)
             .into();
         assert_eq!(sum_fn.to_string(), "([Num; N]) -> Num");
 
         let complex_fn: FnType = FnType::builder()
-            .with_arg(ValueType::NUM)
+            .with_arg(Type::NUM)
             .with_arg(sum_fn.clone())
-            .returning(ValueType::NUM)
+            .returning(Type::NUM)
             .with_constraints(&[], &NumConstraints::Lin)
             .into();
         assert_eq!(complex_fn.to_string(), "(Num, ([Num; N]) -> Num) -> Num");
 
         let other_complex_fn: FnType = FnType::builder()
-            .with_varargs(ValueType::NUM, UnknownLen::param(0))
+            .with_varargs(Type::NUM, UnknownLen::param(0))
             .with_arg(sum_fn)
-            .returning(ValueType::NUM)
+            .returning(Type::NUM)
             .with_constraints(&[], &NumConstraints::Lin)
             .into();
         assert_eq!(

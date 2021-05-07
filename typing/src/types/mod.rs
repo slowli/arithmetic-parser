@@ -1,4 +1,4 @@
-//! Base types, such as `ValueType` and `FnType`.
+//! Base types, such as `Type` and `FnType`.
 
 use std::{borrow::Cow, fmt};
 
@@ -14,7 +14,7 @@ pub(crate) use self::{
 };
 pub use self::{
     fn_type::{FnType, FnTypeBuilder, FnWithConstraints},
-    tuple::{LengthVar, Slice, Tuple, TupleLen, UnknownLen},
+    tuple::{LengthVar, Slice, Tuple, TupleIndex, TupleLen, UnknownLen},
 };
 
 /// Type variable.
@@ -83,7 +83,6 @@ impl TypeVar {
 ///
 /// # Notation
 ///
-/// - [`Self::Some`] is represented as `_`.
 /// - [`Self::Any`] is represented as `any` with an optional [`TypeConstraints`] suffix.
 /// - [`Prim`](Self::Prim)itive types are represented using the [`Display`](fmt::Display)
 ///   implementation of the corresponding [`PrimitiveType`].
@@ -94,31 +93,32 @@ impl TypeVar {
 ///
 /// # Examples
 ///
-/// There are conversions to construct `ValueType`s eloquently:
+/// There are conversions to construct `Type`s eloquently:
 ///
 /// ```
-/// # use arithmetic_typing::{FnType, UnknownLen, ValueType};
-/// let tuple: ValueType = (ValueType::BOOL, ValueType::NUM).into();
+/// # use arithmetic_typing::{FnType, UnknownLen, Type};
+/// let tuple: Type = (Type::BOOL, Type::NUM).into();
 /// assert_eq!(tuple.to_string(), "(Bool, Num)");
-/// let slice = tuple.repeat(UnknownLen::Some);
-/// assert_eq!(slice.to_string(), "[(Bool, Num); _]");
-/// let fn_type: ValueType = FnType::builder()
+/// let slice = tuple.repeat(UnknownLen::param(0));
+/// assert_eq!(slice.to_string(), "[(Bool, Num); N]");
+/// let fn_type: Type = FnType::builder()
 ///     .with_arg(slice)
-///     .returning(ValueType::NUM)
+///     .returning(Type::NUM)
 ///     .into();
-/// assert_eq!(fn_type.to_string(), "([(Bool, Num); _]) -> Num");
+/// assert_eq!(fn_type.to_string(), "([(Bool, Num); N]) -> Num");
 /// ```
 ///
-/// A `ValueType` can also be parsed from a string:
+/// A `Type` can also be parsed from a string:
 ///
 /// ```
-/// # use arithmetic_typing::ValueType;
+/// # use arithmetic_typing::{ast::TypeAst, Type};
+/// # use std::convert::TryFrom;
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
-/// let slice: ValueType = "[(Bool, Num); _]".parse()?;
-/// assert_matches!(slice, ValueType::Tuple(t) if t.as_slice().is_some());
-/// let fn_type: ValueType = "([(Bool, Num); N]) -> Num".parse()?;
-/// assert_matches!(fn_type, ValueType::Function(_));
+/// let slice = <Type>::try_from(&TypeAst::try_from("[(Bool, Num)]")?)?;
+/// assert_matches!(slice, Type::Tuple(t) if t.as_slice().is_some());
+/// let fn_type = <Type>::try_from(&TypeAst::try_from("([(Bool, Num); N]) -> Num")?)?;
+/// assert_matches!(fn_type, Type::Function(_));
 /// # Ok(())
 /// # }
 /// ```
@@ -133,7 +133,7 @@ impl TypeVar {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-/// # use arithmetic_typing::{Annotated, TypeEnvironment, ValueType};
+/// # use arithmetic_typing::{Annotated, TypeEnvironment, Type};
 /// # use assert_matches::assert_matches;
 /// type Parser = Typed<Annotated<NumGrammar<f32>>>;
 ///
@@ -150,10 +150,12 @@ impl TypeVar {
 ///
 /// // Destructure outputs are certain types that can be inferred
 /// // from their usage, rather than `any`!
-/// assert_matches!(env["x"], ValueType::Var(_));
+/// assert_matches!(env["x"], Type::Var(_));
 /// let bogus_usage_code = "x + 1 == 2; x(1)";
 /// let ast = Parser::parse_statements(bogus_usage_code)?;
-/// let err = env.process_statements(&ast).unwrap_err();
+/// let errors = env.process_statements(&ast).unwrap_err();
+/// # assert_eq!(errors.len(), 1);
+/// let err = errors.iter().next().unwrap();
 /// assert_eq!(*err.span().fragment(), "x(1)");
 /// # Ok(())
 /// # }
@@ -167,7 +169,7 @@ impl TypeVar {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-/// # use arithmetic_typing::{Annotated, TypeEnvironment, TypeErrorKind, ValueType};
+/// # use arithmetic_typing::{ErrorKind, Annotated, TypeEnvironment, Type};
 /// # use assert_matches::assert_matches;
 /// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// # fn main() -> anyhow::Result<()> {
@@ -178,9 +180,11 @@ impl TypeVar {
 /// "#;
 /// let ast = Parser::parse_statements(code)?;
 /// let mut env = TypeEnvironment::new();
-/// let err = env.process_statements(&ast).unwrap_err();
+/// let errors = env.process_statements(&ast).unwrap_err();
+///
+/// let err = errors.iter().next().unwrap();
 /// assert_eq!(*err.span().fragment(), "x(1)");
-/// assert_matches!(err.kind(), TypeErrorKind::FailedConstraint { .. });
+/// assert_matches!(err.kind(), ErrorKind::FailedConstraint { .. });
 /// # Ok(())
 /// # }
 /// ```
@@ -189,13 +193,17 @@ impl TypeVar {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-/// # use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, TypeErrorKind, ValueType};
+/// # use arithmetic_typing::{
+/// #     ast::TypeAst, ErrorKind, Annotated, Prelude, TypeEnvironment, Type
+/// # };
+/// # use std::convert::TryFrom;
 /// # use assert_matches::assert_matches;
+/// #
 /// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// # fn main() -> anyhow::Result<()> {
 /// // Function that accepts any amount of linear args (not necessarily
 /// // of the same type) and returns a number.
-/// let digest_fn: ValueType = "(...[any Lin; N]) -> Num".parse()?;
+/// let digest_fn = Type::try_from(&TypeAst::try_from("(...[any Lin; N]) -> Num")?)?;
 /// let mut env = TypeEnvironment::new();
 /// env.insert("true", Prelude::True).insert("digest", digest_fn);
 ///
@@ -204,18 +212,17 @@ impl TypeVar {
 ///     digest(3, true) == 0; // fails: `true` is not linear
 /// "#;
 /// let ast = Parser::parse_statements(code)?;
-/// let err = env.process_statements(&ast).unwrap_err();
-/// assert_eq!(*err.span().fragment(), "digest(3, true)");
-/// assert_matches!(err.kind(), TypeErrorKind::FailedConstraint { .. });
+/// let errors = env.process_statements(&ast).unwrap_err();
+///
+/// let err = errors.iter().next().unwrap();
+/// assert_eq!(*err.span().fragment(), "true");
+/// assert_matches!(err.kind(), ErrorKind::FailedConstraint { .. });
 /// # Ok(())
 /// # }
 /// ```
 #[derive(Debug, Clone)]
 #[non_exhaustive]
-pub enum ValueType<Prim: PrimitiveType = Num> {
-    /// Wildcard type, i.e. some type that is not specified. Similar to `_` in type annotations
-    /// in Rust.
-    Some,
+pub enum Type<Prim: PrimitiveType = Num> {
     /// Any type aka "I'll think about typing later". Similar to `any` type in TypeScript.
     /// See [the dedicated section](#any-type) for more details.
     Any(Prim::Constraints),
@@ -229,10 +236,9 @@ pub enum ValueType<Prim: PrimitiveType = Num> {
     Var(TypeVar),
 }
 
-impl<Prim: PrimitiveType> PartialEq for ValueType<Prim> {
+impl<Prim: PrimitiveType> PartialEq for Type<Prim> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Some, Self::Some) => true,
             (Self::Any(x), Self::Any(y)) => x == y,
             (Self::Prim(x), Self::Prim(y)) => x == y,
             (Self::Var(x), Self::Var(y)) => x == y,
@@ -243,10 +249,9 @@ impl<Prim: PrimitiveType> PartialEq for ValueType<Prim> {
     }
 }
 
-impl<Prim: PrimitiveType> fmt::Display for ValueType<Prim> {
+impl<Prim: PrimitiveType> fmt::Display for Type<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Some => formatter.write_str("_"),
             Self::Any(constraints) => {
                 if *constraints == Prim::Constraints::default() {
                     formatter.write_str("any")
@@ -262,27 +267,27 @@ impl<Prim: PrimitiveType> fmt::Display for ValueType<Prim> {
     }
 }
 
-impl<Prim: PrimitiveType> From<FnType<Prim>> for ValueType<Prim> {
+impl<Prim: PrimitiveType> From<FnType<Prim>> for Type<Prim> {
     fn from(fn_type: FnType<Prim>) -> Self {
         Self::Function(Box::new(fn_type))
     }
 }
 
-impl<Prim: PrimitiveType> From<Tuple<Prim>> for ValueType<Prim> {
-    fn from(tuple: Tuple<Prim>) -> ValueType<Prim> {
+impl<Prim: PrimitiveType> From<Tuple<Prim>> for Type<Prim> {
+    fn from(tuple: Tuple<Prim>) -> Type<Prim> {
         Self::Tuple(tuple)
     }
 }
 
-impl<Prim: PrimitiveType> From<Slice<Prim>> for ValueType<Prim> {
-    fn from(slice: Slice<Prim>) -> ValueType<Prim> {
+impl<Prim: PrimitiveType> From<Slice<Prim>> for Type<Prim> {
+    fn from(slice: Slice<Prim>) -> Type<Prim> {
         Self::Tuple(slice.into())
     }
 }
 
-macro_rules! impl_from_tuple_for_value_type {
+macro_rules! impl_from_tuple_for_type {
     ($($var:tt : $ty:ident),*) => {
-        impl<Prim, $($ty : Into<ValueType<Prim>>,)*> From<($($ty,)*)> for ValueType<Prim>
+        impl<Prim, $($ty : Into<Type<Prim>>,)*> From<($($ty,)*)> for Type<Prim>
         where
             Prim: PrimitiveType,
         {
@@ -294,29 +299,29 @@ macro_rules! impl_from_tuple_for_value_type {
     };
 }
 
-impl_from_tuple_for_value_type!();
-impl_from_tuple_for_value_type!(0: T);
-impl_from_tuple_for_value_type!(0: T, 1: U);
-impl_from_tuple_for_value_type!(0: T, 1: U, 2: V);
-impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W);
-impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W, 4: X);
-impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y);
-impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z);
-impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A);
-impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A, 8: B);
-impl_from_tuple_for_value_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A, 8: B, 9: C);
+impl_from_tuple_for_type!();
+impl_from_tuple_for_type!(0: T);
+impl_from_tuple_for_type!(0: T, 1: U);
+impl_from_tuple_for_type!(0: T, 1: U, 2: V);
+impl_from_tuple_for_type!(0: T, 1: U, 2: V, 3: W);
+impl_from_tuple_for_type!(0: T, 1: U, 2: V, 3: W, 4: X);
+impl_from_tuple_for_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y);
+impl_from_tuple_for_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z);
+impl_from_tuple_for_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A);
+impl_from_tuple_for_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A, 8: B);
+impl_from_tuple_for_type!(0: T, 1: U, 2: V, 3: W, 4: X, 5: Y, 6: Z, 7: A, 8: B, 9: C);
 
-impl ValueType {
+impl Type {
     /// Numeric primitive type.
-    pub const NUM: Self = ValueType::Prim(Num::Num);
+    pub const NUM: Self = Type::Prim(Num::Num);
 }
 
-impl<Prim: WithBoolean> ValueType<Prim> {
+impl<Prim: WithBoolean> Type<Prim> {
     /// Boolean primitive type.
-    pub const BOOL: Self = ValueType::Prim(Prim::BOOL);
+    pub const BOOL: Self = Type::Prim(Prim::BOOL);
 }
 
-impl<Prim: PrimitiveType> ValueType<Prim> {
+impl<Prim: PrimitiveType> Type<Prim> {
     /// Returns a void type (an empty tuple).
     pub fn void() -> Self {
         Self::Tuple(Tuple::empty())
@@ -340,7 +345,7 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
     }
 
     /// Creates a slice type.
-    pub fn slice(element: impl Into<ValueType<Prim>>, length: impl Into<TupleLen>) -> Self {
+    pub fn slice(element: impl Into<Type<Prim>>, length: impl Into<TupleLen>) -> Self {
         Self::Tuple(Slice::new(element.into(), length).into())
     }
 
@@ -371,7 +376,6 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
     pub fn is_concrete(&self) -> bool {
         match self {
             Self::Var(var) => !var.is_free,
-            Self::Some => false,
             Self::Any(_) | Self::Prim(_) => true,
             Self::Function(fn_type) => fn_type.is_concrete(),
             Self::Tuple(tuple) => tuple.is_concrete(),
@@ -382,22 +386,25 @@ impl<Prim: PrimitiveType> ValueType<Prim> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::TypeAst;
+
+    use std::convert::TryFrom;
 
     #[test]
-    fn value_types_are_equal_to_self() {
+    fn types_are_equal_to_self() -> anyhow::Result<()> {
         const SAMPLE_TYPES: &[&str] = &[
             "Num",
             "(Num, Bool)",
-            "[Num; _]",
-            "(Num, ...[Bool; _])",
+            "(Num, ...[Bool; N]) -> ()",
             "(Num) -> Num",
-            "for<'T: Lin> (['T; _]) -> 'T",
+            "for<'T: Lin> (['T; N]) -> 'T",
         ];
 
         for &sample_type in SAMPLE_TYPES {
-            let ty: ValueType = sample_type.parse().unwrap();
+            let ty = <Type>::try_from(&TypeAst::try_from(sample_type)?)?;
             assert!(ty.eq(&ty), "Type is not equal to self: {}", ty);
         }
+        Ok(())
     }
 
     #[test]
@@ -409,7 +416,10 @@ mod tests {
             "for<'N: Lin> (['N; T]) -> 'N",
         ];
 
-        let functions: Vec<ValueType> = EQUAL_FNS.iter().map(|s| s.parse().unwrap()).collect();
+        let functions: Vec<Type> = EQUAL_FNS
+            .iter()
+            .map(|&s| Type::try_from(&TypeAst::try_from(s).unwrap()).unwrap())
+            .collect();
         for (i, function) in functions.iter().enumerate() {
             for other_function in &functions[(i + 1)..] {
                 assert_eq!(function, other_function);
@@ -427,7 +437,10 @@ mod tests {
             "for<'T: Lin> (['T; N]) -> ('T)",
         ];
 
-        let functions: Vec<ValueType> = FUNCTIONS.iter().map(|s| s.parse().unwrap()).collect();
+        let functions: Vec<Type> = FUNCTIONS
+            .iter()
+            .map(|&s| Type::try_from(&TypeAst::try_from(s).unwrap()).unwrap())
+            .collect();
         for (i, function) in functions.iter().enumerate() {
             for other_function in &functions[(i + 1)..] {
                 assert_ne!(function, other_function);
@@ -438,11 +451,11 @@ mod tests {
     #[test]
     fn concrete_types() {
         let sample_types = &[
-            ValueType::NUM,
-            ValueType::BOOL,
-            ValueType::any(),
-            (ValueType::BOOL, ValueType::NUM).into(),
-            "for<'T: Lin> (['T; N]) -> 'T".parse().unwrap(),
+            Type::NUM,
+            Type::BOOL,
+            Type::any(),
+            (Type::BOOL, Type::NUM).into(),
+            Type::try_from(&TypeAst::try_from("for<'T: Lin> (['T; N]) -> 'T").unwrap()).unwrap(),
         ];
 
         for ty in sample_types {
@@ -453,12 +466,11 @@ mod tests {
     #[test]
     fn non_concrete_types() {
         let sample_types = &[
-            ValueType::Some,
-            ValueType::free_var(2),
-            (ValueType::NUM, ValueType::Some).into(),
+            Type::free_var(2),
+            (Type::NUM, Type::free_var(0)).into(),
             FnType::builder()
-                .with_arg(ValueType::Some)
-                .returning(ValueType::void())
+                .with_arg(Type::free_var(0))
+                .returning(Type::void())
                 .into(),
         ];
 

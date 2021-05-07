@@ -226,7 +226,7 @@ impl ErrorKind {
             }
             Self::Undefined(name) => format!("Variable `{}` is not defined", name),
             Self::CannotCall => "Value is not callable".to_owned(),
-            Self::NativeCall(message) => message.to_owned(),
+            Self::NativeCall(message) => message.clone(),
             Self::Wrapper(err) => err.to_string(),
             Self::UnexpectedOperand { op } => format!("Unexpected operand type for {}", op),
             Self::CannotCompare => "Value is not comparable".to_owned(),

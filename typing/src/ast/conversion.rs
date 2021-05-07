@@ -9,72 +9,82 @@ use std::{
     str::FromStr,
 };
 
+use crate::ast::TypeConstraintsAst;
 use crate::{
-    ast::{ConstraintsAst, FnTypeAst, SliceAst, TupleAst, TupleLenAst, ValueTypeAst},
+    ast::{ConstraintsAst, FnTypeAst, SliceAst, SpannedTypeAst, TupleAst, TupleLenAst, TypeAst},
+    error::{Error, Errors},
     types::{ParamConstraints, ParamQuantifier},
-    FnType, PrimitiveType, Slice, Tuple, UnknownLen, ValueType,
+    FnType, PrimitiveType, Slice, Tuple, Type, TypeEnvironment, UnknownLen,
 };
-use arithmetic_parser::{
-    ErrorKind as ParseErrorKind, InputSpan, LocatedSpan, NomResult, SpannedError, StripCode,
-};
+use arithmetic_parser::{ErrorKind as ParseErrorKind, InputSpan, NomResult, Spanned, SpannedError};
 
 /// Kinds of errors that can occur when converting `*Ast` types into their "main" counterparts.
 ///
-/// During parsing, errors of this type are wrapped into the [`Type`](ParseErrorKind::Type)
-/// variant of parsing errors.
+/// During type inference, errors of this type are wrapped into the [`AstConversion`]
+/// variant of typing errors.
+///
+/// [`AstConversion`]: crate::ErrorKind::AstConversion
 ///
 /// # Examples
 ///
 /// ```
-/// use arithmetic_parser::{grammars::{Parse, NumGrammar, Typed}, ErrorKind};
-/// use arithmetic_typing::{ast::ConversionErrorKind, Annotated};
+/// use arithmetic_parser::grammars::{Parse, NumGrammar, Typed};
+/// use arithmetic_typing::{
+///     ast::AstConversionError, ErrorKind, Annotated, TypeEnvironment,
+/// };
 /// # use assert_matches::assert_matches;
 ///
 /// type Parser = Typed<Annotated<NumGrammar<f32>>>;
 ///
+/// # fn main() -> anyhow::Result<()> {
 /// let code = "bogus_slice: ['T; _] = (1, 2, 3);";
-/// let err = Parser::parse_statements(code).unwrap_err();
+/// let code = Parser::parse_statements(code)?;
 ///
-/// assert_eq!(*err.span().fragment(), "T");
-/// let err = match err.kind() {
-///     ErrorKind::Type(type_err) => type_err
-///         .downcast_ref::<ConversionErrorKind>()
-///         .unwrap(),
-///     _ => unreachable!(),
-/// };
+/// let errors = TypeEnvironment::new().process_statements(&code).unwrap_err();
+/// let err = errors.into_iter().next().unwrap();
+/// assert_eq!(*err.span().fragment(), "'T");
 /// assert_matches!(
-///     err,
-///     ConversionErrorKind::FreeTypeVar(t) if t == "T"
+///     err.kind(),
+///     ErrorKind::AstConversion(AstConversionError::FreeTypeVar(id))
+///         if id == "T"
 /// );
+/// # Ok(())
+/// # }
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[non_exhaustive]
-pub enum ConversionErrorKind {
+pub enum AstConversionError {
     /// Embedded param quantifiers.
     EmbeddedQuantifier,
     /// Length param not scoped by a function.
     FreeLengthVar(String),
     /// Type param not scoped by a function.
     FreeTypeVar(String),
-    /// Undefined const param.
+    /// Unused length param.
     UnusedLength(String),
-    /// Undefined type param.
+    /// Unused length param.
     UnusedTypeParam(String),
+    /// Unknown type name.
+    UnknownType(String),
+    /// Unknown constraint.
+    UnknownConstraint(String),
+    /// Some type (`_`) encountered when parsing a standalone type.
+    ///
+    /// `_` types are only allowed in the context of a [`TypeEnvironment`]. It is a logical
+    /// error to use them when parsing standalone types.
+    InvalidSomeType,
+    /// Some length (`_`) encountered when parsing a standalone type.
+    ///
+    /// `_` lengths are only allowed in the context of a [`TypeEnvironment`]. It is a logical
+    /// error to use them when parsing standalone types.
+    InvalidSomeLength,
 }
 
-impl ConversionErrorKind {
-    fn with_span(self, span: InputSpan<'_>) -> ConversionError<&str> {
-        ConversionError {
-            inner: LocatedSpan::from(span).copy_with_extra(self),
-        }
-    }
-}
-
-impl fmt::Display for ConversionErrorKind {
+impl fmt::Display for AstConversionError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::EmbeddedQuantifier => {
-                formatter.write_str("`for` quantifier within the scope of another `for` quantifier")
+                formatter.write_str("`for` quantifier for a function that is not top-level")
             }
 
             Self::FreeLengthVar(name) => {
@@ -98,59 +108,56 @@ impl fmt::Display for ConversionErrorKind {
             Self::UnusedTypeParam(name) => {
                 write!(formatter, "Unused type param `{}`", name)
             }
+            Self::UnknownType(name) => {
+                write!(formatter, "Unknown type `{}`", name)
+            }
+            Self::UnknownConstraint(name) => {
+                write!(formatter, "Unknown constraint `{}`", name)
+            }
+
+            Self::InvalidSomeType => {
+                formatter.write_str("`_` type is disallowed when parsing standalone type")
+            }
+            Self::InvalidSomeLength => {
+                formatter.write_str("`_` length is disallowed when parsing standalone type")
+            }
         }
     }
 }
 
-impl std::error::Error for ConversionErrorKind {}
-
-/// Errors that can occur when converting `*Ast` types into their "main" counterparts, together
-/// with an error span.
-#[derive(Debug)]
-pub struct ConversionError<Span> {
-    inner: LocatedSpan<Span, ConversionErrorKind>,
-}
-
-impl<Span> ConversionError<Span> {
-    /// Returns the kind of this error.
-    pub fn kind(&self) -> &ConversionErrorKind {
-        &self.inner.extra
-    }
-}
-
-impl<Span: Copy> ConversionError<Span> {
-    /// Returns the main span on which the error has occurred.
-    pub fn main_span(&self) -> LocatedSpan<Span> {
-        self.inner.with_no_extra()
-    }
-}
-
-impl<Span> fmt::Display for ConversionError<Span> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "{}:{}: {}",
-            self.inner.location_line(),
-            self.inner.location_offset(),
-            self.kind()
-        )
-    }
-}
-
-impl<Span: fmt::Debug> std::error::Error for ConversionError<Span> {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(&self.inner.extra)
-    }
-}
+impl std::error::Error for AstConversionError {}
 
 /// Intermediate conversion state.
-#[derive(Debug, Default, Clone)]
-struct ConversionState<'a> {
+#[derive(Debug)]
+pub(crate) struct AstConversionState<'r, 'a, Prim: PrimitiveType> {
+    env: Option<&'r mut TypeEnvironment<Prim>>,
+    errors: &'r mut Errors<'a, Prim>,
     len_params: HashMap<&'a str, usize>,
     type_params: HashMap<&'a str, usize>,
+    is_in_function: bool,
 }
 
-impl<'a> ConversionState<'a> {
+impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
+    pub fn new(env: &'r mut TypeEnvironment<Prim>, errors: &'r mut Errors<'a, Prim>) -> Self {
+        Self {
+            env: Some(env),
+            errors,
+            len_params: HashMap::new(),
+            type_params: HashMap::new(),
+            is_in_function: false,
+        }
+    }
+
+    fn without_env(errors: &'r mut Errors<'a, Prim>) -> Self {
+        Self {
+            env: None,
+            errors,
+            len_params: HashMap::new(),
+            type_params: HashMap::new(),
+            is_in_function: false,
+        }
+    }
+
     fn type_param_idx(&mut self, param_name: &'a str) -> usize {
         let type_param_count = self.type_params.len();
         *self
@@ -163,21 +170,137 @@ impl<'a> ConversionState<'a> {
         let len_param_count = self.len_params.len();
         *self.len_params.entry(param_name).or_insert(len_param_count)
     }
+
+    fn new_type(&mut self, span: Option<&SpannedTypeAst<'a>>) -> Type<Prim> {
+        let errors = &mut *self.errors;
+        self.env.as_deref_mut().map_or_else(
+            || {
+                if let Some(span) = span {
+                    let err = AstConversionError::InvalidSomeType;
+                    errors.push(Error::conversion(err, span));
+                }
+                // We don't particularly care about the returned value; the enclosing type
+                // will be discarded anyway.
+                Type::free_var(0)
+            },
+            |env| env.substitutions.new_type_var(),
+        )
+    }
+
+    fn new_len(&mut self, span: Option<&Spanned<'a, TupleLenAst>>) -> UnknownLen {
+        let errors = &mut *self.errors;
+        self.env.as_deref_mut().map_or_else(
+            || {
+                if let Some(span) = span {
+                    let err = AstConversionError::InvalidSomeLength;
+                    errors.push(Error::conversion(err, span));
+                }
+                // We don't particularly care about the returned value; the enclosing type
+                // will be discarded anyway.
+                UnknownLen::free_var(0)
+            },
+            |env| env.substitutions.new_len_var(),
+        )
+    }
+
+    pub(crate) fn convert_type(&mut self, ty: &SpannedTypeAst<'a>) -> Type<Prim> {
+        match &ty.extra {
+            TypeAst::Some => self.new_type(Some(ty)),
+            TypeAst::Any(constraints) => Type::Any(constraints.convert(self)),
+            TypeAst::Ident => {
+                let ident = *ty.fragment();
+                if let Ok(prim_type) = Prim::from_str(ident) {
+                    Type::Prim(prim_type)
+                } else {
+                    let err = AstConversionError::UnknownType(ident.to_owned());
+                    self.errors.push(Error::conversion(err, ty));
+                    self.new_type(None)
+                }
+            }
+
+            TypeAst::Param => {
+                let name = &ty.fragment()[1..];
+                if self.is_in_function {
+                    let idx = self.type_param_idx(name);
+                    Type::param(idx)
+                } else {
+                    let err = AstConversionError::FreeTypeVar(name.to_owned());
+                    self.errors.push(Error::conversion(err, ty));
+                    self.new_type(None)
+                }
+            }
+
+            TypeAst::Function(function) => self.convert_fn(function, None),
+            TypeAst::FunctionWithConstraints {
+                function,
+                constraints,
+            } => self.convert_fn(&function.extra, Some(constraints)),
+
+            TypeAst::Tuple(tuple) => tuple.convert(self).into(),
+            TypeAst::Slice(slice) => slice.convert(self).into(),
+        }
+    }
+
+    fn convert_fn(
+        &mut self,
+        function: &FnTypeAst<'a>,
+        constraints: Option<&Spanned<'a, ConstraintsAst<'a>>>,
+    ) -> Type<Prim> {
+        if self.is_in_function {
+            if let Some(constraints) = constraints {
+                let err = AstConversionError::EmbeddedQuantifier;
+                self.errors.push(Error::conversion(err, constraints));
+            }
+            function.convert(self).into()
+        } else {
+            self.is_in_function = true;
+            let mut converted_fn = function.convert(self);
+            let constraints =
+                constraints.map_or_else(ParamConstraints::default, |c| c.extra.convert(self));
+            ParamQuantifier::set_params(&mut converted_fn, constraints);
+
+            self.is_in_function = false;
+            self.type_params.clear();
+            self.len_params.clear();
+            converted_fn.into()
+        }
+    }
 }
 
-impl<'a, Prim: PrimitiveType> ConstraintsAst<'a, Prim> {
-    fn try_convert(
+impl<'a> TypeConstraintsAst<'a> {
+    fn convert<Prim: PrimitiveType>(
         &self,
-        state: &ConversionState<'a>,
-    ) -> Result<ParamConstraints<Prim>, ConversionError<&'a str>> {
+        state: &mut AstConversionState<'_, 'a, Prim>,
+    ) -> Prim::Constraints {
+        self.terms
+            .iter()
+            .fold(Prim::Constraints::default(), |mut acc, input| {
+                let input_str = *input.fragment();
+                let partial = Prim::Constraints::from_str(input_str)
+                    .map_err(|_| {
+                        let err = AstConversionError::UnknownConstraint(input_str.to_owned());
+                        state.errors.push(Error::conversion(err, input));
+                    })
+                    .unwrap_or_default();
+                acc |= &partial;
+                acc
+            })
+    }
+}
+
+impl<'a> ConstraintsAst<'a> {
+    fn convert<Prim: PrimitiveType>(
+        &self,
+        state: &mut AstConversionState<'_, 'a, Prim>,
+    ) -> ParamConstraints<Prim> {
         let mut static_lengths = HashSet::with_capacity(self.static_lengths.len());
         for dyn_length in &self.static_lengths {
             let name = *dyn_length.fragment();
             if let Some(index) = state.len_params.get(name) {
                 static_lengths.insert(*index);
             } else {
-                let err = ConversionErrorKind::UnusedLength(name.to_owned()).with_span(*dyn_length);
-                return Err(err);
+                let err = AstConversionError::UnusedLength(name.to_owned());
+                state.errors.push(Error::conversion(err, dyn_length));
             }
         }
 
@@ -185,217 +308,151 @@ impl<'a, Prim: PrimitiveType> ConstraintsAst<'a, Prim> {
         for (param, constraints) in &self.type_params {
             let name = *param.fragment();
             if let Some(index) = state.type_params.get(name) {
-                type_params.insert(*index, constraints.computed.clone());
+                type_params.insert(*index, constraints.convert(state));
             } else {
-                let err = ConversionErrorKind::UnusedTypeParam(name.to_owned()).with_span(*param);
-                return Err(err);
+                let err = AstConversionError::UnusedTypeParam(name.to_owned());
+                state.errors.push(Error::conversion(err, param));
             }
         }
 
-        Ok(ParamConstraints {
-            static_lengths,
+        ParamConstraints {
             type_params,
-        })
+            static_lengths,
+        }
     }
 }
 
-impl<'a, Prim: PrimitiveType> TupleAst<'a, Prim> {
-    fn try_convert(
+impl<'a> TupleAst<'a> {
+    fn convert<Prim: PrimitiveType>(
         &self,
-        mut state: Option<&mut ConversionState<'a>>,
-    ) -> Result<Tuple<Prim>, ConversionError<&'a str>> {
+        state: &mut AstConversionState<'_, 'a, Prim>,
+    ) -> Tuple<Prim> {
         let start = self
             .start
             .iter()
-            .map(|element| element.try_convert(state.as_deref_mut()))
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|element| state.convert_type(element))
+            .collect();
         let middle = self
             .middle
             .as_ref()
-            .map(|middle| middle.try_convert(state.as_deref_mut()))
-            .transpose()?;
+            .map(|middle| middle.extra.convert(state));
         let end = self
             .end
             .iter()
-            .map(|element| element.try_convert(state.as_deref_mut()))
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(Tuple::from_parts(start, middle, end))
+            .map(|element| state.convert_type(element))
+            .collect();
+        Tuple::from_parts(start, middle, end)
     }
 }
 
-impl<'a, Prim: PrimitiveType> SliceAst<'a, Prim> {
-    fn try_convert(
+impl<'a> SliceAst<'a> {
+    fn convert<Prim: PrimitiveType>(
         &self,
-        mut state: Option<&mut ConversionState<'a>>,
-    ) -> Result<Slice<Prim>, ConversionError<&'a str>> {
-        let element = self.element.try_convert(state.as_deref_mut())?;
-        let converted_length = match &self.length {
-            TupleLenAst::Ident(ident) => {
-                let name = *ident.fragment();
-                let const_param = if let Some(state) = state {
-                    state.len_param_idx(name)
+        state: &mut AstConversionState<'_, 'a, Prim>,
+    ) -> Slice<Prim> {
+        let element = state.convert_type(&self.element);
+
+        let converted_length = match &self.length.extra {
+            TupleLenAst::Ident => {
+                let name = *self.length.fragment();
+                if state.is_in_function {
+                    let const_param = state.len_param_idx(name);
+                    UnknownLen::param(const_param)
                 } else {
-                    let err = ConversionErrorKind::FreeLengthVar(name.to_owned()).with_span(*ident);
-                    return Err(err);
-                };
-                UnknownLen::param(const_param)
+                    let err = AstConversionError::FreeLengthVar(name.to_owned());
+                    state.errors.push(Error::conversion(err, &self.length));
+                    state.new_len(None)
+                }
             }
-            TupleLenAst::Some => UnknownLen::Some,
+            TupleLenAst::Some => state.new_len(Some(&self.length)),
             TupleLenAst::Dynamic => UnknownLen::Dynamic,
         };
 
-        Ok(Slice::new(element, converted_length))
+        Slice::new(element, converted_length)
     }
 }
 
-impl<'a, Prim: PrimitiveType> ValueTypeAst<'a, Prim> {
-    fn try_convert(
+impl<'a> FnTypeAst<'a> {
+    fn convert<Prim: PrimitiveType>(
         &self,
-        state: Option<&mut ConversionState<'a>>,
-    ) -> Result<ValueType<Prim>, ConversionError<&'a str>> {
-        Ok(match self {
-            Self::Some => ValueType::Some,
-            Self::Any(constraints) => ValueType::Any(constraints.computed.clone()),
-            Self::Prim(prim) => ValueType::Prim(prim.to_owned()),
+        state: &mut AstConversionState<'_, 'a, Prim>,
+    ) -> FnType<Prim> {
+        let args = self.args.extra.convert(state);
+        let return_type = state.convert_type(&self.return_type);
+        FnType::new(args, return_type)
+    }
 
-            Self::Param(ident) => {
-                let name = *ident.fragment();
-                let idx = if let Some(state) = state {
-                    state.type_param_idx(name)
-                } else {
-                    let err = ConversionErrorKind::FreeTypeVar(name.to_owned()).with_span(*ident);
-                    return Err(err);
-                };
-                ValueType::param(idx)
-            }
+    /// Tries to convert this type into [`FnType`].
+    pub fn try_convert<Prim>(&self) -> Result<FnType<Prim>, Errors<'a, Prim>>
+    where
+        Prim: PrimitiveType,
+    {
+        let mut errors = Errors::new();
+        let mut state = AstConversionState::without_env(&mut errors);
+        state.is_in_function = true;
 
-            Self::Function {
-                constraints,
-                function,
-            } => {
-                if let Some(state) = state {
-                    if let Some(constraints) = constraints {
-                        let err = ConversionErrorKind::EmbeddedQuantifier
-                            .with_span(constraints.for_keyword);
-                        return Err(err);
-                    }
-                    function.try_convert(state)?.into()
-                } else {
-                    let mut state = ConversionState::default();
-                    let mut converted_fn = function.try_convert(&mut state)?;
-
-                    let constraints = if let Some(constraints) = constraints {
-                        constraints.try_convert(&state)?
-                    } else {
-                        ParamConstraints::default()
-                    };
-                    ParamQuantifier::set_params(&mut converted_fn, constraints);
-                    converted_fn.into()
-                }
-            }
-
-            Self::Tuple(tuple) => tuple.try_convert(state)?.into(),
-            Self::Slice(slice) => slice.try_convert(state)?.into(),
-        })
+        let output = self.convert(&mut state);
+        if errors.is_empty() {
+            Ok(output)
+        } else {
+            Err(errors)
+        }
     }
 }
 
-impl<'a, Prim: PrimitiveType> TryFrom<ValueTypeAst<'a, Prim>> for ValueType<Prim> {
-    type Error = ConversionError<&'a str>;
-
-    fn try_from(value: ValueTypeAst<'a, Prim>) -> Result<Self, Self::Error> {
-        value.try_convert(None)
-    }
-}
-
-impl<Prim: PrimitiveType> ValueType<Prim> {
-    /// Parses type from `input`. This parser can be composed using `nom` infrastructure.
-    pub fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
-        parse_inner(ValueTypeAst::parse, input, false)
-    }
-}
-
-/// Shared parsing code for `ValueType` and `FnType`.
-fn parse_inner<'a, Ast, T>(
+/// Shared parsing code for `TypeAst` and `FnTypeAst`.
+fn parse_inner<'a, Ast>(
     parser: fn(InputSpan<'a>) -> NomResult<'a, Ast>,
     input: InputSpan<'a>,
-    consume_all_input: bool,
-) -> NomResult<'a, T>
-where
-    T: TryFrom<Ast, Error = ConversionError<&'a str>>,
-{
-    let (rest, parsed) = parser(input)?;
-    if consume_all_input && !rest.fragment().is_empty() {
+) -> NomResult<'a, Ast> {
+    let (rest, ast) = parser(input)?;
+    if !rest.fragment().is_empty() {
         let err = ParseErrorKind::Leftovers.with_span(&rest.into());
         return Err(NomErr::Failure(err));
     }
-
-    let ty = T::try_from(parsed).map_err(|err| {
-        let err_span = err.main_span();
-        let err = ParseErrorKind::Type(err.inner.extra.into()).with_span(&err_span);
-        NomErr::Failure(err)
-    })?;
-    Ok((rest, ty))
+    Ok((rest, ast))
 }
 
-/// Shared `FromStr` logic for `ValueType` and `FnType`.
-fn from_str<'a, Ast, T>(
+/// Shared `TryFrom<&str>` logic for `TypeAst` and `FnTypeAst`.
+fn from_str<'a, Ast>(
     parser: fn(InputSpan<'a>) -> NomResult<'a, Ast>,
     def: &'a str,
-) -> Result<T, SpannedError<usize>>
-where
-    T: TryFrom<Ast, Error = ConversionError<&'a str>>,
-{
+) -> Result<Ast, SpannedError<&'a str>> {
     let input = InputSpan::new(def);
-    let (_, ty) = parse_inner(parser, input, true).map_err(|err| match err {
-        NomErr::Incomplete(_) => ParseErrorKind::Incomplete
-            .with_span(&input.into())
-            .strip_code(),
-        NomErr::Error(e) | NomErr::Failure(e) => e.strip_code(),
+    let (_, ast) = parse_inner(parser, input).map_err(|err| match err {
+        NomErr::Incomplete(_) => ParseErrorKind::Incomplete.with_span(&input.into()),
+        NomErr::Error(e) | NomErr::Failure(e) => e,
     })?;
-
-    Ok(ty)
+    Ok(ast)
 }
 
-impl<Prim: PrimitiveType> FromStr for ValueType<Prim> {
-    type Err = SpannedError<usize>;
-
-    fn from_str(def: &str) -> Result<Self, Self::Err> {
-        from_str(ValueTypeAst::parse, def)
+impl<'a> TypeAst<'a> {
+    /// Parses type AST from a string.
+    pub fn try_from(def: &'a str) -> Result<SpannedTypeAst<'a>, SpannedError<&'a str>> {
+        from_str(TypeAst::parse, def)
     }
 }
 
-impl<'a, Prim: PrimitiveType> FnTypeAst<'a, Prim> {
-    fn try_convert(
-        &self,
-        state: &mut ConversionState<'a>,
-    ) -> Result<FnType<Prim>, ConversionError<&'a str>> {
-        let args = self.args.try_convert(Some(state))?;
-        let return_type = self.return_type.try_convert(Some(state))?;
-        Ok(FnType::new(args, return_type))
+impl<'a, Prim: PrimitiveType> TryFrom<&SpannedTypeAst<'a>> for Type<Prim> {
+    type Error = Errors<'a, Prim>;
+
+    fn try_from(ast: &SpannedTypeAst<'a>) -> Result<Self, Self::Error> {
+        let mut errors = Errors::new();
+        let mut state = AstConversionState::without_env(&mut errors);
+
+        let output = state.convert_type(ast);
+        if errors.is_empty() {
+            Ok(output)
+        } else {
+            Err(errors)
+        }
     }
 }
 
-impl<'a, Prim: PrimitiveType> TryFrom<FnTypeAst<'a, Prim>> for FnType<Prim> {
-    type Error = ConversionError<&'a str>;
+impl<'a> TryFrom<&'a str> for FnTypeAst<'a> {
+    type Error = SpannedError<&'a str>;
 
-    fn try_from(value: FnTypeAst<'a, Prim>) -> Result<Self, Self::Error> {
-        value.try_convert(&mut ConversionState::default())
-    }
-}
-
-impl<Prim: PrimitiveType> FnType<Prim> {
-    /// Parses a functional type from `input`. This parser can be composed using
-    /// `nom` infrastructure.
-    pub fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
-        parse_inner(FnTypeAst::parse, input, false)
-    }
-}
-
-impl<Prim: PrimitiveType> FromStr for FnType<Prim> {
-    type Err = SpannedError<usize>;
-
-    fn from_str(def: &str) -> Result<Self, Self::Err> {
+    fn try_from(def: &'a str) -> Result<Self, Self::Error> {
         from_str(FnTypeAst::parse, def)
     }
 }
@@ -405,13 +462,13 @@ mod tests {
     use assert_matches::assert_matches;
 
     use super::*;
-    use crate::TupleLen;
+    use crate::{ErrorKind, Num};
 
     #[test]
     fn converting_raw_fn_type() {
         let input = InputSpan::new("(['T; N], ('T) -> Bool) -> Bool");
-        let (_, fn_type) = <FnTypeAst>::parse(input).unwrap();
-        let fn_type = FnType::try_from(fn_type).unwrap();
+        let (_, fn_type) = FnTypeAst::parse(input).unwrap();
+        let fn_type = fn_type.try_convert::<Num>().unwrap();
 
         assert_eq!(fn_type.to_string(), *input.fragment());
     }
@@ -419,8 +476,8 @@ mod tests {
     #[test]
     fn converting_fn_type_with_constraint() {
         let input = InputSpan::new("for<'T: Lin> (['T; N], ('T) -> Bool) -> Bool");
-        let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
-        let fn_type = ValueType::try_from(ast).unwrap();
+        let (_, ast) = TypeAst::parse(input).unwrap();
+        let fn_type = <Type>::try_from(&ast).unwrap();
 
         assert_eq!(fn_type.to_string(), *input.fragment());
     }
@@ -428,141 +485,143 @@ mod tests {
     #[test]
     fn converting_fn_type_unused_type() {
         let input = InputSpan::new("for<'T: Lin> (Num) -> Bool");
-        let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
-        let err = ValueType::try_from(ast).unwrap_err();
+        let (_, ast) = TypeAst::parse(input).unwrap();
+        let err = <Type>::try_from(&ast).unwrap_err().single();
 
-        assert_eq!(err.main_span().location_offset(), 5);
+        assert_eq!(err.span().location_offset(), 5);
         assert_matches!(
             err.kind(),
-            ConversionErrorKind::UnusedTypeParam(name) if name == "T"
+            ErrorKind::AstConversion(AstConversionError::UnusedTypeParam(name)) if name == "T"
         );
     }
 
     #[test]
     fn converting_fn_type_unused_length() {
         let input = InputSpan::new("for<len! N> (Num) -> Bool");
-        let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
-        let err = ValueType::try_from(ast).unwrap_err();
+        let (_, ast) = TypeAst::parse(input).unwrap();
+        let err = <Type>::try_from(&ast).unwrap_err().single();
 
-        assert_eq!(err.main_span().location_offset(), 9);
+        assert_eq!(err.span().location_offset(), 9);
         assert_matches!(
             err.kind(),
-            ConversionErrorKind::UnusedLength(name) if name == "N"
+            ErrorKind::AstConversion(AstConversionError::UnusedLength(name)) if name == "N"
         );
     }
 
     #[test]
     fn converting_fn_type_free_type_param() {
         let input = InputSpan::new("(Num, 'T)");
-        let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
-        let err = ValueType::try_from(ast).unwrap_err();
+        let (_, ast) = TypeAst::parse(input).unwrap();
+        let err = <Type>::try_from(&ast).unwrap_err().single();
 
-        assert_eq!(err.main_span().location_offset(), 7);
+        assert_eq!(err.span().location_offset(), 6);
         assert_matches!(
             err.kind(),
-            ConversionErrorKind::FreeTypeVar(name) if name == "T"
+            ErrorKind::AstConversion(AstConversionError::FreeTypeVar(name)) if name == "T"
         );
     }
 
     #[test]
     fn converting_fn_type_free_length() {
         let input = InputSpan::new("[Num; N]");
-        let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
-        let err = ValueType::try_from(ast).unwrap_err();
+        let (_, ast) = TypeAst::parse(input).unwrap();
+        let err = <Type>::try_from(&ast).unwrap_err().single();
 
-        assert_eq!(err.main_span().location_offset(), 6);
+        assert_eq!(err.span().location_offset(), 6);
         assert_matches!(
             err.kind(),
-            ConversionErrorKind::FreeLengthVar(name) if name == "N"
+            ErrorKind::AstConversion(AstConversionError::FreeLengthVar(name)) if name == "N"
         );
     }
 
     #[test]
     fn converting_fn_type_invalid_constraint() {
-        let input = InputSpan::new("for<'T: Bug> fn(['T; _]) -> Bool");
-        let err = match <ValueTypeAst>::parse(input).unwrap_err() {
-            NomErr::Failure(err) => err,
-            other => panic!("Unexpected error type: {:?}", other),
-        };
+        let input = InputSpan::new("for<'T: Bug> (['T; N]) -> Bool");
+        let (_, ast) = TypeAst::parse(input).unwrap();
+        let err = <Type>::try_from(&ast).unwrap_err().single();
 
         assert_eq!(*err.span().fragment(), "Bug");
         assert_matches!(
             err.kind(),
-            ParseErrorKind::Type(err) if err.to_string() == "Cannot parse type constraint"
+            ErrorKind::AstConversion(AstConversionError::UnknownConstraint(id))
+                if id == "Bug"
         );
     }
 
     #[test]
     fn embedded_type_with_constraints() {
         let input = InputSpan::new("('T, for<'U: Lin> ('U) -> 'U) -> ()");
-        let (_, ast) = <ValueTypeAst>::parse(input).unwrap();
-        let err = ValueType::try_from(ast).unwrap_err();
+        let (_, ast) = TypeAst::parse(input).unwrap();
+        let err = <Type>::try_from(&ast).unwrap_err().single();
 
-        assert_eq!(*err.main_span().fragment(), "for");
-        assert_eq!(err.main_span().location_offset(), 5);
-        assert_matches!(err.kind(), ConversionErrorKind::EmbeddedQuantifier);
+        assert_eq!(*err.span().fragment(), "for<'U: Lin>");
+        assert_eq!(err.span().location_offset(), 5);
+        assert_matches!(
+            err.kind(),
+            ErrorKind::AstConversion(AstConversionError::EmbeddedQuantifier)
+        );
     }
 
     #[test]
-    fn parsing_basic_value_types() {
-        let num_type: ValueType = "Num".parse().unwrap();
-        assert_eq!(num_type, ValueType::NUM);
+    fn parsing_basic_types() -> anyhow::Result<()> {
+        let num_type = <Type>::try_from(&TypeAst::try_from("Num")?)?;
+        assert_eq!(num_type, Type::NUM);
 
-        let bool_type: ValueType = "Bool".parse().unwrap();
-        assert_eq!(bool_type, ValueType::BOOL);
+        let bool_type = <Type>::try_from(&TypeAst::try_from("Bool")?)?;
+        assert_eq!(bool_type, Type::BOOL);
 
-        let tuple_type: ValueType = "(Num, (Bool, _))".parse().unwrap();
+        let tuple_type = <Type>::try_from(&TypeAst::try_from("(Num, (Bool, Bool))")?)?;
         assert_eq!(
             tuple_type,
-            ValueType::from((
-                ValueType::NUM,
-                ValueType::Tuple(vec![ValueType::BOOL, ValueType::Some].into()),
-            ))
+            Type::from((Type::NUM, Type::Tuple(vec![Type::BOOL; 2].into()),))
         );
 
-        let slice_type: ValueType = "[(Num, _); _]".parse().unwrap();
+        let slice_type = <Type>::try_from(&TypeAst::try_from("[(Num, Bool)]")?)?;
         let slice_type = match &slice_type {
-            ValueType::Tuple(tuple) => tuple.as_slice().unwrap(),
+            Type::Tuple(tuple) => tuple.as_slice().unwrap(),
             _ => panic!("Unexpected type: {:?}", slice_type),
         };
 
-        assert_eq!(
-            *slice_type.element(),
-            ValueType::from((ValueType::NUM, ValueType::Some))
+        assert_eq!(*slice_type.element(), Type::from((Type::NUM, Type::BOOL)));
+        assert_matches!(
+            slice_type.len().components(),
+            (Some(UnknownLen::Dynamic), 0)
         );
-        assert_eq!(slice_type.len(), TupleLen::from(UnknownLen::Some));
+        Ok(())
     }
 
     #[test]
-    fn parsing_functional_value_type() {
-        let ty: ValueType = "(['T; N], ('T) -> 'U) -> 'U".parse().unwrap();
+    fn parsing_functional_type() -> anyhow::Result<()> {
+        let ty = <Type>::try_from(&TypeAst::try_from("(['T; N], ('T) -> 'U) -> 'U")?)?;
         let ty = match ty {
-            ValueType::Function(fn_type) => *fn_type,
+            Type::Function(fn_type) => *fn_type,
             _ => panic!("Unexpected type: {:?}", ty),
         };
 
         assert_eq!(ty.params.as_ref().unwrap().len_params.len(), 1);
         assert_eq!(ty.params.as_ref().unwrap().type_params.len(), 2);
-        assert_eq!(ty.return_type, ValueType::param(1));
+        assert_eq!(ty.return_type, Type::param(1));
+        Ok(())
     }
 
     #[test]
-    fn parsing_functional_type_with_varargs() {
-        let ty: ValueType = "(...[Num; N]) -> Num".parse().unwrap();
+    fn parsing_functional_type_with_varargs() -> anyhow::Result<()> {
+        let ty = <Type>::try_from(&TypeAst::try_from("(...[Num; N]) -> Num")?)?;
         let ty = match ty {
-            ValueType::Function(fn_type) => *fn_type,
+            Type::Function(fn_type) => *fn_type,
             _ => panic!("Unexpected type: {:?}", ty),
         };
 
         assert_eq!(ty.params.as_ref().unwrap().len_params.len(), 1);
         assert!(ty.params.as_ref().unwrap().type_params.is_empty());
         let args_slice = ty.args.as_slice().unwrap();
-        assert_eq!(*args_slice.element(), ValueType::NUM);
+        assert_eq!(*args_slice.element(), Type::NUM);
         assert_eq!(args_slice.len(), UnknownLen::param(0).into());
+        Ok(())
     }
 
     #[test]
-    fn parsing_incomplete_value_type() {
+    fn parsing_incomplete_type() {
         const INCOMPLETE_TYPES: &[&str] = &[
             "fn(",
             "fn(['T; ",
@@ -574,19 +633,31 @@ mod tests {
 
         for &input in INCOMPLETE_TYPES {
             // TODO: some of reported errors are difficult to interpret; should clarify.
-            input.parse::<ValueType>().unwrap_err();
+            TypeAst::try_from(input).unwrap_err();
         }
     }
 
     #[test]
-    fn parsing_value_type_with_conversion_error() {
-        let input = "['T; _]";
-        let err = input.parse::<ValueType>().unwrap_err();
-        assert_eq!(err.span().location_offset(), 2);
-        let err = match err.kind() {
-            ParseErrorKind::Type(err) => err.downcast_ref::<ConversionErrorKind>().unwrap(),
-            _ => panic!("Unexpected error type: {:?}", err),
-        };
-        assert_matches!(err, ConversionErrorKind::FreeTypeVar(name) if name == "T");
+    fn error_when_parsing_standalone_some_type() {
+        let errors = <Type>::try_from(&TypeAst::try_from("(_) -> Num").unwrap()).unwrap_err();
+        let err = errors.single();
+
+        assert_eq!(*err.span().fragment(), "_");
+        assert_matches!(
+            err.kind(),
+            ErrorKind::AstConversion(AstConversionError::InvalidSomeType)
+        );
+    }
+
+    #[test]
+    fn error_when_parsing_standalone_some_length() {
+        let errors = <Type>::try_from(&TypeAst::try_from("[Num; _]").unwrap()).unwrap_err();
+        let err = errors.single();
+
+        assert_eq!(*err.span().fragment(), "_");
+        assert_matches!(
+            err.kind(),
+            ErrorKind::AstConversion(AstConversionError::InvalidSomeLength)
+        );
     }
 }

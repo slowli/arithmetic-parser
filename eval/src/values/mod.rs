@@ -9,7 +9,7 @@ use core::{
 };
 
 use crate::{
-    alloc::{vec, Rc, String, ToOwned, Vec},
+    alloc::{vec, Rc, String, Vec},
     arith::OrdArithmetic,
     error::{AuxErrorInfo, Backtrace, CodeInModule, TupleLenMismatchContext},
     executable::ExecutableFn,
@@ -562,7 +562,7 @@ impl<T: 'static + Clone> StripCode for Value<'_, T> {
 
 impl<'a, T: Clone> From<&Value<'a, T>> for Value<'a, T> {
     fn from(reference: &Value<'a, T>) -> Self {
-        reference.to_owned()
+        reference.clone()
     }
 }
 

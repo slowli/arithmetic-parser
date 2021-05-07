@@ -6,7 +6,7 @@
 //! Type inference is *partially* compatible with the interpreter from [`arithmetic-eval`];
 //! if the inference algorithm succeeds on a certain expression / statement / block,
 //! it will execute successfully, but not all successfully executing items pass type inference.
-//! (An exception here is [`ValueType::Any`], which is specifically designed to circumvent
+//! (An exception here is [`Type::Any`], which is specifically designed to circumvent
 //! the type system limitations. If `Any` is used too liberally, it can result in code passing
 //! type checks, but failing during execution.)
 //!
@@ -48,7 +48,7 @@
 //!
 //! ```
 //! use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-//! use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, ValueType};
+//! use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, Type};
 //!
 //! type Parser = Typed<Annotated<NumGrammar<f32>>>;
 //! # fn main() -> anyhow::Result<()> {
@@ -70,7 +70,7 @@
 //!
 //! ```
 //! # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-//! # use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, ValueType};
+//! # use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, Type};
 //! # type Parser = Typed<Annotated<NumGrammar<f32>>>;
 //! # fn main() -> anyhow::Result<()> {
 //! let code = "sum_with = |xs, init| xs.fold(init, |acc, x| acc + x);";
@@ -125,7 +125,7 @@ use arithmetic_parser::{
 pub mod arith;
 pub mod ast;
 mod env;
-mod error;
+pub mod error;
 mod substitutions;
 mod type_map;
 mod types;
@@ -133,20 +133,23 @@ pub mod visit;
 
 pub use self::{
     env::TypeEnvironment,
-    error::{TupleLenMismatchContext, TypeError, TypeErrorKind, TypeResult},
+    error::{Error, ErrorKind},
     substitutions::Substitutions,
     type_map::{Assertions, Prelude},
     types::{
-        FnType, FnTypeBuilder, FnWithConstraints, LengthVar, Slice, Tuple, TupleLen, TypeVar,
-        UnknownLen, ValueType,
+        FnType, FnTypeBuilder, FnWithConstraints, LengthVar, Slice, Tuple, TupleIndex, TupleLen,
+        Type, TypeVar, UnknownLen,
     },
 };
 
-use self::arith::{LinearType, NumConstraints, TypeConstraints, WithBoolean};
+use self::{
+    arith::{LinearType, NumConstraints, TypeConstraints, WithBoolean},
+    ast::TypeAst,
+};
 
 /// Primitive types in a certain type system.
 ///
-/// More complex types, like [`ValueType`] and [`FnType`], are defined with a type param
+/// More complex types, like [`Type`] and [`FnType`], are defined with a type param
 /// which determines the primitive type(s). This type param must implement [`PrimitiveType`].
 ///
 /// [`TypeArithmetic`] has a `PrimitiveType` impl as an associated type, and one of the required
@@ -156,7 +159,7 @@ use self::arith::{LinearType, NumConstraints, TypeConstraints, WithBoolean};
 ///
 /// - [`Display`](fmt::Display) and [`FromStr`] implementations must be consistent; i.e.,
 ///   `Display` should produce output parseable by `FromStr`. `Display` will be used in
-///   `Display` impls for `ValueType` etc. `FromStr` will be used to read type annotations.
+///   `Display` impls for `Type` etc. `FromStr` will be used to read type annotations.
 /// - `Display` presentations must be identifiers, such as `Num`.
 /// - While not required, a `PrimitiveType` should usually contain a Boolean type and
 ///   implement [`WithBoolean`]. This allows to reuse [`BoolArithmetic`] and/or [`NumArithmetic`]
@@ -282,9 +285,9 @@ impl LinearType for Num {
 /// # }
 /// ```
 #[derive(Debug)]
-pub struct Annotated<T, Prim = Num>(PhantomData<(T, Prim)>);
+pub struct Annotated<T>(PhantomData<T>);
 
-impl<T: ParseLiteral, Prim: PrimitiveType> ParseLiteral for Annotated<T, Prim> {
+impl<T: ParseLiteral> ParseLiteral for Annotated<T> {
     type Lit = T::Lit;
 
     fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
@@ -292,10 +295,11 @@ impl<T: ParseLiteral, Prim: PrimitiveType> ParseLiteral for Annotated<T, Prim> {
     }
 }
 
-impl<T: ParseLiteral, Prim: PrimitiveType> Grammar for Annotated<T, Prim> {
-    type Type = ValueType<Prim>;
+impl<'a, T: ParseLiteral> Grammar<'a> for Annotated<T> {
+    type Type = TypeAst<'a>;
 
-    fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
-        ValueType::<Prim>::parse(input)
+    fn parse_type(input: InputSpan<'a>) -> NomResult<'a, Self::Type> {
+        use nom::combinator::map;
+        map(TypeAst::parse, |ast| ast.extra)(input)
     }
 }

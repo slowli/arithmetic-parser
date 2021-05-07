@@ -3,7 +3,7 @@
 use core::{fmt, ops};
 
 use crate::{
-    alloc::{Box, String, ToOwned},
+    alloc::{Box, String},
     arith::{OrdArithmetic, StdArithmetic},
     compiler::{Compiler, ImportSpans},
     error::{Backtrace, ErrorWithBacktrace},
@@ -200,7 +200,7 @@ impl<'a, T: Clone + fmt::Debug> ExecutableModule<'a, T> {
     ) -> Result<ExecutableModuleBuilder<'a, T>, Error<'a>>
     where
         Id: ModuleId,
-        G: Grammar<Lit = T>,
+        G: Grammar<'a, Lit = T>,
     {
         let (module, import_spans) = Compiler::compile_module(id, block)?;
         Ok(ExecutableModuleBuilder::new(module, import_spans))
@@ -428,7 +428,7 @@ impl<'a, T> ExecutableModuleBuilder<'a, T> {
     /// highlights one of such imports.
     pub fn try_build(self) -> Result<ExecutableModule<'a, T>, Error<'a>> {
         if let Some((var_name, span)) = self.undefined_imports.iter().next() {
-            let err = ErrorKind::Undefined(var_name.to_owned());
+            let err = ErrorKind::Undefined(var_name.clone());
             Err(Error::new(self.module.id(), span, err))
         } else {
             Ok(self.module)

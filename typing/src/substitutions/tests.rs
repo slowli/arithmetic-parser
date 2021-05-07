@@ -3,7 +3,49 @@
 use assert_matches::assert_matches;
 
 use super::*;
-use crate::{Num, TupleLenMismatchContext::Assignment};
+use crate::{error::TupleContext, Num};
+
+fn extract_errors<Prim: PrimitiveType>(
+    action: impl FnOnce(OpErrors<'_, Prim>),
+) -> Result<(), ErrorKind<Prim>> {
+    let mut errors = OpErrors::new();
+    action(errors.by_ref());
+    let mut errors = errors.into_vec();
+
+    match errors.len() {
+        0 => Ok(()),
+        1 => Err(errors.pop().unwrap()),
+        _ => panic!("Unexpected multiple errors: {:?}", errors),
+    }
+}
+
+fn unify_lengths<Prim: PrimitiveType>(
+    substitutions: &mut Substitutions<Prim>,
+    lhs: TupleLen,
+    rhs: TupleLen,
+) -> Result<(), ErrorKind<Prim>> {
+    substitutions
+        .unify_lengths(lhs, rhs, TupleContext::Generic)
+        .map(drop)
+}
+
+fn unify_tuples<Prim: PrimitiveType>(
+    substitutions: &mut Substitutions<Prim>,
+    lhs: &Tuple<Prim>,
+    rhs: &Tuple<Prim>,
+) -> Result<(), ErrorKind<Prim>> {
+    extract_errors(|errors| {
+        substitutions.unify_tuples(lhs, rhs, TupleContext::Generic, errors);
+    })
+}
+
+fn unify<Prim: PrimitiveType>(
+    substitutions: &mut Substitutions<Prim>,
+    lhs: &Type<Prim>,
+    rhs: &Type<Prim>,
+) -> Result<(), ErrorKind<Prim>> {
+    extract_errors(|errors| substitutions.unify(lhs, rhs, errors))
+}
 
 #[test]
 fn unifying_lengths_success_without_side_effects() {
@@ -22,7 +64,7 @@ fn unifying_lengths_success_without_side_effects() {
 
     let mut substitutions = Substitutions::<Num>::default();
     for &(lhs, rhs) in samples {
-        substitutions.unify_lengths(lhs, rhs, Assignment).unwrap();
+        unify_lengths(&mut substitutions, lhs, rhs).unwrap();
         assert!(substitutions.length_eqs.is_empty());
     }
 }
@@ -39,11 +81,9 @@ fn unifying_lengths_error() {
 
     let mut substitutions = Substitutions::<Num>::default();
     for &(lhs, rhs) in samples {
-        let err = substitutions
-            .unify_lengths(lhs, rhs, Assignment)
-            .unwrap_err();
+        let err = unify_lengths(&mut substitutions, lhs, rhs).unwrap_err();
 
-        assert_matches!(err, TypeErrorKind::TupleLenMismatch { .. });
+        assert_matches!(err, ErrorKind::TupleLenMismatch { .. });
         assert!(substitutions.length_eqs.is_empty());
     }
 }
@@ -58,22 +98,19 @@ fn unifying_lengths_success_with_new_equation() {
 
     for &rhs in len_samples {
         let mut substitutions = Substitutions::<Num>::default();
-        substitutions
-            .unify_lengths(UnknownLen::free_var(2).into(), rhs, Assignment)
-            .unwrap();
+        unify_lengths(&mut substitutions, UnknownLen::free_var(2).into(), rhs).unwrap();
 
         assert_eq!(substitutions.length_eqs.len(), 1);
         assert_eq!(substitutions.length_eqs[&2], rhs);
     }
 
     let mut substitutions = Substitutions::<Num>::default();
-    substitutions
-        .unify_lengths(
-            TupleLen::from(3),
-            UnknownLen::free_var(2).into(),
-            Assignment,
-        )
-        .unwrap();
+    unify_lengths(
+        &mut substitutions,
+        TupleLen::from(3),
+        UnknownLen::free_var(2).into(),
+    )
+    .unwrap();
 
     assert_eq!(substitutions.length_eqs.len(), 1);
     assert_eq!(substitutions.length_eqs[&2], TupleLen::from(3));
@@ -83,26 +120,20 @@ fn unifying_lengths_success_with_new_equation() {
 fn unifying_compound_length_success() {
     let compound_len = UnknownLen::free_var(0) + 2;
     let mut substitutions = Substitutions::<Num>::default();
-    substitutions
-        .unify_lengths(compound_len, TupleLen::from(5), Assignment)
-        .unwrap();
+    unify_lengths(&mut substitutions, compound_len, TupleLen::from(5)).unwrap();
 
     assert_eq!(substitutions.length_eqs.len(), 1);
     assert_eq!(substitutions.length_eqs[&0], TupleLen::from(3));
 
     let mut substitutions = Substitutions::<Num>::default();
-    substitutions
-        .unify_lengths(TupleLen::from(5), compound_len, Assignment)
-        .unwrap();
+    unify_lengths(&mut substitutions, TupleLen::from(5), compound_len).unwrap();
 
     assert_eq!(substitutions.length_eqs.len(), 1);
     assert_eq!(substitutions.length_eqs[&0], TupleLen::from(3));
 
     let other_compound_len = UnknownLen::free_var(1) + 2;
     let mut substitutions = Substitutions::<Num>::default();
-    substitutions
-        .unify_lengths(compound_len, other_compound_len, Assignment)
-        .unwrap();
+    unify_lengths(&mut substitutions, compound_len, other_compound_len).unwrap();
 
     assert_eq!(substitutions.length_eqs.len(), 1);
     assert_eq!(substitutions.length_eqs[&0], UnknownLen::free_var(1).into());
@@ -113,41 +144,27 @@ fn unifying_compound_length_with_dyn_length() {
     let compound_len = UnknownLen::Dynamic + 2;
     let mut substitutions = Substitutions::<Num>::default();
 
-    substitutions
-        .unify_lengths(compound_len, TupleLen::from(5), Assignment)
-        .unwrap();
+    unify_lengths(&mut substitutions, compound_len, TupleLen::from(5)).unwrap();
     assert!(substitutions.length_eqs.is_empty());
 
-    substitutions
-        .unify_lengths(compound_len, compound_len, Assignment)
-        .unwrap();
+    unify_lengths(&mut substitutions, compound_len, compound_len).unwrap();
     assert!(substitutions.length_eqs.is_empty());
 
-    let err = substitutions
-        .unify_lengths(TupleLen::from(5), compound_len, Assignment)
-        .unwrap_err();
-    assert_matches!(err, TypeErrorKind::TupleLenMismatch { .. });
+    let err = unify_lengths(&mut substitutions, TupleLen::from(5), compound_len).unwrap_err();
+    assert_matches!(err, ErrorKind::TupleLenMismatch { .. });
 
     let other_compound_len = UnknownLen::free_var(1) + 2;
-    substitutions
-        .unify_lengths(compound_len, other_compound_len, Assignment)
-        .unwrap();
+    unify_lengths(&mut substitutions, compound_len, other_compound_len).unwrap();
     assert!(substitutions.length_eqs.is_empty());
 
     let other_dyn_len = UnknownLen::Dynamic + 3;
-    substitutions
-        .unify_lengths(compound_len, other_dyn_len, Assignment)
-        .unwrap();
+    unify_lengths(&mut substitutions, compound_len, other_dyn_len).unwrap();
     assert!(substitutions.length_eqs.is_empty());
 
-    let err = substitutions
-        .unify_lengths(other_dyn_len, compound_len, Assignment)
-        .unwrap_err();
-    assert_matches!(err, TypeErrorKind::TupleLenMismatch { .. });
+    let err = unify_lengths(&mut substitutions, other_dyn_len, compound_len).unwrap_err();
+    assert_matches!(err, ErrorKind::TupleLenMismatch { .. });
 
-    substitutions
-        .unify_lengths(other_compound_len, compound_len, Assignment)
-        .unwrap();
+    unify_lengths(&mut substitutions, other_compound_len, compound_len).unwrap();
     assert_eq!(substitutions.length_eqs.len(), 1);
     assert_eq!(substitutions.length_eqs[&1], UnknownLen::Dynamic.into());
 }
@@ -155,93 +172,83 @@ fn unifying_compound_length_with_dyn_length() {
 #[test]
 fn unifying_compound_length_errors() {
     let compound_len = UnknownLen::free_var(0) + 2;
-
     let mut substitutions = Substitutions::<Num>::default();
-    let err = substitutions
-        .unify_lengths(compound_len, TupleLen::from(1), Assignment)
-        .unwrap_err();
+    let err = unify_lengths(&mut substitutions, compound_len, TupleLen::from(1)).unwrap_err();
 
-    assert_matches!(err, TypeErrorKind::TupleLenMismatch { .. });
+    assert_matches!(err, ErrorKind::TupleLenMismatch { .. });
 }
 
 #[test]
 fn unresolved_param_error() {
     let mut substitutions = Substitutions::<Num>::default();
-    let err = substitutions
-        .unify_lengths(UnknownLen::param(2).into(), TupleLen::from(1), Assignment)
-        .unwrap_err();
-    assert_matches!(err, TypeErrorKind::UnresolvedParam);
+    let err = unify_lengths(
+        &mut substitutions,
+        UnknownLen::param(2).into(),
+        TupleLen::from(1),
+    )
+    .unwrap_err();
+    assert_matches!(err, ErrorKind::UnresolvedParam);
 
-    let err = substitutions
-        .unify(&ValueType::param(2), &ValueType::NUM)
-        .unwrap_err();
-    assert_matches!(err, TypeErrorKind::UnresolvedParam);
+    let err = unify(&mut substitutions, &Type::param(2), &Type::NUM).unwrap_err();
+    assert_matches!(err, ErrorKind::UnresolvedParam);
 }
 
 #[test]
 fn unifying_complex_tuples() {
     let xs = Tuple::new(
-        vec![ValueType::NUM, ValueType::NUM],
-        ValueType::NUM.repeat(UnknownLen::free_var(0)),
+        vec![Type::NUM, Type::NUM],
+        Type::NUM.repeat(UnknownLen::free_var(0)),
         vec![],
     );
-    let ys = Tuple::from(ValueType::NUM.repeat(UnknownLen::free_var(1) + 2));
+    let ys = Tuple::from(Type::NUM.repeat(UnknownLen::free_var(1) + 2));
 
     let mut substitutions = Substitutions::<Num>::default();
-    substitutions.unify_tuples(&xs, &ys, Assignment).unwrap();
+    unify_tuples(&mut substitutions, &xs, &ys).unwrap();
 
     assert_eq!(substitutions.length_eqs.len(), 1);
     assert_eq!(substitutions.length_eqs[&0], UnknownLen::free_var(1).into());
 
-    let zs = Tuple::from(ValueType::free_var(0).repeat(UnknownLen::free_var(1)));
+    let zs = Tuple::from(Type::free_var(0).repeat(UnknownLen::free_var(1)));
     let mut substitutions = Substitutions::<Num>::default();
-    substitutions.unify_tuples(&xs, &zs, Assignment).unwrap();
+    unify_tuples(&mut substitutions, &xs, &zs).unwrap();
 
     assert_eq!(substitutions.length_eqs.len(), 1);
     assert_eq!(substitutions.length_eqs[&1], UnknownLen::free_var(0) + 2);
     assert_eq!(substitutions.eqs.len(), 1);
-    assert_eq!(substitutions.eqs[&0], ValueType::NUM);
+    assert_eq!(substitutions.eqs[&0], Type::NUM);
 
     let us = Tuple::new(
         vec![],
-        ValueType::NUM.repeat(UnknownLen::free_var(1)),
-        vec![
-            ValueType::free_var(0),
-            ValueType::free_var(1),
-            ValueType::free_var(2),
-        ],
+        Type::NUM.repeat(UnknownLen::free_var(1)),
+        vec![Type::free_var(0), Type::free_var(1), Type::free_var(2)],
     );
     let mut substitutions = Substitutions::<Num>::default();
-    substitutions.unify_tuples(&xs, &us, Assignment).unwrap();
+    unify_tuples(&mut substitutions, &xs, &us).unwrap();
 
     assert_eq!(substitutions.length_eqs.len(), 1);
     assert_eq!(substitutions.length_eqs[&0], UnknownLen::free_var(1) + 1);
     assert_eq!(substitutions.eqs.len(), 3);
     for i in 0..3 {
-        assert_eq!(substitutions.eqs[&i], ValueType::NUM);
+        assert_eq!(substitutions.eqs[&i], Type::NUM);
     }
 }
 
 #[test]
 fn any_can_be_unified_with_anything() {
     let mut substitutions = Substitutions::<Num>::default();
-    substitutions.eqs.insert(0, ValueType::any());
+    substitutions.eqs.insert(0, Type::any());
 
     let rhs_samples = &[
-        ValueType::NUM,
-        ValueType::BOOL,
-        (ValueType::BOOL, ValueType::NUM).into(),
-        ValueType::NUM.repeat(3).into(),
-        ValueType::NUM.repeat(UnknownLen::free_var(0)).into(),
-        FnType::new(
-            vec![ValueType::BOOL, ValueType::NUM].into(),
-            ValueType::void(),
-        )
-        .into(),
-        ValueType::any(),
+        Type::NUM,
+        Type::BOOL,
+        (Type::BOOL, Type::NUM).into(),
+        Type::NUM.repeat(3).into(),
+        Type::NUM.repeat(UnknownLen::free_var(0)).into(),
+        FnType::new(vec![Type::BOOL, Type::NUM].into(), Type::void()).into(),
+        Type::any(),
     ];
     for rhs in rhs_samples {
-        substitutions.unify(&ValueType::free_var(0), rhs).unwrap();
+        unify(&mut substitutions, &Type::free_var(0), rhs).unwrap();
     }
 }
 
@@ -266,7 +273,7 @@ fn static_length_restrictions() {
     let negative_samples = &[UnknownLen::Dynamic.into(), UnknownLen::Dynamic + 2];
     for &sample in negative_samples {
         let err = substitutions.apply_static_len(sample).unwrap_err();
-        assert_matches!(err, TypeErrorKind::DynamicLen(_));
+        assert_matches!(err, ErrorKind::DynamicLen(_));
     }
 }
 
@@ -280,7 +287,7 @@ fn marking_length_as_static_and_then_failing_unification() {
         (UnknownLen::Dynamic.into(), UnknownLen::free_var(0) + 1),
     ];
     for &(lhs, rhs) in positive_samples {
-        substitutions.unify_lengths(lhs, rhs, Assignment).unwrap();
+        unify_lengths(&mut substitutions, lhs, rhs).unwrap();
         assert!(substitutions.length_eqs.is_empty());
     }
 
@@ -290,10 +297,8 @@ fn marking_length_as_static_and_then_failing_unification() {
         (UnknownLen::free_var(0) + 1, UnknownLen::Dynamic + 2),
     ];
     for &(lhs, rhs) in failing_samples {
-        let err = substitutions
-            .unify_lengths(lhs, rhs, Assignment)
-            .unwrap_err();
-        assert_matches!(err, TypeErrorKind::DynamicLen(_));
+        let err = unify_lengths(&mut substitutions, lhs, rhs).unwrap_err();
+        assert_matches!(err, ErrorKind::DynamicLen(_));
     }
 }
 
@@ -301,26 +306,24 @@ fn marking_length_as_static_and_then_failing_unification() {
 fn marking_length_as_static_and_then_propagating() {
     let mut substitutions = Substitutions::<Num>::default();
     substitutions.static_lengths.insert(0);
-    substitutions
-        .unify_lengths(
-            UnknownLen::free_var(1).into(),
-            UnknownLen::free_var(0).into(),
-            Assignment,
-        )
-        .unwrap();
+    unify_lengths(
+        &mut substitutions,
+        UnknownLen::free_var(1).into(),
+        UnknownLen::free_var(0).into(),
+    )
+    .unwrap();
 
     assert_eq!(substitutions.length_eqs[&1], UnknownLen::free_var(0).into());
     assert_eq!(substitutions.static_lengths.len(), 1);
 
     let mut substitutions = Substitutions::<Num>::default();
     substitutions.static_lengths.insert(0);
-    substitutions
-        .unify_lengths(
-            UnknownLen::free_var(0).into(),
-            UnknownLen::free_var(1).into(),
-            Assignment,
-        )
-        .unwrap();
+    unify_lengths(
+        &mut substitutions,
+        UnknownLen::free_var(0).into(),
+        UnknownLen::free_var(1).into(),
+    )
+    .unwrap();
 
     assert_eq!(substitutions.length_eqs[&0], UnknownLen::free_var(1).into());
     assert!(substitutions.static_lengths.contains(&1));

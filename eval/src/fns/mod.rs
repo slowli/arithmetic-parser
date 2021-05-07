@@ -854,12 +854,10 @@ impl<T> NativeFn<T> for Compare {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{alloc::ToOwned, Environment, ExecutableModule, WildcardId};
+    use crate::{Environment, ExecutableModule, WildcardId};
 
     use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
     use assert_matches::assert_matches;
-
-    use core::f32;
 
     #[test]
     fn if_basic() {
@@ -993,7 +991,7 @@ mod tests {
         let test_block = Untyped::<F32Grammar>::parse_statements("xs.reverse()").unwrap();
         let mut test_module = ExecutableModule::builder("test", &test_block)
             .unwrap()
-            .with_import("reverse", env["reverse"].to_owned())
+            .with_import("reverse", env["reverse"].clone())
             .set_imports(|_| Value::void());
 
         for &(input, expected) in SAMPLES {

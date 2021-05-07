@@ -3,7 +3,9 @@
 use std::{fmt, ops, str::FromStr};
 
 use crate::{
-    arith::OpConstraintSettings, PrimitiveType, Slice, Substitutions, TypeErrorKind, ValueType,
+    arith::OpConstraintSettings,
+    error::{ErrorKind, OpErrors},
+    PrimitiveType, Slice, Substitutions, Type,
 };
 
 /// Container for constraints that can be placed on type variables.
@@ -59,9 +61,10 @@ where
     /// by recursively traversing and resolving the provided type.
     fn apply(
         &self,
-        ty: &ValueType<Prim>,
+        ty: &Type<Prim>,
         substitutions: &mut Substitutions<Prim>,
-    ) -> Result<(), TypeErrorKind<Prim>>;
+        errors: OpErrors<'_, Prim>,
+    );
 }
 
 /// Numeric constraints. In particular, this is [`TypeConstraints`] associated
@@ -138,15 +141,16 @@ impl<Prim: LinearType> TypeConstraints<Prim> for NumConstraints {
     // TODO: extract common logic for it to be reusable?
     fn apply(
         &self,
-        ty: &ValueType<Prim>,
+        ty: &Type<Prim>,
         substitutions: &mut Substitutions<Prim>,
-    ) -> Result<(), TypeErrorKind<Prim>> {
+        mut errors: OpErrors<'_, Prim>,
+    ) {
         if *self == Self::None {
             // The default constraint: does nothing.
-            return Ok(());
+            return;
         }
 
-        let resolved_ty = if let ValueType::Var(var) = ty {
+        let resolved_ty = if let Type::Var(var) = ty {
             debug_assert!(var.is_free());
             substitutions.insert_constraints(var.index(), self);
             substitutions.fast_resolve(ty)
@@ -155,32 +159,29 @@ impl<Prim: LinearType> TypeConstraints<Prim> for NumConstraints {
         };
 
         match resolved_ty {
-            ValueType::Some => unreachable!(),
-
             // `Var`s are taken care of previously. `Any` satisfies any constraints.
-            ValueType::Any(_) | ValueType::Var(_) => Ok(()),
+            Type::Any(_) | Type::Var(_) => {}
+            Type::Prim(lit) if lit.is_linear() => {}
 
-            ValueType::Prim(lit) if lit.is_linear() => Ok(()),
+            Type::Function(_) | Type::Prim(_) => {
+                errors.push(ErrorKind::failed_constraint(resolved_ty.clone(), *self));
+            }
 
-            ValueType::Function(_) | ValueType::Prim(_) => Err(TypeErrorKind::failed_constraint(
-                ty.to_owned(),
-                self.to_owned(),
-            )),
-
-            ValueType::Tuple(tuple) => {
-                let tuple = tuple.to_owned();
+            Type::Tuple(tuple) => {
+                let tuple = tuple.clone();
 
                 if *self == Self::Ops {
                     let middle_len = tuple.parts().1.map(Slice::len);
                     if let Some(middle_len) = middle_len {
-                        substitutions.apply_static_len(middle_len)?;
+                        if let Err(err) = substitutions.apply_static_len(middle_len) {
+                            errors.push(err);
+                        }
                     }
                 }
 
-                for element in tuple.element_types() {
-                    self.apply(element, substitutions)?;
+                for (i, element) in tuple.element_types() {
+                    self.apply(element, substitutions, errors.with_location(i));
                 }
-                Ok(())
             }
         }
     }
@@ -206,7 +207,7 @@ impl FromStr for NoConstraints {
 
 impl ops::BitOrAssign<&Self> for NoConstraints {
     fn bitor_assign(&mut self, _rhs: &Self) {
-        // does nothing
+        // Do nothing
     }
 }
 
@@ -216,9 +217,10 @@ where
 {
     fn apply(
         &self,
-        _ty: &ValueType<Prim>,
+        _ty: &Type<Prim>,
         _substitutions: &mut Substitutions<Prim>,
-    ) -> Result<(), TypeErrorKind<Prim>> {
-        Ok(())
+        _errors: OpErrors<'_, Prim>,
+    ) {
+        // Do nothing
     }
 }

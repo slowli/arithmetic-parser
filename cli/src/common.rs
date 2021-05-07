@@ -368,7 +368,7 @@ impl<T: ReplLiteral> Env<T> {
         Ok(())
     }
 
-    pub fn parse<'a, P: Parse>(
+    pub fn parse<'a, P: Parse<'a>>(
         &mut self,
         line: &'a str,
     ) -> io::Result<ParseAndEvalResult<Block<'a, P::Base>>> {
@@ -426,12 +426,12 @@ impl<T: ReplLiteral> Env<T> {
         Ok(())
     }
 
-    fn compile_and_execute<G>(
+    fn compile_and_execute<'a, G>(
         &mut self,
-        statements: &Block<'_, G>,
+        statements: &Block<'a, G>,
     ) -> io::Result<ParseAndEvalResult>
     where
-        G: Grammar<Lit = T>,
+        G: Grammar<'a, Lit = T>,
     {
         let module_id = self.code_map.latest_module_id();
         let module = match self.env.compile_module(module_id, statements) {

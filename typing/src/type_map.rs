@@ -1,6 +1,6 @@
 //! `TypeMap` trait and standard implementations.
 
-use crate::{arith::WithBoolean, FnType, UnknownLen, ValueType};
+use crate::{arith::WithBoolean, FnType, Type, UnknownLen};
 
 /// Map containing type definitions for all variables from `Prelude` in the eval crate,
 /// except for `loop` function.
@@ -18,7 +18,7 @@ use crate::{arith::WithBoolean, FnType, UnknownLen, ValueType};
 ///
 /// ```
 /// use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-/// use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, ValueType};
+/// use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, Type};
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// type Parser = Typed<Annotated<NumGrammar<f32>>>;
@@ -36,7 +36,7 @@ use crate::{arith::WithBoolean, FnType, UnknownLen, ValueType};
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-/// # use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, ValueType, TypeErrorKind};
+/// # use arithmetic_typing::{ErrorKind, Annotated, Prelude, TypeEnvironment, Type};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// type Parser = Typed<Annotated<NumGrammar<f32>>>;
@@ -49,9 +49,11 @@ use crate::{arith::WithBoolean, FnType, UnknownLen, ValueType};
 /// let ast = Parser::parse_statements(code)?;
 ///
 /// let mut env: TypeEnvironment = Prelude::iter().collect();
-/// let err = env.process_statements(&ast).unwrap_err();
-/// assert_eq!(*err.span().fragment(), "(_, _, _, z) = slice");
-/// # assert_matches!(err.kind(), TypeErrorKind::TupleLenMismatch { .. });
+/// let errors = env.process_statements(&ast).unwrap_err();
+/// assert_eq!(errors.len(), 1);
+/// let err = errors.iter().next().unwrap();
+/// assert_eq!(*err.span().fragment(), "(_, _, _, z)");
+/// # assert_matches!(err.kind(), ErrorKind::TupleLenMismatch { .. });
 /// # Ok(())
 /// # }
 /// ```
@@ -78,83 +80,83 @@ pub enum Prelude {
     Merge,
 }
 
-impl<Prim: WithBoolean> From<Prelude> for ValueType<Prim> {
+impl<Prim: WithBoolean> From<Prelude> for Type<Prim> {
     fn from(value: Prelude) -> Self {
         match value {
-            Prelude::True | Prelude::False => ValueType::BOOL,
+            Prelude::True | Prelude::False => Type::BOOL,
 
             Prelude::If => FnType::builder()
-                .with_arg(ValueType::BOOL)
-                .with_arg(ValueType::param(0))
-                .with_arg(ValueType::param(0))
-                .returning(ValueType::param(0))
+                .with_arg(Type::BOOL)
+                .with_arg(Type::param(0))
+                .with_arg(Type::param(0))
+                .returning(Type::param(0))
                 .into(),
 
             Prelude::While => {
                 let condition_fn = FnType::builder()
-                    .with_arg(ValueType::param(0))
-                    .returning(ValueType::BOOL);
+                    .with_arg(Type::param(0))
+                    .returning(Type::BOOL);
                 let iter_fn = FnType::builder()
-                    .with_arg(ValueType::param(0))
-                    .returning(ValueType::param(0));
+                    .with_arg(Type::param(0))
+                    .returning(Type::param(0));
 
                 FnType::builder()
-                    .with_arg(ValueType::param(0)) // state
+                    .with_arg(Type::param(0)) // state
                     .with_arg(condition_fn)
                     .with_arg(iter_fn)
-                    .returning(ValueType::param(0))
+                    .returning(Type::param(0))
                     .into()
             }
 
             Prelude::Map => {
                 let map_arg = FnType::builder()
-                    .with_arg(ValueType::param(0))
-                    .returning(ValueType::param(1));
+                    .with_arg(Type::param(0))
+                    .returning(Type::param(1));
 
                 FnType::builder()
-                    .with_arg(ValueType::param(0).repeat(UnknownLen::param(0)))
+                    .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
                     .with_arg(map_arg)
-                    .returning(ValueType::param(1).repeat(UnknownLen::param(0)))
+                    .returning(Type::param(1).repeat(UnknownLen::param(0)))
                     .into()
             }
 
             Prelude::Filter => {
                 let predicate_arg = FnType::builder()
-                    .with_arg(ValueType::param(0))
-                    .returning(ValueType::BOOL);
+                    .with_arg(Type::param(0))
+                    .returning(Type::BOOL);
 
                 FnType::builder()
-                    .with_arg(ValueType::param(0).repeat(UnknownLen::Dynamic))
+                    .with_arg(Type::param(0).repeat(UnknownLen::Dynamic))
                     .with_arg(predicate_arg)
-                    .returning(ValueType::param(0).repeat(UnknownLen::Dynamic))
+                    .returning(Type::param(0).repeat(UnknownLen::Dynamic))
                     .into()
             }
 
             Prelude::Fold => {
                 // 0th type param is slice element, 1st is accumulator
                 let fold_arg = FnType::builder()
-                    .with_arg(ValueType::param(1))
-                    .with_arg(ValueType::param(0))
-                    .returning(ValueType::param(1));
+                    .with_arg(Type::param(1))
+                    .with_arg(Type::param(0))
+                    .returning(Type::param(1));
 
                 FnType::builder()
-                    .with_arg(ValueType::param(0).repeat(UnknownLen::Dynamic))
-                    .with_arg(ValueType::param(1))
+                    .with_arg(Type::param(0).repeat(UnknownLen::Dynamic))
+                    .with_arg(Type::param(1))
                     .with_arg(fold_arg)
-                    .returning(ValueType::param(1))
+                    .returning(Type::param(1))
                     .into()
             }
 
             Prelude::Push => FnType::builder()
-                .with_arg(ValueType::param(0).repeat(UnknownLen::param(0)))
-                .with_arg(ValueType::param(0))
-                .returning(ValueType::param(0).repeat(UnknownLen::param(0) + 1))
+                .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
+                .with_arg(Type::param(0))
+                .returning(Type::param(0).repeat(UnknownLen::param(0) + 1))
                 .into(),
 
             Prelude::Merge => FnType::builder()
-                .with_arg(ValueType::param(0).repeat(UnknownLen::Dynamic))
-                .with_arg(ValueType::param(0).repeat(UnknownLen::Dynamic))
-                .returning(ValueType::param(0).repeat(UnknownLen::Dynamic))
+                .with_arg(Type::param(0).repeat(UnknownLen::Dynamic))
+                .with_arg(Type::param(0).repeat(UnknownLen::Dynamic))
+                .returning(Type::param(0).repeat(UnknownLen::Dynamic))
                 .into(),
         }
     }
@@ -188,7 +190,7 @@ impl Prelude {
     }
 
     /// Returns an iterator over all type definitions in the `Prelude`.
-    pub fn iter<Prim: WithBoolean>() -> impl Iterator<Item = (&'static str, ValueType<Prim>)> {
+    pub fn iter<Prim: WithBoolean>() -> impl Iterator<Item = (&'static str, Type<Prim>)> {
         Self::VALUES
             .iter()
             .map(|&value| (value.as_str(), value.into()))
@@ -205,17 +207,17 @@ pub enum Assertions {
     AssertEq,
 }
 
-impl<Prim: WithBoolean> From<Assertions> for ValueType<Prim> {
+impl<Prim: WithBoolean> From<Assertions> for Type<Prim> {
     fn from(value: Assertions) -> Self {
         match value {
             Assertions::Assert => FnType::builder()
-                .with_arg(ValueType::BOOL)
-                .returning(ValueType::void())
+                .with_arg(Type::BOOL)
+                .returning(Type::void())
                 .into(),
             Assertions::AssertEq => FnType::builder()
-                .with_arg(ValueType::param(0))
-                .with_arg(ValueType::param(0))
-                .returning(ValueType::void())
+                .with_arg(Type::param(0))
+                .with_arg(Type::param(0))
+                .returning(Type::void())
                 .into(),
         }
     }
@@ -232,7 +234,7 @@ impl Assertions {
     }
 
     /// Returns an iterator over all type definitions in `Assertions`.
-    pub fn iter<Prim: WithBoolean>() -> impl Iterator<Item = (&'static str, ValueType<Prim>)> {
+    pub fn iter<Prim: WithBoolean>() -> impl Iterator<Item = (&'static str, Type<Prim>)> {
         Self::VALUES.iter().map(|&val| (val.as_str(), val.into()))
     }
 }

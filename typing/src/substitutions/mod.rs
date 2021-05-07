@@ -8,9 +8,9 @@ use std::{
 
 use crate::{
     arith::TypeConstraints,
+    error::{ErrorKind, ErrorLocation, OpErrors, TupleContext},
     visit::{self, Visit, VisitMut},
-    FnType, PrimitiveType, Tuple, TupleLen, TupleLenMismatchContext, TypeErrorKind, TypeVar,
-    UnknownLen, ValueType,
+    FnType, PrimitiveType, Tuple, TupleLen, Type, TypeVar, UnknownLen,
 };
 
 mod fns;
@@ -32,7 +32,7 @@ pub struct Substitutions<Prim: PrimitiveType> {
     /// Number of type variables.
     type_var_count: usize,
     /// Type variable equations, encoded as `type_var[key] = value`.
-    eqs: HashMap<usize, ValueType<Prim>>,
+    eqs: HashMap<usize, Type<Prim>>,
     /// Constraints on type variables.
     constraints: HashMap<usize, Prim::Constraints>,
     /// Number of length variables.
@@ -69,11 +69,11 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     /// Returns type var indexes that are equivalent to the provided `var_idx`,
     /// including `var_idx` itself.
     fn equivalent_vars(&self, var_idx: usize) -> Vec<usize> {
-        let ty = ValueType::free_var(var_idx);
+        let ty = Type::free_var(var_idx);
         let mut ty = &ty;
         let mut equivalent_vars = vec![];
 
-        while let ValueType::Var(var) = ty {
+        while let Type::Var(var) = ty {
             debug_assert!(var.is_free());
             equivalent_vars.push(var.index());
             if let Some(resolved) = self.eqs.get(&var.index()) {
@@ -87,12 +87,12 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
     /// Marks `len` as static, i.e., not containing [`UnknownLen::Dynamic`] components.
     #[allow(clippy::missing_panics_doc)]
-    pub fn apply_static_len(&mut self, len: TupleLen) -> Result<(), TypeErrorKind<Prim>> {
+    pub fn apply_static_len(&mut self, len: TupleLen) -> Result<(), ErrorKind<Prim>> {
         let resolved = self.resolve_len(len);
         self.apply_static_len_inner(resolved)
             .map_err(|err| match err {
-                LenErrorKind::UnresolvedParam => TypeErrorKind::UnresolvedParam,
-                LenErrorKind::Dynamic(len) => TypeErrorKind::DynamicLen(len),
+                LenErrorKind::UnresolvedParam => ErrorKind::UnresolvedParam,
+                LenErrorKind::Dynamic(len) => ErrorKind::DynamicLen(len),
                 LenErrorKind::Mismatch => unreachable!(),
             })
     }
@@ -101,7 +101,6 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     fn apply_static_len_inner(&mut self, len: TupleLen) -> Result<(), LenErrorKind> {
         match len.components().0 {
             None => Ok(()),
-            Some(UnknownLen::Some) => Err(LenErrorKind::UnresolvedParam),
             Some(UnknownLen::Dynamic) => Err(LenErrorKind::Dynamic(len)),
             Some(UnknownLen::Var(var)) => {
                 if var.is_free() {
@@ -115,8 +114,8 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     }
 
     /// Resolves the type by following established equality links between type variables.
-    pub fn fast_resolve<'a>(&'a self, mut ty: &'a ValueType<Prim>) -> &'a ValueType<Prim> {
-        while let ValueType::Var(var) = ty {
+    pub fn fast_resolve<'a>(&'a self, mut ty: &'a Type<Prim>) -> &'a Type<Prim> {
+        while let Type::Var(var) = ty {
             if !var.is_free() {
                 // Bound variables cannot be resolved further.
                 break;
@@ -146,7 +145,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             }
 
             if let Some(eq_rhs) = self.length_eqs.get(&var.index()) {
-                resolved = eq_rhs.to_owned() + exact;
+                resolved = *eq_rhs + exact;
             } else {
                 break;
             }
@@ -154,23 +153,18 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         resolved
     }
 
-    pub(crate) fn assign_new_type(
-        &mut self,
-        ty: &mut ValueType<Prim>,
-    ) -> Result<(), TypeErrorKind<Prim>> {
-        let mut assigner = TypeAssigner {
-            substitutions: self,
-            outcome: Ok(()),
-        };
-        assigner.visit_type_mut(ty);
-        assigner.outcome
+    /// Creates and returns a new type variable.
+    pub(crate) fn new_type_var(&mut self) -> Type<Prim> {
+        let new_type = Type::free_var(self.type_var_count);
+        self.type_var_count += 1;
+        new_type
     }
 
-    pub(crate) fn assign_new_len(&mut self, len: &mut TupleLen) {
-        if let Some(target_len @ UnknownLen::Some) = len.components_mut().0 {
-            *target_len = UnknownLen::free_var(self.len_var_count);
-            self.len_var_count += 1;
-        }
+    /// Creates and returns a new length variable
+    pub(crate) fn new_len_var(&mut self) -> UnknownLen {
+        let new_length = UnknownLen::free_var(self.len_var_count);
+        self.len_var_count += 1;
+        new_length
     }
 
     /// Unifies types in `lhs` and `rhs`.
@@ -178,16 +172,10 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     /// - LHS corresponds to the lvalue in assignments and to called function signature in fn calls.
     /// - RHS corresponds to the rvalue in assignments and to the type of the called function.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if unification is impossible.
-    pub fn unify(
-        &mut self,
-        lhs: &ValueType<Prim>,
-        rhs: &ValueType<Prim>,
-    ) -> Result<(), TypeErrorKind<Prim>> {
-        let resolved_lhs = self.fast_resolve(lhs).to_owned();
-        let resolved_rhs = self.fast_resolve(rhs).to_owned();
+    /// If unification is impossible, the corresponding error(s) will be put into `errors`.
+    pub fn unify(&mut self, lhs: &Type<Prim>, rhs: &Type<Prim>, mut errors: OpErrors<'_, Prim>) {
+        let resolved_lhs = self.fast_resolve(lhs).clone();
+        let resolved_rhs = self.fast_resolve(rhs).clone();
 
         // **NB.** LHS and RHS should never switch sides; the side is important for
         // accuracy of error reporting, and for some cases of type inference (e.g.,
@@ -195,46 +183,45 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         match (&resolved_lhs, &resolved_rhs) {
             // Variables should be assigned *before* the equality check and dealing with `Any`
             // to account for `Var <- Any` assignment.
-            (ValueType::Var(var), ty) => {
+            (Type::Var(var), ty) => {
                 if var.is_free() {
-                    self.unify_var(var.index(), ty, true)
+                    self.unify_var(var.index(), ty, true, errors);
                 } else {
-                    Err(TypeErrorKind::UnresolvedParam)
+                    errors.push(ErrorKind::UnresolvedParam);
                 }
             }
-            (ty, ValueType::Var(var)) => {
+            (ty, Type::Var(var)) => {
                 if var.is_free() {
-                    self.unify_var(var.index(), ty, false)
+                    self.unify_var(var.index(), ty, false, errors);
                 } else {
-                    Err(TypeErrorKind::UnresolvedParam)
+                    errors.push(ErrorKind::UnresolvedParam);
                 }
             }
 
-            (ValueType::Any(constraints), ty) | (ty, ValueType::Any(constraints)) => {
-                self.unify_any(constraints, ty)
+            (Type::Any(constraints), ty) | (ty, Type::Any(constraints)) => {
+                constraints.apply(ty, self, errors);
             }
 
             // This takes care of `Any` types because they are equal to anything.
             (ty, other_ty) if ty == other_ty => {
                 // We already know that types are equal.
-                Ok(())
             }
 
-            (ValueType::Tuple(lhs_tuple), ValueType::Tuple(rhs_tuple)) => {
-                self.unify_tuples(lhs_tuple, rhs_tuple, TupleLenMismatchContext::Assignment)
+            (Type::Tuple(lhs_tuple), Type::Tuple(rhs_tuple)) => {
+                self.unify_tuples(lhs_tuple, rhs_tuple, TupleContext::Generic, errors)
             }
 
-            (ValueType::Function(lhs_fn), ValueType::Function(rhs_fn)) => {
-                self.unify_fn_types(lhs_fn, rhs_fn)
+            (Type::Function(lhs_fn), Type::Function(rhs_fn)) => {
+                self.unify_fn_types(lhs_fn, rhs_fn, errors)
             }
 
             (ty, other_ty) => {
                 let mut resolver = self.resolver();
-                let mut ty = ty.to_owned();
+                let mut ty = ty.clone();
                 resolver.visit_type_mut(&mut ty);
-                let mut other_ty = other_ty.to_owned();
+                let mut other_ty = other_ty.clone();
                 resolver.visit_type_mut(&mut other_ty);
-                Err(TypeErrorKind::TypeMismatch(ty, other_ty))
+                errors.push(ErrorKind::TypeMismatch(ty, other_ty));
             }
         }
     }
@@ -243,22 +230,93 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         &mut self,
         lhs: &Tuple<Prim>,
         rhs: &Tuple<Prim>,
-        context: TupleLenMismatchContext,
-    ) -> Result<(), TypeErrorKind<Prim>> {
-        let resolved_len = self.unify_lengths(lhs.len(), rhs.len(), context)?;
+        context: TupleContext,
+        mut errors: OpErrors<'_, Prim>,
+    ) {
+        let resolved_len = self.unify_lengths(lhs.len(), rhs.len(), context);
+        let resolved_len = match resolved_len {
+            Ok(len) => len,
+            Err(err) => {
+                self.unify_tuples_after_error(lhs, rhs, &err, context, errors.by_ref());
+                errors.push(err);
+                return;
+            }
+        };
 
         if let (None, exact) = resolved_len.components() {
-            for (lhs_elem, rhs_elem) in lhs.equal_elements_static(rhs, exact) {
-                self.unify(lhs_elem, rhs_elem)?;
-            }
+            self.unify_tuple_elements(lhs.iter(exact), rhs.iter(exact), context, errors);
         } else {
-            // FIXME: is this always applicable?
+            // TODO: is this always applicable?
             for (lhs_elem, rhs_elem) in lhs.equal_elements_dyn(rhs) {
-                self.unify(lhs_elem, rhs_elem)?;
+                let elem_errors = errors.with_location(match context {
+                    TupleContext::Generic => ErrorLocation::TupleElement(None),
+                    TupleContext::FnArgs => ErrorLocation::FnArg(None),
+                });
+                self.unify(lhs_elem, rhs_elem, elem_errors);
             }
         }
+    }
 
-        Ok(())
+    #[inline]
+    fn unify_tuple_elements<'it>(
+        &mut self,
+        lhs_elements: impl Iterator<Item = &'it Type<Prim>>,
+        rhs_elements: impl Iterator<Item = &'it Type<Prim>>,
+        context: TupleContext,
+        mut errors: OpErrors<'_, Prim>,
+    ) {
+        for (i, (lhs_elem, rhs_elem)) in lhs_elements.zip(rhs_elements).enumerate() {
+            let location = context.element(i);
+            self.unify(lhs_elem, rhs_elem, errors.with_location(location));
+        }
+    }
+
+    /// Tries to unify tuple elements after an error has occurred when unifying their lengths.
+    fn unify_tuples_after_error(
+        &mut self,
+        lhs: &Tuple<Prim>,
+        rhs: &Tuple<Prim>,
+        err: &ErrorKind<Prim>,
+        context: TupleContext,
+        errors: OpErrors<'_, Prim>,
+    ) {
+        let (lhs_len, rhs_len) = match err {
+            ErrorKind::TupleLenMismatch {
+                lhs: lhs_len,
+                rhs: rhs_len,
+                ..
+            } => (*lhs_len, *rhs_len),
+            _ => return,
+        };
+        let (lhs_var, lhs_exact) = lhs_len.components();
+        let (rhs_var, rhs_exact) = rhs_len.components();
+
+        match (lhs_var, rhs_var) {
+            (None, None) => {
+                // We've attempted to unify tuples with different known lengths.
+                // Iterate over common elements and unify them.
+                debug_assert_ne!(lhs_exact, rhs_exact);
+                self.unify_tuple_elements(
+                    lhs.iter(lhs_exact),
+                    rhs.iter(rhs_exact),
+                    context,
+                    errors,
+                );
+            }
+
+            (None, Some(UnknownLen::Dynamic)) => {
+                // We've attempted to unify static LHS with a dynamic RHS
+                // e.g., `(x, y) = filter(...)`.
+                self.unify_tuple_elements(
+                    lhs.iter(lhs_exact),
+                    rhs.iter(rhs_exact),
+                    context,
+                    errors,
+                );
+            }
+
+            _ => { /* Do nothing. */ }
+        }
     }
 
     /// Returns the resolved length that `lhs` and `rhs` are equal to.
@@ -266,20 +324,20 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         &mut self,
         lhs: TupleLen,
         rhs: TupleLen,
-        context: TupleLenMismatchContext,
-    ) -> Result<TupleLen, TypeErrorKind<Prim>> {
+        context: TupleContext,
+    ) -> Result<TupleLen, ErrorKind<Prim>> {
         let resolved_lhs = self.resolve_len(lhs);
         let resolved_rhs = self.resolve_len(rhs);
 
         self.unify_lengths_inner(resolved_lhs, resolved_rhs)
             .map_err(|err| match err {
-                LenErrorKind::UnresolvedParam => TypeErrorKind::UnresolvedParam,
-                LenErrorKind::Mismatch => TypeErrorKind::TupleLenMismatch {
+                LenErrorKind::UnresolvedParam => ErrorKind::UnresolvedParam,
+                LenErrorKind::Mismatch => ErrorKind::TupleLenMismatch {
                     lhs: resolved_lhs,
                     rhs: resolved_rhs,
                     context,
                 },
-                LenErrorKind::Dynamic(len) => TypeErrorKind::DynamicLen(len),
+                LenErrorKind::Dynamic(len) => ErrorKind::DynamicLen(len),
             })
     }
 
@@ -347,7 +405,6 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     ) -> Result<TupleLen, LenErrorKind> {
         // Check that the source is valid.
         match source.components() {
-            (Some(UnknownLen::Some), _) => Err(LenErrorKind::UnresolvedParam),
             (Some(UnknownLen::Var(var)), _) if !var.is_free() => Err(LenErrorKind::UnresolvedParam),
 
             // Special case is uniting a var with self.
@@ -391,9 +448,11 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         &mut self,
         lhs: &FnType<Prim>,
         rhs: &FnType<Prim>,
-    ) -> Result<(), TypeErrorKind<Prim>> {
+        mut errors: OpErrors<'_, Prim>,
+    ) {
         if lhs.is_parametric() {
-            return Err(TypeErrorKind::UnsupportedParam);
+            errors.push(ErrorKind::UnsupportedParam);
+            return;
         }
 
         let instantiated_lhs = self.instantiate_function(lhs);
@@ -408,10 +467,15 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         self.unify_tuples(
             &instantiated_rhs.args,
             &instantiated_lhs.args,
-            TupleLenMismatchContext::FnArgs,
-        )?;
+            TupleContext::FnArgs,
+            errors.by_ref(),
+        );
 
-        self.unify(&instantiated_lhs.return_type, &instantiated_rhs.return_type)
+        self.unify(
+            &instantiated_lhs.return_type,
+            &instantiated_rhs.return_type,
+            errors.with_location(ErrorLocation::FnReturnType),
+        );
     }
 
     /// Instantiates a functional type by replacing all type arguments with new type vars.
@@ -459,25 +523,23 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     }
 
     /// Unifies a type variable with the specified index and the specified type.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the unification is impossible.
     fn unify_var(
         &mut self,
         var_idx: usize,
-        ty: &ValueType<Prim>,
+        ty: &Type<Prim>,
         is_lhs: bool,
-    ) -> Result<(), TypeErrorKind<Prim>> {
-        if let ValueType::Var(var) = ty {
+        mut errors: OpErrors<'_, Prim>,
+    ) {
+        if let Type::Var(var) = ty {
             if !var.is_free() {
-                return Err(TypeErrorKind::UnresolvedParam);
+                errors.push(ErrorKind::UnresolvedParam);
+                return;
             } else if var.index() == var_idx {
-                return Ok(());
+                return;
             }
         }
-        let needs_equation = if let ValueType::Any(constraints) = ty {
-            self.unify_any(constraints, &ValueType::free_var(var_idx))?;
+        let needs_equation = if let Type::Any(constraints) = ty {
+            self.constraints.insert(var_idx, constraints.to_owned());
             is_lhs
         } else {
             true
@@ -485,7 +547,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
         // variables should be resolved in `unify`.
         debug_assert!(!self.eqs.contains_key(&var_idx));
-        debug_assert!(if let ValueType::Var(var) = ty {
+        debug_assert!(if let Type::Var(var) = ty {
             !self.eqs.contains_key(&var.index())
         } else {
             true
@@ -499,16 +561,16 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         checker.visit_type(ty);
 
         if checker.is_recursive {
-            let mut resolved_ty = ty.to_owned();
+            let mut resolved_ty = ty.clone();
             self.resolver().visit_type_mut(&mut resolved_ty);
             TypeSanitizer { fixed_idx: var_idx }.visit_type_mut(&mut resolved_ty);
-            Err(TypeErrorKind::RecursiveType(resolved_ty))
+            errors.push(ErrorKind::RecursiveType(resolved_ty));
         } else {
             if let Some(constraints) = self.constraints.get(&var_idx).cloned() {
-                constraints.apply(ty, self)?;
+                constraints.apply(ty, self, errors);
             }
             if needs_equation {
-                let mut ty = ty.to_owned();
+                let mut ty = ty.clone();
                 if !is_lhs {
                     // We need to swap `any` types / lengths with new vars so that this type
                     // can be specified further.
@@ -516,32 +578,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 }
                 self.eqs.insert(var_idx, ty);
             }
-            Ok(())
         }
-    }
-
-    /// Unifies `Any(constraints)` with `ty`.
-    #[inline]
-    fn unify_any(
-        &mut self,
-        constraints: &Prim::Constraints,
-        ty: &ValueType<Prim>,
-    ) -> Result<(), TypeErrorKind<Prim>> {
-        constraints.apply(ty, self)
-    }
-
-    /// Returns the return type of the function.
-    pub(crate) fn unify_fn_call(
-        &mut self,
-        definition: &ValueType<Prim>,
-        arg_types: Vec<ValueType<Prim>>,
-    ) -> Result<ValueType<Prim>, TypeErrorKind<Prim>> {
-        let mut return_type = ValueType::Some;
-        self.assign_new_type(&mut return_type)?;
-
-        let called_fn_type = FnType::new(arg_types.into(), return_type.clone());
-        self.unify(&called_fn_type.into(), definition)
-            .map(|()| return_type)
     }
 }
 
@@ -555,7 +592,7 @@ struct OccurrenceChecker<'a, Prim: PrimitiveType> {
 }
 
 impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for OccurrenceChecker<'a, Prim> {
-    fn visit_type(&mut self, ty: &'a ValueType<Prim>) {
+    fn visit_type(&mut self, ty: &'a Type<Prim>) {
         if self.is_recursive {
             // Skip recursion; we already have our answer at this point.
         } else {
@@ -573,62 +610,19 @@ impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for OccurrenceChecker<'a, Prim> {
 }
 
 /// Removes excessive information about type vars. This method is used when types are
-/// provided to `TypeError`.
+/// provided to `Error`.
 #[derive(Debug)]
 struct TypeSanitizer {
     fixed_idx: usize,
 }
 
 impl<Prim: PrimitiveType> VisitMut<Prim> for TypeSanitizer {
-    fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
+    fn visit_type_mut(&mut self, ty: &mut Type<Prim>) {
         match ty {
-            ValueType::Var(var) if var.index() == self.fixed_idx => {
-                *ty = ValueType::param(0);
+            Type::Var(var) if var.index() == self.fixed_idx => {
+                *ty = Type::param(0);
             }
             _ => visit::visit_type_mut(self, ty),
-        }
-    }
-}
-
-/// Replaces `ValueType::Some` and `TupleLen::Some` with new variables.
-#[derive(Debug)]
-struct TypeAssigner<'a, Prim: PrimitiveType> {
-    substitutions: &'a mut Substitutions<Prim>,
-    outcome: Result<(), TypeErrorKind<Prim>>,
-}
-
-impl<Prim: PrimitiveType> VisitMut<Prim> for TypeAssigner<'_, Prim> {
-    fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
-        if self.outcome.is_err() {
-            return;
-        }
-
-        match ty {
-            ValueType::Some => {
-                *ty = ValueType::free_var(self.substitutions.type_var_count);
-                self.substitutions.type_var_count += 1;
-            }
-            _ => visit::visit_type_mut(self, ty),
-        }
-    }
-
-    fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
-        self.substitutions.assign_new_len(len);
-    }
-
-    fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {
-        if function.is_parametric() {
-            // Can occur, for example, with function declarations:
-            //
-            // ```
-            // identity: ('T) -> 'T = |x| x;
-            // ```
-            //
-            // We don't handle such cases yet, because unifying functions with type params
-            // is quite difficult.
-            self.outcome = Err(TypeErrorKind::UnsupportedParam);
-        } else {
-            visit::visit_function_mut(self, function);
         }
     }
 }
@@ -640,10 +634,10 @@ struct TypeResolver<'a, Prim: PrimitiveType> {
 }
 
 impl<Prim: PrimitiveType> VisitMut<Prim> for TypeResolver<'_, Prim> {
-    fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
+    fn visit_type_mut(&mut self, ty: &mut Type<Prim>) {
         let fast_resolved = self.substitutions.fast_resolve(ty);
         if !ptr::eq(ty, fast_resolved) {
-            *ty = fast_resolved.to_owned();
+            *ty = fast_resolved.clone();
         }
         visit::visit_type_mut(self, ty);
     }
@@ -672,6 +666,8 @@ impl ops::Not for Variance {
 
 /// Visitor that swaps `any` types / lengths with new vars, but only if they are in a covariant
 /// position (return types, args of arg functions, etc.).
+///
+/// This is used when assigning to a type containing `any`.
 #[derive(Debug)]
 struct TypeSpecifier<'a, Prim: PrimitiveType> {
     substitutions: &'a mut Substitutions<Prim>,
@@ -688,14 +684,14 @@ impl<'a, Prim: PrimitiveType> TypeSpecifier<'a, Prim> {
 }
 
 impl<Prim: PrimitiveType> VisitMut<Prim> for TypeSpecifier<'_, Prim> {
-    fn visit_type_mut(&mut self, ty: &mut ValueType<Prim>) {
-        if let ValueType::Any(constraints) = ty {
+    fn visit_type_mut(&mut self, ty: &mut Type<Prim>) {
+        if let Type::Any(constraints) = ty {
             if self.variance == Variance::Co {
                 let var_idx = self.substitutions.type_var_count;
                 self.substitutions
                     .constraints
                     .insert(var_idx, constraints.to_owned());
-                *ty = ValueType::free_var(var_idx);
+                *ty = Type::free_var(var_idx);
                 self.substitutions.type_var_count += 1;
             }
         } else {
@@ -708,9 +704,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeSpecifier<'_, Prim> {
             return;
         }
         if let (Some(var_len @ UnknownLen::Dynamic), _) = len.components_mut() {
-            let var_idx = self.substitutions.len_var_count;
-            self.substitutions.len_var_count += 1;
-            *var_len = UnknownLen::free_var(var_idx);
+            *var_len = self.substitutions.new_len_var();
         }
     }
 

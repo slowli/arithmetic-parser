@@ -1,12 +1,17 @@
 use assert_matches::assert_matches;
 
+use std::ops::Range;
+
 use super::*;
-use crate::{arith::NumConstraints, Num};
+
+fn sp<T>(input: InputSpan<'_>, range: Range<usize>, extra: T) -> Spanned<'_, T> {
+    Spanned::from_str(input.fragment(), range).copy_with_extra(extra)
+}
 
 #[test]
 fn fn_const_params() {
     let input = InputSpan::new("for<len! N>");
-    let (rest, constraints) = constraints::<Num>(input).unwrap();
+    let (rest, constraints) = constraints(input).unwrap();
 
     assert!(rest.fragment().is_empty());
     assert!(constraints.type_params.is_empty());
@@ -17,7 +22,7 @@ fn fn_const_params() {
 #[test]
 fn multiple_static_lengths() {
     let input = InputSpan::new("for<len! N, M>");
-    let (rest, constraints) = constraints::<Num>(input).unwrap();
+    let (rest, constraints) = constraints(input).unwrap();
 
     assert!(rest.fragment().is_empty());
     assert!(constraints.type_params.is_empty());
@@ -28,7 +33,7 @@ fn multiple_static_lengths() {
 #[test]
 fn type_param_constraints() {
     let input = InputSpan::new("for<'T: Lin, 'U: Lin>");
-    let (rest, constraints) = constraints::<Num>(input).unwrap();
+    let (rest, constraints) = constraints(input).unwrap();
 
     assert!(rest.fragment().is_empty());
     assert!(constraints.static_lengths.is_empty());
@@ -45,7 +50,7 @@ fn type_param_constraints() {
 #[test]
 fn mixed_constraints() {
     let input = InputSpan::new("for<len! N; 'T: Lin>");
-    let (rest, constraints) = constraints::<Num>(input).unwrap();
+    let (rest, constraints) = constraints(input).unwrap();
 
     assert!(rest.fragment().is_empty());
     assert_eq!(constraints.static_lengths.len(), 1);
@@ -69,52 +74,59 @@ fn simple_tuple() {
     assert_eq!(
         tuple.start,
         vec![
-            ValueTypeAst::Prim(Num::Num),
-            ValueTypeAst::Some,
-            ValueTypeAst::Prim(Num::Bool),
-            ValueTypeAst::Some,
+            sp(input, 1..4, TypeAst::Ident),
+            sp(input, 6..7, TypeAst::Some),
+            sp(input, 9..13, TypeAst::Ident),
+            sp(input, 15..16, TypeAst::Some),
         ]
     );
 }
 
 #[derive(Debug)]
 struct TupleSample {
-    input: &'static str,
-    start: &'static [ValueTypeAst<'static>],
-    middle_element: ValueTypeAst<'static>,
-    end: &'static [ValueTypeAst<'static>],
+    input: InputSpan<'static>,
+    start: Vec<SpannedTypeAst<'static>>,
+    middle_element: SpannedTypeAst<'static>,
+    end: Vec<SpannedTypeAst<'static>>,
 }
 
 #[test]
 fn complex_tuples() {
-    const SAMPLES: &[TupleSample] = &[
+    let first_input = InputSpan::new("(Num, _, ...[Bool; _])");
+    let second_input = InputSpan::new("(...[Bool; _], Num)");
+    let third_input = InputSpan::new("(_, ...[Bool; _], Num)");
+
+    let samples = &[
         TupleSample {
-            input: "(Num, _, ...[Bool; _])",
-            start: &[ValueTypeAst::Prim(Num::Num), ValueTypeAst::Some],
-            middle_element: ValueTypeAst::Prim(Num::Bool),
-            end: &[],
+            input: first_input,
+            start: vec![
+                sp(first_input, 1..4, TypeAst::Ident),
+                sp(first_input, 6..7, TypeAst::Some),
+            ],
+            middle_element: sp(first_input, 13..17, TypeAst::Ident),
+            end: vec![],
         },
         TupleSample {
-            input: "(...[Bool; _], Num)",
-            start: &[],
-            middle_element: ValueTypeAst::Prim(Num::Bool),
-            end: &[ValueTypeAst::Prim(Num::Num)],
+            input: second_input,
+            start: vec![],
+            middle_element: sp(second_input, 5..9, TypeAst::Ident),
+            end: vec![sp(second_input, 15..18, TypeAst::Ident)],
         },
         TupleSample {
-            input: "(_, ...[Bool; _], Num)",
-            start: &[ValueTypeAst::Some],
-            middle_element: ValueTypeAst::Prim(Num::Bool),
-            end: &[ValueTypeAst::Prim(Num::Num)],
+            input: third_input,
+            start: vec![sp(third_input, 1..2, TypeAst::Some)],
+            middle_element: sp(third_input, 8..12, TypeAst::Ident),
+            end: vec![sp(third_input, 18..21, TypeAst::Ident)],
         },
     ];
 
-    for sample in SAMPLES {
-        let input = InputSpan::new(sample.input);
+    for sample in samples {
+        let input = sample.input;
         let (rest, tuple) = tuple_definition(input).unwrap();
 
         assert!(rest.fragment().is_empty());
         assert_eq!(tuple.start, sample.start);
-        assert_eq!(*tuple.middle.unwrap().element, sample.middle_element);
+        assert_eq!(*tuple.middle.unwrap().extra.element, sample.middle_element);
         assert_eq!(tuple.end, sample.end);
     }
 }
@@ -122,27 +134,24 @@ fn complex_tuples() {
 #[test]
 fn embedded_complex_tuple() {
     let input = InputSpan::new("(Num, ...[Num; _], (...['T; N], () -> 'T))");
-    let (rest, tuple) = tuple_definition::<Num>(input).unwrap();
+    let (rest, tuple) = tuple_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_eq!(tuple.start, &[ValueTypeAst::Prim(Num::Num)]);
+    assert_eq!(tuple.start.as_slice(), [sp(input, 1..4, TypeAst::Ident)]);
     let middle = tuple.middle.unwrap();
-    assert_eq!(*middle.element, ValueTypeAst::Prim(Num::Num));
+    assert_eq!(*middle.extra.element, sp(input, 10..13, TypeAst::Ident));
     assert_eq!(tuple.end.len(), 1);
 
-    let embedded_tuple = match &tuple.end[0] {
-        ValueTypeAst::Tuple(tuple) => tuple,
+    let embedded_tuple = match &tuple.end[0].extra {
+        TypeAst::Tuple(tuple) => tuple,
         other => panic!("Unexpected tuple end: {:?}", other),
     };
     assert!(embedded_tuple.start.is_empty());
-    assert_matches!(
-        *embedded_tuple.middle.as_ref().unwrap().element,
-        ValueTypeAst::Param(id) if *id.fragment() == "T"
+    assert_eq!(
+        *embedded_tuple.middle.as_ref().unwrap().extra.element,
+        sp(input, 24..26, TypeAst::Param)
     );
-    assert_matches!(
-        embedded_tuple.end.as_slice(),
-        [ValueTypeAst::Function { .. }]
-    );
+    assert_matches!(embedded_tuple.end[0].extra, TypeAst::Function { .. });
 }
 
 #[test]
@@ -151,18 +160,18 @@ fn simple_slice_with_length() {
     let (rest, slice) = slice_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_eq!(*slice.element, ValueTypeAst::Prim(Num::Num));
-    assert_matches!(slice.length, TupleLenAst::Ident(ident) if *ident.fragment() == "N");
+    assert_matches!(slice.element.extra, TypeAst::Ident);
+    assert_eq!(slice.length, sp(input, 6..7, TupleLenAst::Ident));
 }
 
 #[test]
 fn simple_slice_without_length() {
     let input = InputSpan::new("['T]");
-    let (rest, slice) = slice_definition::<Num>(input).unwrap();
+    let (rest, slice) = slice_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_matches!(*slice.element, ValueTypeAst::Param(ident) if *ident.fragment() == "T");
-    assert_eq!(slice.length, TupleLenAst::Dynamic);
+    assert_matches!(slice.element.extra, TypeAst::Param);
+    assert_eq!(slice.length, sp(input, 3..3, TupleLenAst::Dynamic));
 }
 
 #[test]
@@ -172,31 +181,34 @@ fn complex_slice_type() {
 
     assert!(rest.fragment().is_empty());
     assert_eq!(
-        *slice.element,
-        ValueTypeAst::Tuple(TupleAst {
-            start: vec![ValueTypeAst::Prim(Num::Num), ValueTypeAst::Prim(Num::Bool)],
+        slice.element.extra,
+        TypeAst::Tuple(TupleAst {
+            start: vec![
+                sp(input, 2..5, TypeAst::Ident),
+                sp(input, 7..11, TypeAst::Ident),
+            ],
             middle: None,
             end: vec![],
         })
     );
-    assert_matches!(slice.length, TupleLenAst::Ident(ident) if *ident.fragment() == "M");
+    assert_eq!(slice.length, sp(input, 14..15, TupleLenAst::Ident));
 }
 
 #[test]
 fn embedded_slice_type() {
     let input = InputSpan::new("[(Num, [Bool]); M]");
-    let (rest, slice) = slice_definition::<Num>(input).unwrap();
+    let (rest, slice) = slice_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_matches!(slice.length, TupleLenAst::Ident(ident) if *ident.fragment() == "M");
-    let first_element = match slice.element.as_ref() {
-        ValueTypeAst::Tuple(tuple) => &tuple.start[1],
+    assert_eq!(slice.length, sp(input, 16..17, TupleLenAst::Ident));
+    let first_element = match &slice.element.extra {
+        TypeAst::Tuple(tuple) => &tuple.start[1].extra,
         _ => panic!("Unexpected slice element: {:?}", slice.element),
     };
     assert_matches!(
         first_element,
-        ValueTypeAst::Slice(SliceAst { element, length: TupleLenAst::Dynamic })
-            if **element == ValueTypeAst::Prim(Num::Bool)
+        TypeAst::Slice(SliceAst { element, length })
+            if element.extra == TypeAst::Ident && length.extra == TupleLenAst::Dynamic
     );
 }
 
@@ -206,8 +218,8 @@ fn simple_fn_type() {
     let (rest, fn_type) = fn_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert!(fn_type.args.start.is_empty());
-    assert_eq!(fn_type.return_type, ValueTypeAst::Prim(Num::Num));
+    assert!(fn_type.args.extra.start.is_empty());
+    assert_eq!(fn_type.return_type, sp(input, 6..9, TypeAst::Ident));
 }
 
 #[test]
@@ -216,48 +228,54 @@ fn simple_fn_type_with_args() {
     let (rest, fn_type) = fn_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_eq!(fn_type.args.start.len(), 2);
+    assert_eq!(fn_type.args.extra.start.len(), 2);
     assert_eq!(
-        fn_type.args.start[0],
-        ValueTypeAst::Tuple(TupleAst {
-            start: vec![ValueTypeAst::Prim(Num::Num); 2],
+        fn_type.args.extra.start[0].extra,
+        TypeAst::Tuple(TupleAst {
+            start: vec![
+                sp(input, 2..5, TypeAst::Ident),
+                sp(input, 7..10, TypeAst::Ident),
+            ],
             middle: None,
             end: vec![],
         })
     );
-    assert_eq!(fn_type.args.start[1], ValueTypeAst::Prim(Num::Bool));
-    assert_eq!(fn_type.return_type, ValueTypeAst::Prim(Num::Num));
+    assert_eq!(
+        fn_type.args.extra.start[1],
+        sp(input, 13..17, TypeAst::Ident)
+    );
+    assert_eq!(fn_type.return_type, sp(input, 22..25, TypeAst::Ident));
 }
 
 #[test]
 fn fn_type_with_type_params() {
     let input = InputSpan::new("(Bool, 'T, 'T) -> 'T");
-    let (rest, fn_type) = fn_definition::<Num>(input).unwrap();
+    let (rest, fn_type) = fn_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_eq!(fn_type.args.start.len(), 3);
-    assert_matches!(fn_type.args.start[1], ValueTypeAst::Param(ident) if *ident.fragment() == "T");
-    assert_matches!(fn_type.return_type, ValueTypeAst::Param(ident) if *ident.fragment() == "T");
+    assert_eq!(fn_type.args.extra.start.len(), 3);
+    assert_eq!(fn_type.args.extra.start[1], sp(input, 7..9, TypeAst::Param));
+    assert_eq!(fn_type.return_type, sp(input, 18..20, TypeAst::Param));
 }
 
 #[test]
 fn fn_type_accepting_fn_arg() {
     let input = InputSpan::new("(['T; N], ('T) -> Bool) -> Bool");
-    let (rest, fn_type) = fn_definition::<Num>(input).unwrap();
+    let (rest, fn_type) = fn_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_eq!(fn_type.args.start.len(), 2);
-    assert_eq!(fn_type.return_type, ValueTypeAst::Prim(Num::Bool));
+    assert_eq!(fn_type.args.extra.start.len(), 2);
+    assert_eq!(fn_type.return_type, sp(input, 27..31, TypeAst::Ident));
 
-    let inner_fn = match &fn_type.args.start[1] {
-        ValueTypeAst::Function { function, .. } => function.as_ref(),
+    let inner_fn = match &fn_type.args.extra.start[1].extra {
+        TypeAst::Function(function) => function.as_ref(),
         ty => panic!("Unexpected arg type: {:?}", ty),
     };
-    assert_matches!(
-        inner_fn.args.start.as_slice(),
-        [ValueTypeAst::Param(ident)] if *ident.fragment() == "T"
+    assert_eq!(
+        inner_fn.args.extra.start,
+        [sp(input, 11..13, TypeAst::Param)]
     );
-    assert_eq!(inner_fn.return_type, ValueTypeAst::Prim(Num::Bool));
+    assert_eq!(inner_fn.return_type, sp(input, 18..22, TypeAst::Ident));
 }
 
 #[test]
@@ -266,107 +284,109 @@ fn fn_type_returning_fn_arg() {
     let (rest, fn_type) = fn_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_eq!(fn_type.args.start, vec![ValueTypeAst::Prim(Num::Num)]);
+    assert_eq!(
+        fn_type.args.extra.start,
+        vec![sp(input, 1..4, TypeAst::Ident)]
+    );
 
-    let returned_fn = match fn_type.return_type {
-        ValueTypeAst::Function { function, .. } => *function,
+    let returned_fn = match fn_type.return_type.extra {
+        TypeAst::Function(function) => *function,
         ty => panic!("Unexpected return type: {:?}", ty),
     };
-    assert_eq!(returned_fn.args.start, vec![ValueTypeAst::Prim(Num::Bool)]);
-    assert_eq!(returned_fn.return_type, ValueTypeAst::Prim(Num::Num));
+    assert_eq!(
+        returned_fn.args.extra.start,
+        vec![sp(input, 10..14, TypeAst::Ident)]
+    );
+    assert_eq!(returned_fn.return_type, sp(input, 19..22, TypeAst::Ident));
 }
 
 #[test]
 fn fn_type_with_rest_params() {
     let input = InputSpan::new("(Bool, ...[Num; N]) -> Num");
-    let (rest, fn_type) = fn_definition::<Num>(input).unwrap();
+    let (rest, fn_type) = fn_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_eq!(fn_type.args.start.len(), 1);
-    assert_eq!(fn_type.args.start[0], ValueTypeAst::Prim(Num::Bool));
-    let middle = fn_type.args.middle.unwrap();
-    assert_eq!(*middle.element, ValueTypeAst::Prim(Num::Num));
-    assert_matches!(middle.length, TupleLenAst::Ident(id) if *id.fragment() == "N");
+    assert_eq!(fn_type.args.extra.start.len(), 1);
+    assert_eq!(fn_type.args.extra.start[0], sp(input, 1..5, TypeAst::Ident));
+    let middle = fn_type.args.extra.middle.unwrap().extra;
+    assert_eq!(*middle.element, sp(input, 11..14, TypeAst::Ident));
+    assert_eq!(middle.length, sp(input, 16..17, TupleLenAst::Ident));
 }
 
 #[test]
 fn fn_type_with_constraints() {
     let input = InputSpan::new("for<'T: Lin> ('T) -> 'T");
-    let (rest, (constraints, fn_type)) = fn_definition_with_constraints::<Num>(input).unwrap();
+    let (rest, ty) = fn_definition_with_constraints(input).unwrap();
+    let (constraints, fn_type) = match ty {
+        TypeAst::FunctionWithConstraints {
+            constraints,
+            function,
+        } => (constraints.extra, function.extra),
+        _ => panic!("Unexpected type: {:?}", ty),
+    };
 
     assert!(rest.fragment().is_empty());
     assert!(constraints.static_lengths.is_empty());
     assert_eq!(constraints.type_params.len(), 1);
-    assert_eq!(constraints.type_params[0].1.computed, NumConstraints::Lin);
-    assert_eq!(fn_type.args.start.len(), 1);
-    assert_matches!(fn_type.args.start[0], ValueTypeAst::Param(id) if *id.fragment() == "T");
-    assert_matches!(fn_type.return_type, ValueTypeAst::Param(id) if *id.fragment() == "T");
+    assert_eq!(fn_type.args.extra.start.len(), 1);
+    assert_eq!(
+        fn_type.args.extra.start[0],
+        sp(input, 14..16, TypeAst::Param)
+    );
+    assert_eq!(fn_type.return_type, sp(input, 21..23, TypeAst::Param));
 }
 
 #[test]
 fn multiple_fns_with_constraints() {
     let input = InputSpan::new("(for<'T: Lin> ('T) -> 'T, for<'T: Lin> (...['T; _]) -> ())");
-    let (rest, ty) = type_definition::<Num>(input).unwrap();
+    let (rest, ty) = type_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
     let (second_fn, first_fn) = match ty {
-        ValueTypeAst::Tuple(TupleAst { mut start, .. }) if start.len() == 2 => {
-            (start.pop().unwrap(), start.pop().unwrap())
+        TypeAst::Tuple(TupleAst { mut start, .. }) if start.len() == 2 => {
+            (start.pop().unwrap().extra, start.pop().unwrap().extra)
         }
         _ => panic!("Unexpected type: {:?}", ty),
     };
 
     let first_fn = match first_fn {
-        ValueTypeAst::Function {
-            constraints: Some(_),
-            function,
-        } => *function,
+        TypeAst::FunctionWithConstraints { function, .. } => function.extra,
         _ => panic!("Unexpected 1st function: {:?}", first_fn),
     };
-    assert_matches!(first_fn.return_type, ValueTypeAst::Param(id) if *id.fragment() == "T");
+    assert_eq!(first_fn.return_type, sp(input, 22..24, TypeAst::Param));
 
     let second_fn = match second_fn {
-        ValueTypeAst::Function {
-            constraints: Some(_),
-            function,
-        } => *function,
+        TypeAst::FunctionWithConstraints { function, .. } => function.extra,
         _ => panic!("Unexpected 2nd function: {:?}", second_fn),
     };
-    assert!(second_fn.args.start.is_empty());
-    assert_matches!(
-        *second_fn.args.middle.unwrap().element,
-        ValueTypeAst::Param(id) if *id.fragment() == "T"
+    assert!(second_fn.args.extra.start.is_empty());
+    assert_eq!(
+        *second_fn.args.extra.middle.unwrap().extra.element,
+        sp(input, 44..46, TypeAst::Param)
     );
-    assert_matches!(second_fn.return_type, ValueTypeAst::Tuple(t) if t.start.is_empty());
+    assert_matches!(second_fn.return_type.extra, TypeAst::Tuple(t) if t.start.is_empty());
 }
 
 #[test]
 fn any_type() {
     let input = InputSpan::new("any");
-    let (rest, ty) = type_definition::<Num>(input).unwrap();
+    let (rest, ty) = type_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_matches!(ty, ValueTypeAst::Any(constraints) if constraints.terms.is_empty());
+    assert_matches!(ty, TypeAst::Any(constraints) if constraints.terms.is_empty());
 }
 
 #[test]
 fn any_type_with_bound() {
     let input = InputSpan::new("any Lin");
-    let (rest, ty) = type_definition::<Num>(input).unwrap();
+    let (rest, ty) = type_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_matches!(ty, ValueTypeAst::Any(constraints) if constraints.terms.len() == 1);
+    assert_matches!(ty, TypeAst::Any(constraints) if constraints.terms.len() == 1);
 
-    let bogus_input = InputSpan::new("anyLin");
-    let err = type_definition::<Num>(bogus_input).unwrap_err();
-    let err = match err {
-        NomErr::Failure(err) => err,
-        _ => panic!("Unexpected error type: {:?}", err),
-    };
+    let weird_input = InputSpan::new("anyLin");
+    let (rest, ty) = type_definition(weird_input).unwrap();
 
-    assert_eq!(*err.span().fragment(), "anyLin");
-    assert_matches!(
-        err.kind(),
-        ParseErrorKind::Type(e) if e.to_string() == "Unknown type name: anyLin"
-    );
+    assert!(rest.fragment().is_empty());
+    assert_eq!(ty, TypeAst::Ident);
 }

@@ -111,7 +111,7 @@ where
     Prim: PrimitiveType,
     V: Visit<'ast, Prim> + ?Sized,
 {
-    for ty in tuple.element_types() {
+    for (_, ty) in tuple.element_types() {
         visitor.visit_type(ty);
     }
 }

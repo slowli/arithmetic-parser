@@ -1,16 +1,18 @@
 //! Errors related to type inference.
 
+// TODO: split into a couple of modules
+
 use std::{fmt, ops};
 
 use crate::{
     arith::{BinaryOpContext, UnaryOpContext},
-    ast::{AstConversionError, TypeAst},
+    ast::{AstConversionError, SpannedTypeAst, TupleAst, TypeAst},
     visit::VisitMut,
-    PrimitiveType, Tuple, TupleLen, Type,
+    PrimitiveType, Tuple, TupleIndex, TupleLen, Type,
 };
 use arithmetic_parser::{
-    grammars::Grammar, Destructure, Expr, Lvalue, Spanned, SpannedExpr, SpannedLvalue,
-    UnsupportedType,
+    grammars::Grammar, Destructure, DestructureRest, Expr, Lvalue, Spanned, SpannedExpr,
+    SpannedLvalue, UnsupportedType,
 };
 
 /// Context in which a tuple is used.
@@ -25,7 +27,7 @@ pub enum TupleContext {
 
 impl TupleContext {
     pub(crate) fn element(self, index: usize) -> ErrorLocation {
-        let index = TupleIndex::FromStart(index);
+        let index = TupleIndex::Start(index);
         match self {
             Self::Generic => ErrorLocation::TupleElement(Some(index)),
             Self::FnArgs => ErrorLocation::FnArg(Some(index)),
@@ -33,7 +35,7 @@ impl TupleContext {
     }
 
     pub(crate) fn end_element(self, index: usize) -> ErrorLocation {
-        let index = TupleIndex::FromEnd(index);
+        let index = TupleIndex::End(index);
         match self {
             Self::Generic => ErrorLocation::TupleElement(Some(index)),
             Self::FnArgs => ErrorLocation::FnArg(Some(index)),
@@ -419,9 +421,9 @@ impl<Prim: PrimitiveType> OpErrors<'_, Prim> {
     }
 
     /// Narrows down the location of the error.
-    pub fn with_location(&mut self, location: ErrorLocation) -> OpErrors<'_, Prim> {
+    pub fn with_location(&mut self, location: impl Into<ErrorLocation>) -> OpErrors<'_, Prim> {
         let mut current_location = self.current_location.clone();
-        current_location.push(location);
+        current_location.push(location.into());
         OpErrors {
             errors: Goat::Borrowed(&mut *self.errors),
             current_location,
@@ -568,14 +570,35 @@ impl<Prim: PrimitiveType> ErrorPrecursor<Prim> {
     }
 }
 
-/// Index of an element within a tuple.
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[non_exhaustive]
-pub enum TupleIndex {
-    /// 0-based index from the start of the tuple.
-    FromStart(usize),
-    /// 0-based index from the end of the tuple.
-    FromEnd(usize),
+impl TupleIndex {
+    fn get_from_tuple<'r, 'a>(self, tuple: &'r TupleAst<'a>) -> Option<&'r SpannedTypeAst<'a>> {
+        match self {
+            Self::Start(i) => tuple.start.get(i),
+            Self::Middle => tuple
+                .middle
+                .as_ref()
+                .map(|middle| middle.extra.element.as_ref()),
+            Self::End(i) => tuple.end.get(i),
+        }
+    }
+
+    fn get_from_destructure<'r, 'a>(
+        self,
+        destructure: &'r Destructure<'a, TypeAst<'a>>,
+    ) -> Option<LvalueTree<'r, 'a>> {
+        match self {
+            Self::Start(i) => destructure.start.get(i).map(LvalueTree::Lvalue),
+            Self::Middle => destructure
+                .middle
+                .as_ref()
+                .and_then(|middle| match &middle.extra {
+                    DestructureRest::Named { ty, .. } => ty.as_ref(),
+                    _ => None,
+                })
+                .map(LvalueTree::Type),
+            Self::End(i) => destructure.end.get(i).map(LvalueTree::Lvalue),
+        }
+    }
 }
 
 /// Fragment of an error location.
@@ -596,6 +619,13 @@ pub enum ErrorLocation {
     Rhs,
 }
 
+impl From<TupleIndex> for ErrorLocation {
+    fn from(index: TupleIndex) -> Self {
+        Self::TupleElement(Some(index))
+    }
+}
+
+// TODO: test walking
 impl ErrorLocation {
     /// Walks the provided `expr` and returns the most exact span found in it.
     fn walk_expr<'a, T: Grammar<'a>>(location: &[Self], expr: &SpannedExpr<'a, T>) -> Spanned<'a> {
@@ -621,7 +651,7 @@ impl ErrorLocation {
     ) -> Option<&'r SpannedExpr<'a, T>> {
         match self {
             // `TupleIndex::FromEnd` should not occur in this context.
-            Self::FnArg(Some(TupleIndex::FromStart(index))) => match &expr.extra {
+            Self::FnArg(Some(TupleIndex::Start(index))) => match &expr.extra {
                 Expr::Function { args, .. } => Some(&args[index]),
                 Expr::Method { receiver, args, .. } => Some(if index == 0 {
                     receiver.as_ref()
@@ -646,7 +676,7 @@ impl ErrorLocation {
                 }
             }
 
-            Self::TupleElement(Some(TupleIndex::FromStart(index))) => {
+            Self::TupleElement(Some(TupleIndex::Start(index))) => {
                 if let Expr::Tuple(elements) = &expr.extra {
                     Some(&elements[index])
                 } else {
@@ -692,10 +722,7 @@ impl ErrorLocation {
             _ => return None,
         };
         match self {
-            Self::TupleElement(Some(index)) => match index {
-                TupleIndex::FromStart(i) => tuple.start.get(i).map(LvalueTree::Type),
-                TupleIndex::FromEnd(i) => tuple.end.get(i).map(LvalueTree::Type),
-            },
+            Self::TupleElement(Some(i)) => i.get_from_tuple(tuple).map(LvalueTree::Type),
             _ => None,
         }
     }
@@ -705,10 +732,7 @@ impl ErrorLocation {
         destructure: &'r Destructure<'a, TypeAst<'a>>,
     ) -> Option<LvalueTree<'r, 'a>> {
         match self {
-            Self::TupleElement(Some(index)) => match index {
-                TupleIndex::FromStart(i) => destructure.start.get(i).map(LvalueTree::Lvalue),
-                TupleIndex::FromEnd(i) => destructure.end.get(i).map(LvalueTree::Lvalue),
-            },
+            Self::TupleElement(Some(i)) => i.get_from_destructure(destructure),
             _ => None,
         }
     }

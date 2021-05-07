@@ -195,6 +195,18 @@ impl TupleLen {
     }
 }
 
+/// Index of an element within a tuple.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub enum TupleIndex {
+    /// 0-based index from the start of the tuple.
+    Start(usize),
+    /// Middle element.
+    Middle,
+    /// 0-based index from the end of the tuple.
+    End(usize),
+}
+
 /// Tuple type.
 ///
 /// Most generally, a tuple type consists of three fragments: *start*,
@@ -457,21 +469,36 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     /// # Examples
     ///
     /// ```
-    /// # use arithmetic_typing::{Slice, Tuple, UnknownLen, Type};
+    /// # use arithmetic_typing::{Slice, Tuple, TupleIndex, UnknownLen, Type};
     /// let complex_tuple = Tuple::new(
     ///     vec![Type::NUM],
     ///     Slice::new(Type::NUM, UnknownLen::param(0)),
     ///     vec![Type::BOOL, Type::param(0)],
     /// );
     /// let elements: Vec<_> = complex_tuple.element_types().collect();
-    /// assert_eq!(
-    ///     elements.as_slice(),
-    ///     &[&Type::NUM, &Type::NUM, &Type::BOOL, &Type::param(0)]
-    /// );
+    /// assert_eq!(elements, [
+    ///     (TupleIndex::Start(0), &Type::NUM),
+    ///     (TupleIndex::Middle, &Type::NUM),
+    ///     (TupleIndex::End(0), &Type::BOOL),
+    ///     (TupleIndex::End(1), &Type::param(0)),
+    /// ]);
     /// ```
-    pub fn element_types(&self) -> impl Iterator<Item = &Type<Prim>> + '_ {
-        let middle_element = self.middle.as_ref().map(|slice| slice.element.as_ref());
-        self.start.iter().chain(middle_element).chain(&self.end)
+    pub fn element_types(&self) -> impl Iterator<Item = (TupleIndex, &Type<Prim>)> + '_ {
+        let middle_element = self
+            .middle
+            .as_ref()
+            .map(|slice| (TupleIndex::Middle, slice.element.as_ref()));
+        let start = self
+            .start
+            .iter()
+            .enumerate()
+            .map(|(i, elem)| (TupleIndex::Start(i), elem));
+        let end = self
+            .end
+            .iter()
+            .enumerate()
+            .map(|(i, elem)| (TupleIndex::End(i), elem));
+        start.chain(middle_element).chain(end)
     }
 
     pub(crate) fn element_types_mut(&mut self) -> impl Iterator<Item = &mut Type<Prim>> + '_ {

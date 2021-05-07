@@ -179,8 +179,8 @@ impl<Prim: LinearType> TypeConstraints<Prim> for NumConstraints {
                     }
                 }
 
-                for element in tuple.element_types() {
-                    self.apply(element, substitutions, errors.by_ref());
+                for (i, element) in tuple.element_types() {
+                    self.apply(element, substitutions, errors.with_location(i));
                 }
             }
         }

@@ -164,9 +164,8 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
 
             Type::Tuple(tuple) => {
                 let tuple = tuple.to_owned();
-                // FIXME: fix locations
-                for element in tuple.element_types() {
-                    self.apply(element, substitutions, errors.by_ref());
+                for (i, element) in tuple.element_types() {
+                    self.apply(element, substitutions, errors.with_location(i));
                 }
             }
 

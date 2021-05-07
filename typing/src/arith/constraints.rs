@@ -164,7 +164,7 @@ impl<Prim: LinearType> TypeConstraints<Prim> for NumConstraints {
             Type::Prim(lit) if lit.is_linear() => {}
 
             Type::Function(_) | Type::Prim(_) => {
-                errors.push(ErrorKind::failed_constraint(ty.clone(), *self));
+                errors.push(ErrorKind::failed_constraint(resolved_ty.clone(), *self));
             }
 
             Type::Tuple(tuple) => {

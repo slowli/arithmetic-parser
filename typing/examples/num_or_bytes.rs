@@ -151,14 +151,17 @@ impl TypeConstraints<NumOrBytesType> for Constraints {
             // `Var`s are taken care of previously.
             Type::Var(_) | Type::Prim(NumOrBytesType::Num) => {}
 
-            Type::Prim(NumOrBytesType::Bool) | Type::Function(_) => {
-                errors.push(ErrorKind::failed_constraint(ty.to_owned(), self.to_owned()))
-            }
+            Type::Prim(NumOrBytesType::Bool) | Type::Function(_) => errors.push(
+                ErrorKind::failed_constraint(resolved_ty.to_owned(), self.to_owned()),
+            ),
 
             // Bytes are summable, but not linear.
             Type::Prim(NumOrBytesType::Bytes) => {
                 if *self != Self::Summable {
-                    errors.push(ErrorKind::failed_constraint(ty.to_owned(), self.to_owned()));
+                    errors.push(ErrorKind::failed_constraint(
+                        resolved_ty.to_owned(),
+                        self.to_owned(),
+                    ));
                 }
             }
 

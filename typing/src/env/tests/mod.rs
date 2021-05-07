@@ -5,7 +5,7 @@ use super::*;
 use crate::{
     arith::NumConstraints,
     error::{ErrorKind, ErrorLocation, TupleContext},
-    Annotated, Num, Prelude, TupleLen, UnknownLen,
+    Annotated, Num, Prelude, TupleIndex, TupleLen, UnknownLen,
 };
 
 mod annotations;
@@ -1243,4 +1243,48 @@ fn any_type_with_bound_in_tuple() {
     );
     assert_eq!(err.kind().to_string(), "Type `Bool` fails constraint `Lin`");
     // TODO: store where constraint comes from?
+}
+
+#[test]
+fn locating_type_with_failed_constraint() {
+    let mut type_env = TypeEnvironment::new();
+    for &code in &["5 + (1, true)", "(1, true) + 5"] {
+        let block = F32Grammar::parse_statements(code).unwrap();
+        let err = type_env
+            .insert("true", Type::BOOL)
+            .process_statements(&block)
+            .unwrap_err()
+            .single();
+
+        assert_eq!(*err.span().fragment(), "true");
+        assert_eq!(err.location()[1..], [TupleContext::Generic.element(1)]);
+        assert_matches!(err.context(), ErrorContext::BinaryOp(_));
+        assert_matches!(err.kind(), ErrorKind::FailedConstraint { .. });
+        assert_eq!(err.kind().to_string(), "Type `Bool` fails constraint `Lin`");
+    }
+}
+
+#[test]
+fn locating_tuple_middle_with_failed_constraint() {
+    let code = "|xs| { (_: Num, ...flags) = xs; flags.map(|flag| !flag); hash(xs) }";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .insert("map", Prelude::Map)
+        .insert("hash", hash_fn_type())
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "xs");
+    assert_eq!(*err.root_span().fragment(), "hash(xs)");
+    assert_eq!(
+        err.location(),
+        [TupleContext::FnArgs.element(0), TupleIndex::Middle.into()]
+    );
+    assert_matches!(
+        err.context(),
+        ErrorContext::FnCall { call_signature, .. }
+            if call_signature.to_string() == "((Num, ...[Bool; _])) -> Num"
+    );
+    assert_matches!(err.kind(), ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL);
 }

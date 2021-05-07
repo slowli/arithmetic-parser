@@ -242,7 +242,7 @@ impl NumArithmetic {
                 settings.lin.apply(
                     rhs_ty,
                     substitutions,
-                    errors.with_location(ErrorLocation::Lhs),
+                    errors.with_location(ErrorLocation::Rhs),
                 );
                 resolved_rhs_ty
             }
@@ -256,7 +256,7 @@ impl NumArithmetic {
                 settings.lin.apply(
                     rhs_ty,
                     substitutions,
-                    errors.with_location(ErrorLocation::Lhs),
+                    errors.with_location(ErrorLocation::Rhs),
                 );
                 resolved_lhs_ty
             }

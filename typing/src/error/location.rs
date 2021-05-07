@@ -24,18 +24,20 @@ impl TupleIndex {
     fn get_from_destructure<'r, 'a>(
         self,
         destructure: &'r Destructure<'a, TypeAst<'a>>,
-    ) -> Option<LvalueTree<'r, 'a>> {
+    ) -> Option<SpannedLvalueTree<'r, 'a>> {
         match self {
-            Self::Start(i) => destructure.start.get(i).map(LvalueTree::Lvalue),
+            Self::Start(i) => destructure.start.get(i).map(LvalueTree::from_lvalue),
             Self::Middle => destructure
                 .middle
                 .as_ref()
                 .and_then(|middle| match &middle.extra {
-                    DestructureRest::Named { ty: Some(ty), .. } => Some(LvalueTree::Type(ty)),
-                    DestructureRest::Named { variable, .. } => Some(LvalueTree::Just(*variable)),
+                    DestructureRest::Named { ty: Some(ty), .. } => Some(LvalueTree::from_span(ty)),
+                    DestructureRest::Named { variable, .. } => {
+                        Some(LvalueTree::from_span(variable))
+                    }
                     _ => None,
                 }),
-            Self::End(i) => destructure.end.get(i).map(LvalueTree::Lvalue),
+            Self::End(i) => destructure.end.get(i).map(LvalueTree::from_lvalue),
         }
     }
 }
@@ -133,41 +135,36 @@ impl ErrorLocation {
         location: &[Self],
         lvalue: &SpannedLvalue<'a, TypeAst<'a>>,
     ) -> Spanned<'a> {
-        Self::walk(location, LvalueTree::Lvalue(lvalue), Self::step_into_lvalue)
-            .refine_lvalue()
-            .with_no_extra()
+        let lvalue = LvalueTree::from_lvalue(lvalue);
+        Self::walk(location, lvalue, Self::step_into_lvalue).with_no_extra()
     }
 
     pub(super) fn walk_destructure<'a>(
         location: &[Self],
         destructure: &Spanned<'a, Destructure<'a, TypeAst<'a>>>,
     ) -> Spanned<'a> {
-        let destructure = LvalueTree::Destructure(destructure);
-        Self::walk(location, destructure, Self::step_into_lvalue)
-            .refine_lvalue()
-            .with_no_extra()
+        let destructure = LvalueTree::from_span(destructure);
+        Self::walk(location, destructure, Self::step_into_lvalue).with_no_extra()
     }
 
-    fn step_into_lvalue<'r, 'a>(self, lvalue: LvalueTree<'r, 'a>) -> Option<LvalueTree<'r, 'a>> {
-        match lvalue {
-            LvalueTree::Type(ty) => self.step_into_type(&ty.extra),
-            LvalueTree::Destructure(destructure) => self.step_into_destructure(&destructure.extra),
-            LvalueTree::Lvalue(lvalue) => match &lvalue.extra {
-                Lvalue::Tuple(destructure) => self.step_into_destructure(destructure),
-                Lvalue::Variable { ty: Some(ty) } => self.step_into_type(&ty.extra),
-                _ => None,
-            },
-            LvalueTree::Just(_) => None,
+    fn step_into_lvalue<'r, 'a>(
+        self,
+        lvalue: SpannedLvalueTree<'r, 'a>,
+    ) -> Option<SpannedLvalueTree<'r, 'a>> {
+        match lvalue.extra {
+            LvalueTree::Type(ty) => self.step_into_type(ty),
+            LvalueTree::Destructure(destructure) => self.step_into_destructure(destructure),
+            LvalueTree::JustSpan => None,
         }
     }
 
-    fn step_into_type<'r, 'a>(self, ty: &'r TypeAst<'a>) -> Option<LvalueTree<'r, 'a>> {
+    fn step_into_type<'r, 'a>(self, ty: &'r TypeAst<'a>) -> Option<SpannedLvalueTree<'r, 'a>> {
         match (self, ty) {
             (Self::TupleElement(Some(i)), TypeAst::Tuple(tuple)) => {
-                i.get_from_tuple(tuple).map(LvalueTree::Type)
+                i.get_from_tuple(tuple).map(LvalueTree::from_span)
             }
             (Self::TupleElement(Some(TupleIndex::Middle)), TypeAst::Slice(slice)) => {
-                Some(LvalueTree::Type(&slice.element))
+                Some(LvalueTree::from_span(&slice.element))
             }
             _ => None,
         }
@@ -176,7 +173,7 @@ impl ErrorLocation {
     fn step_into_destructure<'r, 'a>(
         self,
         destructure: &'r Destructure<'a, TypeAst<'a>>,
-    ) -> Option<LvalueTree<'r, 'a>> {
+    ) -> Option<SpannedLvalueTree<'r, 'a>> {
         match self {
             Self::TupleElement(Some(i)) => i.get_from_destructure(destructure),
             _ => None,
@@ -187,30 +184,45 @@ impl ErrorLocation {
 /// Enumeration of all types encountered on the lvalue side of assignments.
 #[derive(Debug, Clone, Copy)]
 enum LvalueTree<'r, 'a> {
-    Lvalue(&'r SpannedLvalue<'a, TypeAst<'a>>),
-    Destructure(&'r Spanned<'a, Destructure<'a, TypeAst<'a>>>),
-    Type(&'r Spanned<'a, TypeAst<'a>>),
-    Just(Spanned<'a>),
+    Destructure(&'r Destructure<'a, TypeAst<'a>>),
+    Type(&'r TypeAst<'a>),
+    JustSpan,
 }
 
-impl<'a> LvalueTree<'_, 'a> {
-    fn with_no_extra(self) -> Spanned<'a> {
-        match self {
-            Self::Lvalue(lvalue) => lvalue.with_no_extra(),
-            Self::Destructure(destructure) => destructure.with_no_extra(),
-            Self::Type(ty) => ty.with_no_extra(),
-            Self::Just(spanned) => spanned,
+type SpannedLvalueTree<'r, 'a> = Spanned<'a, LvalueTree<'r, 'a>>;
+
+impl<'r, 'a> From<&'r Destructure<'a, TypeAst<'a>>> for LvalueTree<'r, 'a> {
+    fn from(destructure: &'r Destructure<'a, TypeAst<'a>>) -> Self {
+        Self::Destructure(destructure)
+    }
+}
+
+impl<'r, 'a> From<&'r TypeAst<'a>> for LvalueTree<'r, 'a> {
+    fn from(ty: &'r TypeAst<'a>) -> Self {
+        Self::Type(ty)
+    }
+}
+
+impl<'r> From<&'r ()> for LvalueTree<'r, '_> {
+    fn from(_: &'r ()) -> Self {
+        Self::JustSpan
+    }
+}
+
+impl<'r, 'a> LvalueTree<'r, 'a> {
+    fn from_lvalue(lvalue: &'r Spanned<'a, Lvalue<'a, TypeAst<'a>>>) -> SpannedLvalueTree<'r, 'a> {
+        match &lvalue.extra {
+            Lvalue::Tuple(destructure) => lvalue.copy_with_extra(Self::Destructure(destructure)),
+            Lvalue::Variable { ty: Some(ty) } => ty.as_ref().map_extra(Self::Type),
+            _ => lvalue.copy_with_extra(Self::JustSpan),
         }
     }
 
-    /// Refines the `Lvalue` variant if it is a variable with an annotation.
-    fn refine_lvalue(self) -> Self {
-        if let Self::Lvalue(lvalue) = self {
-            if let Lvalue::Variable { ty: Some(ty) } = &lvalue.extra {
-                return Self::Type(ty);
-            }
-        }
-        self
+    fn from_span<T>(spanned: &'r Spanned<'a, T>) -> SpannedLvalueTree<'r, 'a>
+    where
+        &'r T: Into<Self>,
+    {
+        spanned.as_ref().map_extra(Into::into)
     }
 }
 

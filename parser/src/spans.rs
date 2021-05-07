@@ -84,6 +84,17 @@ impl<Span, T> LocatedSpan<Span, T> {
 }
 
 impl<Span: Copy, T> LocatedSpan<Span, T> {
+    /// Returns a copy of this span with borrowed `extra` field.
+    pub fn as_ref(&self) -> LocatedSpan<Span, &T> {
+        LocatedSpan {
+            offset: self.offset,
+            line: self.line,
+            column: self.column,
+            fragment: self.fragment,
+            extra: &self.extra,
+        }
+    }
+
     /// Copies this span with the provided `extra` field.
     pub fn copy_with_extra<U>(&self, value: U) -> LocatedSpan<Span, U> {
         LocatedSpan {

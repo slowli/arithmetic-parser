@@ -1,0 +1,30 @@
+dbg(GEN, ORDER);
+
+gen = || {
+    sk = rand_scalar();
+    (sk, GEN ^ sk)
+};
+
+encrypt = |message, pk| {
+    r = rand_scalar();
+    shared_secret = pk ^ r;
+    (GEN ^ r, message * shared_secret)
+};
+
+decrypt = |(R, blinded_message), sk| {
+    shared_secret = R ^ sk;
+    blinded_message / shared_secret
+};
+
+// Test!
+(sk, pk) = gen();
+
+5.while(|i| i != 0, |i| {
+    message = GEN ^ rand_scalar();
+    dbg(message);
+    encrypted = message.encrypt(pk);
+    dbg(encrypted);
+    assert_eq(encrypted.decrypt(sk), message);
+
+    i - 1
+});

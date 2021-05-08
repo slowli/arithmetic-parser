@@ -1,0 +1,35 @@
+dbg(GEN, ORDER);
+
+gen = || {
+    sk = rand_scalar();
+    (sk, GEN ^ sk)
+};
+
+sign = |message, sk| {
+    r = rand_scalar();
+    R = GEN ^ r;
+    e = hash_to_scalar(R, message);
+    (e, r - sk * e)
+};
+
+verify = |(e, s), message, pk| {
+    R = GEN ^ s * pk ^ e;
+    e == hash_to_scalar(R, message)
+};
+
+// Test!
+(sk, pk) = gen();
+(_, other_pk) = gen();
+
+5.while(|i| i != 0, |i| {
+    message = rand_scalar();
+    dbg(message);
+    signature = message.sign(sk);
+    dbg(signature);
+
+    assert(signature.verify(message, pk));
+    assert(!signature.verify(message, other_pk));
+    assert(!signature.verify(rand_scalar(), pk));
+
+    i - 1
+})

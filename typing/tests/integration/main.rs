@@ -10,6 +10,7 @@ use arithmetic_typing::{
 mod annotations;
 mod basics;
 mod errors;
+mod examples;
 mod length_eqs;
 
 type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;

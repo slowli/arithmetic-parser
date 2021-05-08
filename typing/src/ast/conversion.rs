@@ -462,7 +462,7 @@ mod tests {
     use assert_matches::assert_matches;
 
     use super::*;
-    use crate::{ErrorKind, Num};
+    use crate::Num;
 
     #[test]
     fn converting_raw_fn_type() {
@@ -480,86 +480,6 @@ mod tests {
         let fn_type = <Type>::try_from(&ast).unwrap();
 
         assert_eq!(fn_type.to_string(), *input.fragment());
-    }
-
-    #[test]
-    fn converting_fn_type_unused_type() {
-        let input = InputSpan::new("for<'T: Lin> (Num) -> Bool");
-        let (_, ast) = TypeAst::parse(input).unwrap();
-        let err = <Type>::try_from(&ast).unwrap_err().single();
-
-        assert_eq!(err.span().location_offset(), 5);
-        assert_matches!(
-            err.kind(),
-            ErrorKind::AstConversion(AstConversionError::UnusedTypeParam(name)) if name == "T"
-        );
-    }
-
-    #[test]
-    fn converting_fn_type_unused_length() {
-        let input = InputSpan::new("for<len! N> (Num) -> Bool");
-        let (_, ast) = TypeAst::parse(input).unwrap();
-        let err = <Type>::try_from(&ast).unwrap_err().single();
-
-        assert_eq!(err.span().location_offset(), 9);
-        assert_matches!(
-            err.kind(),
-            ErrorKind::AstConversion(AstConversionError::UnusedLength(name)) if name == "N"
-        );
-    }
-
-    #[test]
-    fn converting_fn_type_free_type_param() {
-        let input = InputSpan::new("(Num, 'T)");
-        let (_, ast) = TypeAst::parse(input).unwrap();
-        let err = <Type>::try_from(&ast).unwrap_err().single();
-
-        assert_eq!(err.span().location_offset(), 6);
-        assert_matches!(
-            err.kind(),
-            ErrorKind::AstConversion(AstConversionError::FreeTypeVar(name)) if name == "T"
-        );
-    }
-
-    #[test]
-    fn converting_fn_type_free_length() {
-        let input = InputSpan::new("[Num; N]");
-        let (_, ast) = TypeAst::parse(input).unwrap();
-        let err = <Type>::try_from(&ast).unwrap_err().single();
-
-        assert_eq!(err.span().location_offset(), 6);
-        assert_matches!(
-            err.kind(),
-            ErrorKind::AstConversion(AstConversionError::FreeLengthVar(name)) if name == "N"
-        );
-    }
-
-    #[test]
-    fn converting_fn_type_invalid_constraint() {
-        let input = InputSpan::new("for<'T: Bug> (['T; N]) -> Bool");
-        let (_, ast) = TypeAst::parse(input).unwrap();
-        let err = <Type>::try_from(&ast).unwrap_err().single();
-
-        assert_eq!(*err.span().fragment(), "Bug");
-        assert_matches!(
-            err.kind(),
-            ErrorKind::AstConversion(AstConversionError::UnknownConstraint(id))
-                if id == "Bug"
-        );
-    }
-
-    #[test]
-    fn embedded_type_with_constraints() {
-        let input = InputSpan::new("('T, for<'U: Lin> ('U) -> 'U) -> ()");
-        let (_, ast) = TypeAst::parse(input).unwrap();
-        let err = <Type>::try_from(&ast).unwrap_err().single();
-
-        assert_eq!(*err.span().fragment(), "for<'U: Lin>");
-        assert_eq!(err.span().location_offset(), 5);
-        assert_matches!(
-            err.kind(),
-            ErrorKind::AstConversion(AstConversionError::EmbeddedQuantifier)
-        );
     }
 
     #[test]
@@ -635,29 +555,5 @@ mod tests {
             // TODO: some of reported errors are difficult to interpret; should clarify.
             TypeAst::try_from(input).unwrap_err();
         }
-    }
-
-    #[test]
-    fn error_when_parsing_standalone_some_type() {
-        let errors = <Type>::try_from(&TypeAst::try_from("(_) -> Num").unwrap()).unwrap_err();
-        let err = errors.single();
-
-        assert_eq!(*err.span().fragment(), "_");
-        assert_matches!(
-            err.kind(),
-            ErrorKind::AstConversion(AstConversionError::InvalidSomeType)
-        );
-    }
-
-    #[test]
-    fn error_when_parsing_standalone_some_length() {
-        let errors = <Type>::try_from(&TypeAst::try_from("[Num; _]").unwrap()).unwrap_err();
-        let err = errors.single();
-
-        assert_eq!(*err.span().fragment(), "_");
-        assert_matches!(
-            err.kind(),
-            ErrorKind::AstConversion(AstConversionError::InvalidSomeLength)
-        );
     }
 }

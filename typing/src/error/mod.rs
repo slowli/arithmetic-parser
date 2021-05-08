@@ -178,15 +178,6 @@ impl<'a, Prim: PrimitiveType> Errors<'a, Prim> {
             error.context.map_types(type_resolver);
         }
     }
-
-    #[cfg(test)]
-    pub(crate) fn single(mut self) -> Error<'a, Prim> {
-        if self.len() == 1 {
-            self.inner.pop().unwrap()
-        } else {
-            panic!("Expected 1 error, got {:?}", self);
-        }
-    }
 }
 
 impl<Prim: PrimitiveType> fmt::Display for Errors<'_, Prim> {

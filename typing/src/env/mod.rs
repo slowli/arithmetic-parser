@@ -21,9 +21,6 @@ use arithmetic_parser::{
     Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
 };
 
-#[cfg(test)]
-mod tests;
-
 /// Environment containing type information on named variables.
 ///
 /// # Examples

@@ -22,10 +22,12 @@
 //!   As in Rust, all slice elements must have the same type. Unlike Rust, tuple and slice
 //!   forms are equivalent; e.g., `[Num; 3]` and `(Num, Num, Num)` are the same type.
 //! - Functions are first-class types. Functions can have type and/or const params.
-//! - Type params can be constrained. Constraints are expressed via [`TypeConstraints`].
-//!   As an example, [`Num`] has an only supported constraint – type *linearity*
-//!   (via [`NumConstraints`]).
+//! - Type params can be constrained. Constraints are expressed via [`Constraint`]s.
+//!   As an example, [`Num`] has a few known constraints, such as type *linearity*
+//!   (see [`NumConstraints`]).
 //! - Const params always specify tuple length.
+//!
+//! [`Constraint`]: crate::arith::Constraint
 //!
 //! # Inference rules
 //!
@@ -174,7 +176,7 @@ use self::{
 ///
 /// ```
 /// # use std::{fmt, str::FromStr};
-/// use arithmetic_typing::{arith::NoConstraints, PrimitiveType};
+/// use arithmetic_typing::PrimitiveType;
 ///
 /// #[derive(Debug, Clone, Copy, PartialEq)]
 /// enum NumOrBytes {

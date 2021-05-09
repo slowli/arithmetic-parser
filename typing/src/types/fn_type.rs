@@ -133,7 +133,7 @@ impl<Prim: PrimitiveType> FnParams<Prim> {
 ///
 /// [length params]: crate::LengthVar
 /// [type params]: crate::TypeVar
-/// [constraint]: crate::TypeConstraints
+/// [constraint]: crate::arith::Constraint
 /// [dynamic length]: crate::TupleLen#static-lengths
 ///
 /// # Construction
@@ -373,7 +373,7 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for Type<Prim> {
 ///     .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
 ///     .with_arg(map_fn_arg)
 ///     .returning(Type::param(1).repeat(UnknownLen::Dynamic))
-///     .with_constraints(&[1], &NumConstraints::Lin);
+///     .with_constraints(&[1], NumConstraints::Lin);
 /// assert_eq!(
 ///     map_fn_type.to_string(),
 ///     "for<'U: Lin> (['T; N], ('T) -> 'U) -> ['U]"

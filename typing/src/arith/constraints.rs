@@ -7,7 +7,7 @@ use crate::{
     PrimitiveType, Slice, Substitutions, Type,
 };
 
-/// Container for constraints that can be placed on type variables.
+/// Constraint that can be placed on [`Type`]s.
 ///
 /// Constraints can be placed on [function](crate::FnType) type variables, and can be applied
 /// to types in [`TypeArithmetic`] impls. For example, [`NumArithmetic`] places
@@ -23,18 +23,9 @@ use crate::{
 ///
 /// # Implementation rules
 ///
-/// Usually, this trait should be implemented with something akin to [`bitflags`].
-///
-/// [`bitflags`]: https://docs.rs/bitflags/
-///
-/// - [`Default`] must return a container with no restrictions.
-/// - [`BitOrAssign`](ops::BitOrAssign) must perform the union of the provided constraints.
-/// - [`Display`](fmt::Display) must display constraints in the form `Foo + Bar + Quux`,
-///   where `Foo`, `Bar` and `Quux` are *primitive* constraints (i.e., ones not reduced
-///   to a combination of other constraints). The primitive constraints must be represented
-///   as identifiers (i.e., consist of alphanumeric chars and start with an alphabetic char
-///   or `_`).
-/// - [`FromStr`] must parse primitive constraints.
+/// - [`Display`](fmt::Display) must display constraint as an identifier (e.g., `Lin`).
+///   The string presentation of a constraint must be unique within a [`PrimitiveType`];
+///   it is used to identify constraints in a [`ConstraintSet`].
 ///
 /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
 /// [`NumArithmetic`]: crate::arith::NumArithmetic
@@ -43,8 +34,12 @@ pub trait Constraint<Prim: PrimitiveType>: fmt::Display + Send + Sync + 'static 
     /// contradicts the constraints.
     ///
     /// A typical implementation will use `substitutions` to
-    /// [place constraints on type vars](Substitutions::insert_constraints()), e.g.,
-    /// by recursively traversing and resolving the provided type.
+    /// [place constraints on type vars](Substitutions::insert_constraint()).
+    ///
+    /// # Tips
+    ///
+    /// - You can use [`StructConstraint`] for typical use cases, which involve recursively
+    ///   traversing `ty`.
     fn apply(
         &self,
         ty: &Type<Prim>,
@@ -88,7 +83,58 @@ impl<Prim: PrimitiveType> Constraint<Prim> for Box<dyn Constraint<Prim>> {
     }
 }
 
-/// FIXME
+/// Helper to define *structural* [`Constraint`]s, i.e., constraints recursively checking
+/// the provided type.
+///
+/// The following logic is used to check whether a type satisfies the constraint:
+///
+/// - Primitive types satisfy the constraint iff the predicate provided in [`Self::new()`]
+///   returns `true`.
+/// - [`Type::Any`] always satisfies the constraint.
+/// - Functional types never satisfy the constraint.
+/// - A compound type (i.e., a tuple) satisfies the constraint iff all its items satisfy
+///   the constraint.
+/// - If [`Self::deny_dyn_slices()`] is set, tuple types need to have static length.
+///
+/// # Examples
+///
+/// Defining a constraint type using `StructConstraint`:
+///
+/// ```
+/// # use arithmetic_typing::{
+/// #     arith::{Constraint, StructConstraint}, error::OpErrors, PrimitiveType, Substitutions,
+/// #     Type,
+/// # };
+/// # use std::fmt;
+///
+/// /// Constraint for hashable types.
+/// #[derive(Clone, Copy)]
+/// struct Hashed;
+///
+/// impl fmt::Display for Hashed {
+///     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+///         formatter.write_str("Hash")
+///     }
+/// }
+///
+/// impl<Prim: PrimitiveType> Constraint<Prim> for Hashed {
+///     fn apply(
+///         &self,
+///         ty: &Type<Prim>,
+///         substitutions: &mut Substitutions<Prim>,
+///         errors: OpErrors<'_, Prim>,
+///     ) {
+///         // We can hash everything except for functions (and thus,
+///         // types containing functions).
+///         StructConstraint::new(*self, |_| true)
+///             .apply(ty, substitutions, errors);
+///     }
+///
+///     fn clone_boxed(&self) -> Box<dyn Constraint<Prim>> {
+///         Box::new(*self)
+///     }
+/// }
+/// ```
 #[derive(Debug)]
 pub struct StructConstraint<Prim: PrimitiveType, C, F> {
     constraint: C,
@@ -168,8 +214,7 @@ where
     }
 }
 
-/// Numeric constraints. In particular, this is [`TypeConstraints`] associated
-/// with the [`Num`](crate::Num) literal.
+/// Numeric [`Constraint`]s. In particular, they are applicable to the [`Num`](crate::Num) literal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NumConstraints {
     /// Type can be subject to unary `-` and can participate in `T op Num` / `Num op T` operations.
@@ -219,6 +264,9 @@ impl<Prim: LinearType> Constraint<Prim> for NumConstraints {
 }
 
 /// Set of [`Constraint`]s.
+///
+/// [`Display`](fmt::Display)ed as `Foo + Bar + Quux`, where `Foo`, `Bar` and `Quux` are
+/// constraints in the set.
 #[derive(Debug, Clone)]
 pub struct ConstraintSet<Prim: PrimitiveType> {
     inner: HashMap<String, Box<dyn Constraint<Prim>>>,

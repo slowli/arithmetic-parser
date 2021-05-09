@@ -84,11 +84,11 @@ pub enum ErrorKind<Prim: PrimitiveType> {
     UnsupportedFeature(UnsupportedType),
 
     /// Type not supported by type inference logic. For example,
-    /// a [`TypeArithmetic`] or [`TypeConstraints`] implementations may return this error
+    /// a [`TypeArithmetic`] or [`Constraint`] implementations may return this error
     /// if they encounter an unknown [`Type`] variant.
     ///
     /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
-    /// [`TypeConstraints`]: crate::arith::TypeConstraints
+    /// [`Constraint`]: crate::arith::Constraint
     UnsupportedType(Type<Prim>),
 
     /// Unsupported use of type or length params in a function declaration.

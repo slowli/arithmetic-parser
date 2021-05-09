@@ -86,13 +86,13 @@ impl TypeVar {
 ///
 /// # Notation
 ///
-/// - [`Self::Any`] is represented as `any` with an optional [`TypeConstraints`] suffix.
+/// - [`Self::Any`] is represented as `any` with an optional [`ConstraintSet`] suffix.
 /// - [`Prim`](Self::Prim)itive types are represented using the [`Display`](fmt::Display)
 ///   implementation of the corresponding [`PrimitiveType`].
 /// - [`Var`](Self::Var)s are represented as documented in [`TypeVar`].
 /// - Notation for [functional](FnType) and [tuple](Tuple) types is documented separately.
 ///
-/// [`TypeConstraints`]: crate::arith::TypeConstraints
+/// [`ConstraintSet`]: crate::arith::ConstraintSet
 ///
 /// # Examples
 ///
@@ -166,7 +166,7 @@ impl TypeVar {
 ///
 /// ## `Any` with constraints
 ///
-/// [`Self::Any`] can have [`TypeConstraints`]. This is denoted as a suffix after `any`,
+/// [`Self::Any`] can have [constraints][`ConstraintSet`]. This is denoted as a suffix after `any`,
 /// for example, `any Lin`. A constrained `any` is more restricted than the "default" one;
 /// on assignment to or from `any _`, the types will be checked / set to satisfy the constraints.
 ///

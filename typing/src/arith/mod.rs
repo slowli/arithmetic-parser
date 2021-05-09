@@ -384,26 +384,17 @@ impl TypeArithmetic<Num> for NumArithmetic {
         context: &BinaryOpContext<Num>,
         errors: OpErrors<'_, Num>,
     ) -> Type<Num> {
+        const OP_SETTINGS: OpConstraintSettings<'static, Num> = OpConstraintSettings {
+            lin: &NumConstraints::Lin,
+            ops: &NumConstraints::Ops,
+        };
+
         let comparable_type = if self.comparisons_enabled {
             Some(Num::Num)
         } else {
             None
         };
 
-        Self::process_binary_op(
-            substitutions,
-            context,
-            errors,
-            comparable_type,
-            NumConstraints::OP_SETTINGS,
-        )
+        Self::process_binary_op(substitutions, context, errors, comparable_type, OP_SETTINGS)
     }
-}
-
-impl NumConstraints {
-    /// Default constraint settings for arithmetic ops.
-    pub const OP_SETTINGS: OpConstraintSettings<'static, Num> = OpConstraintSettings {
-        lin: &Self::Lin,
-        ops: &Self::Ops,
-    };
 }

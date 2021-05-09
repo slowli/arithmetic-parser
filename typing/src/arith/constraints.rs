@@ -208,6 +208,13 @@ impl<Prim: PrimitiveType> ConstraintSet<Prim> {
         }
     }
 
+    /// Creates a set with one constraint.
+    pub fn just(constraint: impl Constraint<Prim>) -> Self {
+        let mut this = Self::new();
+        this.insert(constraint);
+        this
+    }
+
     /// Checks if this constraint set is empty.
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()

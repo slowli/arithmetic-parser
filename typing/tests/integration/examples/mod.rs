@@ -5,7 +5,7 @@ use std::{fmt, str::FromStr};
 use arithmetic_parser::grammars::{Features, NumGrammar, Parse};
 use arithmetic_typing::{
     arith::{
-        BinaryOpContext, BoolArithmetic, MapPrimitiveType, NoConstraints, NumArithmetic,
+        BinaryOpContext, BoolArithmetic, ConstraintSet, MapPrimitiveType, NumArithmetic,
         NumConstraints, TypeArithmetic, UnaryOpContext, WithBoolean,
     },
     error::{ErrorLocation, OpErrors},
@@ -36,7 +36,10 @@ fn dbg_fn<Prim: PrimitiveType>() -> FnType<Prim> {
 fn prepare_imprecise_env() -> TypeEnvironment {
     let rand_scalar = FnType::builder().returning(Type::NUM);
     let hash_to_scalar = FnType::builder()
-        .with_varargs(Type::Any(NumConstraints::Lin), UnknownLen::param(0))
+        .with_varargs(
+            ConstraintSet::just(NumConstraints::Lin),
+            UnknownLen::param(0),
+        )
         .returning(Type::NUM);
     let to_scalar = FnType::builder().with_arg(Type::NUM).returning(Type::NUM);
 
@@ -105,9 +108,7 @@ impl WithBoolean for GroupPrim {
     const BOOL: Self = Self::Bool;
 }
 
-impl PrimitiveType for GroupPrim {
-    type Constraints = NoConstraints;
-}
+impl PrimitiveType for GroupPrim {}
 
 const SC: Type<GroupPrim> = Type::Prim(GroupPrim::Scalar);
 const GE: Type<GroupPrim> = Type::Prim(GroupPrim::GroupElement);

@@ -141,7 +141,7 @@ impl Constraint<NumOrBytesType> for Constraints {
         }
 
         let resolved_ty = if let Type::Var(var) = ty {
-            substitutions.insert_constraints(var.index(), self);
+            substitutions.insert_constraint(var.index(), self);
             substitutions.fast_resolve(ty)
         } else {
             ty
@@ -177,11 +177,13 @@ impl Constraint<NumOrBytesType> for Constraints {
             }
         }
     }
+
+    fn clone_boxed(&self) -> Box<dyn Constraint<NumOrBytesType>> {
+        Box::new(*self)
+    }
 }
 
-impl PrimitiveType for NumOrBytesType {
-    type Constraints = Constraints;
-}
+impl PrimitiveType for NumOrBytesType {}
 
 #[derive(Debug, Clone, Copy)]
 struct NumOrBytesArithmetic;

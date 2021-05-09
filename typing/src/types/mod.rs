@@ -277,14 +277,20 @@ impl<Prim: PrimitiveType> From<FnType<Prim>> for Type<Prim> {
 }
 
 impl<Prim: PrimitiveType> From<Tuple<Prim>> for Type<Prim> {
-    fn from(tuple: Tuple<Prim>) -> Type<Prim> {
+    fn from(tuple: Tuple<Prim>) -> Self {
         Self::Tuple(tuple)
     }
 }
 
 impl<Prim: PrimitiveType> From<Slice<Prim>> for Type<Prim> {
-    fn from(slice: Slice<Prim>) -> Type<Prim> {
+    fn from(slice: Slice<Prim>) -> Self {
         Self::Tuple(slice.into())
+    }
+}
+
+impl<Prim: PrimitiveType> From<ConstraintSet<Prim>> for Type<Prim> {
+    fn from(constraints: ConstraintSet<Prim>) -> Self {
+        Self::Any(constraints)
     }
 }
 

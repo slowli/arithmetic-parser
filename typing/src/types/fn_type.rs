@@ -257,8 +257,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
             self
         );
 
-        let mut constraints = ConstraintSet::new();
-        constraints.insert(constraint);
+        let constraints = ConstraintSet::just(constraint);
         let type_params = indexes
             .iter()
             .map(|&idx| (idx, constraints.clone()))
@@ -441,9 +440,7 @@ mod tests {
 
     #[test]
     fn constraints_display() {
-        let mut type_constraints: ConstraintSet<Num> = ConstraintSet::new();
-        type_constraints.insert(NumConstraints::Lin);
-
+        let type_constraints = ConstraintSet::<Num>::just(NumConstraints::Lin);
         let constraints = ParamConstraints {
             type_params: vec![(0, type_constraints.clone())].into_iter().collect(),
             static_lengths: HashSet::new(),

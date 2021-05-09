@@ -2,7 +2,7 @@
 
 use arithmetic_parser::grammars::{NumGrammar, Typed};
 use arithmetic_typing::{
-    arith::NumConstraints,
+    arith::{ConstraintSet, NumConstraints},
     error::{Error, ErrorKind, Errors},
     Annotated, FnType, Num, PrimitiveType, Type, UnknownLen,
 };
@@ -48,7 +48,10 @@ fn assert_incompatible_types<Prim: PrimitiveType>(
 
 fn hash_fn_type() -> FnType<Num> {
     FnType::builder()
-        .with_varargs(Type::Any(NumConstraints::Lin), UnknownLen::param(0))
+        .with_varargs(
+            ConstraintSet::just(NumConstraints::Lin),
+            UnknownLen::param(0),
+        )
         .returning(Type::NUM)
 }
 

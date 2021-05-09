@@ -4,7 +4,7 @@ use assert_matches::assert_matches;
 
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
-    arith::{NumArithmetic, NumConstraints},
+    arith::{ConstraintSet, NumArithmetic, NumConstraints},
     error::{ErrorContext, ErrorKind, ErrorLocation, TupleContext},
     Prelude, TupleIndex, TupleLen, Type, TypeEnvironment,
 };
@@ -357,10 +357,8 @@ fn constraint_error() {
     assert_eq!(*err.span().fragment(), "1 == 2");
     assert_matches!(
         err.kind(),
-        ErrorKind::FailedConstraint {
-            ty,
-            constraint: NumConstraints::Ops,
-        } if *ty == Type::BOOL
+        ErrorKind::FailedConstraint { ty, constraint }
+            if *ty == Type::BOOL && constraint.to_string() == "Ops"
     );
 }
 
@@ -396,7 +394,7 @@ fn any_type_with_bound_with_bogus_function_call() {
 #[test]
 fn any_type_with_bound_in_tuple() {
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("some_lin", Type::Any(NumConstraints::Lin));
+    type_env.insert("some_lin", ConstraintSet::just(NumConstraints::Lin));
 
     let bogus_call = "some_lin(1)";
     let bogus_call = F32Grammar::parse_statements(bogus_call).unwrap();

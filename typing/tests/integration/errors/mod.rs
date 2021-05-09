@@ -4,7 +4,7 @@ use assert_matches::assert_matches;
 
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
-    arith::{ConstraintSet, NumArithmetic, NumConstraints},
+    arith::{BinaryOpContext, ConstraintSet, NumArithmetic, NumConstraints},
     error::{ErrorContext, ErrorKind, ErrorLocation, TupleContext},
     Prelude, TupleIndex, TupleLen, Type, TypeEnvironment,
 };
@@ -449,22 +449,24 @@ fn locating_type_with_failed_constraint() {
 
 #[test]
 fn locating_tuple_middle_with_failed_constraint() {
-    let code = "|xs| { (_: Num, ...flags) = xs; flags.map(|flag| !flag); hash(xs) }";
+    let code = "|xs| { (_: Num, ...flags) = xs; flags.map(|flag| !flag); xs + 1 }";
     let block = F32Grammar::parse_statements(code).unwrap();
     let err = TypeEnvironment::new()
         .insert("map", Prelude::Map)
-        .insert("hash", hash_fn_type())
         .process_statements(&block)
         .unwrap_err()
         .single();
 
     assert_eq!(*err.span().fragment(), "xs");
-    assert_eq!(*err.root_span().fragment(), "hash(xs)");
-    assert_eq!(err.location(), [fn_arg(0), TupleIndex::Middle.into()]);
+    assert_eq!(*err.root_span().fragment(), "xs + 1");
+    assert_eq!(
+        err.location(),
+        [ErrorLocation::Lhs, TupleIndex::Middle.into()]
+    );
     assert_matches!(
         err.context(),
-        ErrorContext::FnCall { call_signature, .. }
-            if call_signature.to_string() == "((Num, ...[Bool; _])) -> Num"
+        ErrorContext::BinaryOp(BinaryOpContext { lhs, .. })
+            if lhs.to_string() == "(Num, ...[Bool; _])"
     );
     assert_matches!(err.kind(), ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL);
 }

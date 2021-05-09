@@ -259,3 +259,35 @@ fn unifying_dynamic_slices_error() {
     assert_matches!(errors[0].kind(), ErrorKind::DynamicLen(_));
     assert_matches!(errors[1].kind(), ErrorKind::DynamicLen(_));
 }
+
+#[test]
+fn bogus_annotation_in_fn_definition() {
+    let code = "|x: Bogus| x + 1";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env.process_statements(&block).unwrap_err().single();
+
+    assert_eq!(*err.span().fragment(), "Bogus");
+    assert_matches!(
+        err.kind(),
+        ErrorKind::AstConversion(AstConversionError::UnknownType(ty))
+            if ty == "Bogus"
+    );
+}
+
+#[test]
+fn custom_constraint_if_not_added_to_env() {
+    let code = "x: any Hash = (1, 2);";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "Hash");
+    assert_matches!(
+        err.kind(),
+        ErrorKind::AstConversion(AstConversionError::UnknownConstraint(c))
+            if c == "Hash"
+    );
+}

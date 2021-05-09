@@ -142,10 +142,10 @@ pub(crate) struct AstConversionState<'r, 'a, Prim: PrimitiveType> {
 
 impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
     pub fn new(env: &'r mut TypeEnvironment<Prim>, errors: &'r mut Errors<'a, Prim>) -> Self {
+        let known_constraints = env.known_constraints.clone();
         Self {
             env: Some(env),
-            // TODO: take `env` into consideration when creating constraints
-            known_constraints: Prim::well_known_constraints(),
+            known_constraints,
             errors,
             len_params: HashMap::new(),
             type_params: HashMap::new(),

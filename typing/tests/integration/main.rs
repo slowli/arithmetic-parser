@@ -1,10 +1,12 @@
 //! Hub for integration tests.
 
+use std::fmt;
+
 use arithmetic_parser::grammars::{NumGrammar, Typed};
 use arithmetic_typing::{
-    arith::{ConstraintSet, NumConstraints},
-    error::{Error, ErrorKind, Errors},
-    Annotated, FnType, Num, PrimitiveType, Type, UnknownLen,
+    arith::{Constraint, ConstraintSet},
+    error::{Error, ErrorKind, Errors, OpErrors},
+    Annotated, FnType, Num, PrimitiveType, Substitutions, Type, UnknownLen,
 };
 
 mod annotations;
@@ -29,6 +31,33 @@ impl<'a, Prim: PrimitiveType> ErrorsExt<'a, Prim> for Errors<'a, Prim> {
     }
 }
 
+/// Constraint for types that can be hashed.
+#[derive(Debug, Clone, Copy)]
+struct Hashed;
+
+impl fmt::Display for Hashed {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("Hash")
+    }
+}
+
+impl<Prim: PrimitiveType> Constraint<Prim> for Hashed {
+    fn apply(
+        &self,
+        ty: &Type<Prim>,
+        substitutions: &mut Substitutions<Prim>,
+        errors: OpErrors<'_, Prim>,
+    ) {
+        use arithmetic_typing::arith::StructConstraint;
+
+        StructConstraint::new(*self, |_| true).apply(ty, substitutions, errors)
+    }
+
+    fn clone_boxed(&self) -> Box<dyn Constraint<Prim>> {
+        Box::new(*self)
+    }
+}
+
 fn assert_incompatible_types<Prim: PrimitiveType>(
     err: &ErrorKind<Prim>,
     first: &Type<Prim>,
@@ -48,16 +77,13 @@ fn assert_incompatible_types<Prim: PrimitiveType>(
 
 fn hash_fn_type() -> FnType<Num> {
     FnType::builder()
-        .with_varargs(
-            ConstraintSet::just(NumConstraints::Lin),
-            UnknownLen::param(0),
-        )
+        .with_varargs(ConstraintSet::just(Hashed), UnknownLen::param(0))
         .returning(Type::NUM)
 }
 
 #[test]
 fn hash_fn_type_display() {
-    assert_eq!(hash_fn_type().to_string(), "(...[any Lin; N]) -> Num");
+    assert_eq!(hash_fn_type().to_string(), "(...[any Hash; N]) -> Num");
 }
 
 /// `zip` function signature.

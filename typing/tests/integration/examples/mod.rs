@@ -13,6 +13,8 @@ use arithmetic_typing::{
     UnknownLen,
 };
 
+use crate::Hashed;
+
 const SCHNORR_CODE: &str = include_str!("schnorr.script");
 const DSA_CODE: &str = include_str!("dsa.script");
 const EL_GAMAL_CODE: &str = include_str!("elgamal.script");
@@ -25,33 +27,6 @@ impl Parse<'_> for U64Grammar {
     // ^ We don't use large literals in code, so `u64` is fine
 
     const FEATURES: Features = Features::all();
-}
-
-/// Constraint for types that can be hashed.
-#[derive(Debug, Clone, Copy)]
-struct Hashed;
-
-impl fmt::Display for Hashed {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("Hash")
-    }
-}
-
-impl<Prim: PrimitiveType> Constraint<Prim> for Hashed {
-    fn apply(
-        &self,
-        ty: &Type<Prim>,
-        substitutions: &mut Substitutions<Prim>,
-        errors: OpErrors<'_, Prim>,
-    ) {
-        use arithmetic_typing::arith::StructConstraint;
-
-        StructConstraint::new(*self, |_| true).apply(ty, substitutions, errors)
-    }
-
-    fn clone_boxed(&self) -> Box<dyn Constraint<Prim>> {
-        Box::new(*self)
-    }
 }
 
 fn dbg_fn<Prim: PrimitiveType>() -> FnType<Prim> {

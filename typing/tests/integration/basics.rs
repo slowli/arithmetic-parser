@@ -62,7 +62,7 @@ fn function_definition() {
     type_env.process_statements(&block).unwrap();
     assert_eq!(
         type_env.get("sign").unwrap().to_string(),
-        "for<'T: Lin> (Num, 'T) -> (Num, Num)"
+        "for<'T: Hash> (Num, 'T) -> (Num, Num)"
     );
 }
 
@@ -85,11 +85,11 @@ fn non_linear_types_in_function() {
     );
     assert_eq!(
         type_env.get("compare_hash").unwrap().to_string(),
-        "for<'T: Lin> (Num, 'T) -> Bool"
+        "for<'T: Hash> (Num, 'T) -> Bool"
     );
     assert_eq!(
         type_env.get("add_hashes").unwrap().to_string(),
-        "for<'T: Lin, 'U: Lin> ('T, 'U) -> Num"
+        "for<'T: Hash, 'U: Hash> ('T, 'U) -> Num"
     );
 }
 

@@ -3,7 +3,7 @@
 use std::{collections::HashMap, iter::FromIterator, ops};
 
 use crate::{
-    arith::{MapPrimitiveType, NumArithmetic, TypeArithmetic},
+    arith::{Constraint, ConstraintSet, MapPrimitiveType, NumArithmetic, TypeArithmetic},
     ast::TypeAst,
     error::Errors,
     types::{ParamConstraints, ParamQuantifier},
@@ -49,6 +49,7 @@ use self::processor::TypeProcessor;
 #[derive(Debug, Clone)]
 pub struct TypeEnvironment<Prim: PrimitiveType = Num> {
     pub(crate) substitutions: Substitutions<Prim>,
+    pub(crate) known_constraints: ConstraintSet<Prim>,
     variables: HashMap<String, Type<Prim>>,
 }
 
@@ -56,6 +57,7 @@ impl<Prim: PrimitiveType> Default for TypeEnvironment<Prim> {
     fn default() -> Self {
         Self {
             variables: HashMap::new(),
+            known_constraints: Prim::well_known_constraints(),
             substitutions: Substitutions::default(),
         }
     }
@@ -98,6 +100,16 @@ impl<Prim: PrimitiveType> TypeEnvironment<Prim> {
     pub fn insert(&mut self, name: &str, ty: impl Into<Type<Prim>>) -> &mut Self {
         self.variables
             .insert(name.to_owned(), Self::prepare_type(ty));
+        self
+    }
+
+    /// Inserts a [`Constraint`] into the environment so that it can be used when parsing
+    /// type annotations.
+    ///
+    /// Adding a constraint is not mandatory for it to be usable during type inference;
+    /// this method only influences whether the constraint is recognized during type parsing.
+    pub fn insert_constraint(&mut self, constraint: impl Constraint<Prim>) -> &mut Self {
+        self.known_constraints.insert(constraint);
         self
     }
 
@@ -167,6 +179,7 @@ where
     fn from_iter<I: IntoIterator<Item = (S, Ty)>>(iter: I) -> Self {
         Self {
             variables: convert_iter(iter).collect(),
+            known_constraints: Prim::well_known_constraints(),
             substitutions: Substitutions::default(),
         }
     }

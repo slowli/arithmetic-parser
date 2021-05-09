@@ -22,10 +22,12 @@
 //!   As in Rust, all slice elements must have the same type. Unlike Rust, tuple and slice
 //!   forms are equivalent; e.g., `[Num; 3]` and `(Num, Num, Num)` are the same type.
 //! - Functions are first-class types. Functions can have type and/or const params.
-//! - Type params can be constrained. Constraints are expressed via [`TypeConstraints`].
-//!   As an example, [`Num`] has an only supported constraint – type *linearity*
-//!   (via [`NumConstraints`]).
+//! - Type params can be constrained. Constraints are expressed via [`Constraint`]s.
+//!   As an example, [`Num`] has a few known constraints, such as type *linearity*
+//!   (see [`NumConstraints`]).
 //! - Const params always specify tuple length.
+//!
+//! [`Constraint`]: crate::arith::Constraint
 //!
 //! # Inference rules
 //!
@@ -143,7 +145,7 @@ pub use self::{
 };
 
 use self::{
-    arith::{LinearType, NumConstraints, TypeConstraints, WithBoolean},
+    arith::{ConstraintSet, LinearType, NumConstraints, WithBoolean},
     ast::TypeAst,
 };
 
@@ -174,7 +176,7 @@ use self::{
 ///
 /// ```
 /// # use std::{fmt, str::FromStr};
-/// use arithmetic_typing::{arith::NoConstraints, PrimitiveType};
+/// use arithmetic_typing::PrimitiveType;
 ///
 /// #[derive(Debug, Clone, Copy, PartialEq)]
 /// enum NumOrBytes {
@@ -212,15 +214,18 @@ use self::{
 ///     }
 /// }
 ///
-/// impl PrimitiveType for NumOrBytes {
-///     type Constraints = NoConstraints;
-/// }
+/// impl PrimitiveType for NumOrBytes {}
 /// ```
 pub trait PrimitiveType:
     Clone + PartialEq + fmt::Debug + fmt::Display + FromStr + Send + Sync + 'static
 {
-    /// Constraints that can be placed on type variables.
-    type Constraints: TypeConstraints<Self>;
+    /// Returns well-known constraints for this type. These constraints are used
+    /// in standalone parsing of type signatures.
+    ///
+    /// The default implementation returns an empty set.
+    fn well_known_constraints() -> ConstraintSet<Self> {
+        ConstraintSet::default()
+    }
 }
 
 /// Primitive types for numeric arithmetic.
@@ -254,7 +259,12 @@ impl FromStr for Num {
 }
 
 impl PrimitiveType for Num {
-    type Constraints = NumConstraints;
+    fn well_known_constraints() -> ConstraintSet<Self> {
+        let mut constraints = ConstraintSet::default();
+        constraints.insert(NumConstraints::Lin);
+        constraints.insert(NumConstraints::Ops);
+        constraints
+    }
 }
 
 impl WithBoolean for Num {

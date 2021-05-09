@@ -6,12 +6,14 @@ use std::{
     collections::{HashMap, HashSet},
     convert::TryFrom,
     fmt,
-    str::FromStr,
 };
 
-use crate::ast::TypeConstraintsAst;
 use crate::{
-    ast::{ConstraintsAst, FnTypeAst, SliceAst, SpannedTypeAst, TupleAst, TupleLenAst, TypeAst},
+    arith::{Constraint, ConstraintSet},
+    ast::{
+        ConstraintsAst, FnTypeAst, SliceAst, SpannedTypeAst, TupleAst, TupleLenAst, TypeAst,
+        TypeConstraintsAst,
+    },
     error::{Error, Errors},
     types::{ParamConstraints, ParamQuantifier},
     FnType, PrimitiveType, Slice, Tuple, Type, TypeEnvironment, UnknownLen,
@@ -131,6 +133,7 @@ impl std::error::Error for AstConversionError {}
 #[derive(Debug)]
 pub(crate) struct AstConversionState<'r, 'a, Prim: PrimitiveType> {
     env: Option<&'r mut TypeEnvironment<Prim>>,
+    known_constraints: ConstraintSet<Prim>,
     errors: &'r mut Errors<'a, Prim>,
     len_params: HashMap<&'a str, usize>,
     type_params: HashMap<&'a str, usize>,
@@ -139,8 +142,10 @@ pub(crate) struct AstConversionState<'r, 'a, Prim: PrimitiveType> {
 
 impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
     pub fn new(env: &'r mut TypeEnvironment<Prim>, errors: &'r mut Errors<'a, Prim>) -> Self {
+        let known_constraints = env.known_constraints.clone();
         Self {
             env: Some(env),
+            known_constraints,
             errors,
             len_params: HashMap::new(),
             type_params: HashMap::new(),
@@ -151,6 +156,7 @@ impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
     fn without_env(errors: &'r mut Errors<'a, Prim>) -> Self {
         Self {
             env: None,
+            known_constraints: Prim::well_known_constraints(),
             errors,
             len_params: HashMap::new(),
             type_params: HashMap::new(),
@@ -201,6 +207,12 @@ impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
             },
             |env| env.substitutions.new_len_var(),
         )
+    }
+
+    fn resolve_constraint(&self, name: &str) -> Option<Box<dyn Constraint<Prim>>> {
+        self.known_constraints
+            .get_by_name(name)
+            .map(Constraint::clone_boxed)
     }
 
     pub(crate) fn convert_type(&mut self, ty: &SpannedTypeAst<'a>) -> Type<Prim> {
@@ -271,18 +283,17 @@ impl<'a> TypeConstraintsAst<'a> {
     fn convert<Prim: PrimitiveType>(
         &self,
         state: &mut AstConversionState<'_, 'a, Prim>,
-    ) -> Prim::Constraints {
+    ) -> ConstraintSet<Prim> {
         self.terms
             .iter()
-            .fold(Prim::Constraints::default(), |mut acc, input| {
+            .fold(ConstraintSet::default(), |mut acc, input| {
                 let input_str = *input.fragment();
-                let partial = Prim::Constraints::from_str(input_str)
-                    .map_err(|_| {
-                        let err = AstConversionError::UnknownConstraint(input_str.to_owned());
-                        state.errors.push(Error::conversion(err, input));
-                    })
-                    .unwrap_or_default();
-                acc |= &partial;
+                if let Some(constraint) = state.resolve_constraint(input_str) {
+                    acc.insert(constraint);
+                } else {
+                    let err = AstConversionError::UnknownConstraint(input_str.to_owned());
+                    state.errors.push(Error::conversion(err, input));
+                }
                 acc
             })
     }

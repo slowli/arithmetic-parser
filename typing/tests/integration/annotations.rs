@@ -4,12 +4,11 @@ use assert_matches::assert_matches;
 
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
-    ast::AstConversionError,
     error::{ErrorContext, ErrorKind, ErrorLocation},
     Prelude, TupleLen, Type, TypeEnvironment, UnknownLen,
 };
 
-use crate::{assert_incompatible_types, ErrorsExt, F32Grammar};
+use crate::{assert_incompatible_types, ErrorsExt, F32Grammar, Hashed};
 
 #[test]
 fn type_hint_within_tuple() {
@@ -400,16 +399,13 @@ fn annotations_for_fns_with_slices_in_contravariant_position() {
 }
 
 #[test]
-fn bogus_annotation_in_fn_definition() {
-    let code = "|x: Bogus| x + 1";
+fn custom_constraint_if_added_to_env() {
+    let code = "x: any Hash = (1, 2);";
     let block = F32Grammar::parse_statements(code).unwrap();
-    let mut type_env = TypeEnvironment::new();
-    let err = type_env.process_statements(&block).unwrap_err().single();
+    let mut env = TypeEnvironment::new();
+    env.insert_constraint(Hashed)
+        .process_statements(&block)
+        .unwrap();
 
-    assert_eq!(*err.span().fragment(), "Bogus");
-    assert_matches!(
-        err.kind(),
-        ErrorKind::AstConversion(AstConversionError::UnknownType(ty))
-            if ty == "Bogus"
-    );
+    assert_eq!(env["x"].to_string(), "any Hash");
 }

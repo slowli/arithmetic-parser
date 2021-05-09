@@ -3,7 +3,8 @@
 use std::fmt;
 
 use crate::{
-    ast::AstConversionError, error::ErrorLocation, PrimitiveType, TupleIndex, TupleLen, Type,
+    arith::Constraint, ast::AstConversionError, error::ErrorLocation, PrimitiveType, TupleIndex,
+    TupleLen, Type,
 };
 use arithmetic_parser::UnsupportedType;
 
@@ -71,8 +72,8 @@ pub enum ErrorKind<Prim: PrimitiveType> {
     FailedConstraint {
         /// Type that fails constraint requirement.
         ty: Type<Prim>,
-        /// Failing constraint(s).
-        constraint: Prim::Constraints,
+        /// Failing constraint.
+        constraint: Box<dyn Constraint<Prim>>,
     },
     /// Length with the static constraint is actually dynamic (contains [`UnknownLen::Dynamic`]).
     ///
@@ -83,11 +84,11 @@ pub enum ErrorKind<Prim: PrimitiveType> {
     UnsupportedFeature(UnsupportedType),
 
     /// Type not supported by type inference logic. For example,
-    /// a [`TypeArithmetic`] or [`TypeConstraints`] implementations may return this error
+    /// a [`TypeArithmetic`] or [`Constraint`] implementations may return this error
     /// if they encounter an unknown [`Type`] variant.
     ///
     /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
-    /// [`TypeConstraints`]: crate::arith::TypeConstraints
+    /// [`Constraint`]: crate::arith::Constraint
     UnsupportedType(Type<Prim>),
 
     /// Unsupported use of type or length params in a function declaration.
@@ -177,7 +178,10 @@ impl<Prim: PrimitiveType> ErrorKind<Prim> {
     }
 
     /// Creates a "failed constraint" error.
-    pub fn failed_constraint(ty: Type<Prim>, constraint: Prim::Constraints) -> Self {
-        Self::FailedConstraint { ty, constraint }
+    pub fn failed_constraint(ty: Type<Prim>, constraint: impl Constraint<Prim> + Clone) -> Self {
+        Self::FailedConstraint {
+            ty,
+            constraint: Box::new(constraint),
+        }
     }
 }

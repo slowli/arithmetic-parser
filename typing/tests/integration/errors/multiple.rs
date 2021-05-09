@@ -3,9 +3,7 @@
 use assert_matches::assert_matches;
 
 use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-use arithmetic_typing::{
-    arith::NumConstraints, error::ErrorKind, Annotated, Prelude, TupleLen, Type, TypeEnvironment,
-};
+use arithmetic_typing::{error::ErrorKind, Annotated, Prelude, TupleLen, Type, TypeEnvironment};
 
 type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
 
@@ -30,7 +28,7 @@ fn multiple_independent_errors() {
     assert_matches!(
         errors[0].kind(),
         ErrorKind::FailedConstraint { ty, constraint }
-            if *ty == Type::BOOL && *constraint == NumConstraints::Ops
+            if *ty == Type::BOOL && constraint.to_string() == "Ops"
     );
 
     assert_eq!(*errors[1].span().fragment(), "|x| x + 1");
@@ -88,7 +86,7 @@ fn recovery_after_error() {
     assert_matches!(
         errors[1].kind(),
         ErrorKind::FailedConstraint { ty, constraint }
-            if *ty == Type::BOOL && *constraint == NumConstraints::Ops
+            if *ty == Type::BOOL && constraint.to_string() == "Ops"
     );
 
     assert_eq!(*errors[2].span().fragment(), "false");

@@ -11,7 +11,9 @@ use arithmetic_parser::{BinaryOp, UnaryOp};
 
 mod constraints;
 
-pub use self::constraints::{LinearType, NoConstraints, NumConstraints, TypeConstraints};
+pub use self::constraints::{
+    Constraint, ConstraintSet, LinearType, NumConstraints, StructConstraint,
+};
 
 /// Maps a literal value from a certain [`Grammar`] to its type. This assumes that all literals
 /// are primitive.
@@ -148,14 +150,14 @@ impl<Prim: WithBoolean> TypeArithmetic<Prim> for BoolArithmetic {
 
 /// Settings for constraints placed on arguments of binary arithmetic operations.
 #[derive(Debug)]
-pub struct OpConstraintSettings<'a, C> {
+pub struct OpConstraintSettings<'a, Prim: PrimitiveType> {
     /// Constraint applied to the argument of `T op Num` / `Num op T` ops.
-    pub lin: &'a C,
+    pub lin: &'a dyn Constraint<Prim>,
     /// Constraint applied to the arguments of in-kind binary arithmetic ops (`T op T`).
-    pub ops: &'a C,
+    pub ops: &'a dyn Constraint<Prim>,
 }
 
-impl<C> Clone for OpConstraintSettings<'_, C> {
+impl<Prim: PrimitiveType> Clone for OpConstraintSettings<'_, Prim> {
     fn clone(&self) -> Self {
         Self {
             lin: self.lin,
@@ -164,7 +166,7 @@ impl<C> Clone for OpConstraintSettings<'_, C> {
     }
 }
 
-impl<C> Copy for OpConstraintSettings<'_, C> {}
+impl<Prim: PrimitiveType> Copy for OpConstraintSettings<'_, Prim> {}
 
 /// Arithmetic on [`Num`]bers.
 ///
@@ -221,7 +223,7 @@ impl NumArithmetic {
         substitutions: &mut Substitutions<Prim>,
         context: &BinaryOpContext<Prim>,
         mut errors: OpErrors<'_, Prim>,
-        settings: OpConstraintSettings<'_, Prim::Constraints>,
+        settings: OpConstraintSettings<'_, Prim>,
     ) -> Type<Prim> {
         let lhs_ty = &context.lhs;
         let rhs_ty = &context.rhs;
@@ -288,7 +290,7 @@ impl NumArithmetic {
         substitutions: &mut Substitutions<Prim>,
         context: &UnaryOpContext<Prim>,
         mut errors: OpErrors<'_, Prim>,
-        constraints: &Prim::Constraints,
+        constraints: &impl Constraint<Prim>,
     ) -> Type<Prim> {
         match context.op {
             UnaryOp::Not => BoolArithmetic.process_unary_op(substitutions, context, errors),
@@ -318,7 +320,7 @@ impl NumArithmetic {
         context: &BinaryOpContext<Prim>,
         mut errors: OpErrors<'_, Prim>,
         comparable_type: Option<Prim>,
-        settings: OpConstraintSettings<'_, Prim::Constraints>,
+        settings: OpConstraintSettings<'_, Prim>,
     ) -> Type<Prim> {
         match context.op {
             BinaryOp::And | BinaryOp::Or | BinaryOp::Eq | BinaryOp::NotEq => {
@@ -384,18 +386,17 @@ impl TypeArithmetic<Num> for NumArithmetic {
         context: &BinaryOpContext<Num>,
         errors: OpErrors<'_, Num>,
     ) -> Type<Num> {
+        const OP_SETTINGS: OpConstraintSettings<'static, Num> = OpConstraintSettings {
+            lin: &NumConstraints::Lin,
+            ops: &NumConstraints::Ops,
+        };
+
         let comparable_type = if self.comparisons_enabled {
             Some(Num::Num)
         } else {
             None
         };
 
-        Self::process_binary_op(
-            substitutions,
-            context,
-            errors,
-            comparable_type,
-            NumConstraints::OP_SETTINGS,
-        )
+        Self::process_binary_op(substitutions, context, errors, comparable_type, OP_SETTINGS)
     }
 }

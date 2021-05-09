@@ -5,13 +5,15 @@ use std::{fmt, str::FromStr};
 use arithmetic_parser::grammars::{Features, NumGrammar, Parse};
 use arithmetic_typing::{
     arith::{
-        BinaryOpContext, BoolArithmetic, MapPrimitiveType, NoConstraints, NumArithmetic,
-        NumConstraints, TypeArithmetic, UnaryOpContext, WithBoolean,
+        BinaryOpContext, BoolArithmetic, Constraint, ConstraintSet, MapPrimitiveType,
+        NumArithmetic, TypeArithmetic, UnaryOpContext, WithBoolean,
     },
     error::{ErrorLocation, OpErrors},
-    Annotated, Assertions, ErrorKind, FnType, Prelude, PrimitiveType, Substitutions, Type,
-    TypeEnvironment, UnknownLen,
+    Annotated, Assertions, FnType, Prelude, PrimitiveType, Substitutions, Type, TypeEnvironment,
+    UnknownLen,
 };
+
+use crate::Hashed;
 
 const SCHNORR_CODE: &str = include_str!("schnorr.script");
 const DSA_CODE: &str = include_str!("dsa.script");
@@ -36,7 +38,7 @@ fn dbg_fn<Prim: PrimitiveType>() -> FnType<Prim> {
 fn prepare_imprecise_env() -> TypeEnvironment {
     let rand_scalar = FnType::builder().returning(Type::NUM);
     let hash_to_scalar = FnType::builder()
-        .with_varargs(Type::Any(NumConstraints::Lin), UnknownLen::param(0))
+        .with_varargs(ConstraintSet::just(Hashed), UnknownLen::param(0))
         .returning(Type::NUM);
     let to_scalar = FnType::builder().with_arg(Type::NUM).returning(Type::NUM);
 
@@ -61,11 +63,11 @@ fn schnorr_signatures_imprecise() {
     assert_eq!(env["gen"].to_string(), "() -> (Num, Num)");
     assert_eq!(
         env["sign"].to_string(),
-        "for<'T: Lin> ('T, Num) -> (Num, Num)"
+        "for<'T: Hash> ('T, Num) -> (Num, Num)"
     );
     assert_eq!(
         env["verify"].to_string(),
-        "for<'T: Lin> ((Num, Num), 'T, Num) -> Bool"
+        "for<'T: Hash> ((Num, Num), 'T, Num) -> Bool"
     );
 }
 
@@ -105,12 +107,39 @@ impl WithBoolean for GroupPrim {
     const BOOL: Self = Self::Bool;
 }
 
-impl PrimitiveType for GroupPrim {
-    type Constraints = NoConstraints;
-}
+impl PrimitiveType for GroupPrim {}
 
 const SC: Type<GroupPrim> = Type::Prim(GroupPrim::Scalar);
 const GE: Type<GroupPrim> = Type::Prim(GroupPrim::GroupElement);
+
+/// Type constraint for types that can be multiplication / division operands.
+#[derive(Debug, Clone, Copy)]
+struct MulOperand;
+
+impl fmt::Display for MulOperand {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("Mul")
+    }
+}
+
+impl Constraint<GroupPrim> for MulOperand {
+    fn apply(
+        &self,
+        ty: &Type<GroupPrim>,
+        substitutions: &mut Substitutions<GroupPrim>,
+        errors: OpErrors<'_, GroupPrim>,
+    ) {
+        use arithmetic_typing::arith::StructConstraint;
+
+        StructConstraint::new(*self, |prim| *prim != GroupPrim::Bool)
+            .deny_dyn_slices()
+            .apply(ty, substitutions, errors);
+    }
+
+    fn clone_boxed(&self) -> Box<dyn Constraint<GroupPrim>> {
+        Box::new(*self)
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 struct GroupArithmetic;
@@ -191,16 +220,19 @@ impl TypeArithmetic<GroupPrim> for GroupArithmetic {
                         );
                         GE
                     }
-                    (Type::Tuple(_), Type::Tuple(_)) => {
-                        substitutions.unify(&context.lhs, &context.rhs, errors.by_ref());
-                        context.lhs.clone()
-                    }
-
                     _ => {
-                        // FIXME: add `other` variant to `ErrorKind`?
-                        let err = ErrorKind::unsupported(context.op);
-                        errors.push(err);
-                        substitutions.new_type_var()
+                        MulOperand.apply(
+                            &context.lhs,
+                            substitutions,
+                            errors.with_location(ErrorLocation::Lhs),
+                        );
+                        MulOperand.apply(
+                            &context.rhs,
+                            substitutions,
+                            errors.with_location(ErrorLocation::Rhs),
+                        );
+                        substitutions.unify(&context.lhs, &context.rhs, errors);
+                        context.lhs.clone()
                     }
                 }
             }
@@ -218,9 +250,8 @@ impl TypeArithmetic<GroupPrim> for GroupArithmetic {
 
 fn prepare_env() -> TypeEnvironment<GroupPrim> {
     let rand_scalar = FnType::builder().returning(SC);
-    // TODO: too wide typing; we don't want to hash fns.
     let hash_to_scalar = FnType::builder()
-        .with_varargs(Type::any(), UnknownLen::param(0))
+        .with_varargs(ConstraintSet::just(Hashed), UnknownLen::param(0))
         .returning(SC);
     let to_scalar = FnType::builder().with_arg(GE).returning(SC);
 
@@ -242,8 +273,14 @@ fn schnorr_signatures() {
         .unwrap();
 
     assert_eq!(env["gen"].to_string(), "() -> (Sc, Ge)");
-    assert_eq!(env["sign"].to_string(), "('T, Sc) -> (Sc, Sc)");
-    assert_eq!(env["verify"].to_string(), "((Sc, Sc), 'T, Ge) -> Bool");
+    assert_eq!(
+        env["sign"].to_string(),
+        "for<'T: Hash> ('T, Sc) -> (Sc, Sc)"
+    );
+    assert_eq!(
+        env["verify"].to_string(),
+        "for<'T: Hash> ((Sc, Sc), 'T, Ge) -> Bool"
+    );
 }
 
 #[test]
@@ -315,11 +352,11 @@ fn dsa_signatures_imprecise() {
     assert_eq!(env["gen"].to_string(), "() -> (Num, Num)");
     assert_eq!(
         env["sign"].to_string(),
-        "for<'T: Lin> ('T, Num) -> (Num, Num)"
+        "for<'T: Hash> ('T, Num) -> (Num, Num)"
     );
     assert_eq!(
         env["verify"].to_string(),
-        "for<'T: Lin> ((Num, Num), 'T, Num) -> Bool"
+        "for<'T: Hash> ((Num, Num), 'T, Num) -> Bool"
     );
 }
 
@@ -331,8 +368,14 @@ fn dsa_signatures() {
         .unwrap();
 
     assert_eq!(env["gen"].to_string(), "() -> (Sc, Ge)");
-    assert_eq!(env["sign"].to_string(), "('T, Sc) -> (Sc, Sc)");
-    assert_eq!(env["verify"].to_string(), "((Sc, Sc), 'T, Ge) -> Bool");
+    assert_eq!(
+        env["sign"].to_string(),
+        "for<'T: Hash> ('T, Sc) -> (Sc, Sc)"
+    );
+    assert_eq!(
+        env["verify"].to_string(),
+        "for<'T: Hash> ((Sc, Sc), 'T, Ge) -> Bool"
+    );
 }
 
 #[test]
@@ -390,27 +433,6 @@ fn el_gamal_encryption() {
     assert_eq!(env["gen"].to_string(), "() -> (Sc, Ge)");
     assert_eq!(env["encrypt"].to_string(), "(Ge, Ge) -> (Ge, Ge)");
     assert_eq!(env["decrypt"].to_string(), "((Ge, Ge), Sc) -> Ge");
-
-    // `Ge` annotations are a temporary measure until constraints are revisited.
-    let additional_code = r#"
-        ONE = GEN ^ 0;
-        encrypt_and_combine = |messages, pk| {
-            messages.map(|msg| msg.encrypt(pk)).fold(
-                (ONE, ONE),
-                |(R_acc: Ge, B_acc: Ge), (R, B)| (R_acc * R, B_acc * B),
-            )
-        };
-
-        messages = (1, 2, 3, 4, 5).map(|_| GEN ^ rand_scalar());
-        assert_eq(
-            encrypt_and_combine(messages, pk).decrypt(sk),
-            messages.fold(ONE, |acc: Ge, msg| acc * msg)
-        );
-    "#;
-    let additional_code = U64Grammar::parse_statements(additional_code).unwrap();
-    env.process_with_arithmetic(&GroupArithmetic, &additional_code)
-        .unwrap();
-
     assert_eq!(
         env["encrypt_and_combine"].to_string(),
         "([Ge; N], Ge) -> (Ge, Ge)"

@@ -1,15 +1,14 @@
 //! Demonstrates how to use custom type constraints with custom primitive types.
 
-use std::{fmt, ops, str::FromStr};
+use std::{fmt, str::FromStr};
 
 use arithmetic_parser::{
     grammars::{NumGrammar, NumLiteral, Parse, Typed},
     BinaryOp, InputSpan, NomResult,
 };
 use arithmetic_typing::{
-    arith::*,
-    error::{ErrorKind, OpErrors},
-    Annotated, Prelude, PrimitiveType, Substitutions, Type, TypeEnvironment,
+    arith::*, error::OpErrors, Annotated, Prelude, PrimitiveType, Substitutions, Type,
+    TypeEnvironment,
 };
 
 /// Literal for arithmetic: either an integer or a byte buffer.
@@ -82,106 +81,43 @@ impl WithBoolean for NumOrBytesType {
 /// we consider its weaker variant: ability to add values of type `T`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Constraints {
-    /// No constraints.
-    None,
     /// Type is summable (can be used as an argument for binary `+`).
     Summable,
     /// Type is linear (can be used as an argument for all arithmetic ops).
     Lin,
 }
 
-impl Default for Constraints {
-    fn default() -> Self {
-        Self::None
-    }
-}
-
 impl fmt::Display for Constraints {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
-            Self::None => "",
             Self::Lin => "Lin",
             Self::Summable => "Sum",
         })
     }
 }
 
-impl FromStr for Constraints {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Lin" => Ok(Self::Lin),
-            "Sum" => Ok(Self::Summable),
-            _ => Err(anyhow::anyhow!("Expected `Lin` or `Sum`")),
-        }
-    }
-}
-
-impl ops::BitOrAssign<&Self> for Constraints {
-    fn bitor_assign(&mut self, rhs: &Constraints) {
-        *self = match (*self, rhs) {
-            (Self::Lin, _) | (_, Self::Lin) => Self::Lin,
-            (Self::Summable, _) | (_, Self::Summable) => Self::Summable,
-            _ => Self::None,
-        };
-    }
-}
-
-impl TypeConstraints<NumOrBytesType> for Constraints {
-    // Constraints are applied recursively, similar to `NumConstraints`.
+impl Constraint<NumOrBytesType> for Constraints {
     fn apply(
         &self,
         ty: &Type<NumOrBytesType>,
         substitutions: &mut Substitutions<NumOrBytesType>,
-        mut errors: OpErrors<'_, NumOrBytesType>,
+        errors: OpErrors<'_, NumOrBytesType>,
     ) {
-        if *self == Self::None {
-            return;
-        }
-
-        let resolved_ty = if let Type::Var(var) = ty {
-            substitutions.insert_constraints(var.index(), self);
-            substitutions.fast_resolve(ty)
-        } else {
-            ty
+        let predicate: fn(&NumOrBytesType) -> bool = match self {
+            Self::Summable => |prim| matches!(prim, NumOrBytesType::Bytes | NumOrBytesType::Num),
+            Self::Lin => |prim| *prim == NumOrBytesType::Num,
         };
+        StructConstraint::new(*self, predicate)
+            .deny_dyn_slices()
+            .apply(ty, substitutions, errors)
+    }
 
-        match resolved_ty {
-            // `Var`s are taken care of previously.
-            Type::Var(_) | Type::Prim(NumOrBytesType::Num) => {}
-
-            Type::Prim(NumOrBytesType::Bool) | Type::Function(_) => errors.push(
-                ErrorKind::failed_constraint(resolved_ty.to_owned(), self.to_owned()),
-            ),
-
-            // Bytes are summable, but not linear.
-            Type::Prim(NumOrBytesType::Bytes) => {
-                if *self != Self::Summable {
-                    errors.push(ErrorKind::failed_constraint(
-                        resolved_ty.to_owned(),
-                        self.to_owned(),
-                    ));
-                }
-            }
-
-            Type::Tuple(tuple) => {
-                let tuple = tuple.to_owned();
-                for (i, element) in tuple.element_types() {
-                    self.apply(element, substitutions, errors.with_location(i));
-                }
-            }
-
-            other => {
-                errors.push(ErrorKind::UnsupportedType(other.to_owned()));
-            }
-        }
+    fn clone_boxed(&self) -> Box<dyn Constraint<NumOrBytesType>> {
+        Box::new(*self)
     }
 }
 
-impl PrimitiveType for NumOrBytesType {
-    type Constraints = Constraints;
-}
+impl PrimitiveType for NumOrBytesType {}
 
 #[derive(Debug, Clone, Copy)]
 struct NumOrBytesArithmetic;

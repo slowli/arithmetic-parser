@@ -41,9 +41,7 @@ impl FromStr for StrType {
     }
 }
 
-impl PrimitiveType for StrType {
-    type Constraints = NumConstraints;
-}
+impl PrimitiveType for StrType {}
 
 impl WithBoolean for StrType {
     const BOOL: Self = Self::Bool;
@@ -115,13 +113,15 @@ impl TypeArithmetic<StrType> for StrArithmetic {
         context: &BinaryOpContext<StrType>,
         mut errors: OpErrors<'a, StrType>,
     ) -> Type<StrType> {
+        const OP_SETTINGS: OpConstraintSettings<'static, StrType> = OpConstraintSettings {
+            lin: &NumConstraints::Lin,
+            ops: &NumConstraints::Ops,
+        };
+
         match context.op {
-            BinaryOp::Add => NumArithmetic::unify_binary_op(
-                substitutions,
-                context,
-                errors,
-                NumConstraints::OP_SETTINGS,
-            ),
+            BinaryOp::Add => {
+                NumArithmetic::unify_binary_op(substitutions, context, errors, OP_SETTINGS)
+            }
 
             BinaryOp::Gt | BinaryOp::Lt | BinaryOp::Ge | BinaryOp::Le => {
                 let lhs_ty = &context.lhs;

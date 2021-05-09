@@ -7,12 +7,14 @@ use std::{
 };
 
 use crate::{
-    types::ParamQuantifier, LengthVar, Num, PrimitiveType, Tuple, TupleLen, Type, TypeVar,
+    arith::{Constraint, ConstraintSet},
+    types::ParamQuantifier,
+    LengthVar, Num, PrimitiveType, Tuple, TupleLen, Type, TypeVar,
 };
 
 #[derive(Debug, Clone)]
 pub(crate) struct ParamConstraints<Prim: PrimitiveType> {
-    pub type_params: HashMap<usize, Prim::Constraints>,
+    pub type_params: HashMap<usize, ConstraintSet<Prim>>,
     pub static_lengths: HashSet<usize>,
 }
 
@@ -58,24 +60,17 @@ impl<Prim: PrimitiveType> ParamConstraints<Prim> {
         self.type_params.is_empty() && self.static_lengths.is_empty()
     }
 
-    // Sort params by ascending index to have a consistent `Display` presentation.
-    #[cfg(test)]
-    fn type_params(&self) -> impl Iterator<Item = (usize, &Prim::Constraints)> + '_ {
+    fn type_params(&self) -> impl Iterator<Item = (usize, &ConstraintSet<Prim>)> + '_ {
         let mut type_params: Vec<_> = self.type_params.iter().map(|(&idx, c)| (idx, c)).collect();
         type_params.sort_unstable_by_key(|(idx, _)| *idx);
         type_params.into_iter()
-    }
-
-    #[cfg(not(test))]
-    fn type_params(&self) -> impl Iterator<Item = (usize, &Prim::Constraints)> + '_ {
-        self.type_params.iter().map(|(&idx, c)| (idx, c))
     }
 }
 
 #[derive(Debug)]
 pub(crate) struct FnParams<Prim: PrimitiveType> {
     /// Type params associated with this function. Filled in by `FnQuantifier`.
-    pub type_params: Vec<(usize, Prim::Constraints)>,
+    pub type_params: Vec<(usize, ConstraintSet<Prim>)>,
     /// Length params associated with this function. Filled in by `FnQuantifier`.
     pub len_params: Vec<(usize, bool)>,
     /// Constraints for params of this function and child functions.
@@ -138,7 +133,7 @@ impl<Prim: PrimitiveType> FnParams<Prim> {
 ///
 /// [length params]: crate::LengthVar
 /// [type params]: crate::TypeVar
-/// [constraint]: crate::TypeConstraints
+/// [constraint]: crate::arith::Constraint
 /// [dynamic length]: crate::TupleLen#static-lengths
 ///
 /// # Construction
@@ -244,10 +239,10 @@ impl<Prim: PrimitiveType> FnType<Prim> {
     /// # Panics
     ///
     /// - Panics if parameters were already computed for the function.
-    pub fn with_constraints(
+    pub fn with_constraints<C: Constraint<Prim>>(
         self,
         indexes: &[usize],
-        constraints: &Prim::Constraints,
+        constraint: C,
     ) -> FnWithConstraints<Prim> {
         assert!(
             self.params.is_none(),
@@ -255,14 +250,11 @@ impl<Prim: PrimitiveType> FnType<Prim> {
             self
         );
 
-        let type_params = if *constraints == Prim::Constraints::default() {
-            HashMap::new()
-        } else {
-            indexes
-                .iter()
-                .map(|&idx| (idx, constraints.clone()))
-                .collect()
-        };
+        let constraints = ConstraintSet::just(constraint);
+        let type_params = indexes
+            .iter()
+            .map(|&idx| (idx, constraints.clone()))
+            .collect();
 
         FnWithConstraints {
             function: self,
@@ -318,10 +310,13 @@ impl<Prim: PrimitiveType> fmt::Display for FnWithConstraints<Prim> {
 impl<Prim: PrimitiveType> FnWithConstraints<Prim> {
     /// Marks type params with the specified `indexes` to have `constraints`. If some constraints
     /// are already present for some of the types, they are overwritten.
-    pub fn with_constraints(mut self, indexes: &[usize], constraints: &Prim::Constraints) -> Self {
-        if *constraints != Prim::Constraints::default() {
-            let new_constraints = indexes.iter().map(|&idx| (idx, constraints.clone()));
-            self.constraints.type_params.extend(new_constraints);
+    pub fn with_constraint<C>(mut self, indexes: &[usize], constraint: &C) -> Self
+    where
+        C: Constraint<Prim> + Clone,
+    {
+        for &i in indexes {
+            let constraints = self.constraints.type_params.entry(i).or_default();
+            constraints.insert(constraint.clone());
         }
         self
     }
@@ -378,7 +373,7 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for Type<Prim> {
 ///     .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
 ///     .with_arg(map_fn_arg)
 ///     .returning(Type::param(1).repeat(UnknownLen::Dynamic))
-///     .with_constraints(&[1], &NumConstraints::Lin);
+///     .with_constraints(&[1], NumConstraints::Lin);
 /// assert_eq!(
 ///     map_fn_type.to_string(),
 ///     "for<'U: Lin> (['T; N], ('T) -> 'U) -> ['U]"
@@ -438,14 +433,15 @@ mod tests {
 
     #[test]
     fn constraints_display() {
-        let constraints: ParamConstraints<Num> = ParamConstraints {
-            type_params: vec![(0, NumConstraints::Lin)].into_iter().collect(),
+        let type_constraints = ConstraintSet::<Num>::just(NumConstraints::Lin);
+        let constraints = ParamConstraints {
+            type_params: vec![(0, type_constraints.clone())].into_iter().collect(),
             static_lengths: HashSet::new(),
         };
         assert_eq!(constraints.to_string(), "'T: Lin");
 
         let constraints: ParamConstraints<Num> = ParamConstraints {
-            type_params: vec![(0, NumConstraints::Lin)].into_iter().collect(),
+            type_params: vec![(0, type_constraints)].into_iter().collect(),
             static_lengths: vec![0].into_iter().collect(),
         };
         assert_eq!(constraints.to_string(), "len! N; 'T: Lin");
@@ -456,7 +452,7 @@ mod tests {
         let sum_fn = <FnType>::builder()
             .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
             .returning(Type::param(0))
-            .with_constraints(&[0], &NumConstraints::Lin);
+            .with_constraints(&[0], NumConstraints::Lin);
         assert_eq!(sum_fn.to_string(), "for<'T: Lin> (['T; N]) -> 'T");
     }
 
@@ -465,7 +461,7 @@ mod tests {
         let sum_fn: FnType = FnType::builder()
             .with_arg(Type::NUM.repeat(UnknownLen::param(0)))
             .returning(Type::NUM)
-            .with_constraints(&[], &NumConstraints::Lin)
+            .with_constraints(&[], NumConstraints::Lin)
             .into();
         assert_eq!(sum_fn.to_string(), "([Num; N]) -> Num");
 
@@ -473,7 +469,7 @@ mod tests {
             .with_arg(Type::NUM)
             .with_arg(sum_fn.clone())
             .returning(Type::NUM)
-            .with_constraints(&[], &NumConstraints::Lin)
+            .with_constraints(&[], NumConstraints::Lin)
             .into();
         assert_eq!(complex_fn.to_string(), "(Num, ([Num; N]) -> Num) -> Num");
 
@@ -481,7 +477,7 @@ mod tests {
             .with_varargs(Type::NUM, UnknownLen::param(0))
             .with_arg(sum_fn)
             .returning(Type::NUM)
-            .with_constraints(&[], &NumConstraints::Lin)
+            .with_constraints(&[], NumConstraints::Lin)
             .into();
         assert_eq!(
             other_complex_fn.to_string(),

@@ -1,14 +1,13 @@
 //! `TypeConstraints` and implementations.
 
-use std::{fmt, ops, str::FromStr};
+use std::{collections::HashMap, fmt, marker::PhantomData};
 
 use crate::{
-    arith::OpConstraintSettings,
     error::{ErrorKind, OpErrors},
     PrimitiveType, Slice, Substitutions, Type,
 };
 
-/// Container for constraints that can be placed on type variables.
+/// Constraint that can be placed on [`Type`]s.
 ///
 /// Constraints can be placed on [function](crate::FnType) type variables, and can be applied
 /// to types in [`TypeArithmetic`] impls. For example, [`NumArithmetic`] places
@@ -24,135 +23,159 @@ use crate::{
 ///
 /// # Implementation rules
 ///
-/// Usually, this trait should be implemented with something akin to [`bitflags`].
-///
-/// [`bitflags`]: https://docs.rs/bitflags/
-///
-/// - [`Default`] must return a container with no restrictions.
-/// - [`BitOrAssign`](ops::BitOrAssign) must perform the union of the provided constraints.
-/// - [`Display`](fmt::Display) must display constraints in the form `Foo + Bar + Quux`,
-///   where `Foo`, `Bar` and `Quux` are *primitive* constraints (i.e., ones not reduced
-///   to a combination of other constraints). The primitive constraints must be represented
-///   as identifiers (i.e., consist of alphanumeric chars and start with an alphabetic char
-///   or `_`).
-/// - [`FromStr`] must parse primitive constraints.
+/// - [`Display`](fmt::Display) must display constraint as an identifier (e.g., `Lin`).
+///   The string presentation of a constraint must be unique within a [`PrimitiveType`];
+///   it is used to identify constraints in a [`ConstraintSet`].
 ///
 /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
 /// [`NumArithmetic`]: crate::arith::NumArithmetic
-pub trait TypeConstraints<Prim>:
-    Clone
-    + Default
-    + PartialEq
-    + fmt::Debug
-    + fmt::Display
-    + FromStr
-    + for<'op> ops::BitOrAssign<&'op Self>
-    + Send
-    + Sync
-    + 'static
-where
-    Prim: PrimitiveType<Constraints = Self>,
-{
+pub trait Constraint<Prim: PrimitiveType>: fmt::Display + Send + Sync + 'static {
     /// Applies these constraints to the provided `ty`pe. Returns an error if the type
     /// contradicts the constraints.
     ///
     /// A typical implementation will use `substitutions` to
-    /// [place constraints on type vars](Substitutions::insert_constraints()), e.g.,
-    /// by recursively traversing and resolving the provided type.
+    /// [place constraints on type vars](Substitutions::insert_constraint()).
+    ///
+    /// # Tips
+    ///
+    /// - You can use [`StructConstraint`] for typical use cases, which involve recursively
+    ///   traversing `ty`.
     fn apply(
         &self,
         ty: &Type<Prim>,
         substitutions: &mut Substitutions<Prim>,
         errors: OpErrors<'_, Prim>,
     );
+
+    /// Clones this constraint into a `Box`.
+    ///
+    /// This method should be implemented by implementing [`Clone`] and boxing its output.
+    fn clone_boxed(&self) -> Box<dyn Constraint<Prim>>;
 }
 
-/// Numeric constraints. In particular, this is [`TypeConstraints`] associated
-/// with the [`Num`](crate::Num) literal.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NumConstraints {
-    /// No constraints.
-    None,
-    /// Type can be subject to unary `-` and can participate in `T op Num` / `Num op T` operations.
-    ///
-    /// Defined recursively as linear primitive types and tuples consisting of `Lin` types.
-    Lin,
-    /// Type can participate in binary arithmetic ops (`T op T`).
-    ///
-    /// Defined as a subset of `Lin` types without dynamically sized slices and
-    /// any types containing dynamically sized slices.
-    Ops,
-}
-
-impl Default for NumConstraints {
-    fn default() -> Self {
-        Self::None
+impl<Prim: PrimitiveType> fmt::Debug for dyn Constraint<Prim> {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter
+            .debug_tuple("dyn Constraint")
+            .field(&self.to_string())
+            .finish()
     }
 }
 
-impl fmt::Display for NumConstraints {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::None => "",
-            Self::Lin => "Lin",
-            Self::Ops => "Ops",
-        })
+impl<Prim: PrimitiveType> Clone for Box<dyn Constraint<Prim>> {
+    fn clone(&self) -> Self {
+        self.clone_boxed()
     }
 }
 
-impl FromStr for NumConstraints {
-    type Err = anyhow::Error;
+impl<Prim: PrimitiveType> Constraint<Prim> for Box<dyn Constraint<Prim>> {
+    fn apply(
+        &self,
+        ty: &Type<Prim>,
+        substitutions: &mut Substitutions<Prim>,
+        errors: OpErrors<'_, Prim>,
+    ) {
+        (**self).apply(ty, substitutions, errors);
+    }
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Lin" => Ok(Self::Lin),
-            "Ops" => Ok(Self::Ops),
-            _ => Err(anyhow::anyhow!("Expected `Lin` or `Ops`")),
+    fn clone_boxed(&self) -> Box<dyn Constraint<Prim>> {
+        (**self).clone_boxed()
+    }
+}
+
+/// Helper to define *structural* [`Constraint`]s, i.e., constraints recursively checking
+/// the provided type.
+///
+/// The following logic is used to check whether a type satisfies the constraint:
+///
+/// - Primitive types satisfy the constraint iff the predicate provided in [`Self::new()`]
+///   returns `true`.
+/// - [`Type::Any`] always satisfies the constraint.
+/// - Functional types never satisfy the constraint.
+/// - A compound type (i.e., a tuple) satisfies the constraint iff all its items satisfy
+///   the constraint.
+/// - If [`Self::deny_dyn_slices()`] is set, tuple types need to have static length.
+///
+/// # Examples
+///
+/// Defining a constraint type using `StructConstraint`:
+///
+/// ```
+/// # use arithmetic_typing::{
+/// #     arith::{Constraint, StructConstraint}, error::OpErrors, PrimitiveType, Substitutions,
+/// #     Type,
+/// # };
+/// # use std::fmt;
+///
+/// /// Constraint for hashable types.
+/// #[derive(Clone, Copy)]
+/// struct Hashed;
+///
+/// impl fmt::Display for Hashed {
+///     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+///         formatter.write_str("Hash")
+///     }
+/// }
+///
+/// impl<Prim: PrimitiveType> Constraint<Prim> for Hashed {
+///     fn apply(
+///         &self,
+///         ty: &Type<Prim>,
+///         substitutions: &mut Substitutions<Prim>,
+///         errors: OpErrors<'_, Prim>,
+///     ) {
+///         // We can hash everything except for functions (and thus,
+///         // types containing functions).
+///         StructConstraint::new(*self, |_| true)
+///             .apply(ty, substitutions, errors);
+///     }
+///
+///     fn clone_boxed(&self) -> Box<dyn Constraint<Prim>> {
+///         Box::new(*self)
+///     }
+/// }
+/// ```
+#[derive(Debug)]
+pub struct StructConstraint<Prim: PrimitiveType, C, F> {
+    constraint: C,
+    predicate: F,
+    deny_dyn_slices: bool,
+    _prim: PhantomData<Prim>,
+}
+
+impl<Prim, C, F> StructConstraint<Prim, C, F>
+where
+    Prim: PrimitiveType,
+    C: Constraint<Prim> + Clone,
+    F: Fn(&Prim) -> bool,
+{
+    /// Creates a new helper.
+    pub fn new(constraint: C, predicate: F) -> Self {
+        Self {
+            constraint,
+            predicate,
+            deny_dyn_slices: false,
+            _prim: PhantomData,
         }
     }
-}
 
-impl ops::BitOrAssign<&Self> for NumConstraints {
-    fn bitor_assign(&mut self, rhs: &Self) {
-        *self = match (*self, rhs) {
-            (Self::Ops, _) | (_, Self::Ops) => Self::Ops,
-            (Self::Lin, _) | (_, Self::Lin) => Self::Lin,
-            _ => Self::None,
-        };
+    /// Marks that dynamically sized slices should fail the constraint check.
+    pub fn deny_dyn_slices(mut self) -> Self {
+        self.deny_dyn_slices = true;
+        self
     }
-}
 
-impl NumConstraints {
-    /// Default constraint settings for arithmetic ops.
-    pub const OP_SETTINGS: OpConstraintSettings<'static, Self> = OpConstraintSettings {
-        lin: &Self::Lin,
-        ops: &Self::Ops,
-    };
-}
-
-/// Primitive type which supports a notion of *linearity*. Linear types are types that
-/// can be used in arithmetic ops.
-pub trait LinearType: PrimitiveType<Constraints = NumConstraints> {
-    /// Returns `true` iff this type is linear.
-    fn is_linear(&self) -> bool;
-}
-
-impl<Prim: LinearType> TypeConstraints<Prim> for NumConstraints {
-    // TODO: extract common logic for it to be reusable?
-    fn apply(
+    /// Applies the enclosed constraint structurally.
+    #[allow(clippy::missing_panics_doc)] // triggered by `debug_assert`
+    pub fn apply(
         &self,
         ty: &Type<Prim>,
         substitutions: &mut Substitutions<Prim>,
         mut errors: OpErrors<'_, Prim>,
     ) {
-        if *self == Self::None {
-            // The default constraint: does nothing.
-            return;
-        }
-
         let resolved_ty = if let Type::Var(var) = ty {
             debug_assert!(var.is_free());
-            substitutions.insert_constraints(var.index(), self);
+            substitutions.insert_constraint(var.index(), &self.constraint);
             substitutions.fast_resolve(ty)
         } else {
             ty
@@ -161,16 +184,20 @@ impl<Prim: LinearType> TypeConstraints<Prim> for NumConstraints {
         match resolved_ty {
             // `Var`s are taken care of previously. `Any` satisfies any constraints.
             Type::Any(_) | Type::Var(_) => {}
-            Type::Prim(lit) if lit.is_linear() => {}
 
-            Type::Function(_) | Type::Prim(_) => {
-                errors.push(ErrorKind::failed_constraint(resolved_ty.clone(), *self));
+            Type::Prim(lit) if (self.predicate)(lit) => {}
+
+            Type::Prim(_) | Type::Function(_) => {
+                errors.push(ErrorKind::failed_constraint(
+                    resolved_ty.clone(),
+                    self.constraint.clone(),
+                ));
             }
 
             Type::Tuple(tuple) => {
                 let tuple = tuple.clone();
 
-                if *self == Self::Ops {
+                if self.deny_dyn_slices {
                     let middle_len = tuple.parts().1.map(Slice::len);
                     if let Some(middle_len) = middle_len {
                         if let Err(err) = substitutions.apply_static_len(middle_len) {
@@ -187,40 +214,132 @@ impl<Prim: LinearType> TypeConstraints<Prim> for NumConstraints {
     }
 }
 
-/// [`TypeConstraints`] implementation with no supported constraints.
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub struct NoConstraints(());
+/// Numeric [`Constraint`]s. In particular, they are applicable to the [`Num`](crate::Num) literal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NumConstraints {
+    /// Type can be subject to unary `-` and can participate in `T op Num` / `Num op T` operations.
+    ///
+    /// Defined recursively as linear primitive types and tuples consisting of `Lin` types.
+    Lin,
+    /// Type can participate in binary arithmetic ops (`T op T`).
+    ///
+    /// Defined as a subset of `Lin` types without dynamically sized slices and
+    /// any types containing dynamically sized slices.
+    Ops,
+}
 
-impl fmt::Display for NoConstraints {
-    fn fmt(&self, _formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for NumConstraints {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Lin => "Lin",
+            Self::Ops => "Ops",
+        })
+    }
+}
+
+/// Primitive type which supports a notion of *linearity*. Linear types are types that
+/// can be used in arithmetic ops.
+pub trait LinearType: PrimitiveType {
+    /// Returns `true` iff this type is linear.
+    fn is_linear(&self) -> bool;
+}
+
+impl<Prim: LinearType> Constraint<Prim> for NumConstraints {
+    fn apply(
+        &self,
+        ty: &Type<Prim>,
+        substitutions: &mut Substitutions<Prim>,
+        errors: OpErrors<'_, Prim>,
+    ) {
+        let helper = match self {
+            Self::Lin => StructConstraint::new(*self, LinearType::is_linear),
+            Self::Ops => StructConstraint::new(*self, LinearType::is_linear).deny_dyn_slices(),
+        };
+        helper.apply(ty, substitutions, errors);
+    }
+
+    fn clone_boxed(&self) -> Box<dyn Constraint<Prim>> {
+        Box::new(*self)
+    }
+}
+
+/// Set of [`Constraint`]s.
+///
+/// [`Display`](fmt::Display)ed as `Foo + Bar + Quux`, where `Foo`, `Bar` and `Quux` are
+/// constraints in the set.
+#[derive(Debug, Clone)]
+pub struct ConstraintSet<Prim: PrimitiveType> {
+    inner: HashMap<String, Box<dyn Constraint<Prim>>>,
+}
+
+impl<Prim: PrimitiveType> Default for ConstraintSet<Prim> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<Prim: PrimitiveType> PartialEq for ConstraintSet<Prim> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.inner.len() == other.inner.len() {
+            self.inner.keys().all(|key| other.inner.contains_key(key))
+        } else {
+            false
+        }
+    }
+}
+
+impl<Prim: PrimitiveType> fmt::Display for ConstraintSet<Prim> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let len = self.inner.len();
+        for (i, constraint) in self.inner.values().enumerate() {
+            fmt::Display::fmt(constraint, formatter)?;
+            if i + 1 < len {
+                formatter.write_str(" + ")?;
+            }
+        }
         Ok(())
     }
 }
 
-impl FromStr for NoConstraints {
-    type Err = anyhow::Error;
-
-    fn from_str(_: &str) -> Result<Self, Self::Err> {
-        Err(anyhow::anyhow!("Cannot be instantiated"))
+impl<Prim: PrimitiveType> ConstraintSet<Prim> {
+    /// Creates an empty set.
+    pub fn new() -> Self {
+        Self {
+            inner: HashMap::new(),
+        }
     }
-}
 
-impl ops::BitOrAssign<&Self> for NoConstraints {
-    fn bitor_assign(&mut self, _rhs: &Self) {
-        // Do nothing
+    /// Creates a set with one constraint.
+    pub fn just(constraint: impl Constraint<Prim>) -> Self {
+        let mut this = Self::new();
+        this.insert(constraint);
+        this
     }
-}
 
-impl<Prim> TypeConstraints<Prim> for NoConstraints
-where
-    Prim: PrimitiveType<Constraints = Self>,
-{
-    fn apply(
+    /// Checks if this constraint set is empty.
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    /// Inserts a constraint into this set.
+    pub fn insert(&mut self, constraint: impl Constraint<Prim>) {
+        self.inner
+            .insert(constraint.to_string(), Box::new(constraint));
+    }
+
+    pub(crate) fn get_by_name(&self, name: &str) -> Option<&dyn Constraint<Prim>> {
+        self.inner.get(name).map(AsRef::as_ref)
+    }
+
+    /// Applies all constraints from this set.
+    pub(crate) fn apply_all(
         &self,
-        _ty: &Type<Prim>,
-        _substitutions: &mut Substitutions<Prim>,
-        _errors: OpErrors<'_, Prim>,
+        ty: &Type<Prim>,
+        substitutions: &mut Substitutions<Prim>,
+        mut errors: OpErrors<'_, Prim>,
     ) {
-        // Do nothing
+        for constraint in self.inner.values() {
+            constraint.apply(ty, substitutions, errors.by_ref());
+        }
     }
 }

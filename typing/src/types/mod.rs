@@ -2,7 +2,10 @@
 
 use std::{borrow::Cow, fmt};
 
-use crate::{arith::WithBoolean, Num, PrimitiveType};
+use crate::{
+    arith::{ConstraintSet, WithBoolean},
+    Num, PrimitiveType,
+};
 
 mod fn_type;
 mod quantifier;
@@ -83,13 +86,13 @@ impl TypeVar {
 ///
 /// # Notation
 ///
-/// - [`Self::Any`] is represented as `any` with an optional [`TypeConstraints`] suffix.
+/// - [`Self::Any`] is represented as `any` with an optional [`ConstraintSet`] suffix.
 /// - [`Prim`](Self::Prim)itive types are represented using the [`Display`](fmt::Display)
 ///   implementation of the corresponding [`PrimitiveType`].
 /// - [`Var`](Self::Var)s are represented as documented in [`TypeVar`].
 /// - Notation for [functional](FnType) and [tuple](Tuple) types is documented separately.
 ///
-/// [`TypeConstraints`]: crate::arith::TypeConstraints
+/// [`ConstraintSet`]: crate::arith::ConstraintSet
 ///
 /// # Examples
 ///
@@ -163,7 +166,7 @@ impl TypeVar {
 ///
 /// ## `Any` with constraints
 ///
-/// [`Self::Any`] can have [`TypeConstraints`]. This is denoted as a suffix after `any`,
+/// [`Self::Any`] can have [constraints][`ConstraintSet`]. This is denoted as a suffix after `any`,
 /// for example, `any Lin`. A constrained `any` is more restricted than the "default" one;
 /// on assignment to or from `any _`, the types will be checked / set to satisfy the constraints.
 ///
@@ -225,7 +228,7 @@ impl TypeVar {
 pub enum Type<Prim: PrimitiveType = Num> {
     /// Any type aka "I'll think about typing later". Similar to `any` type in TypeScript.
     /// See [the dedicated section](#any-type) for more details.
-    Any(Prim::Constraints),
+    Any(ConstraintSet<Prim>),
     /// Primitive type.
     Prim(Prim),
     /// Functional type.
@@ -253,7 +256,7 @@ impl<Prim: PrimitiveType> fmt::Display for Type<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Any(constraints) => {
-                if *constraints == Prim::Constraints::default() {
+                if constraints.is_empty() {
                     formatter.write_str("any")
                 } else {
                     write!(formatter, "any {}", constraints)
@@ -274,14 +277,20 @@ impl<Prim: PrimitiveType> From<FnType<Prim>> for Type<Prim> {
 }
 
 impl<Prim: PrimitiveType> From<Tuple<Prim>> for Type<Prim> {
-    fn from(tuple: Tuple<Prim>) -> Type<Prim> {
+    fn from(tuple: Tuple<Prim>) -> Self {
         Self::Tuple(tuple)
     }
 }
 
 impl<Prim: PrimitiveType> From<Slice<Prim>> for Type<Prim> {
-    fn from(slice: Slice<Prim>) -> Type<Prim> {
+    fn from(slice: Slice<Prim>) -> Self {
         Self::Tuple(slice.into())
+    }
+}
+
+impl<Prim: PrimitiveType> From<ConstraintSet<Prim>> for Type<Prim> {
+    fn from(constraints: ConstraintSet<Prim>) -> Self {
+        Self::Any(constraints)
     }
 }
 
@@ -334,7 +343,7 @@ impl<Prim: PrimitiveType> Type<Prim> {
 
     /// Creates an unbounded `any` type.
     pub fn any() -> Self {
-        Self::Any(Prim::Constraints::default())
+        Self::Any(ConstraintSet::default())
     }
 
     pub(crate) fn free_var(index: usize) -> Self {

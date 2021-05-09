@@ -3,7 +3,8 @@
 use std::fmt;
 
 use crate::{
-    ast::AstConversionError, error::ErrorLocation, PrimitiveType, TupleIndex, TupleLen, Type,
+    arith::Constraint, ast::AstConversionError, error::ErrorLocation, PrimitiveType, TupleIndex,
+    TupleLen, Type,
 };
 use arithmetic_parser::UnsupportedType;
 
@@ -71,8 +72,8 @@ pub enum ErrorKind<Prim: PrimitiveType> {
     FailedConstraint {
         /// Type that fails constraint requirement.
         ty: Type<Prim>,
-        /// Failing constraint(s).
-        constraint: Prim::Constraints,
+        /// Failing constraint.
+        constraint: Box<dyn Constraint<Prim>>,
     },
     /// Length with the static constraint is actually dynamic (contains [`UnknownLen::Dynamic`]).
     ///
@@ -140,7 +141,11 @@ impl<Prim: PrimitiveType> fmt::Display for ErrorKind<Prim> {
             }
 
             Self::FailedConstraint { ty, constraint } => {
-                write!(formatter, "Type `{}` fails constraint `{}`", ty, constraint)
+                write!(
+                    formatter,
+                    "Type `{}` fails constraint `{:?}`",
+                    ty, constraint
+                )
             }
             Self::DynamicLen(len) => {
                 write!(formatter, "Length `{}` is required to be static", len)
@@ -177,7 +182,10 @@ impl<Prim: PrimitiveType> ErrorKind<Prim> {
     }
 
     /// Creates a "failed constraint" error.
-    pub fn failed_constraint(ty: Type<Prim>, constraint: Prim::Constraints) -> Self {
-        Self::FailedConstraint { ty, constraint }
+    pub fn failed_constraint(ty: Type<Prim>, constraint: impl Constraint<Prim> + Clone) -> Self {
+        Self::FailedConstraint {
+            ty,
+            constraint: Box::new(constraint),
+        }
     }
 }

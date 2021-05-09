@@ -143,7 +143,7 @@ pub use self::{
 };
 
 use self::{
-    arith::{LinearType, NumConstraints, TypeConstraints, WithBoolean},
+    arith::{LinearType, WithBoolean},
     ast::TypeAst,
 };
 
@@ -212,15 +212,11 @@ use self::{
 ///     }
 /// }
 ///
-/// impl PrimitiveType for NumOrBytes {
-///     type Constraints = NoConstraints;
-/// }
+/// impl PrimitiveType for NumOrBytes {}
 /// ```
 pub trait PrimitiveType:
     Clone + PartialEq + fmt::Debug + fmt::Display + FromStr + Send + Sync + 'static
 {
-    /// Constraints that can be placed on type variables.
-    type Constraints: TypeConstraints<Self>;
 }
 
 /// Primitive types for numeric arithmetic.
@@ -253,9 +249,7 @@ impl FromStr for Num {
     }
 }
 
-impl PrimitiveType for Num {
-    type Constraints = NumConstraints;
-}
+impl PrimitiveType for Num {}
 
 impl WithBoolean for Num {
     const BOOL: Self = Self::Bool;

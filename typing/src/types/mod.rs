@@ -2,7 +2,10 @@
 
 use std::{borrow::Cow, fmt};
 
-use crate::{arith::WithBoolean, Num, PrimitiveType};
+use crate::{
+    arith::{ConstraintSet, WithBoolean},
+    Num, PrimitiveType,
+};
 
 mod fn_type;
 mod quantifier;
@@ -225,7 +228,7 @@ impl TypeVar {
 pub enum Type<Prim: PrimitiveType = Num> {
     /// Any type aka "I'll think about typing later". Similar to `any` type in TypeScript.
     /// See [the dedicated section](#any-type) for more details.
-    Any(Prim::Constraints),
+    Any(ConstraintSet<Prim>),
     /// Primitive type.
     Prim(Prim),
     /// Functional type.
@@ -253,7 +256,7 @@ impl<Prim: PrimitiveType> fmt::Display for Type<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Any(constraints) => {
-                if *constraints == Prim::Constraints::default() {
+                if constraints.is_empty() {
                     formatter.write_str("any")
                 } else {
                     write!(formatter, "any {}", constraints)
@@ -334,7 +337,7 @@ impl<Prim: PrimitiveType> Type<Prim> {
 
     /// Creates an unbounded `any` type.
     pub fn any() -> Self {
-        Self::Any(Prim::Constraints::default())
+        Self::Any(ConstraintSet::default())
     }
 
     pub(crate) fn free_var(index: usize) -> Self {

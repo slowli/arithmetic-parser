@@ -24,7 +24,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
             .filter_map(|(var_idx, param_idx)| {
                 let constraints = substitutions.constraints.get(&var_idx);
                 constraints
-                    .filter(|constraints| **constraints != Prim::Constraints::default())
+                    .filter(|constraints| !constraints.is_empty())
                     .cloned()
                     .map(|constraints| (param_idx, constraints))
             })

@@ -1,9 +1,8 @@
 //! `TypeConstraints` and implementations.
 
-use std::{fmt, ops, str::FromStr};
+use std::{collections::HashMap, fmt};
 
 use crate::{
-    arith::OpConstraintSettings,
     error::{ErrorKind, OpErrors},
     PrimitiveType, Slice, Substitutions, Type,
 };
@@ -39,20 +38,7 @@ use crate::{
 ///
 /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
 /// [`NumArithmetic`]: crate::arith::NumArithmetic
-pub trait TypeConstraints<Prim>:
-    Clone
-    + Default
-    + PartialEq
-    + fmt::Debug
-    + fmt::Display
-    + FromStr
-    + for<'op> ops::BitOrAssign<&'op Self>
-    + Send
-    + Sync
-    + 'static
-where
-    Prim: PrimitiveType<Constraints = Self>,
-{
+pub trait Constraint<Prim: PrimitiveType>: fmt::Display + Send + Sync + 'static {
     /// Applies these constraints to the provided `ty`pe. Returns an error if the type
     /// contradicts the constraints.
     ///
@@ -65,14 +51,47 @@ where
         substitutions: &mut Substitutions<Prim>,
         errors: OpErrors<'_, Prim>,
     );
+
+    /// Clones this constraint into a `Box`.
+    ///
+    /// This method should be implemented by implementing [`Clone`] and boxing its output.
+    fn clone_boxed(&self) -> Box<dyn Constraint<Prim>>;
+}
+
+impl<Prim: PrimitiveType> fmt::Debug for dyn Constraint<Prim> {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter
+            .debug_tuple("dyn Constraint")
+            .field(&self.to_string())
+            .finish()
+    }
+}
+
+impl<Prim: PrimitiveType> Clone for Box<dyn Constraint<Prim>> {
+    fn clone(&self) -> Self {
+        self.clone_boxed()
+    }
+}
+
+impl<Prim: PrimitiveType> Constraint<Prim> for Box<dyn Constraint<Prim>> {
+    fn apply(
+        &self,
+        ty: &Type<Prim>,
+        substitutions: &mut Substitutions<Prim>,
+        errors: OpErrors<'_, Prim>,
+    ) {
+        (**self).apply(ty, substitutions, errors);
+    }
+
+    fn clone_boxed(&self) -> Box<dyn Constraint<Prim>> {
+        (**self).clone_boxed()
+    }
 }
 
 /// Numeric constraints. In particular, this is [`TypeConstraints`] associated
 /// with the [`Num`](crate::Num) literal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NumConstraints {
-    /// No constraints.
-    None,
     /// Type can be subject to unary `-` and can participate in `T op Num` / `Num op T` operations.
     ///
     /// Defined recursively as linear primitive types and tuples consisting of `Lin` types.
@@ -84,60 +103,23 @@ pub enum NumConstraints {
     Ops,
 }
 
-impl Default for NumConstraints {
-    fn default() -> Self {
-        Self::None
-    }
-}
-
 impl fmt::Display for NumConstraints {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
-            Self::None => "",
             Self::Lin => "Lin",
             Self::Ops => "Ops",
         })
     }
 }
 
-impl FromStr for NumConstraints {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Lin" => Ok(Self::Lin),
-            "Ops" => Ok(Self::Ops),
-            _ => Err(anyhow::anyhow!("Expected `Lin` or `Ops`")),
-        }
-    }
-}
-
-impl ops::BitOrAssign<&Self> for NumConstraints {
-    fn bitor_assign(&mut self, rhs: &Self) {
-        *self = match (*self, rhs) {
-            (Self::Ops, _) | (_, Self::Ops) => Self::Ops,
-            (Self::Lin, _) | (_, Self::Lin) => Self::Lin,
-            _ => Self::None,
-        };
-    }
-}
-
-impl NumConstraints {
-    /// Default constraint settings for arithmetic ops.
-    pub const OP_SETTINGS: OpConstraintSettings<'static, Self> = OpConstraintSettings {
-        lin: &Self::Lin,
-        ops: &Self::Ops,
-    };
-}
-
 /// Primitive type which supports a notion of *linearity*. Linear types are types that
 /// can be used in arithmetic ops.
-pub trait LinearType: PrimitiveType<Constraints = NumConstraints> {
+pub trait LinearType: PrimitiveType {
     /// Returns `true` iff this type is linear.
     fn is_linear(&self) -> bool;
 }
 
-impl<Prim: LinearType> TypeConstraints<Prim> for NumConstraints {
+impl<Prim: LinearType> Constraint<Prim> for NumConstraints {
     // TODO: extract common logic for it to be reusable?
     fn apply(
         &self,
@@ -145,14 +127,9 @@ impl<Prim: LinearType> TypeConstraints<Prim> for NumConstraints {
         substitutions: &mut Substitutions<Prim>,
         mut errors: OpErrors<'_, Prim>,
     ) {
-        if *self == Self::None {
-            // The default constraint: does nothing.
-            return;
-        }
-
         let resolved_ty = if let Type::Var(var) = ty {
             debug_assert!(var.is_free());
-            substitutions.insert_constraints(var.index(), self);
+            substitutions.insert_constraint(var.index(), self);
             substitutions.fast_resolve(ty)
         } else {
             ty
@@ -185,42 +162,72 @@ impl<Prim: LinearType> TypeConstraints<Prim> for NumConstraints {
             }
         }
     }
+
+    fn clone_boxed(&self) -> Box<dyn Constraint<Prim>> {
+        Box::new(*self)
+    }
 }
 
-/// [`TypeConstraints`] implementation with no supported constraints.
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub struct NoConstraints(());
+/// Set of [`Constraint`]s.
+#[derive(Debug, Clone)]
+pub struct ConstraintSet<Prim: PrimitiveType> {
+    inner: HashMap<String, Box<dyn Constraint<Prim>>>,
+}
 
-impl fmt::Display for NoConstraints {
-    fn fmt(&self, _formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<Prim: PrimitiveType> Default for ConstraintSet<Prim> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<Prim: PrimitiveType> PartialEq for ConstraintSet<Prim> {
+    fn eq(&self, other: &Self) -> bool {
+        // TODO: is key ordering stable?
+        self.inner.keys().eq(other.inner.keys())
+    }
+}
+
+impl<Prim: PrimitiveType> fmt::Display for ConstraintSet<Prim> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let len = self.inner.len();
+        for (i, constraint) in self.inner.values().enumerate() {
+            fmt::Display::fmt(constraint, formatter)?;
+            if i + 1 < len {
+                formatter.write_str(" + ")?;
+            }
+        }
         Ok(())
     }
 }
 
-impl FromStr for NoConstraints {
-    type Err = anyhow::Error;
-
-    fn from_str(_: &str) -> Result<Self, Self::Err> {
-        Err(anyhow::anyhow!("Cannot be instantiated"))
+impl<Prim: PrimitiveType> ConstraintSet<Prim> {
+    /// Creates an empty set.
+    pub fn new() -> Self {
+        Self {
+            inner: HashMap::new(),
+        }
     }
-}
 
-impl ops::BitOrAssign<&Self> for NoConstraints {
-    fn bitor_assign(&mut self, _rhs: &Self) {
-        // Do nothing
+    /// Checks if this constraint set is empty.
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
     }
-}
 
-impl<Prim> TypeConstraints<Prim> for NoConstraints
-where
-    Prim: PrimitiveType<Constraints = Self>,
-{
-    fn apply(
+    /// Inserts a constraint into this set.
+    pub fn insert(&mut self, constraint: impl Constraint<Prim>) {
+        self.inner
+            .insert(constraint.to_string(), Box::new(constraint));
+    }
+
+    /// Applies all constraints from this set.
+    pub(crate) fn apply_all(
         &self,
-        _ty: &Type<Prim>,
-        _substitutions: &mut Substitutions<Prim>,
-        _errors: OpErrors<'_, Prim>,
+        ty: &Type<Prim>,
+        substitutions: &mut Substitutions<Prim>,
+        mut errors: OpErrors<'_, Prim>,
     ) {
-        // Do nothing
+        for constraint in self.inner.values() {
+            constraint.apply(ty, substitutions, errors.by_ref());
+        }
     }
 }

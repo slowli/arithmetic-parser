@@ -141,11 +141,7 @@ impl<Prim: PrimitiveType> fmt::Display for ErrorKind<Prim> {
             }
 
             Self::FailedConstraint { ty, constraint } => {
-                write!(
-                    formatter,
-                    "Type `{}` fails constraint `{:?}`",
-                    ty, constraint
-                )
+                write!(formatter, "Type `{}` fails constraint `{}`", ty, constraint)
             }
             Self::DynamicLen(len) => {
                 write!(formatter, "Length `{}` is required to be static", len)

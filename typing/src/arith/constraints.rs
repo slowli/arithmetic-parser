@@ -226,6 +226,10 @@ impl<Prim: PrimitiveType> ConstraintSet<Prim> {
             .insert(constraint.to_string(), Box::new(constraint));
     }
 
+    pub(crate) fn get_by_name(&self, name: &str) -> Option<&dyn Constraint<Prim>> {
+        self.inner.get(name).map(AsRef::as_ref)
+    }
+
     /// Applies all constraints from this set.
     pub(crate) fn apply_all(
         &self,

@@ -133,6 +133,7 @@ impl std::error::Error for AstConversionError {}
 #[derive(Debug)]
 pub(crate) struct AstConversionState<'r, 'a, Prim: PrimitiveType> {
     env: Option<&'r mut TypeEnvironment<Prim>>,
+    known_constraints: ConstraintSet<Prim>,
     errors: &'r mut Errors<'a, Prim>,
     len_params: HashMap<&'a str, usize>,
     type_params: HashMap<&'a str, usize>,
@@ -143,6 +144,8 @@ impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
     pub fn new(env: &'r mut TypeEnvironment<Prim>, errors: &'r mut Errors<'a, Prim>) -> Self {
         Self {
             env: Some(env),
+            // TODO: take `env` into consideration when creating constraints
+            known_constraints: Prim::well_known_constraints(),
             errors,
             len_params: HashMap::new(),
             type_params: HashMap::new(),
@@ -153,6 +156,7 @@ impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
     fn without_env(errors: &'r mut Errors<'a, Prim>) -> Self {
         Self {
             env: None,
+            known_constraints: Prim::well_known_constraints(),
             errors,
             len_params: HashMap::new(),
             type_params: HashMap::new(),
@@ -205,9 +209,10 @@ impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
         )
     }
 
-    #[allow(unused, clippy::unused_self)]
     fn resolve_constraint(&self, name: &str) -> Option<Box<dyn Constraint<Prim>>> {
-        todo!()
+        self.known_constraints
+            .get_by_name(name)
+            .map(Constraint::clone_boxed)
     }
 
     pub(crate) fn convert_type(&mut self, ty: &SpannedTypeAst<'a>) -> Type<Prim> {

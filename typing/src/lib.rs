@@ -143,7 +143,7 @@ pub use self::{
 };
 
 use self::{
-    arith::{LinearType, WithBoolean},
+    arith::{ConstraintSet, LinearType, NumConstraints, WithBoolean},
     ast::TypeAst,
 };
 
@@ -217,6 +217,13 @@ use self::{
 pub trait PrimitiveType:
     Clone + PartialEq + fmt::Debug + fmt::Display + FromStr + Send + Sync + 'static
 {
+    /// Returns well-known constraints for this type. These constraints are used
+    /// in standalone parsing of type signatures.
+    ///
+    /// The default implementation returns an empty set.
+    fn well_known_constraints() -> ConstraintSet<Self> {
+        ConstraintSet::default()
+    }
 }
 
 /// Primitive types for numeric arithmetic.
@@ -249,7 +256,14 @@ impl FromStr for Num {
     }
 }
 
-impl PrimitiveType for Num {}
+impl PrimitiveType for Num {
+    fn well_known_constraints() -> ConstraintSet<Self> {
+        let mut constraints = ConstraintSet::default();
+        constraints.insert(NumConstraints::Lin);
+        constraints.insert(NumConstraints::Ops);
+        constraints
+    }
+}
 
 impl WithBoolean for Num {
     const BOOL: Self = Self::Bool;

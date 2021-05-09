@@ -11,7 +11,9 @@ use arithmetic_parser::{BinaryOp, UnaryOp};
 
 mod constraints;
 
-pub use self::constraints::{Constraint, ConstraintSet, LinearType, NumConstraints};
+pub use self::constraints::{
+    Constraint, ConstraintSet, LinearType, NumConstraints, StructConstraint,
+};
 
 /// Maps a literal value from a certain [`Grammar`] to its type. This assumes that all literals
 /// are primitive.

@@ -32,4 +32,4 @@ verify = |(e, s), message, pk| {
     assert(!signature.verify(rand_scalar(), pk));
 
     i - 1
-})
+});

@@ -1,6 +1,6 @@
 //! `TypeConstraints` and implementations.
 
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, marker::PhantomData};
 
 use crate::{
     error::{ErrorKind, OpErrors},
@@ -88,6 +88,86 @@ impl<Prim: PrimitiveType> Constraint<Prim> for Box<dyn Constraint<Prim>> {
     }
 }
 
+/// FIXME
+#[derive(Debug)]
+pub struct StructConstraint<Prim: PrimitiveType, C, F> {
+    constraint: C,
+    predicate: F,
+    deny_dyn_slices: bool,
+    _prim: PhantomData<Prim>,
+}
+
+impl<Prim, C, F> StructConstraint<Prim, C, F>
+where
+    Prim: PrimitiveType,
+    C: Constraint<Prim> + Clone,
+    F: Fn(&Prim) -> bool,
+{
+    /// Creates a new helper.
+    pub fn new(constraint: C, predicate: F) -> Self {
+        Self {
+            constraint,
+            predicate,
+            deny_dyn_slices: false,
+            _prim: PhantomData,
+        }
+    }
+
+    /// Marks that dynamically sized slices should fail the constraint check.
+    pub fn deny_dyn_slices(mut self) -> Self {
+        self.deny_dyn_slices = true;
+        self
+    }
+
+    /// Applies the enclosed constraint structurally.
+    #[allow(clippy::missing_panics_doc)] // triggered by `debug_assert`
+    pub fn apply(
+        &self,
+        ty: &Type<Prim>,
+        substitutions: &mut Substitutions<Prim>,
+        mut errors: OpErrors<'_, Prim>,
+    ) {
+        let resolved_ty = if let Type::Var(var) = ty {
+            debug_assert!(var.is_free());
+            substitutions.insert_constraint(var.index(), &self.constraint);
+            substitutions.fast_resolve(ty)
+        } else {
+            ty
+        };
+
+        match resolved_ty {
+            // `Var`s are taken care of previously. `Any` satisfies any constraints.
+            Type::Any(_) | Type::Var(_) => {}
+
+            Type::Prim(lit) if (self.predicate)(lit) => {}
+
+            Type::Prim(_) | Type::Function(_) => {
+                errors.push(ErrorKind::failed_constraint(
+                    resolved_ty.clone(),
+                    self.constraint.clone(),
+                ));
+            }
+
+            Type::Tuple(tuple) => {
+                let tuple = tuple.clone();
+
+                if self.deny_dyn_slices {
+                    let middle_len = tuple.parts().1.map(Slice::len);
+                    if let Some(middle_len) = middle_len {
+                        if let Err(err) = substitutions.apply_static_len(middle_len) {
+                            errors.push(err);
+                        }
+                    }
+                }
+
+                for (i, element) in tuple.element_types() {
+                    self.apply(element, substitutions, errors.with_location(i));
+                }
+            }
+        }
+    }
+}
+
 /// Numeric constraints. In particular, this is [`TypeConstraints`] associated
 /// with the [`Num`](crate::Num) literal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -120,47 +200,17 @@ pub trait LinearType: PrimitiveType {
 }
 
 impl<Prim: LinearType> Constraint<Prim> for NumConstraints {
-    // TODO: extract common logic for it to be reusable?
     fn apply(
         &self,
         ty: &Type<Prim>,
         substitutions: &mut Substitutions<Prim>,
-        mut errors: OpErrors<'_, Prim>,
+        errors: OpErrors<'_, Prim>,
     ) {
-        let resolved_ty = if let Type::Var(var) = ty {
-            debug_assert!(var.is_free());
-            substitutions.insert_constraint(var.index(), self);
-            substitutions.fast_resolve(ty)
-        } else {
-            ty
+        let helper = match self {
+            Self::Lin => StructConstraint::new(*self, LinearType::is_linear),
+            Self::Ops => StructConstraint::new(*self, LinearType::is_linear).deny_dyn_slices(),
         };
-
-        match resolved_ty {
-            // `Var`s are taken care of previously. `Any` satisfies any constraints.
-            Type::Any(_) | Type::Var(_) => {}
-            Type::Prim(lit) if lit.is_linear() => {}
-
-            Type::Function(_) | Type::Prim(_) => {
-                errors.push(ErrorKind::failed_constraint(resolved_ty.clone(), *self));
-            }
-
-            Type::Tuple(tuple) => {
-                let tuple = tuple.clone();
-
-                if *self == Self::Ops {
-                    let middle_len = tuple.parts().1.map(Slice::len);
-                    if let Some(middle_len) = middle_len {
-                        if let Err(err) = substitutions.apply_static_len(middle_len) {
-                            errors.push(err);
-                        }
-                    }
-                }
-
-                for (i, element) in tuple.element_types() {
-                    self.apply(element, substitutions, errors.with_location(i));
-                }
-            }
-        }
+        helper.apply(ty, substitutions, errors);
     }
 
     fn clone_boxed(&self) -> Box<dyn Constraint<Prim>> {
@@ -182,8 +232,11 @@ impl<Prim: PrimitiveType> Default for ConstraintSet<Prim> {
 
 impl<Prim: PrimitiveType> PartialEq for ConstraintSet<Prim> {
     fn eq(&self, other: &Self) -> bool {
-        // TODO: is key ordering stable?
-        self.inner.keys().eq(other.inner.keys())
+        if self.inner.len() == other.inner.len() {
+            self.inner.keys().all(|key| other.inner.contains_key(key))
+        } else {
+            false
+        }
     }
 }
 

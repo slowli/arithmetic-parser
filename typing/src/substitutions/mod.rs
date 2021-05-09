@@ -154,7 +154,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     }
 
     /// Creates and returns a new type variable.
-    pub(crate) fn new_type_var(&mut self) -> Type<Prim> {
+    pub fn new_type_var(&mut self) -> Type<Prim> {
         let new_type = Type::free_var(self.type_var_count);
         self.type_var_count += 1;
         new_type

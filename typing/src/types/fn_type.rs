@@ -60,17 +60,10 @@ impl<Prim: PrimitiveType> ParamConstraints<Prim> {
         self.type_params.is_empty() && self.static_lengths.is_empty()
     }
 
-    // Sort params by ascending index to have a consistent `Display` presentation.
-    #[cfg(test)]
     fn type_params(&self) -> impl Iterator<Item = (usize, &ConstraintSet<Prim>)> + '_ {
         let mut type_params: Vec<_> = self.type_params.iter().map(|(&idx, c)| (idx, c)).collect();
         type_params.sort_unstable_by_key(|(idx, _)| *idx);
         type_params.into_iter()
-    }
-
-    #[cfg(not(test))]
-    fn type_params(&self) -> impl Iterator<Item = (usize, &ConstraintSet<Prim>)> + '_ {
-        self.type_params.iter().map(|(&idx, c)| (idx, c))
     }
 }
 

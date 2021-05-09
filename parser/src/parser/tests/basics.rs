@@ -1,11 +1,13 @@
 //! Tests for basic parsers.
 
 use assert_matches::assert_matches;
-use nom::Err as NomErr;
+use nom::{Err as NomErr, Slice};
 
-use super::{sp, span, span_on_line, FieldGrammar, Literal, LiteralType};
+use super::{sp, FieldGrammar, Literal, LiteralType};
 use crate::{
-    parser::{expr, is_valid_variable_name, statements, var_name, ws, Complete, Streaming},
+    parser::{
+        expr, is_valid_variable_name, mandatory_ws, statements, var_name, ws, Complete, Streaming,
+    },
     ErrorKind, Expr, InputSpan,
 };
 
@@ -40,44 +42,54 @@ fn is_valid_variable_name_works() {
 #[test]
 fn whitespace_can_include_comments() {
     let input = InputSpan::new("ge(1)");
-    assert_eq!(ws::<Complete>(input).unwrap().0, span(0, "ge(1)"));
+    assert_eq!(ws::<Complete>(input).unwrap().0, input);
 
     let input = InputSpan::new("   ge(1)");
-    assert_eq!(ws::<Complete>(input).unwrap().0, span(3, "ge(1)"));
+    assert_eq!(ws::<Complete>(input).unwrap().0, input.slice(3..));
 
     let input = InputSpan::new("  \nge(1)");
-    assert_eq!(
-        ws::<Complete>(input).unwrap().0,
-        span_on_line(3, 2, "ge(1)")
-    );
+    assert_eq!(ws::<Complete>(input).unwrap().0, input.slice(3..));
     let input = InputSpan::new("// Comment\nge(1)");
-    assert_eq!(
-        ws::<Complete>(input).unwrap().0,
-        span_on_line(11, 2, "ge(1)")
-    );
+    assert_eq!(ws::<Complete>(input).unwrap().0, input.slice(11..));
     let input = InputSpan::new("//!\nge(1)");
-    assert_eq!(
-        ws::<Complete>(input).unwrap().0,
-        span_on_line(4, 2, "ge(1)")
-    );
+    assert_eq!(ws::<Complete>(input).unwrap().0, input.slice(4..));
 
     let input = InputSpan::new(
         "   // This is a comment.
              \t// This is a comment, too
              this_is_not // although this *is*",
     );
+    assert_eq!(ws::<Complete>(input).unwrap().0, input.slice(78..));
+}
+
+#[test]
+fn mandatory_whitespace() {
+    let input = InputSpan::new(" Type");
+    assert_eq!(mandatory_ws::<Complete>(input).unwrap().0, input.slice(1..));
+    let input = InputSpan::new("(Type)");
+    assert_eq!(mandatory_ws::<Complete>(input).unwrap().0, input);
+    let input = InputSpan::new("\n \tType");
+    assert_eq!(mandatory_ws::<Complete>(input).unwrap().0, input.slice(3..));
+    let input = InputSpan::new("/* Comment */ Type");
     assert_eq!(
-        ws::<Complete>(input).unwrap().0,
-        span_on_line(78, 3, "this_is_not // although this *is*")
+        mandatory_ws::<Complete>(input).unwrap().0,
+        input.slice(14..)
     );
+}
+
+#[test]
+fn mandatory_whitespace_errors() {
+    let input = InputSpan::new("Type");
+    let err = mandatory_ws::<Complete>(input).unwrap_err();
+    assert_matches!(err, NomErr::Error(_));
 }
 
 #[test]
 fn multiline_comments() {
     let input = InputSpan::new("/* !! */ foo");
-    assert_eq!(ws::<Complete>(input).unwrap().0, span(9, "foo"));
+    assert_eq!(ws::<Complete>(input).unwrap().0, input.slice(9..));
     let input = InputSpan::new("/*\nFoo\n*/ foo");
-    assert_eq!(ws::<Complete>(input).unwrap().0, span_on_line(10, 3, "foo"));
+    assert_eq!(ws::<Complete>(input).unwrap().0, input.slice(10..));
     let input = InputSpan::new("/* Foo");
     assert!(ws::<Streaming>(input).unwrap_err().is_incomplete());
 
@@ -150,11 +162,11 @@ fn string_literal_works() {
 #[test]
 fn var_name_works() {
     let input = InputSpan::new("A + B");
-    assert_eq!(var_name(input).unwrap().1, span(0, "A"));
+    assert_eq!(var_name(input).unwrap().1, input.slice(..1));
     let input = InputSpan::new("Abc_d + B");
-    assert_eq!(var_name(input).unwrap().1, span(0, "Abc_d"));
+    assert_eq!(var_name(input).unwrap().1, input.slice(..5));
     let input = InputSpan::new("_ + 3");
-    assert_eq!(var_name(input).unwrap().1, span(0, "_"));
+    assert_eq!(var_name(input).unwrap().1, input.slice(..1));
 }
 
 #[test]

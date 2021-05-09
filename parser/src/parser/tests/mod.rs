@@ -16,6 +16,7 @@ mod features;
 mod function;
 mod order;
 mod tuple;
+mod type_cast;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum LiteralType {

@@ -305,6 +305,15 @@ where
             (Self::Variable, Self::Variable) => true,
             (Self::Literal(this), Self::Literal(that)) => this == that,
             (Self::FnDefinition(this), Self::FnDefinition(that)) => this == that,
+
+            (
+                Self::Cast { value, ty },
+                Self::Cast {
+                    value: other_value,
+                    ty: other_ty,
+                },
+            ) => value == other_value && ty == other_ty,
+
             (Self::Tuple(this), Self::Tuple(that)) => this == that,
             (Self::Block(this), Self::Block(that)) => this == that,
 

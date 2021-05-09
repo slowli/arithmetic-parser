@@ -268,7 +268,7 @@ where
         map(
             with_span(tuple((
                 terminated(with_span(one_of("-!")), ws::<Ty>),
-                simple_expr::<T, Ty>,
+                expr_with_calls::<T, Ty>,
             ))),
             |spanned| {
                 spanned.map_extra(|(op, inner)| Expr::Unary {

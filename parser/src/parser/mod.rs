@@ -362,7 +362,7 @@ where
     map(parser, |(base, casts)| {
         casts.into_iter().fold(base, |value, ty| {
             let united_span = unite_spans(input, &value, &ty);
-            united_span.copy_with_extra(Expr::Cast {
+            united_span.copy_with_extra(Expr::TypeCast {
                 value: Box::new(value),
                 ty,
             })

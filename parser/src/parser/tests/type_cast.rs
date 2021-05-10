@@ -15,7 +15,7 @@ fn type_casts_simple() {
     let expr = simple_expr::<FieldGrammar, Complete>(input).unwrap().1;
     assert_eq!(
         expr.extra,
-        Expr::Cast {
+        Expr::TypeCast {
             value: Box::new(sp(0, "x", Expr::Variable)),
             ty: sp(5, "Sc", ValueType::Scalar),
         }
@@ -25,7 +25,7 @@ fn type_casts_simple() {
     let expr = simple_expr::<FieldGrammar, Complete>(input).unwrap().1;
     assert_eq!(
         expr.extra,
-        Expr::Cast {
+        Expr::TypeCast {
             value: Box::new(sp(0, "1", Expr::Literal(Literal::Number))),
             ty: sp(4, "Sc", ValueType::Scalar),
         }
@@ -35,7 +35,7 @@ fn type_casts_simple() {
     let expr = simple_expr::<FieldGrammar, Complete>(input).unwrap().1;
     assert_eq!(
         expr.extra,
-        Expr::Cast {
+        Expr::TypeCast {
             value: Box::new(sp(
                 0,
                 "-x",
@@ -52,7 +52,7 @@ fn type_casts_simple() {
     let expr = simple_expr::<FieldGrammar, Complete>(input).unwrap().1;
     assert_matches!(
         expr.extra,
-        Expr::Cast { value, ty }
+        Expr::TypeCast { value, ty }
             if matches!(value.extra, Expr::Method { .. }) && *ty.fragment() == "Sc"
     );
 
@@ -60,7 +60,7 @@ fn type_casts_simple() {
     let expr = simple_expr::<FieldGrammar, Complete>(input).unwrap().1;
     assert_matches!(
         expr.extra,
-        Expr::Cast { value, ty }
+        Expr::TypeCast { value, ty }
             if matches!(value.extra, Expr::Block(_)) && *ty.fragment() == "Sc"
     );
 }
@@ -71,7 +71,7 @@ fn multiple_type_casts() {
     let expr = simple_expr::<FieldGrammar, Complete>(input).unwrap().1;
 
     let inner_expr = match expr.extra {
-        Expr::Cast { value, ty } => {
+        Expr::TypeCast { value, ty } => {
             assert_eq!(ty, sp(16, "bool", ValueType::Bool));
             value.extra
         }
@@ -79,7 +79,7 @@ fn multiple_type_casts() {
     };
     assert_eq!(
         inner_expr,
-        Expr::Cast {
+        Expr::TypeCast {
             value: Box::new(sp(
                 0,
                 "abs(x)",
@@ -99,7 +99,7 @@ fn type_casts_within_larger_context() {
     let parsed = expr::<FieldGrammar, Complete>(input).unwrap().1;
     assert_matches!(
         parsed.extra,
-        Expr::Function { args, .. } if matches!(args[0].extra, Expr::Cast { .. })
+        Expr::Function { args, .. } if matches!(args[0].extra, Expr::TypeCast { .. })
     );
 
     let input = InputSpan::new("x as Sc+y");
@@ -110,7 +110,7 @@ fn type_casts_within_larger_context() {
             lhs: Box::new(sp(
                 0,
                 "x as Sc",
-                Expr::Cast {
+                Expr::TypeCast {
                     value: Box::new(sp(0, "x", Expr::Variable)),
                     ty: sp(5, "Sc", ValueType::Scalar),
                 }
@@ -130,7 +130,7 @@ fn type_casts_within_larger_context() {
             rhs: Box::new(sp(
                 4,
                 "y as Sc",
-                Expr::Cast {
+                Expr::TypeCast {
                     value: Box::new(sp(4, "y", Expr::Variable)),
                     ty: sp(9, "Sc", ValueType::Scalar),
                 }
@@ -142,21 +142,21 @@ fn type_casts_within_larger_context() {
     let parsed = expr::<FieldGrammar, Complete>(input).unwrap().1;
     assert_matches!(
         parsed.extra,
-        Expr::Cast { value, .. } if *value.fragment() == "(x + y)"
+        Expr::TypeCast { value, .. } if *value.fragment() == "(x + y)"
     );
 
     let input = InputSpan::new("-(y as Sc)");
     let parsed = expr::<FieldGrammar, Complete>(input).unwrap().1;
     assert_matches!(
         parsed.extra,
-        Expr::Unary { inner, .. } if matches!(inner.extra, Expr::Cast { .. })
+        Expr::Unary { inner, .. } if matches!(inner.extra, Expr::TypeCast { .. })
     );
 
     let input = InputSpan::new("(fn as Sc)(1, x)");
     let parsed = expr::<FieldGrammar, Complete>(input).unwrap().1;
     assert_matches!(
         parsed.extra,
-        Expr::Function { name, .. } if matches!(name.extra, Expr::Cast { .. })
+        Expr::Function { name, .. } if matches!(name.extra, Expr::TypeCast { .. })
     );
 }
 

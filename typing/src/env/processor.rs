@@ -115,7 +115,7 @@ where
 
             Expr::FnDefinition(def) => self.process_fn_def(def).into(),
 
-            Expr::Cast { value, ty } => {
+            Expr::TypeCast { value, ty } => {
                 let ty = self.process_annotation(Some(ty));
                 let original_ty = self.process_expr_inner(value);
                 let mut errors = OpErrors::new();

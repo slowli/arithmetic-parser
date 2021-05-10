@@ -131,7 +131,7 @@ impl Compiler {
                 Atom::Register(*register)
             }
 
-            Expr::Cast { value, .. } => {
+            Expr::TypeCast { value, .. } => {
                 // Just ignore the type annotation.
                 self.compile_expr(executable, value)?.extra
             }

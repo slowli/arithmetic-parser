@@ -73,7 +73,7 @@ impl ErrorLocation {
         expr: &SpannedExpr<'a, T>,
     ) -> Spanned<'a> {
         let mut refined = Self::walk(location, expr, Self::step_into_expr);
-        while let Expr::Cast { value, .. } = &refined.extra {
+        while let Expr::TypeCast { value, .. } = &refined.extra {
             refined = value.as_ref();
         }
         refined.with_no_extra()
@@ -96,7 +96,7 @@ impl ErrorLocation {
         self,
         mut expr: &'r SpannedExpr<'a, T>,
     ) -> Option<&'r SpannedExpr<'a, T>> {
-        while let Expr::Cast { value, .. } = &expr.extra {
+        while let Expr::TypeCast { value, .. } = &expr.extra {
             expr = value.as_ref();
         }
 

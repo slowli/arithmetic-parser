@@ -5,6 +5,10 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ## [Unreleased]
 
+### Added
+
+- Support `Expr::TypeCast` as a no-op.
+
 ## 0.2.0 - 2020-12-05
 
 *(All changes are relative compared to [the 0.2.0-beta.1 release](#020-beta1---2020-10-04))* 

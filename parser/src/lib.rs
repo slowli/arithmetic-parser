@@ -170,8 +170,8 @@ pub enum Expr<'a, T: Grammar<'a>> {
     /// Function definition, e.g., `|x, y| { x + y }`.
     FnDefinition(FnDefinition<'a, T>),
 
-    /// Cast, e.g., `x as Bool`.
-    Cast {
+    /// Type cast, e.g., `x as Bool`.
+    TypeCast {
         /// Value being cast, e.g., `x` in `x as Bool`.
         value: Box<SpannedExpr<'a, T>>,
         /// Type annotation for the case, e.g., `Bool` in `x as Bool`.
@@ -245,7 +245,7 @@ impl<'a, T: Grammar<'a>> Expr<'a, T> {
             Self::Variable => ExprType::Variable,
             Self::Literal(_) => ExprType::Literal,
             Self::FnDefinition(_) => ExprType::FnDefinition,
-            Self::Cast { .. } => ExprType::Cast,
+            Self::TypeCast { .. } => ExprType::Cast,
             Self::Tuple(_) => ExprType::Tuple,
             Self::Block(_) => ExprType::Block,
             Self::Function { .. } => ExprType::Function,
@@ -262,7 +262,7 @@ impl<'a, T: Grammar<'a>> Clone for Expr<'a, T> {
             Self::Variable => Self::Variable,
             Self::Literal(lit) => Self::Literal(lit.clone()),
             Self::FnDefinition(function) => Self::FnDefinition(function.clone()),
-            Self::Cast { value, ty } => Self::Cast {
+            Self::TypeCast { value, ty } => Self::TypeCast {
                 value: value.clone(),
                 ty: ty.clone(),
             },
@@ -307,8 +307,8 @@ where
             (Self::FnDefinition(this), Self::FnDefinition(that)) => this == that,
 
             (
-                Self::Cast { value, ty },
-                Self::Cast {
+                Self::TypeCast { value, ty },
+                Self::TypeCast {
                     value: other_value,
                     ty: other_ty,
                 },

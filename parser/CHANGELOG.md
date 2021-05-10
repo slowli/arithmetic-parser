@@ -12,6 +12,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Make `with_span` parsing combinator public.
 
+- Add `Expr::TypeCast` for cast expressions, such as `x as Bool`.
+
 ### Changed
 
 - Make `Grammar` and `Parse` traits parametric on the lifetime of input.

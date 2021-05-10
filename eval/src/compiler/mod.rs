@@ -131,6 +131,11 @@ impl Compiler {
                 Atom::Register(*register)
             }
 
+            Expr::Cast { value, .. } => {
+                // Just ignore the type annotation.
+                self.compile_expr(executable, value)?.extra
+            }
+
             Expr::Tuple(tuple) => {
                 let registers = tuple
                     .iter()
@@ -617,7 +622,8 @@ mod tests {
     use super::*;
     use crate::{Value, WildcardId};
 
-    use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+    use arithmetic_parser::grammars::{F32Grammar, Parse, ParseLiteral, Typed, Untyped};
+    use arithmetic_parser::NomResult;
 
     #[test]
     fn compilation_basics() {
@@ -707,5 +713,33 @@ mod tests {
         assert!(registers.variables_map().contains_key("x"));
         assert!(registers.variables_map().contains_key("PI"));
         assert_eq!(import_spans["x"].location_line(), 2); // should be the first mention
+    }
+
+    #[test]
+    fn type_casts_are_ignored() {
+        struct TypedGrammar;
+
+        impl ParseLiteral for TypedGrammar {
+            type Lit = f32;
+
+            fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
+                F32Grammar::parse_literal(input)
+            }
+        }
+
+        impl Grammar<'_> for TypedGrammar {
+            type Type = ();
+
+            fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
+                use nom::{bytes::complete::tag, combinator::map};
+                map(tag("Num"), drop)(input)
+            }
+        }
+
+        let block = "x = 3 as Num; 1 + { y = 2; y * x as Num } == 7";
+        let block = Typed::<TypedGrammar>::parse_statements(block).unwrap();
+        let (module, _) = Compiler::compile_module(WildcardId, &block).unwrap();
+        let value = module.run().unwrap();
+        assert_eq!(value, Value::Bool(true));
     }
 }

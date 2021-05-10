@@ -109,6 +109,9 @@ impl<'a> CapturesExtractor<'a> {
             Expr::Block(block) => {
                 self.eval_block_inner(block, HashMap::new())?;
             }
+            Expr::Cast { value, .. } => {
+                self.eval(value)?;
+            }
 
             Expr::FnDefinition(def) => {
                 self.eval_function(def)?;

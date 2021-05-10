@@ -431,7 +431,7 @@ fn type_cast_basics() {
 
 #[test]
 fn transmuting_type_via_casts() {
-    let code = "((1, 2, 3) as any) as (Num, Num)";
+    let code = "(1, 2, 3) as any as (Num, Num)";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let output = type_env.process_statements(&block).unwrap();

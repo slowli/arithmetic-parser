@@ -1,14 +1,13 @@
 rfold = |xs, acc, fn| {
     (_, acc) = (xs, acc).while(|(xs, _)| xs.len() != 0, |(xs, acc)| {
-        xs_any: any = xs;
-        (...head: Num, tail: Num) = xs_any;
+        (...head: Num, tail: Num) = xs as any;
         (head, fn(acc, tail))
     });
     acc
 };
 
 // Check that it works with different accumulator types.
-folded = (1, 2, 3).rfold({ empty: [_] = (); empty }, push);
+folded = (1, 2, 3).rfold(() as [_], push);
 assert_eq(folded, (3, 2, 1));
 
 (4, 5, 6).rfold(true, |acc, x| acc && x > 0);

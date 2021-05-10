@@ -232,6 +232,13 @@ pub enum ErrorContext<Prim: PrimitiveType> {
         /// Right-hand side of the assignment.
         rhs: Type<Prim>,
     },
+    /// Type cast.
+    TypeCast {
+        /// Source type of the casted value.
+        source: Type<Prim>,
+        /// Target type of the cast.
+        target: Type<Prim>,
+    },
     /// Unary operation.
     UnaryOp(UnaryOpContext<Prim>),
     /// Binary operation.
@@ -266,6 +273,10 @@ impl<Prim: PrimitiveType> ErrorContext<Prim> {
             Self::Assignment { lhs, rhs } | Self::BinaryOp(BinaryOpContext { lhs, rhs, .. }) => {
                 mapper.visit_type_mut(lhs);
                 mapper.visit_type_mut(rhs);
+            }
+            Self::TypeCast { source, target } => {
+                mapper.visit_type_mut(source);
+                mapper.visit_type_mut(target);
             }
             Self::UnaryOp(UnaryOpContext { arg, .. }) => {
                 mapper.visit_type_mut(arg);

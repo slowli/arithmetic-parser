@@ -291,3 +291,39 @@ fn custom_constraint_if_not_added_to_env() {
             if c == "Hash"
     );
 }
+
+#[test]
+fn type_cast_basic_error() {
+    let code = "x = (1, 2) as Num;";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env.process_statements(&block).unwrap_err().single();
+
+    assert_eq!(*err.span().fragment(), "(1, 2)");
+    assert_eq!(*err.root_span().fragment(), "(1, 2) as Num");
+    assert_matches!(
+        err.kind(),
+        ErrorKind::TypeMismatch(lhs, rhs) if *lhs == Type::NUM && rhs.to_string() == "(Num, Num)"
+    );
+    assert_matches!(
+        err.context(),
+        ErrorContext::TypeCast { source, target }
+            if *target == Type::NUM && source.to_string() == "(Num, Num)"
+    );
+}
+
+#[test]
+fn type_cast_error_in_subtype() {
+    let code = "x = (1, |x: Num| x + 3) as any Lin;";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env.process_statements(&block).unwrap_err().single();
+
+    assert_matches!(
+        err.kind(),
+        ErrorKind::FailedConstraint { constraint, .. } if constraint.to_string() == "Lin"
+    );
+    assert_matches!(err.context(), ErrorContext::TypeCast { .. });
+    assert_eq!(err.location(), [tuple_element(1)]);
+    assert_eq!(*err.span().fragment(), "|x: Num| x + 3");
+}

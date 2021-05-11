@@ -7,7 +7,7 @@ use nom::{
         streaming,
     },
     character::complete::{char as tag_char, one_of},
-    combinator::{cut, map, not, opt, peek, recognize},
+    combinator::{cut, map, map_res, not, opt, peek, recognize},
     error::context,
     multi::{many0, separated_list0},
     sequence::{delimited, preceded, terminated, tuple},
@@ -290,7 +290,7 @@ struct MethodOrFnCall<'a, T: Grammar<'a>> {
 
 impl<'a, T: Grammar<'a>> MethodOrFnCall<'a, T> {
     fn is_method(&self) -> bool {
-        self.fn_name.is_some()
+        self.fn_name.is_some() && self.args.is_some()
     }
 }
 
@@ -312,11 +312,18 @@ where
     T: Parse<'a>,
     Ty: GrammarType,
 {
-    let method_parser = map(
-        tuple((var_name, opt(fn_args::<T, Ty>))),
-        |(fn_name, maybe_args)| MethodOrFnCall {
-            fn_name: Some(fn_name),
-            args: maybe_args.map(|(args, _)| args),
+    let var_name_or_digits = alt((var_name, take_while1(|c: char| c.is_ascii_digit())));
+    let method_parser = map_res(
+        tuple((var_name_or_digits, opt(fn_args::<T, Ty>))),
+        |(fn_name, maybe_args)| {
+            if maybe_args.is_some() && !is_valid_variable_name(fn_name.fragment()) {
+                Err(ErrorKind::LiteralName)
+            } else {
+                Ok(MethodOrFnCall {
+                    fn_name: Some(fn_name),
+                    args: maybe_args.map(|(args, _)| args),
+                })
+            }
         },
     );
 
@@ -390,7 +397,7 @@ fn fold_args<'a, T: Grammar<'a>>(
     if matches!(base.extra, Expr::Literal(_)) {
         match calls.first() {
             Some(call) if !call.extra.is_method() => {
-                // Bogus function call, such as `1(2, 3)`.
+                // Bogus function call, such as `1(2, 3)` or `1.x`.
                 let e = ErrorKind::LiteralName.with_span(&base);
                 return Err(NomErr::Failure(e));
             }

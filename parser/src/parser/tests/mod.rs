@@ -875,3 +875,48 @@ fn field_access_in_larger_context() {
         Expr::FieldAccess { name, .. } if *name.fragment() == "x"
     );
 }
+
+#[test]
+fn field_access_with_indexed_field() {
+    let input = InputSpan::new("point.0");
+    let (rest, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+
+    assert!(rest.fragment().is_empty());
+    assert_eq!(
+        expr.extra,
+        Expr::FieldAccess {
+            name: sp(6, "0", ()),
+            receiver: Box::new(sp(0, "point", Expr::Variable)),
+        }
+    );
+
+    let input = InputSpan::new("point.122.sin(1)");
+    let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+
+    let inner_expr = match expr.extra {
+        Expr::Method { receiver, .. } => *receiver,
+        other => panic!("Unexpected expr: {:?}", other),
+    };
+    assert_eq!(
+        inner_expr.extra,
+        Expr::FieldAccess {
+            name: sp(6, "122", ()),
+            receiver: Box::new(sp(0, "point", Expr::Variable)),
+        }
+    );
+}
+
+#[test]
+fn bogus_indexed_field_access() {
+    let input = InputSpan::new("1. 0");
+    let err = simple_expr::<FieldGrammar, Complete>(input).unwrap_err();
+    assert_matches!(err, NomErr::Failure(e) if matches!(e.kind(), ErrorKind::LiteralName));
+
+    let input = InputSpan::new("x.0(1, 2)");
+    let err = simple_expr::<FieldGrammar, Complete>(input).unwrap_err();
+    assert_matches!(err, NomErr::Failure(e) if matches!(e.kind(), ErrorKind::LiteralName));
+
+    let input = InputSpan::new("1.test");
+    let err = simple_expr::<FieldGrammar, Complete>(input).unwrap_err();
+    assert_matches!(err, NomErr::Failure(e) if matches!(e.kind(), ErrorKind::LiteralName));
+}

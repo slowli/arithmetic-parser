@@ -167,6 +167,10 @@ impl Compiler {
             }
             Expr::Function { name, args } => self.compile_fn_call(executable, expr, name, args)?,
 
+            Expr::FieldAccess { name, receiver } => {
+                self.compile_field_access(executable, expr, name, receiver)?
+            }
+
             Expr::Method {
                 name,
                 receiver,
@@ -232,6 +236,24 @@ impl Compiler {
             args,
         };
         let register = self.push_assignment(executable, function, call_expr);
+        Ok(Atom::Register(register))
+    }
+
+    fn compile_field_access<'a, T: Grammar<'a>>(
+        &mut self,
+        executable: &mut Executable<'a, T::Lit>,
+        call_expr: &SpannedExpr<'a, T>,
+        name: &Spanned<'a>,
+        receiver: &SpannedExpr<'a, T>,
+    ) -> Result<Atom<T::Lit>, Error<'a>> {
+        let index = name.fragment().parse::<usize>().map_err(|_| {
+            let name_string = (*name.fragment()).to_owned();
+            self.create_error(name, ErrorKind::InvalidFieldName(name_string))
+        })?;
+        let receiver = self.compile_expr(executable, receiver)?;
+
+        let field_access = CompiledExpr::FieldAccess { receiver, index };
+        let register = self.push_assignment(executable, field_access, call_expr);
         Ok(Atom::Register(register))
     }
 

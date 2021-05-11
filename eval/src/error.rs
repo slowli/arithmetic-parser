@@ -155,9 +155,30 @@ pub enum ErrorKind {
     #[display(fmt = "Variable `{}` is not defined", _0)]
     Undefined(String),
 
+    /// Field name is invalid.
+    #[display(fmt = "`{}` is not a valid field name", _0)]
+    InvalidFieldName(String),
+
     /// Value is not callable (i.e., is not a function).
     #[display(fmt = "Value is not callable")]
     CannotCall,
+
+    /// Value cannot be indexed (i.e., not a tuple).
+    #[display(fmt = "Value cannot be indexed")]
+    CannotIndex,
+
+    /// Index is out of bounds for the indexed tuple.
+    #[display(
+        fmt = "Attempting to get element {} from tuple with length {}",
+        index,
+        len
+    )]
+    IndexOutOfBounds {
+        /// Index.
+        index: usize,
+        /// Actual tuple length.
+        len: usize,
+    },
 
     /// Generic error during execution of a native function.
     #[display(fmt = "Failed executing native function: {}", _0)]
@@ -225,7 +246,12 @@ impl ErrorKind {
                 format!("Repeated assignment to the same variable in {}", context)
             }
             Self::Undefined(name) => format!("Variable `{}` is not defined", name),
+            Self::InvalidFieldName(name) => format!("`{}` is not a valid field name", name),
             Self::CannotCall => "Value is not callable".to_owned(),
+            Self::CannotIndex => "Value cannot be indexed".to_owned(),
+            Self::IndexOutOfBounds { len, .. } => {
+                format!("Index out of bounds for tuple with length {}", len)
+            }
             Self::NativeCall(message) => message.clone(),
             Self::Wrapper(err) => err.to_string(),
             Self::UnexpectedOperand { op } => format!("Unexpected operand type for {}", op),
@@ -246,6 +272,8 @@ impl ErrorKind {
             Self::CannotDestructure => "Failed destructuring".to_owned(),
             Self::RepeatedAssignment { .. } => "Re-assigned variable".to_owned(),
             Self::Undefined(_) => "Undefined variable occurrence".to_owned(),
+            Self::InvalidFieldName(_) => "Invalid field".to_owned(),
+            Self::CannotIndex | Self::IndexOutOfBounds { .. } => "Indexing operation".to_owned(),
             Self::CannotCall | Self::NativeCall(_) | Self::Wrapper(_) => "Failed call".to_owned(),
             Self::UnexpectedOperand { .. } => "Operand of wrong type".to_owned(),
             Self::CannotCompare => "Cannot be compared".to_owned(),
@@ -269,9 +297,13 @@ impl ErrorKind {
                 "In {}, all assigned variables must have different names",
                 context
             ),
+            Self::InvalidFieldName(_) => {
+                "Only unsigned integers can be field names for now".to_owned()
+            }
             Self::CannotCall => "Only functions are callable, i.e., can be used as `fn_name` \
                 in `fn_name(...)` expressions"
                 .to_owned(),
+            Self::CannotIndex => "Only tuples can be indexed".to_owned(),
             Self::UnexpectedOperand { op: Op::Binary(op) } if op.is_arithmetic() => {
                 "Operands of binary arithmetic ops must be numbers or tuples containing numbers"
                     .to_owned()

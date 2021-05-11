@@ -750,3 +750,57 @@ fn priority_of_unary_ops_and_methods() {
     let return_value = evaluate(&mut env, program);
     assert_eq!(return_value, Value::Bool(true));
 }
+
+#[test]
+fn indexed_field_access() {
+    let program = "x = 3; (x, 1).0 == 3";
+    let return_value = evaluate(&mut Environment::new(), program);
+    assert_eq!(return_value, Value::Bool(true));
+}
+
+#[test]
+fn sequential_indexed_field_access() {
+    let program = "xs = ((1, 2), (3, 4)); xs.0.0 == 1 && xs.1.0 == 3";
+    let return_value = evaluate(&mut Environment::new(), program);
+    assert_eq!(return_value, Value::Bool(true));
+}
+
+#[test]
+fn callable_indexed_field() {
+    let program = "rec = (|x| x + 5, 1); (rec.0)(1) == 6";
+    let return_value = evaluate(&mut Environment::new(), program);
+    assert_eq!(return_value, Value::Bool(true));
+}
+
+#[test]
+fn indexed_field_out_of_bounds_error() {
+    let program = "x = 3; (x,).1 == 3";
+    let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
+
+    assert_eq!(*err.source().main_span().code().fragment(), "(x,).1");
+    assert_matches!(
+        err.source().kind(),
+        ErrorKind::IndexOutOfBounds { index: 1, len: 1 }
+    );
+}
+
+#[test]
+fn indexed_field_invalid_receiver_error() {
+    let program = "x = 3; x.1 == 3";
+    let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
+
+    assert_eq!(*err.source().main_span().code().fragment(), "x.1");
+    assert_matches!(err.source().kind(), ErrorKind::CannotIndex);
+}
+
+#[test]
+fn indexed_field_invalid_field_name() {
+    let program = "x = (2, 5); x.len";
+    let err = expect_compilation_error(&mut Environment::new(), program);
+
+    assert_eq!(*err.main_span().code().fragment(), "len");
+    assert_matches!(
+        err.kind(),
+        ErrorKind::InvalidFieldName(name) if name == "len"
+    );
+}

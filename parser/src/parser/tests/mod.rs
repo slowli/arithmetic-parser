@@ -732,3 +732,146 @@ fn no_unary_op_if_literal_without_it_not_parsed() {
         _ => panic!("Unexpected expr: {:?}", expr),
     };
 }
+
+#[test]
+fn field_access_basics() {
+    let input = InputSpan::new("point.x");
+    let (rest, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+
+    assert!(rest.fragment().is_empty());
+    assert_eq!(
+        expr.extra,
+        Expr::FieldAccess {
+            name: sp(6, "x", ()),
+            receiver: Box::new(sp(0, "point", Expr::Variable)),
+        }
+    );
+
+    let input = InputSpan::new("(5, 2). s0");
+    let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+    assert_eq!(
+        expr.extra,
+        Expr::FieldAccess {
+            name: sp(8, "s0", ()),
+            receiver: Box::new(sp(
+                0,
+                "(5, 2)",
+                Expr::Tuple(vec![
+                    sp(1, "5", Expr::Literal(Literal::Number)),
+                    sp(4, "2", Expr::Literal(Literal::Number)),
+                ])
+            )),
+        }
+    );
+
+    let input = InputSpan::new("{ x = 5; x }.foo");
+    let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+    let inner_expr = match expr.extra {
+        Expr::FieldAccess { receiver, name } if *name.fragment() == "foo" => *receiver,
+        other => panic!("Unexpected expr: {:?}", other),
+    };
+    assert_matches!(inner_expr.extra, Expr::Block(_));
+}
+
+#[test]
+fn chained_field_access() {
+    let input = InputSpan::new("point.x.sin()");
+    let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+
+    let inner_expr = match expr.extra {
+        Expr::Method { receiver, .. } => *receiver,
+        other => panic!("Unexpected expr: {:?}", other),
+    };
+    assert_eq!(
+        inner_expr.extra,
+        Expr::FieldAccess {
+            name: sp(6, "x", ()),
+            receiver: Box::new(sp(0, "point", Expr::Variable)),
+        }
+    );
+
+    let input = InputSpan::new("Point(1, 2).x");
+    let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+
+    let inner_expr = match expr.extra {
+        Expr::FieldAccess { receiver, name } if *name.fragment() == "x" => *receiver,
+        other => panic!("Unexpected expr: {:?}", other),
+    };
+    assert_eq!(
+        inner_expr.extra,
+        Expr::Function {
+            name: Box::new(sp(0, "Point", Expr::Variable)),
+            args: vec![
+                sp(6, "1", Expr::Literal(Literal::Number)),
+                sp(9, "2", Expr::Literal(Literal::Number)),
+            ],
+        }
+    );
+
+    let input = InputSpan::new("point.x.sin");
+    let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+
+    let inner_expr = match expr.extra {
+        Expr::FieldAccess { receiver, name } if *name.fragment() == "sin" => *receiver,
+        other => panic!("Unexpected expr: {:?}", other),
+    };
+    assert_matches!(inner_expr.extra, Expr::FieldAccess { name, .. } if *name.fragment() == "x");
+}
+
+#[test]
+fn callable_field_access() {
+    let input = InputSpan::new("(obj.fun)(1, 2)");
+    let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+
+    let inner_expr = match expr.extra {
+        Expr::Function { name, args } => {
+            assert_eq!(args.len(), 2);
+            *name
+        }
+        other => panic!("Unexpected expr: {:?}", other),
+    };
+    assert_eq!(*inner_expr.fragment(), "(obj.fun)");
+    assert_eq!(
+        inner_expr.extra,
+        Expr::FieldAccess {
+            name: sp(5, "fun", ()),
+            receiver: Box::new(sp(1, "obj", Expr::Variable)),
+        }
+    );
+}
+
+#[test]
+fn field_access_in_larger_context() {
+    let input = InputSpan::new("point.x.sin + (1, 2)");
+    let (_, parsed) = expr::<FieldGrammar, Complete>(input).unwrap();
+
+    let lhs = match parsed.extra {
+        Expr::Binary { lhs, rhs, op } => {
+            assert_eq!(op, sp(12, "+", BinaryOp::Add));
+            assert_matches!(rhs.extra, Expr::Tuple(items) if items.len() == 2);
+            *lhs
+        }
+        other => panic!("Unexpected expr: {:?}", other),
+    };
+    assert_matches!(lhs.extra, Expr::FieldAccess { name, .. } if *name.fragment() == "sin");
+
+    let input = InputSpan::new("foo(point.sin().x).y");
+    let (_, parsed) = expr::<FieldGrammar, Complete>(input).unwrap();
+
+    let inner_expr = match parsed.extra {
+        Expr::FieldAccess { name, receiver } if *name.fragment() == "y" => *receiver,
+        other => panic!("Unexpected expr: {:?}", other),
+    };
+    let inner_field_access = match inner_expr.extra {
+        Expr::Function { name, mut args } => {
+            assert_eq!(*name, sp(0, "foo", Expr::Variable));
+            assert_eq!(args.len(), 1);
+            args.pop().unwrap()
+        }
+        other => panic!("Unexpected expr: {:?}", other),
+    };
+    assert_matches!(
+        inner_field_access.extra,
+        Expr::FieldAccess { name, .. } if *name.fragment() == "x"
+    );
+}

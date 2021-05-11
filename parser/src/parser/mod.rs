@@ -285,7 +285,7 @@ where
 #[derive(Debug)]
 struct MethodOrFnCall<'a, T: Grammar<'a>> {
     fn_name: Option<InputSpan<'a>>,
-    args: Vec<SpannedExpr<'a, T>>,
+    args: Option<Vec<SpannedExpr<'a, T>>>,
 }
 
 impl<'a, T: Grammar<'a>> MethodOrFnCall<'a, T> {
@@ -303,7 +303,7 @@ where
 {
     map(fn_args::<T, Ty>, |(args, _)| MethodOrFnCall {
         fn_name: None,
-        args,
+        args: Some(args),
     })(input)
 }
 
@@ -313,10 +313,10 @@ where
     Ty: GrammarType,
 {
     let method_parser = map(
-        tuple((var_name, fn_args::<T, Ty>)),
-        |(fn_name, (args, _))| MethodOrFnCall {
+        tuple((var_name, opt(fn_args::<T, Ty>))),
+        |(fn_name, maybe_args)| MethodOrFnCall {
             fn_name: Some(fn_name),
-            args,
+            args: maybe_args.map(|(args, _)| args),
         },
     );
 
@@ -424,15 +424,22 @@ fn fold_args<'a, T: Grammar<'a>>(
         // Clippy lint is triggered here. `name` cannot be moved into both branches,
         // so it's a false positive.
         let expr = if let Some(fn_name) = call.extra.fn_name {
-            Expr::Method {
-                name: fn_name.into(),
-                receiver: Box::new(name),
-                args: call.extra.args,
+            if let Some(args) = call.extra.args {
+                Expr::Method {
+                    name: fn_name.into(),
+                    receiver: Box::new(name),
+                    args,
+                }
+            } else {
+                Expr::FieldAccess {
+                    name: fn_name.into(),
+                    receiver: Box::new(name),
+                }
             }
         } else {
             Expr::Function {
                 name: Box::new(name),
-                args: call.extra.args,
+                args: call.extra.args.expect("Args must be present for functions"),
             }
         };
         united_span.copy_with_extra(expr)

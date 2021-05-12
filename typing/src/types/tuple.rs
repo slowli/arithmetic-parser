@@ -225,6 +225,31 @@ pub enum TupleIndex {
 /// If a tuple only has a middle part ([`Self::as_slice()`] returns `Some(_)`),
 /// it is denoted as the corresponding slice, something like `[T; N]`.
 ///
+/// # Indexing
+///
+/// *Indexing* is accessing tuple elements via an expression like `xs.0`.
+/// Tuple indexing is supported via [`FieldAccess`](arithmetic_parser::Expr::FieldAccess) expr,
+/// where the field name is a decimal `usize` number.
+///
+/// The indexing support for type inference is quite limited.
+/// For it to work, the receiver type must be known to be a tuple, and the index must be such
+/// that the type of the corresponding element is decidable. Otherwise,
+/// an [`UnsupportedIndex`] error will be raised.
+///
+/// | Tuple type | Index | Outcome |
+/// |------------|-------|---------|
+/// | `(Num, Bool)` | 0 | `Num` |
+/// | `(Num, Bool)` | 1 | `Bool` |
+/// | `(Num, Bool)` | 2 | Hard error; the index is out of bounds. |
+/// | `Num` | 0 | Hard error; only tuples can be indexed. |
+/// | `[Num; _]` | 0 | Error; the slice may be empty. |
+/// | `[Num; _ + 1]` | 0 | `Num`; the slice is guaranteed to have 0th element. |
+/// | `(Bool, ...[Num; _])` | 0 | `Bool` |
+/// | `(Bool, ...[Num; _])` | 1 | Error; the slice part may be empty. |
+/// | `(...[Num; _], Bool)` | 0 | Error; cannot decide if the result is `Num` or `Bool`. |
+///
+/// [`UnsupportedIndex`]: crate::error::ErrorKind::UnsupportedIndex
+///
 /// # Examples
 ///
 /// Simple tuples can be created using the [`From`] trait. Complex tuples can be created

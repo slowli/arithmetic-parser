@@ -54,6 +54,9 @@
 //!
 //! - Order comparisons (`>`, `<`, `>=`, `<=`) are defined for primitive values only and use
 //!   [`OrdArithmetic`].
+//! - Indexing for tuples is performed via [`FieldAccess`] with a numeric field name: `xs.0`.
+//!   Thus, the index is always a "compile-time" constant. An error is raised if the index
+//!   is out of bounds or the receiver is not a tuple.
 //! - No type checks are performed before evaluation.
 //! - Type annotations and type casts are completely ignored.
 //!   This means that the interpreter may execute  code that is incorrect with annotations
@@ -75,6 +78,7 @@
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
 //! [`num-complex`]: https://crates.io/crates/num-complex
 //! [`num-bigint`]: https://crates.io/crates/num-bigint
+//! [`FieldAccess`]: arithmetic_parser::Expr::FieldAccess
 //!
 //! # Examples
 //!

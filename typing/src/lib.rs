@@ -46,7 +46,13 @@
 //! [Hindley–Milner typing rules]: https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system#Typing_rules
 //! [`TypeArithmetic`]: crate::arith::TypeArithmetic
 //!
-//! # Type casts
+//! # Operations
+//!
+//! ## Tuple indexing
+//!
+//! See [`Tuple` docs](Tuple#indexing) for discussion of indexing expressions, such as `xs.0`.
+//!
+//! ## Type casts
 //!
 //! [A type cast](arithmetic_parser::Expr::TypeCast) is equivalent to introducing a new var
 //! with the specified annotation, assigning to it and returning the new var. That is,

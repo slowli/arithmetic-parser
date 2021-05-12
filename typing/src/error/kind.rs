@@ -62,7 +62,8 @@ pub enum ErrorKind<Prim: PrimitiveType> {
     InvalidFieldName(String),
     /// Value cannot be indexed (i.e., not a tuple).
     CannotIndex,
-    /// Unsupported indexing operation. For example, the receiver is a type var.
+    /// Unsupported indexing operation. For example, the receiver type is not known,
+    /// or it is a tuple with an unknown length, and the type of the element cannot be decided.
     UnsupportedIndex,
     /// Index is out of bounds for the indexed tuple.
     IndexOutOfBounds {

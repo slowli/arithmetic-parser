@@ -327,3 +327,15 @@ fn type_cast_error_in_subtype() {
     assert_eq!(err.location(), [tuple_element(1)]);
     assert_eq!(*err.span().fragment(), "|x: Num| x + 3");
 }
+
+#[test]
+fn insufficient_info_when_indexing_tuple() {
+    let code = "xs = (1, 2) as [_]; xs.0";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env.process_statements(&block).unwrap_err().single();
+
+    assert_eq!(*err.span().fragment(), "xs.0");
+    assert_matches!(err.kind(), ErrorKind::UnsupportedIndex);
+    assert_matches!(err.context(), ErrorContext::TupleIndex { ty } if ty.to_string() == "[Num]");
+}

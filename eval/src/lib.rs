@@ -55,9 +55,9 @@
 //! - Order comparisons (`>`, `<`, `>=`, `<=`) are defined for primitive values only and use
 //!   [`OrdArithmetic`].
 //! - No type checks are performed before evaluation.
-//! - Type annotations are completely ignored. This means that the interpreter may execute
-//!   code that is incorrect with annotations (e.g., assignment of a tuple to a variable which
-//!   is annotated to have a numeric type).
+//! - Type annotations and type casts are completely ignored.
+//!   This means that the interpreter may execute  code that is incorrect with annotations
+//!   (e.g., assignment of a tuple to a variable which is annotated to have a numeric type).
 //!
 //! # Crate features
 //!

@@ -409,3 +409,32 @@ fn custom_constraint_if_added_to_env() {
 
     assert_eq!(env["x"].to_string(), "any Hash");
 }
+
+#[test]
+fn type_cast_basics() {
+    let code = "(1, 2, 3) as [_]";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let output = type_env.process_statements(&block).unwrap();
+
+    assert_eq!(output.to_string(), "[Num]");
+
+    let any_code = "(1, (2, 3), 1 == 5) as any Hash";
+    let any_block = F32Grammar::parse_statements(any_code).unwrap();
+    let output = type_env
+        .insert_constraint(Hashed)
+        .process_statements(&any_block)
+        .unwrap();
+
+    assert_eq!(output.to_string(), "any Hash");
+}
+
+#[test]
+fn transmuting_type_via_casts() {
+    let code = "(1, 2, 3) as any as (Num, Num)";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let output = type_env.process_statements(&block).unwrap();
+
+    assert_eq!(output.to_string(), "(Num, Num)");
+}

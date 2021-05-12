@@ -390,3 +390,12 @@ fn any_type_with_bound() {
     assert!(rest.fragment().is_empty());
     assert_eq!(ty, TypeAst::Ident);
 }
+
+#[test]
+fn any_type_in_cast_chain() {
+    let input = InputSpan::new("any as Num");
+    let (rest, ty) = type_definition(input).unwrap();
+
+    assert_eq!(*rest.fragment(), " as Num");
+    assert_matches!(ty, TypeAst::Any(constraints) if constraints.terms.is_empty());
+}

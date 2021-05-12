@@ -170,6 +170,14 @@ pub enum Expr<'a, T: Grammar<'a>> {
     /// Function definition, e.g., `|x, y| { x + y }`.
     FnDefinition(FnDefinition<'a, T>),
 
+    /// Type cast, e.g., `x as Bool`.
+    TypeCast {
+        /// Value being cast, e.g., `x` in `x as Bool`.
+        value: Box<SpannedExpr<'a, T>>,
+        /// Type annotation for the case, e.g., `Bool` in `x as Bool`.
+        ty: Spanned<'a, T::Type>,
+    },
+
     /// Function call, e.g., `foo(x, y)` or `|x| { x + 5 }(3)`.
     Function {
         /// Function value. In the simplest case, this is a variable, but may also be another
@@ -237,6 +245,7 @@ impl<'a, T: Grammar<'a>> Expr<'a, T> {
             Self::Variable => ExprType::Variable,
             Self::Literal(_) => ExprType::Literal,
             Self::FnDefinition(_) => ExprType::FnDefinition,
+            Self::TypeCast { .. } => ExprType::Cast,
             Self::Tuple(_) => ExprType::Tuple,
             Self::Block(_) => ExprType::Block,
             Self::Function { .. } => ExprType::Function,
@@ -253,6 +262,10 @@ impl<'a, T: Grammar<'a>> Clone for Expr<'a, T> {
             Self::Variable => Self::Variable,
             Self::Literal(lit) => Self::Literal(lit.clone()),
             Self::FnDefinition(function) => Self::FnDefinition(function.clone()),
+            Self::TypeCast { value, ty } => Self::TypeCast {
+                value: value.clone(),
+                ty: ty.clone(),
+            },
             Self::Tuple(tuple) => Self::Tuple(tuple.clone()),
             Self::Block(block) => Self::Block(block.clone()),
             Self::Function { name, args } => Self::Function {
@@ -292,6 +305,15 @@ where
             (Self::Variable, Self::Variable) => true,
             (Self::Literal(this), Self::Literal(that)) => this == that,
             (Self::FnDefinition(this), Self::FnDefinition(that)) => this == that,
+
+            (
+                Self::TypeCast { value, ty },
+                Self::TypeCast {
+                    value: other_value,
+                    ty: other_ty,
+                },
+            ) => value == other_value && ty == other_ty,
+
             (Self::Tuple(this), Self::Tuple(that)) => this == that,
             (Self::Block(this), Self::Block(that)) => this == that,
 
@@ -351,6 +373,8 @@ pub enum ExprType {
     Literal,
     /// Function definition, e.g., `|x, y| { x + y }`.
     FnDefinition,
+    /// Cast, e.g., `x as Bool`.
+    Cast,
     /// Function call, e.g., `foo(x, y)` or `|x| { x + 5 }(3)`.
     Function,
     /// Method call, e.g., `foo.bar(x, 5)`.
@@ -371,6 +395,7 @@ impl fmt::Display for ExprType {
             Self::Variable => "variable",
             Self::Literal => "literal",
             Self::FnDefinition => "function definition",
+            Self::Cast => "type cast",
             Self::Function => "function call",
             Self::Method => "method call",
             Self::Unary => "unary operation",

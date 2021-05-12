@@ -46,6 +46,13 @@
 //! [Hindley–Milner typing rules]: https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system#Typing_rules
 //! [`TypeArithmetic`]: crate::arith::TypeArithmetic
 //!
+//! # Type casts
+//!
+//! [A type cast](arithmetic_parser::Expr::TypeCast) is equivalent to introducing a new var
+//! with the specified annotation, assigning to it and returning the new var. That is,
+//! `x as Bool` is equivalent to `{ _x: Bool = x; _x }`. As such, casts are safe (cannot be used
+//! to transmute the type arbitrarily), unless `any` types are involved.
+//!
 //! # Examples
 //!
 //! ```

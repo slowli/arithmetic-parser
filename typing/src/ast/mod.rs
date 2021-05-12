@@ -10,12 +10,12 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take, take_until, take_while, take_while1, take_while_m_n},
     character::complete::char as tag_char,
-    combinator::{cut, map, not, opt, peek, recognize},
+    combinator::{cut, map, map_res, not, opt, peek, recognize},
     multi::{many0, separated_list0, separated_list1},
     sequence::{delimited, preceded, terminated, tuple},
 };
 
-use arithmetic_parser::{with_span, InputSpan, NomResult, Spanned};
+use arithmetic_parser::{with_span, ErrorKind as ParseErrorKind, InputSpan, NomResult, Spanned};
 
 mod conversion;
 #[cfg(test)]
@@ -221,6 +221,18 @@ fn ident(input: InputSpan<'_>) -> NomResult<'_, Spanned<'_>> {
     )(input)
 }
 
+fn not_keyword(input: InputSpan<'_>) -> NomResult<'_, Spanned<'_>> {
+    map_res(ident, |ident| {
+        if *ident.fragment() == "as" {
+            Err(ParseErrorKind::Type(anyhow::anyhow!(
+                "`as` is a reserved keyword"
+            )))
+        } else {
+            Ok(ident)
+        }
+    })(input)
+}
+
 fn type_param_ident(input: InputSpan<'_>) -> NomResult<'_, Spanned<'_>> {
     preceded(tag_char('\''), ident)(input)
 }
@@ -287,7 +299,7 @@ fn tuple_definition(input: InputSpan<'_>) -> NomResult<'_, TupleAst<'_>> {
 fn tuple_len(input: InputSpan<'_>) -> NomResult<'_, Spanned<'_, TupleLenAst>> {
     let semicolon = tuple((ws, tag_char(';'), ws));
     let empty = map(take(0_usize), Spanned::from);
-    map(alt((preceded(semicolon, ident), empty)), |id| {
+    map(alt((preceded(semicolon, not_keyword), empty)), |id| {
         id.map_extra(|()| match *id.fragment() {
             "_" => TupleLenAst::Some,
             "" => TupleLenAst::Dynamic,
@@ -315,7 +327,7 @@ fn slice_definition(input: InputSpan<'_>) -> NomResult<'_, SliceAst<'_>> {
 
 fn type_bounds(input: InputSpan<'_>) -> NomResult<'_, TypeConstraintsAst<'_>> {
     let constraint_sep = tuple((ws, tag_char('+'), ws));
-    let (rest, terms) = separated_list1(constraint_sep, ident)(input)?;
+    let (rest, terms) = separated_list1(constraint_sep, not_keyword)(input)?;
     Ok((rest, TypeConstraintsAst { terms }))
 }
 
@@ -331,7 +343,7 @@ fn constraints(input: InputSpan<'_>) -> NomResult<'_, ConstraintsAst<'_>> {
 
     let len_params = preceded(
         terminated(tag("len!"), ws),
-        separated_list1(comma_sep, ident),
+        separated_list1(comma_sep, not_keyword),
     );
 
     let params_parser = alt((
@@ -406,7 +418,7 @@ fn any_type(input: InputSpan<'_>) -> NomResult<'_, TypeConstraintsAst<'_>> {
 }
 
 fn free_ident(input: InputSpan<'_>) -> NomResult<'_, TypeAst<'_>> {
-    map(ident, |id| match *id.fragment() {
+    map(not_keyword, |id| match *id.fragment() {
         "_" => TypeAst::Some,
         _ => TypeAst::Ident,
     })(input)

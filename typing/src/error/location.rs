@@ -72,7 +72,11 @@ impl ErrorLocation {
         location: &[Self],
         expr: &SpannedExpr<'a, T>,
     ) -> Spanned<'a> {
-        Self::walk(location, expr, Self::step_into_expr).with_no_extra()
+        let mut refined = Self::walk(location, expr, Self::step_into_expr);
+        while let Expr::TypeCast { value, .. } = &refined.extra {
+            refined = value.as_ref();
+        }
+        refined.with_no_extra()
     }
 
     fn walk<T: Copy>(mut location: &[Self], init: T, refine: impl Fn(Self, T) -> Option<T>) -> T {
@@ -90,8 +94,12 @@ impl ErrorLocation {
 
     fn step_into_expr<'r, 'a, T: Grammar<'a>>(
         self,
-        expr: &'r SpannedExpr<'a, T>,
+        mut expr: &'r SpannedExpr<'a, T>,
     ) -> Option<&'r SpannedExpr<'a, T>> {
+        while let Expr::TypeCast { value, .. } = &expr.extra {
+            expr = value.as_ref();
+        }
+
         match self {
             // `TupleIndex::FromEnd` should not occur in this context.
             Self::FnArg(Some(TupleIndex::Start(index))) => match &expr.extra {
@@ -296,6 +304,30 @@ mod tests {
     #[test]
     fn walking_expr_with_partial_match() {
         let expr = parse_expr("hash(1, xs)");
+        let location = &[
+            ErrorLocation::FnArg(Some(TupleIndex::Start(1))),
+            TupleIndex::Start(0).into(),
+        ];
+        let located = ErrorLocation::walk_expr(location, &expr);
+
+        assert_eq!(*located.fragment(), "xs");
+    }
+
+    #[test]
+    fn walking_expr_with_intermediate_type_cast() {
+        let expr = parse_expr("hash(1, (xs, ys) as Pair)");
+        let location = &[
+            ErrorLocation::FnArg(Some(TupleIndex::Start(1))),
+            TupleIndex::Start(0).into(),
+        ];
+        let located = ErrorLocation::walk_expr(location, &expr);
+
+        assert_eq!(*located.fragment(), "xs");
+    }
+
+    #[test]
+    fn walking_expr_with_final_type_cast() {
+        let expr = parse_expr("hash(1, (xs as [_] as Slice, ys))");
         let location = &[
             ErrorLocation::FnArg(Some(TupleIndex::Start(1))),
             TupleIndex::Start(0).into(),

@@ -115,6 +115,21 @@ where
 
             Expr::FnDefinition(def) => self.process_fn_def(def).into(),
 
+            Expr::TypeCast { value, ty } => {
+                let ty = self.process_annotation(Some(ty));
+                let original_ty = self.process_expr_inner(value);
+                let mut errors = OpErrors::new();
+                self.env
+                    .substitutions
+                    .unify(&ty, &original_ty, errors.by_ref());
+                let context = ErrorContext::TypeCast {
+                    source: original_ty,
+                    target: ty.clone(),
+                };
+                self.errors.extend(errors.contextualize(expr, context));
+                ty
+            }
+
             Expr::Unary { op, inner } => self.process_unary_op(expr, op.extra, inner),
 
             Expr::Binary { lhs, rhs, op } => self.process_binary_op(expr, op.extra, lhs, rhs),

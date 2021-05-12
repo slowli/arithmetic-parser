@@ -122,6 +122,13 @@ fn ws<Ty: GrammarType>(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
     recognize(many0(ws_line))(input)
 }
 
+fn mandatory_ws<Ty: GrammarType>(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
+    let not_ident_char = peek(not(take_while_m_n(1, 1, |c: char| {
+        c.is_ascii_alphanumeric() || c == '_'
+    })));
+    preceded(not_ident_char, ws::<Ty>)(input)
+}
+
 /// Variable name, like `a_foo` or `Bar`.
 fn var_name(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
     context(
@@ -261,7 +268,7 @@ where
         map(
             with_span(tuple((
                 terminated(with_span(one_of("-!")), ws::<Ty>),
-                simple_expr::<T, Ty>,
+                expr_with_calls::<T, Ty>,
             ))),
             |spanned| {
                 spanned.map_extra(|(op, inner)| Expr::Unary {
@@ -319,8 +326,8 @@ where
     ))(input)
 }
 
-/// Simple expression, which includes, besides `simplest_expr`s, function calls.
-fn simple_expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>
+/// Expression, which includes, besides `simplest_expr`s, function calls.
+fn expr_with_calls<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>
 where
     T: Parse<'a>,
     Ty: GrammarType,
@@ -338,6 +345,29 @@ where
     parser(input).and_then(|(rest, (base, calls))| {
         fold_args(input, base, calls).map(|folded| (rest, folded))
     })
+}
+
+/// Simple expression, which includes `expr_with_calls` and type casts.
+fn simple_expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>
+where
+    T: Parse<'a>,
+    Ty: GrammarType,
+{
+    let as_keyword = delimited(ws::<Ty>, tag("as"), mandatory_ws::<Ty>);
+    let parser = tuple((
+        expr_with_calls::<T, Ty>,
+        many0(preceded(as_keyword, cut(with_span(<T::Base>::parse_type)))),
+    ));
+
+    map(parser, |(base, casts)| {
+        casts.into_iter().fold(base, |value, ty| {
+            let united_span = unite_spans(input, &value, &ty);
+            united_span.copy_with_extra(Expr::TypeCast {
+                value: Box::new(value),
+                ty,
+            })
+        })
+    })(input)
 }
 
 #[allow(clippy::option_if_let_else, clippy::range_plus_one)]

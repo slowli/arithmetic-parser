@@ -19,7 +19,7 @@ verify = |(r, s), message, pk| {
 
 // Test!
 (sk, pk) = gen();
-(_, other_pk) = gen();
+other_pk = gen().1;
 
 5.while(|i| i != 0, |i| {
     message = rand_scalar();

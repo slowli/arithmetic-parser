@@ -187,6 +187,14 @@ pub enum Expr<'a, T: Grammar<'a>> {
         args: Vec<SpannedExpr<'a, T>>,
     },
 
+    /// Field access, e.g., `foo.bar`.
+    FieldAccess {
+        /// Name of the called method, e.g. `bar` in `foo.bar`.
+        name: Spanned<'a>,
+        /// Receiver of the call, e.g., `foo` in `foo.bar(x, 5)`.
+        receiver: Box<SpannedExpr<'a, T>>,
+    },
+
     /// Method call, e.g., `foo.bar(x, 5)`.
     Method {
         /// Name of the called method, e.g. `bar` in `foo.bar(x, 5)`.
@@ -249,6 +257,7 @@ impl<'a, T: Grammar<'a>> Expr<'a, T> {
             Self::Tuple(_) => ExprType::Tuple,
             Self::Block(_) => ExprType::Block,
             Self::Function { .. } => ExprType::Function,
+            Self::FieldAccess { .. } => ExprType::FieldAccess,
             Self::Method { .. } => ExprType::Method,
             Self::Unary { .. } => ExprType::Unary,
             Self::Binary { .. } => ExprType::Binary,
@@ -271,6 +280,10 @@ impl<'a, T: Grammar<'a>> Clone for Expr<'a, T> {
             Self::Function { name, args } => Self::Function {
                 name: name.clone(),
                 args: args.clone(),
+            },
+            Self::FieldAccess { name, receiver } => Self::FieldAccess {
+                name: *name,
+                receiver: receiver.clone(),
             },
             Self::Method {
                 name,
@@ -326,6 +339,14 @@ where
             ) => name == that_name && args == that_args,
 
             (
+                Self::FieldAccess { name, receiver },
+                Self::FieldAccess {
+                    name: that_name,
+                    receiver: that_receiver,
+                },
+            ) => name == that_name && receiver == that_receiver,
+
+            (
                 Self::Method {
                     name,
                     receiver,
@@ -377,6 +398,8 @@ pub enum ExprType {
     Cast,
     /// Function call, e.g., `foo(x, y)` or `|x| { x + 5 }(3)`.
     Function,
+    /// Field access, e.g., `foo.bar`.
+    FieldAccess,
     /// Method call, e.g., `foo.bar(x, 5)`.
     Method,
     /// Unary operation, e.g., `-x`.
@@ -397,6 +420,7 @@ impl fmt::Display for ExprType {
             Self::FnDefinition => "function definition",
             Self::Cast => "type cast",
             Self::Function => "function call",
+            Self::FieldAccess => "field access",
             Self::Method => "method call",
             Self::Unary => "unary operation",
             Self::Binary => "binary operation",

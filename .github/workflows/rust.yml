@@ -159,6 +159,7 @@ jobs:
         run: node test-wasm/test.js
 
   document:
+    if: github.event_name == 'push'
     needs:
       - build
       - build-msrv
@@ -169,11 +170,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Cache cargo bins
-        uses: actions/cache@v1
-        with:
-          path: ~/.cargo/bin
-          key: ${{ runner.os }}-cargo-document-bin
       - name: Cache cargo build
         uses: actions/cache@v1
         with:
@@ -186,10 +182,6 @@ jobs:
           toolchain: ${{ env.nightly }}
           profile: minimal
           override: true
-      - name: Install deadlinks
-        run: cargo deadlinks -V | grep $DEADLINKS_VERS || cargo install cargo-deadlinks --vers $DEADLINKS_VERS --force
-        env:
-          DEADLINKS_VERS: 0.4.1
 
       - name: Build docs
         run: |
@@ -201,12 +193,8 @@ jobs:
           cargo rustdoc -p arithmetic-eval --all-features -- --cfg docsrs
           cargo rustdoc -p arithmetic-typing --all-features -- --cfg docsrs
 
-      - name: Check dead links
-        run: cargo deadlinks --dir target/doc
-
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@releases/v3
-        if: github.event_name == 'push'
         with:
           ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
           BRANCH: gh-pages

@@ -10,14 +10,17 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 - Parse type annotations for varargs and tuples with a middle, such as
   `|...xs: T, y| { /* ... */ }` or `(head, ...tail: T)`. (#72)
 
-- Make `with_span` parsing combinator public.
+- Make `with_span` parsing combinator public. (#77)
 
-- Add `Expr::TypeCast` for cast expressions, such as `x as Bool`.
+- Add `Expr::TypeCast` for cast expressions, such as `x as Bool`. (#83)
+
+- Add `Expr::FieldAccess` for field access expressions, such as
+  `point.x` or `xs.0`. (#84)
 
 ### Changed
 
 - Make `Grammar` and `Parse` traits parametric on the lifetime of input.
-  This allows to have type annotations dependent on this lifetime as well.
+  This allows to have type annotations dependent on this lifetime as well. (#77)
 
 ## 0.2.0 - 2020-12-05
 

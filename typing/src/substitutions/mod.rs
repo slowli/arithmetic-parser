@@ -140,7 +140,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         }
     }
 
-    fn resolve_len(&self, len: TupleLen) -> TupleLen {
+    pub(crate) fn resolve_len(&self, len: TupleLen) -> TupleLen {
         let mut resolved = len;
         while let (Some(UnknownLen::Var(var)), exact) = resolved.components() {
             if !var.is_free() {

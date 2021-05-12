@@ -37,6 +37,10 @@ pub(crate) enum CompiledExpr<'a, T> {
         lhs: SpannedAtom<'a, T>,
         rhs: SpannedAtom<'a, T>,
     },
+    FieldAccess {
+        receiver: SpannedAtom<'a, T>,
+        index: usize, // TODO: generalize to string props
+    },
     Function {
         name: SpannedAtom<'a, T>,
         // Original function name if it is a proper variable name.
@@ -66,6 +70,11 @@ impl<T: Clone> Clone for CompiledExpr<'_, T> {
                 op: *op,
                 lhs: lhs.clone(),
                 rhs: rhs.clone(),
+            },
+
+            Self::FieldAccess { receiver, index } => Self::FieldAccess {
+                receiver: receiver.clone(),
+                index: *index,
             },
 
             Self::Function {
@@ -108,6 +117,11 @@ impl<T: 'static + Clone> StripCode for CompiledExpr<'_, T> {
                 op,
                 lhs: lhs.strip_code(),
                 rhs: rhs.strip_code(),
+            },
+
+            Self::FieldAccess { receiver, index } => CompiledExpr::FieldAccess {
+                receiver: receiver.strip_code(),
+                index,
             },
 
             Self::Function {

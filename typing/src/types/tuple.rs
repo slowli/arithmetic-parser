@@ -225,6 +225,31 @@ pub enum TupleIndex {
 /// If a tuple only has a middle part ([`Self::as_slice()`] returns `Some(_)`),
 /// it is denoted as the corresponding slice, something like `[T; N]`.
 ///
+/// # Indexing
+///
+/// *Indexing* is accessing tuple elements via an expression like `xs.0`.
+/// Tuple indexing is supported via [`FieldAccess`](arithmetic_parser::Expr::FieldAccess) expr,
+/// where the field name is a decimal `usize` number.
+///
+/// The indexing support for type inference is quite limited.
+/// For it to work, the receiver type must be known to be a tuple, and the index must be such
+/// that the type of the corresponding element is decidable. Otherwise,
+/// an [`UnsupportedIndex`] error will be raised.
+///
+/// | Tuple type | Index | Outcome |
+/// |------------|-------|---------|
+/// | `(Num, Bool)` | 0 | `Num` |
+/// | `(Num, Bool)` | 1 | `Bool` |
+/// | `(Num, Bool)` | 2 | Hard error; the index is out of bounds. |
+/// | `Num` | 0 | Hard error; only tuples can be indexed. |
+/// | `[Num; _]` | 0 | Error; the slice may be empty. |
+/// | `[Num; _ + 1]` | 0 | `Num`; the slice is guaranteed to have 0th element. |
+/// | `(Bool, ...[Num; _])` | 0 | `Bool` |
+/// | `(Bool, ...[Num; _])` | 1 | Error; the slice part may be empty. |
+/// | `(...[Num; _], Bool)` | 0 | Error; cannot decide if the result is `Num` or `Bool`. |
+///
+/// [`UnsupportedIndex`]: crate::error::ErrorKind::UnsupportedIndex
+///
 /// # Examples
 ///
 /// Simple tuples can be created using the [`From`] trait. Complex tuples can be created
@@ -429,6 +454,34 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
             .chain(&self.end)
     }
 
+    /// Attempts to index into this tuple. `middle_len` specifies the resolved middle length.
+    #[allow(clippy::option_if_let_else)] // hurts readability
+    pub(crate) fn get_element(
+        &self,
+        index: usize,
+        middle_len: TupleLen,
+    ) -> Result<&Type<Prim>, IndexError> {
+        if let Some(element) = self.start.get(index) {
+            Ok(element)
+        } else {
+            self.middle
+                .as_ref()
+                .map_or(Err(IndexError::OutOfBounds), |middle| {
+                    let middle_index = index - self.start.len();
+                    if middle_index < middle_len.exact {
+                        // The element is definitely in the middle.
+                        Ok(middle.element.as_ref())
+                    } else if middle_len.var.is_none() {
+                        // The element is definitely in the end.
+                        let end_index = middle_index - middle_len.exact;
+                        self.end.get(end_index).ok_or(IndexError::OutOfBounds)
+                    } else {
+                        Err(IndexError::NoInfo)
+                    }
+                })
+        }
+    }
+
     /// Returns pairs of elements of this and `other` tuple that should be equal to each other.
     ///
     /// This method is specialized for the case when the length of middles is unknown.
@@ -518,6 +571,15 @@ impl<Prim: PrimitiveType> From<Vec<Type<Prim>>> for Tuple<Prim> {
             end: Vec::new(),
         }
     }
+}
+
+/// Errors that can occur when indexing into a tuple.
+#[derive(Debug)]
+pub(crate) enum IndexError {
+    /// Index is out of bounds.
+    OutOfBounds,
+    /// Not enough info to determine the type.
+    NoInfo,
 }
 
 /// Slice type. Unlike in Rust, slices are a subset of tuples. If `length` is
@@ -620,6 +682,8 @@ impl<Prim: PrimitiveType> From<Slice<Prim>> for Tuple<Prim> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use assert_matches::assert_matches;
 
     #[test]
     fn tuple_length_display() {
@@ -808,6 +872,58 @@ mod tests {
                 // Non-borders in second tuple.
                 (&Type::free_var(0), &Type::free_var(3)),
             ]
+        );
+    }
+
+    #[test]
+    fn tuple_indexing() {
+        // Ordinary tuple.
+        let tuple = Tuple::from(vec![Type::NUM, Type::BOOL]);
+        assert_eq!(*tuple.get_element(0, TupleLen::ZERO).unwrap(), Type::NUM,);
+        assert_eq!(*tuple.get_element(1, TupleLen::ZERO).unwrap(), Type::BOOL,);
+        assert_matches!(
+            tuple.get_element(2, TupleLen::ZERO).unwrap_err(),
+            IndexError::OutOfBounds
+        );
+
+        // Slice.
+        let tuple = Tuple::from(Slice::new(Type::NUM, UnknownLen::param(0)));
+        assert_eq!(*tuple.get_element(0, TupleLen::from(3)).unwrap(), Type::NUM);
+        assert_matches!(
+            tuple.get_element(3, TupleLen::from(3)).unwrap_err(),
+            IndexError::OutOfBounds
+        );
+        assert_matches!(
+            tuple
+                .get_element(0, UnknownLen::free_var(0).into())
+                .unwrap_err(),
+            IndexError::NoInfo
+        );
+        assert_eq!(
+            *tuple.get_element(0, UnknownLen::free_var(0) + 1).unwrap(),
+            Type::NUM
+        );
+
+        // Tuple with all three components.
+        let (tuple, _) = create_test_tuples();
+        assert_eq!(
+            *tuple
+                .get_element(0, UnknownLen::free_var(0).into())
+                .unwrap(),
+            Type::NUM
+        );
+        assert_matches!(
+            tuple
+                .get_element(1, UnknownLen::free_var(0).into())
+                .unwrap_err(),
+            IndexError::NoInfo
+        );
+
+        assert_eq!(*tuple.get_element(1, 2.into()).unwrap(), Type::free_var(0));
+        assert_eq!(*tuple.get_element(3, 2.into()).unwrap(), Type::BOOL);
+        assert_matches!(
+            tuple.get_element(5, 2.into()).unwrap_err(),
+            IndexError::OutOfBounds
         );
     }
 }

@@ -7,7 +7,7 @@ use nom::{
         streaming,
     },
     character::complete::{char as tag_char, one_of},
-    combinator::{cut, map, not, opt, peek, recognize},
+    combinator::{cut, map, map_res, not, opt, peek, recognize},
     error::context,
     multi::{many0, separated_list0},
     sequence::{delimited, preceded, terminated, tuple},
@@ -285,12 +285,12 @@ where
 #[derive(Debug)]
 struct MethodOrFnCall<'a, T: Grammar<'a>> {
     fn_name: Option<InputSpan<'a>>,
-    args: Vec<SpannedExpr<'a, T>>,
+    args: Option<Vec<SpannedExpr<'a, T>>>,
 }
 
 impl<'a, T: Grammar<'a>> MethodOrFnCall<'a, T> {
     fn is_method(&self) -> bool {
-        self.fn_name.is_some()
+        self.fn_name.is_some() && self.args.is_some()
     }
 }
 
@@ -303,7 +303,7 @@ where
 {
     map(fn_args::<T, Ty>, |(args, _)| MethodOrFnCall {
         fn_name: None,
-        args,
+        args: Some(args),
     })(input)
 }
 
@@ -312,11 +312,18 @@ where
     T: Parse<'a>,
     Ty: GrammarType,
 {
-    let method_parser = map(
-        tuple((var_name, fn_args::<T, Ty>)),
-        |(fn_name, (args, _))| MethodOrFnCall {
-            fn_name: Some(fn_name),
-            args,
+    let var_name_or_digits = alt((var_name, take_while1(|c: char| c.is_ascii_digit())));
+    let method_parser = map_res(
+        tuple((var_name_or_digits, opt(fn_args::<T, Ty>))),
+        |(fn_name, maybe_args)| {
+            if maybe_args.is_some() && !is_valid_variable_name(fn_name.fragment()) {
+                Err(ErrorKind::LiteralName)
+            } else {
+                Ok(MethodOrFnCall {
+                    fn_name: Some(fn_name),
+                    args: maybe_args.map(|(args, _)| args),
+                })
+            }
         },
     );
 
@@ -390,7 +397,7 @@ fn fold_args<'a, T: Grammar<'a>>(
     if matches!(base.extra, Expr::Literal(_)) {
         match calls.first() {
             Some(call) if !call.extra.is_method() => {
-                // Bogus function call, such as `1(2, 3)`.
+                // Bogus function call, such as `1(2, 3)` or `1.x`.
                 let e = ErrorKind::LiteralName.with_span(&base);
                 return Err(NomErr::Failure(e));
             }
@@ -424,15 +431,22 @@ fn fold_args<'a, T: Grammar<'a>>(
         // Clippy lint is triggered here. `name` cannot be moved into both branches,
         // so it's a false positive.
         let expr = if let Some(fn_name) = call.extra.fn_name {
-            Expr::Method {
-                name: fn_name.into(),
-                receiver: Box::new(name),
-                args: call.extra.args,
+            if let Some(args) = call.extra.args {
+                Expr::Method {
+                    name: fn_name.into(),
+                    receiver: Box::new(name),
+                    args,
+                }
+            } else {
+                Expr::FieldAccess {
+                    name: fn_name.into(),
+                    receiver: Box::new(name),
+                }
             }
         } else {
             Expr::Function {
                 name: Box::new(name),
-                args: call.extra.args,
+                args: call.extra.args.expect("Args must be present for functions"),
             }
         };
         united_span.copy_with_extra(expr)

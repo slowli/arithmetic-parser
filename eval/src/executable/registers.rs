@@ -426,6 +426,22 @@ impl<'a, T: Clone> Registers<'a, T> {
                 }
             }
 
+            CompiledExpr::FieldAccess { receiver, index } => {
+                if let Value::Tuple(mut tuple) = self.resolve_atom(&receiver.extra) {
+                    let len = tuple.len();
+                    if *index >= len {
+                        Err(executable.create_error(
+                            &span,
+                            ErrorKind::IndexOutOfBounds { index: *index, len },
+                        ))
+                    } else {
+                        Ok(tuple.swap_remove(*index))
+                    }
+                } else {
+                    Err(executable.create_error(&span, ErrorKind::CannotIndex))
+                }
+            }
+
             CompiledExpr::Function {
                 name,
                 original_name,

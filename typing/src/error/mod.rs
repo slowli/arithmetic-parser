@@ -82,6 +82,52 @@ impl<'a, Prim: PrimitiveType> Error<'a, Prim> {
         }
     }
 
+    pub(crate) fn invalid_field_name(span: Spanned<'a>) -> Self {
+        let ident = (*span.fragment()).to_owned();
+        Self {
+            inner: span.copy_with_extra(ErrorKind::InvalidFieldName(ident)),
+            root_span: span,
+            context: ErrorContext::None,
+            location: vec![],
+        }
+    }
+
+    pub(crate) fn index_out_of_bounds<T>(
+        receiver: Tuple<Prim>,
+        span: &Spanned<'a, T>,
+        index: usize,
+    ) -> Self {
+        Self {
+            inner: span.copy_with_extra(ErrorKind::IndexOutOfBounds {
+                index,
+                len: receiver.len(),
+            }),
+            root_span: span.with_no_extra(),
+            context: ErrorContext::TupleIndex {
+                ty: Type::Tuple(receiver),
+            },
+            location: vec![],
+        }
+    }
+
+    pub(crate) fn cannot_index<T>(receiver: Type<Prim>, span: &Spanned<'a, T>) -> Self {
+        Self {
+            inner: span.copy_with_extra(ErrorKind::CannotIndex),
+            root_span: span.with_no_extra(),
+            context: ErrorContext::TupleIndex { ty: receiver },
+            location: vec![],
+        }
+    }
+
+    pub(crate) fn unsupported_index<T>(receiver: Type<Prim>, span: &Spanned<'a, T>) -> Self {
+        Self {
+            inner: span.copy_with_extra(ErrorKind::UnsupportedIndex),
+            root_span: span.with_no_extra(),
+            context: ErrorContext::TupleIndex { ty: receiver },
+            location: vec![],
+        }
+    }
+
     /// Gets the kind of this error.
     pub fn kind(&self) -> &ErrorKind<Prim> {
         &self.inner.extra
@@ -243,6 +289,11 @@ pub enum ErrorContext<Prim: PrimitiveType> {
     UnaryOp(UnaryOpContext<Prim>),
     /// Binary operation.
     BinaryOp(BinaryOpContext<Prim>),
+    /// Tuple indexing operation.
+    TupleIndex {
+        /// Type being indexed.
+        ty: Type<Prim>,
+    },
 }
 
 impl<Prim: PrimitiveType> From<UnaryOpContext<Prim>> for ErrorContext<Prim> {
@@ -280,6 +331,9 @@ impl<Prim: PrimitiveType> ErrorContext<Prim> {
             }
             Self::UnaryOp(UnaryOpContext { arg, .. }) => {
                 mapper.visit_type_mut(arg);
+            }
+            Self::TupleIndex { ty } => {
+                mapper.visit_type_mut(ty);
             }
         }
     }

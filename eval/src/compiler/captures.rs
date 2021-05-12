@@ -93,6 +93,10 @@ impl<'a> CapturesExtractor<'a> {
                 self.eval(name)?;
             }
 
+            Expr::FieldAccess { receiver, .. } => {
+                self.eval(receiver)?;
+            }
+
             Expr::Method {
                 args,
                 receiver,

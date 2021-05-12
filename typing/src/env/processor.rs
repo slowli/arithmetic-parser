@@ -7,8 +7,9 @@ use crate::{
     ast::{AstConversionState, SpannedTypeAst, TypeAst},
     env::{FullArithmetic, TypeEnvironment},
     error::{Error, ErrorContext, ErrorKind, Errors, OpErrors, TupleContext},
+    types::IndexError,
     visit::VisitMut,
-    FnType, PrimitiveType, Slice, Tuple, Type,
+    FnType, PrimitiveType, Slice, Tuple, TupleLen, Type,
 };
 use arithmetic_parser::{
     grammars::Grammar, BinaryOp, Block, Destructure, DestructureRest, Expr, FnDefinition, Lvalue,
@@ -94,6 +95,11 @@ where
             Expr::Function { name, args } => {
                 let fn_type = self.process_expr_inner(name);
                 self.process_fn_call(expr, fn_type, args.iter())
+            }
+
+            Expr::FieldAccess { name, receiver } => {
+                let receiver = self.process_expr_inner(receiver);
+                self.process_field_access(expr, &receiver, name)
             }
 
             Expr::Method {
@@ -245,6 +251,58 @@ where
             self.insert_type(variable.fragment(), Type::slice(element.clone(), length));
         }
         Slice::new(element, length)
+    }
+
+    fn process_field_access<T>(
+        &mut self,
+        access_expr: &SpannedExpr<'a, T>,
+        receiver: &Type<Prim>,
+        field_name: &Spanned<'a>,
+    ) -> Type<Prim>
+    where
+        T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
+    {
+        let index = if let Ok(index) = field_name.fragment().parse::<usize>() {
+            index
+        } else {
+            self.errors.push(Error::invalid_field_name(*field_name));
+            return self.new_type();
+        };
+
+        let receiver = self.env.substitutions.fast_resolve(receiver);
+        match receiver {
+            Type::Tuple(tuple) => {
+                let middle_len = tuple.parts().1.map_or(TupleLen::ZERO, Slice::len);
+                let middle_len = self.env.substitutions.resolve_len(middle_len);
+
+                match tuple.get_element(index, middle_len) {
+                    Ok(ty) => return ty.clone(),
+                    Err(IndexError::OutOfBounds) => {
+                        self.errors.push(Error::index_out_of_bounds(
+                            tuple.clone(),
+                            access_expr,
+                            index,
+                        ));
+                        return self.new_type();
+                    }
+                    Err(IndexError::NoInfo) => { /* An error will be added below. */ }
+                }
+            }
+            Type::Function(_) | Type::Prim(_) => {
+                self.errors
+                    .push(Error::cannot_index(receiver.clone(), access_expr));
+                return self.new_type();
+            }
+            Type::Any(_) => {
+                // FIXME: consider constraints?
+                return self.new_type();
+            }
+            _ => { /* An error will be added below. */ }
+        }
+
+        self.errors
+            .push(Error::unsupported_index(receiver.clone(), access_expr));
+        self.new_type()
     }
 
     fn process_fn_call<'it, T>(

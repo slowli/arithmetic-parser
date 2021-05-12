@@ -7,7 +7,10 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ### Added
 
-- Support `Expr::TypeCast` as a no-op.
+- Support `Expr::TypeCast` as a no-op. (#83)
+
+- Support `Expr::FieldAccess` for tuple indexing. Non-numeric fields
+  are not supported yet. (#84)
 
 ## 0.2.0 - 2020-12-05
 

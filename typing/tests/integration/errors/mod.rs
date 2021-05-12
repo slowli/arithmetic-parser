@@ -524,6 +524,22 @@ fn indexing_hard_errors() {
 }
 
 #[test]
+fn overly_large_indexed_field() {
+    let code = "x = (2, 5); x.123456789012345678901234567890";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "123456789012345678901234567890");
+    assert_matches!(
+        err.kind(),
+        ErrorKind::InvalidFieldName(name) if name == "123456789012345678901234567890"
+    );
+}
+
+#[test]
 fn indexing_unsupported_errors() {
     let code = "|xs| xs.0";
     let block = F32Grammar::parse_statements(code).unwrap();

@@ -773,3 +773,32 @@ fn unifying_types_containing_any() {
 
     assert_incompatible_types(err.kind(), &Type::NUM, &Type::BOOL);
 }
+
+#[test]
+fn indexing_basics() {
+    let code = "((1, 2, 3).0, ((1, 2), (3, 4)).0.1)";
+    let block = F32Grammar::parse_statements(code).unwrap();
+
+    let output = TypeEnvironment::new().process_statements(&block).unwrap();
+    assert_eq!(output, Type::from((Type::NUM, Type::NUM)));
+}
+
+#[test]
+fn indexing_after_narrowing_type() {
+    let code = r#"
+        |xs| {
+            (_, ...ys) = xs;
+            ys.fold(xs.0, |acc, y| acc + (y, y))
+        }
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+
+    let output = TypeEnvironment::new()
+        .insert("fold", Prelude::Fold)
+        .process_statements(&block)
+        .unwrap();
+    assert_eq!(
+        output.to_string(),
+        "for<'T: Ops> ((('T, 'T), ...['T; N])) -> ('T, 'T)"
+    );
+}

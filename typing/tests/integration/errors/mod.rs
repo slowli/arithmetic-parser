@@ -470,3 +470,70 @@ fn locating_tuple_middle_with_failed_constraint() {
     );
     assert_matches!(err.kind(), ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL);
 }
+
+#[test]
+fn invalid_field_name() {
+    let code = "xs = (1, 2); xs.len";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "len");
+    assert_eq!(err.location(), []);
+    assert_matches!(err.context(), ErrorContext::None);
+    assert_matches!(err.kind(), ErrorKind::InvalidFieldName(name) if name == "len");
+}
+
+#[test]
+fn indexing_hard_errors() {
+    let code = r#"
+        { 5 }.1; // not indexable
+        (|x| x + 1).0; // not indexable
+        xs = (1, 2); xs.2; // index out of bounds
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+
+    let errors = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err();
+
+    assert_eq!(errors.len(), 3);
+    let mut errors = errors.into_iter();
+
+    let block_err = errors.next().unwrap();
+    assert_eq!(*block_err.span().fragment(), "{ 5 }.1");
+    assert_eq!(block_err.location(), []);
+    assert_matches!(
+        block_err.context(),
+        ErrorContext::TupleIndex { ty } if *ty == Type::NUM
+    );
+    assert_matches!(block_err.kind(), ErrorKind::CannotIndex);
+
+    let fn_err = errors.next().unwrap();
+    assert_eq!(*fn_err.span().fragment(), "(|x| x + 1).0");
+    assert_matches!(fn_err.kind(), ErrorKind::CannotIndex);
+
+    let oob_err = errors.next().unwrap();
+    assert_eq!(*oob_err.span().fragment(), "xs.2");
+    assert_matches!(
+        oob_err.kind(),
+        ErrorKind::IndexOutOfBounds { index, len } if *index == 2 && *len == TupleLen::from(2)
+    );
+}
+
+#[test]
+fn indexing_unsupported_errors() {
+    let code = "|xs| xs.0";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "xs.0");
+    assert_eq!(err.location(), []);
+    assert_matches!(err.context(), ErrorContext::TupleIndex { ty: Type::Var(_) });
+    assert_matches!(err.kind(), ErrorKind::UnsupportedIndex);
+}

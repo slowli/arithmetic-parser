@@ -438,3 +438,13 @@ fn transmuting_type_via_casts() {
 
     assert_eq!(output.to_string(), "(Num, Num)");
 }
+
+#[test]
+fn indexing_with_annotations() {
+    let code = "|xs: (_, _)| xs.0 + xs.1";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let output = type_env.process_statements(&block).unwrap();
+
+    assert_eq!(output.to_string(), "for<'T: Ops> (('T, 'T)) -> 'T");
+}

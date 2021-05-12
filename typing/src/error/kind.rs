@@ -58,6 +58,20 @@ pub enum ErrorKind<Prim: PrimitiveType> {
     /// Trying to unify a type with a type containing it.
     RecursiveType(Type<Prim>),
 
+    /// Field name is invalid.
+    InvalidFieldName(String),
+    /// Value cannot be indexed (i.e., not a tuple).
+    CannotIndex,
+    /// Unsupported indexing operation. For example, the receiver is a type var.
+    UnsupportedIndex,
+    /// Index is out of bounds for the indexed tuple.
+    IndexOutOfBounds {
+        /// Index.
+        index: usize,
+        /// Actual tuple length.
+        len: TupleLen,
+    },
+
     /// Mention of a bounded type or length variable in a type supplied
     /// to [`Substitutions::unify()`].
     ///
@@ -134,6 +148,17 @@ impl<Prim: PrimitiveType> fmt::Display for ErrorKind<Prim> {
                 formatter,
                 "Cannot unify type 'T with a type containing it: {}",
                 ty
+            ),
+
+            Self::InvalidFieldName(name) => {
+                write!(formatter, "`{}` is not a valid field name", name)
+            }
+            Self::CannotIndex => formatter.write_str("Value cannot be indexed"),
+            Self::UnsupportedIndex => formatter.write_str("Unsupported indexing operation"),
+            Self::IndexOutOfBounds { index, len } => write!(
+                formatter,
+                "Attempting to get element {} from tuple with length {}",
+                index, len
             ),
 
             Self::UnresolvedParam => {

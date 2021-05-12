@@ -14,6 +14,7 @@ mod tuple;
 pub(crate) use self::{
     fn_type::{FnParams, ParamConstraints},
     quantifier::ParamQuantifier,
+    tuple::IndexError,
 };
 pub use self::{
     fn_type::{FnType, FnTypeBuilder, FnWithConstraints},

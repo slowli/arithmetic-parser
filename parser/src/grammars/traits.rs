@@ -27,6 +27,9 @@ bitflags! {
         const BOOLEAN_OPS_BASIC = 32;
         /// Enables parsing order comparisons (`>`, `<`, `>=`, `<=`).
         const ORDER_COMPARISONS = 64;
+        /// Enables parsing objects.
+        const OBJECTS = 128;
+
         /// Enables all Boolean operations.
         const BOOLEAN_OPS = Self::BOOLEAN_OPS_BASIC.bits | Self::ORDER_COMPARISONS.bits;
     }

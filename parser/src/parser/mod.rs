@@ -217,6 +217,24 @@ where
     })(input)
 }
 
+fn object_expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>
+where
+    T: Parse<'a>,
+    Ty: GrammarType,
+{
+    let statements = preceded(
+        terminated(tag("#{"), ws::<Ty>),
+        cut(terminated(
+            many0(terminated(separated_statement::<T, Ty>, ws::<Ty>)),
+            preceded(ws::<Ty>, tag_char('}')),
+        )),
+    );
+
+    map(with_span(statements), |spanned| {
+        spanned.map_extra(Expr::Object)
+    })(input)
+}
+
 /// Parses a function definition and wraps it into an `Expr`.
 fn fn_def_expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>
 where
@@ -251,6 +269,12 @@ where
         error::<T>
     };
 
+    let object_parser = if T::FEATURES.contains(Features::OBJECTS) {
+        object_expr::<T, Ty>
+    } else {
+        error::<T>
+    };
+
     let fn_def_parser = if T::FEATURES.contains(Features::FN_DEFINITIONS) {
         fn_def_expr::<T, Ty>
     } else {
@@ -278,6 +302,7 @@ where
             },
         ),
         block_parser,
+        object_parser,
         paren_expr::<T, Ty>,
     ))(input)
 }

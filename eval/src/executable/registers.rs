@@ -6,7 +6,7 @@ use crate::{
     alloc::{vec, Box, Rc, String, ToOwned, Vec},
     arith::OrdArithmetic,
     error::{Backtrace, CodeInModule, EvalResult, TupleLenMismatchContext},
-    executable::command::{Atom, Command, CompiledExpr, SpannedCommand},
+    executable::command::{Atom, Command, CompiledExpr, SpannedAtom, SpannedCommand},
     CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, ModuleId, SpannedValue,
     Value,
 };
@@ -375,9 +375,16 @@ impl<'a, T: Clone> Registers<'a, T> {
     ) -> EvalResult<'a, T> {
         match expr {
             CompiledExpr::Atom(atom) => Ok(self.resolve_atom(atom)),
+
             CompiledExpr::Tuple(atoms) => {
                 let values = atoms.iter().map(|atom| self.resolve_atom(atom)).collect();
                 Ok(Value::Tuple(values))
+            }
+            CompiledExpr::Object(fields) => {
+                let fields = fields
+                    .iter()
+                    .map(|(name, atom)| (name.clone(), self.resolve_atom(atom)));
+                Ok(Value::Object(fields.collect()))
             }
 
             CompiledExpr::Unary { op, inner } => {
@@ -391,39 +398,7 @@ impl<'a, T: Clone> Registers<'a, T> {
             }
 
             CompiledExpr::Binary { op, lhs, rhs } => {
-                let lhs_value = lhs.copy_with_extra(self.resolve_atom(&lhs.extra));
-                let rhs_value = rhs.copy_with_extra(self.resolve_atom(&rhs.extra));
-                let module_id = executable.id();
-
-                match op {
-                    BinaryOp::Add
-                    | BinaryOp::Sub
-                    | BinaryOp::Mul
-                    | BinaryOp::Div
-                    | BinaryOp::Power => {
-                        Value::try_binary_op(module_id, span, lhs_value, rhs_value, *op, arithmetic)
-                    }
-
-                    BinaryOp::Eq | BinaryOp::NotEq => {
-                        let is_eq = lhs_value
-                            .extra
-                            .eq_by_arithmetic(&rhs_value.extra, arithmetic);
-                        Ok(Value::Bool(if *op == BinaryOp::Eq {
-                            is_eq
-                        } else {
-                            !is_eq
-                        }))
-                    }
-
-                    BinaryOp::And => Value::try_and(module_id, &lhs_value, &rhs_value),
-                    BinaryOp::Or => Value::try_or(module_id, &lhs_value, &rhs_value),
-
-                    BinaryOp::Gt | BinaryOp::Lt | BinaryOp::Ge | BinaryOp::Le => {
-                        Value::compare(module_id, &lhs_value, &rhs_value, *op, arithmetic)
-                    }
-
-                    _ => unreachable!("Checked during compilation"),
-                }
+                self.execute_binary_expr(executable.id(), span, *op, lhs, rhs, arithmetic)
             }
 
             CompiledExpr::FieldAccess { receiver, index } => {
@@ -482,6 +457,41 @@ impl<'a, T: Clone> Registers<'a, T> {
                     InterpretedFn::new(fn_executable, captured_values, capture_names.clone());
                 Ok(Value::interpreted_fn(function))
             }
+        }
+    }
+
+    fn execute_binary_expr(
+        &self,
+        module_id: &dyn ModuleId,
+        span: MaybeSpanned<'a>,
+        op: BinaryOp,
+        lhs: &SpannedAtom<'a, T>,
+        rhs: &SpannedAtom<'a, T>,
+        arithmetic: &dyn OrdArithmetic<T>,
+    ) -> EvalResult<'a, T> {
+        let lhs_value = lhs.copy_with_extra(self.resolve_atom(&lhs.extra));
+        let rhs_value = rhs.copy_with_extra(self.resolve_atom(&rhs.extra));
+
+        match op {
+            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Power => {
+                Value::try_binary_op(module_id, span, lhs_value, rhs_value, op, arithmetic)
+            }
+
+            BinaryOp::Eq | BinaryOp::NotEq => {
+                let is_eq = lhs_value
+                    .extra
+                    .eq_by_arithmetic(&rhs_value.extra, arithmetic);
+                Ok(Value::Bool(if op == BinaryOp::Eq { is_eq } else { !is_eq }))
+            }
+
+            BinaryOp::And => Value::try_and(module_id, &lhs_value, &rhs_value),
+            BinaryOp::Or => Value::try_or(module_id, &lhs_value, &rhs_value),
+
+            BinaryOp::Gt | BinaryOp::Lt | BinaryOp::Ge | BinaryOp::Le => {
+                Value::compare(module_id, &lhs_value, &rhs_value, op, arithmetic)
+            }
+
+            _ => unreachable!("Checked during compilation"),
         }
     }
 

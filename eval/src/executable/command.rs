@@ -28,6 +28,7 @@ pub(crate) type SpannedAtom<'a, T> = MaybeSpanned<'a, Atom<T>>;
 pub(crate) enum CompiledExpr<'a, T> {
     Atom(Atom<T>),
     Tuple(Vec<Atom<T>>),
+    Object(Vec<(String, Atom<T>)>),
     Unary {
         op: UnaryOp,
         inner: SpannedAtom<'a, T>,
@@ -60,6 +61,7 @@ impl<T: Clone> Clone for CompiledExpr<'_, T> {
         match self {
             Self::Atom(atom) => Self::Atom(atom.clone()),
             Self::Tuple(atoms) => Self::Tuple(atoms.clone()),
+            Self::Object(fields) => Self::Object(fields.clone()),
 
             Self::Unary { op, inner } => Self::Unary {
                 op: *op,
@@ -107,6 +109,7 @@ impl<T: 'static + Clone> StripCode for CompiledExpr<'_, T> {
         match self {
             Self::Atom(atom) => CompiledExpr::Atom(atom),
             Self::Tuple(atoms) => CompiledExpr::Tuple(atoms),
+            Self::Object(fields) => CompiledExpr::Object(fields),
 
             Self::Unary { op, inner } => CompiledExpr::Unary {
                 op,

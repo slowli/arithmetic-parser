@@ -322,6 +322,8 @@ pub enum ValueType {
     Function,
     /// Tuple of a specific size.
     Tuple(usize),
+    /// Object.
+    Object,
     /// Array (a tuple of arbitrary size).
     ///
     /// This variant is never returned from [`Value::value_type()`]; at the same time, it is
@@ -337,7 +339,8 @@ impl fmt::Display for ValueType {
             Self::Number => formatter.write_str("number"),
             Self::Bool => formatter.write_str("boolean value"),
             Self::Function => formatter.write_str("function"),
-            Self::Tuple(1) => write!(formatter, "tuple with 1 element"),
+            Self::Tuple(1) => formatter.write_str("tuple with 1 element"),
+            Self::Object => formatter.write_str("object"),
             Self::Tuple(size) => write!(formatter, "tuple with {} elements", size),
             Self::Array => formatter.write_str("array"),
             Self::Ref => formatter.write_str("reference"),
@@ -467,6 +470,8 @@ pub enum Value<'a, T> {
     Function(Function<'a, T>),
     /// Tuple of zero or more values.
     Tuple(Vec<Value<'a, T>>),
+    /// Object with zero or more named fields.
+    Object(HashMap<String, Value<'a, T>>),
     /// Opaque reference to a native value.
     Ref(OpaqueRef),
 }
@@ -517,6 +522,7 @@ impl<'a, T> Value<'a, T> {
             Self::Bool(_) => ValueType::Bool,
             Self::Function(_) => ValueType::Function,
             Self::Tuple(elements) => ValueType::Tuple(elements.len()),
+            Self::Object(_) => ValueType::Object,
             Self::Ref(_) => ValueType::Ref,
         }
     }
@@ -539,6 +545,7 @@ impl<T: Clone> Clone for Value<'_, T> {
             Self::Bool(bool) => Self::Bool(*bool),
             Self::Function(function) => Self::Function(function.clone()),
             Self::Tuple(tuple) => Self::Tuple(tuple.clone()),
+            Self::Object(fields) => Self::Object(fields.clone()),
             Self::Ref(reference) => Self::Ref(reference.clone()),
         }
     }
@@ -555,6 +562,12 @@ impl<T: 'static + Clone> StripCode for Value<'_, T> {
             Self::Tuple(tuple) => {
                 Value::Tuple(tuple.into_iter().map(StripCode::strip_code).collect())
             }
+            Self::Object(fields) => Value::Object(
+                fields
+                    .into_iter()
+                    .map(|(name, value)| (name, value.strip_code()))
+                    .collect(),
+            ),
             Self::Ref(reference) => Value::Ref(reference),
         }
     }
@@ -572,6 +585,7 @@ impl<T: PartialEq> PartialEq for Value<'_, T> {
             (Self::Number(this), Self::Number(other)) => this == other,
             (Self::Bool(this), Self::Bool(other)) => this == other,
             (Self::Tuple(this), Self::Tuple(other)) => this == other,
+            (Self::Object(this), Self::Object(other)) => this == other,
             (Self::Function(this), Self::Function(other)) => this.is_same_function(other),
             (Self::Ref(this), Self::Ref(other)) => this == other,
             _ => false,
@@ -587,6 +601,13 @@ impl<T: fmt::Display> fmt::Display for Value<'_, T> {
             Self::Bool(false) => formatter.write_str("false"),
             Self::Ref(opaque_ref) => fmt::Display::fmt(opaque_ref, formatter),
             Self::Function(_) => formatter.write_str("[function]"),
+            Self::Object(fields) => {
+                formatter.write_str("#{ ")?;
+                for (name, value) in fields.iter() {
+                    write!(formatter, "{} = {}; ", name, value)?;
+                }
+                formatter.write_str("}")
+            }
             Self::Tuple(elements) => {
                 formatter.write_str("(")?;
                 for (i, element) in elements.iter().enumerate() {

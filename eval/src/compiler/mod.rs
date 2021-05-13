@@ -8,8 +8,8 @@ use crate::{
     alloc::{Box, String, ToOwned, Vec},
     error::RepeatedAssignmentContext,
     executable::{
-        Atom, Command, CompiledExpr, Executable, ExecutableFn, ExecutableModule, Registers,
-        SpannedAtom,
+        Atom, Command, CompiledExpr, Executable, ExecutableFn, ExecutableModule, FieldName,
+        Registers, SpannedAtom,
     },
     Error, ErrorKind, ModuleId, Value,
 };
@@ -274,13 +274,21 @@ impl Compiler {
         name: &Spanned<'a>,
         receiver: &SpannedExpr<'a, T>,
     ) -> Result<Atom<T::Lit>, Error<'a>> {
-        let index = name.fragment().parse::<usize>().map_err(|_| {
-            let name_string = (*name.fragment()).to_owned();
-            self.create_error(name, ErrorKind::InvalidFieldName(name_string))
-        })?;
-        let receiver = self.compile_expr(executable, receiver)?;
+        let name_str = *name.fragment();
+        let field = name_str
+            .parse::<usize>()
+            .map(FieldName::Index)
+            .or_else(|_| {
+                if is_valid_variable_name(name_str) {
+                    Ok(FieldName::Name(name_str.to_owned()))
+                } else {
+                    let err = ErrorKind::InvalidFieldName(name_str.to_owned());
+                    Err(self.create_error(name, err))
+                }
+            })?;
 
-        let field_access = CompiledExpr::FieldAccess { receiver, index };
+        let receiver = self.compile_expr(executable, receiver)?;
+        let field_access = CompiledExpr::FieldAccess { receiver, field };
         let register = self.push_assignment(executable, field_access, call_expr);
         Ok(Atom::Register(register))
     }

@@ -6,7 +6,7 @@ use crate::{
     alloc::{vec, Box, Rc, String, ToOwned, Vec},
     arith::OrdArithmetic,
     error::{Backtrace, CodeInModule, EvalResult, TupleLenMismatchContext},
-    executable::command::{Atom, Command, CompiledExpr, SpannedAtom, SpannedCommand},
+    executable::command::{Atom, Command, CompiledExpr, FieldName, SpannedAtom, SpannedCommand},
     CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, ModuleId, SpannedValue,
     Value,
 };
@@ -401,7 +401,10 @@ impl<'a, T: Clone> Registers<'a, T> {
                 self.execute_binary_expr(executable.id(), span, *op, lhs, rhs, arithmetic)
             }
 
-            CompiledExpr::FieldAccess { receiver, index } => {
+            CompiledExpr::FieldAccess {
+                receiver,
+                field: FieldName::Index(index),
+            } => {
                 if let Value::Tuple(mut tuple) = self.resolve_atom(&receiver.extra) {
                     let len = tuple.len();
                     if *index >= len {
@@ -414,6 +417,23 @@ impl<'a, T: Clone> Registers<'a, T> {
                     }
                 } else {
                     Err(executable.create_error(&span, ErrorKind::CannotIndex))
+                }
+            }
+
+            CompiledExpr::FieldAccess {
+                receiver,
+                field: FieldName::Name(name),
+            } => {
+                if let Value::Object(mut obj) = self.resolve_atom(&receiver.extra) {
+                    obj.remove(name).ok_or_else(|| {
+                        let err = ErrorKind::NoField {
+                            field: name.clone(),
+                            available_fields: obj.keys().cloned().collect(),
+                        };
+                        executable.create_error(&span, err)
+                    })
+                } else {
+                    Err(executable.create_error(&span, ErrorKind::CannotAccessFields))
                 }
             }
 

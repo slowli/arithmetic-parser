@@ -162,10 +162,12 @@ pub enum ErrorKind {
     /// Value is not callable (i.e., is not a function).
     #[display(fmt = "Value is not callable")]
     CannotCall,
-
-    /// Value cannot be indexed (i.e., not a tuple).
+    /// Value cannot be indexed (i.e., it is not a tuple).
     #[display(fmt = "Value cannot be indexed")]
     CannotIndex,
+    /// A field cannot be accessed for the value (i.e., it is not an object).
+    #[display(fmt = "Fields cannot be accessed for the object")]
+    CannotAccessFields,
 
     /// Index is out of bounds for the indexed tuple.
     #[display(
@@ -178,6 +180,14 @@ pub enum ErrorKind {
         index: usize,
         /// Actual tuple length.
         len: usize,
+    },
+    /// Field is absent when attempting to access it.
+    #[display(fmt = "Object does not have field {}", field)]
+    NoField {
+        /// Missing field.
+        field: String,
+        /// Available fields in the object in no particular order.
+        available_fields: Vec<String>,
     },
 
     /// Generic error during execution of a native function.
@@ -249,9 +259,11 @@ impl ErrorKind {
             Self::InvalidFieldName(name) => format!("`{}` is not a valid field name", name),
             Self::CannotCall => "Value is not callable".to_owned(),
             Self::CannotIndex => "Value cannot be indexed".to_owned(),
+            Self::CannotAccessFields => "Value has no fields".to_owned(),
             Self::IndexOutOfBounds { len, .. } => {
                 format!("Index out of bounds for tuple with length {}", len)
             }
+            Self::NoField { field, .. } => format!("Object does not have field {}", field),
             Self::NativeCall(message) => message.clone(),
             Self::Wrapper(err) => err.to_string(),
             Self::UnexpectedOperand { op } => format!("Unexpected operand type for {}", op),
@@ -274,6 +286,7 @@ impl ErrorKind {
             Self::Undefined(_) => "Undefined variable occurrence".to_owned(),
             Self::InvalidFieldName(_) => "Invalid field".to_owned(),
             Self::CannotIndex | Self::IndexOutOfBounds { .. } => "Indexing operation".to_owned(),
+            Self::CannotAccessFields | Self::NoField { .. } => "Field access".to_owned(),
             Self::CannotCall | Self::NativeCall(_) | Self::Wrapper(_) => "Failed call".to_owned(),
             Self::UnexpectedOperand { .. } => "Operand of wrong type".to_owned(),
             Self::CannotCompare => "Cannot be compared".to_owned(),
@@ -297,13 +310,12 @@ impl ErrorKind {
                 "In {}, all assigned variables must have different names",
                 context
             ),
-            Self::InvalidFieldName(_) => {
-                "Only unsigned integers can be field names for now".to_owned()
-            }
+            Self::InvalidFieldName(_) => "Field names must be `usize`s or identifiers".to_owned(),
             Self::CannotCall => "Only functions are callable, i.e., can be used as `fn_name` \
                 in `fn_name(...)` expressions"
                 .to_owned(),
             Self::CannotIndex => "Only tuples can be indexed".to_owned(),
+            Self::CannotAccessFields => "Only objects have fields".to_owned(),
             Self::UnexpectedOperand { op: Op::Binary(op) } if op.is_arithmetic() => {
                 "Operands of binary arithmetic ops must be numbers or tuples containing numbers"
                     .to_owned()

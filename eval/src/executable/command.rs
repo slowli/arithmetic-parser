@@ -23,6 +23,12 @@ impl<T: Clone> Clone for Atom<T> {
 
 pub(crate) type SpannedAtom<'a, T> = MaybeSpanned<'a, Atom<T>>;
 
+#[derive(Debug, Clone)]
+pub(crate) enum FieldName {
+    Index(usize),
+    Name(String),
+}
+
 /// Atomic operation on registers and/or constants.
 #[derive(Debug)]
 pub(crate) enum CompiledExpr<'a, T> {
@@ -40,7 +46,7 @@ pub(crate) enum CompiledExpr<'a, T> {
     },
     FieldAccess {
         receiver: SpannedAtom<'a, T>,
-        index: usize, // TODO: generalize to string props
+        field: FieldName,
     },
     Function {
         name: SpannedAtom<'a, T>,
@@ -74,9 +80,12 @@ impl<T: Clone> Clone for CompiledExpr<'_, T> {
                 rhs: rhs.clone(),
             },
 
-            Self::FieldAccess { receiver, index } => Self::FieldAccess {
+            Self::FieldAccess {
+                receiver,
+                field: index,
+            } => Self::FieldAccess {
                 receiver: receiver.clone(),
-                index: *index,
+                field: index.clone(),
             },
 
             Self::Function {
@@ -122,9 +131,12 @@ impl<T: 'static + Clone> StripCode for CompiledExpr<'_, T> {
                 rhs: rhs.strip_code(),
             },
 
-            Self::FieldAccess { receiver, index } => CompiledExpr::FieldAccess {
+            Self::FieldAccess {
+                receiver,
+                field: index,
+            } => CompiledExpr::FieldAccess {
                 receiver: receiver.strip_code(),
-                index,
+                field: index,
             },
 
             Self::Function {

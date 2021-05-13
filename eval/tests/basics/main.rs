@@ -432,18 +432,6 @@ fn indexed_field_invalid_receiver_error() {
 }
 
 #[test]
-fn indexed_field_invalid_field_name() {
-    let program = "x = (2, 5); x.len";
-    let err = expect_compilation_error(&mut Environment::new(), program);
-
-    assert_eq!(*err.main_span().code().fragment(), "len");
-    assert_matches!(
-        err.kind(),
-        ErrorKind::InvalidFieldName(name) if name == "len"
-    );
-}
-
-#[test]
 fn overly_large_indexed_field() {
     let program = "x = (2, 5); x.123456789012345678901234567890";
     let err = expect_compilation_error(&mut Environment::new(), program);

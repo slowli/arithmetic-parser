@@ -3,7 +3,7 @@
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
-    ops, ptr,
+    iter, ops, ptr,
 };
 
 use crate::{
@@ -80,11 +80,31 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         constraint: &Object<Prim>,
         mut errors: OpErrors<'_, Prim>,
     ) {
+        // Check whether the constraint is recursive.
+        let mut checker = OccurrenceChecker::new(self, self.equivalent_vars(var_idx));
+        checker.visit_object(constraint);
+        if let Some(var) = checker.recursive_var {
+            self.handle_recursive_type(Type::Object(constraint.clone()), var, &mut errors);
+            return;
+        }
+
         for idx in self.equivalent_vars(var_idx) {
             let mut current_constraints = self.constraints.remove(&idx).unwrap_or_default();
             current_constraints.insert_obj_constraint(constraint.clone(), self, errors.by_ref());
             self.constraints.insert(idx, current_constraints);
         }
+    }
+
+    fn handle_recursive_type(
+        &self,
+        ty: Type<Prim>,
+        recursive_var: usize,
+        errors: &mut OpErrors<'_, Prim>,
+    ) {
+        let mut resolved_ty = ty;
+        self.resolver().visit_type_mut(&mut resolved_ty);
+        TypeSanitizer::new(recursive_var).visit_type_mut(&mut resolved_ty);
+        errors.push(ErrorKind::RecursiveType(resolved_ty));
     }
 
     /// Returns type var indexes that are equivalent to the provided `var_idx`,
@@ -601,18 +621,11 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             true
         });
 
-        let mut checker = OccurrenceChecker {
-            substitutions: self,
-            var_idx,
-            is_recursive: false,
-        };
+        let mut checker = OccurrenceChecker::new(self, iter::once(var_idx));
         checker.visit_type(ty);
 
-        if checker.is_recursive {
-            let mut resolved_ty = ty.clone();
-            self.resolver().visit_type_mut(&mut resolved_ty);
-            TypeSanitizer { fixed_idx: var_idx }.visit_type_mut(&mut resolved_ty);
-            errors.push(ErrorKind::RecursiveType(resolved_ty));
+        if let Some(var) = checker.recursive_var {
+            self.handle_recursive_type(ty.clone(), var, &mut errors);
         } else {
             if let Some(constraints) = self.constraints.get(&var_idx).cloned() {
                 constraints.apply_all(ty, self, errors);
@@ -635,13 +648,26 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 #[derive(Debug)]
 struct OccurrenceChecker<'a, Prim: PrimitiveType> {
     substitutions: &'a Substitutions<Prim>,
-    var_idx: usize,
-    is_recursive: bool,
+    var_indexes: HashSet<usize>,
+    recursive_var: Option<usize>,
+}
+
+impl<'a, Prim: PrimitiveType> OccurrenceChecker<'a, Prim> {
+    fn new(
+        substitutions: &'a Substitutions<Prim>,
+        var_indexes: impl IntoIterator<Item = usize>,
+    ) -> Self {
+        Self {
+            substitutions,
+            var_indexes: var_indexes.into_iter().collect(),
+            recursive_var: None,
+        }
+    }
 }
 
 impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for OccurrenceChecker<'a, Prim> {
     fn visit_type(&mut self, ty: &'a Type<Prim>) {
-        if self.is_recursive {
+        if self.recursive_var.is_some() {
             // Skip recursion; we already have our answer at this point.
         } else {
             visit::visit_type(self, ty);
@@ -649,9 +675,10 @@ impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for OccurrenceChecker<'a, Prim> {
     }
 
     fn visit_var(&mut self, var: TypeVar) {
-        if var.index() == self.var_idx {
-            self.is_recursive = true;
-        } else if let Some(ty) = self.substitutions.eqs.get(&var.index()) {
+        let var_idx = var.index();
+        if self.var_indexes.contains(&var_idx) {
+            self.recursive_var = Some(var_idx);
+        } else if let Some(ty) = self.substitutions.eqs.get(&var_idx) {
             self.visit_type(ty);
         }
     }
@@ -662,6 +689,12 @@ impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for OccurrenceChecker<'a, Prim> {
 #[derive(Debug)]
 struct TypeSanitizer {
     fixed_idx: usize,
+}
+
+impl TypeSanitizer {
+    fn new(fixed_idx: usize) -> Self {
+        Self { fixed_idx }
+    }
 }
 
 impl<Prim: PrimitiveType> VisitMut<Prim> for TypeSanitizer {

@@ -607,7 +607,9 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             }
         }
         let needs_equation = if let Type::Any(constraints) = ty {
-            self.constraints.insert(var_idx, constraints.clone().into());
+            let mut current_constraints = self.constraints.remove(&var_idx).unwrap_or_default();
+            current_constraints.extend(constraints.clone().into(), self, errors.by_ref());
+            self.constraints.insert(var_idx, current_constraints);
             is_lhs
         } else {
             true

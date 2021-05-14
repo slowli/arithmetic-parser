@@ -404,6 +404,17 @@ impl<Prim: PrimitiveType> CompleteConstraints<Prim> {
         self.check_object_consistency(substitutions, errors);
     }
 
+    /// Extends these constraints from `other`.
+    pub(crate) fn extend(
+        &mut self,
+        other: Self,
+        substitutions: &mut Substitutions<Prim>,
+        errors: OpErrors<'_, Prim>,
+    ) {
+        self.simple.inner.extend(other.simple.inner);
+        self.check_object_consistency(substitutions, errors);
+    }
+
     /// Applies all constraints from this set.
     pub(crate) fn apply_all(
         &self,

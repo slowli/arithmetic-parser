@@ -319,7 +319,7 @@ impl<'a> ConstraintsAst<'a> {
         for (param, constraints) in &self.type_params {
             let name = *param.fragment();
             if let Some(index) = state.type_params.get(name) {
-                type_params.insert(*index, constraints.convert(state));
+                type_params.insert(*index, constraints.convert(state).into());
             } else {
                 let err = AstConversionError::UnusedTypeParam(name.to_owned());
                 state.errors.push(Error::conversion(err, param));

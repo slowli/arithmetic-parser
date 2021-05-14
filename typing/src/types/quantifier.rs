@@ -22,24 +22,24 @@ struct FunctionInfo {
     depth: usize,
 }
 
-#[derive(Debug)]
-pub(crate) struct ParamQuantifier {
+#[derive(Debug, Default)]
+struct ParamQuantifierOutput {
     type_params: HashMap<usize, ParamStats>,
     len_params: HashMap<usize, ParamStats>,
     functions: Vec<FunctionInfo>,
-    current_function_idx: usize,
-    current_function_depth: usize,
 }
 
-impl ParamQuantifier {
-    fn new() -> Self {
-        Self {
-            type_params: HashMap::new(),
-            len_params: HashMap::new(),
-            functions: vec![],
-            current_function_idx: usize::MAX, // immediately overridden
-            current_function_depth: 0,        // immediately overridden
-        }
+impl ParamQuantifierOutput {
+    fn place_params<Prim>(self, constraints: ParamConstraints<Prim>) -> ParamPlacement<Prim>
+    where
+        Prim: PrimitiveType,
+    {
+        let functions = &self.functions;
+        ParamPlacement::new(
+            Self::place_params_of_certain_kind(functions, self.type_params),
+            Self::place_params_of_certain_kind(functions, self.len_params),
+            constraints,
+        )
     }
 
     fn place_param(functions: &[FunctionInfo], stats: ParamStats) -> usize {
@@ -95,42 +95,55 @@ impl ParamQuantifier {
 
         params
     }
+}
 
-    fn place_params<Prim>(self, constraints: ParamConstraints<Prim>) -> ParamPlacement<Prim>
-    where
-        Prim: PrimitiveType,
-    {
-        let functions = &self.functions;
-        ParamPlacement::new(
-            Self::place_params_of_certain_kind(functions, self.type_params),
-            Self::place_params_of_certain_kind(functions, self.len_params),
+#[derive(Debug)]
+pub(crate) struct ParamQuantifier<'a, Prim: PrimitiveType> {
+    constraints: &'a ParamConstraints<Prim>,
+    output: ParamQuantifierOutput,
+    current_function_idx: usize,
+    current_function_depth: usize,
+}
+
+impl<'a, Prim: PrimitiveType> ParamQuantifier<'a, Prim> {
+    fn new(constraints: &'a ParamConstraints<Prim>) -> Self {
+        Self {
             constraints,
-        )
+            output: ParamQuantifierOutput::default(),
+            current_function_idx: usize::MAX, // immediately overridden
+            current_function_depth: 0,        // immediately overridden
+        }
     }
 
-    pub fn set_params<Prim: PrimitiveType>(
-        function: &mut FnType<Prim>,
-        constraints: ParamConstraints<Prim>,
-    ) {
-        let mut analyzer = Self::new();
+    fn constraint_object(&self, var_idx: usize) -> Option<&'a Type<Prim>> {
+        let constraints = self.constraints.type_params.get(&var_idx)?;
+        constraints.object.as_ref()
+    }
+
+    pub fn set_params(function: &mut FnType<Prim>, constraints: ParamConstraints<Prim>) {
+        let mut analyzer = ParamQuantifier::new(&constraints);
         analyzer.visit_function(function);
-        let mut placement = analyzer.place_params(constraints);
+        let mut placement = analyzer.output.place_params(constraints);
         placement.visit_function_mut(function);
     }
 }
 
-impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for ParamQuantifier {
-    fn visit_type(&mut self, ty: &'a Type<Prim>) {
+impl<'ty, Prim: PrimitiveType> Visit<'ty, Prim> for ParamQuantifier<'_, Prim> {
+    fn visit_type(&mut self, ty: &'ty Type<Prim>) {
         match ty {
             Type::Var(var) if !var.is_free() => {
-                let stats = self.type_params.entry(var.index()).or_default();
+                let stats = self.output.type_params.entry(var.index()).or_default();
                 stats.mentioning_fns.insert(self.current_function_idx);
+
+                if let Some(object) = self.constraint_object(var.index()) {
+                    self.visit_type(object);
+                }
             }
             _ => visit::visit_type(self, ty),
         }
     }
 
-    fn visit_tuple(&mut self, tuple: &'a Tuple<Prim>) {
+    fn visit_tuple(&mut self, tuple: &'ty Tuple<Prim>) {
         let (_, middle, _) = tuple.parts();
         let middle_len = middle.and_then(|middle| middle.len().components().0);
         let middle_len = if let Some(len) = middle_len {
@@ -142,18 +155,18 @@ impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for ParamQuantifier {
 
         if let UnknownLen::Var(var) = middle_len {
             if !var.is_free() {
-                let stats = self.len_params.entry(var.index()).or_default();
+                let stats = self.output.len_params.entry(var.index()).or_default();
                 stats.mentioning_fns.insert(self.current_function_idx);
             }
         }
         visit::visit_tuple(self, tuple);
     }
 
-    fn visit_function(&mut self, function: &'a FnType<Prim>) {
-        let this_function_idx = self.functions.len();
+    fn visit_function(&mut self, function: &'ty FnType<Prim>) {
+        let this_function_idx = self.output.functions.len();
         let old_function_idx = mem::replace(&mut self.current_function_idx, this_function_idx);
 
-        self.functions.push(FunctionInfo {
+        self.output.functions.push(FunctionInfo {
             parent: old_function_idx,
             depth: self.current_function_depth,
         });
@@ -240,7 +253,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for ParamPlacement<Prim> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Num;
+    use crate::{arith::CompleteConstraints, Num, Object};
 
     #[test]
     fn analyzing_map_fn() {
@@ -252,8 +265,10 @@ mod tests {
             .with_arg(map_arg)
             .returning(Type::param(1).repeat(UnknownLen::param(0)));
 
-        let mut analyzer = ParamQuantifier::new();
+        let constraints = ParamConstraints::default();
+        let mut analyzer = ParamQuantifier::new(&constraints);
         analyzer.visit_function(&map_fn);
+        let analyzer = analyzer.output;
 
         assert_eq!(analyzer.functions.len(), 2);
         assert_eq!(analyzer.functions[0].parent, usize::MAX);
@@ -272,7 +287,7 @@ mod tests {
         root_fn_index.insert(0);
         assert_eq!(analyzer.len_params[&0].mentioning_fns, root_fn_index);
 
-        let mut placement = analyzer.place_params(ParamConstraints::default());
+        let mut placement = analyzer.place_params(constraints);
         let expected_type_params: HashMap<_, _> = vec![(0, vec![0, 1])].into_iter().collect();
         assert_eq!(placement.type_params, expected_type_params);
         let expected_len_params: HashMap<_, _> = vec![(0, vec![0])].into_iter().collect();
@@ -280,6 +295,33 @@ mod tests {
 
         placement.visit_function_mut(&mut map_fn);
         assert_eq!(map_fn.to_string(), "(['T; N], ('T) -> 'U) -> ['U; N]");
+    }
+
+    #[test]
+    fn params_are_added_from_object_constraints() {
+        let obj: Object<Num> = vec![("x", Type::param(1))].into_iter().collect();
+        let constraints = CompleteConstraints {
+            object: Some(Type::Object(obj)),
+            ..CompleteConstraints::default()
+        };
+        let constraints = ParamConstraints {
+            type_params: vec![(0, constraints)].into_iter().collect(),
+            static_lengths: HashSet::new(),
+        };
+
+        let identity_fn = FnType::builder()
+            .with_arg(Type::param(0))
+            .returning(Type::param(0));
+
+        let mut analyzer = ParamQuantifier::new(&constraints);
+        analyzer.visit_function(&identity_fn);
+        let analyzer = analyzer.output;
+
+        assert_eq!(analyzer.functions.len(), 1);
+        assert_eq!(analyzer.type_params.len(), 2);
+        let expected_fns: HashSet<_> = vec![0].into_iter().collect();
+        assert_eq!(analyzer.type_params[&0].mentioning_fns, expected_fns);
+        assert_eq!(analyzer.type_params[&1].mentioning_fns, expected_fns);
     }
 
     #[test]
@@ -320,12 +362,10 @@ mod tests {
             })
             .collect();
 
-        let analyzer = ParamQuantifier {
+        let analyzer = ParamQuantifierOutput {
             type_params,
             len_params: HashMap::new(),
             functions,
-            current_function_idx: 0,
-            current_function_depth: 0,
         };
         let placements = analyzer
             .place_params::<Num>(ParamConstraints::default())

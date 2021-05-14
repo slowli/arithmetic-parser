@@ -294,6 +294,11 @@ pub enum ErrorContext<Prim: PrimitiveType> {
         /// Type being indexed.
         ty: Type<Prim>,
     },
+    /// Field access for an object.
+    ObjectFieldAccess {
+        /// Type being accessed.
+        ty: Type<Prim>,
+    },
 }
 
 impl<Prim: PrimitiveType> From<UnaryOpContext<Prim>> for ErrorContext<Prim> {
@@ -332,7 +337,7 @@ impl<Prim: PrimitiveType> ErrorContext<Prim> {
             Self::UnaryOp(UnaryOpContext { arg, .. }) => {
                 mapper.visit_type_mut(arg);
             }
-            Self::TupleIndex { ty } => {
+            Self::TupleIndex { ty } | Self::ObjectFieldAccess { ty } => {
                 mapper.visit_type_mut(ty);
             }
         }

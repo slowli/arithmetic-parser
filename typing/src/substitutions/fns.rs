@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use crate::arith::CompleteConstraints;
 use crate::{
     types::{ParamConstraints, ParamQuantifier},
     visit::{self, VisitMut},
@@ -13,9 +14,10 @@ impl<Prim: PrimitiveType> FnType<Prim> {
     /// to the function or its child functions.
     pub(crate) fn finalize(&mut self, substitutions: &Substitutions<Prim>) {
         // 1. Replace `Var`s with `Param`s.
-        let mut transformer = PolyTypeTransformer::default();
+        let mut transformer = PolyTypeTransformer::new(substitutions);
         transformer.visit_function_mut(self);
         let mapping = transformer.mapping;
+        let mut resolved_objects = transformer.resolved_objects;
 
         // 2. Extract constraints on type params and lengths.
         let type_params = mapping
@@ -26,7 +28,13 @@ impl<Prim: PrimitiveType> FnType<Prim> {
                 constraints
                     .filter(|constraints| !constraints.is_empty())
                     .cloned()
-                    .map(|constraints| (param_idx, constraints))
+                    .map(|constraints| {
+                        let resolved = Self::resolve_constraints(
+                            constraints,
+                            resolved_objects.remove(&var_idx),
+                        );
+                        (param_idx, resolved)
+                    })
             })
             .collect();
 
@@ -51,6 +59,21 @@ impl<Prim: PrimitiveType> FnType<Prim> {
             },
         );
     }
+
+    #[allow(clippy::option_if_let_else)] // false positive
+    fn resolve_constraints(
+        constraints: CompleteConstraints<Prim>,
+        resolved_object: Option<Type<Prim>>,
+    ) -> CompleteConstraints<Prim> {
+        if let Some(obj) = resolved_object {
+            CompleteConstraints {
+                simple: constraints.simple,
+                object: Some(obj),
+            }
+        } else {
+            constraints
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -60,18 +83,45 @@ pub(super) struct ParamMapping {
 }
 
 /// Replaces `Var`s with `Param`s and creates the corresponding `mapping`.
-#[derive(Debug, Default)]
-struct PolyTypeTransformer {
+#[derive(Debug)]
+struct PolyTypeTransformer<'a, Prim: PrimitiveType> {
     mapping: ParamMapping,
+    resolved_objects: HashMap<usize, Type<Prim>>,
+    substitutions: &'a Substitutions<Prim>,
 }
 
-impl<Prim: PrimitiveType> VisitMut<Prim> for PolyTypeTransformer {
+impl<'a, Prim: PrimitiveType> PolyTypeTransformer<'a, Prim> {
+    fn new(substitutions: &'a Substitutions<Prim>) -> Self {
+        Self {
+            mapping: ParamMapping::default(),
+            resolved_objects: HashMap::new(),
+            substitutions,
+        }
+    }
+
+    fn obj_constraint(&self, var_idx: usize) -> Option<&'a Type<Prim>> {
+        let constraints = self.substitutions.constraints.get(&var_idx)?;
+        constraints.object.as_ref()
+    }
+}
+
+impl<Prim: PrimitiveType> VisitMut<Prim> for PolyTypeTransformer<'_, Prim> {
     fn visit_type_mut(&mut self, ty: &mut Type<Prim>) {
         match ty {
             Type::Var(var) if var.is_free() => {
                 let type_count = self.mapping.types.len();
-                let param_idx = *self.mapping.types.entry(var.index()).or_insert(type_count);
+                let var_idx = var.index();
+                let param_idx = *self.mapping.types.entry(var_idx).or_insert(type_count);
                 *ty = Type::param(param_idx);
+
+                if let Some(object) = self.obj_constraint(var_idx) {
+                    let mut resolved_object = object.clone();
+                    self.substitutions
+                        .resolver()
+                        .visit_type_mut(&mut resolved_object);
+                    self.visit_type_mut(&mut resolved_object);
+                    self.resolved_objects.insert(var_idx, resolved_object);
+                }
             }
             _ => visit::visit_type_mut(self, ty),
         }
@@ -101,6 +151,23 @@ impl<'a> MonoTypeTransformer<'a> {
     pub fn transform<Prim: PrimitiveType>(mapping: &'a ParamMapping, function: &mut FnType<Prim>) {
         function.params = None;
         Self { mapping }.visit_function_mut(function);
+    }
+
+    pub fn transform_constraints<Prim: PrimitiveType>(
+        mapping: &'a ParamMapping,
+        constraints: &CompleteConstraints<Prim>,
+    ) -> CompleteConstraints<Prim> {
+        constraints.object.as_ref().map_or_else(
+            || constraints.clone(),
+            |object| {
+                let mut mono_object = object.clone();
+                Self { mapping }.visit_type_mut(&mut mono_object);
+                CompleteConstraints {
+                    simple: constraints.simple.clone(),
+                    object: Some(mono_object),
+                }
+            },
+        )
     }
 }
 

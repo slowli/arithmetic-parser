@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    arith::{Constraint, ConstraintSet},
+    arith::{CompleteConstraints, Constraint},
     error::{ErrorKind, ErrorLocation, OpErrors, TupleContext},
     visit::{self, Visit, VisitMut},
     FnType, Object, PrimitiveType, Tuple, TupleLen, Type, TypeVar, UnknownLen,
@@ -34,7 +34,7 @@ pub struct Substitutions<Prim: PrimitiveType> {
     /// Type variable equations, encoded as `type_var[key] = value`.
     eqs: HashMap<usize, Type<Prim>>,
     /// Constraints on type variables.
-    constraints: HashMap<usize, ConstraintSet<Prim>>,
+    constraints: HashMap<usize, CompleteConstraints<Prim>>,
     /// Number of length variables.
     len_var_count: usize,
     /// Length variable equations.
@@ -59,13 +59,31 @@ impl<Prim: PrimitiveType> Default for Substitutions<Prim> {
 impl<Prim: PrimitiveType> Substitutions<Prim> {
     /// Inserts `constraints` for a type var with the specified index and all vars
     /// it is equivalent to.
-    pub fn insert_constraint<C>(&mut self, var_idx: usize, constraint: &C)
-    where
+    pub(crate) fn insert_constraint<C>(
+        &mut self,
+        var_idx: usize,
+        constraint: &C,
+        mut errors: OpErrors<'_, Prim>,
+    ) where
         C: Constraint<Prim> + Clone,
     {
         for idx in self.equivalent_vars(var_idx) {
-            let current_constraints = self.constraints.entry(idx).or_default();
-            current_constraints.insert(constraint.clone());
+            let mut current_constraints = self.constraints.remove(&idx).unwrap_or_default();
+            current_constraints.insert(constraint.clone(), self, errors.by_ref());
+            self.constraints.insert(idx, current_constraints);
+        }
+    }
+
+    pub(crate) fn insert_obj_constraint(
+        &mut self,
+        var_idx: usize,
+        constraint: &Object<Prim>,
+        mut errors: OpErrors<'_, Prim>,
+    ) {
+        for idx in self.equivalent_vars(var_idx) {
+            let mut current_constraints = self.constraints.remove(&idx).unwrap_or_default();
+            current_constraints.insert_obj_constraint(constraint.clone(), self, errors.by_ref());
+            self.constraints.insert(idx, current_constraints);
         }
     }
 
@@ -544,7 +562,9 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         }
         for (original_idx, constraints) in &fn_params.type_params {
             let new_idx = mapping.types[original_idx];
-            self.constraints.insert(new_idx, constraints.clone());
+            let mono_constraints =
+                MonoTypeTransformer::transform_constraints(&mapping, constraints);
+            self.constraints.insert(new_idx, mono_constraints);
         }
 
         instantiated_fn_type
@@ -567,7 +587,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             }
         }
         let needs_equation = if let Type::Any(constraints) = ty {
-            self.constraints.insert(var_idx, constraints.clone());
+            self.constraints.insert(var_idx, constraints.clone().into());
             is_lhs
         } else {
             true
@@ -718,7 +738,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeSpecifier<'_, Prim> {
                 let var_idx = self.substitutions.type_var_count;
                 self.substitutions
                     .constraints
-                    .insert(var_idx, constraints.clone());
+                    .insert(var_idx, constraints.clone().into());
                 *ty = Type::free_var(var_idx);
                 self.substitutions.type_var_count += 1;
             }

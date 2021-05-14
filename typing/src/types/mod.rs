@@ -231,6 +231,7 @@ impl TypeVar {
 pub enum Type<Prim: PrimitiveType = Num> {
     /// Any type aka "I'll think about typing later". Similar to `any` type in TypeScript.
     /// See [the dedicated section](#any-type) for more details.
+    // TODO: use `CompleteConstraints` here?
     Any(ConstraintSet<Prim>),
     /// Primitive type.
     Prim(Prim),

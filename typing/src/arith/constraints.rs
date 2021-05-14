@@ -4,7 +4,7 @@ use std::{collections::HashMap, fmt, marker::PhantomData};
 
 use crate::{
     error::{ErrorKind, OpErrors},
-    PrimitiveType, Slice, Substitutions, Type,
+    Object, PrimitiveType, Slice, Substitutions, Type,
 };
 
 /// Constraint that can be placed on [`Type`]s.
@@ -175,7 +175,7 @@ where
     ) {
         let resolved_ty = if let Type::Var(var) = ty {
             debug_assert!(var.is_free());
-            substitutions.insert_constraint(var.index(), &self.constraint);
+            substitutions.insert_constraint(var.index(), &self.constraint, errors.by_ref());
             substitutions.fast_resolve(ty)
         } else {
             ty
@@ -347,6 +347,98 @@ impl<Prim: PrimitiveType> ConstraintSet<Prim> {
     ) {
         for constraint in self.inner.values() {
             constraint.apply(ty, substitutions, errors.by_ref());
+        }
+    }
+}
+
+/// Extended [`ConstraintSet`] that additionally supports object constraints.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompleteConstraints<Prim: PrimitiveType> {
+    pub(crate) simple: ConstraintSet<Prim>,
+    /// Object constraint. Stored as `Type` for convenience.
+    pub(crate) object: Option<Type<Prim>>,
+}
+
+impl<Prim: PrimitiveType> Default for CompleteConstraints<Prim> {
+    fn default() -> Self {
+        Self {
+            simple: ConstraintSet::new(),
+            object: None,
+        }
+    }
+}
+
+impl<Prim: PrimitiveType> From<ConstraintSet<Prim>> for CompleteConstraints<Prim> {
+    fn from(constraints: ConstraintSet<Prim>) -> Self {
+        Self {
+            simple: constraints,
+            object: None,
+        }
+    }
+}
+
+impl<Prim: PrimitiveType> fmt::Display for CompleteConstraints<Prim> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match (&self.object, self.simple.is_empty()) {
+            (Some(object), false) => write!(formatter, "{} + {}", object, self.simple),
+            (Some(object), true) => fmt::Display::fmt(object, formatter),
+            (None, _) => fmt::Display::fmt(&self.simple, formatter),
+        }
+    }
+}
+
+impl<Prim: PrimitiveType> CompleteConstraints<Prim> {
+    /// Checks if this constraint set is empty.
+    pub fn is_empty(&self) -> bool {
+        self.object.is_none() && self.simple.is_empty()
+    }
+
+    /// Inserts a constraint into this set.
+    pub(crate) fn insert(
+        &mut self,
+        constraint: impl Constraint<Prim>,
+        substitutions: &mut Substitutions<Prim>,
+        errors: OpErrors<'_, Prim>,
+    ) {
+        self.simple.insert(constraint);
+        self.check_object_consistency(substitutions, errors);
+    }
+
+    /// Applies all constraints from this set.
+    pub(crate) fn apply_all(
+        &self,
+        ty: &Type<Prim>,
+        substitutions: &mut Substitutions<Prim>,
+        mut errors: OpErrors<'_, Prim>,
+    ) {
+        self.simple.apply_all(ty, substitutions, errors.by_ref());
+        if let Some(Type::Object(lhs)) = &self.object {
+            lhs.apply_as_constraint(ty, substitutions, errors);
+        }
+    }
+
+    /// Inserts an object constraint into this set.
+    pub(crate) fn insert_obj_constraint(
+        &mut self,
+        object: Object<Prim>,
+        substitutions: &mut Substitutions<Prim>,
+        mut errors: OpErrors<'_, Prim>,
+    ) {
+        if let Some(Type::Object(existing_object)) = &mut self.object {
+            existing_object.extend_from(object, substitutions, errors.by_ref());
+        } else {
+            self.object = Some(Type::Object(object));
+        }
+        self.check_object_consistency(substitutions, errors);
+    }
+
+    fn check_object_consistency(
+        &self,
+        substitutions: &mut Substitutions<Prim>,
+        errors: OpErrors<'_, Prim>,
+    ) {
+        if let Some(object) = &self.object {
+            self.simple.apply_all(object, substitutions, errors);
         }
     }
 }

@@ -73,12 +73,21 @@ pub enum ErrorKind<Prim: PrimitiveType> {
         len: TupleLen,
     },
 
+    /// Cannot access fields in a value (i.e., it's not an object).
+    CannotAccessFields,
     /// Field set differs between LHS and RHS, which are both concrete objects.
     FieldsMismatch {
         /// Fields in LHS.
         lhs_fields: HashSet<String>,
         /// Fields in RHS.
         rhs_fields: HashSet<String>,
+    },
+    /// Concrete object does not have required fields.
+    MissingFields {
+        /// Missing fields.
+        fields: HashSet<String>,
+        /// Available object fields.
+        available_fields: HashSet<String>,
     },
 
     /// Mention of a bounded type or length variable in a type supplied
@@ -170,6 +179,7 @@ impl<Prim: PrimitiveType> fmt::Display for ErrorKind<Prim> {
                 index, len
             ),
 
+            Self::CannotAccessFields => formatter.write_str("Value is not an object"),
             Self::FieldsMismatch {
                 lhs_fields,
                 rhs_fields,
@@ -178,6 +188,14 @@ impl<Prim: PrimitiveType> fmt::Display for ErrorKind<Prim> {
                 "Cannot assign object with fields {rhs:?} to object with fields {lhs:?}",
                 lhs = lhs_fields,
                 rhs = rhs_fields
+            ),
+            Self::MissingFields {
+                fields,
+                available_fields,
+            } => write!(
+                formatter,
+                "Missing field(s) {:?} from object (available fields: {:?})",
+                fields, available_fields
             ),
 
             Self::UnresolvedParam => {

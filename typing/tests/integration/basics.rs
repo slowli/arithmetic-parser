@@ -9,7 +9,7 @@ use arithmetic_typing::{
     FnType, Num, Prelude, TupleLen, Type, TypeEnvironment, UnknownLen,
 };
 
-use super::{assert_incompatible_types, hash_fn_type, zip_fn_type, ErrorsExt, F32Grammar};
+use crate::{assert_incompatible_types, hash_fn_type, zip_fn_type, ErrorsExt, F32Grammar};
 
 #[test]
 fn statements_with_a_block() {
@@ -801,22 +801,4 @@ fn indexing_after_narrowing_type() {
         output.to_string(),
         "for<'T: Ops> ((('T, 'T), ...['T; N])) -> ('T, 'T)"
     );
-}
-
-#[test]
-fn object_expr_basics() {
-    let code = "#{ x = 1; y = (x + 1, x + 2); }";
-    let block = F32Grammar::parse_statements(code).unwrap();
-    let output = TypeEnvironment::new().process_statements(&block).unwrap();
-    assert_eq!(output.to_string(), "{ x: Num, y: (Num, Num) }");
-
-    let code_with_destructuring = r#"
-        xs = ((1, 1), 2, 3 == 3);
-        #{ x = xs.0; (..., y, z) = xs; }
-    "#;
-    let block_with_destructuring = F32Grammar::parse_statements(code_with_destructuring).unwrap();
-    let output = TypeEnvironment::new()
-        .process_statements(&block_with_destructuring)
-        .unwrap();
-    assert_eq!(output.to_string(), "{ x: (Num, Num), y: Num, z: Bool }");
 }

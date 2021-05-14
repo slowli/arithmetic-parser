@@ -14,6 +14,7 @@ mod basics;
 mod errors;
 mod examples;
 mod length_eqs;
+mod object;
 
 type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
 

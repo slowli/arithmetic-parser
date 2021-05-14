@@ -36,8 +36,11 @@ where
 
 impl<Prim: PrimitiveType> fmt::Display for Object<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut sorted_fields: Vec<_> = self.fields.iter().collect();
+        sorted_fields.sort_unstable_by_key(|(name, _)| *name);
+
         formatter.write_str("{")?;
-        for (i, (name, ty)) in self.fields.iter().enumerate() {
+        for (i, (name, ty)) in sorted_fields.into_iter().enumerate() {
             write!(formatter, " {}: {}", name, ty)?;
             if i + 1 < self.fields.len() {
                 formatter.write_str(",")?;
@@ -51,6 +54,10 @@ impl<Prim: PrimitiveType> Object<Prim> {
     /// Creates an empty object.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub(crate) fn from_map(fields: HashMap<String, Type<Prim>>) -> Self {
+        Self { fields }
     }
 
     /// Returns type of a field with the specified `name`.

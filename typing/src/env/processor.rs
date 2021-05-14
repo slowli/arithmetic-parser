@@ -9,7 +9,7 @@ use crate::{
     error::{Error, ErrorContext, ErrorKind, Errors, OpErrors, TupleContext},
     types::IndexError,
     visit::VisitMut,
-    FnType, PrimitiveType, Slice, Tuple, TupleLen, Type,
+    FnType, Object, PrimitiveType, Slice, Tuple, TupleLen, Type,
 };
 use arithmetic_parser::{
     grammars::Grammar, BinaryOp, Block, Destructure, DestructureRest, Expr, FnDefinition, Lvalue,
@@ -117,6 +117,15 @@ where
                 let result = self.process_block(block);
                 self.scopes.pop(); // intentionally called even on failure
                 result
+            }
+
+            Expr::Object(statements) => {
+                self.scopes.push(HashMap::new());
+                for statement in statements {
+                    self.process_statement(statement);
+                }
+                let object_scope = self.scopes.pop().unwrap();
+                Type::Object(Object::from_map(object_scope))
             }
 
             Expr::FnDefinition(def) => self.process_fn_def(def).into(),

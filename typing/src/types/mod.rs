@@ -8,6 +8,7 @@ use crate::{
 };
 
 mod fn_type;
+mod object;
 mod quantifier;
 mod tuple;
 
@@ -18,6 +19,7 @@ pub(crate) use self::{
 };
 pub use self::{
     fn_type::{FnType, FnTypeBuilder, FnWithConstraints},
+    object::Object,
     tuple::{LengthVar, Slice, Tuple, TupleIndex, TupleLen, UnknownLen},
 };
 
@@ -236,6 +238,8 @@ pub enum Type<Prim: PrimitiveType = Num> {
     Function(Box<FnType<Prim>>),
     /// Tuple type.
     Tuple(Tuple<Prim>),
+    /// Object type.
+    Object(Object<Prim>),
     /// Type variable.
     Var(TypeVar),
 }
@@ -247,6 +251,7 @@ impl<Prim: PrimitiveType> PartialEq for Type<Prim> {
             (Self::Prim(x), Self::Prim(y)) => x == y,
             (Self::Var(x), Self::Var(y)) => x == y,
             (Self::Tuple(xs), Self::Tuple(ys)) => xs == ys,
+            (Self::Object(x), Self::Object(y)) => x == y,
             (Self::Function(x), Self::Function(y)) => x == y,
             _ => false,
         }
@@ -267,6 +272,7 @@ impl<Prim: PrimitiveType> fmt::Display for Type<Prim> {
             Self::Prim(num) => fmt::Display::fmt(num, formatter),
             Self::Function(fn_type) => fmt::Display::fmt(fn_type, formatter),
             Self::Tuple(tuple) => fmt::Display::fmt(tuple, formatter),
+            Self::Object(obj) => fmt::Display::fmt(obj, formatter),
         }
     }
 }
@@ -374,7 +380,7 @@ impl<Prim: PrimitiveType> Type<Prim> {
     pub(crate) fn is_primitive(&self) -> Option<bool> {
         match self {
             Self::Prim(_) => Some(true),
-            Self::Tuple(_) | Self::Function(_) => Some(false),
+            Self::Tuple(_) | Self::Object(_) | Self::Function(_) => Some(false),
             _ => None,
         }
     }
@@ -389,6 +395,7 @@ impl<Prim: PrimitiveType> Type<Prim> {
             Self::Any(_) | Self::Prim(_) => true,
             Self::Function(fn_type) => fn_type.is_concrete(),
             Self::Tuple(tuple) => tuple.is_concrete(),
+            Self::Object(obj) => obj.is_concrete(),
         }
     }
 }

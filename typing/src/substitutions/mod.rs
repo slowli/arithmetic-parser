@@ -10,7 +10,7 @@ use crate::{
     arith::{Constraint, ConstraintSet},
     error::{ErrorKind, ErrorLocation, OpErrors, TupleContext},
     visit::{self, Visit, VisitMut},
-    FnType, PrimitiveType, Tuple, TupleLen, Type, TypeVar, UnknownLen,
+    FnType, Object, PrimitiveType, Tuple, TupleLen, Type, TypeVar, UnknownLen,
 };
 
 mod fns;
@@ -211,11 +211,14 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             }
 
             (Type::Tuple(lhs_tuple), Type::Tuple(rhs_tuple)) => {
-                self.unify_tuples(lhs_tuple, rhs_tuple, TupleContext::Generic, errors)
+                self.unify_tuples(lhs_tuple, rhs_tuple, TupleContext::Generic, errors);
+            }
+            (Type::Object(lhs_obj), Type::Object(rhs_obj)) => {
+                self.unify_objects(lhs_obj, rhs_obj, errors);
             }
 
             (Type::Function(lhs_fn), Type::Function(rhs_fn)) => {
-                self.unify_fn_types(lhs_fn, rhs_fn, errors)
+                self.unify_fn_types(lhs_fn, rhs_fn, errors);
             }
 
             (ty, other_ty) => {
@@ -444,6 +447,28 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 _ => return Err(LenErrorKind::Mismatch),
             };
             self.unify_var_length(source_var_idx, UnknownLen::Dynamic.into())
+        }
+    }
+
+    fn unify_objects(
+        &mut self,
+        lhs: &Object<Prim>,
+        rhs: &Object<Prim>,
+        mut errors: OpErrors<'_, Prim>,
+    ) {
+        let lhs_fields: HashSet<_> = lhs.field_names().collect();
+        let rhs_fields: HashSet<_> = rhs.field_names().collect();
+
+        if lhs_fields == rhs_fields {
+            for (field_name, ty) in lhs.iter() {
+                let rhs_ty = rhs.field(field_name).unwrap();
+                self.unify(ty, rhs_ty, errors.with_location(field_name));
+            }
+        } else {
+            errors.push(ErrorKind::FieldsMismatch {
+                lhs_fields: lhs_fields.into_iter().map(String::from).collect(),
+                rhs_fields: rhs_fields.into_iter().map(String::from).collect(),
+            });
         }
     }
 

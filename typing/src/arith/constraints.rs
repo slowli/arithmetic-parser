@@ -210,6 +210,13 @@ where
                     self.apply(element, substitutions, errors.with_location(i));
                 }
             }
+
+            Type::Object(obj) => {
+                let obj = obj.clone();
+                for (name, element) in obj.iter() {
+                    self.apply(element, substitutions, errors.with_location(name));
+                }
+            }
         }
     }
 }

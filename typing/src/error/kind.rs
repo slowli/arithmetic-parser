@@ -1,6 +1,6 @@
 //! `ErrorKind` and tightly related types.
 
-use std::fmt;
+use std::{collections::HashSet, fmt};
 
 use crate::{
     arith::Constraint, ast::AstConversionError, error::ErrorLocation, PrimitiveType, TupleIndex,
@@ -71,6 +71,14 @@ pub enum ErrorKind<Prim: PrimitiveType> {
         index: usize,
         /// Actual tuple length.
         len: TupleLen,
+    },
+
+    /// Field set differs between LHS and RHS, which are both concrete objects.
+    FieldsMismatch {
+        /// Fields in LHS.
+        lhs_fields: HashSet<String>,
+        /// Fields in RHS.
+        rhs_fields: HashSet<String>,
     },
 
     /// Mention of a bounded type or length variable in a type supplied
@@ -160,6 +168,16 @@ impl<Prim: PrimitiveType> fmt::Display for ErrorKind<Prim> {
                 formatter,
                 "Attempting to get element {} from tuple with length {}",
                 index, len
+            ),
+
+            Self::FieldsMismatch {
+                lhs_fields,
+                rhs_fields,
+            } => write!(
+                formatter,
+                "Cannot assign object with fields {rhs:?} to object with fields {lhs:?}",
+                lhs = lhs_fields,
+                rhs = rhs_fields
             ),
 
             Self::UnresolvedParam => {

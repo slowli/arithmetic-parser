@@ -320,6 +320,12 @@ where
                 // FIXME: consider constraints?
                 return self.new_type();
             }
+            Type::Var(var) => {
+                if let Some(object) = self.env.substitutions.object_constraint(*var) {
+                    self.errors.push(Error::cannot_index(object, access_expr));
+                    return self.new_type();
+                }
+            }
             _ => { /* An error will be added below. */ }
         }
 

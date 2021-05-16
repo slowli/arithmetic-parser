@@ -72,6 +72,16 @@ fn applying_object_constraints() {
 }
 
 #[test]
+fn extra_fields_are_retained_with_constraints() {
+    let code = r#"
+        test = |obj| { obj.x == 1; obj };
+        test(#{ x = 1; y = 2; }).y == 2;
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    TypeEnvironment::new().process_statements(&block).unwrap();
+}
+
+#[test]
 fn additional_object_constraint() {
     let code = r#"
         require_x = |obj| obj.x == 1;
@@ -305,4 +315,96 @@ fn folding_to_object() {
         .unwrap();
 
     assert_eq!(output.to_string(), "([Num; N]) -> { max: Num, min: Num }");
+}
+
+#[test]
+fn shared_type_vars_in_objects() {
+    let code = r#"
+        fun = |x, obj| x == obj.x;
+        fun(5, #{ x = 4; });
+        fun(5, #{ x = 4; y = 2; });
+        fun((1, true), #{ x = (5, true); });
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env
+        .insert("true", Type::BOOL)
+        .process_statements(&block)
+        .unwrap();
+
+    assert_eq!(
+        type_env["fun"].to_string(),
+        "for<'U: { x: 'T }> ('T, 'U) -> Bool"
+    );
+}
+
+#[test]
+fn shared_type_vars_in_objects_curried() {
+    let code = r#"
+        fun = |x| |obj| x == obj.x;
+        fun(5)(#{ x = 4; });
+        fun(5)(#{ x = 4; y = 2; });
+        fun((1, true))(#{ x = (5, true); });
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env
+        .insert("true", Type::BOOL)
+        .process_statements(&block)
+        .unwrap();
+
+    assert_eq!(
+        type_env["fun"].to_string(),
+        "for<'U: { x: 'T }> ('T) -> ('U) -> Bool"
+    );
+
+    let bogus_code = "fun((1, true))(#{ x = 5; });";
+    let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
+    let err = type_env
+        .process_statements(&bogus_block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(
+        err.kind().to_string(),
+        "Type `Num` is not assignable to type `(Num, Bool)`"
+    );
+}
+
+#[test]
+fn tuples_as_object_fields() {
+    let code = r#"
+        test = |obj| { obj.xs == obj.ys.map(|y| (y, y * 2)) };
+        test(#{ xs = ((1, 2), (3, 4)); ys = (3, 4); });
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env
+        .insert("map", Prelude::Map)
+        .process_statements(&block)
+        .unwrap();
+
+    assert_eq!(
+        type_env["test"].to_string(),
+        "for<'T: { xs: [(Num, Num); N], ys: [Num; N] }> ('T) -> Bool"
+    );
+}
+
+#[test]
+fn tuples_with_dyn_length_as_object_fields() {
+    let code = r#"
+        test = |obj| { obj.xs == obj.ys.filter(|y| y > 1) };
+        test(#{ xs = (2, 3); ys = (1, 2, 3); });
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env
+        .insert("filter", Prelude::Filter)
+        .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
+        .unwrap();
+
+    assert_eq!(
+        type_env["test"].to_string(),
+        "for<'T: { xs: [Num], ys: [Num; N] }> ('T) -> Bool"
+    );
 }

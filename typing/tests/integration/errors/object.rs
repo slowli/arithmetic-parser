@@ -36,6 +36,49 @@ fn recursive_object_type() {
 }
 
 #[test]
+fn tuple_as_object() {
+    let code = "require_x = |obj| obj.x; require_x((1, 2))";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "(1, 2)");
+    assert_matches!(err.kind(), ErrorKind::CannotAccessFields);
+}
+
+#[test]
+fn object_and_tuple_constraints() {
+    let code = "|obj| { obj.x; (x, ...) = obj; }";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "(x, ...)");
+    assert_matches!(err.kind(), ErrorKind::CannotAccessFields);
+}
+
+#[test]
+fn object_and_tuple_constraints_via_fields() {
+    let code = "|obj| { obj.x == 1; obj.0 }";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "obj.0");
+    assert_matches!(err.kind(), ErrorKind::CannotIndex);
+    assert_matches!(
+        err.context(),
+        ErrorContext::TupleIndex { ty } if ty.to_string() == "{ x: Num }"
+    );
+}
+
+#[test]
 fn no_required_field() {
     let code = r#"
         require_x = |obj| obj.x == 1;
@@ -174,6 +217,32 @@ fn incompatible_fields_via_constraints_for_object_constraint_rev() {
         err.kind(),
         ErrorKind::FailedConstraint { ty, .. } if ty.to_string() == "() -> _"
     );
+}
+
+#[test]
+fn incompatible_fields_in_embedded_obj() {
+    let code_samples = &[
+        "|obj| { hash(obj); (obj.some.run)() }",
+        "|obj| { hash(obj); some = obj.some; (some.run)() }",
+        "|obj| { hash(obj); run = obj.some.run; run() }",
+        "|obj| { (obj.some.run)(); hash(obj); }",
+        "|obj| { some = obj.some; (some.run)(); hash(obj); }",
+        "|obj| { run = obj.some.run; run(); hash(obj); }",
+    ];
+
+    for &code in code_samples {
+        let block = F32Grammar::parse_statements(code).unwrap();
+        let err = TypeEnvironment::new()
+            .insert("hash", hash_fn_type())
+            .process_statements(&block)
+            .unwrap_err()
+            .single();
+
+        assert_matches!(
+            err.kind(),
+            ErrorKind::FailedConstraint { ty, .. } if ty.to_string() == "() -> _"
+        );
+    }
 }
 
 #[test]

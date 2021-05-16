@@ -428,6 +428,17 @@ impl<Prim: PrimitiveType> CompleteConstraints<Prim> {
         }
     }
 
+    /// Maps the object constraint if present.
+    pub(crate) fn map_object(self, map: impl FnOnce(&mut Type<Prim>)) -> Self {
+        Self {
+            simple: self.simple,
+            object: self.object.map(|mut object| {
+                map(&mut object);
+                object
+            }),
+        }
+    }
+
     /// Inserts an object constraint into this set.
     pub(crate) fn insert_obj_constraint(
         &mut self,

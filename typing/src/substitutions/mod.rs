@@ -74,6 +74,19 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         }
     }
 
+    /// Returns an object constraint associated with the specified type var. The returned type
+    /// is resolved.
+    pub(crate) fn object_constraint(&self, var: TypeVar) -> Option<Type<Prim>> {
+        if var.is_free() {
+            let mut ty = self.constraints.get(&var.index())?.object.clone()?;
+            self.resolver().visit_type_mut(&mut ty);
+            Some(ty)
+        } else {
+            None
+        }
+    }
+
+    /// Inserts an object constraint for a type var with the specified index.
     pub(crate) fn insert_obj_constraint(
         &mut self,
         var_idx: usize,
@@ -178,6 +191,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         }
     }
 
+    /// Resolves the provided `len` given length equations in this instance.
     pub(crate) fn resolve_len(&self, len: TupleLen) -> TupleLen {
         let mut resolved = len;
         while let (Some(UnknownLen::Var(var)), exact) = resolved.components() {
@@ -201,7 +215,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         new_type
     }
 
-    /// Creates and returns a new length variable
+    /// Creates and returns a new length variable.
     pub(crate) fn new_len_var(&mut self) -> UnknownLen {
         let new_length = UnknownLen::free_var(self.len_var_count);
         self.len_var_count += 1;

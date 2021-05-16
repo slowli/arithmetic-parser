@@ -1,10 +1,10 @@
 //! Functional type substitutions.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::arith::CompleteConstraints;
 use crate::{
-    types::{ParamConstraints, ParamQuantifier},
+    types::{FnParams, ParamConstraints, ParamQuantifier},
     visit::{self, VisitMut},
     FnType, PrimitiveType, Substitutions, TupleLen, Type, UnknownLen,
 };
@@ -29,10 +29,11 @@ impl<Prim: PrimitiveType> FnType<Prim> {
                     .filter(|constraints| !constraints.is_empty())
                     .cloned()
                     .map(|constraints| {
-                        let resolved = Self::resolve_constraints(
-                            constraints,
-                            resolved_objects.remove(&var_idx),
-                        );
+                        let resolved = constraints.map_object(|object| {
+                            if let Some(resolved) = resolved_objects.remove(&var_idx) {
+                                *object = resolved;
+                            }
+                        });
                         (param_idx, resolved)
                     })
             })
@@ -58,21 +59,6 @@ impl<Prim: PrimitiveType> FnType<Prim> {
                 static_lengths,
             },
         );
-    }
-
-    #[allow(clippy::option_if_let_else)] // false positive
-    fn resolve_constraints(
-        constraints: CompleteConstraints<Prim>,
-        resolved_object: Option<Type<Prim>>,
-    ) -> CompleteConstraints<Prim> {
-        if let Some(obj) = resolved_object {
-            CompleteConstraints {
-                simple: constraints.simple,
-                object: Some(obj),
-            }
-        } else {
-            constraints
-        }
     }
 }
 
@@ -157,17 +143,9 @@ impl<'a> MonoTypeTransformer<'a> {
         mapping: &'a ParamMapping,
         constraints: &CompleteConstraints<Prim>,
     ) -> CompleteConstraints<Prim> {
-        constraints.object.as_ref().map_or_else(
-            || constraints.clone(),
-            |object| {
-                let mut mono_object = object.clone();
-                Self { mapping }.visit_type_mut(&mut mono_object);
-                CompleteConstraints {
-                    simple: constraints.simple.clone(),
-                    object: Some(mono_object),
-                }
-            },
-        )
+        constraints.clone().map_object(|object| {
+            Self { mapping }.visit_type_mut(object);
+        })
     }
 }
 
@@ -194,6 +172,33 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for MonoTypeTransformer<'_> {
                 if let Some(mapped_len) = self.mapping.lengths.get(&var.index()) {
                     *target_len = UnknownLen::free_var(*mapped_len);
                 }
+            }
+        }
+    }
+
+    fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {
+        visit::visit_function_mut(self, function);
+
+        if let Some(params) = function.params.as_deref() {
+            // TODO: make this check more precise?
+            let needs_modifying = params
+                .type_params
+                .iter()
+                .any(|(_, type_params)| type_params.object.is_some());
+
+            // We need to monomorphize types in the object constraint as well.
+            if needs_modifying {
+                let mapped_params = params.type_params.iter().map(|(i, constraints)| {
+                    let mapped_constraints = constraints
+                        .clone()
+                        .map_object(|object| self.visit_type_mut(object));
+                    (*i, mapped_constraints)
+                });
+                function.params = Some(Arc::new(FnParams {
+                    type_params: mapped_params.collect(),
+                    len_params: params.len_params.clone(),
+                    constraints: None,
+                }));
             }
         }
     }

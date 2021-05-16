@@ -261,3 +261,18 @@ fn no_field_error() {
             available_fields.contains(&"y".to_owned())
     );
 }
+
+#[test]
+fn object_comparison() {
+    let program = r#"
+        #{ x = 1; } == #{ x = 1; } &&
+        #{ x = 1; } == #{ x = 2; x = 1; } &&
+        #{ x = 1; } != #{ x = 0; } &&
+        #{ x = 1; } != #{} &&
+        #{ x = 1; } != #{ x = 1; y = 1; } &&
+        #{ x = 1; } != (1,) && (1,) != #{ x = 1; } &&
+        #{ x = 1; } != 1 && 1 != #{ x = 1; }
+    "#;
+    let return_value = evaluate(&mut Environment::new(), program);
+    assert_eq!(return_value, Value::Bool(true));
+}

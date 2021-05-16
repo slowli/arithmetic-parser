@@ -9,14 +9,14 @@ use std::{
 };
 
 use crate::{
-    arith::{Constraint, ConstraintSet},
+    arith::{CompleteConstraints, Constraint, ConstraintSet},
     ast::{
-        ConstraintsAst, FnTypeAst, SliceAst, SpannedTypeAst, TupleAst, TupleLenAst, TypeAst,
-        TypeConstraintsAst,
+        ConstraintsAst, FnTypeAst, ObjectAst, SliceAst, SpannedTypeAst, TupleAst, TupleLenAst,
+        TypeAst, TypeConstraintsAst,
     },
     error::{Error, Errors},
     types::{ParamConstraints, ParamQuantifier},
-    FnType, PrimitiveType, Slice, Tuple, Type, TypeEnvironment, UnknownLen,
+    FnType, Object, PrimitiveType, Slice, Tuple, Type, TypeEnvironment, UnknownLen,
 };
 use arithmetic_parser::{ErrorKind as ParseErrorKind, InputSpan, NomResult, Spanned, SpannedError};
 
@@ -80,6 +80,8 @@ pub enum AstConversionError {
     /// `_` lengths are only allowed in the context of a [`TypeEnvironment`]. It is a logical
     /// error to use them when parsing standalone types.
     InvalidSomeLength,
+    /// Field with the same name is defined multiple times in an object type.
+    DuplicateField(String),
 }
 
 impl fmt::Display for AstConversionError {
@@ -122,6 +124,10 @@ impl fmt::Display for AstConversionError {
             }
             Self::InvalidSomeLength => {
                 formatter.write_str("`_` length is disallowed when parsing standalone type")
+            }
+
+            Self::DuplicateField(name) => {
+                write!(formatter, "Duplicate field `{}` in object type", name)
             }
         }
     }
@@ -218,7 +224,8 @@ impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
     pub(crate) fn convert_type(&mut self, ty: &SpannedTypeAst<'a>) -> Type<Prim> {
         match &ty.extra {
             TypeAst::Some => self.new_type(Some(ty)),
-            TypeAst::Any(constraints) => Type::Any(constraints.convert(self)),
+            // FIXME: support object constraints
+            TypeAst::Any(constraints) => Type::Any(constraints.convert(self).simple),
             TypeAst::Ident => {
                 let ident = *ty.fragment();
                 if let Ok(prim_type) = Prim::from_str(ident) {
@@ -250,6 +257,7 @@ impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
 
             TypeAst::Tuple(tuple) => tuple.convert(self).into(),
             TypeAst::Slice(slice) => slice.convert(self).into(),
+            TypeAst::Object(object) => object.convert(self).into(),
         }
     }
 
@@ -283,19 +291,23 @@ impl<'a> TypeConstraintsAst<'a> {
     fn convert<Prim: PrimitiveType>(
         &self,
         state: &mut AstConversionState<'_, 'a, Prim>,
-    ) -> ConstraintSet<Prim> {
-        self.terms
-            .iter()
-            .fold(ConstraintSet::default(), |mut acc, input| {
-                let input_str = *input.fragment();
-                if let Some(constraint) = state.resolve_constraint(input_str) {
-                    acc.insert(constraint);
-                } else {
-                    let err = AstConversionError::UnknownConstraint(input_str.to_owned());
-                    state.errors.push(Error::conversion(err, input));
-                }
-                acc
-            })
+    ) -> CompleteConstraints<Prim> {
+        let mut constraints = CompleteConstraints::default();
+        if let Some(object) = &self.object {
+            constraints.object = Some(Type::Object(object.convert(state)));
+        }
+
+        self.terms.iter().fold(constraints, |mut acc, input| {
+            let input_str = *input.fragment();
+            if let Some(constraint) = state.resolve_constraint(input_str) {
+                // TODO: might want to check constraint consistency here.
+                acc.simple.insert(constraint);
+            } else {
+                let err = AstConversionError::UnknownConstraint(input_str.to_owned());
+                state.errors.push(Error::conversion(err, input));
+            }
+            acc
+        })
     }
 }
 
@@ -319,7 +331,7 @@ impl<'a> ConstraintsAst<'a> {
         for (param, constraints) in &self.type_params {
             let name = *param.fragment();
             if let Some(index) = state.type_params.get(name) {
-                type_params.insert(*index, constraints.convert(state).into());
+                type_params.insert(*index, constraints.convert(state));
             } else {
                 let err = AstConversionError::UnusedTypeParam(name.to_owned());
                 state.errors.push(Error::conversion(err, param));
@@ -380,6 +392,25 @@ impl<'a> SliceAst<'a> {
         };
 
         Slice::new(element, converted_length)
+    }
+}
+
+impl<'a> ObjectAst<'a> {
+    fn convert<Prim: PrimitiveType>(
+        &self,
+        state: &mut AstConversionState<'_, 'a, Prim>,
+    ) -> Object<Prim> {
+        let mut fields = HashMap::new();
+        for (field_name, ty) in &self.fields {
+            let field_name_str = *field_name.fragment();
+            if fields.contains_key(field_name_str) {
+                let err = AstConversionError::DuplicateField(field_name_str.to_owned());
+                state.errors.push(Error::conversion(err, field_name));
+            } else {
+                fields.insert(field_name_str.to_owned(), state.convert_type(ty));
+            }
+        }
+        Object::from_map(fields)
     }
 }
 
@@ -566,5 +597,25 @@ mod tests {
             // TODO: some of reported errors are difficult to interpret; should clarify.
             TypeAst::try_from(input).unwrap_err();
         }
+    }
+
+    #[test]
+    fn parsing_type_with_object_constraint() -> anyhow::Result<()> {
+        let type_def = "for<'T: { x: Num } + Lin> ('T) -> Bool";
+        let ty = TypeAst::try_from(type_def)?;
+        let ty = <Type>::try_from(&ty)?;
+        let ty = match ty {
+            Type::Function(fn_type) => *fn_type,
+            _ => panic!("Unexpected type: {:?}", ty),
+        };
+
+        let type_params = &ty.params.as_ref().unwrap().type_params;
+        assert_eq!(type_params.len(), 1);
+        let (_, type_params) = &type_params[0];
+        assert!(type_params.object.is_some());
+        assert!(type_params.simple.get_by_name("Lin").is_some());
+
+        assert_eq!(ty.to_string(), type_def);
+        Ok(())
     }
 }

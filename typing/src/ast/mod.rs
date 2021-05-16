@@ -12,7 +12,7 @@ use nom::{
     character::complete::char as tag_char,
     combinator::{cut, map, map_res, not, opt, peek, recognize},
     multi::{many0, separated_list0, separated_list1},
-    sequence::{delimited, preceded, terminated, tuple},
+    sequence::{delimited, preceded, separated_pair, terminated, tuple},
 };
 
 use arithmetic_parser::{with_span, ErrorKind as ParseErrorKind, InputSpan, NomResult, Spanned};
@@ -78,6 +78,8 @@ pub enum TypeAst<'a> {
     Tuple(TupleAst<'a>),
     /// Slice type; for example, `[Num]` or `[(Num, T); N]`.
     Slice(SliceAst<'a>),
+    /// Object type; for example, `{ len: Num }`. Not to be confused with object constraints.
+    Object(ObjectAst<'a>),
 }
 
 impl<'a> TypeAst<'a> {
@@ -175,17 +177,21 @@ pub struct ConstraintsAst<'a> {
 }
 
 /// Bounds that can be placed on a type variable.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct TypeConstraintsAst<'a> {
+    /// Object constraint, such as `{ x: 'T }`.
+    pub object: Option<ObjectAst<'a>>,
     /// Spans corresponding to constraints, e.g. `Foo` and `Bar` in `Foo + Bar`.
     pub terms: Vec<Spanned<'a>>,
 }
 
-impl Default for TypeConstraintsAst<'_> {
-    fn default() -> Self {
-        Self { terms: vec![] }
-    }
+/// Object type or constraint, such as `{ x: Num, y: [(Num, Bool)] }`.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct ObjectAst<'a> {
+    /// Fields of the object.
+    pub fields: Vec<(Spanned<'a>, SpannedTypeAst<'a>)>,
 }
 
 /// Whitespace and comments.
@@ -325,10 +331,43 @@ fn slice_definition(input: InputSpan<'_>) -> NomResult<'_, SliceAst<'_>> {
     )(input)
 }
 
+fn object(input: InputSpan<'_>) -> NomResult<'_, ObjectAst<'_>> {
+    let colon = tuple((ws, tag_char(':'), ws));
+    let object_field = separated_pair(ident, colon, with_span(type_definition));
+    let object_body = terminated(separated_list1(comma_sep, object_field), opt(comma_sep));
+    let object = preceded(
+        terminated(tag_char('{'), ws),
+        cut(terminated(object_body, tuple((ws, tag_char('}'))))),
+    );
+    map(object, |fields| ObjectAst { fields })(input)
+}
+
+fn constraint_sep(input: InputSpan<'_>) -> NomResult<'_, ()> {
+    map(tuple((ws, tag_char('+'), ws)), drop)(input)
+}
+
 fn type_bounds(input: InputSpan<'_>) -> NomResult<'_, TypeConstraintsAst<'_>> {
-    let constraint_sep = tuple((ws, tag_char('+'), ws));
-    let (rest, terms) = separated_list1(constraint_sep, not_keyword)(input)?;
-    Ok((rest, TypeConstraintsAst { terms }))
+    alt((
+        map(
+            tuple((
+                object,
+                opt(preceded(
+                    constraint_sep,
+                    separated_list1(constraint_sep, not_keyword),
+                )),
+            )),
+            |(object, terms)| TypeConstraintsAst {
+                object: Some(object),
+                terms: terms.unwrap_or_default(),
+            },
+        ),
+        map(separated_list1(constraint_sep, not_keyword), |terms| {
+            TypeConstraintsAst {
+                object: None,
+                terms,
+            }
+        }),
+    ))(input)
 }
 
 fn type_params(input: InputSpan<'_>) -> NomResult<'_, Vec<(Spanned<'_>, TypeConstraintsAst<'_>)>> {
@@ -430,6 +469,7 @@ fn type_definition(input: InputSpan<'_>) -> NomResult<'_, TypeAst<'_>> {
         fn_definition_with_constraints,
         map(type_param_ident, |_| TypeAst::Param),
         map(slice_definition, TypeAst::Slice),
+        map(object, TypeAst::Object),
         map(any_type, TypeAst::Any),
         free_ident,
     ))(input)

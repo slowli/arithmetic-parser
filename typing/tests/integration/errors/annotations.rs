@@ -94,6 +94,21 @@ fn embedded_type_with_constraints() {
 }
 
 #[test]
+fn object_type_with_duplicate_fields() {
+    let input = InputSpan::new("{ x: Num, x: (Num,) }");
+    let (_, ast) = TypeAst::parse(input).unwrap();
+    let err = <Type>::try_from(&ast).unwrap_err().single();
+
+    assert_eq!(*err.span().fragment(), "x");
+    assert_eq!(err.span().location_offset(), 10);
+    assert_matches!(
+        err.kind(),
+        ErrorKind::AstConversion(AstConversionError::DuplicateField(field))
+            if field == "x"
+    );
+}
+
+#[test]
 fn error_when_parsing_standalone_some_type() {
     let errors = <Type>::try_from(&TypeAst::try_from("(_) -> Num").unwrap()).unwrap_err();
     let err = errors.single();
@@ -338,4 +353,27 @@ fn insufficient_info_when_indexing_tuple() {
     assert_eq!(*err.span().fragment(), "xs.0");
     assert_matches!(err.kind(), ErrorKind::UnsupportedIndex);
     assert_matches!(err.context(), ErrorContext::TupleIndex { ty } if ty.to_string() == "[Num]");
+}
+
+#[test]
+fn object_annotation_mismatch() {
+    let code = "obj: { x: _ } = #{ x = 1; y = 2; };";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env.process_statements(&block).unwrap_err().single();
+
+    assert_matches!(err.kind(), ErrorKind::FieldsMismatch { .. });
+}
+
+#[test]
+fn missing_field_after_object_annotation() {
+    let code = "|obj: { x: _ }| obj.x == obj.y";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env.process_statements(&block).unwrap_err().single();
+
+    assert_matches!(
+        err.kind(),
+        ErrorKind::MissingFields { fields, .. } if fields.len() == 1 && fields.contains("y")
+    );
 }

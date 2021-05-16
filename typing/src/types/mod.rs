@@ -296,6 +296,12 @@ impl<Prim: PrimitiveType> From<Slice<Prim>> for Type<Prim> {
     }
 }
 
+impl<Prim: PrimitiveType> From<Object<Prim>> for Type<Prim> {
+    fn from(object: Object<Prim>) -> Self {
+        Self::Object(object)
+    }
+}
+
 impl<Prim: PrimitiveType> From<ConstraintSet<Prim>> for Type<Prim> {
     fn from(constraints: ConstraintSet<Prim>) -> Self {
         Self::Any(constraints)

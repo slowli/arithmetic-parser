@@ -187,3 +187,38 @@ fn boolean_ops_when_switched_off() {
         assert_binary_op_is_not_parsed::<SimpleGrammar>(op);
     }
 }
+
+#[test]
+fn object_blocks_when_switched_off() {
+    #[derive(Debug, Clone)]
+    struct SimpleGrammar;
+
+    impl Parse<'_> for SimpleGrammar {
+        type Base = FieldGrammarBase;
+
+        const FEATURES: Features = Features::all().without(Features::OBJECTS);
+    }
+
+    let input = InputSpan::new("#{ x = 1; y = 2; };");
+    let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
+    assert_matches!(err, NomErr::Error(ref spanned) if *spanned.span().fragment() == "#");
+}
+
+#[test]
+fn object_blocks_when_blocks_are_switched_off() {
+    #[derive(Debug, Clone)]
+    struct SimpleGrammar;
+
+    impl Parse<'_> for SimpleGrammar {
+        type Base = FieldGrammarBase;
+
+        const FEATURES: Features = Features::all().without(Features::BLOCKS);
+    }
+
+    let input = InputSpan::new("#{ x = 1; y = 2; };");
+    let (_, statement) = statement::<SimpleGrammar, Complete>(input).unwrap();
+    assert_matches!(
+        statement.extra,
+        Statement::Expr(expr) if matches!(expr.extra, Expr::ObjectBlock(_))
+    );
+}

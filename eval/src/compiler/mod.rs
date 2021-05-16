@@ -204,7 +204,7 @@ impl Compiler {
 
             Expr::Block(block) => self.compile_block(executable, expr, block)?,
             Expr::FnDefinition(def) => self.compile_fn_definition(executable, expr, def)?,
-            Expr::Object(statements) => {
+            Expr::ObjectBlock(statements) => {
                 self.compile_block(executable, expr, statements.as_slice())?
             }
 

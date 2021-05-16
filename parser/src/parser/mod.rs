@@ -231,7 +231,7 @@ where
     );
 
     map(with_span(statements), |spanned| {
-        spanned.map_extra(Expr::Object)
+        spanned.map_extra(Expr::ObjectBlock)
     })(input)
 }
 

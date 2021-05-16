@@ -12,6 +12,71 @@ use crate::{
 };
 
 /// Object type: named fields with heterogeneous types.
+///
+/// # Notation
+///
+/// Object types are denoted using a brace notation such as `{ x: Num, y: [(Num, 'T)] }`.
+/// Here, `x` and `y` are field names, and `Num` / `[(Num, 'T)]` are types of the corresponding
+/// object fields.
+///
+/// # As constraint
+///
+/// Object types are *exact*; their extensions cannot be unified with the original types.
+/// For example, if a function argument is `{ x: Num, y: Num }`,
+/// the function cannot be called with an arg of type `{ x: Num, y: Num, z: Num }`:
+///
+/// ```
+/// # use arithmetic_parser::grammars::{Parse, Typed, NumGrammar};
+/// # use arithmetic_typing::{error::ErrorKind, Annotated, TypeEnvironment};
+/// # use assert_matches::assert_matches;
+/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
+/// # fn main() -> anyhow::Result<()> {
+/// let code = r#"
+///     manhattan = |pt: { x: Num, y: Num }| pt.x + pt.y;
+///     manhattan(#{ x = 3; y = 4; }); // OK
+///     manhattan(#{ x = 3; y = 4; z = 5; }); // fails
+/// "#;
+/// let ast = Parser::parse_statements(code)?;
+/// let err = TypeEnvironment::new().process_statements(&ast).unwrap_err();
+/// # assert_eq!(err.len(), 1);
+/// let err = err.iter().next().unwrap();
+/// assert_matches!(err.kind(), ErrorKind::FieldsMismatch { .. });
+/// # Ok(())
+/// # }
+/// ```
+///
+/// To bridge this gap, objects can be used as a constraint on types, similarly to [`Constraint`]s.
+/// As a constraint, an object specifies *necessary* fields, which can be arbitrarily extended.
+///
+/// The type inference algorithm uses object constraints, not concrete object types whenever
+/// possible:
+///
+/// ```
+/// # use arithmetic_parser::grammars::{Parse, Typed, NumGrammar};
+/// # use arithmetic_typing::{error::ErrorKind, Annotated, TypeEnvironment};
+/// # use assert_matches::assert_matches;
+/// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
+/// # fn main() -> anyhow::Result<()> {
+/// let code = r#"
+///     manhattan = |pt| pt.x + pt.y;
+///     manhattan(#{ x = 3; y = 4; }); // OK
+///     manhattan(#{ x = 3; y = 4; z = 5; }); // also OK
+/// "#;
+/// let ast = Parser::parse_statements(code)?;
+/// let mut env = TypeEnvironment::new();
+/// env.process_statements(&ast)?;
+/// assert_eq!(
+///     env["manhattan"].to_string(),
+///     "for<'T: { x: 'U, y: 'U }, 'U: Ops> ('T) -> 'U"
+/// );
+/// # Ok(())
+/// # }
+/// ```
+///
+/// Note that the object constraint in this case refers to another type param, which is
+/// constrained on its own!
+///
+/// [`Constraint`]: crate::arith::Constraint
 #[derive(Debug, Clone, PartialEq)]
 pub struct Object<Prim: PrimitiveType> {
     fields: HashMap<String, Type<Prim>>,

@@ -928,7 +928,7 @@ fn object_basics() {
     assert!(rest.fragment().is_empty());
     assert_matches!(
         obj.extra,
-        Expr::Object(statements) if statements.len() == 2
+        Expr::ObjectBlock(statements) if statements.len() == 2
     );
 
     let input = InputSpan::new("#{}");
@@ -936,14 +936,14 @@ fn object_basics() {
     assert!(rest.fragment().is_empty());
     assert_matches!(
         obj.extra,
-        Expr::Object(statements) if statements.is_empty()
+        Expr::ObjectBlock(statements) if statements.is_empty()
     );
 
     let input = InputSpan::new("#{ x = 5; dbg(x); y = x + 2; }");
     let (_, obj) = object_expr::<FieldGrammar, Complete>(input).unwrap();
     assert_matches!(
         obj.extra,
-        Expr::Object(statements) if statements.len() == 3
+        Expr::ObjectBlock(statements) if statements.len() == 3
     );
 }
 
@@ -969,7 +969,7 @@ fn objects_within_larger_context() {
         }
         other => panic!("Unexpected expr: {:?}", other),
     };
-    assert_matches!(inner_expr.extra, Expr::Object(statements) if statements.len() == 2);
+    assert_matches!(inner_expr.extra, Expr::ObjectBlock(statements) if statements.len() == 2);
 
     let input = InputSpan::new("test(x, #{ y = y; z = 2 * y; })");
     let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
@@ -982,7 +982,7 @@ fn objects_within_larger_context() {
         }
         other => panic!("Unexpected expr: {:?}", other),
     };
-    assert_matches!(inner_expr.extra, Expr::Object(statements) if statements.len() == 2);
+    assert_matches!(inner_expr.extra, Expr::ObjectBlock(statements) if statements.len() == 2);
 
     let input = InputSpan::new("{ x = gen(); #{ x = x; y = x * GEN; } }");
     let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
@@ -994,12 +994,12 @@ fn objects_within_larger_context() {
         }
         other => panic!("Unexpected expr: {:?}", other),
     };
-    assert_matches!(inner_expr.extra, Expr::Object(statements) if statements.len() == 2);
+    assert_matches!(inner_expr.extra, Expr::ObjectBlock(statements) if statements.len() == 2);
 
     let input = InputSpan::new("|xs| #{ x = xs.0; }");
     let (_, fn_def) = fn_def::<FieldGrammar, Complete>(input).unwrap();
     assert_eq!(*fn_def.args.fragment(), "|xs|");
     assert!(fn_def.body.statements.is_empty());
     let inner_expr = *fn_def.body.return_value.unwrap();
-    assert_matches!(inner_expr.extra, Expr::Object(statements) if statements.len() == 1);
+    assert_matches!(inner_expr.extra, Expr::ObjectBlock(statements) if statements.len() == 1);
 }

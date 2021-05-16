@@ -59,7 +59,7 @@ impl<Prim: PrimitiveType> Default for Substitutions<Prim> {
 impl<Prim: PrimitiveType> Substitutions<Prim> {
     /// Inserts `constraints` for a type var with the specified index and all vars
     /// it is equivalent to.
-    pub(crate) fn insert_constraint<C>(
+    pub fn insert_constraint<C>(
         &mut self,
         var_idx: usize,
         constraint: &C,

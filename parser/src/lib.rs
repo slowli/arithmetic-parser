@@ -37,6 +37,11 @@
 //! - **Blocks.** A block is several `;`-delimited statements enclosed in `{}` braces,
 //!   e.g, `{ z = max(x, y); (z - x, z - y) }`. The blocks can be used in all contexts
 //!   instead of a simple expression; for example, `min({ z = 5; z - 1 }, 3)`.
+//! - **Objects.** Object is a mapping of string fields to values. It is defined via an
+//!   *object block*, which is a block with an additional `#` before the opening brace;
+//!   for example, `#{ x = 1; y = 2; }`. Unlike ordinary blocks, object blocks cannot end
+//!   with a return expression. All other block content is permitted, including `;`-terminated
+//!   expressions and variable redefinition.
 //! - **Methods.** Method call is a function call separated from the receiver with a `.` char;
 //!   for example, `foo.bar(2, x)`.
 //! - **Type annotations.** A type annotation in the form `var: Type` can be present
@@ -54,6 +59,8 @@
 //! - Functions are only defined via the closure syntax.
 //! - There is "rest" destructuting for tuples and function arguments.
 //! - Type annotations are placed within tuple elements, for example, `(x: Num, _) = y`.
+//! - Objects are created using differing syntax; they are closer to blocks than to
+//!   `{ x: 1, y: 2 }` exressions found in Rust and some other programming languages.
 //!
 //! # Crate features
 //!
@@ -226,11 +233,11 @@ pub enum Expr<'a, T: Grammar<'a>> {
     /// Tuple expression, e.g., `(x, y + z)`.
     Tuple(Vec<SpannedExpr<'a, T>>),
 
-    /// Object expression, e.g., `#{ x = 1; y = x + 2; }`.
-    Object(Vec<SpannedStatement<'a, T>>),
-
     /// Block expression, e.g., `{ x = 3; x + y }`.
     Block(Block<'a, T>),
+
+    /// Object block, e.g., `#{ x = 1; y = x + 2; }`.
+    ObjectBlock(Vec<SpannedStatement<'a, T>>),
 }
 
 impl<'a, T: Grammar<'a>> Expr<'a, T> {
@@ -258,7 +265,7 @@ impl<'a, T: Grammar<'a>> Expr<'a, T> {
             Self::FnDefinition(_) => ExprType::FnDefinition,
             Self::TypeCast { .. } => ExprType::Cast,
             Self::Tuple(_) => ExprType::Tuple,
-            Self::Object(_) => ExprType::Object,
+            Self::ObjectBlock(_) => ExprType::Object,
             Self::Block(_) => ExprType::Block,
             Self::Function { .. } => ExprType::Function,
             Self::FieldAccess { .. } => ExprType::FieldAccess,
@@ -280,7 +287,7 @@ impl<'a, T: Grammar<'a>> Clone for Expr<'a, T> {
                 ty: ty.clone(),
             },
             Self::Tuple(tuple) => Self::Tuple(tuple.clone()),
-            Self::Object(statements) => Self::Object(statements.clone()),
+            Self::ObjectBlock(statements) => Self::ObjectBlock(statements.clone()),
             Self::Block(block) => Self::Block(block.clone()),
             Self::Function { name, args } => Self::Function {
                 name: name.clone(),
@@ -333,7 +340,7 @@ where
             ) => value == other_value && ty == other_ty,
 
             (Self::Tuple(this), Self::Tuple(that)) => this == that,
-            (Self::Object(this), Self::Object(that)) => this == that,
+            (Self::ObjectBlock(this), Self::ObjectBlock(that)) => this == that,
             (Self::Block(this), Self::Block(that)) => this == that,
 
             (

@@ -11,8 +11,9 @@ use arithmetic_parser::{BinaryOp, UnaryOp};
 
 mod constraints;
 
+pub(crate) use self::constraints::CompleteConstraints;
 pub use self::constraints::{
-    CompleteConstraints, Constraint, ConstraintSet, LinearType, NumConstraints, StructConstraint,
+    Constraint, ConstraintSet, LinearType, NumConstraints, StructConstraint,
 };
 
 /// Maps a literal value from a certain [`Grammar`] to its type. This assumes that all literals

@@ -353,7 +353,7 @@ impl<Prim: PrimitiveType> ConstraintSet<Prim> {
 
 /// Extended [`ConstraintSet`] that additionally supports object constraints.
 #[derive(Debug, Clone, PartialEq)]
-pub struct CompleteConstraints<Prim: PrimitiveType> {
+pub(crate) struct CompleteConstraints<Prim: PrimitiveType> {
     pub(crate) simple: ConstraintSet<Prim>,
     /// Object constraint. Stored as `Type` for convenience.
     pub(crate) object: Option<Object<Prim>>,

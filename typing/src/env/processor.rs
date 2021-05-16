@@ -120,7 +120,7 @@ where
                 result
             }
 
-            Expr::Object(statements) => {
+            Expr::ObjectBlock(statements) => {
                 self.scopes.push(HashMap::new());
                 for statement in statements {
                     self.process_statement(statement);

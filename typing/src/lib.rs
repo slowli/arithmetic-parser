@@ -17,10 +17,13 @@
 //! - Primitive types are customizeable via [`PrimitiveType`] impl. In the simplest case,
 //!   there can be 2 primitive types: Booleans (`Bool`) and numbers (`Num`),
 //!   as ecapsulated in [`Num`].
-//! - There is only one container type - a tuple. It can be represented either
+//! - There are two container type - [tuples](Tuple) and [objects](Object).
+//! - Tuples can be represented either
 //!   in the tuple form, such as `(Num, Bool)`, or as a slice, such as `[Num; 3]`.
 //!   As in Rust, all slice elements must have the same type. Unlike Rust, tuple and slice
 //!   forms are equivalent; e.g., `[Num; 3]` and `(Num, Num, Num)` are the same type.
+//! - Objects are represented in a brace form, such as `{ x: Num }`. Objects can act as
+//!   either specific types or type constraints.
 //! - Functions are first-class types. Functions can have type and/or const params.
 //! - Type params can be constrained. Constraints are expressed via [`Constraint`]s.
 //!   As an example, [`Num`] has a few known constraints, such as type *linearity*

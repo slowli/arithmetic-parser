@@ -14,13 +14,14 @@
 //!
 //! # Type system
 //!
-//! [`Value`]s have 4 major types:
+//! [`Value`]s have 5 major types:
 //!
 //! - **Numbers** corresponding to literals in the parsed `Block`
 //! - **Boolean values**
 //! - **Functions,** which are further subdivided into native functions (defined in the Rust code)
 //!   and interpreted ones (defined within a module)
-//! - **Tuples / arrays**.
+//! - [**Tuples / arrays**](#tuples).
+//! - [**Objects**](#objects).
 //!
 //! Besides these types, there is an auxiliary one: [`OpaqueRef`], which represents a
 //! reference-counted native value, which can be returned from native functions or provided to
@@ -39,28 +40,50 @@
 //! - Methods are considered syntactic sugar for functions, with the method receiver considered
 //!   the first function argument. For example, `(1, 2).map(sin)` is equivalent to
 //!   `map((1, 2), sin)`.
-//! - Equality comparisons (`==`, `!=`) are defined on all types of values.
-//!
-//!   - For bool values, the comparisons work as expected.
-//!   - For functions, the equality is determined by the pointer (2 functions are equal
-//!     iff they alias each other).
-//!   - `OpaqueRef`s either use the [`PartialEq`] impl of the underlying type or
-//!     the pointer equality, depending on how the reference was created; see [`OpaqueRef`] docs
-//!     for more details.
-//!   - Equality for numbers is determined by the [`Arithmetic`].
-//!   - Tuples are equal if they contain the same number of elements and elements are pairwise
-//!     equal.
-//!   - Different types of values are always non-equal.
-//!
-//! - Order comparisons (`>`, `<`, `>=`, `<=`) are defined for primitive values only and use
-//!   [`OrdArithmetic`].
-//! - Indexing for tuples is performed via [`FieldAccess`] with a numeric field name: `xs.0`.
-//!   Thus, the index is always a "compile-time" constant. An error is raised if the index
-//!   is out of bounds or the receiver is not a tuple.
 //! - No type checks are performed before evaluation.
 //! - Type annotations and type casts are completely ignored.
 //!   This means that the interpreter may execute  code that is incorrect with annotations
 //!   (e.g., assignment of a tuple to a variable which is annotated to have a numeric type).
+//!
+//! ## Value comparisons
+//!
+//! Equality comparisons (`==`, `!=`) are defined on all types of values.
+//!
+//! - For bool values, the comparisons work as expected.
+//! - For functions, the equality is determined by the pointer (2 functions are equal
+//!   iff they alias each other).
+//! - `OpaqueRef`s either use the [`PartialEq`] impl of the underlying type or
+//!   the pointer equality, depending on how the reference was created; see [`OpaqueRef`] docs
+//!   for more details.
+//! - Equality for numbers is determined by the [`Arithmetic`].
+//! - Tuples are equal if they contain the same number of elements and elements are pairwise
+//!   equal.
+//! - Different types of values are always non-equal.
+//!
+//! Order comparisons (`>`, `<`, `>=`, `<=`) are defined for primitive values only and use
+//! [`OrdArithmetic`].
+//!
+//! ## Tuples
+//!
+//! - Tuples are created using a [`Tuple` expression], e.g., `(x, 1, 5)`.
+//! - Indexing for tuples is performed via [`FieldAccess`] with a numeric field name: `xs.0`.
+//!   Thus, the index is always a "compile-time" constant. An error is raised if the index
+//!   is out of bounds or the receiver is not a tuple.
+//! - Tuples can be destructured using a [`Destructure`] LHS of an assignment, e.g.,
+//!   `(x, y, ...) = (1, 2, 3, 4)`. An error will be raised if the destructured value is
+//!   not a tuple.
+//!
+//! ## Objects
+//!
+//! - Objects can be created using [object blocks]. After evaluating all statements in the object
+//!   block, all variables assigned within the block become fields of the created object.
+//!   For example, `#{ x = 1; (y, x) = (x, 2); }` will create an object with two fields:
+//!   `x` equal to 2 and `y` equal to 1.
+//! - Object fields can be accessed via [`FieldAccess`] with a field name that is a valid
+//!   variable name. No other values have such fields. An error will be raised if the object
+//!   does not have the specified field.
+//! - Functional fields are permitted. Similar to Rust, to call a function field, it must
+//!   be enclosed in parentheses: `(obj.run)(arg0, arg1)`.
 //!
 //! # Crate features
 //!
@@ -78,14 +101,17 @@
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
 //! [`num-complex`]: https://crates.io/crates/num-complex
 //! [`num-bigint`]: https://crates.io/crates/num-bigint
+//! [`Tuple` expression]: arithmetic_parser::Expr::Tuple
+//! [`Destructure`]: arithmetic_parser::Destructure
 //! [`FieldAccess`]: arithmetic_parser::Expr::FieldAccess
+//! [object blocks]: arithmetic_parser::Expr::ObjectBlock
 //!
 //! # Examples
 //!
 //! ```
 //! use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 //! use arithmetic_eval::{
-//!     fns, Assertions, Comparisons, Environment, Prelude, Value, VariableMap,
+//!     Assertions, Comparisons, Environment, Prelude, Value, VariableMap,
 //! };
 //!
 //! # fn main() -> anyhow::Result<()> {
@@ -109,6 +135,31 @@
 //! let module = env.compile_module("test", &program)?;
 //! // Then, the module can be run.
 //! assert_eq!(module.run()?, Value::Number(9.0));
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Using objects:
+//!
+//! ```
+//! # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+//! # use arithmetic_eval::{Assertions, Environment, Prelude, Value, VariableMap};
+//! # fn main() -> anyhow::Result<()> {
+//! let program = r#"
+//!     minmax = |xs| xs.fold(#{ min = INF; max = -INF; }, |acc, x| #{
+//!          min = if(x < acc.min, x, acc.min);
+//!          max = if(x > acc.max, x, acc.max);
+//!     });
+//!     assert_eq((3, 7, 2, 4).minmax().min, 2);
+//!     assert_eq((5, -4, 6, 9, 1).minmax(), #{ min = -4; max = 9; });
+//! "#;
+//! let program = Untyped::<F32Grammar>::parse_statements(program)?;
+//!
+//! let mut env = Environment::new();
+//! env.extend(Prelude.iter());
+//! env.extend(Assertions.iter());
+//! let module = env.compile_module("minmax", &program)?;
+//! module.run()?;
 //! # Ok(())
 //! # }
 //! ```

@@ -76,10 +76,10 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
     /// Returns an object constraint associated with the specified type var. The returned type
     /// is resolved.
-    pub(crate) fn object_constraint(&self, var: TypeVar) -> Option<Type<Prim>> {
+    pub(crate) fn object_constraint(&self, var: TypeVar) -> Option<Object<Prim>> {
         if var.is_free() {
             let mut ty = self.constraints.get(&var.index())?.object.clone()?;
-            self.resolver().visit_type_mut(&mut ty);
+            self.resolver().visit_object_mut(&mut ty);
             Some(ty)
         } else {
             None
@@ -620,16 +620,16 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 return;
             }
         }
-        let needs_equation = if let Type::Any(constraints) = ty {
+        let (needs_equation, constraints_checked) = if let Type::Any(constraints) = ty {
             let mut current_constraints = self.constraints.remove(&var_idx).unwrap_or_default();
             current_constraints.extend(constraints.clone().into(), self, errors.by_ref());
             self.constraints.insert(var_idx, current_constraints);
-            is_lhs
+            (is_lhs, true)
         } else {
-            true
+            (true, false)
         };
 
-        // variables should be resolved in `unify`.
+        // Variables should be resolved in `unify`.
         debug_assert!(!self.eqs.contains_key(&var_idx));
         debug_assert!(if let Type::Var(var) = ty {
             !self.eqs.contains_key(&var.index())
@@ -643,9 +643,14 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         if let Some(var) = checker.recursive_var {
             self.handle_recursive_type(ty.clone(), var, &mut errors);
         } else {
-            if let Some(constraints) = self.constraints.get(&var_idx).cloned() {
-                constraints.apply_all(ty, self, errors);
+            // If the constraints were checked previously, we don't need to do it again;
+            // it will lead to duplicate errors.
+            if !constraints_checked {
+                if let Some(constraints) = self.constraints.get(&var_idx).cloned() {
+                    constraints.apply_all(ty, self, errors);
+                }
             }
+
             if needs_equation {
                 let mut ty = ty.clone();
                 if !is_lhs {

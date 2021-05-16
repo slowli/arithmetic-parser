@@ -8,7 +8,7 @@ use std::{
 use crate::{
     types::{FnParams, ParamConstraints},
     visit::{self, Visit, VisitMut},
-    FnType, PrimitiveType, Tuple, Type, UnknownLen,
+    FnType, Object, PrimitiveType, Tuple, Type, UnknownLen,
 };
 
 #[derive(Debug, Default)]
@@ -115,7 +115,7 @@ impl<'a, Prim: PrimitiveType> ParamQuantifier<'a, Prim> {
         }
     }
 
-    fn constraint_object(&self, var_idx: usize) -> Option<&'a Type<Prim>> {
+    fn object_constraint(&self, var_idx: usize) -> Option<&'a Object<Prim>> {
         let constraints = self.constraints.type_params.get(&var_idx)?;
         constraints.object.as_ref()
     }
@@ -135,8 +135,8 @@ impl<'ty, Prim: PrimitiveType> Visit<'ty, Prim> for ParamQuantifier<'_, Prim> {
                 let stats = self.output.type_params.entry(var.index()).or_default();
                 stats.mentioning_fns.insert(self.current_function_idx);
 
-                if let Some(object) = self.constraint_object(var.index()) {
-                    self.visit_type(object);
+                if let Some(object) = self.object_constraint(var.index()) {
+                    self.visit_object(object);
                 }
             }
             _ => visit::visit_type(self, ty),
@@ -301,7 +301,7 @@ mod tests {
     fn params_are_added_from_object_constraints() {
         let obj: Object<Num> = vec![("x", Type::param(1))].into_iter().collect();
         let constraints = CompleteConstraints {
-            object: Some(Type::Object(obj)),
+            object: Some(obj),
             ..CompleteConstraints::default()
         };
         let constraints = ParamConstraints {

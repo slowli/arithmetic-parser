@@ -224,8 +224,10 @@ impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
     pub(crate) fn convert_type(&mut self, ty: &SpannedTypeAst<'a>) -> Type<Prim> {
         match &ty.extra {
             TypeAst::Some => self.new_type(Some(ty)),
-            // FIXME: support object constraints
-            TypeAst::Any(constraints) => Type::Any(constraints.convert(self).simple),
+            TypeAst::Any(constraints) => {
+                debug_assert!(constraints.object.is_none());
+                Type::Any(constraints.convert(self).simple)
+            }
             TypeAst::Ident => {
                 let ident = *ty.fragment();
                 if let Ok(prim_type) = Prim::from_str(ident) {
@@ -294,13 +296,12 @@ impl<'a> TypeConstraintsAst<'a> {
     ) -> CompleteConstraints<Prim> {
         let mut constraints = CompleteConstraints::default();
         if let Some(object) = &self.object {
-            constraints.object = Some(Type::Object(object.convert(state)));
+            constraints.object = Some(object.convert(state));
         }
 
         self.terms.iter().fold(constraints, |mut acc, input| {
             let input_str = *input.fragment();
             if let Some(constraint) = state.resolve_constraint(input_str) {
-                // TODO: might want to check constraint consistency here.
                 acc.simple.insert(constraint);
             } else {
                 let err = AstConversionError::UnknownConstraint(input_str.to_owned());

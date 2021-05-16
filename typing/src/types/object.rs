@@ -131,7 +131,14 @@ impl<Prim: PrimitiveType> Object<Prim> {
                 let rhs = rhs.clone();
                 self.constraint_object(&rhs, substitutions, errors);
             }
-            Type::Any(_) | Type::Var(_) => { /* OK */ }
+            Type::Any(constraints) => {
+                // TODO: make this more efficient (via `Visit`?)
+                let object = Type::Object(self.clone());
+                constraints
+                    .clone()
+                    .apply_all(&object, substitutions, errors);
+            }
+            Type::Var(_) => { /* OK */ }
             _ => errors.push(ErrorKind::CannotAccessFields),
         }
     }

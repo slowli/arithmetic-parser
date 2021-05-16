@@ -356,7 +356,7 @@ impl<Prim: PrimitiveType> ConstraintSet<Prim> {
 pub struct CompleteConstraints<Prim: PrimitiveType> {
     pub(crate) simple: ConstraintSet<Prim>,
     /// Object constraint. Stored as `Type` for convenience.
-    pub(crate) object: Option<Type<Prim>>,
+    pub(crate) object: Option<Object<Prim>>,
 }
 
 impl<Prim: PrimitiveType> Default for CompleteConstraints<Prim> {
@@ -423,13 +423,13 @@ impl<Prim: PrimitiveType> CompleteConstraints<Prim> {
         mut errors: OpErrors<'_, Prim>,
     ) {
         self.simple.apply_all(ty, substitutions, errors.by_ref());
-        if let Some(Type::Object(lhs)) = &self.object {
+        if let Some(lhs) = &self.object {
             lhs.apply_as_constraint(ty, substitutions, errors);
         }
     }
 
     /// Maps the object constraint if present.
-    pub(crate) fn map_object(self, map: impl FnOnce(&mut Type<Prim>)) -> Self {
+    pub(crate) fn map_object(self, map: impl FnOnce(&mut Object<Prim>)) -> Self {
         Self {
             simple: self.simple,
             object: self.object.map(|mut object| {
@@ -446,10 +446,10 @@ impl<Prim: PrimitiveType> CompleteConstraints<Prim> {
         substitutions: &mut Substitutions<Prim>,
         mut errors: OpErrors<'_, Prim>,
     ) {
-        if let Some(Type::Object(existing_object)) = &mut self.object {
+        if let Some(existing_object) = &mut self.object {
             existing_object.extend_from(object, substitutions, errors.by_ref());
         } else {
-            self.object = Some(Type::Object(object));
+            self.object = Some(object);
         }
         self.check_object_consistency(substitutions, errors);
     }
@@ -460,7 +460,9 @@ impl<Prim: PrimitiveType> CompleteConstraints<Prim> {
         errors: OpErrors<'_, Prim>,
     ) {
         if let Some(object) = &self.object {
-            self.simple.apply_all(object, substitutions, errors);
+            // TODO: make this more efficient (via `Visit`?)
+            let object = Type::Object(object.clone());
+            self.simple.apply_all(&object, substitutions, errors);
         }
     }
 }

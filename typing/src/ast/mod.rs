@@ -346,6 +346,15 @@ fn constraint_sep(input: InputSpan<'_>) -> NomResult<'_, ()> {
     map(tuple((ws, tag_char('+'), ws)), drop)(input)
 }
 
+fn simple_type_bounds(input: InputSpan<'_>) -> NomResult<'_, TypeConstraintsAst<'_>> {
+    map(separated_list1(constraint_sep, not_keyword), |terms| {
+        TypeConstraintsAst {
+            object: None,
+            terms,
+        }
+    })(input)
+}
+
 fn type_bounds(input: InputSpan<'_>) -> NomResult<'_, TypeConstraintsAst<'_>> {
     alt((
         map(
@@ -361,12 +370,7 @@ fn type_bounds(input: InputSpan<'_>) -> NomResult<'_, TypeConstraintsAst<'_>> {
                 terms: terms.unwrap_or_default(),
             },
         ),
-        map(separated_list1(constraint_sep, not_keyword), |terms| {
-            TypeConstraintsAst {
-                object: None,
-                terms,
-            }
-        }),
+        simple_type_bounds,
     ))(input)
 }
 
@@ -450,7 +454,7 @@ fn any_type(input: InputSpan<'_>) -> NomResult<'_, TypeConstraintsAst<'_>> {
     map(
         preceded(
             terminated(tag("any"), not_ident_char),
-            opt(preceded(ws, type_bounds)),
+            opt(preceded(ws, simple_type_bounds)),
         ),
         Option::unwrap_or_default,
     )(input)

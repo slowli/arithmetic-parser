@@ -6,7 +6,7 @@ use crate::arith::CompleteConstraints;
 use crate::{
     types::{FnParams, ParamConstraints, ParamQuantifier},
     visit::{self, VisitMut},
-    FnType, PrimitiveType, Substitutions, TupleLen, Type, UnknownLen,
+    FnType, Object, PrimitiveType, Substitutions, TupleLen, Type, UnknownLen,
 };
 
 impl<Prim: PrimitiveType> FnType<Prim> {
@@ -72,7 +72,7 @@ pub(super) struct ParamMapping {
 #[derive(Debug)]
 struct PolyTypeTransformer<'a, Prim: PrimitiveType> {
     mapping: ParamMapping,
-    resolved_objects: HashMap<usize, Type<Prim>>,
+    resolved_objects: HashMap<usize, Object<Prim>>,
     substitutions: &'a Substitutions<Prim>,
 }
 
@@ -85,7 +85,7 @@ impl<'a, Prim: PrimitiveType> PolyTypeTransformer<'a, Prim> {
         }
     }
 
-    fn obj_constraint(&self, var_idx: usize) -> Option<&'a Type<Prim>> {
+    fn object_constraint(&self, var_idx: usize) -> Option<&'a Object<Prim>> {
         let constraints = self.substitutions.constraints.get(&var_idx)?;
         constraints.object.as_ref()
     }
@@ -100,12 +100,12 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for PolyTypeTransformer<'_, Prim> {
                 let param_idx = *self.mapping.types.entry(var_idx).or_insert(type_count);
                 *ty = Type::param(param_idx);
 
-                if let Some(object) = self.obj_constraint(var_idx) {
+                if let Some(object) = self.object_constraint(var_idx) {
                     let mut resolved_object = object.clone();
                     self.substitutions
                         .resolver()
-                        .visit_type_mut(&mut resolved_object);
-                    self.visit_type_mut(&mut resolved_object);
+                        .visit_object_mut(&mut resolved_object);
+                    self.visit_object_mut(&mut resolved_object);
                     self.resolved_objects.insert(var_idx, resolved_object);
                 }
             }
@@ -144,7 +144,7 @@ impl<'a> MonoTypeTransformer<'a> {
         constraints: &CompleteConstraints<Prim>,
     ) -> CompleteConstraints<Prim> {
         constraints.clone().map_object(|object| {
-            Self { mapping }.visit_type_mut(object);
+            Self { mapping }.visit_object_mut(object);
         })
     }
 }
@@ -191,7 +191,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for MonoTypeTransformer<'_> {
                 let mapped_params = params.type_params.iter().map(|(i, constraints)| {
                     let mapped_constraints = constraints
                         .clone()
-                        .map_object(|object| self.visit_type_mut(object));
+                        .map_object(|object| self.visit_object_mut(object));
                     (*i, mapped_constraints)
                 });
                 function.params = Some(Arc::new(FnParams {

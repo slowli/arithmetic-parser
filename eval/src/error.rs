@@ -151,6 +151,10 @@ pub enum ErrorKind {
         context: RepeatedAssignmentContext,
     },
 
+    /// Repeated field in object destructure, e.g., `{ x, x }`.
+    #[display(fmt = "Repeated field in object destructure")]
+    RepeatedField,
+
     /// Variable with the enclosed name is not defined.
     #[display(fmt = "Variable `{}` is not defined", _0)]
     Undefined(String),
@@ -255,6 +259,7 @@ impl ErrorKind {
             Self::RepeatedAssignment { context } => {
                 format!("Repeated assignment to the same variable in {}", context)
             }
+            Self::RepeatedField => "Repeated field in object destructure".to_owned(),
             Self::Undefined(name) => format!("Variable `{}` is not defined", name),
             Self::InvalidFieldName(name) => format!("`{}` is not a valid field name", name),
             Self::CannotCall => "Value is not callable".to_owned(),
@@ -283,6 +288,7 @@ impl ErrorKind {
             Self::ArgsLenMismatch { call, .. } => format!("Called with {} arg(s) here", call),
             Self::CannotDestructure => "Failed destructuring".to_owned(),
             Self::RepeatedAssignment { .. } => "Re-assigned variable".to_owned(),
+            Self::RepeatedField => "Repeated field".to_owned(),
             Self::Undefined(_) => "Undefined variable occurrence".to_owned(),
             Self::InvalidFieldName(_) => "Invalid field".to_owned(),
             Self::CannotIndex | Self::IndexOutOfBounds { .. } => "Indexing operation".to_owned(),
@@ -310,6 +316,7 @@ impl ErrorKind {
                 "In {}, all assigned variables must have different names",
                 context
             ),
+            Self::RepeatedField => "Field names in destructuring must be unique".to_owned(),
             Self::InvalidFieldName(_) => "Field names must be `usize`s or identifiers".to_owned(),
             Self::CannotCall => "Only functions are callable, i.e., can be used as `fn_name` \
                 in `fn_name(...)` expressions"

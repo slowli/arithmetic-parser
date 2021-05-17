@@ -1,9 +1,9 @@
 //! Tests targeting objects / object field access.
 
-use arithmetic_eval::{Environment, ErrorKind, Value};
+use arithmetic_eval::{error::AuxErrorInfo, Assertions, Environment, ErrorKind, Prelude, Value};
 use assert_matches::assert_matches;
 
-use crate::{evaluate, try_evaluate};
+use crate::{evaluate, expect_compilation_error, try_evaluate};
 
 #[test]
 fn object_basics() {
@@ -275,4 +275,139 @@ fn object_comparison() {
     "#;
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(return_value, Value::Bool(true));
+}
+
+#[test]
+fn object_destructuring() {
+    let program = r#"
+        { x } = #{ x = 1; };
+        { x -> y } = #{ x = 2; };
+        obj = #{ xs = (3, 4, 5); flag = 1 == 1; };
+        { xs: (head, ...tail), flag } = obj;
+        x == 1 && y == 2 && head == 3 && tail == (4, 5) && flag
+    "#;
+    let return_value = evaluate(&mut Environment::new(), program);
+    assert_eq!(return_value, Value::Bool(true));
+}
+
+#[test]
+fn embedded_object_destructuring() {
+    let program = r#"
+        ({ x, y }, ...pts) = (#{ x = 1; y = 2; }, #{ x = 2; y = 3; });
+        x == 1 && y == 2 && pts.0.x == 2 && pts.0.y == 3
+    "#;
+    let return_value = evaluate(&mut Environment::new(), program);
+    assert_eq!(return_value, Value::Bool(true));
+}
+
+#[test]
+fn object_destructuring_in_fn_args() {
+    let program = r#"
+        manhattan = |{ x, y }| x + y;
+        manhattan(#{ x = 1; y = 2; }) == 3
+    "#;
+    let return_value = evaluate(&mut Environment::new(), program);
+    assert_eq!(return_value, Value::Bool(true));
+}
+
+#[test]
+fn object_destructuring_in_pipeline() {
+    let program = r#"
+        minmax = |xs| xs.fold(#{ min = INF; max = -INF; }, |{ min, max }, x| #{
+            min = if(x < min, x, min);
+            max = if(x > max, x, max);
+        });
+        assert_eq((5, -4, 6, 9, 1).minmax(), #{ min = -4; max = 9; });
+    "#;
+    let mut env = Environment::new();
+    env.extend(Prelude.iter());
+    env.extend(Assertions.iter());
+    evaluate(&mut env, program);
+}
+
+#[test]
+fn object_destructuring_on_non_object() {
+    let programs = &[
+        "{ x } = 1;",
+        "{ x } = 1 == 1;",
+        "{ x } = (1, 2);",
+        "{ x } = || 1;",
+    ];
+    for &program in programs {
+        let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
+        assert_eq!(*err.source().main_span().code().fragment(), "x");
+        assert_matches!(err.source().kind(), ErrorKind::CannotAccessFields);
+    }
+}
+
+#[test]
+fn object_destructuring_with_missing_field() {
+    let program = "{ x, y: Y } = #{ x = 1; };";
+    let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
+    assert_eq!(*err.source().main_span().code().fragment(), "y");
+    assert_matches!(err.source().kind(), ErrorKind::NoField { field, .. } if field == "y");
+
+    let program = "({ x, y }, ...pts) = (#{ x = 1; }, #{ x = 2; });";
+    let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
+    assert_eq!(*err.source().main_span().code().fragment(), "y");
+    assert_matches!(err.source().kind(), ErrorKind::NoField { field, .. } if field == "y");
+}
+
+#[test]
+fn embedded_destructuring_error() {
+    let program = "{ x, y: (y, ...) } = #{ x = 1; y = 2; };";
+    let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
+    assert_eq!(*err.source().main_span().code().fragment(), "(y, ...)");
+    assert_matches!(err.source().kind(), ErrorKind::CannotDestructure);
+}
+
+#[test]
+fn object_destructuring_repeated_fields() {
+    let program = "{ x, x: y } = #{ x = 1; y = 2; };";
+    let err = expect_compilation_error(&mut Environment::new(), program);
+    let err_span = err.main_span().code();
+
+    assert_eq!(*err_span.fragment(), "x");
+    assert_eq!(err_span.location_offset(), 5);
+    assert_matches!(err.kind(), ErrorKind::RepeatedField);
+
+    assert_eq!(err.aux_spans().len(), 1);
+    let aux_span = err.aux_spans()[0].code();
+    assert_eq!(*aux_span.fragment(), "x");
+    assert_eq!(aux_span.location_offset(), 2);
+    assert_matches!(aux_span.extra, AuxErrorInfo::PrevAssignment);
+}
+
+#[test]
+fn object_destructuring_repeated_assignment() {
+    let program = "{ x, y: x } = #{ x = 1; y = 2; };";
+    let err = expect_compilation_error(&mut Environment::new(), program);
+    let err_span = err.main_span().code();
+
+    assert_eq!(*err_span.fragment(), "x");
+    assert_eq!(err_span.location_offset(), 8);
+    assert_matches!(err.kind(), ErrorKind::RepeatedAssignment { .. });
+
+    assert_eq!(err.aux_spans().len(), 1);
+    let aux_span = err.aux_spans()[0].code();
+    assert_eq!(*aux_span.fragment(), "x");
+    assert_eq!(aux_span.location_offset(), 2);
+    assert_matches!(aux_span.extra, AuxErrorInfo::PrevAssignment);
+}
+
+#[test]
+fn object_destructuring_repeated_assignment_complex() {
+    let program = "{ x, ys: (x, ...) } = #{ x = 1; ys = (2, 3); };";
+    let err = expect_compilation_error(&mut Environment::new(), program);
+    let err_span = err.main_span().code();
+
+    assert_eq!(*err_span.fragment(), "x");
+    assert_eq!(err_span.location_offset(), 10);
+    assert_matches!(err.kind(), ErrorKind::RepeatedAssignment { .. });
+
+    assert_eq!(err.aux_spans().len(), 1);
+    let aux_span = err.aux_spans()[0].code();
+    assert_eq!(*aux_span.fragment(), "x");
+    assert_eq!(aux_span.location_offset(), 2);
+    assert_matches!(aux_span.extra, AuxErrorInfo::PrevAssignment);
 }

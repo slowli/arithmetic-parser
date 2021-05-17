@@ -202,6 +202,23 @@ fn extract_vars<'a, T>(
     extract_vars_iter(module_id, vars, all_lvalues, context)
 }
 
+fn add_var<'a>(
+    module_id: &dyn ModuleId,
+    vars: &mut HashMap<&'a str, Spanned<'a>>,
+    var_span: Spanned<'a>,
+    context: RepeatedAssignmentContext,
+) -> Result<(), Error<'a>> {
+    let var_name = *var_span.fragment();
+    if var_name != "_" {
+        if let Some(prev_span) = vars.insert(var_name, var_span) {
+            let err = ErrorKind::RepeatedAssignment { context };
+            return Err(Error::new(module_id, &var_span, err)
+                .with_span(&prev_span.into(), AuxErrorInfo::PrevAssignment));
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
     module_id: &dyn ModuleId,
     vars: &mut HashMap<&'a str, Spanned<'a>>,
@@ -211,19 +228,29 @@ pub(super) fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
     for lvalue in lvalues {
         match &lvalue.extra {
             Lvalue::Variable { .. } => {
-                let var_name = *lvalue.fragment();
-                if var_name != "_" {
-                    let var_span = lvalue.with_no_extra();
-                    if let Some(prev_span) = vars.insert(var_name, var_span) {
-                        let err = ErrorKind::RepeatedAssignment { context };
-                        return Err(Error::new(module_id, lvalue, err)
-                            .with_span(&prev_span.into(), AuxErrorInfo::PrevAssignment));
-                    }
-                }
+                add_var(module_id, vars, lvalue.with_no_extra(), context)?;
             }
 
-            Lvalue::Tuple(fragments) => {
-                extract_vars(module_id, vars, fragments, context)?;
+            Lvalue::Tuple(tuple) => {
+                extract_vars(module_id, vars, tuple, context)?;
+            }
+
+            Lvalue::Object(object) => {
+                let mut object_fields = HashMap::new();
+                for field in &object.fields {
+                    let field_str = *field.field_name.fragment();
+                    if let Some(prev_span) = object_fields.insert(field_str, field.field_name) {
+                        let err = ErrorKind::RepeatedField;
+                        return Err(Error::new(module_id, &field.field_name, err)
+                            .with_span(&prev_span.into(), AuxErrorInfo::PrevAssignment));
+                    }
+
+                    if let Some(binding) = &field.binding {
+                        extract_vars_iter(module_id, vars, iter::once(binding), context)?;
+                    } else {
+                        add_var(module_id, vars, field.field_name, context)?;
+                    }
+                }
             }
 
             _ => {

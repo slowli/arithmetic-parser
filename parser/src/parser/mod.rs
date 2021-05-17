@@ -9,7 +9,7 @@ use nom::{
     character::complete::{char as tag_char, one_of},
     combinator::{cut, map, map_res, not, opt, peek, recognize},
     error::context,
-    multi::{many0, separated_list0},
+    multi::{many0, separated_list0, separated_list1},
     sequence::{delimited, preceded, terminated, tuple},
     Err as NomErr, Slice,
 };
@@ -21,8 +21,8 @@ use crate::{
     grammars::{Features, Grammar, Parse, ParseLiteral},
     spans::{unite_spans, with_span},
     BinaryOp, Block, Context, Destructure, DestructureRest, Error, ErrorKind, Expr, FnDefinition,
-    InputSpan, Lvalue, NomResult, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
-    UnaryOp,
+    InputSpan, Lvalue, NomResult, ObjectDestructure, ObjectDestructureField, Spanned, SpannedExpr,
+    SpannedLvalue, SpannedStatement, Statement, UnaryOp,
 };
 
 #[cfg(test)]
@@ -730,6 +730,21 @@ where
 
 type GrammarLvalue<'a, T> = SpannedLvalue<'a, <<T as Parse<'a>>::Base as Grammar<'a>>::Type>;
 
+fn parenthesized_destructure<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, GrammarLvalue<'a, T>>
+where
+    T: Parse<'a>,
+    Ty: GrammarType,
+{
+    with_span(map(
+        delimited(
+            terminated(tag_char('('), ws::<Ty>),
+            destructure::<T, Ty>,
+            preceded(ws::<Ty>, tag_char(')')),
+        ),
+        Lvalue::Tuple,
+    ))(input)
+}
+
 /// Simple lvalue with an optional type annotation, e.g., `x` or `x: Num`.
 fn simple_lvalue_with_type<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, GrammarLvalue<'a, T>>
 where
@@ -757,33 +772,80 @@ where
     })(input)
 }
 
+fn object_destructure_field<'a, T, Ty>(
+    input: InputSpan<'a>,
+) -> NomResult<'a, ObjectDestructureField<'a, <T::Base as Grammar<'a>>::Type>>
+where
+    T: Parse<'a>,
+    Ty: GrammarType,
+{
+    let field_sep = alt((tag(":"), tag("->")));
+    let field_sep = tuple((ws::<Ty>, field_sep, ws::<Ty>));
+    let field = tuple((var_name, opt(preceded(field_sep, lvalue::<T, Ty>))));
+    map(field, |(name, maybe_binding)| ObjectDestructureField {
+        field_name: Spanned::new(name, ()),
+        binding: maybe_binding,
+    })(input)
+}
+
+fn object_destructure<'a, T, Ty>(
+    input: InputSpan<'a>,
+) -> NomResult<'a, ObjectDestructure<'a, <T::Base as Grammar<'a>>::Type>>
+where
+    T: Parse<'a>,
+    Ty: GrammarType,
+{
+    let inner = separated_list1(comma_sep::<Ty>, object_destructure_field::<T, Ty>);
+    let inner = terminated(inner, opt(comma_sep::<Ty>));
+    let inner = delimited(
+        terminated(tag_char('{'), ws::<Ty>),
+        inner,
+        preceded(ws::<Ty>, tag_char('}')),
+    );
+    map(inner, |fields| ObjectDestructure { fields })(input)
+}
+
+fn mapped_object_destructure<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, GrammarLvalue<'a, T>>
+where
+    T: Parse<'a>,
+    Ty: GrammarType,
+{
+    with_span(map(object_destructure::<T, Ty>, Lvalue::Object))(input)
+}
+
 /// Parses an `Lvalue`.
 fn lvalue<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, GrammarLvalue<'a, T>>
 where
     T: Parse<'a>,
     Ty: GrammarType,
 {
+    fn error<'b, T>(input: InputSpan<'b>) -> NomResult<'b, GrammarLvalue<'b, T>>
+    where
+        T: Parse<'b>,
+    {
+        let e = ErrorKind::Leftovers.with_span(&input.into());
+        Err(NomErr::Error(e))
+    }
+
     let simple_lvalue = if T::FEATURES.contains(Features::TYPE_ANNOTATIONS) {
         simple_lvalue_with_type::<T, Ty>
     } else {
         simple_lvalue_without_type::<T>
     };
 
-    if T::FEATURES.contains(Features::TUPLES) {
-        alt((
-            with_span(map(
-                delimited(
-                    terminated(tag_char('('), ws::<Ty>),
-                    destructure::<T, Ty>,
-                    preceded(ws::<Ty>, tag_char(')')),
-                ),
-                Lvalue::Tuple,
-            )),
-            simple_lvalue,
-        ))(input)
+    let destructure = if T::FEATURES.contains(Features::TUPLES) {
+        parenthesized_destructure::<T, Ty>
     } else {
-        simple_lvalue(input)
-    }
+        error::<T>
+    };
+
+    let object_destructure = if T::FEATURES.contains(Features::OBJECTS) {
+        mapped_object_destructure::<T, Ty>
+    } else {
+        error::<T>
+    };
+
+    alt((destructure, object_destructure, simple_lvalue))(input)
 }
 
 #[allow(clippy::option_if_let_else)]

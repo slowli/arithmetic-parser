@@ -535,6 +535,23 @@ impl<'a, T> DestructureRest<'a, T> {
     }
 }
 
+/// Object destructuring, such as `{ x, y: new_y }`.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct ObjectDestructure<'a, T> {
+    /// Fields mentioned in the destructuring.
+    pub fields: Vec<ObjectDestructureField<'a, T>>,
+}
+
+/// Single field in [`ObjectDestructure`], such as `x` and `y: new_y` in `{ x, y: new_y }`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObjectDestructureField<'a, T> {
+    /// Field name.
+    pub field_name: Spanned<'a>,
+    /// Binding for the field.
+    pub binding: Option<SpannedLvalue<'a, T>>,
+}
+
 /// Assignable value.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -546,6 +563,8 @@ pub enum Lvalue<'a, T> {
     },
     /// Tuple destructuring, e.g., `(x, y)`.
     Tuple(Destructure<'a, T>),
+    /// Object destructuring, e.g., `{ x, y }`.
+    Object(ObjectDestructure<'a, T>),
 }
 
 impl<T> Lvalue<'_, T> {
@@ -554,6 +573,7 @@ impl<T> Lvalue<'_, T> {
         match self {
             Self::Variable { .. } => LvalueType::Variable,
             Self::Tuple(_) => LvalueType::Tuple,
+            Self::Object(_) => LvalueType::Object,
         }
     }
 }
@@ -569,6 +589,8 @@ pub enum LvalueType {
     Variable,
     /// Tuple destructuring, e.g., `(x, y)`.
     Tuple,
+    /// Object destructuring, e.g., `{ x, y }`.
+    Object,
 }
 
 impl fmt::Display for LvalueType {
@@ -576,6 +598,7 @@ impl fmt::Display for LvalueType {
         formatter.write_str(match self {
             Self::Variable => "simple variable",
             Self::Tuple => "tuple destructuring",
+            Self::Object => "object destructuring",
         })
     }
 }

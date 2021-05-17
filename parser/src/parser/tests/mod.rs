@@ -1003,3 +1003,119 @@ fn objects_within_larger_context() {
     let inner_expr = *fn_def.body.return_value.unwrap();
     assert_matches!(inner_expr.extra, Expr::ObjectBlock(statements) if statements.len() == 1);
 }
+
+#[test]
+fn object_destructure_basics() {
+    let input = InputSpan::new("{ x }");
+    let (rest, obj) = object_destructure::<FieldGrammar, Complete>(input).unwrap();
+    assert!(rest.fragment().is_empty());
+    assert_eq!(obj.fields.len(), 1);
+    assert_eq!(
+        obj.fields[0],
+        ObjectDestructureField {
+            field_name: sp(2, "x", ()),
+            binding: None,
+        }
+    );
+
+    let input = InputSpan::new("{ x, y: new_y }");
+    let (rest, obj) = object_destructure::<FieldGrammar, Complete>(input).unwrap();
+    assert!(rest.fragment().is_empty());
+    assert_eq!(
+        obj.fields,
+        vec![
+            ObjectDestructureField {
+                field_name: sp(2, "x", ()),
+                binding: None,
+            },
+            ObjectDestructureField {
+                field_name: sp(5, "y", ()),
+                binding: Some(lsp(8, "new_y", Lvalue::Variable { ty: None })),
+            },
+        ]
+    );
+
+    let input = InputSpan::new("{ x, ys: (flag, ...ys) }");
+    let (rest, obj) = object_destructure::<FieldGrammar, Complete>(input).unwrap();
+    assert!(rest.fragment().is_empty());
+    assert_eq!(obj.fields.len(), 2);
+    assert_matches!(
+        obj.fields[1].binding.as_ref().unwrap().extra,
+        Lvalue::Tuple(_)
+    );
+}
+
+#[test]
+fn embedded_object_destructuring() {
+    let input = InputSpan::new("{ x: { y: _y, z } }");
+    let (rest, obj) = object_destructure::<FieldGrammar, Complete>(input).unwrap();
+    assert!(rest.fragment().is_empty());
+
+    let inner_obj = ObjectDestructure {
+        fields: vec![
+            ObjectDestructureField {
+                field_name: sp(7, "y", ()),
+                binding: Some(lsp(10, "_y", Lvalue::Variable { ty: None })),
+            },
+            ObjectDestructureField {
+                field_name: sp(14, "z", ()),
+                binding: None,
+            },
+        ],
+    };
+    assert_eq!(
+        obj.fields,
+        vec![ObjectDestructureField {
+            field_name: sp(2, "x", ()),
+            binding: Some(lsp(5, "{ y: _y, z }", Lvalue::Object(inner_obj))),
+        }]
+    );
+}
+
+#[test]
+fn object_destructuring_in_tuple() {
+    let input = InputSpan::new("({ x, y -> (z, ...), }, ...pts)");
+    let (rest, lvalue) = lvalue::<FieldGrammar, Complete>(input).unwrap();
+
+    assert!(rest.fragment().is_empty());
+    let lvalue = match lvalue.extra {
+        Lvalue::Tuple(tuple) => tuple,
+        _ => panic!("Unexpected lvalue: {:?}", lvalue),
+    };
+    assert_eq!(lvalue.start.len(), 1);
+    let inner_lvalue = match &lvalue.start[0].extra {
+        Lvalue::Object(obj) => obj,
+        _ => panic!("Unexpected lvalue: {:?}", lvalue),
+    };
+    assert_eq!(inner_lvalue.fields.len(), 2);
+    assert_eq!(inner_lvalue.fields[0].field_name, sp(3, "x", ()));
+    assert_eq!(inner_lvalue.fields[1].field_name, sp(6, "y", ()));
+}
+
+#[test]
+fn type_annotations_in_object_destructuring() {
+    let input = InputSpan::new("{ x -> x: (Sc, Ge), y }");
+    let (rest, obj) = object_destructure::<FieldGrammar, Complete>(input).unwrap();
+    assert!(rest.fragment().is_empty());
+
+    let ty = ValueType::Tuple(vec![ValueType::Scalar, ValueType::Element]);
+    assert_eq!(
+        obj.fields,
+        vec![
+            ObjectDestructureField {
+                field_name: sp(2, "x", ()),
+                binding: Some(lsp(
+                    7,
+                    "x",
+                    Lvalue::Variable {
+                        ty: Some(sp(10, "(Sc, Ge)", ty))
+                    }
+                )),
+            },
+            ObjectDestructureField {
+                field_name: sp(20, "y", ()),
+                binding: None,
+            }
+        ]
+    );
+}

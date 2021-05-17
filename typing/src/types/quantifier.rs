@@ -128,8 +128,8 @@ impl<'a, Prim: PrimitiveType> ParamQuantifier<'a, Prim> {
     }
 }
 
-impl<'ty, Prim: PrimitiveType> Visit<'ty, Prim> for ParamQuantifier<'_, Prim> {
-    fn visit_type(&mut self, ty: &'ty Type<Prim>) {
+impl<Prim: PrimitiveType> Visit<Prim> for ParamQuantifier<'_, Prim> {
+    fn visit_type(&mut self, ty: &Type<Prim>) {
         match ty {
             Type::Var(var) if !var.is_free() => {
                 let stats = self.output.type_params.entry(var.index()).or_default();
@@ -143,7 +143,7 @@ impl<'ty, Prim: PrimitiveType> Visit<'ty, Prim> for ParamQuantifier<'_, Prim> {
         }
     }
 
-    fn visit_tuple(&mut self, tuple: &'ty Tuple<Prim>) {
+    fn visit_tuple(&mut self, tuple: &Tuple<Prim>) {
         let (_, middle, _) = tuple.parts();
         let middle_len = middle.and_then(|middle| middle.len().components().0);
         let middle_len = if let Some(len) = middle_len {
@@ -162,7 +162,7 @@ impl<'ty, Prim: PrimitiveType> Visit<'ty, Prim> for ParamQuantifier<'_, Prim> {
         visit::visit_tuple(self, tuple);
     }
 
-    fn visit_function(&mut self, function: &'ty FnType<Prim>) {
+    fn visit_function(&mut self, function: &FnType<Prim>) {
         let this_function_idx = self.output.functions.len();
         let old_function_idx = mem::replace(&mut self.current_function_idx, this_function_idx);
 

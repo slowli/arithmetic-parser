@@ -686,8 +686,8 @@ impl<'a, Prim: PrimitiveType> OccurrenceChecker<'a, Prim> {
     }
 }
 
-impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for OccurrenceChecker<'a, Prim> {
-    fn visit_type(&mut self, ty: &'a Type<Prim>) {
+impl<Prim: PrimitiveType> Visit<Prim> for OccurrenceChecker<'_, Prim> {
+    fn visit_type(&mut self, ty: &Type<Prim>) {
         if self.recursive_var.is_some() {
             // Skip recursion; we already have our answer at this point.
         } else {

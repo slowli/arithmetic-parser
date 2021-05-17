@@ -302,7 +302,7 @@ impl<'a> TypeConstraintsAst<'a> {
         self.terms.iter().fold(constraints, |mut acc, input| {
             let input_str = *input.fragment();
             if let Some(constraint) = state.resolve_constraint(input_str) {
-                acc.simple.insert(constraint);
+                acc.simple.insert_boxed(constraint);
             } else {
                 let err = AstConversionError::UnknownConstraint(input_str.to_owned());
                 state.errors.push(Error::conversion(err, input));

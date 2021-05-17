@@ -237,39 +237,41 @@ impl NumArithmetic {
         ) {
             (Some(true), Some(false)) => {
                 let resolved_rhs_ty = resolved_rhs_ty.clone();
-                settings.lin.apply(
-                    lhs_ty,
-                    substitutions,
-                    errors.with_location(ErrorLocation::Lhs),
-                );
-                settings.lin.apply(
-                    rhs_ty,
-                    substitutions,
-                    errors.with_location(ErrorLocation::Rhs),
-                );
+                settings
+                    .lin
+                    .visitor(substitutions, errors.with_location(ErrorLocation::Lhs))
+                    .visit_type(lhs_ty);
+                settings
+                    .lin
+                    .visitor(substitutions, errors.with_location(ErrorLocation::Rhs))
+                    .visit_type(rhs_ty);
                 resolved_rhs_ty
             }
             (Some(false), Some(true)) => {
                 let resolved_lhs_ty = resolved_lhs_ty.clone();
-                settings.lin.apply(
-                    lhs_ty,
-                    substitutions,
-                    errors.with_location(ErrorLocation::Lhs),
-                );
-                settings.lin.apply(
-                    rhs_ty,
-                    substitutions,
-                    errors.with_location(ErrorLocation::Rhs),
-                );
+                settings
+                    .lin
+                    .visitor(substitutions, errors.with_location(ErrorLocation::Lhs))
+                    .visit_type(lhs_ty);
+                settings
+                    .lin
+                    .visitor(substitutions, errors.with_location(ErrorLocation::Rhs))
+                    .visit_type(rhs_ty);
                 resolved_lhs_ty
             }
             _ => {
-                let lhs_is_valid = errors
-                    .with_location(ErrorLocation::Lhs)
-                    .check(|errors| settings.ops.apply(lhs_ty, substitutions, errors));
-                let rhs_is_valid = errors
-                    .with_location(ErrorLocation::Rhs)
-                    .check(|errors| settings.ops.apply(rhs_ty, substitutions, errors));
+                let lhs_is_valid = errors.with_location(ErrorLocation::Lhs).check(|errors| {
+                    settings
+                        .ops
+                        .visitor(substitutions, errors)
+                        .visit_type(lhs_ty);
+                });
+                let rhs_is_valid = errors.with_location(ErrorLocation::Rhs).check(|errors| {
+                    settings
+                        .ops
+                        .visitor(substitutions, errors)
+                        .visit_type(rhs_ty);
+                });
 
                 if lhs_is_valid && rhs_is_valid {
                     substitutions.unify(lhs_ty, rhs_ty, errors);
@@ -296,7 +298,9 @@ impl NumArithmetic {
         match context.op {
             UnaryOp::Not => BoolArithmetic.process_unary_op(substitutions, context, errors),
             UnaryOp::Neg => {
-                constraints.apply(&context.arg, substitutions, errors);
+                constraints
+                    .visitor(substitutions, errors)
+                    .visit_type(&context.arg);
                 context.arg.clone()
             }
             _ => {

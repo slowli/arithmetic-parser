@@ -7,8 +7,8 @@ use arithmetic_parser::{
     BinaryOp, InputSpan, NomResult,
 };
 use arithmetic_typing::{
-    arith::*, error::OpErrors, Annotated, Prelude, PrimitiveType, Substitutions, Type,
-    TypeEnvironment,
+    arith::*, error::OpErrors, visit::Visit, Annotated, Prelude, PrimitiveType, Substitutions,
+    Type, TypeEnvironment,
 };
 
 /// Literal for arithmetic: either an integer or a byte buffer.
@@ -97,19 +97,18 @@ impl fmt::Display for Constraints {
 }
 
 impl Constraint<NumOrBytesType> for Constraints {
-    fn apply(
+    fn visitor<'r>(
         &self,
-        ty: &Type<NumOrBytesType>,
-        substitutions: &mut Substitutions<NumOrBytesType>,
-        errors: OpErrors<'_, NumOrBytesType>,
-    ) {
+        substitutions: &'r mut Substitutions<NumOrBytesType>,
+        errors: OpErrors<'r, NumOrBytesType>,
+    ) -> Box<dyn Visit<NumOrBytesType> + 'r> {
         let predicate: fn(&NumOrBytesType) -> bool = match self {
             Self::Summable => |prim| matches!(prim, NumOrBytesType::Bytes | NumOrBytesType::Num),
             Self::Lin => |prim| *prim == NumOrBytesType::Num,
         };
         StructConstraint::new(*self, predicate)
             .deny_dyn_slices()
-            .apply(ty, substitutions, errors)
+            .visitor(substitutions, errors)
     }
 
     fn clone_boxed(&self) -> Box<dyn Constraint<NumOrBytesType>> {

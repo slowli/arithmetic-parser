@@ -9,6 +9,7 @@ use arithmetic_typing::{
         NumArithmetic, TypeArithmetic, UnaryOpContext, WithBoolean,
     },
     error::{ErrorLocation, OpErrors},
+    visit::Visit,
     Annotated, Assertions, FnType, Prelude, PrimitiveType, Substitutions, Type, TypeEnvironment,
     UnknownLen,
 };
@@ -123,17 +124,16 @@ impl fmt::Display for MulOperand {
 }
 
 impl Constraint<GroupPrim> for MulOperand {
-    fn apply(
+    fn visitor<'r>(
         &self,
-        ty: &Type<GroupPrim>,
-        substitutions: &mut Substitutions<GroupPrim>,
-        errors: OpErrors<'_, GroupPrim>,
-    ) {
+        substitutions: &'r mut Substitutions<GroupPrim>,
+        errors: OpErrors<'r, GroupPrim>,
+    ) -> Box<dyn Visit<GroupPrim> + 'r> {
         use arithmetic_typing::arith::StructConstraint;
 
         StructConstraint::new(*self, |prim| *prim != GroupPrim::Bool)
             .deny_dyn_slices()
-            .apply(ty, substitutions, errors);
+            .visitor(substitutions, errors)
     }
 
     fn clone_boxed(&self) -> Box<dyn Constraint<GroupPrim>> {
@@ -221,16 +221,12 @@ impl TypeArithmetic<GroupPrim> for GroupArithmetic {
                         GE
                     }
                     _ => {
-                        MulOperand.apply(
-                            &context.lhs,
-                            substitutions,
-                            errors.with_location(ErrorLocation::Lhs),
-                        );
-                        MulOperand.apply(
-                            &context.rhs,
-                            substitutions,
-                            errors.with_location(ErrorLocation::Rhs),
-                        );
+                        MulOperand
+                            .visitor(substitutions, errors.with_location(ErrorLocation::Lhs))
+                            .visit_type(&context.lhs);
+                        MulOperand
+                            .visitor(substitutions, errors.with_location(ErrorLocation::Rhs))
+                            .visit_type(&context.rhs);
                         substitutions.unify(&context.lhs, &context.rhs, errors);
                         context.lhs.clone()
                     }

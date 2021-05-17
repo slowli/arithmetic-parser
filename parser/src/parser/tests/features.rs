@@ -43,7 +43,7 @@ fn type_hints_when_switched_off() {
 
     let input = InputSpan::new("(x, y: Sc) = (1 + 2, 3 + 5)");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(ref spanned) if spanned.span().location_offset() == 5);
+    assert_matches!(err, NomErr::Failure(spanned) if spanned.span().location_offset() == 5);
 
     let input = InputSpan::new("duplicate = |x| { x * (1, 2) }");
     let (rem, _) = statement::<SimpleGrammar, Complete>(input).unwrap();
@@ -51,7 +51,7 @@ fn type_hints_when_switched_off() {
 
     let input = InputSpan::new("duplicate = |x: Sc| { x * (1, 2) }");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(ref spanned) if *spanned.span().fragment() == ":");
+    assert_matches!(err, NomErr::Failure(spanned) if *spanned.span().fragment() == ":");
 }
 
 #[test]
@@ -67,7 +67,7 @@ fn fn_defs_when_switched_off() {
 
     let input = InputSpan::new("foo = |x| { x + 3 }");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Error(ref spanned) if *spanned.span().fragment() == "|");
+    assert_matches!(err, NomErr::Error(spanned) if *spanned.span().fragment() == "|");
 }
 
 #[test]
@@ -83,11 +83,18 @@ fn tuples_when_switched_off() {
 
     let input = InputSpan::new("tup = (1 + 2, 3 + 5)");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(ref spanned) if spanned.span().location_offset() == 6);
+    assert_matches!(err, NomErr::Failure(spanned) if spanned.span().location_offset() == 6);
 
     let input = InputSpan::new("(x, y) = (1 + 2, 3 + 5)");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(ref spanned) if spanned.span().location_offset() == 0);
+    assert_matches!(err, NomErr::Failure(spanned) if spanned.span().location_offset() == 0);
+
+    let input = InputSpan::new("{ x, y } = #{ x = 1; y = 2; }");
+    let stmt = statement::<SimpleGrammar, Complete>(input).unwrap().1;
+    assert_matches!(
+        stmt.extra,
+        Statement::Assignment { lhs, .. } if matches!(lhs.extra, Lvalue::Object(_))
+    );
 }
 
 #[test]
@@ -103,11 +110,11 @@ fn blocks_when_switched_off() {
 
     let input = InputSpan::new("x = { y = 10; y * 2 }");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Error(ref spanned) if spanned.span().location_offset() == 4);
+    assert_matches!(err, NomErr::Error(spanned) if spanned.span().location_offset() == 4);
 
     let input = InputSpan::new("foo({ y = 10; y * 2 }, z)");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(ref spanned) if spanned.span().location_offset() == 4);
+    assert_matches!(err, NomErr::Failure(spanned) if spanned.span().location_offset() == 4);
 }
 
 #[test]
@@ -201,7 +208,18 @@ fn object_blocks_when_switched_off() {
 
     let input = InputSpan::new("#{ x = 1; y = 2; };");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Error(ref spanned) if *spanned.span().fragment() == "#");
+    assert_matches!(err, NomErr::Error(spanned) if *spanned.span().fragment() == "#");
+
+    let input = InputSpan::new("{ x, y } = #{ x = 1; y = 2; }");
+    let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
+    assert_matches!(err, NomErr::Failure(spanned) if spanned.span().location_offset() == 3);
+
+    let input = InputSpan::new("(x, y) = (1 + 2, 3 + 5)");
+    let stmt = statement::<SimpleGrammar, Complete>(input).unwrap().1;
+    assert_matches!(
+        stmt.extra,
+        Statement::Assignment { lhs, .. } if matches!(lhs.extra, Lvalue::Tuple(_))
+    );
 }
 
 #[test]

@@ -9,8 +9,14 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Support `Expr::TypeCast` as a no-op. (#83)
 
-- Support `Expr::FieldAccess` for tuple indexing. Non-numeric fields
-  are not supported yet. (#84)
+- Support `Expr::FieldAccess` for tuple indexing. (#84)
+
+- Support `Expr::ObjectBlock` for creating objects, i.e. aggregate data structures
+  with heterogeneous named fields (known in Rust as structs). Statements
+  in an `ObjectBlock` are evaluated as usual, with all vars assigned in the block
+  becoming fields of the object created by the block. (#85)
+
+- Support `Expr::FieldAccess` for accessing fields in objects. (#85)
 
 ## 0.2.0 - 2020-12-05
 

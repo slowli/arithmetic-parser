@@ -61,14 +61,14 @@ fn schnorr_signatures_imprecise() {
     let mut env = prepare_imprecise_env();
     env.process_statements(&code).unwrap();
 
-    assert_eq!(env["gen"].to_string(), "() -> (Num, Num)");
+    assert_eq!(env["gen"].to_string(), "() -> { pk: Num, sk: Num }");
     assert_eq!(
         env["sign"].to_string(),
-        "for<'T: Hash> ('T, Num) -> (Num, Num)"
+        "for<'T: Hash> ('T, Num) -> { e: Num, s: Num }"
     );
     assert_eq!(
         env["verify"].to_string(),
-        "for<'T: Hash> ((Num, Num), 'T, Num) -> Bool"
+        "for<'T: { e: Num, s: Num }, 'U: Hash> ('T, 'U, Num) -> Bool"
     );
 }
 
@@ -268,20 +268,20 @@ fn schnorr_signatures() {
     env.process_with_arithmetic(&GroupArithmetic, &code)
         .unwrap();
 
-    assert_eq!(env["gen"].to_string(), "() -> (Sc, Ge)");
+    assert_eq!(env["gen"].to_string(), "() -> { pk: Ge, sk: Sc }");
     assert_eq!(
         env["sign"].to_string(),
-        "for<'T: Hash> ('T, Sc) -> (Sc, Sc)"
+        "for<'T: Hash> ('T, Sc) -> { e: Sc, s: Sc }"
     );
     assert_eq!(
         env["verify"].to_string(),
-        "for<'T: Hash> ((Sc, Sc), 'T, Ge) -> Bool"
+        "for<'T: { e: Sc, s: Sc }, 'U: Hash> ('T, 'U, Ge) -> Bool"
     );
 }
 
 #[test]
 fn schnorr_signatures_error() {
-    let bogus_code = SCHNORR_CODE.replace("(e, r - sk * e)", "(e, R - sk * e)");
+    let bogus_code = SCHNORR_CODE.replace("s = r - sk * e;", "s = R - sk * e;");
     let code = U64Grammar::parse_statements(bogus_code.as_str()).unwrap();
     let errors = prepare_env()
         .process_with_arithmetic(&GroupArithmetic, &code)
@@ -309,22 +309,22 @@ fn schnorr_signatures_mutations() {
         Mutation {
             from: "R = GEN ^ s * pk ^ e;",
             to: "R = GEN ^ s * e ^ pk;",
-            expected_msg: "17:5: Type `Sc` is not assignable to type `Ge`",
+            expected_msg: "19:5: Type `Sc` is not assignable to type `Ge`",
         },
         Mutation {
             from: "R = GEN ^ s * pk ^ e;",
             to: "R = GEN ^ s + pk ^ e;",
-            expected_msg: "16:9: Type `Ge` is not assignable to type `Sc`",
+            expected_msg: "18:9: Type `Ge` is not assignable to type `Sc`",
         },
         Mutation {
             from: "R = GEN ^ s * pk ^ e;",
             to: "R = GEN ^ s * pk * e;",
-            expected_msg: "17:5: Type `Sc` is not assignable to type `Ge`",
+            expected_msg: "19:5: Type `Sc` is not assignable to type `Ge`",
         },
         Mutation {
             from: "R = GEN ^ s * pk ^ e;",
             to: "R = (GEN, pk) ^ (s, e);",
-            expected_msg: "16:9: Type `(Ge, _)` is not assignable to type `Ge`",
+            expected_msg: "18:9: Type `(Ge, _)` is not assignable to type `Ge`",
         },
     ];
 
@@ -345,14 +345,14 @@ fn dsa_signatures_imprecise() {
     let mut env = prepare_imprecise_env();
     env.process_statements(&code).unwrap();
 
-    assert_eq!(env["gen"].to_string(), "() -> (Num, Num)");
+    assert_eq!(env["gen"].to_string(), "() -> { pk: Num, sk: Num }");
     assert_eq!(
         env["sign"].to_string(),
-        "for<'T: Hash> ('T, Num) -> (Num, Num)"
+        "for<'T: Hash> ('T, Num) -> { r: Num, s: Num }"
     );
     assert_eq!(
         env["verify"].to_string(),
-        "for<'T: Hash> ((Num, Num), 'T, Num) -> Bool"
+        "for<'T: { r: Num, s: Num }, 'U: Hash> ('T, 'U, Num) -> Bool"
     );
 }
 
@@ -363,14 +363,14 @@ fn dsa_signatures() {
     env.process_with_arithmetic(&GroupArithmetic, &code)
         .unwrap();
 
-    assert_eq!(env["gen"].to_string(), "() -> (Sc, Ge)");
+    assert_eq!(env["gen"].to_string(), "() -> { pk: Ge, sk: Sc }");
     assert_eq!(
         env["sign"].to_string(),
-        "for<'T: Hash> ('T, Sc) -> (Sc, Sc)"
+        "for<'T: Hash> ('T, Sc) -> { r: Sc, s: Sc }"
     );
     assert_eq!(
         env["verify"].to_string(),
-        "for<'T: Hash> ((Sc, Sc), 'T, Ge) -> Bool"
+        "for<'T: { r: Sc, s: Sc }, 'U: Hash> ('T, 'U, Ge) -> Bool"
     );
 }
 
@@ -380,17 +380,17 @@ fn dsa_signatures_mutations() {
         Mutation {
             from: "r = (GEN ^ k).to_scalar();",
             to: "r = GEN ^ k;",
-            expected_msg: "11:36: Type `Ge` is not assignable to type `Sc`",
+            expected_msg: "12:40: Type `Ge` is not assignable to type `Sc`",
         },
         Mutation {
             from: "(GEN ^ u1 * pk ^ u2).to_scalar() == r",
             to: "GEN ^ u1 * pk ^ u2 == r",
-            expected_msg: "17:5: Type `Sc` is not assignable to type `Ge`",
+            expected_msg: "18:5: Type `Sc` is not assignable to type `Ge`",
         },
         Mutation {
             from: "assert(signature.verify(message, pk));",
             to: "assert(signature.verify(pk, message));",
-            expected_msg: "30:33: Type `Sc` is not assignable to type `Ge`",
+            expected_msg: "31:33: Type `Sc` is not assignable to type `Ge`",
         },
     ];
 
@@ -411,11 +411,14 @@ fn el_gamal_encryption_imprecise() {
     let mut env = prepare_imprecise_env();
     env.process_statements(&code).unwrap();
 
-    assert_eq!(env["gen"].to_string(), "() -> (Num, Num)");
-    assert_eq!(env["encrypt"].to_string(), "(Num, Num) -> (Num, Num)");
+    assert_eq!(env["gen"].to_string(), "() -> { pk: Num, sk: Num }");
+    assert_eq!(
+        env["encrypt"].to_string(),
+        "(Num, Num) -> { B: Num, R: Num }"
+    );
     assert_eq!(
         env["decrypt"].to_string(),
-        "for<'T: Ops> (('T, 'T), 'T) -> 'T"
+        "for<'T: { B: 'U, R: 'U }, 'U: Ops> ('T, 'U) -> 'U"
     );
 }
 
@@ -426,12 +429,15 @@ fn el_gamal_encryption() {
     env.process_with_arithmetic(&GroupArithmetic, &code)
         .unwrap();
 
-    assert_eq!(env["gen"].to_string(), "() -> (Sc, Ge)");
-    assert_eq!(env["encrypt"].to_string(), "(Ge, Ge) -> (Ge, Ge)");
-    assert_eq!(env["decrypt"].to_string(), "((Ge, Ge), Sc) -> Ge");
+    assert_eq!(env["gen"].to_string(), "() -> { pk: Ge, sk: Sc }");
+    assert_eq!(env["encrypt"].to_string(), "(Ge, Ge) -> { B: Ge, R: Ge }");
+    assert_eq!(
+        env["decrypt"].to_string(),
+        "for<'T: { B: Ge, R: Ge }> ('T, Sc) -> Ge"
+    );
     assert_eq!(
         env["encrypt_and_combine"].to_string(),
-        "([Ge; N], Ge) -> (Ge, Ge)"
+        "([Ge; N], Ge) -> { B: Ge, R: Ge }"
     );
 }
 
@@ -440,13 +446,8 @@ fn rfold() {
     let code = include_str!("rfold.script");
     let code = U64Grammar::parse_statements(code).unwrap();
     let mut env: TypeEnvironment = Prelude::iter().chain(Assertions::iter()).collect();
-    let tuple_len = FnType::builder()
-        .with_arg(Type::slice(Type::any(), UnknownLen::param(0)))
-        .returning(Type::NUM);
-    env.insert("MIN", Type::NUM)
-        .insert("MAX", Type::NUM)
-        .insert("len", tuple_len);
-    env.process_with_arithmetic(&NumArithmetic::with_comparisons(), &code)
+    env.insert("INF", Type::NUM)
+        .process_with_arithmetic(&NumArithmetic::with_comparisons(), &code)
         .unwrap();
 
     assert_eq!(

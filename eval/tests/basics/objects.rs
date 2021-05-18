@@ -1,7 +1,9 @@
 //! Tests targeting objects / object field access.
 
-use arithmetic_eval::{error::AuxErrorInfo, Assertions, Environment, ErrorKind, Prelude, Value};
 use assert_matches::assert_matches;
+
+use arithmetic_eval::{error::AuxErrorInfo, Assertions, Environment, ErrorKind, Prelude, Value};
+use arithmetic_parser::BinaryOp;
 
 use crate::{evaluate, expect_compilation_error, try_evaluate};
 
@@ -410,4 +412,47 @@ fn object_destructuring_repeated_assignment_complex() {
     assert_eq!(*aux_span.fragment(), "x");
     assert_eq!(aux_span.location_offset(), 2);
     assert_matches!(aux_span.extra, AuxErrorInfo::PrevAssignment);
+}
+
+#[test]
+fn binary_ops_on_objects() {
+    let program = r#"
+        #{ x = 1; } - #{ x = 2; } == #{ x = -1; } &&
+        #{ x = 6; } / #{ x = 2; } == #{ x = 3; } &&
+        #{ x = 1; y = (2, 3); } + #{ x = (5, 7); y = (1, 2); } ==
+            #{ x = (6, 8); y = (3, 5); }
+    "#;
+    let return_value = evaluate(&mut Environment::new(), program);
+    assert_eq!(return_value, Value::Bool(true));
+}
+
+#[test]
+fn binary_ops_on_objects_with_number_operand() {
+    let program = r#"
+        #{ x = 3; y = 2; } - 1 == #{ x = 2; y = 1; } &&
+        5 - #{ x = 3; } == #{ x = 2; } &&
+        2 + #{ x = 3; y = (4, 5); } == #{ x = 5; y = (6, 7); }
+    "#;
+    let return_value = evaluate(&mut Environment::new(), program);
+    assert_eq!(return_value, Value::Bool(true));
+}
+
+#[test]
+fn error_in_binary_ops_on_objects() {
+    let program = "#{ x = 1; } + #{ y = 1; }";
+    let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
+    assert_eq!(*err.source().main_span().code().fragment(), "#{ x = 1; }");
+    assert_matches!(
+        err.source().kind(),
+        ErrorKind::FieldsMismatch { op: BinaryOp::Add, lhs_fields, rhs_fields }
+            if lhs_fields.len() == 1 && lhs_fields.contains("x")
+            && rhs_fields.len() == 1 && rhs_fields.contains("y")
+    );
+    assert_eq!(err.source().aux_spans().len(), 1);
+
+    let aux_info = &err.source().aux_spans()[0].code().extra;
+    assert_matches!(
+        aux_info,
+        AuxErrorInfo::UnbalancedRhsObject(fields) if fields.contains("y")
+    );
 }

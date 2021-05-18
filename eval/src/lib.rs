@@ -33,9 +33,10 @@
 //! - All variables are immutable. Re-declaring a var shadows the previous declaration.
 //! - Functions are first-class (in fact, a function is just a variant of the [`Value`] enum).
 //! - Functions can capture variables (including other functions). All captures are by value.
-//! - Arithmetic operations are defined on numbers and tuples. Ops or numbers are defined
-//!   via the [`Arithmetic`]. With tuples, operations are performed per-element.
-//!   Binary operations require tuples of the same size, or a tuple and a primitive value.
+//! - Arithmetic operations are defined on numbers, tuples and objects. Ops or numbers are defined
+//!   via the [`Arithmetic`]. With tuples and object, operations are performed per-element / field.
+//!   Binary operations require tuples of the same size / objects of the same shape,
+//!   or a tuple / object and a primitive value.
 //!   As an example, `(1, 2) + 3` and `(2, 3) / (4, 5)` are valid, but `(1, 2) * (3, 4, 5)` isn't.
 //! - Methods are considered syntactic sugar for functions, with the method receiver considered
 //!   the first function argument. For example, `(1, 2).map(sin)` is equivalent to

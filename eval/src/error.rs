@@ -3,6 +3,7 @@
 pub use arithmetic_parser::UnsupportedType;
 
 use derive_more::Display;
+use hashbrown::HashSet;
 
 use core::fmt;
 
@@ -124,6 +125,22 @@ pub enum ErrorKind {
         rhs: usize,
         /// Context in which the error has occurred.
         context: TupleLenMismatchContext,
+    },
+
+    /// Field set differs between LHS and RHS, which are both objects.
+    #[display(
+        fmt = "Cannot perform {} on objects: LHS has fields {:?}, whereas RHS has fields {:?}",
+        op,
+        lhs_fields,
+        rhs_fields
+    )]
+    FieldsMismatch {
+        /// Fields in LHS.
+        lhs_fields: HashSet<String>,
+        /// Fields in RHS.
+        rhs_fields: HashSet<String>,
+        /// Operation being performed.
+        op: BinaryOp,
     },
 
     /// Mismatch between the number of arguments in the function definition and its call.
@@ -251,6 +268,9 @@ impl ErrorKind {
             Self::TupleLenMismatch { context, .. } => {
                 format!("Mismatch between length of tuples in {}", context)
             }
+            Self::FieldsMismatch { op, .. } => {
+                format!("Mismatch between object shapes during {}", op)
+            }
             Self::ArgsLenMismatch { .. } => {
                 "Mismatch between the number of arguments in the function definition and its call"
                     .to_owned()
@@ -285,6 +305,9 @@ impl ErrorKind {
             Self::TupleLenMismatch { context, lhs, .. } => {
                 format!("LHS of {} with {} element(s)", context, lhs)
             }
+            Self::FieldsMismatch { lhs_fields, .. } => {
+                format!("LHS with fields {:?}", lhs_fields)
+            }
             Self::ArgsLenMismatch { call, .. } => format!("Called with {} arg(s) here", call),
             Self::CannotDestructure => "Failed destructuring".to_owned(),
             Self::RepeatedAssignment { .. } => "Re-assigned variable".to_owned(),
@@ -308,6 +331,10 @@ impl ErrorKind {
             Self::TupleLenMismatch { context, .. } => format!(
                 "If both args of {} are tuples, the number of elements in them must agree",
                 context
+            ),
+            Self::FieldsMismatch { op, .. } => format!(
+                "If both args of {} are objects, their field names must be the same",
+                op
             ),
             Self::CannotDestructure => {
                 "Only tuples can be destructured; numbers, functions and booleans cannot".to_owned()
@@ -373,7 +400,9 @@ pub enum AuxErrorInfo {
     Rvalue,
 
     /// RHS of a binary operation on differently sized tuples.
-    UnbalancedRhs(usize),
+    UnbalancedRhsTuple(usize),
+    /// RHS of a binary operation on differently shaped objects.
+    UnbalancedRhsObject(HashSet<String>),
 
     /// Invalid argument.
     InvalidArg,
@@ -394,7 +423,12 @@ impl fmt::Display for AuxErrorInfo {
             Self::FnArgs => formatter.write_str("Function arguments declared here"),
             Self::PrevAssignment => formatter.write_str("Previous declaration"),
             Self::Rvalue => formatter.write_str("RHS containing the invalid assignment"),
-            Self::UnbalancedRhs(size) => write!(formatter, "RHS with the {}-element tuple", size),
+            Self::UnbalancedRhsTuple(size) => {
+                write!(formatter, "RHS with the {}-element tuple", size)
+            }
+            Self::UnbalancedRhsObject(fields) => {
+                write!(formatter, "RHS object with fields {:?}", fields)
+            }
             Self::InvalidArg => formatter.write_str("Invalid argument"),
             Self::ArgValue(val) => write!(formatter, "Has value: {}", val),
         }

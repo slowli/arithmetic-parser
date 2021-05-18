@@ -309,22 +309,22 @@ fn schnorr_signatures_mutations() {
         Mutation {
             from: "R = GEN ^ s * pk ^ e;",
             to: "R = GEN ^ s * e ^ pk;",
-            expected_msg: "19:5: Type `Sc` is not assignable to type `Ge`",
+            expected_msg: "21:5: Type `Sc` is not assignable to type `Ge`",
         },
         Mutation {
             from: "R = GEN ^ s * pk ^ e;",
             to: "R = GEN ^ s + pk ^ e;",
-            expected_msg: "18:9: Type `Ge` is not assignable to type `Sc`",
+            expected_msg: "20:9: Type `Ge` is not assignable to type `Sc`",
         },
         Mutation {
             from: "R = GEN ^ s * pk ^ e;",
             to: "R = GEN ^ s * pk * e;",
-            expected_msg: "19:5: Type `Sc` is not assignable to type `Ge`",
+            expected_msg: "21:5: Type `Sc` is not assignable to type `Ge`",
         },
         Mutation {
             from: "R = GEN ^ s * pk ^ e;",
             to: "R = (GEN, pk) ^ (s, e);",
-            expected_msg: "18:9: Type `(Ge, _)` is not assignable to type `Ge`",
+            expected_msg: "20:9: Type `(Ge, _)` is not assignable to type `Ge`",
         },
     ];
 
@@ -380,17 +380,17 @@ fn dsa_signatures_mutations() {
         Mutation {
             from: "r = (GEN ^ k).to_scalar();",
             to: "r = GEN ^ k;",
-            expected_msg: "12:40: Type `Ge` is not assignable to type `Sc`",
+            expected_msg: "14:40: Type `Ge` is not assignable to type `Sc`",
         },
         Mutation {
             from: "(GEN ^ u1 * pk ^ u2).to_scalar() == r",
             to: "GEN ^ u1 * pk ^ u2 == r",
-            expected_msg: "18:5: Type `Sc` is not assignable to type `Ge`",
+            expected_msg: "20:5: Type `Sc` is not assignable to type `Ge`",
         },
         Mutation {
             from: "assert(signature.verify(message, pk));",
             to: "assert(signature.verify(pk, message));",
-            expected_msg: "31:33: Type `Sc` is not assignable to type `Ge`",
+            expected_msg: "33:33: Type `Sc` is not assignable to type `Ge`",
         },
     ];
 

@@ -113,6 +113,11 @@ impl<'a> CapturesExtractor<'a> {
             Expr::Block(block) => {
                 self.eval_block_inner(block, HashMap::new())?;
             }
+            Expr::ObjectBlock(statements) => {
+                for statement in statements {
+                    self.eval_statement(statement)?;
+                }
+            }
             Expr::TypeCast { value, .. } => {
                 self.eval(value)?;
             }

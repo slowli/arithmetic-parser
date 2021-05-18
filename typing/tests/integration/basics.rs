@@ -9,7 +9,7 @@ use arithmetic_typing::{
     FnType, Num, Prelude, TupleLen, Type, TypeEnvironment, UnknownLen,
 };
 
-use super::{assert_incompatible_types, hash_fn_type, zip_fn_type, ErrorsExt, F32Grammar};
+use crate::{assert_incompatible_types, hash_fn_type, zip_fn_type, ErrorsExt, F32Grammar};
 
 #[test]
 fn statements_with_a_block() {

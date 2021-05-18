@@ -43,7 +43,7 @@ impl TupleIndex {
 }
 
 /// Fragment of an error location.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum ErrorLocation {
     /// Function argument with the specified index (0-based; can be `None` if the error cannot
@@ -54,6 +54,8 @@ pub enum ErrorLocation {
     /// Tuple element with the specified index (0-based; can be `None` if the error cannot
     /// be attributed to a specific index).
     TupleElement(Option<TupleIndex>),
+    /// Object field with the specified name.
+    ObjectField(String),
     /// Left-hand side of a binary operation.
     Lhs,
     /// Right-hand side of a binary operation.
@@ -63,6 +65,12 @@ pub enum ErrorLocation {
 impl From<TupleIndex> for ErrorLocation {
     fn from(index: TupleIndex) -> Self {
         Self::TupleElement(Some(index))
+    }
+}
+
+impl From<&str> for ErrorLocation {
+    fn from(field_name: &str) -> Self {
+        Self::ObjectField(field_name.to_owned())
     }
 }
 
@@ -79,10 +87,10 @@ impl ErrorLocation {
         refined.with_no_extra()
     }
 
-    fn walk<T: Copy>(mut location: &[Self], init: T, refine: impl Fn(Self, T) -> Option<T>) -> T {
+    fn walk<T: Copy>(mut location: &[Self], init: T, refine: impl Fn(&Self, T) -> Option<T>) -> T {
         let mut refined = init;
         while !location.is_empty() {
-            if let Some(refinement) = refine(location[0], refined) {
+            if let Some(refinement) = refine(&location[0], refined) {
                 refined = refinement;
                 location = &location[1..];
             } else {
@@ -93,7 +101,7 @@ impl ErrorLocation {
     }
 
     fn step_into_expr<'r, 'a, T: Grammar<'a>>(
-        self,
+        &self,
         mut expr: &'r SpannedExpr<'a, T>,
     ) -> Option<&'r SpannedExpr<'a, T>> {
         while let Expr::TypeCast { value, .. } = &expr.extra {
@@ -103,11 +111,11 @@ impl ErrorLocation {
         match self {
             // `TupleIndex::FromEnd` should not occur in this context.
             Self::FnArg(Some(TupleIndex::Start(index))) => match &expr.extra {
-                Expr::Function { args, .. } => Some(&args[index]),
-                Expr::Method { receiver, args, .. } => Some(if index == 0 {
+                Expr::Function { args, .. } => Some(&args[*index]),
+                Expr::Method { receiver, args, .. } => Some(if *index == 0 {
                     receiver.as_ref()
                 } else {
-                    &args[index - 1]
+                    &args[*index - 1]
                 }),
                 _ => None,
             },
@@ -129,7 +137,7 @@ impl ErrorLocation {
 
             Self::TupleElement(Some(TupleIndex::Start(index))) => {
                 if let Expr::Tuple(elements) = &expr.extra {
-                    Some(&elements[index])
+                    Some(&elements[*index])
                 } else {
                     None
                 }
@@ -156,7 +164,7 @@ impl ErrorLocation {
     }
 
     fn step_into_lvalue<'r, 'a>(
-        self,
+        &self,
         lvalue: SpannedLvalueTree<'r, 'a>,
     ) -> Option<SpannedLvalueTree<'r, 'a>> {
         match lvalue.extra {
@@ -166,7 +174,7 @@ impl ErrorLocation {
         }
     }
 
-    fn step_into_type<'r, 'a>(self, ty: &'r TypeAst<'a>) -> Option<SpannedLvalueTree<'r, 'a>> {
+    fn step_into_type<'r, 'a>(&self, ty: &'r TypeAst<'a>) -> Option<SpannedLvalueTree<'r, 'a>> {
         match (self, ty) {
             (Self::TupleElement(Some(i)), TypeAst::Tuple(tuple)) => {
                 i.get_from_tuple(tuple).map(LvalueTree::from_span)
@@ -179,7 +187,7 @@ impl ErrorLocation {
     }
 
     fn step_into_destructure<'r, 'a>(
-        self,
+        &self,
         destructure: &'r Destructure<'a, TypeAst<'a>>,
     ) -> Option<SpannedLvalueTree<'r, 'a>> {
         match self {

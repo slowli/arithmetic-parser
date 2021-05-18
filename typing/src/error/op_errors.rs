@@ -57,6 +57,14 @@ impl<Prim: PrimitiveType> OpErrors<'_, Prim> {
         }
     }
 
+    pub(crate) fn push_location(&mut self, location: impl Into<ErrorLocation>) {
+        self.current_location.push(location.into());
+    }
+
+    pub(crate) fn pop_location(&mut self) {
+        self.current_location.pop().expect("Location is empty");
+    }
+
     #[cfg(test)]
     pub(crate) fn into_vec(self) -> Vec<ErrorKind<Prim>> {
         let errors = match self.errors {

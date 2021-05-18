@@ -39,6 +39,16 @@ fn unify_tuples<Prim: PrimitiveType>(
     })
 }
 
+fn unify_objects<Prim: PrimitiveType>(
+    substitutions: &mut Substitutions<Prim>,
+    lhs: &Object<Prim>,
+    rhs: &Object<Prim>,
+) -> Result<(), ErrorKind<Prim>> {
+    extract_errors(|errors| {
+        substitutions.unify_objects(lhs, rhs, errors);
+    })
+}
+
 fn unify<Prim: PrimitiveType>(
     substitutions: &mut Substitutions<Prim>,
     lhs: &Type<Prim>,
@@ -327,4 +337,31 @@ fn marking_length_as_static_and_then_propagating() {
 
     assert_eq!(substitutions.length_eqs[&0], UnknownLen::free_var(1).into());
     assert!(substitutions.static_lengths.contains(&1));
+}
+
+#[test]
+fn unifying_objects() {
+    let x: Object<Num> = vec![("x", Type::NUM), ("y", Type::NUM)]
+        .into_iter()
+        .collect();
+    let y: Object<Num> = vec![("x", Type::NUM), ("y", Type::free_var(0))]
+        .into_iter()
+        .collect();
+
+    let mut substitutions = Substitutions::<Num>::default();
+    unify_objects(&mut substitutions, &x, &y).unwrap();
+    assert_eq!(substitutions.eqs.len(), 1);
+    assert_eq!(substitutions.eqs[&0], Type::NUM);
+
+    let truncated_y = vec![("x", Type::NUM)].into_iter().collect();
+    let mut substitutions = Substitutions::<Num>::default();
+    let err = unify_objects(&mut substitutions, &x, &truncated_y).unwrap_err();
+    assert_matches!(err, ErrorKind::FieldsMismatch { .. });
+
+    let extended_y = vec![("x", Type::NUM), ("y", Type::NUM), ("z", Type::BOOL)]
+        .into_iter()
+        .collect();
+    let mut substitutions = Substitutions::<Num>::default();
+    let err = unify_objects(&mut substitutions, &x, &extended_y).unwrap_err();
+    assert_matches!(err, ErrorKind::FieldsMismatch { .. });
 }

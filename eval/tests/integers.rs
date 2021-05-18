@@ -1,3 +1,5 @@
+//! Tests for integer arithmetics.
+
 use assert_matches::assert_matches;
 use num_traits::Bounded;
 

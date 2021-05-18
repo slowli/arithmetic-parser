@@ -8,8 +8,8 @@ use crate::{
     alloc::{Box, String, ToOwned, Vec},
     error::RepeatedAssignmentContext,
     executable::{
-        Atom, Command, CompiledExpr, Executable, ExecutableFn, ExecutableModule, Registers,
-        SpannedAtom,
+        Atom, Command, CompiledExpr, Executable, ExecutableFn, ExecutableModule, FieldName,
+        Registers, SpannedAtom,
     },
     Error, ErrorKind, ModuleId, Value,
 };
@@ -26,28 +26,40 @@ use self::captures::{extract_vars_iter, CapturesExtractor, CompilerExtTarget};
 pub(crate) type ImportSpans<'a> = HashMap<String, Spanned<'a>>;
 
 #[derive(Debug)]
+enum BlockOrObject<'r, 'a, T: Grammar<'a>> {
+    Block(&'r Block<'a, T>),
+    Object(&'r [SpannedStatement<'a, T>]),
+}
+
+impl<'r, 'a, T: Grammar<'a>> From<&'r Block<'a, T>> for BlockOrObject<'r, 'a, T> {
+    fn from(block: &'r Block<'a, T>) -> Self {
+        Self::Block(block)
+    }
+}
+
+impl<'r, 'a, T: Grammar<'a>> From<&'r [SpannedStatement<'a, T>]> for BlockOrObject<'r, 'a, T> {
+    fn from(statements: &'r [SpannedStatement<'a, T>]) -> Self {
+        Self::Object(statements)
+    }
+}
+
+#[derive(Debug)]
 pub(crate) struct Compiler {
+    /// Mapping between registers and named variables.
     vars_to_registers: HashMap<String, usize>,
+    /// Fields for the collected object, if any. We store it explicitly because it is impossible
+    /// to find out which vars correspond to the object otherwise.
+    object_fields: Option<HashMap<String, usize>>,
     scope_depth: usize,
     register_count: usize,
     module_id: Box<dyn ModuleId>,
-}
-
-impl Clone for Compiler {
-    fn clone(&self) -> Self {
-        Self {
-            vars_to_registers: self.vars_to_registers.clone(),
-            scope_depth: self.scope_depth,
-            register_count: self.register_count,
-            module_id: self.module_id.clone_boxed(),
-        }
-    }
 }
 
 impl Compiler {
     fn new(module_id: Box<dyn ModuleId>) -> Self {
         Self {
             vars_to_registers: HashMap::new(),
+            object_fields: None,
             scope_depth: 0,
             register_count: 0,
             module_id,
@@ -57,9 +69,22 @@ impl Compiler {
     fn from_env<T>(module_id: Box<dyn ModuleId>, env: &Registers<'_, T>) -> Self {
         Self {
             vars_to_registers: env.variables_map().clone(),
+            object_fields: None,
             register_count: env.register_count(),
             scope_depth: 0,
             module_id,
+        }
+    }
+
+    /// Backups this instance. This effectively clones all fields except for `object_fields`,
+    /// which is *moved* to the returned instance rather than cloned.
+    fn backup(&mut self) -> Self {
+        Self {
+            vars_to_registers: self.vars_to_registers.clone(),
+            object_fields: self.object_fields.take(),
+            scope_depth: self.scope_depth,
+            register_count: self.register_count,
+            module_id: self.module_id.clone_boxed(),
         }
     }
 
@@ -179,6 +204,9 @@ impl Compiler {
 
             Expr::Block(block) => self.compile_block(executable, expr, block)?,
             Expr::FnDefinition(def) => self.compile_fn_definition(executable, expr, def)?,
+            Expr::ObjectBlock(statements) => {
+                self.compile_block(executable, expr, statements.as_slice())?
+            }
 
             _ => {
                 let err = ErrorKind::unsupported(expr.extra.ty());
@@ -246,13 +274,21 @@ impl Compiler {
         name: &Spanned<'a>,
         receiver: &SpannedExpr<'a, T>,
     ) -> Result<Atom<T::Lit>, Error<'a>> {
-        let index = name.fragment().parse::<usize>().map_err(|_| {
-            let name_string = (*name.fragment()).to_owned();
-            self.create_error(name, ErrorKind::InvalidFieldName(name_string))
-        })?;
-        let receiver = self.compile_expr(executable, receiver)?;
+        let name_str = *name.fragment();
+        let field = name_str
+            .parse::<usize>()
+            .map(FieldName::Index)
+            .or_else(|_| {
+                if is_valid_variable_name(name_str) {
+                    Ok(FieldName::Name(name_str.to_owned()))
+                } else {
+                    let err = ErrorKind::InvalidFieldName(name_str.to_owned());
+                    Err(self.create_error(name, err))
+                }
+            })?;
 
-        let field_access = CompiledExpr::FieldAccess { receiver, index };
+        let receiver = self.compile_expr(executable, receiver)?;
+        let field_access = CompiledExpr::FieldAccess { receiver, field };
         let register = self.push_assignment(executable, field_access, call_expr);
         Ok(Atom::Register(register))
     }
@@ -283,25 +319,49 @@ impl Compiler {
         Ok(Atom::Register(register))
     }
 
-    fn compile_block<'a, T: Grammar<'a>>(
+    fn compile_block<'r, 'a: 'r, T: Grammar<'a>>(
         &mut self,
         executable: &mut Executable<'a, T::Lit>,
         block_expr: &SpannedExpr<'a, T>,
-        block: &Block<'a, T>,
+        block_or_object: impl Into<BlockOrObject<'r, 'a, T>>,
     ) -> Result<Atom<T::Lit>, Error<'a>> {
-        let backup_state = self.clone();
+        let block_or_object = block_or_object.into();
+
+        let backup_state = self.backup();
         if self.scope_depth == 0 {
             let command = Command::StartInnerScope;
             executable.push_command(block_expr.copy_with_extra(command));
         }
         self.scope_depth += 1;
 
-        let return_value = self
-            .compile_block_inner(executable, block)?
-            .unwrap_or_else(|| block_expr.copy_with_extra(Atom::Void).into());
-
         // Move the return value to the next register.
-        let new_register = if let Atom::Register(ret_register) = return_value.extra {
+        let return_value = match block_or_object {
+            BlockOrObject::Block(block) => {
+                self.object_fields = None;
+                self.compile_block_inner(executable, block)?
+                    .map_or(Atom::Void, |spanned| spanned.extra)
+            }
+
+            BlockOrObject::Object(statements) => {
+                self.object_fields = Some(HashMap::new());
+                for statement in statements {
+                    self.compile_statement(executable, statement)?;
+                }
+
+                // Find out variables that need to be collected into the object.
+                let new_vars = self
+                    .object_fields
+                    .take()
+                    .expect("object_fields")
+                    .into_iter()
+                    .map(|(name, register)| (name, Atom::Register(register)));
+                let obj_expr = CompiledExpr::Object(new_vars.collect());
+                let register = self.push_assignment(executable, obj_expr, block_expr);
+                Atom::Register(register)
+            }
+        };
+
+        let new_register = if let Atom::Register(ret_register) = return_value {
             let command = Command::Copy {
                 source: ret_register,
                 destination: backup_state.register_count,
@@ -342,7 +402,7 @@ impl Compiler {
             self.compile_statement(executable, statement)?;
         }
 
-        Ok(if let Some(ref return_value) = block.return_value {
+        Ok(if let Some(return_value) = &block.return_value {
             Some(self.compile_expr(executable, return_value)?)
         } else {
             None
@@ -421,7 +481,7 @@ impl Compiler {
         for statement in &def.body.statements {
             this.compile_statement(&mut executable, statement)?;
         }
-        if let Some(ref return_value) = def.body.return_value {
+        if let Some(return_value) = &def.body.return_value {
             let return_atom = this.compile_expr(&mut executable, return_value)?;
             let return_span = return_atom.with_no_extra();
             let command = Command::Push(CompiledExpr::Atom(return_atom.extra));
@@ -525,6 +585,9 @@ impl Compiler {
                 if var_name != "_" {
                     self.vars_to_registers
                         .insert(var_name.to_owned(), rhs_register);
+                    if let Some(fields) = &mut self.object_fields {
+                        fields.insert(var_name.to_owned(), rhs_register);
+                    }
 
                     // It does not make sense to annotate vars in the inner scopes, since
                     // they cannot be accessed externally.
@@ -575,7 +638,7 @@ impl Compiler {
         }
 
         let start_register = start_register + destructure.start.len();
-        if let Some(ref middle) = destructure.middle {
+        if let Some(middle) = &destructure.middle {
             if let Some(lvalue) = middle.extra.to_lvalue() {
                 self.assign(executable, &lvalue, start_register)?;
             }

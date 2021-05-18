@@ -1,6 +1,6 @@
 //! Visitor traits allowing to traverse [`Type`] and related types.
 
-use crate::{FnType, PrimitiveType, Tuple, TupleLen, Type, TypeVar};
+use crate::{FnType, Object, PrimitiveType, Tuple, TupleLen, Type, TypeVar};
 
 /// Recursive traversal across the shared reference to a [`Type`].
 ///
@@ -22,12 +22,12 @@ use crate::{FnType, PrimitiveType, Tuple, TupleLen, Type, TypeVar};
 ///     lengths: HashMap<usize, usize>,
 /// }
 ///
-/// impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for Mentions {
+/// impl<Prim: PrimitiveType> Visit<Prim> for Mentions {
 ///     fn visit_var(&mut self, var: TypeVar) {
 ///         *self.types.entry(var.index()).or_default() += 1;
 ///     }
 ///
-///     fn visit_tuple(&mut self, tuple: &'a Tuple<Prim>) {
+///     fn visit_tuple(&mut self, tuple: &Tuple<Prim>) {
 ///         let (_, middle, _) = tuple.parts();
 ///         let len = middle.and_then(|middle| middle.len().components().0);
 ///         if let Some(UnknownLen::Var(var)) = len {
@@ -50,12 +50,12 @@ use crate::{FnType, PrimitiveType, Tuple, TupleLen, Type, TypeVar};
 /// # }
 /// ```
 #[allow(unused_variables)]
-pub trait Visit<'ast, Prim: PrimitiveType> {
+pub trait Visit<Prim: PrimitiveType> {
     /// Visits a generic type.
     ///
     /// The default implementation calls one of more specific methods corresponding to the `ty`
     /// variant.
-    fn visit_type(&mut self, ty: &'ast Type<Prim>) {
+    fn visit_type(&mut self, ty: &Type<Prim>) {
         visit_type(self, ty)
     }
 
@@ -77,50 +77,67 @@ pub trait Visit<'ast, Prim: PrimitiveType> {
     ///
     /// The default implementation calls [`Self::visit_type()`] for each tuple element,
     /// including the middle element if any.
-    fn visit_tuple(&mut self, tuple: &'ast Tuple<Prim>) {
+    fn visit_tuple(&mut self, tuple: &Tuple<Prim>) {
         visit_tuple(self, tuple);
+    }
+
+    /// Visits an object type.
+    fn visit_object(&mut self, obj: &Object<Prim>) {
+        visit_object(self, obj);
     }
 
     /// Visits a functional type.
     ///
     /// The default implementation calls [`Self::visit_tuple()`] on arguments and then
     /// [`Self::visit_type()`] on the return value.
-    fn visit_function(&mut self, function: &'ast FnType<Prim>) {
+    fn visit_function(&mut self, function: &FnType<Prim>) {
         visit_function(self, function);
     }
 }
 
 /// Default implementation of [`Visit::visit_type()`].
-pub fn visit_type<'ast, Prim, V>(visitor: &mut V, ty: &'ast Type<Prim>)
+pub fn visit_type<Prim, V>(visitor: &mut V, ty: &Type<Prim>)
 where
     Prim: PrimitiveType,
-    V: Visit<'ast, Prim> + ?Sized,
+    V: Visit<Prim> + ?Sized,
 {
     match ty {
         Type::Any(_) => { /* Do nothing. */ }
         Type::Var(var) => visitor.visit_var(*var),
         Type::Prim(primitive) => visitor.visit_primitive(primitive),
         Type::Tuple(tuple) => visitor.visit_tuple(tuple),
+        Type::Object(obj) => visitor.visit_object(obj),
         Type::Function(function) => visitor.visit_function(function.as_ref()),
     }
 }
 
-/// Default implementation of [`Visit::visit_type()`].
-pub fn visit_tuple<'ast, Prim, V>(visitor: &mut V, tuple: &'ast Tuple<Prim>)
+/// Default implementation of [`Visit::visit_tuple()`].
+pub fn visit_tuple<Prim, V>(visitor: &mut V, tuple: &Tuple<Prim>)
 where
     Prim: PrimitiveType,
-    V: Visit<'ast, Prim> + ?Sized,
+    V: Visit<Prim> + ?Sized,
 {
     for (_, ty) in tuple.element_types() {
         visitor.visit_type(ty);
     }
 }
 
-/// Default implementation of [`Visit::visit_function()`].
-pub fn visit_function<'ast, Prim, V>(visitor: &mut V, function: &'ast FnType<Prim>)
+/// Default implementation of [`Visit::visit_object()`].
+pub fn visit_object<Prim, V>(visitor: &mut V, obj: &Object<Prim>)
 where
     Prim: PrimitiveType,
-    V: Visit<'ast, Prim> + ?Sized,
+    V: Visit<Prim> + ?Sized,
+{
+    for (_, ty) in obj.iter() {
+        visitor.visit_type(ty);
+    }
+}
+
+/// Default implementation of [`Visit::visit_function()`].
+pub fn visit_function<Prim, V>(visitor: &mut V, function: &FnType<Prim>)
+where
+    Prim: PrimitiveType,
+    V: Visit<Prim> + ?Sized,
 {
     visitor.visit_tuple(&function.args);
     visitor.visit_type(&function.return_type);
@@ -179,6 +196,11 @@ pub trait VisitMut<Prim: PrimitiveType> {
         visit_tuple_mut(self, tuple);
     }
 
+    /// Visits an object type.
+    fn visit_object_mut(&mut self, obj: &mut Object<Prim>) {
+        visit_object_mut(self, obj);
+    }
+
     /// Visits a middle length of a tuple.
     ///
     /// The default implementation does nothing.
@@ -204,6 +226,7 @@ where
     match ty {
         Type::Any(_) | Type::Var(_) | Type::Prim(_) => {}
         Type::Tuple(tuple) => visitor.visit_tuple_mut(tuple),
+        Type::Object(obj) => visitor.visit_object_mut(obj),
         Type::Function(function) => visitor.visit_function_mut(function.as_mut()),
     }
 }
@@ -218,6 +241,17 @@ where
         visitor.visit_middle_len_mut(middle.len_mut());
     }
     for ty in tuple.element_types_mut() {
+        visitor.visit_type_mut(ty);
+    }
+}
+
+/// Default implementation of [`VisitMut::visit_object_mut()`].
+pub fn visit_object_mut<Prim, V>(visitor: &mut V, obj: &mut Object<Prim>)
+where
+    Prim: PrimitiveType,
+    V: VisitMut<Prim> + ?Sized,
+{
+    for (_, ty) in obj.iter_mut() {
         visitor.visit_type_mut(ty);
     }
 }

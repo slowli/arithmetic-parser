@@ -4,7 +4,8 @@ use std::{collections::HashMap, fmt, marker::PhantomData};
 
 use crate::{
     error::{ErrorKind, OpErrors},
-    PrimitiveType, Slice, Substitutions, Type,
+    visit::{self, Visit},
+    FnType, Object, PrimitiveType, Slice, Substitutions, Tuple, Type, TypeVar,
 };
 
 /// Constraint that can be placed on [`Type`]s.
@@ -30,22 +31,18 @@ use crate::{
 /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
 /// [`NumArithmetic`]: crate::arith::NumArithmetic
 pub trait Constraint<Prim: PrimitiveType>: fmt::Display + Send + Sync + 'static {
-    /// Applies these constraints to the provided `ty`pe. Returns an error if the type
-    /// contradicts the constraints.
-    ///
-    /// A typical implementation will use `substitutions` to
-    /// [place constraints on type vars](Substitutions::insert_constraint()).
+    /// Returns a [`Visit`]or that will be applied to constrained [`Type`]s. The visitor
+    /// may use `substitutions` to resolve types and `errors` to record constraint errors.
     ///
     /// # Tips
     ///
     /// - You can use [`StructConstraint`] for typical use cases, which involve recursively
     ///   traversing `ty`.
-    fn apply(
+    fn visitor<'r>(
         &self,
-        ty: &Type<Prim>,
-        substitutions: &mut Substitutions<Prim>,
-        errors: OpErrors<'_, Prim>,
-    );
+        substitutions: &'r mut Substitutions<Prim>,
+        errors: OpErrors<'r, Prim>,
+    ) -> Box<dyn Visit<Prim> + 'r>;
 
     /// Clones this constraint into a `Box`.
     ///
@@ -68,21 +65,6 @@ impl<Prim: PrimitiveType> Clone for Box<dyn Constraint<Prim>> {
     }
 }
 
-impl<Prim: PrimitiveType> Constraint<Prim> for Box<dyn Constraint<Prim>> {
-    fn apply(
-        &self,
-        ty: &Type<Prim>,
-        substitutions: &mut Substitutions<Prim>,
-        errors: OpErrors<'_, Prim>,
-    ) {
-        (**self).apply(ty, substitutions, errors);
-    }
-
-    fn clone_boxed(&self) -> Box<dyn Constraint<Prim>> {
-        (**self).clone_boxed()
-    }
-}
-
 /// Helper to define *structural* [`Constraint`]s, i.e., constraints recursively checking
 /// the provided type.
 ///
@@ -102,8 +84,8 @@ impl<Prim: PrimitiveType> Constraint<Prim> for Box<dyn Constraint<Prim>> {
 ///
 /// ```
 /// # use arithmetic_typing::{
-/// #     arith::{Constraint, StructConstraint}, error::OpErrors, PrimitiveType, Substitutions,
-/// #     Type,
+/// #     arith::{Constraint, StructConstraint}, error::OpErrors, visit::Visit,
+/// #     PrimitiveType, Substitutions, Type,
 /// # };
 /// # use std::fmt;
 ///
@@ -118,16 +100,15 @@ impl<Prim: PrimitiveType> Constraint<Prim> for Box<dyn Constraint<Prim>> {
 /// }
 ///
 /// impl<Prim: PrimitiveType> Constraint<Prim> for Hashed {
-///     fn apply(
+///     fn visitor<'r>(
 ///         &self,
-///         ty: &Type<Prim>,
-///         substitutions: &mut Substitutions<Prim>,
-///         errors: OpErrors<'_, Prim>,
-///     ) {
+///         substitutions: &'r mut Substitutions<Prim>,
+///         errors: OpErrors<'r, Prim>,
+///     ) -> Box<dyn Visit<Prim> + 'r> {
 ///         // We can hash everything except for functions (and thus,
 ///         // types containing functions).
 ///         StructConstraint::new(*self, |_| true)
-///             .apply(ty, substitutions, errors);
+///             .visitor(substitutions, errors)
 ///     }
 ///
 ///     fn clone_boxed(&self) -> Box<dyn Constraint<Prim>> {
@@ -136,7 +117,7 @@ impl<Prim: PrimitiveType> Constraint<Prim> for Box<dyn Constraint<Prim>> {
 /// }
 /// ```
 #[derive(Debug)]
-pub struct StructConstraint<Prim: PrimitiveType, C, F> {
+pub struct StructConstraint<Prim, C, F> {
     constraint: C,
     predicate: F,
     deny_dyn_slices: bool,
@@ -147,7 +128,7 @@ impl<Prim, C, F> StructConstraint<Prim, C, F>
 where
     Prim: PrimitiveType,
     C: Constraint<Prim> + Clone,
-    F: Fn(&Prim) -> bool,
+    F: Fn(&Prim) -> bool + 'static,
 {
     /// Creates a new helper.
     pub fn new(constraint: C, predicate: F) -> Self {
@@ -165,52 +146,88 @@ where
         self
     }
 
-    /// Applies the enclosed constraint structurally.
-    #[allow(clippy::missing_panics_doc)] // triggered by `debug_assert`
-    pub fn apply(
-        &self,
-        ty: &Type<Prim>,
-        substitutions: &mut Substitutions<Prim>,
-        mut errors: OpErrors<'_, Prim>,
-    ) {
-        let resolved_ty = if let Type::Var(var) = ty {
-            debug_assert!(var.is_free());
-            substitutions.insert_constraint(var.index(), &self.constraint);
-            substitutions.fast_resolve(ty)
+    /// Returns a [`Visit`]or that can be used for [`Constraint::visitor()`] implementations.
+    pub fn visitor<'r>(
+        self,
+        substitutions: &'r mut Substitutions<Prim>,
+        errors: OpErrors<'r, Prim>,
+    ) -> Box<dyn Visit<Prim> + 'r> {
+        Box::new(StructConstraintVisitor {
+            inner: self,
+            substitutions,
+            errors,
+        })
+    }
+}
+
+#[derive(Debug)]
+struct StructConstraintVisitor<'r, Prim: PrimitiveType, C, F> {
+    inner: StructConstraint<Prim, C, F>,
+    substitutions: &'r mut Substitutions<Prim>,
+    errors: OpErrors<'r, Prim>,
+}
+
+impl<'r, Prim, C, F> Visit<Prim> for StructConstraintVisitor<'r, Prim, C, F>
+where
+    Prim: PrimitiveType,
+    C: Constraint<Prim> + Clone,
+    F: Fn(&Prim) -> bool + 'static,
+{
+    fn visit_var(&mut self, var: TypeVar) {
+        debug_assert!(var.is_free());
+        self.substitutions.insert_constraint(
+            var.index(),
+            &self.inner.constraint,
+            self.errors.by_ref(),
+        );
+
+        let resolved = self.substitutions.fast_resolve(&Type::Var(var)).clone();
+        if let Type::Var(_) = resolved {
+            // Avoid infinite recursion.
         } else {
-            ty
-        };
+            visit::visit_type(self, &resolved);
+        }
+    }
 
-        match resolved_ty {
-            // `Var`s are taken care of previously. `Any` satisfies any constraints.
-            Type::Any(_) | Type::Var(_) => {}
+    fn visit_primitive(&mut self, primitive: &Prim) {
+        if !(self.inner.predicate)(primitive) {
+            self.errors.push(ErrorKind::failed_constraint(
+                Type::Prim(primitive.clone()),
+                self.inner.constraint.clone(),
+            ));
+        }
+    }
 
-            Type::Prim(lit) if (self.predicate)(lit) => {}
-
-            Type::Prim(_) | Type::Function(_) => {
-                errors.push(ErrorKind::failed_constraint(
-                    resolved_ty.clone(),
-                    self.constraint.clone(),
-                ));
-            }
-
-            Type::Tuple(tuple) => {
-                let tuple = tuple.clone();
-
-                if self.deny_dyn_slices {
-                    let middle_len = tuple.parts().1.map(Slice::len);
-                    if let Some(middle_len) = middle_len {
-                        if let Err(err) = substitutions.apply_static_len(middle_len) {
-                            errors.push(err);
-                        }
-                    }
-                }
-
-                for (i, element) in tuple.element_types() {
-                    self.apply(element, substitutions, errors.with_location(i));
+    fn visit_tuple(&mut self, tuple: &Tuple<Prim>) {
+        if self.inner.deny_dyn_slices {
+            let middle_len = tuple.parts().1.map(Slice::len);
+            if let Some(middle_len) = middle_len {
+                if let Err(err) = self.substitutions.apply_static_len(middle_len) {
+                    self.errors.push(err);
                 }
             }
         }
+
+        for (i, element) in tuple.element_types() {
+            self.errors.push_location(i);
+            self.visit_type(element);
+            self.errors.pop_location();
+        }
+    }
+
+    fn visit_object(&mut self, obj: &Object<Prim>) {
+        for (name, element) in obj.iter() {
+            self.errors.push_location(name);
+            self.visit_type(element);
+            self.errors.pop_location();
+        }
+    }
+
+    fn visit_function(&mut self, function: &FnType<Prim>) {
+        self.errors.push(ErrorKind::failed_constraint(
+            function.clone().into(),
+            self.inner.constraint.clone(),
+        ));
     }
 }
 
@@ -245,17 +262,16 @@ pub trait LinearType: PrimitiveType {
 }
 
 impl<Prim: LinearType> Constraint<Prim> for NumConstraints {
-    fn apply(
+    fn visitor<'r>(
         &self,
-        ty: &Type<Prim>,
-        substitutions: &mut Substitutions<Prim>,
-        errors: OpErrors<'_, Prim>,
-    ) {
+        substitutions: &'r mut Substitutions<Prim>,
+        errors: OpErrors<'r, Prim>,
+    ) -> Box<dyn Visit<Prim> + 'r> {
         let helper = match self {
             Self::Lin => StructConstraint::new(*self, LinearType::is_linear),
             Self::Ops => StructConstraint::new(*self, LinearType::is_linear).deny_dyn_slices(),
         };
-        helper.apply(ty, substitutions, errors);
+        helper.visitor(substitutions, errors)
     }
 
     fn clone_boxed(&self) -> Box<dyn Constraint<Prim>> {
@@ -327,6 +343,11 @@ impl<Prim: PrimitiveType> ConstraintSet<Prim> {
             .insert(constraint.to_string(), Box::new(constraint));
     }
 
+    /// Inserts a boxed constraint into this set.
+    pub(crate) fn insert_boxed(&mut self, constraint: Box<dyn Constraint<Prim>>) {
+        self.inner.insert(constraint.to_string(), constraint);
+    }
+
     pub(crate) fn get_by_name(&self, name: &str) -> Option<&dyn Constraint<Prim>> {
         self.inner.get(name).map(AsRef::as_ref)
     }
@@ -339,7 +360,138 @@ impl<Prim: PrimitiveType> ConstraintSet<Prim> {
         mut errors: OpErrors<'_, Prim>,
     ) {
         for constraint in self.inner.values() {
-            constraint.apply(ty, substitutions, errors.by_ref());
+            constraint
+                .visitor(substitutions, errors.by_ref())
+                .visit_type(ty);
+        }
+    }
+
+    /// Applies all constraints from this set to an object.
+    pub(crate) fn apply_all_to_object(
+        &self,
+        object: &Object<Prim>,
+        substitutions: &mut Substitutions<Prim>,
+        mut errors: OpErrors<'_, Prim>,
+    ) {
+        for constraint in self.inner.values() {
+            constraint
+                .visitor(substitutions, errors.by_ref())
+                .visit_object(object);
+        }
+    }
+}
+
+/// Extended [`ConstraintSet`] that additionally supports object constraints.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct CompleteConstraints<Prim: PrimitiveType> {
+    pub(crate) simple: ConstraintSet<Prim>,
+    /// Object constraint. Stored as `Type` for convenience.
+    pub(crate) object: Option<Object<Prim>>,
+}
+
+impl<Prim: PrimitiveType> Default for CompleteConstraints<Prim> {
+    fn default() -> Self {
+        Self {
+            simple: ConstraintSet::new(),
+            object: None,
+        }
+    }
+}
+
+impl<Prim: PrimitiveType> From<ConstraintSet<Prim>> for CompleteConstraints<Prim> {
+    fn from(constraints: ConstraintSet<Prim>) -> Self {
+        Self {
+            simple: constraints,
+            object: None,
+        }
+    }
+}
+
+impl<Prim: PrimitiveType> fmt::Display for CompleteConstraints<Prim> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match (&self.object, self.simple.is_empty()) {
+            (Some(object), false) => write!(formatter, "{} + {}", object, self.simple),
+            (Some(object), true) => fmt::Display::fmt(object, formatter),
+            (None, _) => fmt::Display::fmt(&self.simple, formatter),
+        }
+    }
+}
+
+impl<Prim: PrimitiveType> CompleteConstraints<Prim> {
+    /// Checks if this constraint set is empty.
+    pub fn is_empty(&self) -> bool {
+        self.object.is_none() && self.simple.is_empty()
+    }
+
+    /// Inserts a constraint into this set.
+    pub(crate) fn insert(
+        &mut self,
+        constraint: impl Constraint<Prim>,
+        substitutions: &mut Substitutions<Prim>,
+        errors: OpErrors<'_, Prim>,
+    ) {
+        self.simple.insert(constraint);
+        self.check_object_consistency(substitutions, errors);
+    }
+
+    /// Extends these constraints from `other`.
+    pub(crate) fn extend(
+        &mut self,
+        other: Self,
+        substitutions: &mut Substitutions<Prim>,
+        errors: OpErrors<'_, Prim>,
+    ) {
+        self.simple.inner.extend(other.simple.inner);
+        self.check_object_consistency(substitutions, errors);
+    }
+
+    /// Applies all constraints from this set.
+    pub(crate) fn apply_all(
+        &self,
+        ty: &Type<Prim>,
+        substitutions: &mut Substitutions<Prim>,
+        mut errors: OpErrors<'_, Prim>,
+    ) {
+        self.simple.apply_all(ty, substitutions, errors.by_ref());
+        if let Some(lhs) = &self.object {
+            lhs.apply_as_constraint(ty, substitutions, errors);
+        }
+    }
+
+    /// Maps the object constraint if present.
+    pub(crate) fn map_object(self, map: impl FnOnce(&mut Object<Prim>)) -> Self {
+        Self {
+            simple: self.simple,
+            object: self.object.map(|mut object| {
+                map(&mut object);
+                object
+            }),
+        }
+    }
+
+    /// Inserts an object constraint into this set.
+    pub(crate) fn insert_obj_constraint(
+        &mut self,
+        object: Object<Prim>,
+        substitutions: &mut Substitutions<Prim>,
+        mut errors: OpErrors<'_, Prim>,
+    ) {
+        if let Some(existing_object) = &mut self.object {
+            existing_object.extend_from(object, substitutions, errors.by_ref());
+        } else {
+            self.object = Some(object);
+        }
+        self.check_object_consistency(substitutions, errors);
+    }
+
+    fn check_object_consistency(
+        &self,
+        substitutions: &mut Substitutions<Prim>,
+        errors: OpErrors<'_, Prim>,
+    ) {
+        if let Some(object) = &self.object {
+            self.simple
+                .apply_all_to_object(&object, substitutions, errors);
         }
     }
 }

@@ -7,14 +7,14 @@ use std::{
 };
 
 use crate::{
-    arith::{Constraint, ConstraintSet},
+    arith::{CompleteConstraints, Constraint, ConstraintSet},
     types::ParamQuantifier,
     LengthVar, Num, PrimitiveType, Tuple, TupleLen, Type, TypeVar,
 };
 
 #[derive(Debug, Clone)]
 pub(crate) struct ParamConstraints<Prim: PrimitiveType> {
-    pub type_params: HashMap<usize, ConstraintSet<Prim>>,
+    pub type_params: HashMap<usize, CompleteConstraints<Prim>>,
     pub static_lengths: HashSet<usize>,
 }
 
@@ -60,7 +60,7 @@ impl<Prim: PrimitiveType> ParamConstraints<Prim> {
         self.type_params.is_empty() && self.static_lengths.is_empty()
     }
 
-    fn type_params(&self) -> impl Iterator<Item = (usize, &ConstraintSet<Prim>)> + '_ {
+    fn type_params(&self) -> impl Iterator<Item = (usize, &CompleteConstraints<Prim>)> + '_ {
         let mut type_params: Vec<_> = self.type_params.iter().map(|(&idx, c)| (idx, c)).collect();
         type_params.sort_unstable_by_key(|(idx, _)| *idx);
         type_params.into_iter()
@@ -70,7 +70,7 @@ impl<Prim: PrimitiveType> ParamConstraints<Prim> {
 #[derive(Debug)]
 pub(crate) struct FnParams<Prim: PrimitiveType> {
     /// Type params associated with this function. Filled in by `FnQuantifier`.
-    pub type_params: Vec<(usize, ConstraintSet<Prim>)>,
+    pub type_params: Vec<(usize, CompleteConstraints<Prim>)>,
     /// Length params associated with this function. Filled in by `FnQuantifier`.
     pub len_params: Vec<(usize, bool)>,
     /// Constraints for params of this function and child functions.
@@ -250,7 +250,7 @@ impl<Prim: PrimitiveType> FnType<Prim> {
             self
         );
 
-        let constraints = ConstraintSet::just(constraint);
+        let constraints = CompleteConstraints::from(ConstraintSet::just(constraint));
         let type_params = indexes
             .iter()
             .map(|&idx| (idx, constraints.clone()))
@@ -316,7 +316,7 @@ impl<Prim: PrimitiveType> FnWithConstraints<Prim> {
     {
         for &i in indexes {
             let constraints = self.constraints.type_params.entry(i).or_default();
-            constraints.insert(constraint.clone());
+            constraints.simple.insert(constraint.clone());
         }
         self
     }
@@ -434,6 +434,8 @@ mod tests {
     #[test]
     fn constraints_display() {
         let type_constraints = ConstraintSet::<Num>::just(NumConstraints::Lin);
+        let type_constraints = CompleteConstraints::from(type_constraints);
+
         let constraints = ParamConstraints {
             type_params: vec![(0, type_constraints.clone())].into_iter().collect(),
             static_lengths: HashSet::new(),

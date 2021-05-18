@@ -3,14 +3,14 @@
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
-    ops, ptr,
+    iter, ops, ptr,
 };
 
 use crate::{
-    arith::{Constraint, ConstraintSet},
+    arith::{CompleteConstraints, Constraint},
     error::{ErrorKind, ErrorLocation, OpErrors, TupleContext},
     visit::{self, Visit, VisitMut},
-    FnType, PrimitiveType, Tuple, TupleLen, Type, TypeVar, UnknownLen,
+    FnType, Object, PrimitiveType, Tuple, TupleLen, Type, TypeVar, UnknownLen,
 };
 
 mod fns;
@@ -34,7 +34,7 @@ pub struct Substitutions<Prim: PrimitiveType> {
     /// Type variable equations, encoded as `type_var[key] = value`.
     eqs: HashMap<usize, Type<Prim>>,
     /// Constraints on type variables.
-    constraints: HashMap<usize, ConstraintSet<Prim>>,
+    constraints: HashMap<usize, CompleteConstraints<Prim>>,
     /// Number of length variables.
     len_var_count: usize,
     /// Length variable equations.
@@ -59,14 +59,65 @@ impl<Prim: PrimitiveType> Default for Substitutions<Prim> {
 impl<Prim: PrimitiveType> Substitutions<Prim> {
     /// Inserts `constraints` for a type var with the specified index and all vars
     /// it is equivalent to.
-    pub fn insert_constraint<C>(&mut self, var_idx: usize, constraint: &C)
-    where
+    pub fn insert_constraint<C>(
+        &mut self,
+        var_idx: usize,
+        constraint: &C,
+        mut errors: OpErrors<'_, Prim>,
+    ) where
         C: Constraint<Prim> + Clone,
     {
         for idx in self.equivalent_vars(var_idx) {
-            let current_constraints = self.constraints.entry(idx).or_default();
-            current_constraints.insert(constraint.clone());
+            let mut current_constraints = self.constraints.remove(&idx).unwrap_or_default();
+            current_constraints.insert(constraint.clone(), self, errors.by_ref());
+            self.constraints.insert(idx, current_constraints);
         }
+    }
+
+    /// Returns an object constraint associated with the specified type var. The returned type
+    /// is resolved.
+    pub(crate) fn object_constraint(&self, var: TypeVar) -> Option<Object<Prim>> {
+        if var.is_free() {
+            let mut ty = self.constraints.get(&var.index())?.object.clone()?;
+            self.resolver().visit_object_mut(&mut ty);
+            Some(ty)
+        } else {
+            None
+        }
+    }
+
+    /// Inserts an object constraint for a type var with the specified index.
+    pub(crate) fn insert_obj_constraint(
+        &mut self,
+        var_idx: usize,
+        constraint: &Object<Prim>,
+        mut errors: OpErrors<'_, Prim>,
+    ) {
+        // Check whether the constraint is recursive.
+        let mut checker = OccurrenceChecker::new(self, self.equivalent_vars(var_idx));
+        checker.visit_object(constraint);
+        if let Some(var) = checker.recursive_var {
+            self.handle_recursive_type(Type::Object(constraint.clone()), var, &mut errors);
+            return;
+        }
+
+        for idx in self.equivalent_vars(var_idx) {
+            let mut current_constraints = self.constraints.remove(&idx).unwrap_or_default();
+            current_constraints.insert_obj_constraint(constraint.clone(), self, errors.by_ref());
+            self.constraints.insert(idx, current_constraints);
+        }
+    }
+
+    fn handle_recursive_type(
+        &self,
+        ty: Type<Prim>,
+        recursive_var: usize,
+        errors: &mut OpErrors<'_, Prim>,
+    ) {
+        let mut resolved_ty = ty;
+        self.resolver().visit_type_mut(&mut resolved_ty);
+        TypeSanitizer::new(recursive_var).visit_type_mut(&mut resolved_ty);
+        errors.push(ErrorKind::RecursiveType(resolved_ty));
     }
 
     /// Returns type var indexes that are equivalent to the provided `var_idx`,
@@ -140,6 +191,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         }
     }
 
+    /// Resolves the provided `len` given length equations in this instance.
     pub(crate) fn resolve_len(&self, len: TupleLen) -> TupleLen {
         let mut resolved = len;
         while let (Some(UnknownLen::Var(var)), exact) = resolved.components() {
@@ -163,7 +215,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         new_type
     }
 
-    /// Creates and returns a new length variable
+    /// Creates and returns a new length variable.
     pub(crate) fn new_len_var(&mut self) -> UnknownLen {
         let new_length = UnknownLen::free_var(self.len_var_count);
         self.len_var_count += 1;
@@ -211,11 +263,14 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             }
 
             (Type::Tuple(lhs_tuple), Type::Tuple(rhs_tuple)) => {
-                self.unify_tuples(lhs_tuple, rhs_tuple, TupleContext::Generic, errors)
+                self.unify_tuples(lhs_tuple, rhs_tuple, TupleContext::Generic, errors);
+            }
+            (Type::Object(lhs_obj), Type::Object(rhs_obj)) => {
+                self.unify_objects(lhs_obj, rhs_obj, errors);
             }
 
             (Type::Function(lhs_fn), Type::Function(rhs_fn)) => {
-                self.unify_fn_types(lhs_fn, rhs_fn, errors)
+                self.unify_fn_types(lhs_fn, rhs_fn, errors);
             }
 
             (ty, other_ty) => {
@@ -447,6 +502,28 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         }
     }
 
+    fn unify_objects(
+        &mut self,
+        lhs: &Object<Prim>,
+        rhs: &Object<Prim>,
+        mut errors: OpErrors<'_, Prim>,
+    ) {
+        let lhs_fields: HashSet<_> = lhs.field_names().collect();
+        let rhs_fields: HashSet<_> = rhs.field_names().collect();
+
+        if lhs_fields == rhs_fields {
+            for (field_name, ty) in lhs.iter() {
+                let rhs_ty = rhs.field(field_name).unwrap();
+                self.unify(ty, rhs_ty, errors.with_location(field_name));
+            }
+        } else {
+            errors.push(ErrorKind::FieldsMismatch {
+                lhs_fields: lhs_fields.into_iter().map(String::from).collect(),
+                rhs_fields: rhs_fields.into_iter().map(String::from).collect(),
+            });
+        }
+    }
+
     fn unify_fn_types(
         &mut self,
         lhs: &FnType<Prim>,
@@ -519,7 +596,9 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         }
         for (original_idx, constraints) in &fn_params.type_params {
             let new_idx = mapping.types[original_idx];
-            self.constraints.insert(new_idx, constraints.clone());
+            let mono_constraints =
+                MonoTypeTransformer::transform_constraints(&mapping, constraints);
+            self.constraints.insert(new_idx, mono_constraints);
         }
 
         instantiated_fn_type
@@ -541,14 +620,16 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 return;
             }
         }
-        let needs_equation = if let Type::Any(constraints) = ty {
-            self.constraints.insert(var_idx, constraints.clone());
-            is_lhs
+        let (needs_equation, constraints_checked) = if let Type::Any(constraints) = ty {
+            let mut current_constraints = self.constraints.remove(&var_idx).unwrap_or_default();
+            current_constraints.extend(constraints.clone().into(), self, errors.by_ref());
+            self.constraints.insert(var_idx, current_constraints);
+            (is_lhs, true)
         } else {
-            true
+            (true, false)
         };
 
-        // variables should be resolved in `unify`.
+        // Variables should be resolved in `unify`.
         debug_assert!(!self.eqs.contains_key(&var_idx));
         debug_assert!(if let Type::Var(var) = ty {
             !self.eqs.contains_key(&var.index())
@@ -556,22 +637,20 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             true
         });
 
-        let mut checker = OccurrenceChecker {
-            substitutions: self,
-            var_idx,
-            is_recursive: false,
-        };
+        let mut checker = OccurrenceChecker::new(self, iter::once(var_idx));
         checker.visit_type(ty);
 
-        if checker.is_recursive {
-            let mut resolved_ty = ty.clone();
-            self.resolver().visit_type_mut(&mut resolved_ty);
-            TypeSanitizer { fixed_idx: var_idx }.visit_type_mut(&mut resolved_ty);
-            errors.push(ErrorKind::RecursiveType(resolved_ty));
+        if let Some(var) = checker.recursive_var {
+            self.handle_recursive_type(ty.clone(), var, &mut errors);
         } else {
-            if let Some(constraints) = self.constraints.get(&var_idx).cloned() {
-                constraints.apply_all(ty, self, errors);
+            // If the constraints were checked previously, we don't need to do it again;
+            // it will lead to duplicate errors.
+            if !constraints_checked {
+                if let Some(constraints) = self.constraints.get(&var_idx).cloned() {
+                    constraints.apply_all(ty, self, errors);
+                }
             }
+
             if needs_equation {
                 let mut ty = ty.clone();
                 if !is_lhs {
@@ -590,13 +669,26 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 #[derive(Debug)]
 struct OccurrenceChecker<'a, Prim: PrimitiveType> {
     substitutions: &'a Substitutions<Prim>,
-    var_idx: usize,
-    is_recursive: bool,
+    var_indexes: HashSet<usize>,
+    recursive_var: Option<usize>,
 }
 
-impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for OccurrenceChecker<'a, Prim> {
-    fn visit_type(&mut self, ty: &'a Type<Prim>) {
-        if self.is_recursive {
+impl<'a, Prim: PrimitiveType> OccurrenceChecker<'a, Prim> {
+    fn new(
+        substitutions: &'a Substitutions<Prim>,
+        var_indexes: impl IntoIterator<Item = usize>,
+    ) -> Self {
+        Self {
+            substitutions,
+            var_indexes: var_indexes.into_iter().collect(),
+            recursive_var: None,
+        }
+    }
+}
+
+impl<Prim: PrimitiveType> Visit<Prim> for OccurrenceChecker<'_, Prim> {
+    fn visit_type(&mut self, ty: &Type<Prim>) {
+        if self.recursive_var.is_some() {
             // Skip recursion; we already have our answer at this point.
         } else {
             visit::visit_type(self, ty);
@@ -604,9 +696,10 @@ impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for OccurrenceChecker<'a, Prim> {
     }
 
     fn visit_var(&mut self, var: TypeVar) {
-        if var.index() == self.var_idx {
-            self.is_recursive = true;
-        } else if let Some(ty) = self.substitutions.eqs.get(&var.index()) {
+        let var_idx = var.index();
+        if self.var_indexes.contains(&var_idx) {
+            self.recursive_var = Some(var_idx);
+        } else if let Some(ty) = self.substitutions.eqs.get(&var_idx) {
             self.visit_type(ty);
         }
     }
@@ -617,6 +710,12 @@ impl<'a, Prim: PrimitiveType> Visit<'a, Prim> for OccurrenceChecker<'a, Prim> {
 #[derive(Debug)]
 struct TypeSanitizer {
     fixed_idx: usize,
+}
+
+impl TypeSanitizer {
+    fn new(fixed_idx: usize) -> Self {
+        Self { fixed_idx }
+    }
 }
 
 impl<Prim: PrimitiveType> VisitMut<Prim> for TypeSanitizer {
@@ -693,7 +792,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeSpecifier<'_, Prim> {
                 let var_idx = self.substitutions.type_var_count;
                 self.substitutions
                     .constraints
-                    .insert(var_idx, constraints.clone());
+                    .insert(var_idx, constraints.clone().into());
                 *ty = Type::free_var(var_idx);
                 self.substitutions.type_var_count += 1;
             }

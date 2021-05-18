@@ -399,3 +399,47 @@ fn any_type_in_cast_chain() {
     assert_eq!(*rest.fragment(), " as Num");
     assert_matches!(ty, TypeAst::Any(constraints) if constraints.terms.is_empty());
 }
+
+#[test]
+fn object_types() {
+    let input = InputSpan::new("{ x: Num, y: [(Num, 'T)] }");
+    let (rest, ty) = object(input).unwrap();
+
+    assert!(rest.fragment().is_empty());
+    assert_eq!(ty.fields.len(), 2);
+    let (first_name, first_ty) = &ty.fields[0];
+    assert_eq!(*first_name.fragment(), "x");
+    assert_eq!(first_ty.extra, TypeAst::Ident);
+    let (second_name, second_ty) = &ty.fields[1];
+    assert_eq!(*second_name.fragment(), "y");
+    assert_matches!(second_ty.extra, TypeAst::Slice(_));
+}
+
+#[test]
+fn object_constraints() {
+    let obj_input = InputSpan::new("{ len: Num }");
+    let (obj_rest, obj_constraints) = type_bounds(obj_input).unwrap();
+    assert!(obj_rest.fragment().is_empty());
+    assert_eq!(obj_constraints.object.unwrap().fields.len(), 1);
+    assert!(obj_constraints.terms.is_empty());
+
+    let mixed_input = InputSpan::new("{ len: Num } + Ops");
+    let (mixed_rest, mixed_constraints) = type_bounds(mixed_input).unwrap();
+    assert!(mixed_rest.fragment().is_empty());
+    assert_eq!(mixed_constraints.object.unwrap().fields.len(), 1);
+    assert_eq!(mixed_constraints.terms.len(), 1);
+}
+
+#[test]
+fn object_in_type_param_constraints() {
+    let input = InputSpan::new("for<'T: Lin, 'U: { x: 'T } + Lin>");
+    let (rest, constraints) = constraints(input).unwrap();
+
+    assert!(rest.fragment().is_empty());
+    assert_eq!(constraints.type_params.len(), 2);
+    let (type_var, constraints) = &constraints.type_params[1];
+    assert_eq!(*type_var.fragment(), "U");
+    assert_eq!(constraints.object.as_ref().unwrap().fields.len(), 1);
+    assert_eq!(constraints.terms.len(), 1);
+    assert_eq!(*constraints.terms[0].fragment(), "Lin");
+}

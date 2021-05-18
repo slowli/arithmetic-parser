@@ -9,11 +9,12 @@ use crate::{
     error::{Error, ErrorContext, ErrorKind, Errors, OpErrors, TupleContext},
     types::IndexError,
     visit::VisitMut,
-    FnType, PrimitiveType, Slice, Tuple, TupleLen, Type,
+    FnType, Object, PrimitiveType, Slice, Tuple, TupleLen, Type,
 };
 use arithmetic_parser::{
-    grammars::Grammar, BinaryOp, Block, Destructure, DestructureRest, Expr, FnDefinition, Lvalue,
-    Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
+    grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Destructure, DestructureRest, Expr,
+    FnDefinition, Lvalue, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
+    UnaryOp,
 };
 
 /// Processor for deriving type information.
@@ -117,6 +118,15 @@ where
                 let result = self.process_block(block);
                 self.scopes.pop(); // intentionally called even on failure
                 result
+            }
+
+            Expr::ObjectBlock(statements) => {
+                self.scopes.push(HashMap::new());
+                for statement in statements {
+                    self.process_statement(statement);
+                }
+                let object_scope = self.scopes.pop().unwrap();
+                Type::Object(Object::from_map(object_scope))
             }
 
             Expr::FnDefinition(def) => self.process_fn_def(def).into(),
@@ -262,13 +272,26 @@ where
     where
         T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
     {
-        let index = if let Ok(index) = field_name.fragment().parse::<usize>() {
-            index
+        let field_str = *field_name.fragment();
+        if let Ok(index) = field_str.parse::<usize>() {
+            self.process_indexing(access_expr, receiver, index)
+        } else if is_valid_variable_name(field_str) {
+            self.process_object_access(access_expr, receiver, field_str)
         } else {
             self.errors.push(Error::invalid_field_name(*field_name));
-            return self.new_type();
-        };
+            self.new_type()
+        }
+    }
 
+    fn process_indexing<T>(
+        &mut self,
+        access_expr: &SpannedExpr<'a, T>,
+        receiver: &Type<Prim>,
+        index: usize,
+    ) -> Type<Prim>
+    where
+        T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
+    {
         let receiver = self.env.substitutions.fast_resolve(receiver);
         match receiver {
             Type::Tuple(tuple) => {
@@ -297,12 +320,44 @@ where
                 // FIXME: consider constraints?
                 return self.new_type();
             }
+            Type::Var(var) => {
+                if let Some(object) = self.env.substitutions.object_constraint(*var) {
+                    self.errors
+                        .push(Error::cannot_index(object.into(), access_expr));
+                    return self.new_type();
+                }
+            }
             _ => { /* An error will be added below. */ }
         }
 
         self.errors
             .push(Error::unsupported_index(receiver.clone(), access_expr));
         self.new_type()
+    }
+
+    fn process_object_access<T>(
+        &mut self,
+        access_expr: &SpannedExpr<'a, T>,
+        receiver: &Type<Prim>,
+        field_name: &str,
+    ) -> Type<Prim>
+    where
+        T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
+    {
+        let mut errors = OpErrors::new();
+        let return_type = self.new_type();
+        Object::just(field_name, return_type.clone()).apply_as_constraint(
+            receiver,
+            &mut self.env.substitutions,
+            errors.by_ref(),
+        );
+
+        let context = ErrorContext::ObjectFieldAccess {
+            ty: receiver.clone(),
+        };
+        self.errors
+            .extend(errors.contextualize(access_expr, context));
+        return_type
     }
 
     fn process_fn_call<'it, T>(

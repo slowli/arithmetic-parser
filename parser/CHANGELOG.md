@@ -17,6 +17,11 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 - Add `Expr::FieldAccess` for field access expressions, such as
   `point.x` or `xs.0`. (#84)
 
+- Add `Expr::ObjectBlock` for creating objects, i.e. aggregate data structures
+  with heterogeneous named fields (known in Rust as structs). The `ObjectBlock`
+  syntax is similar to a `Block`, except it does not allow a terminating
+  return expression. (#85)
+
 ### Changed
 
 - Make `Grammar` and `Parse` traits parametric on the lifetime of input.

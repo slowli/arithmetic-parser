@@ -920,3 +920,86 @@ fn bogus_indexed_field_access() {
     let err = simple_expr::<FieldGrammar, Complete>(input).unwrap_err();
     assert_matches!(err, NomErr::Failure(e) if matches!(e.kind(), ErrorKind::LiteralName));
 }
+
+#[test]
+fn object_basics() {
+    let input = InputSpan::new("#{ x = 1; y = 2; }");
+    let (rest, obj) = object_expr::<FieldGrammar, Complete>(input).unwrap();
+    assert!(rest.fragment().is_empty());
+    assert_matches!(
+        obj.extra,
+        Expr::ObjectBlock(statements) if statements.len() == 2
+    );
+
+    let input = InputSpan::new("#{}");
+    let (rest, obj) = object_expr::<FieldGrammar, Complete>(input).unwrap();
+    assert!(rest.fragment().is_empty());
+    assert_matches!(
+        obj.extra,
+        Expr::ObjectBlock(statements) if statements.is_empty()
+    );
+
+    let input = InputSpan::new("#{ x = 5; dbg(x); y = x + 2; }");
+    let (_, obj) = object_expr::<FieldGrammar, Complete>(input).unwrap();
+    assert_matches!(
+        obj.extra,
+        Expr::ObjectBlock(statements) if statements.len() == 3
+    );
+}
+
+#[test]
+fn object_errors() {
+    let input = InputSpan::new("#{ x = 1; y = 2 }");
+    let err = object_expr::<FieldGrammar, Complete>(input).unwrap_err();
+    let err = match err {
+        NomErr::Failure(err) => err,
+        other => panic!("Unexpected error: {:?}", other),
+    };
+    assert_eq!(err.span(), sp(10, "y", ()));
+}
+
+#[test]
+fn objects_within_larger_context() {
+    let input = InputSpan::new("#{ x = 1; y = 5; }.x");
+    let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+    let inner_expr = match expr.extra {
+        Expr::FieldAccess { receiver, name } => {
+            assert_eq!(name, sp(19, "x", ()));
+            *receiver
+        }
+        other => panic!("Unexpected expr: {:?}", other),
+    };
+    assert_matches!(inner_expr.extra, Expr::ObjectBlock(statements) if statements.len() == 2);
+
+    let input = InputSpan::new("test(x, #{ y = y; z = 2 * y; })");
+    let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+    let inner_expr = match expr.extra {
+        Expr::Function { name, mut args } => {
+            assert_eq!(*name, sp(0, "test", Expr::Variable));
+            assert_eq!(args.len(), 2);
+            assert_eq!(args[0], sp(5, "x", Expr::Variable));
+            args.pop().unwrap()
+        }
+        other => panic!("Unexpected expr: {:?}", other),
+    };
+    assert_matches!(inner_expr.extra, Expr::ObjectBlock(statements) if statements.len() == 2);
+
+    let input = InputSpan::new("{ x = gen(); #{ x = x; y = x * GEN; } }");
+    let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+    let inner_expr = match expr.extra {
+        Expr::Block(block) => {
+            assert_eq!(block.statements.len(), 1);
+            assert_eq!(*block.statements[0].fragment(), "x = gen()");
+            *block.return_value.unwrap()
+        }
+        other => panic!("Unexpected expr: {:?}", other),
+    };
+    assert_matches!(inner_expr.extra, Expr::ObjectBlock(statements) if statements.len() == 2);
+
+    let input = InputSpan::new("|xs| #{ x = xs.0; }");
+    let (_, fn_def) = fn_def::<FieldGrammar, Complete>(input).unwrap();
+    assert_eq!(*fn_def.args.fragment(), "|xs|");
+    assert!(fn_def.body.statements.is_empty());
+    let inner_expr = *fn_def.body.return_value.unwrap();
+    assert_matches!(inner_expr.extra, Expr::ObjectBlock(statements) if statements.len() == 1);
+}

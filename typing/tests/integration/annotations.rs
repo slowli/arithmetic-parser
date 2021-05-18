@@ -448,3 +448,40 @@ fn indexing_with_annotations() {
 
     assert_eq!(output.to_string(), "for<'T: Ops> (('T, 'T)) -> 'T");
 }
+
+#[test]
+fn object_annotations() {
+    let code_samples = &[
+        "obj: { x: _ } = #{ x = 1; };",
+        "obj: { x: Num } = #{ x = 1; };",
+    ];
+
+    for &code in code_samples {
+        let block = F32Grammar::parse_statements(code).unwrap();
+        let mut type_env = TypeEnvironment::new();
+        type_env.process_statements(&block).unwrap();
+        assert_eq!(type_env["obj"].to_string(), "{ x: Num }");
+    }
+}
+
+#[test]
+fn object_annotations_in_function() {
+    let code = r#"
+        test = |obj: { x: _ }| obj.x == 1;
+        test(#{ x = 1; });
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.process_statements(&block).unwrap();
+
+    assert_eq!(type_env["test"].to_string(), "({ x: Num }) -> Bool");
+
+    let bogus_code = "test(#{ x = 1; y = 2; })";
+    let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
+    let err = type_env
+        .process_statements(&bogus_block)
+        .unwrap_err()
+        .single();
+
+    assert_matches!(err.kind(), ErrorKind::FieldsMismatch { .. });
+}

@@ -9,10 +9,11 @@ use arithmetic_typing::{
     Prelude, TupleIndex, TupleLen, Type, TypeEnvironment,
 };
 
-use super::{assert_incompatible_types, hash_fn_type, zip_fn_type, ErrorsExt, F32Grammar};
+use crate::{assert_incompatible_types, hash_fn_type, zip_fn_type, ErrorsExt, F32Grammar};
 
 mod annotations;
 mod multiple;
+mod object;
 mod recovery;
 
 fn fn_arg(index: usize) -> ErrorLocation {
@@ -473,17 +474,17 @@ fn locating_tuple_middle_with_failed_constraint() {
 
 #[test]
 fn invalid_field_name() {
-    let code = "xs = (1, 2); xs.len";
+    let code = "xs = (1, 2); xs.123456789012345678901234567890";
     let block = F32Grammar::parse_statements(code).unwrap();
     let err = TypeEnvironment::new()
         .process_statements(&block)
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.span().fragment(), "len");
+    assert_eq!(*err.span().fragment(), "123456789012345678901234567890");
     assert_eq!(err.location(), []);
     assert_matches!(err.context(), ErrorContext::None);
-    assert_matches!(err.kind(), ErrorKind::InvalidFieldName(name) if name == "len");
+    assert_matches!(err.kind(), ErrorKind::InvalidFieldName(_));
 }
 
 #[test]

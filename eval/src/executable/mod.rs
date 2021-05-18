@@ -17,7 +17,7 @@ mod registers;
 
 pub use self::module_id::{IndexedId, ModuleId, WildcardId};
 pub(crate) use self::{
-    command::{Atom, Command, CompiledExpr, SpannedAtom},
+    command::{Atom, Command, CompiledExpr, FieldName, SpannedAtom},
     registers::{Executable, ExecutableFn, Registers},
 };
 

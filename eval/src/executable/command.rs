@@ -23,11 +23,18 @@ impl<T: Clone> Clone for Atom<T> {
 
 pub(crate) type SpannedAtom<'a, T> = MaybeSpanned<'a, Atom<T>>;
 
+#[derive(Debug, Clone)]
+pub(crate) enum FieldName {
+    Index(usize),
+    Name(String),
+}
+
 /// Atomic operation on registers and/or constants.
 #[derive(Debug)]
 pub(crate) enum CompiledExpr<'a, T> {
     Atom(Atom<T>),
     Tuple(Vec<Atom<T>>),
+    Object(Vec<(String, Atom<T>)>),
     Unary {
         op: UnaryOp,
         inner: SpannedAtom<'a, T>,
@@ -39,7 +46,7 @@ pub(crate) enum CompiledExpr<'a, T> {
     },
     FieldAccess {
         receiver: SpannedAtom<'a, T>,
-        index: usize, // TODO: generalize to string props
+        field: FieldName,
     },
     Function {
         name: SpannedAtom<'a, T>,
@@ -60,6 +67,7 @@ impl<T: Clone> Clone for CompiledExpr<'_, T> {
         match self {
             Self::Atom(atom) => Self::Atom(atom.clone()),
             Self::Tuple(atoms) => Self::Tuple(atoms.clone()),
+            Self::Object(fields) => Self::Object(fields.clone()),
 
             Self::Unary { op, inner } => Self::Unary {
                 op: *op,
@@ -72,9 +80,12 @@ impl<T: Clone> Clone for CompiledExpr<'_, T> {
                 rhs: rhs.clone(),
             },
 
-            Self::FieldAccess { receiver, index } => Self::FieldAccess {
+            Self::FieldAccess {
+                receiver,
+                field: index,
+            } => Self::FieldAccess {
                 receiver: receiver.clone(),
-                index: *index,
+                field: index.clone(),
             },
 
             Self::Function {
@@ -107,6 +118,7 @@ impl<T: 'static + Clone> StripCode for CompiledExpr<'_, T> {
         match self {
             Self::Atom(atom) => CompiledExpr::Atom(atom),
             Self::Tuple(atoms) => CompiledExpr::Tuple(atoms),
+            Self::Object(fields) => CompiledExpr::Object(fields),
 
             Self::Unary { op, inner } => CompiledExpr::Unary {
                 op,
@@ -119,9 +131,12 @@ impl<T: 'static + Clone> StripCode for CompiledExpr<'_, T> {
                 rhs: rhs.strip_code(),
             },
 
-            Self::FieldAccess { receiver, index } => CompiledExpr::FieldAccess {
+            Self::FieldAccess {
+                receiver,
+                field: index,
+            } => CompiledExpr::FieldAccess {
                 receiver: receiver.strip_code(),
-                index,
+                field: index,
             },
 
             Self::Function {

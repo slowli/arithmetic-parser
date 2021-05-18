@@ -6,6 +6,7 @@ use arithmetic_parser::grammars::{NumGrammar, Typed};
 use arithmetic_typing::{
     arith::{Constraint, ConstraintSet},
     error::{Error, ErrorKind, Errors, OpErrors},
+    visit::Visit,
     Annotated, FnType, Num, PrimitiveType, Substitutions, Type, UnknownLen,
 };
 
@@ -14,6 +15,7 @@ mod basics;
 mod errors;
 mod examples;
 mod length_eqs;
+mod object;
 
 type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
 
@@ -42,15 +44,14 @@ impl fmt::Display for Hashed {
 }
 
 impl<Prim: PrimitiveType> Constraint<Prim> for Hashed {
-    fn apply(
+    fn visitor<'r>(
         &self,
-        ty: &Type<Prim>,
-        substitutions: &mut Substitutions<Prim>,
-        errors: OpErrors<'_, Prim>,
-    ) {
+        substitutions: &'r mut Substitutions<Prim>,
+        errors: OpErrors<'r, Prim>,
+    ) -> Box<dyn Visit<Prim> + 'r> {
         use arithmetic_typing::arith::StructConstraint;
 
-        StructConstraint::new(*self, |_| true).apply(ty, substitutions, errors)
+        StructConstraint::new(*self, |_| true).visitor(substitutions, errors)
     }
 
     fn clone_boxed(&self) -> Box<dyn Constraint<Prim>> {

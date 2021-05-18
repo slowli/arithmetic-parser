@@ -72,7 +72,7 @@
 //!   is out of bounds or the receiver is not a tuple.
 //! - Tuples can be destructured using a [`Destructure`] LHS of an assignment, e.g.,
 //!   `(x, y, ...) = (1, 2, 3, 4)`. An error will be raised if the destructured value is
-//!   not a tuple.
+//!   not a tuple, or has an incompatible length.
 //!
 //! ## Objects
 //!
@@ -83,6 +83,9 @@
 //! - Object fields can be accessed via [`FieldAccess`] with a field name that is a valid
 //!   variable name. No other values have such fields. An error will be raised if the object
 //!   does not have the specified field.
+//! - Objects can be destructured using an [`ObjectDestructure`] LHS of an assignment, e.g.,
+//!   `{ x, y } = obj`. An error will be raised if the destructured value is not an object
+//!   or does not have specified fields.
 //! - Functional fields are permitted. Similar to Rust, to call a function field, it must
 //!   be enclosed in parentheses: `(obj.run)(arg0, arg1)`.
 //!

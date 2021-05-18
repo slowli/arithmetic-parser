@@ -389,3 +389,22 @@ fn contradicting_any_constraint_via_field_access() {
     assert_matches!(err.context(), ErrorContext::UnaryOp(_));
     assert_matches!(err.kind(), ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL);
 }
+
+#[test]
+fn contradicting_field_types_via_annotations() {
+    let code = r#"
+       |obj| {
+            { x -> _: Num } = obj; !obj.x
+       }
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env.process_statements(&block).unwrap_err().single();
+
+    assert_eq!(*err.span().fragment(), "!obj.x");
+    assert_matches!(err.context(), ErrorContext::UnaryOp(_));
+    assert_matches!(
+        err.kind(),
+        ErrorKind::TypeMismatch(lhs, rhs) if *lhs == Type::BOOL && *rhs == Type::NUM
+    );
+}

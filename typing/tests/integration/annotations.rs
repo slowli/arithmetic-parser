@@ -485,3 +485,35 @@ fn object_annotations_in_function() {
 
     assert_matches!(err.kind(), ErrorKind::FieldsMismatch { .. });
 }
+
+#[test]
+fn object_destructure_with_narrowing_annotation() {
+    let code = r#"
+        test = |{ x -> x_: Num, y }| x_ + y;
+        test(#{ x = 1; y = 2; });
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.process_statements(&block).unwrap();
+
+    assert_eq!(
+        type_env["test"].to_string(),
+        "for<'T: { x: Num, y: Num }> ('T) -> Num"
+    );
+}
+
+#[test]
+fn embedded_object_type_annotation() {
+    let code = r#"
+        test = |{ pt -> pt: { x: Num, y: Num } }| pt.x + pt.y;
+        test(#{ pt = #{ x = 1; y = 2; }; });
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.process_statements(&block).unwrap();
+
+    assert_eq!(
+        type_env["test"].to_string(),
+        "for<'T: { pt: { x: Num, y: Num } }> ('T) -> Num"
+    );
+}

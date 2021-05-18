@@ -13,8 +13,8 @@ use crate::{
 };
 use arithmetic_parser::{
     grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Destructure, DestructureRest, Expr,
-    FnDefinition, Lvalue, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
-    UnaryOp,
+    FnDefinition, Lvalue, ObjectDestructure, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement,
+    Statement, UnaryOp,
 };
 
 /// Processor for deriving type information.
@@ -206,6 +206,8 @@ where
                 Type::Tuple(element_types)
             }
 
+            Lvalue::Object(destructure) => self.process_object_destructure(destructure, errors),
+
             _ => {
                 errors.push(ErrorKind::unsupported(lvalue.extra.ty()));
                 // No better choice than to go with `Some` type.
@@ -261,6 +263,30 @@ where
             self.insert_type(variable.fragment(), Type::slice(element.clone(), length));
         }
         Slice::new(element, length)
+    }
+
+    #[allow(clippy::option_if_let_else)] // false positive
+    fn process_object_destructure(
+        &mut self,
+        destructure: &ObjectDestructure<'a, TypeAst<'a>>,
+        mut errors: OpErrors<'_, Prim>,
+    ) -> Type<Prim> {
+        let fields = destructure.fields.iter().map(|field| {
+            let field_name = *field.field_name.fragment();
+            let field_type = if let Some(binding) = &field.binding {
+                self.process_lvalue(binding, errors.with_location(field_name))
+            } else {
+                let new_type = self.new_type();
+                self.insert_type(field_name, new_type.clone());
+                new_type
+            };
+            (field_name.to_owned(), field_type)
+        });
+        let object = Object::from_map(fields.collect());
+
+        let object_ty = self.new_type();
+        object.apply_as_constraint(&object_ty, &mut self.env.substitutions, errors.by_ref());
+        object_ty
     }
 
     fn process_field_access<T>(

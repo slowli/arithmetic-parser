@@ -89,7 +89,8 @@ impl TypeVar {
 ///
 /// # Notation
 ///
-/// - [`Self::Any`] is represented as `any` with an optional [`ConstraintSet`] suffix.
+/// - [`Self::Any`] is represented as `any`.
+/// - [`Self::Dyn`] types are represented as documented in [`DynConstraints`].
 /// - [`Prim`](Self::Prim)itive types are represented using the [`Display`](fmt::Display)
 ///   implementation of the corresponding [`PrimitiveType`].
 /// - [`Var`](Self::Var)s are represented as documented in [`TypeVar`].
@@ -131,7 +132,7 @@ impl TypeVar {
 ///
 /// # `Any` type
 ///
-/// [`Self::any()`], denoted as `any`, is a catch-all type similar to `any` in TypeScript.
+/// [`Self::Any`], denoted as `any`, is a catch-all type similar to `any` in TypeScript.
 /// It allows to circumvent type system limitations at the cost of being exteremely imprecise.
 /// `any` type can be used in any context (destructured, called with args of any quantity
 /// and type and so on), with each application of the type evaluated independently.
@@ -166,66 +167,6 @@ impl TypeVar {
 /// # Ok(())
 /// # }
 /// ```
-///
-/// ## `Any` with constraints
-///
-/// [`Self::Any`] can have [constraints][`ConstraintSet`]. This is denoted as a suffix after `any`,
-/// for example, `any Lin`. A constrained `any` is more restricted than the "default" one;
-/// on assignment to or from `any _`, the types will be checked / set to satisfy the constraints.
-///
-/// ```
-/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-/// # use arithmetic_typing::{ErrorKind, Annotated, TypeEnvironment, Type};
-/// # use assert_matches::assert_matches;
-/// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
-/// # fn main() -> anyhow::Result<()> {
-/// let code = r#"
-///     lin_tuple: [any Lin; _] = (1, (2, 3), (4, (5, 6)));
-///     (x, ...) = lin_tuple; // OK; `x` is some linear type
-///     x(1) // fails: none of linear types is a function
-/// "#;
-/// let ast = Parser::parse_statements(code)?;
-/// let mut env = TypeEnvironment::new();
-/// let errors = env.process_statements(&ast).unwrap_err();
-///
-/// let err = errors.iter().next().unwrap();
-/// assert_eq!(*err.span().fragment(), "x(1)");
-/// assert_matches!(err.kind(), ErrorKind::FailedConstraint { .. });
-/// # Ok(())
-/// # }
-/// ```
-///
-/// One of primary use cases of `any _` is restricting varargs of a function:
-///
-/// ```
-/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-/// # use arithmetic_typing::{
-/// #     ast::TypeAst, ErrorKind, Annotated, Prelude, TypeEnvironment, Type
-/// # };
-/// # use std::convert::TryFrom;
-/// # use assert_matches::assert_matches;
-/// #
-/// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
-/// # fn main() -> anyhow::Result<()> {
-/// // Function that accepts any amount of linear args (not necessarily
-/// // of the same type) and returns a number.
-/// let digest_fn = Type::try_from(&TypeAst::try_from("(...[any Lin; N]) -> Num")?)?;
-/// let mut env = TypeEnvironment::new();
-/// env.insert("true", Prelude::True).insert("digest", digest_fn);
-///
-/// let code = r#"
-///     digest(1, 2, (3, 4), (5, (6, 7))) == 1;
-///     digest(3, true) == 0; // fails: `true` is not linear
-/// "#;
-/// let ast = Parser::parse_statements(code)?;
-/// let errors = env.process_statements(&ast).unwrap_err();
-///
-/// let err = errors.iter().next().unwrap();
-/// assert_eq!(*err.span().fragment(), "true");
-/// assert_matches!(err.kind(), ErrorKind::FailedConstraint { .. });
-/// # Ok(())
-/// # }
-/// ```
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum Type<Prim: PrimitiveType = Num> {
@@ -235,7 +176,7 @@ pub enum Type<Prim: PrimitiveType = Num> {
     /// Arbitrary type implementing certain constraints. Similar to `dyn _` types in Rust or use of
     /// interfaces in type position in TypeScript.
     ///
-    /// See [`DynConstraints`] for details on types.
+    /// See [`DynConstraints`] for details.
     Dyn(DynConstraints<Prim>),
     /// Primitive type.
     Prim(Prim),
@@ -412,7 +353,84 @@ impl<Prim: PrimitiveType> Type<Prim> {
 /// Arbitrary type implementing certain constraints. Similar to `dyn _` types in Rust or use of
 /// interfaces in type position in TypeScript.
 ///
-/// Constraints in the type must be [object-safe](crate::arith::ObjectSafeConstraint).
+/// [`Constraint`]s in this type must be [object-safe](crate::arith::ObjectSafeConstraint).
+/// `DynConstraints` can also specify an [`Object`] constraint, which can be converted to it
+/// using the [`From`] trait.
+///
+/// [`Constraint`]: crate::arith::Constraint
+///
+/// # Notation
+///
+/// - If the constraints do not include an object constraint, they are [`Display`](fmt::Display)ed
+///   like a [`ConstraintSet`] with `dyn` prefix; e.g, `dyn Lin + Hash`.
+/// - If the constraints include an object constraint, it is specified before all other constraints,
+///   but after the `dyn` prefix; e.g., `dyn { x: Num } + Lin`.
+///
+/// # Examples
+///
+/// `dyn _` types can be used to express that any types satisfying certain constraints
+/// should be accepted.
+///
+/// ```
+/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// # use arithmetic_typing::{
+/// #     Annotated, Prelude, TypeEnvironment, Type, FnType,
+/// # };
+/// #
+/// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
+/// # fn main() -> anyhow::Result<()> {
+/// let code = r#"
+///     sum_lengths = |...pts: dyn { x: _, y: _ }| {
+///         pts.fold(0, |acc, { x, y }| acc + sqrt(x * x + y * y))
+///     };
+///     sum_lengths(#{ x: 1, y: 2 }, #{ x: 3, y: 4, z: 5 })
+/// "#;
+/// let ast = Parser::parse_statements(code)?;
+///
+/// let mut env = TypeEnvironment::new();
+/// let sqrt = FnType::builder().with_arg(Type::NUM).returning(Type::NUM);
+/// env.insert("fold", Prelude::Fold).insert("sqrt", sqrt);
+/// env.process_statements(&ast)?;
+///
+/// assert_eq!(
+///     env["sum_lengths"].to_string(),
+///     "(...[dyn { x: Num, y: Num }; N]) -> Num"
+/// );
+/// # Ok(())
+/// # }
+/// ```
+///
+/// One of primary use cases of `dyn _` is restricting varargs of a function:
+///
+/// ```
+/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// # use arithmetic_typing::{
+/// #     ast::TypeAst, ErrorKind, Annotated, Prelude, TypeEnvironment, Type,
+/// # };
+/// # use std::convert::TryFrom;
+/// # use assert_matches::assert_matches;
+/// #
+/// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
+/// # fn main() -> anyhow::Result<()> {
+/// // Function that accepts any amount of linear args (not necessarily
+/// // of the same type) and returns a number.
+/// let digest_fn = Type::try_from(&TypeAst::try_from("(...[dyn Lin; N]) -> Num")?)?;
+/// let mut env = TypeEnvironment::new();
+/// env.insert("true", Prelude::True).insert("digest", digest_fn);
+///
+/// let code = r#"
+///     digest(1, 2, (3, 4), #{ x: 5, y: (6,) }) == 1;
+///     digest(3, true) == 0; // fails: `true` is not linear
+/// "#;
+/// let ast = Parser::parse_statements(code)?;
+/// let errors = env.process_statements(&ast).unwrap_err();
+///
+/// let err = errors.iter().next().unwrap();
+/// assert_eq!(*err.span().fragment(), "true");
+/// assert_matches!(err.kind(), ErrorKind::FailedConstraint { .. });
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Clone, PartialEq)]
 pub struct DynConstraints<Prim: PrimitiveType> {
     pub(crate) inner: CompleteConstraints<Prim>,

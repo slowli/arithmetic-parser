@@ -4,7 +4,7 @@ use assert_matches::assert_matches;
 
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
-    arith::{BinaryOpContext, LinConstraint, NumArithmetic},
+    arith::{BinaryOpContext, Linearity, NumArithmetic},
     error::{ErrorContext, ErrorKind, ErrorLocation, TupleContext},
     DynConstraints, Prelude, TupleIndex, TupleLen, Type, TypeEnvironment,
 };
@@ -395,7 +395,7 @@ fn dyn_type_with_bogus_function_call() {
 #[test]
 fn dyn_type_as_function() {
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("some_lin", DynConstraints::just(LinConstraint));
+    type_env.insert("some_lin", DynConstraints::just(Linearity));
 
     let bogus_call = "some_lin(1)";
     let bogus_call = F32Grammar::parse_statements(bogus_call).unwrap();

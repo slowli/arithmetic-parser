@@ -17,18 +17,17 @@
 //! - Primitive types are customizeable via [`PrimitiveType`] impl. In the simplest case,
 //!   there can be 2 primitive types: Booleans (`Bool`) and numbers (`Num`),
 //!   as ecapsulated in [`Num`].
-//! - There are two container type - [tuples](Tuple) and [objects](Object).
-//! - Tuples can be represented either
+//! - There are two container types - [tuples](Tuple) and [objects](Object).
+//! - Tuple types can be represented either
 //!   in the tuple form, such as `(Num, Bool)`, or as a slice, such as `[Num; 3]`.
 //!   As in Rust, all slice elements must have the same type. Unlike Rust, tuple and slice
 //!   forms are equivalent; e.g., `[Num; 3]` and `(Num, Num, Num)` are the same type.
-//! - Objects are represented in a brace form, such as `{ x: Num }`. Objects can act as
+//! - Object types are represented in a brace form, such as `{ x: Num }`. Objects can act as
 //!   either specific types or type constraints.
 //! - Functions are first-class types. Functions can have type and/or const params.
+//!   Const params always specify tuple length.
 //! - Type params can be constrained. Constraints are expressed via [`Constraint`]s.
-//!   As an example, [`Num`] has a few known constraints, such as type *linearity*
-//!   (see [`NumConstraints`]).
-//! - Const params always specify tuple length.
+//!   As an example, [`Num`] has a few known constraints, such as type [`Linearity`].
 //!
 //! [`Constraint`]: crate::arith::Constraint
 //!
@@ -42,7 +41,7 @@
 //!
 //! Whenever possible, the most generic type satisfying the constraints is used. In particular,
 //! this means that all type / length variables not resolved at the function definition site become
-//! parameters of the function. Symmetrically, each function call instantiates a separate instance
+//! parameters of the function. Likewise, each function call instantiates a separate instance
 //! of a generic function; type / length params for each call are assigned independently.
 //! See the example below for more details.
 //!
@@ -51,16 +50,17 @@
 //!
 //! # Operations
 //!
-//! ## Tuple indexing
+//! ## Field access
 //!
-//! See [`Tuple` docs](Tuple#indexing) for discussion of indexing expressions, such as `xs.0`.
+//! See [`Tuple` docs](Tuple#indexing) for discussion of indexing expressions, such as `xs.0`,
+//! and [`Object` docs](Object) for discussion of field access, such as `point.x`.
 //!
 //! ## Type casts
 //!
 //! [A type cast](arithmetic_parser::Expr::TypeCast) is equivalent to introducing a new var
 //! with the specified annotation, assigning to it and returning the new var. That is,
 //! `x as Bool` is equivalent to `{ _x: Bool = x; _x }`. As such, casts are safe (cannot be used
-//! to transmute the type arbitrarily), unless `any` types are involved.
+//! to transmute the type arbitrarily), unless `any` type is involved.
 //!
 //! # Examples
 //!
@@ -162,7 +162,7 @@ pub use self::{
 };
 
 use self::{
-    arith::{ConstraintSet, LinConstraint, LinearType, OpsConstraint, WithBoolean},
+    arith::{ConstraintSet, LinearType, Linearity, Ops, WithBoolean},
     ast::TypeAst,
 };
 
@@ -278,8 +278,8 @@ impl FromStr for Num {
 impl PrimitiveType for Num {
     fn well_known_constraints() -> ConstraintSet<Self> {
         let mut constraints = ConstraintSet::default();
-        constraints.insert_object_safe(LinConstraint);
-        constraints.insert(OpsConstraint);
+        constraints.insert_object_safe(Linearity);
+        constraints.insert(Ops);
         constraints
     }
 }

@@ -12,7 +12,7 @@ use crate::{
 ///
 /// Constraints can be placed on [function](crate::FnType) type variables, and can be applied
 /// to types in [`TypeArithmetic`] impls. For example, [`NumArithmetic`] places
-/// a [linearity constraint](NumConstraints::Lin) on types involved in arithmetic ops.
+/// the [`Linearity`] constraint on types involved in arithmetic ops.
 ///
 /// The constraint mechanism is similar to trait constraints in Rust, but is much more limited:
 ///
@@ -66,12 +66,12 @@ impl<Prim: PrimitiveType> Clone for Box<dyn Constraint<Prim>> {
 }
 
 /// Marker trait for object-safe constraints, i.e., constraints that can be included
-/// into a `dyn _` type.
+/// into a [`DynConstraints`](crate::DynConstraints).
 ///
 /// Object safety is similar to this notion in Rust. For a constraint `C` to be object-safe,
 /// it should be the case that `dyn C` (the untagged union of all types implementing `C`)
-/// implements `C`. As an example, this is the case for [`LinConstraint`], but is not the case
-/// for [`OpsConstraint`]. Indeed, [`OpsConstraint`] requires the type to be addable to itself,
+/// implements `C`. As an example, this is the case for [`Linearity`], but is not the case
+/// for [`Ops`]. Indeed, [`Ops`] requires the type to be addable to itself,
 /// which would be impossible for `dyn Ops`.
 pub trait ObjectSafeConstraint<Prim: PrimitiveType>: Constraint<Prim> {}
 
@@ -83,6 +83,10 @@ pub trait ObjectSafeConstraint<Prim: PrimitiveType>: Constraint<Prim> {}
 /// - Primitive types satisfy the constraint iff the predicate provided in [`Self::new()`]
 ///   returns `true`.
 /// - [`Type::Any`] always satisfies the constraint.
+/// - [`Type::Dyn`] types satisfy the constraint iff the [`Constraint`] wrapped by this helper
+///   is present among [`DynConstraints`](crate::DynConstraints). Thus,
+///   if the wrapped constraint is not [object-safe](ObjectSafeConstraint), it will not be satisfied
+///   by any `Dyn` type.
 /// - Functional types never satisfy the constraint.
 /// - A compound type (i.e., a tuple) satisfies the constraint iff all its items satisfy
 ///   the constraint.
@@ -98,7 +102,6 @@ pub trait ObjectSafeConstraint<Prim: PrimitiveType>: Constraint<Prim> {}
 /// #     PrimitiveType, Substitutions, Type,
 /// # };
 /// # use std::fmt;
-///
 /// /// Constraint for hashable types.
 /// #[derive(Clone, Copy)]
 /// struct Hashed;
@@ -258,17 +261,18 @@ where
 /// [`Constraint`] for numeric types that can be subject to unary `-` and can participate
 /// in `T op Num` / `Num op T` operations.
 ///
-/// Defined recursively as linear primitive types and tuples consisting of `Lin` types.
+/// Defined recursively as [linear](LinearType) primitive types and tuples / objects consisting
+/// of `Lin` types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct LinConstraint;
+pub struct Linearity;
 
-impl fmt::Display for LinConstraint {
+impl fmt::Display for Linearity {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("Lin")
     }
 }
 
-impl<Prim: LinearType> Constraint<Prim> for LinConstraint {
+impl<Prim: LinearType> Constraint<Prim> for Linearity {
     fn visitor<'r>(
         &self,
         substitutions: &'r mut Substitutions<Prim>,
@@ -282,7 +286,7 @@ impl<Prim: LinearType> Constraint<Prim> for LinConstraint {
     }
 }
 
-impl<Prim: LinearType> ObjectSafeConstraint<Prim> for LinConstraint {}
+impl<Prim: LinearType> ObjectSafeConstraint<Prim> for Linearity {}
 
 /// Primitive type which supports a notion of *linearity*. Linear types are types that
 /// can be used in arithmetic ops.
@@ -296,15 +300,15 @@ pub trait LinearType: PrimitiveType {
 /// Defined as a subset of `Lin` types without dynamically sized slices and
 /// any types containing dynamically sized slices.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct OpsConstraint;
+pub struct Ops;
 
-impl fmt::Display for OpsConstraint {
+impl fmt::Display for Ops {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("Ops")
     }
 }
 
-impl<Prim: LinearType> Constraint<Prim> for OpsConstraint {
+impl<Prim: LinearType> Constraint<Prim> for Ops {
     fn visitor<'r>(
         &self,
         substitutions: &'r mut Substitutions<Prim>,

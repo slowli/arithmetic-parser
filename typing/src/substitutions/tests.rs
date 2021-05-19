@@ -4,7 +4,7 @@ use assert_matches::assert_matches;
 
 use super::*;
 use crate::{
-    arith::{ConstraintSet, LinConstraint, OpsConstraint},
+    arith::{ConstraintSet, Linearity, Ops},
     error::TupleContext,
     DynConstraints, Num,
 };
@@ -269,7 +269,7 @@ fn any_can_be_unified_with_anything() {
 #[test]
 fn unifying_dyn_type_as_rhs() {
     let mut substitutions = Substitutions::<Num>::default();
-    let rhs = Type::Dyn(DynConstraints::just(LinConstraint));
+    let rhs = Type::Dyn(DynConstraints::just(Linearity));
 
     unify(&mut substitutions, &Type::Any, &rhs).unwrap();
     assert!(substitutions.eqs.is_empty());
@@ -296,7 +296,7 @@ fn unifying_dyn_type_as_rhs() {
 
 #[test]
 fn unifying_dyn_type_as_lhs() {
-    let constraints = DynConstraints::just(LinConstraint);
+    let constraints = DynConstraints::just(Linearity);
     let lhs = Type::Dyn(constraints.clone());
     let valid_rhs = &[Type::Any, Type::NUM, Type::NUM.repeat(3).into()];
 
@@ -336,8 +336,8 @@ fn unifying_dyn_type_as_lhs() {
     {
         // We cheat here a little bit: `Ops` is not object-safe.
         let mut extended_constraints = ConstraintSet::new();
-        extended_constraints.insert(LinConstraint);
-        extended_constraints.insert(OpsConstraint);
+        extended_constraints.insert(Linearity);
+        extended_constraints.insert(Ops);
         let rhs = Type::Dyn(DynConstraints {
             inner: extended_constraints.into(),
         });
@@ -348,7 +348,7 @@ fn unifying_dyn_type_as_lhs() {
         assert!(substitutions.constraints.is_empty());
     }
     {
-        let ops_constraint = ConstraintSet::just(OpsConstraint);
+        let ops_constraint = ConstraintSet::just(Ops);
         let rhs = Type::Dyn(DynConstraints {
             inner: ops_constraint.into(),
         });
@@ -445,7 +445,7 @@ fn unifying_dyn_object_as_lhs() {
         assert_eq!(substitutions.eqs[&0], Type::NUM);
     }
     {
-        let rhs = Type::Dyn(DynConstraints::just(LinConstraint));
+        let rhs = Type::Dyn(DynConstraints::just(Linearity));
         let mut substitutions = Substitutions::<Num>::default();
         let err = unify(&mut substitutions, &lhs, &rhs).unwrap_err();
         assert_matches!(err, ErrorKind::CannotAccessFields);

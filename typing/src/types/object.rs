@@ -33,8 +33,8 @@ use crate::{
 /// # fn main() -> anyhow::Result<()> {
 /// let code = r#"
 ///     manhattan = |pt: { x: Num, y: Num }| pt.x + pt.y;
-///     manhattan(#{ x = 3; y = 4; }); // OK
-///     manhattan(#{ x = 3; y = 4; z = 5; }); // fails
+///     manhattan(#{ x: 3, y: 4 }); // OK
+///     manhattan(#{ x: 3, y: 4, z: 5 }); // fails
 /// "#;
 /// let ast = Parser::parse_statements(code)?;
 /// let err = TypeEnvironment::new().process_statements(&ast).unwrap_err();
@@ -59,8 +59,8 @@ use crate::{
 /// # fn main() -> anyhow::Result<()> {
 /// let code = r#"
 ///     manhattan = |pt| pt.x + pt.y;
-///     manhattan(#{ x = 3; y = 4; }); // OK
-///     manhattan(#{ x = 3; y = 4; z = 5; }); // also OK
+///     manhattan(#{ x: 3, y: 4 }); // OK
+///     manhattan(#{ x: 3, y: 4, z: 5 }); // also OK
 /// "#;
 /// let ast = Parser::parse_statements(code)?;
 /// let mut env = TypeEnvironment::new();

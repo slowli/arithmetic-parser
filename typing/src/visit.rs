@@ -104,7 +104,7 @@ where
     match ty {
         Type::Any => { /* Do nothing. */ }
         Type::Dyn(constraints) => {
-            if let Some(object) = &constraints.object {
+            if let Some(object) = &constraints.inner.object {
                 visitor.visit_object(object);
             }
         }
@@ -231,7 +231,7 @@ where
     match ty {
         Type::Any | Type::Var(_) | Type::Prim(_) => {}
         Type::Dyn(constraints) => {
-            if let Some(object) = &mut constraints.object {
+            if let Some(object) = &mut constraints.inner.object {
                 visitor.visit_object_mut(object);
             }
         }

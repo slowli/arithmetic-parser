@@ -4,9 +4,9 @@ use assert_matches::assert_matches;
 
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
-    arith::{BinaryOpContext, ConstraintSet, NumArithmetic, NumConstraints},
+    arith::{BinaryOpContext, LinConstraint, NumArithmetic},
     error::{ErrorContext, ErrorKind, ErrorLocation, TupleContext},
-    Prelude, TupleIndex, TupleLen, Type, TypeEnvironment,
+    DynConstraints, Prelude, TupleIndex, TupleLen, Type, TypeEnvironment,
 };
 
 use crate::{assert_incompatible_types, hash_fn_type, zip_fn_type, ErrorsExt, F32Grammar};
@@ -395,7 +395,7 @@ fn dyn_type_with_bogus_function_call() {
 #[test]
 fn dyn_type_as_function() {
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("some_lin", ConstraintSet::just(NumConstraints::Lin));
+    type_env.insert("some_lin", DynConstraints::just(LinConstraint));
 
     let bogus_call = "some_lin(1)";
     let bogus_call = F32Grammar::parse_statements(bogus_call).unwrap();

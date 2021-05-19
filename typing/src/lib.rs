@@ -156,13 +156,13 @@ pub use self::{
     substitutions::Substitutions,
     type_map::{Assertions, Prelude},
     types::{
-        FnType, FnTypeBuilder, FnWithConstraints, LengthVar, Object, Slice, Tuple, TupleIndex,
-        TupleLen, Type, TypeVar, UnknownLen,
+        DynConstraints, FnType, FnTypeBuilder, FnWithConstraints, LengthVar, Object, Slice, Tuple,
+        TupleIndex, TupleLen, Type, TypeVar, UnknownLen,
     },
 };
 
 use self::{
-    arith::{ConstraintSet, LinearType, NumConstraints, WithBoolean},
+    arith::{ConstraintSet, LinConstraint, LinearType, OpsConstraint, WithBoolean},
     ast::TypeAst,
 };
 
@@ -278,8 +278,8 @@ impl FromStr for Num {
 impl PrimitiveType for Num {
     fn well_known_constraints() -> ConstraintSet<Self> {
         let mut constraints = ConstraintSet::default();
-        constraints.insert(NumConstraints::Lin);
-        constraints.insert(NumConstraints::Ops);
+        constraints.insert_object_safe(LinConstraint);
+        constraints.insert(OpsConstraint);
         constraints
     }
 }

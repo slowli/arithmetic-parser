@@ -5,13 +5,13 @@ use std::{fmt, str::FromStr};
 use arithmetic_parser::grammars::{Features, NumGrammar, Parse};
 use arithmetic_typing::{
     arith::{
-        BinaryOpContext, BoolArithmetic, Constraint, ConstraintSet, MapPrimitiveType,
-        NumArithmetic, TypeArithmetic, UnaryOpContext, WithBoolean,
+        BinaryOpContext, BoolArithmetic, Constraint, MapPrimitiveType, NumArithmetic,
+        TypeArithmetic, UnaryOpContext, WithBoolean,
     },
     error::{ErrorLocation, OpErrors},
     visit::Visit,
-    Annotated, Assertions, FnType, Prelude, PrimitiveType, Substitutions, Type, TypeEnvironment,
-    UnknownLen,
+    Annotated, Assertions, DynConstraints, FnType, Prelude, PrimitiveType, Substitutions, Type,
+    TypeEnvironment, UnknownLen,
 };
 
 use crate::Hashed;
@@ -39,7 +39,7 @@ fn dbg_fn<Prim: PrimitiveType>() -> FnType<Prim> {
 fn prepare_imprecise_env() -> TypeEnvironment {
     let rand_scalar = FnType::builder().returning(Type::NUM);
     let hash_to_scalar = FnType::builder()
-        .with_varargs(ConstraintSet::just(Hashed), UnknownLen::param(0))
+        .with_varargs(DynConstraints::just(Hashed), UnknownLen::param(0))
         .returning(Type::NUM);
     let to_scalar = FnType::builder().with_arg(Type::NUM).returning(Type::NUM);
 
@@ -247,7 +247,7 @@ impl TypeArithmetic<GroupPrim> for GroupArithmetic {
 fn prepare_env() -> TypeEnvironment<GroupPrim> {
     let rand_scalar = FnType::builder().returning(SC);
     let hash_to_scalar = FnType::builder()
-        .with_varargs(ConstraintSet::just(Hashed), UnknownLen::param(0))
+        .with_varargs(DynConstraints::just(Hashed), UnknownLen::param(0))
         .returning(SC);
     let to_scalar = FnType::builder().with_arg(GE).returning(SC);
 

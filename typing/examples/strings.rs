@@ -114,8 +114,8 @@ impl TypeArithmetic<StrType> for StrArithmetic {
         mut errors: OpErrors<'a, StrType>,
     ) -> Type<StrType> {
         const OP_SETTINGS: OpConstraintSettings<'static, StrType> = OpConstraintSettings {
-            lin: &NumConstraints::Lin,
-            ops: &NumConstraints::Ops,
+            lin: &LinConstraint,
+            ops: &OpsConstraint,
         };
 
         match context.op {

@@ -11,8 +11,10 @@ use arithmetic_parser::{BinaryOp, UnaryOp};
 
 mod constraints;
 
+pub(crate) use self::constraints::CompleteConstraints;
 pub use self::constraints::{
-    CompleteConstraints, Constraint, ConstraintSet, LinearType, NumConstraints, StructConstraint,
+    Constraint, ConstraintSet, LinConstraint, LinearType, ObjectSafeConstraint, OpsConstraint,
+    StructConstraint,
 };
 
 /// Maps a literal value from a certain [`Grammar`] to its type. This assumes that all literals
@@ -381,7 +383,7 @@ impl TypeArithmetic<Num> for NumArithmetic {
         context: &UnaryOpContext<Num>,
         errors: OpErrors<'_, Num>,
     ) -> Type<Num> {
-        Self::process_unary_op(substitutions, context, errors, &NumConstraints::Lin)
+        Self::process_unary_op(substitutions, context, errors, &LinConstraint)
     }
 
     fn process_binary_op<'a>(
@@ -391,8 +393,8 @@ impl TypeArithmetic<Num> for NumArithmetic {
         errors: OpErrors<'_, Num>,
     ) -> Type<Num> {
         const OP_SETTINGS: OpConstraintSettings<'static, Num> = OpConstraintSettings {
-            lin: &NumConstraints::Lin,
-            ops: &NumConstraints::Ops,
+            lin: &LinConstraint,
+            ops: &OpsConstraint,
         };
 
         let comparable_type = if self.comparisons_enabled {

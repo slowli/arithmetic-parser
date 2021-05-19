@@ -7,9 +7,8 @@ use std::{
 };
 
 use crate::{
-    arith::CompleteConstraints,
     error::{ErrorKind, OpErrors},
-    PrimitiveType, Substitutions, Type,
+    DynConstraints, PrimitiveType, Substitutions, Type,
 };
 
 /// Object type: named fields with heterogeneous types.
@@ -157,7 +156,7 @@ impl<Prim: PrimitiveType> Object<Prim> {
 
     /// Converts this object into a corresponding dynamic constraint.
     pub fn into_dyn(self) -> Type<Prim> {
-        Type::Dyn(CompleteConstraints::from(self))
+        Type::Dyn(DynConstraints::from(self))
     }
 
     pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = (&str, &mut Type<Prim>)> + '_ {
@@ -202,7 +201,7 @@ impl<Prim: PrimitiveType> Object<Prim> {
                 self.constraint_object(&rhs.clone(), substitutions, errors);
             }
             Type::Dyn(constraints) => {
-                if let Some(object) = constraints.object.clone() {
+                if let Some(object) = constraints.inner.object.clone() {
                     self.constraint_object(&object, substitutions, errors);
                 } else {
                     errors.push(ErrorKind::CannotAccessFields);

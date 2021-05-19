@@ -14,7 +14,7 @@ use arithmetic_typing::{
 use crate::{
     assert_incompatible_types,
     errors::{fn_arg, tuple_element},
-    hash_fn_type, zip_fn_type, ErrorsExt, F32Grammar,
+    hash_fn_type, zip_fn_type, ErrorsExt, F32Grammar, Hashed,
 };
 
 #[test]
@@ -307,6 +307,24 @@ fn custom_constraint_if_not_added_to_env() {
     assert_matches!(
         err.kind(),
         ErrorKind::AstConversion(AstConversionError::UnknownConstraint(c))
+            if c == "Hash"
+    );
+}
+
+#[test]
+fn custom_constraint_if_incorrectly_added_to_env() {
+    let code = "x: dyn Hash = (1, 2);";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .insert_constraint(Hashed)
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "Hash");
+    assert_matches!(
+        err.kind(),
+        ErrorKind::AstConversion(AstConversionError::NotObjectSafe(c))
             if c == "Hash"
     );
 }

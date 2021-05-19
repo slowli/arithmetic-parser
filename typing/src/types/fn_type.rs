@@ -429,11 +429,11 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{arith::NumConstraints, UnknownLen};
+    use crate::{arith::LinConstraint, UnknownLen};
 
     #[test]
     fn constraints_display() {
-        let type_constraints = ConstraintSet::<Num>::just(NumConstraints::Lin);
+        let type_constraints = ConstraintSet::<Num>::just(LinConstraint);
         let type_constraints = CompleteConstraints::from(type_constraints);
 
         let constraints = ParamConstraints {
@@ -454,7 +454,7 @@ mod tests {
         let sum_fn = <FnType>::builder()
             .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
             .returning(Type::param(0))
-            .with_constraints(&[0], NumConstraints::Lin);
+            .with_constraints(&[0], LinConstraint);
         assert_eq!(sum_fn.to_string(), "for<'T: Lin> (['T; N]) -> 'T");
     }
 
@@ -463,7 +463,7 @@ mod tests {
         let sum_fn: FnType = FnType::builder()
             .with_arg(Type::NUM.repeat(UnknownLen::param(0)))
             .returning(Type::NUM)
-            .with_constraints(&[], NumConstraints::Lin)
+            .with_constraints(&[], LinConstraint)
             .into();
         assert_eq!(sum_fn.to_string(), "([Num; N]) -> Num");
 
@@ -471,7 +471,7 @@ mod tests {
             .with_arg(Type::NUM)
             .with_arg(sum_fn.clone())
             .returning(Type::NUM)
-            .with_constraints(&[], NumConstraints::Lin)
+            .with_constraints(&[], LinConstraint)
             .into();
         assert_eq!(complex_fn.to_string(), "(Num, ([Num; N]) -> Num) -> Num");
 
@@ -479,7 +479,7 @@ mod tests {
             .with_varargs(Type::NUM, UnknownLen::param(0))
             .with_arg(sum_fn)
             .returning(Type::NUM)
-            .with_constraints(&[], NumConstraints::Lin)
+            .with_constraints(&[], LinConstraint)
             .into();
         assert_eq!(
             other_complex_fn.to_string(),

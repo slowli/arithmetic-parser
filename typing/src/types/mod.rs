@@ -3,7 +3,7 @@
 use std::{borrow::Cow, fmt};
 
 use crate::{
-    arith::{CompleteConstraints, ConstraintSet, WithBoolean},
+    arith::{CompleteConstraints, ConstraintSet, ObjectSafeConstraint, WithBoolean},
     Num, PrimitiveType,
 };
 
@@ -232,9 +232,11 @@ pub enum Type<Prim: PrimitiveType = Num> {
     /// Any type aka "I'll think about typing later". Similar to `any` type in TypeScript.
     /// See [the dedicated section](#any-type) for more details.
     Any,
-    /// Arbitrary type implementing constraints, similar to `dyn _` types in Rust.
-    // FIXME: separate type.
-    Dyn(CompleteConstraints<Prim>),
+    /// Arbitrary type implementing certain constraints. Similar to `dyn _` types in Rust or use of
+    /// interfaces in type position in TypeScript.
+    ///
+    /// See [`DynConstraints`] for details on types.
+    Dyn(DynConstraints<Prim>),
     /// Primitive type.
     Prim(Prim),
     /// Functional type.
@@ -267,7 +269,7 @@ impl<Prim: PrimitiveType> fmt::Display for Type<Prim> {
         match self {
             Self::Any => formatter.write_str("any"),
             Self::Dyn(constraints) => {
-                if constraints.is_empty() {
+                if constraints.inner.is_empty() {
                     formatter.write_str("dyn")
                 } else {
                     write!(formatter, "dyn {}", constraints)
@@ -306,14 +308,8 @@ impl<Prim: PrimitiveType> From<Object<Prim>> for Type<Prim> {
     }
 }
 
-impl<Prim: PrimitiveType> From<ConstraintSet<Prim>> for Type<Prim> {
-    fn from(constraints: ConstraintSet<Prim>) -> Self {
-        Self::Dyn(constraints.into())
-    }
-}
-
-impl<Prim: PrimitiveType> From<CompleteConstraints<Prim>> for Type<Prim> {
-    fn from(constraints: CompleteConstraints<Prim>) -> Self {
+impl<Prim: PrimitiveType> From<DynConstraints<Prim>> for Type<Prim> {
+    fn from(constraints: DynConstraints<Prim>) -> Self {
         Self::Dyn(constraints)
     }
 }
@@ -405,14 +401,63 @@ impl<Prim: PrimitiveType> Type<Prim> {
         match self {
             Self::Var(var) => !var.is_free,
             Self::Any | Self::Prim(_) => true,
-            Self::Dyn(constraints) => constraints
-                .object
-                .as_ref()
-                .map_or(true, Object::is_concrete),
+            Self::Dyn(constraints) => constraints.is_concrete(),
             Self::Function(fn_type) => fn_type.is_concrete(),
             Self::Tuple(tuple) => tuple.is_concrete(),
             Self::Object(obj) => obj.is_concrete(),
         }
+    }
+}
+
+/// Arbitrary type implementing certain constraints. Similar to `dyn _` types in Rust or use of
+/// interfaces in type position in TypeScript.
+///
+/// Constraints in the type must be [object-safe](crate::arith::ObjectSafeConstraint).
+#[derive(Clone, PartialEq)]
+pub struct DynConstraints<Prim: PrimitiveType> {
+    pub(crate) inner: CompleteConstraints<Prim>,
+}
+
+impl<Prim: PrimitiveType> fmt::Debug for DynConstraints<Prim> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.inner, formatter)
+    }
+}
+
+impl<Prim: PrimitiveType> fmt::Display for DynConstraints<Prim> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.inner, formatter)
+    }
+}
+
+impl<Prim: PrimitiveType> From<Object<Prim>> for DynConstraints<Prim> {
+    fn from(object: Object<Prim>) -> Self {
+        Self {
+            inner: object.into(),
+        }
+    }
+}
+
+impl<Prim: PrimitiveType> DynConstraints<Prim> {
+    /// Creates constraints based on a single constraint.
+    pub fn just(constraint: impl ObjectSafeConstraint<Prim>) -> Self {
+        Self {
+            inner: CompleteConstraints::from(ConstraintSet::just(constraint)),
+        }
+    }
+
+    /// Checks if this constraint set is empty.
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    fn is_concrete(&self) -> bool {
+        self.inner.object.as_ref().map_or(true, Object::is_concrete)
+    }
+
+    /// Adds the specified `constraint` to these constraints.
+    pub fn insert(&mut self, constraint: impl ObjectSafeConstraint<Prim>) {
+        self.inner.simple.insert(constraint);
     }
 }
 

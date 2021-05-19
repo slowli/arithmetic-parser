@@ -349,7 +349,7 @@ fn constraint_with_dyn_object_and_cast() {
     let code = "hash(#{ x: 1 } as dyn { x: Num } + Hash)";
     let block = F32Grammar::parse_statements(code).unwrap();
     let output = TypeEnvironment::new()
-        .insert_constraint(Hashed)
+        .insert_object_safe_constraint(Hashed)
         .insert("hash", hash_fn_type())
         .process_statements(&block)
         .unwrap();
@@ -494,7 +494,7 @@ fn custom_constraint_if_added_to_env() {
     let code = "x: dyn Hash = (1, 2);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut env = TypeEnvironment::new();
-    env.insert_constraint(Hashed)
+    env.insert_object_safe_constraint(Hashed)
         .process_statements(&block)
         .unwrap();
 
@@ -513,7 +513,7 @@ fn type_cast_basics() {
     let any_code = "(1, (2, 3), 1 == 5) as dyn Hash";
     let any_block = F32Grammar::parse_statements(any_code).unwrap();
     let output = type_env
-        .insert_constraint(Hashed)
+        .insert_object_safe_constraint(Hashed)
         .process_statements(&any_block)
         .unwrap();
 

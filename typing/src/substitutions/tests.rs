@@ -4,9 +4,9 @@ use assert_matches::assert_matches;
 
 use super::*;
 use crate::{
-    arith::{ConstraintSet, NumConstraints},
+    arith::{ConstraintSet, LinConstraint, OpsConstraint},
     error::TupleContext,
-    Num,
+    DynConstraints, Num,
 };
 
 fn extract_errors<Prim: PrimitiveType>(
@@ -269,7 +269,7 @@ fn any_can_be_unified_with_anything() {
 #[test]
 fn unifying_dyn_type_as_rhs() {
     let mut substitutions = Substitutions::<Num>::default();
-    let rhs = Type::Dyn(ConstraintSet::just(NumConstraints::Lin).into());
+    let rhs = Type::Dyn(DynConstraints::just(LinConstraint));
 
     unify(&mut substitutions, &Type::Any, &rhs).unwrap();
     assert!(substitutions.eqs.is_empty());
@@ -296,7 +296,7 @@ fn unifying_dyn_type_as_rhs() {
 
 #[test]
 fn unifying_dyn_type_as_lhs() {
-    let constraints = CompleteConstraints::from(ConstraintSet::just(NumConstraints::Lin));
+    let constraints = DynConstraints::just(LinConstraint);
     let lhs = Type::Dyn(constraints.clone());
     let valid_rhs = &[Type::Any, Type::NUM, Type::NUM.repeat(3).into()];
 
@@ -314,7 +314,7 @@ fn unifying_dyn_type_as_lhs() {
         unify(&mut substitutions, &lhs, &rhs).unwrap();
         assert!(substitutions.eqs.is_empty());
         assert_eq!(substitutions.constraints.len(), 1);
-        assert_eq!(substitutions.constraints[&0], constraints);
+        assert_eq!(substitutions.constraints[&0], constraints.inner);
     }
     {
         let rhs = (Type::free_var(0), Type::free_var(1)).into();
@@ -322,8 +322,8 @@ fn unifying_dyn_type_as_lhs() {
         unify(&mut substitutions, &lhs, &rhs).unwrap();
         assert!(substitutions.eqs.is_empty());
         assert_eq!(substitutions.constraints.len(), 2);
-        assert_eq!(substitutions.constraints[&0], constraints);
-        assert_eq!(substitutions.constraints[&1], constraints);
+        assert_eq!(substitutions.constraints[&0], constraints.inner);
+        assert_eq!(substitutions.constraints[&1], constraints.inner);
     }
 
     // `dyn` RHS.
@@ -334,21 +334,24 @@ fn unifying_dyn_type_as_lhs() {
         assert!(substitutions.constraints.is_empty());
     }
     {
-        let rhs = Type::Dyn(CompleteConstraints::from({
-            let mut extended_constraints = ConstraintSet::new();
-            extended_constraints.insert(NumConstraints::Lin);
-            extended_constraints.insert(NumConstraints::Ops);
-            extended_constraints
-        }));
+        // We cheat here a little bit: `Ops` is not object-safe.
+        let mut extended_constraints = ConstraintSet::new();
+        extended_constraints.insert(LinConstraint);
+        extended_constraints.insert(OpsConstraint);
+        let rhs = Type::Dyn(DynConstraints {
+            inner: extended_constraints.into(),
+        });
+
         let mut substitutions = Substitutions::<Num>::default();
         unify(&mut substitutions, &lhs, &rhs).unwrap();
         assert!(substitutions.eqs.is_empty());
         assert!(substitutions.constraints.is_empty());
     }
     {
-        let rhs = Type::Dyn(CompleteConstraints::from(ConstraintSet::just(
-            NumConstraints::Ops,
-        )));
+        let ops_constraint = ConstraintSet::just(OpsConstraint);
+        let rhs = Type::Dyn(DynConstraints {
+            inner: ops_constraint.into(),
+        });
         let mut substitutions = Substitutions::<Num>::default();
         let err = unify(&mut substitutions, &lhs, &rhs).unwrap_err();
         assert_matches!(err, ErrorKind::FailedConstraint { .. });
@@ -369,10 +372,7 @@ fn unifying_dyn_type_as_lhs() {
 
 #[test]
 fn unifying_dyn_object_as_lhs() {
-    let constraints = CompleteConstraints {
-        object: Some(Object::just("x", Type::NUM)),
-        ..CompleteConstraints::default()
-    };
+    let constraints = DynConstraints::from(Object::just("x", Type::NUM));
     let lhs = Type::Dyn(constraints.clone());
 
     {
@@ -386,7 +386,7 @@ fn unifying_dyn_object_as_lhs() {
         unify(&mut substitutions, &lhs, &Type::free_var(0)).unwrap();
         assert!(substitutions.eqs.is_empty());
         assert_eq!(substitutions.constraints.len(), 1);
-        assert_eq!(substitutions.constraints[&0], constraints);
+        assert_eq!(substitutions.constraints[&0], constraints.inner);
     }
 
     // Object RHS.
@@ -445,8 +445,7 @@ fn unifying_dyn_object_as_lhs() {
         assert_eq!(substitutions.eqs[&0], Type::NUM);
     }
     {
-        let constraints = CompleteConstraints::from(ConstraintSet::just(NumConstraints::Lin));
-        let rhs = Type::Dyn(constraints);
+        let rhs = Type::Dyn(DynConstraints::just(LinConstraint));
         let mut substitutions = Substitutions::<Num>::default();
         let err = unify(&mut substitutions, &lhs, &rhs).unwrap_err();
         assert_matches!(err, ErrorKind::CannotAccessFields);

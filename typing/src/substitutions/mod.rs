@@ -252,7 +252,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             }
 
             (Type::Dyn(constraints), ty) => {
-                constraints.apply_all(ty, self, errors);
+                constraints.inner.apply_all(ty, self, errors);
             }
 
             (ty, Type::Var(var)) => {
@@ -784,7 +784,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeSpecifier<'_, Prim> {
                 let var_idx = self.substitutions.type_var_count;
                 self.substitutions
                     .constraints
-                    .insert(var_idx, constraints.clone());
+                    .insert(var_idx, constraints.inner.clone());
                 *ty = Type::free_var(var_idx);
                 self.substitutions.type_var_count += 1;
             }

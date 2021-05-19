@@ -16,7 +16,7 @@ use crate::{
     },
     error::{Error, Errors},
     types::{ParamConstraints, ParamQuantifier},
-    FnType, Object, PrimitiveType, Slice, Tuple, Type, TypeEnvironment, UnknownLen,
+    DynConstraints, FnType, Object, PrimitiveType, Slice, Tuple, Type, TypeEnvironment, UnknownLen,
 };
 use arithmetic_parser::{ErrorKind as ParseErrorKind, InputSpan, NomResult, Spanned, SpannedError};
 
@@ -82,6 +82,8 @@ pub enum AstConversionError {
     InvalidSomeLength,
     /// Field with the same name is defined multiple times in an object type.
     DuplicateField(String),
+    /// Constraint is not object-safe.
+    NotObjectSafe(String),
 }
 
 impl fmt::Display for AstConversionError {
@@ -128,6 +130,10 @@ impl fmt::Display for AstConversionError {
 
             Self::DuplicateField(name) => {
                 write!(formatter, "Duplicate field `{}` in object type", name)
+            }
+
+            Self::NotObjectSafe(name) => {
+                write!(formatter, "Constraint `{}` is not object-safe", name)
             }
         }
     }
@@ -215,17 +221,17 @@ impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
         )
     }
 
-    fn resolve_constraint(&self, name: &str) -> Option<Box<dyn Constraint<Prim>>> {
+    fn resolve_constraint(&self, name: &str) -> Option<(Box<dyn Constraint<Prim>>, bool)> {
         self.known_constraints
             .get_by_name(name)
-            .map(Constraint::clone_boxed)
+            .map(|(constraint, is_object_safe)| (constraint.clone_boxed(), is_object_safe))
     }
 
     pub(crate) fn convert_type(&mut self, ty: &SpannedTypeAst<'a>) -> Type<Prim> {
         match &ty.extra {
             TypeAst::Some => self.new_type(Some(ty)),
             TypeAst::Any => Type::Any,
-            TypeAst::Dyn(constraints) => Type::Dyn(constraints.convert(self)),
+            TypeAst::Dyn(constraints) => Type::Dyn(constraints.convert_dyn(self)),
             TypeAst::Ident => {
                 let ident = *ty.fragment();
                 if let Ok(prim_type) = Prim::from_str(ident) {
@@ -292,6 +298,23 @@ impl<'a> TypeConstraintsAst<'a> {
         &self,
         state: &mut AstConversionState<'_, 'a, Prim>,
     ) -> CompleteConstraints<Prim> {
+        self.do_convert(state, false)
+    }
+
+    fn convert_dyn<Prim: PrimitiveType>(
+        &self,
+        state: &mut AstConversionState<'_, 'a, Prim>,
+    ) -> DynConstraints<Prim> {
+        DynConstraints {
+            inner: self.do_convert(state, true),
+        }
+    }
+
+    fn do_convert<Prim: PrimitiveType>(
+        &self,
+        state: &mut AstConversionState<'_, 'a, Prim>,
+        require_object_safety: bool,
+    ) -> CompleteConstraints<Prim> {
         let mut constraints = CompleteConstraints::default();
         if let Some(object) = &self.object {
             constraints.object = Some(object.convert(state));
@@ -299,8 +322,13 @@ impl<'a> TypeConstraintsAst<'a> {
 
         self.terms.iter().fold(constraints, |mut acc, input| {
             let input_str = *input.fragment();
-            if let Some(constraint) = state.resolve_constraint(input_str) {
-                acc.simple.insert_boxed(constraint);
+            if let Some((constraint, is_object_safe)) = state.resolve_constraint(input_str) {
+                if require_object_safety && !is_object_safe {
+                    let err = AstConversionError::NotObjectSafe(input_str.to_owned());
+                    state.errors.push(Error::conversion(err, input));
+                } else {
+                    acc.simple.insert_boxed(constraint);
+                }
             } else {
                 let err = AstConversionError::UnknownConstraint(input_str.to_owned());
                 state.errors.push(Error::conversion(err, input));

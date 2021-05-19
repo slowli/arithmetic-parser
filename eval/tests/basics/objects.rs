@@ -305,6 +305,34 @@ fn embedded_destructuring_error() {
 }
 
 #[test]
+fn object_initialization_repeated_fields() {
+    let program = "#{ x: 1, x: 2 }";
+    let err = expect_compilation_error(&mut Environment::new(), program);
+    let err_span = err.main_span().code();
+
+    assert_eq!(*err_span.fragment(), "x");
+    assert_eq!(err_span.location_offset(), 9);
+    assert_matches!(err.kind(), ErrorKind::RepeatedField);
+
+    assert_eq!(err.aux_spans().len(), 1);
+    let aux_span = err.aux_spans()[0].code();
+    assert_eq!(*aux_span.fragment(), "x");
+    assert_eq!(aux_span.location_offset(), 3);
+    assert_matches!(aux_span.extra, AuxErrorInfo::PrevAssignment);
+}
+
+#[test]
+fn object_initialization_repeated_fields_with_shorthand() {
+    let program = "x = 2; #{ x: 5 + x, x }";
+    let err = expect_compilation_error(&mut Environment::new(), program);
+    let err_span = err.main_span().code();
+
+    assert_eq!(*err_span.fragment(), "x");
+    assert_eq!(err_span.location_offset(), 20);
+    assert_matches!(err.kind(), ErrorKind::RepeatedField);
+}
+
+#[test]
 fn object_destructuring_repeated_fields() {
     let program = "{ x, x: y } = #{ x: 1, y: 2 };";
     let err = expect_compilation_error(&mut Environment::new(), program);

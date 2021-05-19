@@ -73,6 +73,8 @@ pub enum ErrorKind<Prim: PrimitiveType> {
         len: TupleLen,
     },
 
+    /// Repeated field in object initialization / destructuring.
+    RepeatedField(String),
     /// Cannot access fields in a value (i.e., it's not an object).
     CannotAccessFields,
     /// Field set differs between LHS and RHS, which are both concrete objects.
@@ -179,6 +181,7 @@ impl<Prim: PrimitiveType> fmt::Display for ErrorKind<Prim> {
                 index, len
             ),
 
+            Self::RepeatedField(name) => write!(formatter, "Repeated object field `{}`", name),
             Self::CannotAccessFields => formatter.write_str("Value is not an object"),
             Self::FieldsMismatch {
                 lhs_fields,

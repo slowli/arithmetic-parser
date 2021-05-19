@@ -13,8 +13,8 @@ use crate::{
 };
 use arithmetic_parser::{
     grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Destructure, DestructureRest, Expr,
-    FnDefinition, Lvalue, ObjectDestructure, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement,
-    Statement, UnaryOp,
+    FnDefinition, Lvalue, ObjectDestructure, ObjectExpr, Spanned, SpannedExpr, SpannedLvalue,
+    SpannedStatement, Statement, UnaryOp,
 };
 
 /// Processor for deriving type information.
@@ -121,17 +121,7 @@ where
                 result
             }
 
-            Expr::Object(object) => {
-                let fields = object.fields.iter().map(|(name, field_expr)| {
-                    let name_string = (*name.fragment()).to_owned();
-                    if let Some(field_expr) = field_expr {
-                        (name_string, self.process_expr_inner(field_expr))
-                    } else {
-                        (name_string, self.process_var(name))
-                    }
-                });
-                Type::Object(Object::from_map(fields.collect()))
-            }
+            Expr::Object(object) => self.process_object(object).into(),
 
             Expr::FnDefinition(def) => self.process_fn_def(def).into(),
 
@@ -363,6 +353,30 @@ where
         self.errors
             .push(Error::unsupported_index(receiver.clone(), access_expr));
         self.new_type()
+    }
+
+    fn process_object<T>(&mut self, object: &ObjectExpr<'a, T>) -> Object<Prim>
+    where
+        T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
+    {
+        // Check that all field names are unique.
+        let mut object_fields = HashMap::new();
+        for (name, _) in &object.fields {
+            let field_str = *name.fragment();
+            if object_fields.insert(field_str, *name).is_some() {
+                self.errors.push(Error::repeated_field(*name));
+            }
+        }
+
+        let fields = object.fields.iter().map(|(name, field_expr)| {
+            let name_string = (*name.fragment()).to_owned();
+            if let Some(field_expr) = field_expr {
+                (name_string, self.process_expr_inner(field_expr))
+            } else {
+                (name_string, self.process_var(name))
+            }
+        });
+        Object::from_map(fields.collect())
     }
 
     fn process_object_access<T>(

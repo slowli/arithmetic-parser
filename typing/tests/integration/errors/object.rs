@@ -307,3 +307,17 @@ fn folding_to_object_errors() {
             if rhs_fields.contains("ma") && lhs_fields.contains("max")
     );
 }
+
+#[test]
+fn repeated_field_in_object_initialization() {
+    let code = "#{ x: 1, x: 2 }";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "x");
+    assert_eq!(err.span().location_offset(), 9);
+    assert_matches!(err.kind(), ErrorKind::RepeatedField(field) if field == "x");
+}

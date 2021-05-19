@@ -32,7 +32,7 @@ impl Parse<'_> for U64Grammar {
 
 fn dbg_fn<Prim: PrimitiveType>() -> FnType<Prim> {
     FnType::builder()
-        .with_varargs(Type::any(), UnknownLen::param(0))
+        .with_varargs(Type::Any, UnknownLen::param(0))
         .returning(Type::void())
 }
 

@@ -364,7 +364,7 @@ fn constraint_error() {
 }
 
 #[test]
-fn any_type_with_bound_with_bogus_function_call() {
+fn dyn_type_with_bogus_function_call() {
     let code = "hash(1, |x| x + 1)";
     let block = F32Grammar::parse_statements(code).unwrap();
 
@@ -393,7 +393,7 @@ fn any_type_with_bound_with_bogus_function_call() {
 }
 
 #[test]
-fn any_type_with_bound_in_tuple() {
+fn dyn_type_as_function() {
     let mut type_env = TypeEnvironment::new();
     type_env.insert("some_lin", ConstraintSet::just(NumConstraints::Lin));
 
@@ -404,29 +404,7 @@ fn any_type_with_bound_in_tuple() {
         .unwrap_err()
         .single();
 
-    assert_matches!(
-        err.kind(),
-        ErrorKind::FailedConstraint {
-            ty: Type::Function(_),
-            ..
-        }
-    );
-
-    let destructure = "(x, y) = some_lin; !x";
-    let destructure = F32Grammar::parse_statements(destructure).unwrap();
-    let err = type_env
-        .process_statements(&destructure)
-        .unwrap_err()
-        .single();
-
-    assert_eq!(*err.span().fragment(), "!x");
-    assert_eq!(err.location(), []);
-    assert_matches!(err.context(), ErrorContext::UnaryOp(_));
-    assert_matches!(
-        err.kind(),
-        ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
-    );
-    assert_eq!(err.kind().to_string(), "Type `Bool` fails constraint `Lin`");
+    assert_matches!(err.kind(), ErrorKind::TypeMismatch(_, _));
 }
 
 #[test]

@@ -354,13 +354,12 @@ where
                     Err(IndexError::NoInfo) => { /* An error will be added below. */ }
                 }
             }
-            Type::Function(_) | Type::Prim(_) => {
+            Type::Function(_) | Type::Prim(_) | Type::Dyn(_) => {
                 self.errors
                     .push(Error::cannot_index(receiver.clone(), access_expr));
                 return self.new_type();
             }
-            Type::Any(_) => {
-                // FIXME: consider constraints?
+            Type::Any => {
                 return self.new_type();
             }
             Type::Var(var) => {

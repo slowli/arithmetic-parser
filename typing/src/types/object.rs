@@ -7,6 +7,7 @@ use std::{
 };
 
 use crate::{
+    arith::CompleteConstraints,
     error::{ErrorKind, OpErrors},
     PrimitiveType, Substitutions, Type,
 };
@@ -154,6 +155,11 @@ impl<Prim: PrimitiveType> Object<Prim> {
         self.fields.keys().map(String::as_str)
     }
 
+    /// Converts this object into a corresponding dynamic constraint.
+    pub fn into_dyn(self) -> Type<Prim> {
+        Type::Dyn(CompleteConstraints::from(self))
+    }
+
     pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = (&str, &mut Type<Prim>)> + '_ {
         self.fields.iter_mut().map(|(name, ty)| (name.as_str(), ty))
     }
@@ -193,15 +199,16 @@ impl<Prim: PrimitiveType> Object<Prim> {
 
         match resolved_ty {
             Type::Object(rhs) => {
-                let rhs = rhs.clone();
-                self.constraint_object(&rhs, substitutions, errors);
+                self.constraint_object(&rhs.clone(), substitutions, errors);
             }
-            Type::Any(constraints) => {
-                constraints
-                    .clone()
-                    .apply_all_to_object(self, substitutions, errors);
+            Type::Dyn(constraints) => {
+                if let Some(object) = constraints.object.clone() {
+                    self.constraint_object(&object, substitutions, errors);
+                } else {
+                    errors.push(ErrorKind::CannotAccessFields);
+                }
             }
-            Type::Var(_) => { /* OK */ }
+            Type::Any | Type::Var(_) => { /* OK */ }
             _ => errors.push(ErrorKind::CannotAccessFields),
         }
     }

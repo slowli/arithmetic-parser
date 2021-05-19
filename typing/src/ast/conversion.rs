@@ -224,10 +224,8 @@ impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
     pub(crate) fn convert_type(&mut self, ty: &SpannedTypeAst<'a>) -> Type<Prim> {
         match &ty.extra {
             TypeAst::Some => self.new_type(Some(ty)),
-            TypeAst::Any(constraints) => {
-                debug_assert!(constraints.object.is_none());
-                Type::Any(constraints.convert(self).simple)
-            }
+            TypeAst::Any => Type::Any,
+            TypeAst::Dyn(constraints) => Type::Dyn(constraints.convert(self)),
             TypeAst::Ident => {
                 let ident = *ty.fragment();
                 if let Ok(prim_type) = Prim::from_str(ident) {

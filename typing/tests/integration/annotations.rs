@@ -8,7 +8,7 @@ use arithmetic_typing::{
     Prelude, TupleLen, Type, TypeEnvironment, UnknownLen,
 };
 
-use crate::{assert_incompatible_types, ErrorsExt, F32Grammar, Hashed};
+use crate::{assert_incompatible_types, hash_fn_type, ErrorsExt, F32Grammar, Hashed};
 
 #[test]
 fn type_hint_within_tuple() {
@@ -279,9 +279,9 @@ fn type_with_tuple_of_any() {
         ErrorKind::TypeMismatch(lhs, rhs)
             if lhs.to_string() == "(Num) -> _" && rhs.to_string() == "(any, any, any)"
     );
-    assert_eq!(type_env["x"], Type::any());
-    assert_eq!(type_env["y"], Type::any());
-    assert_eq!(type_env["z"], Type::any());
+    assert_eq!(type_env["x"], Type::Any);
+    assert_eq!(type_env["y"], Type::Any);
+    assert_eq!(type_env["z"], Type::Any);
 }
 
 #[test]
@@ -305,23 +305,23 @@ fn type_with_any_fn() {
 }
 
 #[test]
-fn any_fn_with_constraints() {
+fn dyn_type_in_slice() {
     let code = r#"
-        lin_tuple: [any Lin; _] = (1, (2, 5), 9);
-        bogus_tuple: [any Lin; _] = (1, 2, 3 == 4);
+        lin_tuple: [dyn Lin; _] = (1, (2, 5), 9);
+        bogus_tuple: [dyn Lin; _] = (1, 2, 3 == 4);
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.span().fragment(), "[any Lin; _]");
+    assert_eq!(*err.span().fragment(), "[dyn Lin; _]");
     assert_matches!(
         err.kind(),
         ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
     );
     assert_eq!(
         type_env["lin_tuple"].to_string(),
-        "(any Lin, any Lin, any Lin)"
+        "(dyn Lin, dyn Lin, dyn Lin)"
     );
 }
 
@@ -330,8 +330,10 @@ fn mix_of_any_and_specific_types() {
     let code_samples = &[
         "|xs| { _unused: [any; _] = xs; xs + (1, 2) }",
         "|xs| { _unused: [any] = xs; xs + (1, 2) }",
-        "|xs| { _unused: [any Lin; _] = xs; xs + (1, 2) }",
-        "|xs| { _unused: [any Lin] = xs; xs + (1, 2) }",
+        "|xs| { _unused: [dyn; _] = xs; xs + (1, 2) }",
+        "|xs| { _unused: [dyn] = xs; xs + (1, 2) }",
+        "|xs| { _unused: [dyn Lin; _] = xs; xs + (1, 2) }",
+        "|xs| { _unused: [dyn Lin] = xs; xs + (1, 2) }",
     ];
 
     for &code in code_samples {
@@ -340,6 +342,95 @@ fn mix_of_any_and_specific_types() {
         let output = type_env.process_statements(&block).unwrap();
         assert_eq!(output.to_string(), "((Num, Num)) -> (Num, Num)");
     }
+}
+
+#[test]
+fn constraint_with_dyn_object_and_cast() {
+    let code = "hash(#{ x: 1 } as dyn { x: Num } + Hash)";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let output = TypeEnvironment::new()
+        .insert_constraint(Hashed)
+        .insert("hash", hash_fn_type())
+        .process_statements(&block)
+        .unwrap();
+
+    assert_eq!(output, Type::NUM);
+}
+
+#[test]
+fn generalizing_dyn_constraint() {
+    let code = "#{ x: 1, y: 1 } as dyn { x: Num, y: Num } as dyn { x: _ }";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let output = TypeEnvironment::new().process_statements(&block).unwrap();
+
+    assert_eq!(output.to_string(), "dyn { x: Num }");
+}
+
+#[test]
+fn dyn_annotation_on_fn_arg() {
+    let code = r#"
+        test = |obj: dyn { x: Num, y: Num }| obj.x + obj.y;
+        test(#{ x: 1, y: 2 });
+        test(#{ x: 1, y: 2, z: 3 });
+
+        pt: dyn { x: Num, y: Num } = #{ x: 1, y: 2, z: 3 };
+        test(pt);
+        pt: dyn { x: Num, y: Num, z: Num } = #{ x: 1, y: 2, z: 3 };
+        test(pt);
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.process_statements(&block).unwrap();
+
+    assert_eq!(
+        type_env["test"].to_string(),
+        "(dyn { x: Num, y: Num }) -> Num"
+    );
+    assert_matches!(type_env["pt"], Type::Dyn(_));
+}
+
+#[test]
+fn partial_dyn_annotation_on_fn_arg() {
+    let code = r#"
+        test = |obj: dyn { x: _, y: _ }| obj.x + obj.y;
+        test(#{ x: 1, y: 2 });
+        test(#{ x: 1, y: 2, z: 3 });
+        test(#{ x: (1, 2), y: (3, 4), z: 3 });
+
+        pt: dyn { x: Num, y: Num } = #{ x: 1, y: 2 };
+        test(pt);
+        pt: dyn { x: Num, y: _ } = #{ x: 1, y: 2 };
+        test(pt);
+        pt: dyn { x: _, y: _ } = #{ x: 1, y: 2 };
+        test(pt);
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.process_statements(&block).unwrap();
+
+    assert_eq!(
+        type_env["test"].to_string(),
+        "for<'T: Ops> (dyn { x: 'T, y: 'T }) -> 'T"
+    );
+}
+
+#[test]
+fn dyn_annotation_propagation() {
+    let code = r#"
+        test = |objs: [dyn { x: _ }; _]| objs.map(|obj| obj.x + 1);
+        (#{ x: 1, y: 2 }, #{ x: 2 }, #{ x: 3, y: (1,) }).test();
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env
+        .insert("map", Prelude::Map)
+        .process_statements(&block)
+        .unwrap();
+
+    assert_eq!(
+        type_env["test"].to_string(),
+        "([dyn { x: Num }; N]) -> [Num; N]"
+    );
 }
 
 #[test]
@@ -400,14 +491,14 @@ fn annotations_for_fns_with_slices_in_contravariant_position() {
 
 #[test]
 fn custom_constraint_if_added_to_env() {
-    let code = "x: any Hash = (1, 2);";
+    let code = "x: dyn Hash = (1, 2);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut env = TypeEnvironment::new();
     env.insert_constraint(Hashed)
         .process_statements(&block)
         .unwrap();
 
-    assert_eq!(env["x"].to_string(), "any Hash");
+    assert_eq!(env["x"].to_string(), "dyn Hash");
 }
 
 #[test]
@@ -419,14 +510,14 @@ fn type_cast_basics() {
 
     assert_eq!(output.to_string(), "[Num]");
 
-    let any_code = "(1, (2, 3), 1 == 5) as any Hash";
+    let any_code = "(1, (2, 3), 1 == 5) as dyn Hash";
     let any_block = F32Grammar::parse_statements(any_code).unwrap();
     let output = type_env
         .insert_constraint(Hashed)
         .process_statements(&any_block)
         .unwrap();
 
-    assert_eq!(output.to_string(), "any Hash");
+    assert_eq!(output.to_string(), "dyn Hash");
 }
 
 #[test]

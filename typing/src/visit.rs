@@ -102,7 +102,12 @@ where
     V: Visit<Prim> + ?Sized,
 {
     match ty {
-        Type::Any(_) => { /* Do nothing. */ }
+        Type::Any => { /* Do nothing. */ }
+        Type::Dyn(constraints) => {
+            if let Some(object) = &constraints.object {
+                visitor.visit_object(object);
+            }
+        }
         Type::Var(var) => visitor.visit_var(*var),
         Type::Prim(primitive) => visitor.visit_primitive(primitive),
         Type::Tuple(tuple) => visitor.visit_tuple(tuple),
@@ -224,7 +229,12 @@ where
     V: VisitMut<Prim> + ?Sized,
 {
     match ty {
-        Type::Any(_) | Type::Var(_) | Type::Prim(_) => {}
+        Type::Any | Type::Var(_) | Type::Prim(_) => {}
+        Type::Dyn(constraints) => {
+            if let Some(object) = &mut constraints.object {
+                visitor.visit_object_mut(object);
+            }
+        }
         Type::Tuple(tuple) => visitor.visit_tuple_mut(tuple),
         Type::Object(obj) => visitor.visit_object_mut(obj),
         Type::Function(function) => visitor.visit_function_mut(function.as_mut()),

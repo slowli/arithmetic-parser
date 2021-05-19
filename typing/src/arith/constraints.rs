@@ -173,6 +173,20 @@ where
     C: Constraint<Prim> + Clone,
     F: Fn(&Prim) -> bool + 'static,
 {
+    fn visit_type(&mut self, ty: &Type<Prim>) {
+        match ty {
+            Type::Dyn(constraints) => {
+                if !constraints.simple.contains(&self.inner.constraint) {
+                    self.errors.push(ErrorKind::failed_constraint(
+                        ty.clone(),
+                        self.inner.constraint.clone(),
+                    ));
+                }
+            }
+            _ => visit::visit_type(self, ty),
+        }
+    }
+
     fn visit_var(&mut self, var: TypeVar) {
         debug_assert!(var.is_free());
         self.substitutions.insert_constraint(
@@ -337,6 +351,10 @@ impl<Prim: PrimitiveType> ConstraintSet<Prim> {
         self.inner.is_empty()
     }
 
+    fn contains(&self, constraint: &impl Constraint<Prim>) -> bool {
+        self.inner.contains_key(&constraint.to_string())
+    }
+
     /// Inserts a constraint into this set.
     pub fn insert(&mut self, constraint: impl Constraint<Prim>) {
         self.inner
@@ -383,7 +401,7 @@ impl<Prim: PrimitiveType> ConstraintSet<Prim> {
 
 /// Extended [`ConstraintSet`] that additionally supports object constraints.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct CompleteConstraints<Prim: PrimitiveType> {
+pub struct CompleteConstraints<Prim: PrimitiveType> {
     pub(crate) simple: ConstraintSet<Prim>,
     /// Object constraint. Stored as `Type` for convenience.
     pub(crate) object: Option<Object<Prim>>,
@@ -403,6 +421,15 @@ impl<Prim: PrimitiveType> From<ConstraintSet<Prim>> for CompleteConstraints<Prim
         Self {
             simple: constraints,
             object: None,
+        }
+    }
+}
+
+impl<Prim: PrimitiveType> From<Object<Prim>> for CompleteConstraints<Prim> {
+    fn from(object: Object<Prim>) -> Self {
+        Self {
+            simple: ConstraintSet::default(),
+            object: Some(object),
         }
     }
 }
@@ -431,17 +458,6 @@ impl<Prim: PrimitiveType> CompleteConstraints<Prim> {
         errors: OpErrors<'_, Prim>,
     ) {
         self.simple.insert(constraint);
-        self.check_object_consistency(substitutions, errors);
-    }
-
-    /// Extends these constraints from `other`.
-    pub(crate) fn extend(
-        &mut self,
-        other: Self,
-        substitutions: &mut Substitutions<Prim>,
-        errors: OpErrors<'_, Prim>,
-    ) {
-        self.simple.inner.extend(other.simple.inner);
         self.check_object_consistency(substitutions, errors);
     }
 

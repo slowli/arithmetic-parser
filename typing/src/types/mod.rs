@@ -3,7 +3,7 @@
 use std::{borrow::Cow, fmt};
 
 use crate::{
-    arith::{ConstraintSet, WithBoolean},
+    arith::{CompleteConstraints, ConstraintSet, WithBoolean},
     Num, PrimitiveType,
 };
 
@@ -231,7 +231,10 @@ impl TypeVar {
 pub enum Type<Prim: PrimitiveType = Num> {
     /// Any type aka "I'll think about typing later". Similar to `any` type in TypeScript.
     /// See [the dedicated section](#any-type) for more details.
-    Any(ConstraintSet<Prim>),
+    Any,
+    /// Arbitrary type implementing constraints, similar to `dyn _` types in Rust.
+    // FIXME: separate type.
+    Dyn(CompleteConstraints<Prim>),
     /// Primitive type.
     Prim(Prim),
     /// Functional type.
@@ -247,7 +250,8 @@ pub enum Type<Prim: PrimitiveType = Num> {
 impl<Prim: PrimitiveType> PartialEq for Type<Prim> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Any(x), Self::Any(y)) => x == y,
+            (Self::Any, _) | (_, Self::Any) => true,
+            (Self::Dyn(x), Self::Dyn(y)) => x == y,
             (Self::Prim(x), Self::Prim(y)) => x == y,
             (Self::Var(x), Self::Var(y)) => x == y,
             (Self::Tuple(xs), Self::Tuple(ys)) => xs == ys,
@@ -261,11 +265,12 @@ impl<Prim: PrimitiveType> PartialEq for Type<Prim> {
 impl<Prim: PrimitiveType> fmt::Display for Type<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Any(constraints) => {
+            Self::Any => formatter.write_str("any"),
+            Self::Dyn(constraints) => {
                 if constraints.is_empty() {
-                    formatter.write_str("any")
+                    formatter.write_str("dyn")
                 } else {
-                    write!(formatter, "any {}", constraints)
+                    write!(formatter, "dyn {}", constraints)
                 }
             }
             Self::Var(var) => fmt::Display::fmt(var, formatter),
@@ -303,7 +308,13 @@ impl<Prim: PrimitiveType> From<Object<Prim>> for Type<Prim> {
 
 impl<Prim: PrimitiveType> From<ConstraintSet<Prim>> for Type<Prim> {
     fn from(constraints: ConstraintSet<Prim>) -> Self {
-        Self::Any(constraints)
+        Self::Dyn(constraints.into())
+    }
+}
+
+impl<Prim: PrimitiveType> From<CompleteConstraints<Prim>> for Type<Prim> {
+    fn from(constraints: CompleteConstraints<Prim>) -> Self {
+        Self::Dyn(constraints)
     }
 }
 
@@ -354,11 +365,6 @@ impl<Prim: PrimitiveType> Type<Prim> {
         Self::Var(TypeVar::param(index))
     }
 
-    /// Creates an unbounded `any` type.
-    pub fn any() -> Self {
-        Self::Any(ConstraintSet::default())
-    }
-
     pub(crate) fn free_var(index: usize) -> Self {
         Self::Var(TypeVar {
             index,
@@ -398,7 +404,11 @@ impl<Prim: PrimitiveType> Type<Prim> {
     pub fn is_concrete(&self) -> bool {
         match self {
             Self::Var(var) => !var.is_free,
-            Self::Any(_) | Self::Prim(_) => true,
+            Self::Any | Self::Prim(_) => true,
+            Self::Dyn(constraints) => constraints
+                .object
+                .as_ref()
+                .map_or(true, Object::is_concrete),
             Self::Function(fn_type) => fn_type.is_concrete(),
             Self::Tuple(tuple) => tuple.is_concrete(),
             Self::Object(obj) => obj.is_concrete(),
@@ -476,7 +486,7 @@ mod tests {
         let sample_types = &[
             Type::NUM,
             Type::BOOL,
-            Type::any(),
+            Type::Any,
             (Type::BOOL, Type::NUM).into(),
             Type::try_from(&TypeAst::try_from("for<'T: Lin> (['T; N]) -> 'T").unwrap()).unwrap(),
         ];

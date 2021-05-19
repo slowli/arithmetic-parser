@@ -84,7 +84,7 @@ fn hash_fn_type() -> FnType<Num> {
 
 #[test]
 fn hash_fn_type_display() {
-    assert_eq!(hash_fn_type().to_string(), "(...[any Hash; N]) -> Num");
+    assert_eq!(hash_fn_type().to_string(), "(...[dyn Hash; N]) -> Num");
 }
 
 /// `zip` function signature.

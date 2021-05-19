@@ -11,7 +11,11 @@ use arithmetic_typing::{
     Prelude, TupleLen, Type, TypeEnvironment,
 };
 
-use crate::{assert_incompatible_types, errors::tuple_element, zip_fn_type, ErrorsExt, F32Grammar};
+use crate::{
+    assert_incompatible_types,
+    errors::{fn_arg, tuple_element},
+    hash_fn_type, zip_fn_type, ErrorsExt, F32Grammar,
+};
 
 #[test]
 fn converting_fn_type_unused_type() {
@@ -292,7 +296,7 @@ fn bogus_annotation_in_fn_definition() {
 
 #[test]
 fn custom_constraint_if_not_added_to_env() {
-    let code = "x: any Hash = (1, 2);";
+    let code = "x: dyn Hash = (1, 2);";
     let block = F32Grammar::parse_statements(code).unwrap();
     let err = TypeEnvironment::new()
         .process_statements(&block)
@@ -329,7 +333,7 @@ fn type_cast_basic_error() {
 
 #[test]
 fn type_cast_error_in_subtype() {
-    let code = "x = (1, |x: Num| x + 3) as any Lin;";
+    let code = "x = (1, |x: Num| x + 3) as dyn Lin;";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
@@ -379,8 +383,45 @@ fn missing_field_after_object_annotation() {
 }
 
 #[test]
-fn contradicting_any_constraint_via_field_access() {
-    let code = "|obj: any Lin| !obj.x";
+fn dyn_constraint_non_object() {
+    let code = "#{ x: 1 } as dyn Lin as dyn { x: Num } + Lin";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env.process_statements(&block).unwrap_err().single();
+
+    assert_matches!(err.kind(), ErrorKind::CannotAccessFields);
+}
+
+#[test]
+fn dyn_constraint_missing_additional_constraint() {
+    let code = "#{ x: 1 } as dyn { x: Num } as dyn { x: Num } + Lin";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env.process_statements(&block).unwrap_err().single();
+
+    assert_matches!(
+        err.kind(),
+        ErrorKind::FailedConstraint { ty, constraint }
+            if ty.to_string() == "dyn { x: Num }" && constraint.to_string() == "Lin"
+    );
+}
+
+#[test]
+fn dyn_constraint_failing_additional_constraint() {
+    let code = "#{ x: 1, fun: || 1 } as dyn { x: Num } + Lin";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env.process_statements(&block).unwrap_err().single();
+
+    assert_matches!(
+        err.kind(),
+        ErrorKind::FailedConstraint { constraint, .. } if constraint.to_string() == "Lin"
+    );
+}
+
+#[test]
+fn contradicting_dyn_constraint_via_field_access() {
+    let code = "|obj| { _: dyn Lin = obj; !obj.x; }";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
@@ -406,5 +447,44 @@ fn contradicting_field_types_via_annotations() {
     assert_matches!(
         err.kind(),
         ErrorKind::TypeMismatch(lhs, rhs) if *lhs == Type::BOOL && *rhs == Type::NUM
+    );
+}
+
+#[test]
+fn contradicting_constraint_with_dyn_object() {
+    let code = "hash(#{ x: 1 } as dyn { x: Num })";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env
+        .insert("hash", hash_fn_type())
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "#{ x: 1 }");
+    assert_eq!(err.location(), [fn_arg(0)]);
+    assert_matches!(
+        err.kind(),
+        ErrorKind::FailedConstraint { ty: Type::Dyn(_), constraint }
+            if constraint.to_string() == "Hash"
+    );
+}
+
+#[test]
+fn extra_fields_in_dyn_fn_arg() {
+    let code = "|objs: [dyn { x: _ }; _]| objs.map(|obj| obj.x + obj.y)";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    let err = type_env
+        .insert("map", Prelude::Map)
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "|obj| obj.x + obj.y");
+    assert_eq!(err.location(), [fn_arg(1), fn_arg(0)]);
+    assert_matches!(
+        err.kind(),
+        ErrorKind::MissingFields { fields, .. } if fields.contains("y")
     );
 }

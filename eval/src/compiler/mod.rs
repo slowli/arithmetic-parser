@@ -15,8 +15,8 @@ use crate::{
 };
 use arithmetic_parser::{
     grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Destructure, Expr, FnDefinition,
-    InputSpan, Lvalue, MaybeSpanned, ObjectDestructure, Spanned, SpannedExpr, SpannedLvalue,
-    SpannedStatement, Statement, UnaryOp,
+    InputSpan, Lvalue, MaybeSpanned, ObjectDestructure, ObjectExpr, Spanned, SpannedExpr,
+    SpannedLvalue, SpannedStatement, Statement, UnaryOp,
 };
 
 mod captures;
@@ -26,30 +26,9 @@ use self::captures::{extract_vars_iter, CapturesExtractor, CompilerExtTarget};
 pub(crate) type ImportSpans<'a> = HashMap<String, Spanned<'a>>;
 
 #[derive(Debug)]
-enum BlockOrObject<'r, 'a, T: Grammar<'a>> {
-    Block(&'r Block<'a, T>),
-    Object(&'r [SpannedStatement<'a, T>]),
-}
-
-impl<'r, 'a, T: Grammar<'a>> From<&'r Block<'a, T>> for BlockOrObject<'r, 'a, T> {
-    fn from(block: &'r Block<'a, T>) -> Self {
-        Self::Block(block)
-    }
-}
-
-impl<'r, 'a, T: Grammar<'a>> From<&'r [SpannedStatement<'a, T>]> for BlockOrObject<'r, 'a, T> {
-    fn from(statements: &'r [SpannedStatement<'a, T>]) -> Self {
-        Self::Object(statements)
-    }
-}
-
-#[derive(Debug)]
 pub(crate) struct Compiler {
     /// Mapping between registers and named variables.
     vars_to_registers: HashMap<String, usize>,
-    /// Fields for the collected object, if any. We store it explicitly because it is impossible
-    /// to find out which vars correspond to the object otherwise.
-    object_fields: Option<HashMap<String, usize>>,
     scope_depth: usize,
     register_count: usize,
     module_id: Box<dyn ModuleId>,
@@ -59,7 +38,6 @@ impl Compiler {
     fn new(module_id: Box<dyn ModuleId>) -> Self {
         Self {
             vars_to_registers: HashMap::new(),
-            object_fields: None,
             scope_depth: 0,
             register_count: 0,
             module_id,
@@ -69,7 +47,6 @@ impl Compiler {
     fn from_env<T>(module_id: Box<dyn ModuleId>, env: &Registers<'_, T>) -> Self {
         Self {
             vars_to_registers: env.variables_map().clone(),
-            object_fields: None,
             register_count: env.register_count(),
             scope_depth: 0,
             module_id,
@@ -81,7 +58,6 @@ impl Compiler {
     fn backup(&mut self) -> Self {
         Self {
             vars_to_registers: self.vars_to_registers.clone(),
-            object_fields: self.object_fields.take(),
             scope_depth: self.scope_depth,
             register_count: self.register_count,
             module_id: self.module_id.clone_boxed(),
@@ -147,14 +123,7 @@ impl Compiler {
         let atom = match &expr.extra {
             Expr::Literal(lit) => Atom::Constant(lit.clone()),
 
-            Expr::Variable => {
-                let var_name = *expr.fragment();
-                let register = self.vars_to_registers.get(var_name).ok_or_else(|| {
-                    let err = ErrorKind::Undefined(var_name.to_owned());
-                    self.create_error(expr, err)
-                })?;
-                Atom::Register(*register)
-            }
+            Expr::Variable => self.compile_var_access(expr)?,
 
             Expr::TypeCast { value, .. } => {
                 // Just ignore the type annotation.
@@ -204,9 +173,7 @@ impl Compiler {
 
             Expr::Block(block) => self.compile_block(executable, expr, block)?,
             Expr::FnDefinition(def) => self.compile_fn_definition(executable, expr, def)?,
-            Expr::ObjectBlock(statements) => {
-                self.compile_block(executable, expr, statements.as_slice())?
-            }
+            Expr::Object(object) => self.compile_object(executable, expr, object)?,
 
             _ => {
                 let err = ErrorKind::unsupported(expr.extra.ty());
@@ -215,6 +182,18 @@ impl Compiler {
         };
 
         Ok(expr.copy_with_extra(atom).into())
+    }
+
+    fn compile_var_access<'a, T, A>(
+        &self,
+        var_span: &Spanned<'a, T>,
+    ) -> Result<Atom<A>, Error<'a>> {
+        let var_name = *var_span.fragment();
+        let register = self.vars_to_registers.get(var_name).ok_or_else(|| {
+            let err = ErrorKind::Undefined(var_name.to_owned());
+            self.create_error(var_span, err)
+        })?;
+        Ok(Atom::Register(*register))
     }
 
     fn compile_binary_expr<'a, T: Grammar<'a>>(
@@ -323,10 +302,8 @@ impl Compiler {
         &mut self,
         executable: &mut Executable<'a, T::Lit>,
         block_expr: &SpannedExpr<'a, T>,
-        block_or_object: impl Into<BlockOrObject<'r, 'a, T>>,
+        block: &Block<'a, T>,
     ) -> Result<Atom<T::Lit>, Error<'a>> {
-        let block_or_object = block_or_object.into();
-
         let backup_state = self.backup();
         if self.scope_depth == 0 {
             let command = Command::StartInnerScope;
@@ -335,31 +312,9 @@ impl Compiler {
         self.scope_depth += 1;
 
         // Move the return value to the next register.
-        let return_value = match block_or_object {
-            BlockOrObject::Block(block) => {
-                self.object_fields = None;
-                self.compile_block_inner(executable, block)?
-                    .map_or(Atom::Void, |spanned| spanned.extra)
-            }
-
-            BlockOrObject::Object(statements) => {
-                self.object_fields = Some(HashMap::new());
-                for statement in statements {
-                    self.compile_statement(executable, statement)?;
-                }
-
-                // Find out variables that need to be collected into the object.
-                let new_vars = self
-                    .object_fields
-                    .take()
-                    .expect("object_fields")
-                    .into_iter()
-                    .map(|(name, register)| (name, Atom::Register(register)));
-                let obj_expr = CompiledExpr::Object(new_vars.collect());
-                let register = self.push_assignment(executable, obj_expr, block_expr);
-                Atom::Register(register)
-            }
-        };
+        let return_value = self
+            .compile_block_inner(executable, block)?
+            .map_or(Atom::Void, |spanned| spanned.extra);
 
         let new_register = if let Atom::Register(ret_register) = return_value {
             let command = Command::Copy {
@@ -407,6 +362,28 @@ impl Compiler {
         } else {
             None
         })
+    }
+
+    #[allow(clippy::option_if_let_else)] // false positive
+    fn compile_object<'a, T: Grammar<'a>>(
+        &mut self,
+        executable: &mut Executable<'a, T::Lit>,
+        object_expr: &SpannedExpr<'a, T>,
+        object: &ObjectExpr<'a, T>,
+    ) -> Result<Atom<T::Lit>, Error<'a>> {
+        let fields = object.fields.iter().map(|(name, field_expr)| {
+            let name_str = *name.fragment();
+            if let Some(field_expr) = field_expr {
+                self.compile_expr(executable, field_expr)
+                    .map(|register| (name_str.to_owned(), register.extra))
+            } else {
+                self.compile_var_access(name)
+                    .map(|register| (name_str.to_owned(), register))
+            }
+        });
+        let obj_expr = CompiledExpr::Object(fields.collect::<Result<_, _>>()?);
+        let register = self.push_assignment(executable, obj_expr, object_expr);
+        Ok(Atom::Register(register))
     }
 
     fn compile_fn_definition<'a, T: Grammar<'a>>(
@@ -612,9 +589,6 @@ impl Compiler {
         let var_name = *var_span.fragment();
         if var_name != "_" {
             self.vars_to_registers.insert(var_name.to_owned(), register);
-            if let Some(fields) = &mut self.object_fields {
-                fields.insert(var_name.to_owned(), register);
-            }
 
             // It does not make sense to annotate vars in the inner scopes, since
             // they cannot be accessed externally.

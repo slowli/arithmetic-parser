@@ -76,6 +76,7 @@ where
         }
     }
 
+    #[allow(clippy::option_if_let_else)] // false positive; `self` is moved into both clauses
     fn process_expr_inner<T>(&mut self, expr: &SpannedExpr<'a, T>) -> Type<Prim>
     where
         T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
@@ -120,13 +121,16 @@ where
                 result
             }
 
-            Expr::ObjectBlock(statements) => {
-                self.scopes.push(HashMap::new());
-                for statement in statements {
-                    self.process_statement(statement);
-                }
-                let object_scope = self.scopes.pop().unwrap();
-                Type::Object(Object::from_map(object_scope))
+            Expr::Object(object) => {
+                let fields = object.fields.iter().map(|(name, field_expr)| {
+                    let name_string = (*name.fragment()).to_owned();
+                    if let Some(field_expr) = field_expr {
+                        (name_string, self.process_expr_inner(field_expr))
+                    } else {
+                        (name_string, self.process_var(name))
+                    }
+                });
+                Type::Object(Object::from_map(fields.collect()))
             }
 
             Expr::FnDefinition(def) => self.process_fn_def(def).into(),

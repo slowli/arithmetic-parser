@@ -451,10 +451,7 @@ fn indexing_with_annotations() {
 
 #[test]
 fn object_annotations() {
-    let code_samples = &[
-        "obj: { x: _ } = #{ x = 1; };",
-        "obj: { x: Num } = #{ x = 1; };",
-    ];
+    let code_samples = &["obj: { x: _ } = #{ x: 1 };", "obj: { x: Num } = #{ x: 1 };"];
 
     for &code in code_samples {
         let block = F32Grammar::parse_statements(code).unwrap();
@@ -468,7 +465,7 @@ fn object_annotations() {
 fn object_annotations_in_function() {
     let code = r#"
         test = |obj: { x: _ }| obj.x == 1;
-        test(#{ x = 1; });
+        test(#{ x: 1 });
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -476,7 +473,7 @@ fn object_annotations_in_function() {
 
     assert_eq!(type_env["test"].to_string(), "({ x: Num }) -> Bool");
 
-    let bogus_code = "test(#{ x = 1; y = 2; })";
+    let bogus_code = "test(#{ x: 1, y: 2 })";
     let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
     let err = type_env
         .process_statements(&bogus_block)
@@ -490,7 +487,7 @@ fn object_annotations_in_function() {
 fn object_destructure_with_narrowing_annotation() {
     let code = r#"
         test = |{ x -> x_: Num, y }| x_ + y;
-        test(#{ x = 1; y = 2; });
+        test(#{ x: 1, y: 2 });
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -506,7 +503,7 @@ fn object_destructure_with_narrowing_annotation() {
 fn embedded_object_type_annotation() {
     let code = r#"
         test = |{ pt -> pt: { x: Num, y: Num } }| pt.x + pt.y;
-        test(#{ pt = #{ x = 1; y = 2; }; });
+        test(#{ pt: #{ x: 1, y: 2 } });
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();

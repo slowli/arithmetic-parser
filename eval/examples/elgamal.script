@@ -2,15 +2,15 @@
 
 dbg(GEN, ORDER);
 
-gen = || #{
+gen = || {
     sk = rand_scalar();
-    pk = GEN ^ sk;
+    #{ sk, pk: GEN ^ sk }
 };
 
 encrypt = |message, pk| {
     r = rand_scalar();
     shared_secret = pk ^ r;
-    #{ R = GEN ^ r; B = message * shared_secret; }
+    #{ R: GEN ^ r, B: message * shared_secret }
 };
 
 decrypt = |{ R, B }, sk| {
@@ -35,7 +35,7 @@ decrypt = |{ R, B }, sk| {
 ONE = GEN ^ 0;
 encrypt_and_combine = |messages, pk| {
     messages.map(|msg| msg.encrypt(pk)).fold(
-        #{ R = ONE; B = ONE; },
+        #{ R: ONE, B: ONE },
         |enc_x, enc_y| enc_x * enc_y,
     )
 };

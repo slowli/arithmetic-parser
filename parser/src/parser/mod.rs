@@ -21,8 +21,8 @@ use crate::{
     grammars::{Features, Grammar, Parse, ParseLiteral},
     spans::{unite_spans, with_span},
     BinaryOp, Block, Context, Destructure, DestructureRest, Error, ErrorKind, Expr, FnDefinition,
-    InputSpan, Lvalue, NomResult, ObjectDestructure, ObjectDestructureField, Spanned, SpannedExpr,
-    SpannedLvalue, SpannedStatement, Statement, UnaryOp,
+    InputSpan, Lvalue, NomResult, ObjectDestructure, ObjectDestructureField, ObjectExpr, Spanned,
+    SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
 };
 
 #[cfg(test)]
@@ -217,21 +217,38 @@ where
     })(input)
 }
 
+fn object_expr_field<'a, T, Ty>(
+    input: InputSpan<'a>,
+) -> NomResult<'a, (Spanned<'a>, Option<SpannedExpr<'a, T::Base>>)>
+where
+    T: Parse<'a>,
+    Ty: GrammarType,
+{
+    let colon_sep = delimited(ws::<Ty>, tag_char(':'), ws::<Ty>);
+    tuple((
+        map(var_name, Spanned::from),
+        opt(preceded(colon_sep, expr::<T, Ty>)),
+    ))(input)
+}
+
 fn object_expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>
 where
     T: Parse<'a>,
     Ty: GrammarType,
 {
-    let statements = preceded(
+    let object = preceded(
         terminated(tag("#{"), ws::<Ty>),
         cut(terminated(
-            many0(terminated(separated_statement::<T, Ty>, ws::<Ty>)),
+            terminated(
+                separated_list0(comma_sep::<Ty>, object_expr_field::<T, Ty>),
+                opt(comma_sep::<Ty>),
+            ),
             preceded(ws::<Ty>, tag_char('}')),
         )),
     );
 
-    map(with_span(statements), |spanned| {
-        spanned.map_extra(Expr::ObjectBlock)
+    map(with_span(object), |spanned| {
+        spanned.map_extra(|fields| Expr::Object(ObjectExpr { fields }))
     })(input)
 }
 

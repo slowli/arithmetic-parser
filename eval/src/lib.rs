@@ -37,7 +37,8 @@
 //!   via the [`Arithmetic`]. With tuples and object, operations are performed per-element / field.
 //!   Binary operations require tuples of the same size / objects of the same shape,
 //!   or a tuple / object and a primitive value.
-//!   As an example, `(1, 2) + 3` and `(2, 3) / (4, 5)` are valid, but `(1, 2) * (3, 4, 5)` isn't.
+//!   As an example, `(1, 2) + 3` and `#{ x: 2, y: 3 } / #{ x: 4, y: 5 }` are valid,
+//!   but `(1, 2) * (3, 4, 5)` isn't.
 //! - Methods are considered syntactic sugar for functions, with the method receiver considered
 //!   the first function argument. For example, `(1, 2).map(sin)` is equivalent to
 //!   `map((1, 2), sin)`.
@@ -76,16 +77,17 @@
 //!
 //! ## Objects
 //!
-//! - Objects can be created using [object blocks]. After evaluating all statements in the object
-//!   block, all variables assigned within the block become fields of the created object.
-//!   For example, `#{ x = 1; (y, x) = (x, 2); }` will create an object with two fields:
-//!   `x` equal to 2 and `y` equal to 1.
+//! - Objects can be created using [object expressions], which are similar to ones in JavaScript.
+//!   For example, `#{ x: 1, y: (2, 3) }` will create an object with two fields:
+//!   `x` equal to 1 and `y` equal to `(2, 3)`. Similar to Rust / modern JavaScript, shortcut
+//!   field initialization is available: `#{ x, y }` will take vars `x` and `y` from the context.
 //! - Object fields can be accessed via [`FieldAccess`] with a field name that is a valid
 //!   variable name. No other values have such fields. An error will be raised if the object
 //!   does not have the specified field.
 //! - Objects can be destructured using an [`ObjectDestructure`] LHS of an assignment, e.g.,
 //!   `{ x, y } = obj`. An error will be raised if the destructured value is not an object
-//!   or does not have specified fields.
+//!   or does not have the specified fields. Destructuring is not exhaustive; i.e.,
+//!   the destructured object may have extra fields.
 //! - Functional fields are permitted. Similar to Rust, to call a function field, it must
 //!   be enclosed in parentheses: `(obj.run)(arg0, arg1)`.
 //!
@@ -108,7 +110,7 @@
 //! [`Tuple` expression]: arithmetic_parser::Expr::Tuple
 //! [`Destructure`]: arithmetic_parser::Destructure
 //! [`FieldAccess`]: arithmetic_parser::Expr::FieldAccess
-//! [object blocks]: arithmetic_parser::Expr::ObjectBlock
+//! [object expressions]: arithmetic_parser::Expr::Object
 //!
 //! # Examples
 //!
@@ -150,12 +152,12 @@
 //! # use arithmetic_eval::{Assertions, Environment, Prelude, Value, VariableMap};
 //! # fn main() -> anyhow::Result<()> {
 //! let program = r#"
-//!     minmax = |xs| xs.fold(#{ min = INF; max = -INF; }, |acc, x| #{
-//!          min = if(x < acc.min, x, acc.min);
-//!          max = if(x > acc.max, x, acc.max);
+//!     minmax = |xs| xs.fold(#{ min: INF, max: -INF }, |acc, x| #{
+//!          min: if(x < acc.min, x, acc.min),
+//!          max: if(x > acc.max, x, acc.max),
 //!     });
 //!     assert_eq((3, 7, 2, 4).minmax().min, 2);
-//!     assert_eq((5, -4, 6, 9, 1).minmax(), #{ min = -4; max = 9; });
+//!     assert_eq((5, -4, 6, 9, 1).minmax(), #{ min: -4, max: 9 });
 //! "#;
 //! let program = Untyped::<F32Grammar>::parse_statements(program)?;
 //!

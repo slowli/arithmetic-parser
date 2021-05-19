@@ -164,6 +164,28 @@ mod ops;
 mod parser;
 mod spans;
 
+/// Object expression, such as `#{ x, y: x + 2 }`.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct ObjectExpr<'a, T: Grammar<'a>> {
+    /// Fields. Each field is the field name and an optional expression.
+    pub fields: Vec<(Spanned<'a>, Option<SpannedExpr<'a, T>>)>,
+}
+
+impl<'a, T: Grammar<'a>> Clone for ObjectExpr<'a, T> {
+    fn clone(&self) -> Self {
+        Self {
+            fields: self.fields.clone(),
+        }
+    }
+}
+
+impl<'a, T: Grammar<'a>> PartialEq for ObjectExpr<'a, T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.fields == other.fields
+    }
+}
+
 /// Arithmetic expression with an abstract types for type annotations and literals.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -236,8 +258,8 @@ pub enum Expr<'a, T: Grammar<'a>> {
     /// Block expression, e.g., `{ x = 3; x + y }`.
     Block(Block<'a, T>),
 
-    /// Object block, e.g., `#{ x = 1; y = x + 2; }`.
-    ObjectBlock(Vec<SpannedStatement<'a, T>>),
+    /// Object expression, e.g., `#{ x, y: x + 2 }`.
+    Object(ObjectExpr<'a, T>),
 }
 
 impl<'a, T: Grammar<'a>> Expr<'a, T> {
@@ -265,7 +287,7 @@ impl<'a, T: Grammar<'a>> Expr<'a, T> {
             Self::FnDefinition(_) => ExprType::FnDefinition,
             Self::TypeCast { .. } => ExprType::Cast,
             Self::Tuple(_) => ExprType::Tuple,
-            Self::ObjectBlock(_) => ExprType::Object,
+            Self::Object(_) => ExprType::Object,
             Self::Block(_) => ExprType::Block,
             Self::Function { .. } => ExprType::Function,
             Self::FieldAccess { .. } => ExprType::FieldAccess,
@@ -287,7 +309,7 @@ impl<'a, T: Grammar<'a>> Clone for Expr<'a, T> {
                 ty: ty.clone(),
             },
             Self::Tuple(tuple) => Self::Tuple(tuple.clone()),
-            Self::ObjectBlock(statements) => Self::ObjectBlock(statements.clone()),
+            Self::Object(statements) => Self::Object(statements.clone()),
             Self::Block(block) => Self::Block(block.clone()),
             Self::Function { name, args } => Self::Function {
                 name: name.clone(),
@@ -340,7 +362,7 @@ where
             ) => value == other_value && ty == other_ty,
 
             (Self::Tuple(this), Self::Tuple(that)) => this == that,
-            (Self::ObjectBlock(this), Self::ObjectBlock(that)) => this == that,
+            (Self::Object(this), Self::Object(that)) => this == that,
             (Self::Block(this), Self::Block(that)) => this == that,
 
             (

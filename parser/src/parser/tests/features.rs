@@ -237,6 +237,6 @@ fn object_blocks_when_blocks_are_switched_off() {
     let (_, statement) = statement::<SimpleGrammar, Complete>(input).unwrap();
     assert_matches!(
         statement.extra,
-        Statement::Expr(expr) if matches!(expr.extra, Expr::ObjectBlock(_))
+        Statement::Expr(expr) if matches!(expr.extra, Expr::Object(_))
     );
 }

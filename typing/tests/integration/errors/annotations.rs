@@ -357,7 +357,7 @@ fn insufficient_info_when_indexing_tuple() {
 
 #[test]
 fn object_annotation_mismatch() {
-    let code = "obj: { x: _ } = #{ x = 1; y = 2; };";
+    let code = "obj: { x: _ } = #{ x: 1, y: 2 };";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();

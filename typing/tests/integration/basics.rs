@@ -802,3 +802,37 @@ fn indexing_after_narrowing_type() {
         "for<'T: Ops> ((('T, 'T), ...['T; N])) -> ('T, 'T)"
     );
 }
+
+#[test]
+fn wildcard_var_is_not_assigned() {
+    let code = "(_, x) = (1, 2);";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.process_statements(&block).unwrap();
+
+    assert_eq!(type_env["x"].to_string(), "Num");
+    assert!(type_env.get("_").is_none());
+}
+
+#[test]
+fn multiple_wildcard_vars_in_assignment_are_fine() {
+    let code = "(_, _, x) = (1, 2, 3); x == 3;";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.process_statements(&block).unwrap();
+
+    assert_eq!(type_env["x"].to_string(), "Num");
+    assert!(type_env.get("_").is_none());
+}
+
+#[test]
+fn multiple_wildcard_vars_in_fn_def_are_fine() {
+    let code = "|_: Num, { x -> _: Num, y }| y == 1";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let output = TypeEnvironment::new().process_statements(&block).unwrap();
+
+    assert_eq!(
+        output.to_string(),
+        "for<'T: { x: Num, y: Num }> (Num, 'T) -> Bool"
+    );
+}

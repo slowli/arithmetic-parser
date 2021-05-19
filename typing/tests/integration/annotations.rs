@@ -514,3 +514,11 @@ fn embedded_object_type_annotation() {
         "for<'T: { pt: { x: Num, y: Num } }> ('T) -> Num"
     );
 }
+
+#[test]
+fn wildcard_var_influences_typing() {
+    let code = "|(_: Num, y)| y == 1";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let output = TypeEnvironment::new().process_statements(&block).unwrap();
+    assert_eq!(output.to_string(), "((Num, Num)) -> Bool");
+}

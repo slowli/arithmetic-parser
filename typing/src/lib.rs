@@ -130,7 +130,8 @@
     clippy::missing_errors_doc,
     clippy::must_use_candidate,
     clippy::module_name_repetitions,
-    clippy::similar_names // too many false positives because of lhs / rhs
+    clippy::similar_names, // too many false positives because of lhs / rhs
+    clippy::option_if_let_else // too many false positives
 )]
 
 use std::{fmt, marker::PhantomData, str::FromStr};

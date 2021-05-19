@@ -310,7 +310,7 @@ fn folding_to_object_errors() {
 
 #[test]
 fn repeated_field_in_object_initialization() {
-    let code = "#{ x: 1, x: 2 }";
+    let code = "obj = #{ x: 1, x: 2 == 3 }; !obj.x";
     let block = F32Grammar::parse_statements(code).unwrap();
     let err = TypeEnvironment::new()
         .process_statements(&block)
@@ -318,6 +318,20 @@ fn repeated_field_in_object_initialization() {
         .single();
 
     assert_eq!(*err.span().fragment(), "x");
-    assert_eq!(err.span().location_offset(), 9);
+    assert_eq!(err.span().location_offset(), 15);
+    assert_matches!(err.kind(), ErrorKind::RepeatedField(field) if field == "x");
+}
+
+#[test]
+fn repeated_field_in_object_destructure() {
+    let code = "{ x, x } = #{ x: 1 };";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "x");
+    assert_eq!(err.span().location_offset(), 5);
     assert_matches!(err.kind(), ErrorKind::RepeatedField(field) if field == "x");
 }

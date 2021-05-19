@@ -554,3 +554,59 @@ fn indexing_unsupported_errors() {
     assert_matches!(err.context(), ErrorContext::TupleIndex { ty: Type::Var(_) });
     assert_matches!(err.kind(), ErrorKind::UnsupportedIndex);
 }
+
+#[test]
+fn multiple_var_assignments() {
+    let code = "(x, x, y) = (1 == 1, 2, 3); x + 1";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "x");
+    assert_eq!(err.span().location_offset(), 4);
+    assert_matches!(err.kind(), ErrorKind::RepeatedAssignment(var) if var == "x");
+}
+
+#[test]
+fn multiple_var_assignments_in_fn_def() {
+    let code = "|x, x| x + 1";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "x");
+    assert_eq!(err.span().location_offset(), 4);
+    assert_matches!(err.kind(), ErrorKind::RepeatedAssignment(var) if var == "x");
+}
+
+#[test]
+fn multiple_var_assignments_complex() {
+    let code = "(x, { x }, y) = (1 == 1, #{ x: 2 }, 3); x + 1";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "x");
+    assert_eq!(err.span().location_offset(), 6);
+    assert_matches!(err.kind(), ErrorKind::RepeatedAssignment(var) if var == "x");
+}
+
+#[test]
+fn multiple_var_assignments_in_fn_def_complex() {
+    let code = "test = |x, { x }| x + 1; test(3, #{ x: 1 }) == 2";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "x");
+    assert_eq!(err.span().location_offset(), 13);
+    assert_matches!(err.kind(), ErrorKind::RepeatedAssignment(var) if var == "x");
+}

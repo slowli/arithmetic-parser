@@ -455,7 +455,6 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     }
 
     /// Attempts to index into this tuple. `middle_len` specifies the resolved middle length.
-    #[allow(clippy::option_if_let_else)] // hurts readability
     pub(crate) fn get_element(
         &self,
         index: usize,

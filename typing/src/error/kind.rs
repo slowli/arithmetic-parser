@@ -58,6 +58,9 @@ pub enum ErrorKind<Prim: PrimitiveType> {
     /// Trying to unify a type with a type containing it.
     RecursiveType(Type<Prim>),
 
+    /// Repeated assignment to the same variable in function args or tuple destructuring.
+    RepeatedAssignment(String),
+
     /// Field name is invalid.
     InvalidFieldName(String),
     /// Value cannot be indexed (i.e., not a tuple).
@@ -169,6 +172,14 @@ impl<Prim: PrimitiveType> fmt::Display for ErrorKind<Prim> {
                 "Cannot unify type 'T with a type containing it: {}",
                 ty
             ),
+
+            Self::RepeatedAssignment(name) => {
+                write!(
+                    formatter,
+                    "Repeated assignment to the same variable `{}`",
+                    name
+                )
+            }
 
             Self::InvalidFieldName(name) => {
                 write!(formatter, "`{}` is not a valid field name", name)

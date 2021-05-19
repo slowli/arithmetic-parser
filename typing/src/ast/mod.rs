@@ -416,7 +416,6 @@ fn return_type(input: InputSpan<'_>) -> NomResult<'_, SpannedTypeAst<'_>> {
     preceded(tuple((ws, tag("->"), ws)), cut(with_span(type_definition)))(input)
 }
 
-#[allow(clippy::option_if_let_else)] // false positive; `args` is moved into both clauses
 fn fn_or_tuple(input: InputSpan<'_>) -> NomResult<'_, TypeAst<'_>> {
     map(
         tuple((with_span(tuple_definition), opt(return_type))),

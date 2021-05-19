@@ -24,6 +24,9 @@ pub(super) struct TypeProcessor<'a, 'env, Val, Prim: PrimitiveType> {
     scope_before_first_error: Option<HashMap<String, Type<Prim>>>,
     arithmetic: &'env dyn FullArithmetic<Val, Prim>,
     is_in_function: bool,
+    /// Variables assigned within the current lvalue (if it is being processed).
+    /// Used to determine duplicate vars.
+    lvalue_vars: Option<HashMap<&'a str, Spanned<'a>>>,
     errors: Errors<'a, Prim>,
 }
 
@@ -38,6 +41,7 @@ impl<'env, Val, Prim: PrimitiveType> TypeProcessor<'_, 'env, Val, Prim> {
             scope_before_first_error: None,
             arithmetic,
             is_in_function: false,
+            lvalue_vars: None,
             errors: Errors::new(),
         }
     }
@@ -57,9 +61,17 @@ where
             .or_else(|| self.env.get(name))
     }
 
-    fn insert_type(&mut self, name: &str, ty: Type<Prim>) {
-        let scope = self.scopes.last_mut().unwrap();
-        scope.insert(name.to_owned(), ty);
+    fn insert_type(&mut self, name_span: Spanned<'a>, ty: Type<Prim>) {
+        let name = *name_span.fragment();
+        if name != "_" {
+            if let Some(lvalue_vars) = &mut self.lvalue_vars {
+                if lvalue_vars.insert(name, name_span).is_some() {
+                    self.errors.push(Error::repeated_assignment(name_span));
+                }
+            }
+            let scope = self.scopes.last_mut().unwrap();
+            scope.insert(name.to_owned(), ty);
+        }
     }
 
     /// Creates a new type variable.
@@ -67,7 +79,6 @@ where
         self.env.substitutions.new_type_var()
     }
 
-    #[allow(clippy::option_if_let_else)] // false positive; `self` is moved into both clauses
     fn process_annotation(&mut self, ty: Option<&SpannedTypeAst<'a>>) -> Type<Prim> {
         if let Some(ty) = ty {
             AstConversionState::new(&mut self.env, &mut self.errors).convert_type(ty)
@@ -76,7 +87,6 @@ where
         }
     }
 
-    #[allow(clippy::option_if_let_else)] // false positive; `self` is moved into both clauses
     fn process_expr_inner<T>(&mut self, expr: &SpannedExpr<'a, T>) -> Type<Prim>
     where
         T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
@@ -153,7 +163,6 @@ where
     }
 
     #[inline]
-    #[allow(clippy::option_if_let_else)] // false positive
     fn process_var<T>(&mut self, name: &Spanned<'a, T>) -> Type<Prim> {
         let var_name = *name.fragment();
 
@@ -190,7 +199,7 @@ where
         match &lvalue.extra {
             Lvalue::Variable { ty } => {
                 let type_instance = self.process_annotation(ty.as_ref());
-                self.insert_type(lvalue.fragment(), type_instance.clone());
+                self.insert_type(lvalue.with_no_extra(), type_instance.clone());
                 type_instance
             }
 
@@ -254,24 +263,38 @@ where
         let length = self.env.substitutions.new_len_var();
 
         if let DestructureRest::Named { variable, .. } = rest {
-            self.insert_type(variable.fragment(), Type::slice(element.clone(), length));
+            self.insert_type(*variable, Type::slice(element.clone(), length));
         }
         Slice::new(element, length)
     }
 
-    #[allow(clippy::option_if_let_else)] // false positive
     fn process_object_destructure(
         &mut self,
         destructure: &ObjectDestructure<'a, TypeAst<'a>>,
         mut errors: OpErrors<'_, Prim>,
     ) -> Type<Prim> {
+        let mut object_fields = HashMap::new();
+        for field in &destructure.fields {
+            let field_str = *field.field_name.fragment();
+            if object_fields.insert(field_str, field.field_name).is_some() {
+                // We push directly into `self.errors` to preserve the error span.
+                self.errors.push(Error::repeated_field(field.field_name));
+            }
+        }
+
         let fields = destructure.fields.iter().map(|field| {
             let field_name = *field.field_name.fragment();
+
+            // We still process lvalues even if they correspond to duplicate fields.
             let field_type = if let Some(binding) = &field.binding {
                 self.process_lvalue(binding, errors.with_location(field_name))
             } else {
                 let new_type = self.new_type();
-                self.insert_type(field_name, new_type.clone());
+                if object_fields[field_name] == field.field_name {
+                    // Skip inserting a field if we know it's a duplicate; this will just lead to
+                    // an additional error.
+                    self.insert_type(field.field_name, new_type.clone());
+                }
                 new_type
             };
             (field_name.to_owned(), field_type)
@@ -491,6 +514,7 @@ where
         self.scopes.push(HashMap::new());
         let was_in_function = mem::replace(&mut self.is_in_function, true);
 
+        self.lvalue_vars = Some(HashMap::new());
         let mut errors = OpErrors::new();
         let arg_types =
             self.process_destructure(&def.args.extra, TupleContext::FnArgs, errors.by_ref());
@@ -498,6 +522,7 @@ where
             args: arg_types.clone(),
         });
         self.errors.extend(errors);
+        self.lvalue_vars.take();
 
         let return_type = self.process_block(&def.body);
         self.scopes.pop();
@@ -530,6 +555,7 @@ where
             Statement::Assignment { lhs, rhs } => {
                 let rhs_ty = self.process_expr_inner(rhs);
 
+                self.lvalue_vars = Some(HashMap::new());
                 let mut errors = OpErrors::new();
                 let lhs_ty = self.process_lvalue(lhs, errors.by_ref());
                 self.env
@@ -541,6 +567,8 @@ where
                 };
                 self.errors
                     .extend(errors.contextualize_assignment(lhs, &context));
+                self.lvalue_vars.take();
+
                 Type::void()
             }
 

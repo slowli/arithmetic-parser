@@ -89,7 +89,7 @@ fn tuples_when_switched_off() {
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
     assert_matches!(err, NomErr::Failure(spanned) if spanned.span().location_offset() == 0);
 
-    let input = InputSpan::new("{ x, y } = #{ x = 1; y = 2; }");
+    let input = InputSpan::new("{ x, y } = #{ x: 1, y: 2 }");
     let stmt = statement::<SimpleGrammar, Complete>(input).unwrap().1;
     assert_matches!(
         stmt.extra,
@@ -233,7 +233,7 @@ fn object_blocks_when_blocks_are_switched_off() {
         const FEATURES: Features = Features::all().without(Features::BLOCKS);
     }
 
-    let input = InputSpan::new("#{ x = 1; y = 2; };");
+    let input = InputSpan::new("#{ x: 1, y: 2 };");
     let (_, statement) = statement::<SimpleGrammar, Complete>(input).unwrap();
     assert_matches!(
         statement.extra,

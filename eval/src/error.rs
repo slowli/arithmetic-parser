@@ -3,6 +3,7 @@
 pub use arithmetic_parser::UnsupportedType;
 
 use derive_more::Display;
+use hashbrown::HashSet;
 
 use core::fmt;
 
@@ -126,6 +127,22 @@ pub enum ErrorKind {
         context: TupleLenMismatchContext,
     },
 
+    /// Field set differs between LHS and RHS, which are both objects.
+    #[display(
+        fmt = "Cannot perform {} on objects: LHS has fields {:?}, whereas RHS has fields {:?}",
+        op,
+        lhs_fields,
+        rhs_fields
+    )]
+    FieldsMismatch {
+        /// Fields in LHS.
+        lhs_fields: HashSet<String>,
+        /// Fields in RHS.
+        rhs_fields: HashSet<String>,
+        /// Operation being performed.
+        op: BinaryOp,
+    },
+
     /// Mismatch between the number of arguments in the function definition and its call.
     #[display(
         fmt = "Mismatch between the number of arguments in the function definition and its call: \
@@ -150,6 +167,10 @@ pub enum ErrorKind {
         /// Context in which the error has occurred.
         context: RepeatedAssignmentContext,
     },
+
+    /// Repeated field in object destructure, e.g., `{ x, x }`.
+    #[display(fmt = "Repeated field in object destructure")]
+    RepeatedField,
 
     /// Variable with the enclosed name is not defined.
     #[display(fmt = "Variable `{}` is not defined", _0)]
@@ -247,6 +268,9 @@ impl ErrorKind {
             Self::TupleLenMismatch { context, .. } => {
                 format!("Mismatch between length of tuples in {}", context)
             }
+            Self::FieldsMismatch { op, .. } => {
+                format!("Mismatch between object shapes during {}", op)
+            }
             Self::ArgsLenMismatch { .. } => {
                 "Mismatch between the number of arguments in the function definition and its call"
                     .to_owned()
@@ -255,6 +279,7 @@ impl ErrorKind {
             Self::RepeatedAssignment { context } => {
                 format!("Repeated assignment to the same variable in {}", context)
             }
+            Self::RepeatedField => "Repeated field in object destructure".to_owned(),
             Self::Undefined(name) => format!("Variable `{}` is not defined", name),
             Self::InvalidFieldName(name) => format!("`{}` is not a valid field name", name),
             Self::CannotCall => "Value is not callable".to_owned(),
@@ -280,9 +305,13 @@ impl ErrorKind {
             Self::TupleLenMismatch { context, lhs, .. } => {
                 format!("LHS of {} with {} element(s)", context, lhs)
             }
+            Self::FieldsMismatch { lhs_fields, .. } => {
+                format!("LHS with fields {:?}", lhs_fields)
+            }
             Self::ArgsLenMismatch { call, .. } => format!("Called with {} arg(s) here", call),
             Self::CannotDestructure => "Failed destructuring".to_owned(),
             Self::RepeatedAssignment { .. } => "Re-assigned variable".to_owned(),
+            Self::RepeatedField => "Repeated field".to_owned(),
             Self::Undefined(_) => "Undefined variable occurrence".to_owned(),
             Self::InvalidFieldName(_) => "Invalid field".to_owned(),
             Self::CannotIndex | Self::IndexOutOfBounds { .. } => "Indexing operation".to_owned(),
@@ -303,6 +332,10 @@ impl ErrorKind {
                 "If both args of {} are tuples, the number of elements in them must agree",
                 context
             ),
+            Self::FieldsMismatch { op, .. } => format!(
+                "If both args of {} are objects, their field names must be the same",
+                op
+            ),
             Self::CannotDestructure => {
                 "Only tuples can be destructured; numbers, functions and booleans cannot".to_owned()
             }
@@ -310,6 +343,7 @@ impl ErrorKind {
                 "In {}, all assigned variables must have different names",
                 context
             ),
+            Self::RepeatedField => "Field names in destructuring must be unique".to_owned(),
             Self::InvalidFieldName(_) => "Field names must be `usize`s or identifiers".to_owned(),
             Self::CannotCall => "Only functions are callable, i.e., can be used as `fn_name` \
                 in `fn_name(...)` expressions"
@@ -366,7 +400,9 @@ pub enum AuxErrorInfo {
     Rvalue,
 
     /// RHS of a binary operation on differently sized tuples.
-    UnbalancedRhs(usize),
+    UnbalancedRhsTuple(usize),
+    /// RHS of a binary operation on differently shaped objects.
+    UnbalancedRhsObject(HashSet<String>),
 
     /// Invalid argument.
     InvalidArg,
@@ -387,7 +423,12 @@ impl fmt::Display for AuxErrorInfo {
             Self::FnArgs => formatter.write_str("Function arguments declared here"),
             Self::PrevAssignment => formatter.write_str("Previous declaration"),
             Self::Rvalue => formatter.write_str("RHS containing the invalid assignment"),
-            Self::UnbalancedRhs(size) => write!(formatter, "RHS with the {}-element tuple", size),
+            Self::UnbalancedRhsTuple(size) => {
+                write!(formatter, "RHS with the {}-element tuple", size)
+            }
+            Self::UnbalancedRhsObject(fields) => {
+                write!(formatter, "RHS object with fields {:?}", fields)
+            }
             Self::InvalidArg => formatter.write_str("Invalid argument"),
             Self::ArgValue(val) => write!(formatter, "Has value: {}", val),
         }

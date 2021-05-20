@@ -18,6 +18,13 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Support `Expr::FieldAccess` for accessing fields in objects. (#85)
 
+- Support object destructuring via `Lvalue::Object`. Destructuring is non-exhaustive,
+  i.e., the destructured object may have extra fields. (#86)
+
+### Changed
+
+- Rename `AuxErrorInfo::UnbalancedRhs` to `AuxErrorInfo::UnbalancedRhsTuple`. (#86)
+
 ## 0.2.0 - 2020-12-05
 
 *(All changes are relative compared to [the 0.2.0-beta.1 release](#020-beta1---2020-10-04))* 

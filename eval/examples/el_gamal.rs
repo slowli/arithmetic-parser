@@ -29,46 +29,7 @@ fn find_generator(modulus: &BigUint) -> BigUint {
     random_value.modpow(&two, modulus)
 }
 
-const EL_GAMAL_ENCRYPTION: &str = r#"
-    dbg(GEN, ORDER);
-
-    gen = || {
-        sk = rand_scalar();
-        (sk, GEN ^ sk)
-    };
-
-    encrypt = |message, pk| {
-        r = rand_scalar();
-        shared_secret = pk ^ r;
-        (GEN ^ r, message * shared_secret)
-    };
-
-    decrypt = |(R, blinded_message), sk| {
-        shared_secret = R ^ sk;
-        blinded_message / shared_secret
-    };
-
-    // Test!
-    (sk, pk) = gen();
-
-    5.while(|i| i != 0, |i| {
-        message = rand_scalar();
-        dbg(message);
-        encrypted = message.encrypt(pk);
-        dbg(encrypted);
-        assert_eq(encrypted.decrypt(sk), message);
-
-        // ElGamal encryption is partially homomorphic: a product of encryptions
-        // is an encryption of the product of plaintexts.
-        other_message = rand_scalar();
-        dbg(other_message);
-        encrypted_total = dbg(other_message.encrypt(pk)) * encrypted;
-        dbg(encrypted_total);
-        assert_eq(encrypted_total.decrypt(sk), message * other_message);
-
-        i - 1
-    })
-"#;
+const EL_GAMAL_ENCRYPTION: &str = include_str!("elgamal.script");
 
 fn main() -> anyhow::Result<()> {
     let el_gamal_encryption =

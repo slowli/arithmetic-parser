@@ -653,6 +653,17 @@ impl BinaryOpError {
         }
     }
 
+    fn object<T>(op: BinaryOp, lhs: HashMap<String, T>, rhs: HashMap<String, T>) -> Self {
+        Self {
+            inner: ErrorKind::FieldsMismatch {
+                lhs_fields: lhs.into_iter().map(|(name, _)| name).collect(),
+                rhs_fields: rhs.into_iter().map(|(name, _)| name).collect(),
+                op,
+            },
+            side: Some(OpSide::Lhs),
+        }
+    }
+
     fn with_side(mut self, side: OpSide) -> Self {
         self.side = Some(side);
         self
@@ -676,10 +687,12 @@ impl BinaryOpError {
             None => total_span,
         };
 
-        let aux_info = if let ErrorKind::TupleLenMismatch { rhs, .. } = self.inner {
-            Some(AuxErrorInfo::UnbalancedRhs(rhs))
-        } else {
-            None
+        let aux_info = match &self.inner {
+            ErrorKind::TupleLenMismatch { rhs, .. } => Some(AuxErrorInfo::UnbalancedRhsTuple(*rhs)),
+            ErrorKind::FieldsMismatch { rhs_fields, .. } => {
+                Some(AuxErrorInfo::UnbalancedRhsObject(rhs_fields.clone()))
+            }
+            _ => None,
         };
 
         let mut err = Error::new(module_id, &main_span, self.inner);
@@ -719,7 +732,6 @@ impl<'a, T: Clone> Value<'a, T> {
                     .collect();
                 output.map(Self::Tuple)
             }
-
             (Self::Tuple(this), other @ Self::Number(_)) => {
                 let output: Result<Vec<_>, _> = this
                     .into_iter()
@@ -738,6 +750,47 @@ impl<'a, T: Clone> Value<'a, T> {
                     output.map(Self::Tuple)
                 } else {
                     Err(BinaryOpError::tuple(op, this.len(), other.len()))
+                }
+            }
+
+            (this @ Self::Number(_), Self::Object(other)) => {
+                let output: Result<HashMap<_, _>, _> = other
+                    .into_iter()
+                    .map(|(name, y)| {
+                        this.clone()
+                            .try_binary_op_inner(y, op, arithmetic)
+                            .map(|res| (name, res))
+                    })
+                    .collect();
+                output.map(Self::Object)
+            }
+            (Self::Object(this), other @ Self::Number(_)) => {
+                let output: Result<HashMap<_, _>, _> = this
+                    .into_iter()
+                    .map(|(name, x)| {
+                        x.try_binary_op_inner(other.clone(), op, arithmetic)
+                            .map(|res| (name, res))
+                    })
+                    .collect();
+                output.map(Self::Object)
+            }
+
+            (Self::Object(this), Self::Object(mut other)) => {
+                let same_keys =
+                    this.len() == other.len() && this.keys().all(|key| other.contains_key(key));
+                if same_keys {
+                    let output: Result<HashMap<_, _>, _> = this
+                        .into_iter()
+                        .map(|(name, x)| {
+                            let y = other.remove(&name).unwrap();
+                            // ^ `unwrap` safety was checked previously
+                            x.try_binary_op_inner(y, op, arithmetic)
+                                .map(|res| (name, res))
+                        })
+                        .collect();
+                    output.map(Self::Object)
+                } else {
+                    Err(BinaryOpError::object(op, this, other))
                 }
             }
 

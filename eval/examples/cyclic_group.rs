@@ -279,81 +279,8 @@ impl Arithmetic<GroupLiteral> for CyclicGroupArithmetic {
     }
 }
 
-const SCHNORR_SIGNATURES: &str = r#"
-    dbg(GEN, ORDER);
-
-    gen = || {
-        sk = rand_scalar();
-        (sk, GEN ^ sk)
-    };
-
-    sign = |message, sk| {
-        r = rand_scalar();
-        R = GEN ^ r;
-        e = hash_to_scalar(R, message);
-        (e, r - sk * e)
-    };
-
-    verify = |(e, s), message, pk| {
-        R = GEN ^ s * pk ^ e;
-        e == hash_to_scalar(R, message)
-    };
-
-    // Test!
-    (sk, pk) = gen();
-    (_, other_pk) = gen();
-
-    5.while(|i| i != 0, |i| {
-        message = rand_scalar();
-        dbg(message);
-        signature = message.sign(sk);
-        dbg(signature);
-
-        assert(signature.verify(message, pk));
-        assert(!signature.verify(message, other_pk));
-        assert(!signature.verify(rand_scalar(), pk));
-
-        i - 1
-    })
-"#;
-
-const DSA_SIGNATURES: &str = r#"
-    dbg(GEN, ORDER);
-
-    gen = || {
-        sk = rand_scalar();
-        (sk, GEN ^ sk)
-    };
-
-    sign = |message, sk| {
-        k = rand_scalar();
-        r = (GEN ^ k).to_scalar();
-        s = (hash_to_scalar(message) + sk * r) / k;
-        (r, s)
-    };
-
-    verify = |(r, s), message, pk| {
-        (u1, u2) = (hash_to_scalar(message), r) / s;
-        (GEN ^ u1 * pk ^ u2).to_scalar() == r
-    };
-
-    // Test!
-    (sk, pk) = gen();
-    (_, other_pk) = gen();
-
-    5.while(|i| i != 0, |i| {
-        message = rand_scalar();
-        dbg(message);
-        signature = message.sign(sk);
-        dbg(signature);
-
-        assert(signature.verify(message, pk));
-        assert(!signature.verify(message, other_pk));
-        assert(!signature.verify(rand_scalar(), pk));
-
-        i - 1
-    })
-"#;
+const SCHNORR_SIGNATURES: &str = include_str!("schnorr.script");
+const DSA_SIGNATURES: &str = include_str!("dsa.script");
 
 /// Type for a custom grammar definition.
 #[derive(Debug, Clone, Copy)]

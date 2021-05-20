@@ -15,8 +15,8 @@ use crate::{
 };
 use arithmetic_parser::{
     grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Destructure, Expr, FnDefinition,
-    InputSpan, Lvalue, MaybeSpanned, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement,
-    Statement, UnaryOp,
+    InputSpan, Lvalue, MaybeSpanned, ObjectDestructure, Spanned, SpannedExpr, SpannedLvalue,
+    SpannedStatement, Statement, UnaryOp,
 };
 
 mod captures;
@@ -581,29 +581,17 @@ impl Compiler {
     ) -> Result<(), Error<'a>> {
         match &lhs.extra {
             Lvalue::Variable { .. } => {
-                let var_name = *lhs.fragment();
-                if var_name != "_" {
-                    self.vars_to_registers
-                        .insert(var_name.to_owned(), rhs_register);
-                    if let Some(fields) = &mut self.object_fields {
-                        fields.insert(var_name.to_owned(), rhs_register);
-                    }
-
-                    // It does not make sense to annotate vars in the inner scopes, since
-                    // they cannot be accessed externally.
-                    if self.scope_depth == 0 {
-                        let command = Command::Annotate {
-                            register: rhs_register,
-                            name: var_name.to_owned(),
-                        };
-                        executable.push_command(lhs.copy_with_extra(command));
-                    }
-                }
+                self.insert_var(executable, lhs.with_no_extra(), rhs_register);
             }
 
             Lvalue::Tuple(destructure) => {
                 let span = lhs.with_no_extra();
                 self.destructure(executable, destructure, span, rhs_register)?;
+            }
+
+            Lvalue::Object(destructure) => {
+                let span = lhs.with_no_extra();
+                self.destructure_object(executable, destructure, span, rhs_register)?;
             }
 
             _ => {
@@ -613,6 +601,31 @@ impl Compiler {
         }
 
         Ok(())
+    }
+
+    fn insert_var<'a, T>(
+        &mut self,
+        executable: &mut Executable<'a, T>,
+        var_span: Spanned<'a>,
+        register: usize,
+    ) {
+        let var_name = *var_span.fragment();
+        if var_name != "_" {
+            self.vars_to_registers.insert(var_name.to_owned(), register);
+            if let Some(fields) = &mut self.object_fields {
+                fields.insert(var_name.to_owned(), register);
+            }
+
+            // It does not make sense to annotate vars in the inner scopes, since
+            // they cannot be accessed externally.
+            if self.scope_depth == 0 {
+                let command = Command::Annotate {
+                    register,
+                    name: var_name.to_owned(),
+                };
+                executable.push_command(var_span.copy_with_extra(command));
+            }
+        }
     }
 
     fn destructure<'a, T, Ty>(
@@ -649,6 +662,29 @@ impl Compiler {
             self.assign(executable, lvalue, i)?;
         }
 
+        Ok(())
+    }
+
+    fn destructure_object<'a, T, Ty>(
+        &mut self,
+        executable: &mut Executable<'a, T>,
+        destructure: &ObjectDestructure<'a, Ty>,
+        span: Spanned<'a>,
+        rhs_register: usize,
+    ) -> Result<(), Error<'a>> {
+        for field in &destructure.fields {
+            let field_name = FieldName::Name((*field.field_name.fragment()).to_owned());
+            let field_access = CompiledExpr::FieldAccess {
+                receiver: span.copy_with_extra(Atom::Register(rhs_register)).into(),
+                field: field_name,
+            };
+            let register = self.push_assignment(executable, field_access, &field.field_name);
+            if let Some(binding) = &field.binding {
+                self.assign(executable, binding, register)?;
+            } else {
+                self.insert_var(executable, field.field_name, register);
+            }
+        }
         Ok(())
     }
 }

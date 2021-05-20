@@ -22,6 +22,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
   syntax is similar to a `Block`, except it does not allow a terminating
   return expression. (#85)
 
+- Add object destructuring via `Lvalue::Object`. (#86)
+
 ### Changed
 
 - Make `Grammar` and `Parse` traits parametric on the lifetime of input.

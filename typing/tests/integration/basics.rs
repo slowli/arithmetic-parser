@@ -648,7 +648,7 @@ fn comparison_type_errors() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.span().fragment(), "(2 <= 1)");
+    assert_eq!(*err.main_span().fragment(), "(2 <= 1)");
     assert_eq!(err.location(), [ErrorLocation::Lhs]);
     assert_matches!(err.context(), ErrorContext::BinaryOp(_));
     assert_matches!(

@@ -614,7 +614,7 @@ pub(crate) enum IndexError {
 /// let errors = env.process_statements(&ast).unwrap_err();
 ///
 /// let err = errors.iter().next().unwrap();
-/// assert_eq!(*err.span().fragment(), "(_, _, z)");
+/// assert_eq!(*err.main_span().fragment(), "(_, _, z)");
 /// assert_eq!(env["ys"], env["xs"]);
 /// # Ok(())
 /// # }

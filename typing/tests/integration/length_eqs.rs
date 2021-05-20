@@ -49,7 +49,7 @@ fn push_fn_in_other_fn_definition() {
     type_env.insert("push", Prelude::Push);
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.span().fragment(), "(_, z)");
+    assert_eq!(*err.main_span().fragment(), "(_, z)");
     assert_eq!(*err.root_span().fragment(), "(_, (_, z))");
     assert_matches!(
         err.kind(),
@@ -142,7 +142,7 @@ fn requirements_on_len_via_destructuring() {
         .insert("map", Prelude::Map);
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.span().fragment(), "(1,)");
+    assert_eq!(*err.main_span().fragment(), "(1,)");
     assert_eq!(*err.root_span().fragment(), "(1,).len_at_least2()");
     assert_matches!(
         err.kind(),
@@ -183,7 +183,7 @@ fn reversing_a_slice() {
         .insert("merge", Prelude::Merge);
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.span().fragment(), "(_, ...)");
+    assert_eq!(*err.main_span().fragment(), "(_, ...)");
     assert_matches!(err.kind(), ErrorKind::TupleLenMismatch { .. });
     assert_eq!(type_env["reverse"].to_string(), "(['T; N]) -> ['T]");
     assert_eq!(type_env["ys"].to_string(), "[Bool]");
@@ -241,7 +241,7 @@ fn square_function() {
     let errors = type_env.process_statements(&block).unwrap_err();
     let err = errors.into_iter().next().unwrap();
 
-    assert_eq!(*err.span().fragment(), "(1, 2)");
+    assert_eq!(*err.main_span().fragment(), "(1, 2)");
     assert_eq!(
         *err.root_span().fragment(),
         "((1, 2), (3, 4), (5, 6)).is_square()"
@@ -302,7 +302,7 @@ fn column_row_equality_fn() {
         .process_statements(&test_code)
         .unwrap_err()
         .single();
-    assert_eq!(*err.span().fragment(), "(3, 4, 5)");
+    assert_eq!(*err.main_span().fragment(), "(3, 4, 5)");
     assert_eq!(*err.root_span().fragment(), "zs.push((3, 4, 5))");
     assert_matches!(err.kind(), ErrorKind::TupleLenMismatch { .. });
 }

@@ -218,7 +218,7 @@ fn unifying_tuples_with_dyn_lengths() {
     type_env.insert("true", Type::BOOL);
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.span().fragment(), "(...[_; _], _, Num)");
+    assert_eq!(*err.main_span().fragment(), "(...[_; _], _, Num)");
     assert_eq!(err.location(), [ErrorLocation::TupleElement(None)]);
     assert_matches!(
         err.context(),
@@ -273,7 +273,7 @@ fn type_with_tuple_of_any() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.span().fragment(), "test(1)");
+    assert_eq!(*err.main_span().fragment(), "test(1)");
     assert_matches!(
         err.kind(),
         ErrorKind::TypeMismatch(lhs, rhs)
@@ -295,7 +295,7 @@ fn type_with_any_fn() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.span().fragment(), "fun(1, 2)");
+    assert_eq!(*err.main_span().fragment(), "fun(1, 2)");
     assert_matches!(
         err.kind(),
         ErrorKind::TupleLenMismatch { lhs, rhs, .. }
@@ -314,7 +314,7 @@ fn dyn_type_in_slice() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.span().fragment(), "[dyn Lin; _]");
+    assert_eq!(*err.main_span().fragment(), "[dyn Lin; _]");
     assert_matches!(
         err.kind(),
         ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
@@ -460,7 +460,7 @@ fn annotations_for_fns_with_slices() {
     type_env.insert("map", Prelude::Map);
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(err.span().location_line(), 4);
+    assert_eq!(err.main_span().location_line(), 4);
     assert_matches!(
         err.kind(),
         ErrorKind::TupleLenMismatch { lhs, rhs, .. }

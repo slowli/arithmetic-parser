@@ -289,7 +289,7 @@ fn schnorr_signatures_error() {
 
     assert_eq!(errors.len(), 1);
     let err = errors.into_iter().next().unwrap();
-    assert_eq!(*err.span().fragment(), "R");
+    assert_eq!(*err.main_span().fragment(), "R");
     assert_eq!(
         err.kind().to_string(),
         "Type `Ge` is not assignable to type `Sc`"

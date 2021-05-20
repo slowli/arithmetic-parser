@@ -52,7 +52,7 @@ use crate::{arith::WithBoolean, Function, Type, UnknownLen};
 /// let errors = env.process_statements(&ast).unwrap_err();
 /// assert_eq!(errors.len(), 1);
 /// let err = errors.iter().next().unwrap();
-/// assert_eq!(*err.span().fragment(), "(_, _, _, z)");
+/// assert_eq!(*err.main_span().fragment(), "(_, _, _, z)");
 /// # assert_matches!(err.kind(), ErrorKind::TupleLenMismatch { .. });
 /// # Ok(())
 /// # }

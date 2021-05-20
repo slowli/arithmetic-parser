@@ -35,8 +35,8 @@ impl<Prim: PrimitiveType> fmt::Display for Error<'_, Prim> {
         write!(
             formatter,
             "{}:{}: {}",
-            self.span().location_line(),
-            self.span().get_column(),
+            self.main_span().location_line(),
+            self.main_span().get_column(),
             self.kind()
         )
     }
@@ -154,11 +154,11 @@ impl<'a, Prim: PrimitiveType> Error<'a, Prim> {
     }
 
     /// Gets the most specific code span of this error.
-    pub fn span(&self) -> Spanned<'a> {
+    pub fn main_span(&self) -> Spanned<'a> {
         self.inner.with_no_extra()
     }
 
-    /// Gets the root code span of the failed operation. May coincide with [`Self::span()`].
+    /// Gets the root code span of the failed operation. May coincide with [`Self::main_span()`].
     pub fn root_span(&self) -> Spanned<'a> {
         self.root_span
     }

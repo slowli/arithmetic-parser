@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     error::{ErrorKind, OpErrors},
-    PrimitiveType, Substitutions, Type,
+    DynConstraints, PrimitiveType, Substitutions, Type,
 };
 
 /// Object type: named fields with heterogeneous types.
@@ -33,8 +33,8 @@ use crate::{
 /// # fn main() -> anyhow::Result<()> {
 /// let code = r#"
 ///     manhattan = |pt: { x: Num, y: Num }| pt.x + pt.y;
-///     manhattan(#{ x = 3; y = 4; }); // OK
-///     manhattan(#{ x = 3; y = 4; z = 5; }); // fails
+///     manhattan(#{ x: 3, y: 4 }); // OK
+///     manhattan(#{ x: 3, y: 4, z: 5 }); // fails
 /// "#;
 /// let ast = Parser::parse_statements(code)?;
 /// let err = TypeEnvironment::new().process_statements(&ast).unwrap_err();
@@ -59,8 +59,8 @@ use crate::{
 /// # fn main() -> anyhow::Result<()> {
 /// let code = r#"
 ///     manhattan = |pt| pt.x + pt.y;
-///     manhattan(#{ x = 3; y = 4; }); // OK
-///     manhattan(#{ x = 3; y = 4; z = 5; }); // also OK
+///     manhattan(#{ x: 3, y: 4 }); // OK
+///     manhattan(#{ x: 3, y: 4, z: 5 }); // also OK
 /// "#;
 /// let ast = Parser::parse_statements(code)?;
 /// let mut env = TypeEnvironment::new();
@@ -154,6 +154,11 @@ impl<Prim: PrimitiveType> Object<Prim> {
         self.fields.keys().map(String::as_str)
     }
 
+    /// Converts this object into a corresponding dynamic constraint.
+    pub fn into_dyn(self) -> Type<Prim> {
+        Type::Dyn(DynConstraints::from(self))
+    }
+
     pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = (&str, &mut Type<Prim>)> + '_ {
         self.fields.iter_mut().map(|(name, ty)| (name.as_str(), ty))
     }
@@ -193,15 +198,16 @@ impl<Prim: PrimitiveType> Object<Prim> {
 
         match resolved_ty {
             Type::Object(rhs) => {
-                let rhs = rhs.clone();
-                self.constraint_object(&rhs, substitutions, errors);
+                self.constraint_object(&rhs.clone(), substitutions, errors);
             }
-            Type::Any(constraints) => {
-                constraints
-                    .clone()
-                    .apply_all_to_object(self, substitutions, errors);
+            Type::Dyn(constraints) => {
+                if let Some(object) = constraints.inner.object.clone() {
+                    self.constraint_object(&object, substitutions, errors);
+                } else {
+                    errors.push(ErrorKind::CannotAccessFields);
+                }
             }
-            Type::Var(_) => { /* OK */ }
+            Type::Any | Type::Var(_) => { /* OK */ }
             _ => errors.push(ErrorKind::CannotAccessFields),
         }
     }

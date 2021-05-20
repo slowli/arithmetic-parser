@@ -245,21 +245,22 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                     errors.push(ErrorKind::UnresolvedParam);
                 }
             }
+
+            // This takes care of `Any` types because they are equal to anything.
+            (ty, other_ty) if ty == other_ty => {
+                // We already know that types are equal.
+            }
+
+            (Type::Dyn(constraints), ty) => {
+                constraints.inner.apply_all(ty, self, errors);
+            }
+
             (ty, Type::Var(var)) => {
                 if var.is_free() {
                     self.unify_var(var.index(), ty, false, errors);
                 } else {
                     errors.push(ErrorKind::UnresolvedParam);
                 }
-            }
-
-            (Type::Any(constraints), ty) | (ty, Type::Any(constraints)) => {
-                constraints.apply_all(ty, self, errors);
-            }
-
-            // This takes care of `Any` types because they are equal to anything.
-            (ty, other_ty) if ty == other_ty => {
-                // We already know that types are equal.
             }
 
             (Type::Tuple(lhs_tuple), Type::Tuple(rhs_tuple)) => {
@@ -612,6 +613,15 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         is_lhs: bool,
         mut errors: OpErrors<'_, Prim>,
     ) {
+        // Variables should be resolved in `unify`.
+        debug_assert!(is_lhs || !matches!(ty, Type::Any | Type::Dyn(_)));
+        debug_assert!(!self.eqs.contains_key(&var_idx));
+        debug_assert!(if let Type::Var(var) = ty {
+            !self.eqs.contains_key(&var.index())
+        } else {
+            true
+        });
+
         if let Type::Var(var) = ty {
             if !var.is_free() {
                 errors.push(ErrorKind::UnresolvedParam);
@@ -620,22 +630,6 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 return;
             }
         }
-        let (needs_equation, constraints_checked) = if let Type::Any(constraints) = ty {
-            let mut current_constraints = self.constraints.remove(&var_idx).unwrap_or_default();
-            current_constraints.extend(constraints.clone().into(), self, errors.by_ref());
-            self.constraints.insert(var_idx, current_constraints);
-            (is_lhs, true)
-        } else {
-            (true, false)
-        };
-
-        // Variables should be resolved in `unify`.
-        debug_assert!(!self.eqs.contains_key(&var_idx));
-        debug_assert!(if let Type::Var(var) = ty {
-            !self.eqs.contains_key(&var.index())
-        } else {
-            true
-        });
 
         let mut checker = OccurrenceChecker::new(self, iter::once(var_idx));
         checker.visit_type(ty);
@@ -643,23 +637,17 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         if let Some(var) = checker.recursive_var {
             self.handle_recursive_type(ty.clone(), var, &mut errors);
         } else {
-            // If the constraints were checked previously, we don't need to do it again;
-            // it will lead to duplicate errors.
-            if !constraints_checked {
-                if let Some(constraints) = self.constraints.get(&var_idx).cloned() {
-                    constraints.apply_all(ty, self, errors);
-                }
+            if let Some(constraints) = self.constraints.get(&var_idx).cloned() {
+                constraints.apply_all(ty, self, errors);
             }
 
-            if needs_equation {
-                let mut ty = ty.clone();
-                if !is_lhs {
-                    // We need to swap `any` types / lengths with new vars so that this type
-                    // can be specified further.
-                    TypeSpecifier::new(self).visit_type_mut(&mut ty);
-                }
-                self.eqs.insert(var_idx, ty);
+            let mut ty = ty.clone();
+            if !is_lhs {
+                // We need to swap `any` types / lengths with new vars so that this type
+                // can be specified further.
+                TypeSpecifier::new(self).visit_type_mut(&mut ty);
             }
+            self.eqs.insert(var_idx, ty);
         }
     }
 }
@@ -787,17 +775,21 @@ impl<'a, Prim: PrimitiveType> TypeSpecifier<'a, Prim> {
 
 impl<Prim: PrimitiveType> VisitMut<Prim> for TypeSpecifier<'_, Prim> {
     fn visit_type_mut(&mut self, ty: &mut Type<Prim>) {
-        if let Type::Any(constraints) = ty {
-            if self.variance == Variance::Co {
+        match ty {
+            Type::Any if self.variance == Variance::Co => {
+                *ty = self.substitutions.new_type_var();
+            }
+
+            Type::Dyn(constraints) if self.variance == Variance::Co => {
                 let var_idx = self.substitutions.type_var_count;
                 self.substitutions
                     .constraints
-                    .insert(var_idx, constraints.clone().into());
+                    .insert(var_idx, constraints.inner.clone());
                 *ty = Type::free_var(var_idx);
                 self.substitutions.type_var_count += 1;
             }
-        } else {
-            visit::visit_type_mut(self, ty);
+
+            _ => visit::visit_type_mut(self, ty),
         }
     }
 

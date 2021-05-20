@@ -373,22 +373,41 @@ fn any_type() {
     let (rest, ty) = type_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_matches!(ty, TypeAst::Any(constraints) if constraints.terms.is_empty());
+    assert_matches!(ty, TypeAst::Any);
 }
 
 #[test]
-fn any_type_with_bound() {
-    let input = InputSpan::new("any Lin");
+fn dyn_type_with_bound() {
+    let input = InputSpan::new("dyn Lin");
     let (rest, ty) = type_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    assert_matches!(ty, TypeAst::Any(constraints) if constraints.terms.len() == 1);
+    assert_matches!(ty, TypeAst::Dyn(constraints) if constraints.terms.len() == 1);
 
-    let weird_input = InputSpan::new("anyLin");
+    let weird_input = InputSpan::new("dynLin");
     let (rest, ty) = type_definition(weird_input).unwrap();
 
     assert!(rest.fragment().is_empty());
     assert_eq!(ty, TypeAst::Ident);
+}
+
+#[test]
+fn dyn_type_with_object_bound() {
+    let input = InputSpan::new("dyn { x: Num } + Lin");
+    let (rest, ty) = type_definition(input).unwrap();
+
+    assert!(rest.fragment().is_empty());
+    let object = match ty {
+        TypeAst::Dyn(constraints) => {
+            assert_eq!(constraints.terms.len(), 1);
+            constraints.object.unwrap()
+        }
+        _ => panic!("Unexpected type: {:?}", ty),
+    };
+    assert_eq!(object.fields.len(), 1);
+    let (field_name, field_ty) = &object.fields[0];
+    assert_eq!(*field_name.fragment(), "x");
+    assert_matches!(field_ty.extra, TypeAst::Ident);
 }
 
 #[test]
@@ -397,7 +416,7 @@ fn any_type_in_cast_chain() {
     let (rest, ty) = type_definition(input).unwrap();
 
     assert_eq!(*rest.fragment(), " as Num");
-    assert_matches!(ty, TypeAst::Any(constraints) if constraints.terms.is_empty());
+    assert_matches!(ty, TypeAst::Any);
 }
 
 #[test]

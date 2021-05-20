@@ -17,10 +17,10 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 - Add `Expr::FieldAccess` for field access expressions, such as
   `point.x` or `xs.0`. (#84)
 
-- Add `Expr::ObjectBlock` for creating objects, i.e. aggregate data structures
-  with heterogeneous named fields (known in Rust as structs). The `ObjectBlock`
-  syntax is similar to a `Block`, except it does not allow a terminating
-  return expression. (#85)
+- Add `Expr::Object` for creating objects, i.e. aggregate data structures
+  with heterogeneous named fields (known in Rust as structs). The `Object`
+  syntax is similar to struct initialization in Rust or object creation
+  in JS / TS. (#85, #87)
 
 - Add object destructuring via `Lvalue::Object`. (#86)
 
@@ -28,6 +28,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Make `Grammar` and `Parse` traits parametric on the lifetime of input.
   This allows to have type annotations dependent on this lifetime as well. (#77)
+
+- Re-license the crate to MIT or Apache-2.0. (#87)
 
 ## 0.2.0 - 2020-12-05
 

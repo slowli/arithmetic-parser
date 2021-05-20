@@ -4,10 +4,10 @@ use std::fmt;
 
 use arithmetic_parser::grammars::{NumGrammar, Typed};
 use arithmetic_typing::{
-    arith::{Constraint, ConstraintSet},
+    arith::{Constraint, ObjectSafeConstraint},
     error::{Error, ErrorKind, Errors, OpErrors},
     visit::Visit,
-    Annotated, FnType, Num, PrimitiveType, Substitutions, Type, UnknownLen,
+    Annotated, DynConstraints, FnType, Num, PrimitiveType, Substitutions, Type, UnknownLen,
 };
 
 mod annotations;
@@ -59,6 +59,8 @@ impl<Prim: PrimitiveType> Constraint<Prim> for Hashed {
     }
 }
 
+impl<Prim: PrimitiveType> ObjectSafeConstraint<Prim> for Hashed {}
+
 fn assert_incompatible_types<Prim: PrimitiveType>(
     err: &ErrorKind<Prim>,
     first: &Type<Prim>,
@@ -78,13 +80,13 @@ fn assert_incompatible_types<Prim: PrimitiveType>(
 
 fn hash_fn_type() -> FnType<Num> {
     FnType::builder()
-        .with_varargs(ConstraintSet::just(Hashed), UnknownLen::param(0))
+        .with_varargs(DynConstraints::just(Hashed), UnknownLen::param(0))
         .returning(Type::NUM)
 }
 
 #[test]
 fn hash_fn_type_display() {
-    assert_eq!(hash_fn_type().to_string(), "(...[any Hash; N]) -> Num");
+    assert_eq!(hash_fn_type().to_string(), "(...[dyn Hash; N]) -> Num");
 }
 
 /// `zip` function signature.

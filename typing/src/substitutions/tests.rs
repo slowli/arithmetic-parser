@@ -3,7 +3,11 @@
 use assert_matches::assert_matches;
 
 use super::*;
-use crate::{error::TupleContext, Num};
+use crate::{
+    arith::{ConstraintSet, Linearity, Ops},
+    error::TupleContext,
+    DynConstraints, Num,
+};
 
 fn extract_errors<Prim: PrimitiveType>(
     action: impl FnOnce(OpErrors<'_, Prim>),
@@ -246,7 +250,7 @@ fn unifying_complex_tuples() {
 #[test]
 fn any_can_be_unified_with_anything() {
     let mut substitutions = Substitutions::<Num>::default();
-    substitutions.eqs.insert(0, Type::any());
+    substitutions.eqs.insert(0, Type::Any);
 
     let rhs_samples = &[
         Type::NUM,
@@ -255,10 +259,210 @@ fn any_can_be_unified_with_anything() {
         Type::NUM.repeat(3).into(),
         Type::NUM.repeat(UnknownLen::free_var(0)).into(),
         FnType::new(vec![Type::BOOL, Type::NUM].into(), Type::void()).into(),
-        Type::any(),
+        Type::Any,
     ];
     for rhs in rhs_samples {
         unify(&mut substitutions, &Type::free_var(0), rhs).unwrap();
+    }
+}
+
+#[test]
+fn unifying_dyn_type_as_rhs() {
+    let mut substitutions = Substitutions::<Num>::default();
+    let rhs = Type::Dyn(DynConstraints::just(Linearity));
+
+    unify(&mut substitutions, &Type::Any, &rhs).unwrap();
+    assert!(substitutions.eqs.is_empty());
+    assert!(substitutions.constraints.is_empty());
+
+    unify(&mut substitutions, &Type::free_var(0), &rhs).unwrap();
+    assert_eq!(substitutions.eqs.len(), 1);
+    assert_eq!(substitutions.eqs[&0], rhs);
+
+    let invalid_lhs = &[
+        Type::NUM,
+        Type::BOOL,
+        (Type::BOOL, Type::NUM).into(),
+        Type::NUM.repeat(3).into(),
+        Type::NUM.repeat(UnknownLen::free_var(0)).into(),
+        FnType::new(vec![Type::BOOL, Type::NUM].into(), Type::void()).into(),
+    ];
+
+    for lhs in invalid_lhs {
+        let err = unify(&mut substitutions, lhs, &rhs).unwrap_err();
+        assert_matches!(err, ErrorKind::TypeMismatch(_, rhs_ty) if rhs_ty == rhs);
+    }
+}
+
+#[test]
+fn unifying_dyn_type_as_lhs() {
+    let constraints = DynConstraints::just(Linearity);
+    let lhs = Type::Dyn(constraints.clone());
+    let valid_rhs = &[Type::Any, Type::NUM, Type::NUM.repeat(3).into()];
+
+    for rhs in valid_rhs {
+        let mut substitutions = Substitutions::<Num>::default();
+        unify(&mut substitutions, &lhs, rhs).unwrap();
+        assert!(substitutions.eqs.is_empty());
+        assert!(substitutions.constraints.is_empty());
+    }
+
+    // RHS with type vars.
+    {
+        let rhs = Type::free_var(0);
+        let mut substitutions = Substitutions::<Num>::default();
+        unify(&mut substitutions, &lhs, &rhs).unwrap();
+        assert!(substitutions.eqs.is_empty());
+        assert_eq!(substitutions.constraints.len(), 1);
+        assert_eq!(substitutions.constraints[&0], constraints.inner);
+    }
+    {
+        let rhs = (Type::free_var(0), Type::free_var(1)).into();
+        let mut substitutions = Substitutions::<Num>::default();
+        unify(&mut substitutions, &lhs, &rhs).unwrap();
+        assert!(substitutions.eqs.is_empty());
+        assert_eq!(substitutions.constraints.len(), 2);
+        assert_eq!(substitutions.constraints[&0], constraints.inner);
+        assert_eq!(substitutions.constraints[&1], constraints.inner);
+    }
+
+    // `dyn` RHS.
+    {
+        let mut substitutions = Substitutions::<Num>::default();
+        unify(&mut substitutions, &lhs, &lhs).unwrap();
+        assert!(substitutions.eqs.is_empty());
+        assert!(substitutions.constraints.is_empty());
+    }
+    {
+        // We cheat here a little bit: `Ops` is not object-safe.
+        let mut extended_constraints = ConstraintSet::new();
+        extended_constraints.insert(Linearity);
+        extended_constraints.insert(Ops);
+        let rhs = Type::Dyn(DynConstraints {
+            inner: extended_constraints.into(),
+        });
+
+        let mut substitutions = Substitutions::<Num>::default();
+        unify(&mut substitutions, &lhs, &rhs).unwrap();
+        assert!(substitutions.eqs.is_empty());
+        assert!(substitutions.constraints.is_empty());
+    }
+    {
+        let ops_constraint = ConstraintSet::just(Ops);
+        let rhs = Type::Dyn(DynConstraints {
+            inner: ops_constraint.into(),
+        });
+        let mut substitutions = Substitutions::<Num>::default();
+        let err = unify(&mut substitutions, &lhs, &rhs).unwrap_err();
+        assert_matches!(err, ErrorKind::FailedConstraint { .. });
+    }
+
+    let invalid_rhs = &[
+        Type::BOOL,
+        (Type::NUM, Type::BOOL).into(),
+        FnType::new(vec![Type::BOOL, Type::NUM].into(), Type::void()).into(),
+    ];
+
+    for rhs in invalid_rhs {
+        let mut substitutions = Substitutions::<Num>::default();
+        let err = unify(&mut substitutions, &lhs, rhs).unwrap_err();
+        assert_matches!(err, ErrorKind::FailedConstraint { .. });
+    }
+}
+
+#[test]
+fn unifying_dyn_object_as_lhs() {
+    let constraints = DynConstraints::from(Object::just("x", Type::NUM));
+    let lhs = Type::Dyn(constraints.clone());
+
+    {
+        let mut substitutions = Substitutions::<Num>::default();
+        unify(&mut substitutions, &lhs, &Type::Any).unwrap();
+        assert!(substitutions.eqs.is_empty());
+        assert!(substitutions.constraints.is_empty());
+    }
+    {
+        let mut substitutions = Substitutions::<Num>::default();
+        unify(&mut substitutions, &lhs, &Type::free_var(0)).unwrap();
+        assert!(substitutions.eqs.is_empty());
+        assert_eq!(substitutions.constraints.len(), 1);
+        assert_eq!(substitutions.constraints[&0], constraints.inner);
+    }
+
+    // Object RHS.
+    {
+        let rhs = Object::just("x", Type::BOOL);
+        let mut substitutions = Substitutions::<Num>::default();
+        let err = unify(&mut substitutions, &lhs, &rhs.into()).unwrap_err();
+        assert_matches!(
+            err,
+            ErrorKind::TypeMismatch(lhs, rhs) if lhs == Type::NUM && rhs == Type::BOOL
+        );
+    }
+    {
+        let rhs = Object::just("y", Type::NUM);
+        let mut substitutions = Substitutions::<Num>::default();
+        let err = unify(&mut substitutions, &lhs, &rhs.into()).unwrap_err();
+        assert_matches!(
+            err,
+            ErrorKind::MissingFields { fields, .. } if fields.contains("x")
+        );
+    }
+    {
+        let rhs = Object::just("x", Type::free_var(0));
+        let mut substitutions = Substitutions::<Num>::default();
+        unify(&mut substitutions, &lhs, &rhs.into()).unwrap();
+        assert_eq!(substitutions.eqs[&0], Type::NUM);
+    }
+
+    // Dyn constraint RHS.
+    {
+        let mut substitutions = Substitutions::<Num>::default();
+        unify(&mut substitutions, &lhs, &lhs).unwrap();
+        assert!(substitutions.eqs.is_empty());
+        assert!(substitutions.constraints.is_empty());
+    }
+    {
+        let rhs = Object::just("y", Type::NUM).into_dyn();
+        let mut substitutions = Substitutions::<Num>::default();
+        let err = unify(&mut substitutions, &lhs, &rhs).unwrap_err();
+        assert_matches!(err, ErrorKind::MissingFields { fields, .. } if fields.contains("x"));
+    }
+    {
+        let rhs = Object::just("x", Type::BOOL).into_dyn();
+        let mut substitutions = Substitutions::<Num>::default();
+        let err = unify(&mut substitutions, &lhs, &rhs).unwrap_err();
+        assert_matches!(
+            err,
+            ErrorKind::TypeMismatch(lhs_ty, rhs_ty)
+                if lhs_ty == Type::NUM && rhs_ty == Type::BOOL
+        );
+    }
+    {
+        let rhs = Object::just("x", Type::free_var(0)).into_dyn();
+        let mut substitutions = Substitutions::<Num>::default();
+        unify(&mut substitutions, &lhs, &rhs).unwrap();
+        assert_eq!(substitutions.eqs[&0], Type::NUM);
+    }
+    {
+        let rhs = Type::Dyn(DynConstraints::just(Linearity));
+        let mut substitutions = Substitutions::<Num>::default();
+        let err = unify(&mut substitutions, &lhs, &rhs).unwrap_err();
+        assert_matches!(err, ErrorKind::CannotAccessFields);
+    }
+
+    let invalid_rhs = &[
+        Type::NUM,
+        Type::BOOL,
+        (Type::BOOL, Type::NUM).into(),
+        Type::NUM.repeat(3).into(),
+        Type::NUM.repeat(UnknownLen::free_var(0)).into(),
+        FnType::new(vec![Type::BOOL, Type::NUM].into(), Type::void()).into(),
+    ];
+    for rhs in invalid_rhs {
+        let mut substitutions = Substitutions::<Num>::default();
+        let err = unify(&mut substitutions, &lhs, rhs).unwrap_err();
+        assert_matches!(err, ErrorKind::CannotAccessFields);
     }
 }
 

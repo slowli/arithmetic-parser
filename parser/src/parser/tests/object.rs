@@ -8,7 +8,8 @@ use crate::{
     parser::{
         expr, fn_def, lvalue, object_destructure, object_expr, simple_expr, statement, Complete,
     },
-    BinaryOp, Expr, InputSpan, Lvalue, ObjectDestructure, ObjectDestructureField, Statement,
+    BinaryOp, Expr, InputSpan, Lvalue, ObjectDestructure, ObjectDestructureField, ObjectExpr,
+    Statement,
 };
 
 #[test]
@@ -156,12 +157,12 @@ fn field_access_in_larger_context() {
 
 #[test]
 fn object_basics() {
-    let input = InputSpan::new("#{ x = 1; y = 2; }");
+    let input = InputSpan::new("#{ x: 1, y: 2 }");
     let (rest, obj) = object_expr::<FieldGrammar, Complete>(input).unwrap();
     assert!(rest.fragment().is_empty());
     assert_matches!(
         obj.extra,
-        Expr::ObjectBlock(statements) if statements.len() == 2
+        Expr::Object(ObjectExpr { fields }) if fields.len() == 2
     );
 
     let input = InputSpan::new("#{}");
@@ -169,42 +170,42 @@ fn object_basics() {
     assert!(rest.fragment().is_empty());
     assert_matches!(
         obj.extra,
-        Expr::ObjectBlock(statements) if statements.is_empty()
+        Expr::Object(ObjectExpr { fields }) if fields.is_empty()
     );
 
-    let input = InputSpan::new("#{ x = 5; dbg(x); y = x + 2; }");
+    let input = InputSpan::new("#{ x, y: x + 1, z, }");
     let (_, obj) = object_expr::<FieldGrammar, Complete>(input).unwrap();
     assert_matches!(
         obj.extra,
-        Expr::ObjectBlock(statements) if statements.len() == 3
+        Expr::Object(ObjectExpr { fields }) if fields.len() == 3
     );
 }
 
 #[test]
 fn object_errors() {
-    let input = InputSpan::new("#{ x = 1; y = 2 }");
+    let input = InputSpan::new("#{ x = 1 }");
     let err = object_expr::<FieldGrammar, Complete>(input).unwrap_err();
     let err = match err {
         NomErr::Failure(err) => err,
         other => panic!("Unexpected error: {:?}", other),
     };
-    assert_eq!(err.span(), sp(10, "y", ()));
+    assert_eq!(err.span(), sp(5, "=", ()));
 }
 
 #[test]
 fn objects_within_larger_context() {
-    let input = InputSpan::new("#{ x = 1; y = 5; }.x");
+    let input = InputSpan::new("#{ x: 1, y: 5 }.x");
     let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
     let inner_expr = match expr.extra {
         Expr::FieldAccess { receiver, name } => {
-            assert_eq!(name, sp(19, "x", ()));
+            assert_eq!(name, sp(16, "x", ()));
             *receiver
         }
         other => panic!("Unexpected expr: {:?}", other),
     };
-    assert_matches!(inner_expr.extra, Expr::ObjectBlock(statements) if statements.len() == 2);
+    assert_matches!(inner_expr.extra, Expr::Object(ObjectExpr { fields }) if fields.len() == 2);
 
-    let input = InputSpan::new("test(x, #{ y = y; z = 2 * y; })");
+    let input = InputSpan::new("test(x, #{ y, z: 2 * y })");
     let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
     let inner_expr = match expr.extra {
         Expr::Function { name, mut args } => {
@@ -215,9 +216,9 @@ fn objects_within_larger_context() {
         }
         other => panic!("Unexpected expr: {:?}", other),
     };
-    assert_matches!(inner_expr.extra, Expr::ObjectBlock(statements) if statements.len() == 2);
+    assert_matches!(inner_expr.extra, Expr::Object(ObjectExpr { fields }) if fields.len() == 2);
 
-    let input = InputSpan::new("{ x = gen(); #{ x = x; y = x * GEN; } }");
+    let input = InputSpan::new("{ x = gen(); #{ x, y: x * GEN } }");
     let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
     let inner_expr = match expr.extra {
         Expr::Block(block) => {
@@ -227,14 +228,14 @@ fn objects_within_larger_context() {
         }
         other => panic!("Unexpected expr: {:?}", other),
     };
-    assert_matches!(inner_expr.extra, Expr::ObjectBlock(statements) if statements.len() == 2);
+    assert_matches!(inner_expr.extra, Expr::Object(ObjectExpr { fields }) if fields.len() == 2);
 
-    let input = InputSpan::new("|xs| #{ x = xs.0; }");
+    let input = InputSpan::new("|xs| #{ x: xs.0 }");
     let (_, fn_def) = fn_def::<FieldGrammar, Complete>(input).unwrap();
     assert_eq!(*fn_def.args.fragment(), "|xs|");
     assert!(fn_def.body.statements.is_empty());
     let inner_expr = *fn_def.body.return_value.unwrap();
-    assert_matches!(inner_expr.extra, Expr::ObjectBlock(statements) if statements.len() == 1);
+    assert_matches!(inner_expr.extra, Expr::Object(ObjectExpr { fields }) if fields.len() == 1);
 }
 
 #[test]

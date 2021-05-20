@@ -1,7 +1,7 @@
 # Simple Arithmetic Interpreter
 
 [![Build Status](https://github.com/slowli/arithmetic-parser/workflows/Rust/badge.svg?branch=master)](https://github.com/slowli/arithmetic-parser/actions)
-[![License: Apache-2.0](https://img.shields.io/crates/l/arithmetic-eval)](https://github.com/slowli/arithmetic-parser/blob/master/LICENSE)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue)](https://github.com/slowli/arithmetic-parser#license)
 ![rust 1.44+ required](https://img.shields.io/badge/rust-1.44+-blue.svg) 
 
 **Links:** [![Docs on docs.rs](https://docs.rs/arithmetic-eval/badge.svg)](https://docs.rs/arithmetic-eval/)
@@ -35,7 +35,12 @@ Please see the crate docs and [examples](examples) for the examples of usage.
 
 ## License
 
-Licensed under the [Apache-2.0 license](LICENSE).
+Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE)
+or [MIT license](LICENSE-MIT) at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in `arithmetic-eval` by you, as defined in the Apache-2.0 license,
+shall be dual licensed as above, without any additional terms or conditions.
 
 [`arithmetic-parser`]: https://docs.rs/crates/arithmetic-parser
 [`num-bigint`]: https://crates.io/crates/num-bigint

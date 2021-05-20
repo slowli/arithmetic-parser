@@ -3,7 +3,10 @@
 use std::{collections::HashMap, iter::FromIterator, ops};
 
 use crate::{
-    arith::{Constraint, ConstraintSet, MapPrimitiveType, NumArithmetic, TypeArithmetic},
+    arith::{
+        Constraint, ConstraintSet, MapPrimitiveType, NumArithmetic, ObjectSafeConstraint,
+        TypeArithmetic,
+    },
     ast::TypeAst,
     error::Errors,
     types::{ParamConstraints, ParamQuantifier},
@@ -34,10 +37,7 @@ use self::processor::TypeProcessor;
 /// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// # fn main() -> anyhow::Result<()> {
 /// // An easy way to get a non-concrete type is to involve `any`.
-/// let code = r#"
-///     lin: any Lin = (1, 2, 3);
-///     (x, ...) = lin;
-/// "#;
+/// let code = "(x, ...) = (1, 2, 3) as any;";
 /// let code = Parser::parse_statements(code)?;
 ///
 /// let mut env: TypeEnvironment = Prelude::iter().collect();
@@ -110,6 +110,19 @@ impl<Prim: PrimitiveType> TypeEnvironment<Prim> {
     /// this method only influences whether the constraint is recognized during type parsing.
     pub fn insert_constraint(&mut self, constraint: impl Constraint<Prim>) -> &mut Self {
         self.known_constraints.insert(constraint);
+        self
+    }
+
+    /// Inserts an [`ObjectSafeConstraint`] into the environment so that it can be used
+    /// when parsing type annotations.
+    ///
+    /// Other than more strict type requirements, this method is identical to
+    /// [`Self::insert_constraint`].
+    pub fn insert_object_safe_constraint(
+        &mut self,
+        constraint: impl ObjectSafeConstraint<Prim>,
+    ) -> &mut Self {
+        self.known_constraints.insert_object_safe(constraint);
         self
     }
 

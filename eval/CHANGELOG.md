@@ -11,10 +11,9 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Support `Expr::FieldAccess` for tuple indexing. (#84)
 
-- Support `Expr::ObjectBlock` for creating objects, i.e. aggregate data structures
-  with heterogeneous named fields (known in Rust as structs). Statements
-  in an `ObjectBlock` are evaluated as usual, with all vars assigned in the block
-  becoming fields of the object created by the block. (#85)
+- Support `Expr::Object` for creating objects, i.e. aggregate data structures
+  with heterogeneous named fields (known in Rust as structs). This construction
+  works similarly to creating structs in Rust or objects in JS / TS. (#85, #87)
 
 - Support `Expr::FieldAccess` for accessing fields in objects. (#85)
 
@@ -24,6 +23,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 ### Changed
 
 - Rename `AuxErrorInfo::UnbalancedRhs` to `AuxErrorInfo::UnbalancedRhsTuple`. (#86)
+
+- Re-license the crate to MIT or Apache-2.0. (#87)
 
 ## 0.2.0 - 2020-12-05
 

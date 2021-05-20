@@ -2,18 +2,16 @@
 
 dbg(GEN, ORDER);
 
-gen = || #{
+gen = || {
     sk = rand_scalar();
-    pk = GEN ^ sk;
+    #{ sk, pk: GEN ^ sk }
 };
 
 sign = |message, sk| {
     r = rand_scalar();
     R = GEN ^ r;
-    #{
-        e = hash_to_scalar(R, message);
-        s = r - sk * e;
-    }
+    e = hash_to_scalar(R, message);
+    #{ e, s: r - sk * e }
 };
 
 verify = |{ e, s }, message, pk| {

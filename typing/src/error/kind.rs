@@ -58,6 +58,9 @@ pub enum ErrorKind<Prim: PrimitiveType> {
     /// Trying to unify a type with a type containing it.
     RecursiveType(Type<Prim>),
 
+    /// Repeated assignment to the same variable in function args or tuple destructuring.
+    RepeatedAssignment(String),
+
     /// Field name is invalid.
     InvalidFieldName(String),
     /// Value cannot be indexed (i.e., not a tuple).
@@ -73,6 +76,8 @@ pub enum ErrorKind<Prim: PrimitiveType> {
         len: TupleLen,
     },
 
+    /// Repeated field in object initialization / destructuring.
+    RepeatedField(String),
     /// Cannot access fields in a value (i.e., it's not an object).
     CannotAccessFields,
     /// Field set differs between LHS and RHS, which are both concrete objects.
@@ -168,6 +173,14 @@ impl<Prim: PrimitiveType> fmt::Display for ErrorKind<Prim> {
                 ty
             ),
 
+            Self::RepeatedAssignment(name) => {
+                write!(
+                    formatter,
+                    "Repeated assignment to the same variable `{}`",
+                    name
+                )
+            }
+
             Self::InvalidFieldName(name) => {
                 write!(formatter, "`{}` is not a valid field name", name)
             }
@@ -179,6 +192,7 @@ impl<Prim: PrimitiveType> fmt::Display for ErrorKind<Prim> {
                 index, len
             ),
 
+            Self::RepeatedField(name) => write!(formatter, "Repeated object field `{}`", name),
             Self::CannotAccessFields => formatter.write_str("Value is not an object"),
             Self::FieldsMismatch {
                 lhs_fields,

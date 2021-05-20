@@ -4,9 +4,9 @@ use assert_matches::assert_matches;
 
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
-    arith::{BinaryOpContext, ConstraintSet, NumArithmetic, NumConstraints},
+    arith::{BinaryOpContext, Linearity, NumArithmetic},
     error::{ErrorContext, ErrorKind, ErrorLocation, TupleContext},
-    Prelude, TupleIndex, TupleLen, Type, TypeEnvironment,
+    DynConstraints, Prelude, TupleIndex, TupleLen, Type, TypeEnvironment,
 };
 
 use crate::{assert_incompatible_types, hash_fn_type, zip_fn_type, ErrorsExt, F32Grammar};
@@ -364,7 +364,7 @@ fn constraint_error() {
 }
 
 #[test]
-fn any_type_with_bound_with_bogus_function_call() {
+fn dyn_type_with_bogus_function_call() {
     let code = "hash(1, |x| x + 1)";
     let block = F32Grammar::parse_statements(code).unwrap();
 
@@ -393,9 +393,9 @@ fn any_type_with_bound_with_bogus_function_call() {
 }
 
 #[test]
-fn any_type_with_bound_in_tuple() {
+fn dyn_type_as_function() {
     let mut type_env = TypeEnvironment::new();
-    type_env.insert("some_lin", ConstraintSet::just(NumConstraints::Lin));
+    type_env.insert("some_lin", DynConstraints::just(Linearity));
 
     let bogus_call = "some_lin(1)";
     let bogus_call = F32Grammar::parse_statements(bogus_call).unwrap();
@@ -404,29 +404,7 @@ fn any_type_with_bound_in_tuple() {
         .unwrap_err()
         .single();
 
-    assert_matches!(
-        err.kind(),
-        ErrorKind::FailedConstraint {
-            ty: Type::Function(_),
-            ..
-        }
-    );
-
-    let destructure = "(x, y) = some_lin; !x";
-    let destructure = F32Grammar::parse_statements(destructure).unwrap();
-    let err = type_env
-        .process_statements(&destructure)
-        .unwrap_err()
-        .single();
-
-    assert_eq!(*err.span().fragment(), "!x");
-    assert_eq!(err.location(), []);
-    assert_matches!(err.context(), ErrorContext::UnaryOp(_));
-    assert_matches!(
-        err.kind(),
-        ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
-    );
-    assert_eq!(err.kind().to_string(), "Type `Bool` fails constraint `Lin`");
+    assert_matches!(err.kind(), ErrorKind::TypeMismatch(_, _));
 }
 
 #[test]
@@ -553,4 +531,60 @@ fn indexing_unsupported_errors() {
     assert_eq!(err.location(), []);
     assert_matches!(err.context(), ErrorContext::TupleIndex { ty: Type::Var(_) });
     assert_matches!(err.kind(), ErrorKind::UnsupportedIndex);
+}
+
+#[test]
+fn multiple_var_assignments() {
+    let code = "(x, x, y) = (1 == 1, 2, 3); x + 1";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "x");
+    assert_eq!(err.span().location_offset(), 4);
+    assert_matches!(err.kind(), ErrorKind::RepeatedAssignment(var) if var == "x");
+}
+
+#[test]
+fn multiple_var_assignments_in_fn_def() {
+    let code = "|x, x| x + 1";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "x");
+    assert_eq!(err.span().location_offset(), 4);
+    assert_matches!(err.kind(), ErrorKind::RepeatedAssignment(var) if var == "x");
+}
+
+#[test]
+fn multiple_var_assignments_complex() {
+    let code = "(x, { x }, y) = (1 == 1, #{ x: 2 }, 3); x + 1";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "x");
+    assert_eq!(err.span().location_offset(), 6);
+    assert_matches!(err.kind(), ErrorKind::RepeatedAssignment(var) if var == "x");
+}
+
+#[test]
+fn multiple_var_assignments_in_fn_def_complex() {
+    let code = "test = |x, { x }| x + 1; test(3, #{ x: 1 }) == 2";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "x");
+    assert_eq!(err.span().location_offset(), 13);
+    assert_matches!(err.kind(), ErrorKind::RepeatedAssignment(var) if var == "x");
 }

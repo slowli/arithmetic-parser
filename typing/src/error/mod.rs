@@ -72,6 +72,26 @@ impl<'a, Prim: PrimitiveType> Error<'a, Prim> {
         }
     }
 
+    pub(crate) fn repeated_assignment(span: Spanned<'a>) -> Self {
+        let ident = (*span.fragment()).to_owned();
+        Self {
+            inner: span.copy_with_extra(ErrorKind::RepeatedAssignment(ident)),
+            root_span: span.with_no_extra(),
+            context: ErrorContext::None,
+            location: vec![],
+        }
+    }
+
+    pub(crate) fn repeated_field(span: Spanned<'a>) -> Self {
+        let ident = (*span.fragment()).to_owned();
+        Self {
+            inner: span.copy_with_extra(ErrorKind::RepeatedField(ident)),
+            root_span: span.with_no_extra(),
+            context: ErrorContext::None,
+            location: vec![],
+        }
+    }
+
     pub(crate) fn conversion<T>(kind: AstConversionError, span: &Spanned<'a, T>) -> Self {
         let kind = ErrorKind::AstConversion(kind);
         Self {

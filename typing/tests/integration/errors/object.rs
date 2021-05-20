@@ -25,7 +25,7 @@ fn recursive_object_constraint() {
 
 #[test]
 fn recursive_object_type() {
-    let code = "|obj| obj == #{ x = obj; }";
+    let code = "|obj| obj == #{ x: obj }";
     let block = F32Grammar::parse_statements(code).unwrap();
     let err = TypeEnvironment::new()
         .process_statements(&block)
@@ -82,7 +82,7 @@ fn object_and_tuple_constraints_via_fields() {
 fn no_required_field() {
     let code = r#"
         require_x = |obj| obj.x == 1;
-        require_x(#{ y = 2; });
+        require_x(#{ y: 2 });
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let err = TypeEnvironment::new()
@@ -90,7 +90,7 @@ fn no_required_field() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.span().fragment(), "#{ y = 2; }");
+    assert_eq!(*err.span().fragment(), "#{ y: 2 }");
     assert_eq!(err.location(), [fn_arg(0)]);
     assert_matches!(
         err.kind(),
@@ -104,7 +104,7 @@ fn no_required_field() {
 fn incompatible_field_types() {
     let code = r#"
         require_x = |obj| obj.x == 1;
-        require_x(#{ x = (1, 2); })
+        require_x(#{ x: (1, 2) })
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let err = TypeEnvironment::new()
@@ -112,7 +112,7 @@ fn incompatible_field_types() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.span().fragment(), "#{ x = (1, 2); }");
+    assert_eq!(*err.span().fragment(), "#{ x: (1, 2) }");
     assert_eq!(err.location(), [fn_arg(0), ErrorLocation::from("x")]);
     assert_matches!(err.context(), ErrorContext::FnCall { .. });
     assert_matches!(
@@ -162,7 +162,7 @@ fn incompatible_field_types_via_fn() {
 
 #[test]
 fn incompatible_fields_via_constraints_for_concrete_object() {
-    let code = "hash(#{ x = 1; y = || 2; })";
+    let code = "hash(#{ x: 1, y: || 2 })";
     let block = F32Grammar::parse_statements(code).unwrap();
     let err = TypeEnvironment::new()
         .insert("hash", hash_fn_type())
@@ -170,7 +170,7 @@ fn incompatible_fields_via_constraints_for_concrete_object() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.span().fragment(), "#{ x = 1; y = || 2; }");
+    assert_eq!(*err.span().fragment(), "#{ x: 1, y: || 2 }");
     assert_eq!(err.location(), [fn_arg(0), ErrorLocation::from("y")]);
     assert_matches!(err.context(), ErrorContext::FnCall { .. });
     assert_matches!(
@@ -248,7 +248,7 @@ fn incompatible_fields_in_embedded_obj() {
 #[test]
 fn creating_and_consuming_object_in_closure() {
     let code = r#"
-        (1, 2, 3).map(|x| #{ x = x; y = x + 1; }).fold(0, |acc, pt| acc + pt.x / pt.z)
+        (1, 2, 3).map(|x| #{ x, y: x + 1 }).fold(0, |acc, pt| acc + pt.x / pt.z)
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -276,13 +276,13 @@ fn folding_to_object_errors() {
         .insert("fold", Prelude::Fold);
 
     let code = r#"
-        |xs| xs.fold(#{ min = INF; max = -INF; }, |acc, x| #{
-            min = if(x < acc.min, x, acc.min);
-            max = if(x > acc.max, x, acc.max);
+        |xs| xs.fold(#{ min: INF, max: -INF }, |acc, x| #{
+            min: if(x < acc.min, x, acc.min),
+            max: if(x > acc.max, x, acc.max),
         })
     "#;
 
-    let bogus_code = code.replace("max = -INF", "ma = -INF");
+    let bogus_code = code.replace("max: -INF", "ma: -INF");
     let block = F32Grammar::parse_statements(bogus_code.as_str()).unwrap();
     let errors = type_env
         .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
@@ -294,7 +294,7 @@ fn folding_to_object_errors() {
             if fields.len() == 1 && fields.contains("max")
     )));
 
-    let bogus_code = code.replace("max = if", "ma = if");
+    let bogus_code = code.replace("max: if", "ma: if");
     let block = F32Grammar::parse_statements(bogus_code.as_str()).unwrap();
     let err = type_env
         .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
@@ -306,4 +306,32 @@ fn folding_to_object_errors() {
         ErrorKind::FieldsMismatch { lhs_fields, rhs_fields }
             if rhs_fields.contains("ma") && lhs_fields.contains("max")
     );
+}
+
+#[test]
+fn repeated_field_in_object_initialization() {
+    let code = "obj = #{ x: 1, x: 2 == 3 }; !obj.x";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "x");
+    assert_eq!(err.span().location_offset(), 15);
+    assert_matches!(err.kind(), ErrorKind::RepeatedField(field) if field == "x");
+}
+
+#[test]
+fn repeated_field_in_object_destructure() {
+    let code = "{ x, x } = #{ x: 1 };";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.span().fragment(), "x");
+    assert_eq!(err.span().location_offset(), 5);
+    assert_matches!(err.kind(), ErrorKind::RepeatedField(field) if field == "x");
 }

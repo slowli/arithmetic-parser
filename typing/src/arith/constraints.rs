@@ -12,7 +12,7 @@ use crate::{
 ///
 /// Constraints can be placed on [function](crate::FnType) type variables, and can be applied
 /// to types in [`TypeArithmetic`] impls. For example, [`NumArithmetic`] places
-/// a [linearity constraint](NumConstraints::Lin) on types involved in arithmetic ops.
+/// the [`Linearity`] constraint on types involved in arithmetic ops.
 ///
 /// The constraint mechanism is similar to trait constraints in Rust, but is much more limited:
 ///
@@ -65,6 +65,16 @@ impl<Prim: PrimitiveType> Clone for Box<dyn Constraint<Prim>> {
     }
 }
 
+/// Marker trait for object-safe constraints, i.e., constraints that can be included
+/// into a [`DynConstraints`](crate::DynConstraints).
+///
+/// Object safety is similar to this notion in Rust. For a constraint `C` to be object-safe,
+/// it should be the case that `dyn C` (the untagged union of all types implementing `C`)
+/// implements `C`. As an example, this is the case for [`Linearity`], but is not the case
+/// for [`Ops`]. Indeed, [`Ops`] requires the type to be addable to itself,
+/// which would be impossible for `dyn Ops`.
+pub trait ObjectSafeConstraint<Prim: PrimitiveType>: Constraint<Prim> {}
+
 /// Helper to define *structural* [`Constraint`]s, i.e., constraints recursively checking
 /// the provided type.
 ///
@@ -73,6 +83,10 @@ impl<Prim: PrimitiveType> Clone for Box<dyn Constraint<Prim>> {
 /// - Primitive types satisfy the constraint iff the predicate provided in [`Self::new()`]
 ///   returns `true`.
 /// - [`Type::Any`] always satisfies the constraint.
+/// - [`Type::Dyn`] types satisfy the constraint iff the [`Constraint`] wrapped by this helper
+///   is present among [`DynConstraints`](crate::DynConstraints). Thus,
+///   if the wrapped constraint is not [object-safe](ObjectSafeConstraint), it will not be satisfied
+///   by any `Dyn` type.
 /// - Functional types never satisfy the constraint.
 /// - A compound type (i.e., a tuple) satisfies the constraint iff all its items satisfy
 ///   the constraint.
@@ -88,7 +102,6 @@ impl<Prim: PrimitiveType> Clone for Box<dyn Constraint<Prim>> {
 /// #     PrimitiveType, Substitutions, Type,
 /// # };
 /// # use std::fmt;
-///
 /// /// Constraint for hashable types.
 /// #[derive(Clone, Copy)]
 /// struct Hashed;
@@ -173,6 +186,20 @@ where
     C: Constraint<Prim> + Clone,
     F: Fn(&Prim) -> bool + 'static,
 {
+    fn visit_type(&mut self, ty: &Type<Prim>) {
+        match ty {
+            Type::Dyn(constraints) => {
+                if !constraints.inner.simple.contains(&self.inner.constraint) {
+                    self.errors.push(ErrorKind::failed_constraint(
+                        ty.clone(),
+                        self.inner.constraint.clone(),
+                    ));
+                }
+            }
+            _ => visit::visit_type(self, ty),
+        }
+    }
+
     fn visit_var(&mut self, var: TypeVar) {
         debug_assert!(var.is_free());
         self.substitutions.insert_constraint(
@@ -231,28 +258,35 @@ where
     }
 }
 
-/// Numeric [`Constraint`]s. In particular, they are applicable to the [`Num`](crate::Num) literal.
+/// [`Constraint`] for numeric types that can be subject to unary `-` and can participate
+/// in `T op Num` / `Num op T` operations.
+///
+/// Defined recursively as [linear](LinearType) primitive types and tuples / objects consisting
+/// of `Lin` types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NumConstraints {
-    /// Type can be subject to unary `-` and can participate in `T op Num` / `Num op T` operations.
-    ///
-    /// Defined recursively as linear primitive types and tuples consisting of `Lin` types.
-    Lin,
-    /// Type can participate in binary arithmetic ops (`T op T`).
-    ///
-    /// Defined as a subset of `Lin` types without dynamically sized slices and
-    /// any types containing dynamically sized slices.
-    Ops,
-}
+pub struct Linearity;
 
-impl fmt::Display for NumConstraints {
+impl fmt::Display for Linearity {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::Lin => "Lin",
-            Self::Ops => "Ops",
-        })
+        formatter.write_str("Lin")
     }
 }
+
+impl<Prim: LinearType> Constraint<Prim> for Linearity {
+    fn visitor<'r>(
+        &self,
+        substitutions: &'r mut Substitutions<Prim>,
+        errors: OpErrors<'r, Prim>,
+    ) -> Box<dyn Visit<Prim> + 'r> {
+        StructConstraint::new(*self, LinearType::is_linear).visitor(substitutions, errors)
+    }
+
+    fn clone_boxed(&self) -> Box<dyn Constraint<Prim>> {
+        Box::new(*self)
+    }
+}
+
+impl<Prim: LinearType> ObjectSafeConstraint<Prim> for Linearity {}
 
 /// Primitive type which supports a notion of *linearity*. Linear types are types that
 /// can be used in arithmetic ops.
@@ -261,17 +295,28 @@ pub trait LinearType: PrimitiveType {
     fn is_linear(&self) -> bool;
 }
 
-impl<Prim: LinearType> Constraint<Prim> for NumConstraints {
+/// [`Constraint`] for numeric types that can participate in binary arithmetic ops (`T op T`).
+///
+/// Defined as a subset of `Lin` types without dynamically sized slices and
+/// any types containing dynamically sized slices.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Ops;
+
+impl fmt::Display for Ops {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("Ops")
+    }
+}
+
+impl<Prim: LinearType> Constraint<Prim> for Ops {
     fn visitor<'r>(
         &self,
         substitutions: &'r mut Substitutions<Prim>,
         errors: OpErrors<'r, Prim>,
     ) -> Box<dyn Visit<Prim> + 'r> {
-        let helper = match self {
-            Self::Lin => StructConstraint::new(*self, LinearType::is_linear),
-            Self::Ops => StructConstraint::new(*self, LinearType::is_linear).deny_dyn_slices(),
-        };
-        helper.visitor(substitutions, errors)
+        StructConstraint::new(*self, LinearType::is_linear)
+            .deny_dyn_slices()
+            .visitor(substitutions, errors)
     }
 
     fn clone_boxed(&self) -> Box<dyn Constraint<Prim>> {
@@ -285,7 +330,7 @@ impl<Prim: LinearType> Constraint<Prim> for NumConstraints {
 /// constraints in the set.
 #[derive(Debug, Clone)]
 pub struct ConstraintSet<Prim: PrimitiveType> {
-    inner: HashMap<String, Box<dyn Constraint<Prim>>>,
+    inner: HashMap<String, (Box<dyn Constraint<Prim>>, bool)>,
 }
 
 impl<Prim: PrimitiveType> Default for ConstraintSet<Prim> {
@@ -307,7 +352,7 @@ impl<Prim: PrimitiveType> PartialEq for ConstraintSet<Prim> {
 impl<Prim: PrimitiveType> fmt::Display for ConstraintSet<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let len = self.inner.len();
-        for (i, constraint) in self.inner.values().enumerate() {
+        for (i, (constraint, _)) in self.inner.values().enumerate() {
             fmt::Display::fmt(constraint, formatter)?;
             if i + 1 < len {
                 formatter.write_str(" + ")?;
@@ -337,19 +382,33 @@ impl<Prim: PrimitiveType> ConstraintSet<Prim> {
         self.inner.is_empty()
     }
 
+    fn contains(&self, constraint: &impl Constraint<Prim>) -> bool {
+        self.inner.contains_key(&constraint.to_string())
+    }
+
     /// Inserts a constraint into this set.
     pub fn insert(&mut self, constraint: impl Constraint<Prim>) {
         self.inner
-            .insert(constraint.to_string(), Box::new(constraint));
+            .insert(constraint.to_string(), (Box::new(constraint), false));
+    }
+
+    /// Inserts an object-safe constraint into this set.
+    pub fn insert_object_safe(&mut self, constraint: impl ObjectSafeConstraint<Prim>) {
+        self.inner
+            .insert(constraint.to_string(), (Box::new(constraint), true));
     }
 
     /// Inserts a boxed constraint into this set.
     pub(crate) fn insert_boxed(&mut self, constraint: Box<dyn Constraint<Prim>>) {
-        self.inner.insert(constraint.to_string(), constraint);
+        self.inner
+            .insert(constraint.to_string(), (constraint, false));
     }
 
-    pub(crate) fn get_by_name(&self, name: &str) -> Option<&dyn Constraint<Prim>> {
-        self.inner.get(name).map(AsRef::as_ref)
+    /// Returns the link to constraint and an indicator whether it is object-safe.
+    pub(crate) fn get_by_name(&self, name: &str) -> Option<(&dyn Constraint<Prim>, bool)> {
+        self.inner
+            .get(name)
+            .map(|(constraint, is_object_safe)| (constraint.as_ref(), *is_object_safe))
     }
 
     /// Applies all constraints from this set.
@@ -359,7 +418,7 @@ impl<Prim: PrimitiveType> ConstraintSet<Prim> {
         substitutions: &mut Substitutions<Prim>,
         mut errors: OpErrors<'_, Prim>,
     ) {
-        for constraint in self.inner.values() {
+        for (constraint, _) in self.inner.values() {
             constraint
                 .visitor(substitutions, errors.by_ref())
                 .visit_type(ty);
@@ -373,7 +432,7 @@ impl<Prim: PrimitiveType> ConstraintSet<Prim> {
         substitutions: &mut Substitutions<Prim>,
         mut errors: OpErrors<'_, Prim>,
     ) {
-        for constraint in self.inner.values() {
+        for (constraint, _) in self.inner.values() {
             constraint
                 .visitor(substitutions, errors.by_ref())
                 .visit_object(object);
@@ -384,9 +443,9 @@ impl<Prim: PrimitiveType> ConstraintSet<Prim> {
 /// Extended [`ConstraintSet`] that additionally supports object constraints.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct CompleteConstraints<Prim: PrimitiveType> {
-    pub(crate) simple: ConstraintSet<Prim>,
+    pub simple: ConstraintSet<Prim>,
     /// Object constraint. Stored as `Type` for convenience.
-    pub(crate) object: Option<Object<Prim>>,
+    pub object: Option<Object<Prim>>,
 }
 
 impl<Prim: PrimitiveType> Default for CompleteConstraints<Prim> {
@@ -403,6 +462,15 @@ impl<Prim: PrimitiveType> From<ConstraintSet<Prim>> for CompleteConstraints<Prim
         Self {
             simple: constraints,
             object: None,
+        }
+    }
+}
+
+impl<Prim: PrimitiveType> From<Object<Prim>> for CompleteConstraints<Prim> {
+    fn from(object: Object<Prim>) -> Self {
+        Self {
+            simple: ConstraintSet::default(),
+            object: Some(object),
         }
     }
 }
@@ -424,7 +492,7 @@ impl<Prim: PrimitiveType> CompleteConstraints<Prim> {
     }
 
     /// Inserts a constraint into this set.
-    pub(crate) fn insert(
+    pub fn insert(
         &mut self,
         constraint: impl Constraint<Prim>,
         substitutions: &mut Substitutions<Prim>,
@@ -434,19 +502,8 @@ impl<Prim: PrimitiveType> CompleteConstraints<Prim> {
         self.check_object_consistency(substitutions, errors);
     }
 
-    /// Extends these constraints from `other`.
-    pub(crate) fn extend(
-        &mut self,
-        other: Self,
-        substitutions: &mut Substitutions<Prim>,
-        errors: OpErrors<'_, Prim>,
-    ) {
-        self.simple.inner.extend(other.simple.inner);
-        self.check_object_consistency(substitutions, errors);
-    }
-
     /// Applies all constraints from this set.
-    pub(crate) fn apply_all(
+    pub fn apply_all(
         &self,
         ty: &Type<Prim>,
         substitutions: &mut Substitutions<Prim>,
@@ -459,7 +516,7 @@ impl<Prim: PrimitiveType> CompleteConstraints<Prim> {
     }
 
     /// Maps the object constraint if present.
-    pub(crate) fn map_object(self, map: impl FnOnce(&mut Object<Prim>)) -> Self {
+    pub fn map_object(self, map: impl FnOnce(&mut Object<Prim>)) -> Self {
         Self {
             simple: self.simple,
             object: self.object.map(|mut object| {
@@ -470,7 +527,7 @@ impl<Prim: PrimitiveType> CompleteConstraints<Prim> {
     }
 
     /// Inserts an object constraint into this set.
-    pub(crate) fn insert_obj_constraint(
+    pub fn insert_obj_constraint(
         &mut self,
         object: Object<Prim>,
         substitutions: &mut Substitutions<Prim>,

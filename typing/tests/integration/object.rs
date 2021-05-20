@@ -11,20 +11,10 @@ use crate::{hash_fn_type, ErrorsExt, F32Grammar};
 
 #[test]
 fn object_expr_basics() {
-    let code = "#{ x = 1; y = (x + 1, x + 2); }";
+    let code = "x = 1; #{ x, y: (x + 1, x + 2) }";
     let block = F32Grammar::parse_statements(code).unwrap();
     let output = TypeEnvironment::new().process_statements(&block).unwrap();
     assert_eq!(output.to_string(), "{ x: Num, y: (Num, Num) }");
-
-    let code_with_destructuring = r#"
-        xs = ((1, 1), 2, 3 == 3);
-        #{ x = xs.0; (..., y, z) = xs; }
-    "#;
-    let block_with_destructuring = F32Grammar::parse_statements(code_with_destructuring).unwrap();
-    let output = TypeEnvironment::new()
-        .process_statements(&block_with_destructuring)
-        .unwrap();
-    assert_eq!(output.to_string(), "{ x: (Num, Num), y: Num, z: Bool }");
 }
 
 #[test]
@@ -63,8 +53,8 @@ fn object_field_access() {
 fn applying_object_constraints() {
     let code = r#"
         manhattan = |pt| pt.x + pt.y;
-        manhattan(#{ x = 1; y = -3; }) == -2;
-        manhattan(#{ x = (1, 2); y = (-3, 4); })
+        manhattan(#{ x: 1, y: -3 }) == -2;
+        manhattan(#{ x: (1, 2), y: (-3, 4) })
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let output = TypeEnvironment::new().process_statements(&block).unwrap();
@@ -75,7 +65,7 @@ fn applying_object_constraints() {
 fn extra_fields_are_retained_with_constraints() {
     let code = r#"
         test = |obj| { obj.x == 1; obj };
-        test(#{ x = 1; y = 2; }).y == 2;
+        test(#{ x: 1, y: 2 }).y == 2;
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     TypeEnvironment::new().process_statements(&block).unwrap();
@@ -108,7 +98,7 @@ fn additional_object_constraints_through_multiple_fns() {
         require_y = |obj| obj.y == (2, 3);
         test = |obj| require_x(obj) && require_y(obj);
 
-        test(#{ x = 1; y = (4, 5); z = x + y; });
+        test(#{ x: 1, y: (4, 5), z: 1 == 1 });
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -127,8 +117,8 @@ fn interleaving_object_constraints() {
         require_y = |obj| obj.x * obj.y;
         test = |obj| require_x(obj) + require_y(obj);
 
-        test(#{ x = 1; y = 3; z = 1; });
-        test(#{ x = (1, 2); z = 1; y = x + z; });
+        test(#{ x: 1, y: 3, z: 1 });
+        test(#{ x: (1, 2), z: 1, y: (2, 3) });
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -147,7 +137,7 @@ fn interleaving_object_constraints_complex_case() {
         require_y = |obj| obj.x == (obj.y, obj.z);
         test = |obj| { require_x(obj); require_y(obj) };
 
-        test(#{ x = (1, 2); y = x.0; z = x.1; });
+        test({ x = (1, 2); #{ x, y: x.0, z: x.1 } });
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -162,7 +152,7 @@ fn interleaving_object_constraints_complex_case() {
 #[test]
 fn functional_fields_in_objects() {
     let code = r#"
-        obj = #{ x = 1; run = |x, y| x + y; };
+        obj = #{ x: 1, run: |x, y| x + y };
         run = obj.run;
         run((1, 2), (3, 4)) == (4, 6);
         (obj.run)(obj.x, 5)
@@ -191,9 +181,9 @@ fn functional_fields_in_object_constraints() {
     );
 
     let code_samples = &[
-        ("test(#{ x = 1; run = |x: Num, y: Num| x + y; })", "Num"),
-        ("test(#{ x = 1; run = |x, y| x + y; })", "Num"),
-        ("test(#{ run = push; x = (5, 6); })", "(Num, Num, Num)"),
+        ("test(#{ x: 1, run: |x: Num, y: Num| x + y })", "Num"),
+        ("test(#{ x: 1, run: |x, y| x + y })", "Num"),
+        ("test(#{ run: push, x: (5, 6) })", "(Num, Num, Num)"),
     ];
     for &(run_code, expected_output) in code_samples {
         let run_block = F32Grammar::parse_statements(run_code).unwrap();
@@ -217,11 +207,11 @@ fn object_and_ordinary_constraints() {
         "for<'T: { x: Bool } + Hash> ('T) -> Bool"
     );
 
-    let use_code = "fun(#{ x = true; }) && fun(#{ x = true; y = 5; })";
+    let use_code = "fun(#{ x: true }) && fun(#{ x: true, y: 5 })";
     let use_block = F32Grammar::parse_statements(use_code).unwrap();
     type_env.process_statements(&use_block).unwrap();
 
-    let bogus_code = "fun(#{ x = true; y = || 1; })";
+    let bogus_code = "fun(#{ x: true, y: || 1 })";
     let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
     let err = type_env
         .process_statements(&bogus_block)
@@ -234,8 +224,8 @@ fn object_and_ordinary_constraints() {
 fn embedded_objects() {
     let code = r#"
         obj = #{
-            x = #{ val = (1, 2, 3); len = 3; };
-            y = 3;
+            x: #{ val: (1, 2, 3), len: 3 },
+            y: 3,
         };
         obj.x.val.0 + obj.y;
         x = obj.x;
@@ -265,7 +255,7 @@ fn embedded_object_constraints() {
 
 #[test]
 fn creating_object_in_closure() {
-    let code = "(1, 2, 3).map(|x| #{ x = x; y = x + 1; })";
+    let code = "(1, 2, 3).map(|x| #{ x, y: x + 1 })";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let output = type_env
@@ -284,7 +274,7 @@ fn creating_object_in_closure() {
 #[test]
 fn creating_and_consuming_object_in_closure() {
     let code = r#"
-        (1, 2, 3).map(|x| #{ x = x; y = x + 1; }).fold(0, |acc, pt| acc + pt.x / pt.y)
+        (1, 2, 3).map(|x| #{ x, y: x + 1 }).fold(0, |acc, pt| acc + pt.x / pt.y)
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -300,9 +290,9 @@ fn creating_and_consuming_object_in_closure() {
 #[test]
 fn folding_to_object() {
     let code = r#"
-        |xs| xs.fold(#{ min = INF; max = -INF; }, |acc, x| #{
-            min = if(x < acc.min, x, acc.min);
-            max = if(x > acc.max, x, acc.max);
+        |xs| xs.fold(#{ min: INF, max: -INF }, |acc, x| #{
+            min: if(x < acc.min, x, acc.min),
+            max: if(x > acc.max, x, acc.max),
         })
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
@@ -321,9 +311,9 @@ fn folding_to_object() {
 fn shared_type_vars_in_objects() {
     let code = r#"
         fun = |x, obj| x == obj.x;
-        fun(5, #{ x = 4; });
-        fun(5, #{ x = 4; y = 2; });
-        fun((1, true), #{ x = (5, true); });
+        fun(5, #{ x: 4 });
+        fun(5, #{ x: 4, y: 2 });
+        fun((1, true), #{ x: (5, true) });
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -342,9 +332,9 @@ fn shared_type_vars_in_objects() {
 fn shared_type_vars_in_objects_curried() {
     let code = r#"
         fun = |x| |obj| x == obj.x;
-        fun(5)(#{ x = 4; });
-        fun(5)(#{ x = 4; y = 2; });
-        fun((1, true))(#{ x = (5, true); });
+        fun(5)(#{ x: 4 });
+        fun(5)(#{ x: 4, y: 2 });
+        fun((1, true))(#{ x: (5, true) });
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -358,7 +348,7 @@ fn shared_type_vars_in_objects_curried() {
         "for<'U: { x: 'T }> ('T) -> ('U) -> Bool"
     );
 
-    let bogus_code = "fun((1, true))(#{ x = 5; });";
+    let bogus_code = "fun((1, true))(#{ x: 5 });";
     let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
     let err = type_env
         .process_statements(&bogus_block)
@@ -375,7 +365,7 @@ fn shared_type_vars_in_objects_curried() {
 fn tuples_as_object_fields() {
     let code = r#"
         test = |obj| { obj.xs == obj.ys.map(|y| (y, y * 2)) };
-        test(#{ xs = ((1, 2), (3, 4)); ys = (3, 4); });
+        test(#{ xs: ((1, 2), (3, 4)), ys: (3, 4) });
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -394,7 +384,7 @@ fn tuples_as_object_fields() {
 fn tuples_with_dyn_length_as_object_fields() {
     let code = r#"
         test = |obj| { obj.xs == obj.ys.filter(|y| y > 1) };
-        test(#{ xs = (2, 3); ys = (1, 2, 3); });
+        test(#{ xs: (2, 3), ys: (1, 2, 3) });
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -412,9 +402,9 @@ fn tuples_with_dyn_length_as_object_fields() {
 #[test]
 fn object_destructure_basics() {
     let code = r#"
-        { x } = #{ x = 1; };
-        { x -> y } = #{ x = 2; };
-        obj = #{ xs = (3, 4, 5); flag = 1 == 1; };
+        { x } = #{ x: 1 };
+        { x -> y } = #{ x: 2 };
+        obj = #{ xs: (3, 4, 5), flag: 1 == 1 };
         { xs: (head, ...tail), flag } = obj;
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
@@ -432,7 +422,7 @@ fn object_destructure_basics() {
 fn object_destructure_in_fn_args() {
     let code = r#"
         test = |{ x, y }| x + y;
-        test(#{ x = 1; y = 2; })
+        test(#{ x: 1, y: 2 })
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -449,8 +439,8 @@ fn object_destructure_in_fn_args() {
 fn object_destructure_with_complex_bindings() {
     let code = r#"
         test = |{ xs: (head, ...xs), ys }| xs == ys && head == 1;
-        test(#{ xs = (1, 2, 3); ys = (2, 4); });
-        test(#{ xs = (1, true); ys = (true,); });
+        test(#{ xs: (1, 2, 3), ys: (2, 4) });
+        test(#{ xs: (1, true), ys: (true,) });
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -469,10 +459,10 @@ fn object_destructure_with_complex_bindings() {
 fn object_destructure_in_map_pipeline() {
     let code = r#"
         test = |xs| xs.map(|{ x, y }| x as Num + y);
-        (#{ x = 1; y = 2; }, #{ x = 3; y = 4; }).test() == (3, 7);
+        (#{ x: 1, y: 2 }, #{ x: 3, y: 4 }).test() == (3, 7);
         (
-            #{ x = 1; y = 2; z = 3; },
-            #{ x = 3; y = 4; z = x - y; },
+            #{ x: 1, y: 2, z: 3 },
+            #{ x: 3, y: 4, z: -1 },
         ).test() == (3, 7);
         // Unfortunately, having `z` in *one* of tuple items doesn't work for now.
     "#;
@@ -492,11 +482,11 @@ fn object_destructure_in_map_pipeline() {
 #[test]
 fn object_destructure_in_fold_pipeline() {
     let code = r#"
-        minmax = |xs| xs.fold(#{ min = INF; max = -INF; }, |{ min, max }, x| #{
-            min = if(x < min, x, min);
-            max = if(x > max, x, max);
+        minmax = |xs| xs.fold(#{ min: INF, max: -INF }, |{ min, max }, x| #{
+            min: if(x < min, x, min),
+            max: if(x > max, x, max),
         });
-        assert_eq((5, -4, 6, 9, 1).minmax(), #{ min = -4; max = 9; });
+        assert_eq((5, -4, 6, 9, 1).minmax(), #{ min: -4, max: 9 });
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
 

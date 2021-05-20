@@ -120,7 +120,7 @@ impl UnknownLen {
 /// that contain [`UnknownLen::Dynamic`].
 ///
 /// Functions, [`TypeArithmetic`]s, etc. can specify constraints on lengths being static.
-/// For example, this is a part of [`NumConstraints::Ops`];
+/// For example, this is a part of [`Ops`];
 /// dynamically sized slices such as `[Num]` cannot be added / multiplied / etc.,
 /// even if they are of the same type. This constraint is denoted as `len! N, M, ...`
 /// in the function quantifier, e.g., `for<len! N> (['T; N]) -> 'T`.
@@ -129,7 +129,7 @@ impl UnknownLen {
 /// set to [`ErrorKind::DynamicLen`].
 ///
 /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
-/// [`NumConstraints::Ops`]: crate::arith::NumConstraints::Ops
+/// [`Ops`]: crate::arith::Ops
 /// [`ErrorKind::DynamicLen`]: crate::ErrorKind::DynamicLen
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TupleLen {
@@ -455,7 +455,6 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
     }
 
     /// Attempts to index into this tuple. `middle_len` specifies the resolved middle length.
-    #[allow(clippy::option_if_let_else)] // hurts readability
     pub(crate) fn get_element(
         &self,
         index: usize,

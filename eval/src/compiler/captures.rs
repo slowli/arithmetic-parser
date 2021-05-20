@@ -113,9 +113,24 @@ impl<'a> CapturesExtractor<'a> {
             Expr::Block(block) => {
                 self.eval_block_inner(block, HashMap::new())?;
             }
-            Expr::ObjectBlock(statements) => {
-                for statement in statements {
-                    self.eval_statement(statement)?;
+            Expr::Object(object) => {
+                // Check that all field names are unique.
+                let mut object_fields = HashMap::new();
+                for (name, _) in &object.fields {
+                    let field_str = *name.fragment();
+                    if let Some(prev_span) = object_fields.insert(field_str, *name) {
+                        let err = ErrorKind::RepeatedField;
+                        return Err(Error::new(self.module_id.as_ref(), name, err)
+                            .with_span(&prev_span.into(), AuxErrorInfo::PrevAssignment));
+                    }
+                }
+
+                for (name, field_expr) in &object.fields {
+                    if let Some(field_expr) = field_expr {
+                        self.eval(field_expr)?;
+                    } else {
+                        self.eval_local_var(name);
+                    }
                 }
             }
             Expr::TypeCast { value, .. } => {

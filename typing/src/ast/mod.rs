@@ -60,7 +60,9 @@ pub enum TypeAst<'a> {
     /// in type annotations in Rust.
     Some,
     /// Any type (`any`).
-    Any(TypeConstraintsAst<'a>),
+    Any,
+    /// Dynamically applied constraints (`dyn _`).
+    Dyn(TypeConstraintsAst<'a>),
     /// Non-ticked identifier, e.g., `Bool`.
     Ident,
     /// Ticked identifier, e.g., `'T`.
@@ -416,7 +418,6 @@ fn return_type(input: InputSpan<'_>) -> NomResult<'_, SpannedTypeAst<'_>> {
     preceded(tuple((ws, tag("->"), ws)), cut(with_span(type_definition)))(input)
 }
 
-#[allow(clippy::option_if_let_else)] // false positive; `args` is moved into both clauses
 fn fn_or_tuple(input: InputSpan<'_>) -> NomResult<'_, TypeAst<'_>> {
     map(
         tuple((with_span(tuple_definition), opt(return_type))),
@@ -447,14 +448,21 @@ fn fn_definition_with_constraints(input: InputSpan<'_>) -> NomResult<'_, TypeAst
     )(input)
 }
 
-fn any_type(input: InputSpan<'_>) -> NomResult<'_, TypeConstraintsAst<'_>> {
-    let not_ident_char = peek(not(take_while_m_n(1, 1, |c: char| {
+fn not_ident_char(input: InputSpan<'_>) -> NomResult<'_, ()> {
+    peek(not(take_while_m_n(1, 1, |c: char| {
         c.is_ascii_alphanumeric() || c == '_'
-    })));
+    })))(input)
+}
+
+fn any_type(input: InputSpan<'_>) -> NomResult<'_, ()> {
+    terminated(map(tag("any"), drop), not_ident_char)(input)
+}
+
+fn dyn_type(input: InputSpan<'_>) -> NomResult<'_, TypeConstraintsAst<'_>> {
     map(
         preceded(
-            terminated(tag("any"), not_ident_char),
-            opt(preceded(ws, simple_type_bounds)),
+            terminated(tag("dyn"), not_ident_char),
+            opt(preceded(ws, type_bounds)),
         ),
         Option::unwrap_or_default,
     )(input)
@@ -474,7 +482,8 @@ fn type_definition(input: InputSpan<'_>) -> NomResult<'_, TypeAst<'_>> {
         map(type_param_ident, |_| TypeAst::Param),
         map(slice_definition, TypeAst::Slice),
         map(object, TypeAst::Object),
-        map(any_type, TypeAst::Any),
+        map(dyn_type, TypeAst::Dyn),
+        map(any_type, |()| TypeAst::Any),
         free_ident,
     ))(input)
 }

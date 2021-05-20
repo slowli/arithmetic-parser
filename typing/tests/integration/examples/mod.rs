@@ -5,13 +5,13 @@ use std::{fmt, str::FromStr};
 use arithmetic_parser::grammars::{Features, NumGrammar, Parse};
 use arithmetic_typing::{
     arith::{
-        BinaryOpContext, BoolArithmetic, Constraint, ConstraintSet, MapPrimitiveType,
-        NumArithmetic, TypeArithmetic, UnaryOpContext, WithBoolean,
+        BinaryOpContext, BoolArithmetic, Constraint, MapPrimitiveType, NumArithmetic,
+        TypeArithmetic, UnaryOpContext, WithBoolean,
     },
     error::{ErrorLocation, OpErrors},
     visit::Visit,
-    Annotated, Assertions, FnType, Prelude, PrimitiveType, Substitutions, Type, TypeEnvironment,
-    UnknownLen,
+    Annotated, Assertions, DynConstraints, FnType, Prelude, PrimitiveType, Substitutions, Type,
+    TypeEnvironment, UnknownLen,
 };
 
 use crate::Hashed;
@@ -32,14 +32,14 @@ impl Parse<'_> for U64Grammar {
 
 fn dbg_fn<Prim: PrimitiveType>() -> FnType<Prim> {
     FnType::builder()
-        .with_varargs(Type::any(), UnknownLen::param(0))
+        .with_varargs(Type::Any, UnknownLen::param(0))
         .returning(Type::void())
 }
 
 fn prepare_imprecise_env() -> TypeEnvironment {
     let rand_scalar = FnType::builder().returning(Type::NUM);
     let hash_to_scalar = FnType::builder()
-        .with_varargs(ConstraintSet::just(Hashed), UnknownLen::param(0))
+        .with_varargs(DynConstraints::just(Hashed), UnknownLen::param(0))
         .returning(Type::NUM);
     let to_scalar = FnType::builder().with_arg(Type::NUM).returning(Type::NUM);
 
@@ -247,7 +247,7 @@ impl TypeArithmetic<GroupPrim> for GroupArithmetic {
 fn prepare_env() -> TypeEnvironment<GroupPrim> {
     let rand_scalar = FnType::builder().returning(SC);
     let hash_to_scalar = FnType::builder()
-        .with_varargs(ConstraintSet::just(Hashed), UnknownLen::param(0))
+        .with_varargs(DynConstraints::just(Hashed), UnknownLen::param(0))
         .returning(SC);
     let to_scalar = FnType::builder().with_arg(GE).returning(SC);
 
@@ -281,7 +281,7 @@ fn schnorr_signatures() {
 
 #[test]
 fn schnorr_signatures_error() {
-    let bogus_code = SCHNORR_CODE.replace("s = r - sk * e;", "s = R - sk * e;");
+    let bogus_code = SCHNORR_CODE.replace("s: r - sk * e", "s: R - sk * e");
     let code = U64Grammar::parse_statements(bogus_code.as_str()).unwrap();
     let errors = prepare_env()
         .process_with_arithmetic(&GroupArithmetic, &code)
@@ -309,22 +309,22 @@ fn schnorr_signatures_mutations() {
         Mutation {
             from: "R = GEN ^ s * pk ^ e;",
             to: "R = GEN ^ s * e ^ pk;",
-            expected_msg: "21:5: Type `Sc` is not assignable to type `Ge`",
+            expected_msg: "19:5: Type `Sc` is not assignable to type `Ge`",
         },
         Mutation {
             from: "R = GEN ^ s * pk ^ e;",
             to: "R = GEN ^ s + pk ^ e;",
-            expected_msg: "20:9: Type `Ge` is not assignable to type `Sc`",
+            expected_msg: "18:9: Type `Ge` is not assignable to type `Sc`",
         },
         Mutation {
             from: "R = GEN ^ s * pk ^ e;",
             to: "R = GEN ^ s * pk * e;",
-            expected_msg: "21:5: Type `Sc` is not assignable to type `Ge`",
+            expected_msg: "19:5: Type `Sc` is not assignable to type `Ge`",
         },
         Mutation {
             from: "R = GEN ^ s * pk ^ e;",
             to: "R = (GEN, pk) ^ (s, e);",
-            expected_msg: "20:9: Type `(Ge, _)` is not assignable to type `Ge`",
+            expected_msg: "18:9: Type `(Ge, _)` is not assignable to type `Ge`",
         },
     ];
 
@@ -380,17 +380,17 @@ fn dsa_signatures_mutations() {
         Mutation {
             from: "r = (GEN ^ k).to_scalar();",
             to: "r = GEN ^ k;",
-            expected_msg: "14:40: Type `Ge` is not assignable to type `Sc`",
+            expected_msg: "13:36: Type `Ge` is not assignable to type `Sc`",
         },
         Mutation {
             from: "(GEN ^ u1 * pk ^ u2).to_scalar() == r",
             to: "GEN ^ u1 * pk ^ u2 == r",
-            expected_msg: "20:5: Type `Sc` is not assignable to type `Ge`",
+            expected_msg: "19:5: Type `Sc` is not assignable to type `Ge`",
         },
         Mutation {
             from: "assert(signature.verify(message, pk));",
             to: "assert(signature.verify(pk, message));",
-            expected_msg: "33:33: Type `Sc` is not assignable to type `Ge`",
+            expected_msg: "32:33: Type `Sc` is not assignable to type `Ge`",
         },
     ];
 

@@ -682,7 +682,7 @@ fn any_can_be_unified_with_anything() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env
-        .insert("any", Type::any())
+        .insert("any", Type::Any)
         .insert("map", Prelude::Map)
         .process_statements(&block)
         .unwrap_err()
@@ -708,11 +708,11 @@ fn any_propagates_via_fn_params() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env
-        .insert("any", Type::any())
+        .insert("any", Type::Any)
         .process_statements(&block)
         .unwrap();
 
-    assert_eq!(type_env["val"], Type::any());
+    assert_eq!(type_env["val"], Type::Any);
 }
 
 #[test]
@@ -726,7 +726,7 @@ fn any_can_be_copied_and_unified_with_anything() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env
-        .insert("any_other", Type::any())
+        .insert("any_other", Type::Any)
         .process_statements(&block)
         .unwrap();
 }
@@ -742,7 +742,7 @@ fn any_can_be_destructured_and_unified_with_anything() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env
-        .insert("some_tuple", Type::any().repeat(3))
+        .insert("some_tuple", Type::Any.repeat(3))
         .process_statements(&block)
         .unwrap();
 }
@@ -754,7 +754,7 @@ fn unifying_types_containing_any() {
 
     let digest_type = FnType::builder()
         .with_arg(Type::NUM)
-        .with_varargs(Type::any(), UnknownLen::param(0))
+        .with_varargs(Type::Any, UnknownLen::param(0))
         .returning(Type::NUM);
     let mut type_env = TypeEnvironment::new();
     let output = type_env
@@ -800,5 +800,39 @@ fn indexing_after_narrowing_type() {
     assert_eq!(
         output.to_string(),
         "for<'T: Ops> ((('T, 'T), ...['T; N])) -> ('T, 'T)"
+    );
+}
+
+#[test]
+fn wildcard_var_is_not_assigned() {
+    let code = "(_, x) = (1, 2);";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.process_statements(&block).unwrap();
+
+    assert_eq!(type_env["x"].to_string(), "Num");
+    assert!(type_env.get("_").is_none());
+}
+
+#[test]
+fn multiple_wildcard_vars_in_assignment_are_fine() {
+    let code = "(_, _, x) = (1, 2, 3); x == 3;";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.process_statements(&block).unwrap();
+
+    assert_eq!(type_env["x"].to_string(), "Num");
+    assert!(type_env.get("_").is_none());
+}
+
+#[test]
+fn multiple_wildcard_vars_in_fn_def_are_fine() {
+    let code = "|_: Num, { x -> _: Num, y }| y == 1";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let output = TypeEnvironment::new().process_statements(&block).unwrap();
+
+    assert_eq!(
+        output.to_string(),
+        "for<'T: { x: Num, y: Num }> (Num, 'T) -> Bool"
     );
 }

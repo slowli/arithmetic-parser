@@ -363,7 +363,7 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for Type<Prim> {
 /// Signature for a slice mapping function:
 ///
 /// ```
-/// # use arithmetic_typing::{arith::NumConstraints, FnType, UnknownLen, Type};
+/// # use arithmetic_typing::{arith::Linearity, FnType, UnknownLen, Type};
 /// // Definition of the mapping arg.
 /// let map_fn_arg = <FnType>::builder()
 ///     .with_arg(Type::param(0))
@@ -373,7 +373,7 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for Type<Prim> {
 ///     .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
 ///     .with_arg(map_fn_arg)
 ///     .returning(Type::param(1).repeat(UnknownLen::Dynamic))
-///     .with_constraints(&[1], NumConstraints::Lin);
+///     .with_constraints(&[1], Linearity);
 /// assert_eq!(
 ///     map_fn_type.to_string(),
 ///     "for<'U: Lin> (['T; N], ('T) -> 'U) -> ['U]"
@@ -383,7 +383,7 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for Type<Prim> {
 /// Signature of a function with varargs:
 ///
 /// ```
-/// # use arithmetic_typing::{arith::NumConstraints, FnType, UnknownLen, Type};
+/// # use arithmetic_typing::{FnType, UnknownLen, Type};
 /// let fn_type = <FnType>::builder()
 ///     .with_varargs(Type::param(0), UnknownLen::param(0))
 ///     .with_arg(Type::BOOL)
@@ -429,11 +429,11 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{arith::NumConstraints, UnknownLen};
+    use crate::{arith::Linearity, UnknownLen};
 
     #[test]
     fn constraints_display() {
-        let type_constraints = ConstraintSet::<Num>::just(NumConstraints::Lin);
+        let type_constraints = ConstraintSet::<Num>::just(Linearity);
         let type_constraints = CompleteConstraints::from(type_constraints);
 
         let constraints = ParamConstraints {
@@ -454,7 +454,7 @@ mod tests {
         let sum_fn = <FnType>::builder()
             .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
             .returning(Type::param(0))
-            .with_constraints(&[0], NumConstraints::Lin);
+            .with_constraints(&[0], Linearity);
         assert_eq!(sum_fn.to_string(), "for<'T: Lin> (['T; N]) -> 'T");
     }
 
@@ -463,7 +463,7 @@ mod tests {
         let sum_fn: FnType = FnType::builder()
             .with_arg(Type::NUM.repeat(UnknownLen::param(0)))
             .returning(Type::NUM)
-            .with_constraints(&[], NumConstraints::Lin)
+            .with_constraints(&[], Linearity)
             .into();
         assert_eq!(sum_fn.to_string(), "([Num; N]) -> Num");
 
@@ -471,7 +471,7 @@ mod tests {
             .with_arg(Type::NUM)
             .with_arg(sum_fn.clone())
             .returning(Type::NUM)
-            .with_constraints(&[], NumConstraints::Lin)
+            .with_constraints(&[], Linearity)
             .into();
         assert_eq!(complex_fn.to_string(), "(Num, ([Num; N]) -> Num) -> Num");
 
@@ -479,7 +479,7 @@ mod tests {
             .with_varargs(Type::NUM, UnknownLen::param(0))
             .with_arg(sum_fn)
             .returning(Type::NUM)
-            .with_constraints(&[], NumConstraints::Lin)
+            .with_constraints(&[], Linearity)
             .into();
         assert_eq!(
             other_complex_fn.to_string(),

@@ -4,7 +4,7 @@ version = "0.2.0"
 authors = ["Alex Ostrovski <ostrovski.alex@gmail.com>"]
 edition = "2018"
 readme = "README.md"
-license = "Apache-2.0"
+license = "MIT OR Apache-2.0"
 description = "CLI / REPL for arithmetic expressions."
 repository = "https://github.com/slowli/arithmetic-parser"
 

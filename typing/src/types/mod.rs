@@ -469,6 +469,11 @@ impl<Prim: PrimitiveType> DynConstraints<Prim> {
         self.inner.is_empty()
     }
 
+    /// Returns the enclosed object constraint, if any.
+    pub fn object(&self) -> Option<&Object<Prim>> {
+        self.inner.object.as_ref()
+    }
+
     fn is_concrete(&self) -> bool {
         self.inner.object.as_ref().map_or(true, Object::is_concrete)
     }

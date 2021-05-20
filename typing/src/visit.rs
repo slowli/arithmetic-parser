@@ -1,6 +1,6 @@
 //! Visitor traits allowing to traverse [`Type`] and related types.
 
-use crate::{FnType, Object, PrimitiveType, Tuple, TupleLen, Type, TypeVar};
+use crate::{DynConstraints, FnType, Object, PrimitiveType, Tuple, TupleLen, Type, TypeVar};
 
 /// Recursive traversal across the shared reference to a [`Type`].
 ///
@@ -82,8 +82,18 @@ pub trait Visit<Prim: PrimitiveType> {
     }
 
     /// Visits an object type.
-    fn visit_object(&mut self, obj: &Object<Prim>) {
-        visit_object(self, obj);
+    fn visit_object(&mut self, object: &Object<Prim>) {
+        visit_object(self, object);
+    }
+
+    /// Visits a [`Type::Dyn`] variant.
+    ///
+    /// The default implementation visits the object constraint if it is present using
+    /// [`Self::visit_object()`].
+    fn visit_dyn_constraints(&mut self, constraints: &DynConstraints<Prim>) {
+        if let Some(object) = &constraints.inner.object {
+            self.visit_object(object);
+        }
     }
 
     /// Visits a functional type.
@@ -103,11 +113,7 @@ where
 {
     match ty {
         Type::Any => { /* Do nothing. */ }
-        Type::Dyn(constraints) => {
-            if let Some(object) = &constraints.inner.object {
-                visitor.visit_object(object);
-            }
-        }
+        Type::Dyn(constraints) => visitor.visit_dyn_constraints(constraints),
         Type::Var(var) => visitor.visit_var(*var),
         Type::Prim(primitive) => visitor.visit_primitive(primitive),
         Type::Tuple(tuple) => visitor.visit_tuple(tuple),
@@ -128,12 +134,12 @@ where
 }
 
 /// Default implementation of [`Visit::visit_object()`].
-pub fn visit_object<Prim, V>(visitor: &mut V, obj: &Object<Prim>)
+pub fn visit_object<Prim, V>(visitor: &mut V, object: &Object<Prim>)
 where
     Prim: PrimitiveType,
     V: Visit<Prim> + ?Sized,
 {
-    for (_, ty) in obj.iter() {
+    for (_, ty) in object.iter() {
         visitor.visit_type(ty);
     }
 }
@@ -202,8 +208,18 @@ pub trait VisitMut<Prim: PrimitiveType> {
     }
 
     /// Visits an object type.
-    fn visit_object_mut(&mut self, obj: &mut Object<Prim>) {
-        visit_object_mut(self, obj);
+    fn visit_object_mut(&mut self, object: &mut Object<Prim>) {
+        visit_object_mut(self, object);
+    }
+
+    /// Visits a [`Type::Dyn`] variant.
+    ///
+    /// The default implementation visits the object constraint if it is present using
+    /// [`Self::visit_object_mut()`].
+    fn visit_dyn_constraints_mut(&mut self, constraints: &mut DynConstraints<Prim>) {
+        if let Some(object) = &mut constraints.inner.object {
+            self.visit_object_mut(object);
+        }
     }
 
     /// Visits a middle length of a tuple.
@@ -230,11 +246,7 @@ where
 {
     match ty {
         Type::Any | Type::Var(_) | Type::Prim(_) => {}
-        Type::Dyn(constraints) => {
-            if let Some(object) = &mut constraints.inner.object {
-                visitor.visit_object_mut(object);
-            }
-        }
+        Type::Dyn(constraints) => visitor.visit_dyn_constraints_mut(constraints),
         Type::Tuple(tuple) => visitor.visit_tuple_mut(tuple),
         Type::Object(obj) => visitor.visit_object_mut(obj),
         Type::Function(function) => visitor.visit_function_mut(function.as_mut()),
@@ -256,12 +268,12 @@ where
 }
 
 /// Default implementation of [`VisitMut::visit_object_mut()`].
-pub fn visit_object_mut<Prim, V>(visitor: &mut V, obj: &mut Object<Prim>)
+pub fn visit_object_mut<Prim, V>(visitor: &mut V, object: &mut Object<Prim>)
 where
     Prim: PrimitiveType,
     V: VisitMut<Prim> + ?Sized,
 {
-    for (_, ty) in obj.iter_mut() {
+    for (_, ty) in object.iter_mut() {
         visitor.visit_type_mut(ty);
     }
 }

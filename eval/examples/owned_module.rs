@@ -6,44 +6,26 @@ use core::iter::FromIterator;
 
 use arithmetic_eval::{Assertions, Environment, ErrorKind, ExecutableModule, Prelude, Value};
 use arithmetic_parser::{
-    grammars::{F64Grammar, Grammar, Parse, ParseLiteral, Typed},
-    BinaryOp, InputSpan, NomResult, StripCode, StripResultExt,
+    grammars::{F64Grammar, MockTypes, Parse, WithMockedTypes},
+    BinaryOp, StripCode, StripResultExt,
 };
 
 /// We need to process some type annotations, but don't want to depend
 /// on the typing crate for that. Hence, we define a grammar that gobbles up the exact
 /// type annotations used in the script.
-#[derive(Debug)]
-struct MockTypesGrammar;
+struct MockedTypesList;
 
-impl ParseLiteral for MockTypesGrammar {
-    type Lit = f64;
-
-    fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
-        F64Grammar::parse_literal(input)
-    }
+impl MockTypes for MockedTypesList {
+    const MOCKED_TYPES: &'static [&'static str] = &["Num", "[_]", "any"];
 }
 
-impl Grammar<'_> for MockTypesGrammar {
-    type Type = ();
-
-    fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
-        use nom::{
-            branch::alt,
-            bytes::complete::tag,
-            combinator::{cut, map},
-        };
-
-        let types = alt((tag("Num"), tag("[_]"), tag("any")));
-        cut(map(types, drop))(input)
-    }
-}
+type Grammar = WithMockedTypes<F64Grammar, MockedTypesList>;
 
 fn create_module<'a>(
     module_name: &'static str,
     program: &'a str,
 ) -> anyhow::Result<ExecutableModule<'a, f64>> {
-    let block = Typed::<MockTypesGrammar>::parse_statements(program).strip_err()?;
+    let block = Grammar::parse_statements(program).strip_err()?;
     Ok(ExecutableModule::builder(module_name, &block)
         .strip_err()?
         .with_imports_from(&Prelude)

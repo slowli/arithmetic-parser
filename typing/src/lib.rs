@@ -156,8 +156,8 @@ pub use self::{
     substitutions::Substitutions,
     type_map::{Assertions, Prelude},
     types::{
-        DynConstraints, FnType, FnTypeBuilder, FnWithConstraints, LengthVar, Object, Slice, Tuple,
-        TupleIndex, TupleLen, Type, TypeVar, UnknownLen,
+        DynConstraints, FnWithConstraints, Function, FunctionBuilder, LengthVar, Object, Slice,
+        Tuple, TupleIndex, TupleLen, Type, TypeVar, UnknownLen,
     },
 };
 
@@ -168,7 +168,7 @@ use self::{
 
 /// Primitive types in a certain type system.
 ///
-/// More complex types, like [`Type`] and [`FnType`], are defined with a type param
+/// More complex types, like [`Type`] and [`Function`], are defined with a type param
 /// which determines the primitive type(s). This type param must implement [`PrimitiveType`].
 ///
 /// [`TypeArithmetic`] has a `PrimitiveType` impl as an associated type, and one of the required

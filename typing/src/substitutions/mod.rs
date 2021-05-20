@@ -10,7 +10,7 @@ use crate::{
     arith::{CompleteConstraints, Constraint},
     error::{ErrorKind, ErrorLocation, OpErrors, TupleContext},
     visit::{self, Visit, VisitMut},
-    FnType, Object, PrimitiveType, Tuple, TupleLen, Type, TypeVar, UnknownLen,
+    Function, Object, PrimitiveType, Tuple, TupleLen, Type, TypeVar, UnknownLen,
 };
 
 mod fns;
@@ -527,8 +527,8 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
     fn unify_fn_types(
         &mut self,
-        lhs: &FnType<Prim>,
-        rhs: &FnType<Prim>,
+        lhs: &Function<Prim>,
+        rhs: &Function<Prim>,
         mut errors: OpErrors<'_, Prim>,
     ) {
         if lhs.is_parametric() {
@@ -560,7 +560,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     }
 
     /// Instantiates a functional type by replacing all type arguments with new type vars.
-    fn instantiate_function(&mut self, fn_type: &FnType<Prim>) -> FnType<Prim> {
+    fn instantiate_function(&mut self, fn_type: &Function<Prim>) -> Function<Prim> {
         if !fn_type.is_parametric() {
             // Fast path: just clone the function type.
             return fn_type.clone();
@@ -802,7 +802,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for TypeSpecifier<'_, Prim> {
         }
     }
 
-    fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {
+    fn visit_function_mut(&mut self, function: &mut Function<Prim>) {
         // Since the visiting order doesn't matter, we visit the return type (which preserves
         // variance) first.
         self.visit_type_mut(&mut function.return_type);

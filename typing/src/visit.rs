@@ -1,6 +1,6 @@
 //! Visitor traits allowing to traverse [`Type`] and related types.
 
-use crate::{DynConstraints, FnType, Object, PrimitiveType, Tuple, TupleLen, Type, TypeVar};
+use crate::{DynConstraints, Function, Object, PrimitiveType, Tuple, TupleLen, Type, TypeVar};
 
 /// Recursive traversal across the shared reference to a [`Type`].
 ///
@@ -100,7 +100,7 @@ pub trait Visit<Prim: PrimitiveType> {
     ///
     /// The default implementation calls [`Self::visit_tuple()`] on arguments and then
     /// [`Self::visit_type()`] on the return value.
-    fn visit_function(&mut self, function: &FnType<Prim>) {
+    fn visit_function(&mut self, function: &Function<Prim>) {
         visit_function(self, function);
     }
 }
@@ -145,7 +145,7 @@ where
 }
 
 /// Default implementation of [`Visit::visit_function()`].
-pub fn visit_function<Prim, V>(visitor: &mut V, function: &FnType<Prim>)
+pub fn visit_function<Prim, V>(visitor: &mut V, function: &Function<Prim>)
 where
     Prim: PrimitiveType,
     V: Visit<Prim> + ?Sized,
@@ -233,7 +233,7 @@ pub trait VisitMut<Prim: PrimitiveType> {
     ///
     /// The default implementation calls [`Self::visit_tuple_mut()`] on arguments and then
     /// [`Self::visit_type_mut()`] on the return value.
-    fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {
+    fn visit_function_mut(&mut self, function: &mut Function<Prim>) {
         visit_function_mut(self, function);
     }
 }
@@ -279,7 +279,7 @@ where
 }
 
 /// Default implementation of [`VisitMut::visit_function_mut()`].
-pub fn visit_function_mut<Prim, V>(visitor: &mut V, function: &mut FnType<Prim>)
+pub fn visit_function_mut<Prim, V>(visitor: &mut V, function: &mut Function<Prim>)
 where
     Prim: PrimitiveType,
     V: VisitMut<Prim> + ?Sized,

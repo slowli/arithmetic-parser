@@ -5,12 +5,12 @@ use std::{collections::HashMap, fmt, marker::PhantomData};
 use crate::{
     error::{ErrorKind, OpErrors},
     visit::{self, Visit},
-    FnType, Object, PrimitiveType, Slice, Substitutions, Tuple, Type, TypeVar,
+    Function, Object, PrimitiveType, Slice, Substitutions, Tuple, Type, TypeVar,
 };
 
 /// Constraint that can be placed on [`Type`]s.
 ///
-/// Constraints can be placed on [function](crate::FnType) type variables, and can be applied
+/// Constraints can be placed on [`Function`] type variables, and can be applied
 /// to types in [`TypeArithmetic`] impls. For example, [`NumArithmetic`] places
 /// the [`Linearity`] constraint on types involved in arithmetic ops.
 ///
@@ -250,7 +250,7 @@ where
         }
     }
 
-    fn visit_function(&mut self, function: &FnType<Prim>) {
+    fn visit_function(&mut self, function: &Function<Prim>) {
         self.errors.push(ErrorKind::failed_constraint(
             function.clone().into(),
             self.inner.constraint.clone(),

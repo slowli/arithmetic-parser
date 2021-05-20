@@ -7,7 +7,7 @@ use arithmetic_typing::{
     arith::{Constraint, ObjectSafeConstraint},
     error::{Error, ErrorKind, Errors, OpErrors},
     visit::Visit,
-    Annotated, DynConstraints, FnType, Num, PrimitiveType, Substitutions, Type, UnknownLen,
+    Annotated, DynConstraints, Function, Num, PrimitiveType, Substitutions, Type, UnknownLen,
 };
 
 mod annotations;
@@ -78,8 +78,8 @@ fn assert_incompatible_types<Prim: PrimitiveType>(
     );
 }
 
-fn hash_fn_type() -> FnType<Num> {
-    FnType::builder()
+fn hash_fn_type() -> Function<Num> {
+    Function::builder()
         .with_varargs(DynConstraints::just(Hashed), UnknownLen::param(0))
         .returning(Type::NUM)
 }
@@ -90,8 +90,8 @@ fn hash_fn_type_display() {
 }
 
 /// `zip` function signature.
-fn zip_fn_type() -> FnType<Num> {
-    FnType::builder()
+fn zip_fn_type() -> Function<Num> {
+    Function::builder()
         .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
         .with_arg(Type::param(1).repeat(UnknownLen::param(0)))
         .returning(Type::slice(

@@ -5,7 +5,7 @@ use assert_matches::assert_matches;
 use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
 use arithmetic_typing::{
     error::{Error, ErrorKind, Errors, TupleContext},
-    Annotated, FnType, Num, Prelude, TupleLen, Type, TypeEnvironment, UnknownLen,
+    Annotated, Function, Num, Prelude, TupleLen, Type, TypeEnvironment, UnknownLen,
 };
 
 type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
@@ -222,7 +222,7 @@ fn errors_when_adding_dynamic_slices() {
 #[test]
 fn square_function() {
     let square = Type::slice(Type::param(0), UnknownLen::param(0)).repeat(UnknownLen::param(0));
-    let square_fn = FnType::builder()
+    let square_fn = Function::builder()
         .with_arg(square)
         .returning(Type::void())
         .with_static_lengths(&[0]);

@@ -9,7 +9,7 @@ use crate::{
     error::{Error, ErrorContext, ErrorKind, Errors, OpErrors, TupleContext},
     types::IndexError,
     visit::VisitMut,
-    FnType, Object, PrimitiveType, Slice, Tuple, TupleLen, Type,
+    Function, Object, PrimitiveType, Slice, Tuple, TupleLen, Type,
 };
 use arithmetic_parser::{
     grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Destructure, DestructureRest, Expr,
@@ -438,7 +438,7 @@ where
     {
         let arg_types: Vec<_> = args.map(|arg| self.process_expr_inner(arg)).collect();
         let return_type = self.new_type();
-        let call_signature = FnType::new(arg_types.into(), return_type.clone()).into();
+        let call_signature = Function::new(arg_types.into(), return_type.clone()).into();
 
         let mut errors = OpErrors::new();
         self.env
@@ -506,7 +506,7 @@ where
         output
     }
 
-    fn process_fn_def<T>(&mut self, def: &FnDefinition<'a, T>) -> FnType<Prim>
+    fn process_fn_def<T>(&mut self, def: &FnDefinition<'a, T>) -> Function<Prim>
     where
         T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
     {
@@ -527,7 +527,7 @@ where
         self.scopes.pop();
         self.is_in_function = was_in_function;
 
-        let mut fn_type = FnType::new(arg_types, return_type);
+        let mut fn_type = Function::new(arg_types, return_type);
         let substitutions = &self.env.substitutions;
         substitutions.resolver().visit_function_mut(&mut fn_type);
 

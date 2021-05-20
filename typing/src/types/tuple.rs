@@ -7,7 +7,7 @@ use crate::{Num, PrimitiveType, Type};
 /// Length variable.
 ///
 /// A variable represents a certain unknown length. Variables can be either *free*
-/// or *bound* to a [function](crate::FnType) (similar to const params in Rust, except lengths
+/// or *bound* to a [`Function`](crate::Function) (similar to const params in Rust, except lengths
 /// always have the `usize` type).
 /// Just as with [`TypeVar`](crate::TypeVar)s, types input to a [`TypeEnvironment`]
 /// can only have bounded length variables (this is
@@ -45,7 +45,7 @@ impl LengthVar {
     }
 
     /// Creates a bounded length variable that can be used to
-    /// [build functions](crate::FnTypeBuilder).
+    /// [build functions](crate::FunctionBuilder).
     pub const fn param(index: usize) -> Self {
         Self {
             index,
@@ -95,7 +95,7 @@ impl ops::Add<usize> for UnknownLen {
 }
 
 impl UnknownLen {
-    /// Creates a bounded type variable that can be used to [build functions](crate::FnTypeBuilder).
+    /// Creates a bounded type variable that can be used to [build functions](crate::FunctionBuilder).
     pub const fn param(index: usize) -> Self {
         Self::Var(LengthVar::param(index))
     }

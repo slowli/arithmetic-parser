@@ -286,7 +286,7 @@ pub enum ErrorContext<Prim: PrimitiveType> {
     },
     /// Function call.
     FnCall {
-        /// Function definition. Note that this is not necessarily a [`FnType`](crate::FnType).
+        /// Function definition. Note that this is not necessarily a [`Function`](crate::Function).
         definition: Type<Prim>,
         /// Signature of the call.
         call_signature: Type<Prim>,

@@ -1,4 +1,4 @@
-//! Base types, such as `Type` and `FnType`.
+//! Base types, such as `Type` and `DynConstraints`.
 
 use std::{borrow::Cow, fmt};
 
@@ -18,7 +18,7 @@ pub(crate) use self::{
     tuple::IndexError,
 };
 pub use self::{
-    fn_type::{FnType, FnTypeBuilder, FnWithConstraints},
+    fn_type::{FnWithConstraints, Function, FunctionBuilder},
     object::Object,
     tuple::{LengthVar, Slice, Tuple, TupleIndex, TupleLen, UnknownLen},
 };
@@ -26,7 +26,7 @@ pub use self::{
 /// Type variable.
 ///
 /// A variable represents a certain unknown type. Variables can be either *free*
-/// or *bound* to a [function](FnType) (these are known as type params in Rust).
+/// or *bound* to a [`Function`] (these are known as type params in Rust).
 /// Types input to a [`TypeEnvironment`] can only have bounded variables (this is
 /// verified in runtime), but types output by the inference process can contain both.
 ///
@@ -64,7 +64,7 @@ impl TypeVar {
         )
     }
 
-    /// Creates a bounded type variable that can be used to [build functions](FnTypeBuilder).
+    /// Creates a bounded type variable that can be used to [build functions](FunctionBuilder).
     pub const fn param(index: usize) -> Self {
         Self {
             index,
@@ -94,7 +94,7 @@ impl TypeVar {
 /// - [`Prim`](Self::Prim)itive types are represented using the [`Display`](fmt::Display)
 ///   implementation of the corresponding [`PrimitiveType`].
 /// - [`Var`](Self::Var)s are represented as documented in [`TypeVar`].
-/// - Notation for [functional](FnType) and [tuple](Tuple) types is documented separately.
+/// - Notation for [functional](Function) and [tuple](Tuple) types is documented separately.
 ///
 /// [`ConstraintSet`]: crate::arith::ConstraintSet
 ///
@@ -103,12 +103,12 @@ impl TypeVar {
 /// There are conversions to construct `Type`s eloquently:
 ///
 /// ```
-/// # use arithmetic_typing::{FnType, UnknownLen, Type};
+/// # use arithmetic_typing::{Function, UnknownLen, Type};
 /// let tuple: Type = (Type::BOOL, Type::NUM).into();
 /// assert_eq!(tuple.to_string(), "(Bool, Num)");
 /// let slice = tuple.repeat(UnknownLen::param(0));
 /// assert_eq!(slice.to_string(), "[(Bool, Num); N]");
-/// let fn_type: Type = FnType::builder()
+/// let fn_type: Type = Function::builder()
 ///     .with_arg(slice)
 ///     .returning(Type::NUM)
 ///     .into();
@@ -181,7 +181,7 @@ pub enum Type<Prim: PrimitiveType = Num> {
     /// Primitive type.
     Prim(Prim),
     /// Functional type.
-    Function(Box<FnType<Prim>>),
+    Function(Box<Function<Prim>>),
     /// Tuple type.
     Tuple(Tuple<Prim>),
     /// Object type.
@@ -225,8 +225,8 @@ impl<Prim: PrimitiveType> fmt::Display for Type<Prim> {
     }
 }
 
-impl<Prim: PrimitiveType> From<FnType<Prim>> for Type<Prim> {
-    fn from(fn_type: FnType<Prim>) -> Self {
+impl<Prim: PrimitiveType> From<Function<Prim>> for Type<Prim> {
+    fn from(fn_type: Function<Prim>) -> Self {
         Self::Function(Box::new(fn_type))
     }
 }
@@ -374,7 +374,7 @@ impl<Prim: PrimitiveType> Type<Prim> {
 /// ```
 /// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
 /// # use arithmetic_typing::{
-/// #     Annotated, Prelude, TypeEnvironment, Type, FnType,
+/// #     Annotated, Prelude, TypeEnvironment, Type, Function,
 /// # };
 /// #
 /// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
@@ -388,7 +388,7 @@ impl<Prim: PrimitiveType> Type<Prim> {
 /// let ast = Parser::parse_statements(code)?;
 ///
 /// let mut env = TypeEnvironment::new();
-/// let sqrt = FnType::builder().with_arg(Type::NUM).returning(Type::NUM);
+/// let sqrt = Function::builder().with_arg(Type::NUM).returning(Type::NUM);
 /// env.insert("fold", Prelude::Fold).insert("sqrt", sqrt);
 /// env.process_statements(&ast)?;
 ///
@@ -569,7 +569,7 @@ mod tests {
         let sample_types = &[
             Type::free_var(2),
             (Type::NUM, Type::free_var(0)).into(),
-            FnType::builder()
+            Function::builder()
                 .with_arg(Type::free_var(0))
                 .returning(Type::void())
                 .into(),

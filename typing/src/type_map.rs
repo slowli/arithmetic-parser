@@ -1,6 +1,6 @@
 //! `TypeMap` trait and standard implementations.
 
-use crate::{arith::WithBoolean, FnType, Type, UnknownLen};
+use crate::{arith::WithBoolean, Function, Type, UnknownLen};
 
 /// Map containing type definitions for all variables from `Prelude` in the eval crate,
 /// except for `loop` function.
@@ -85,7 +85,7 @@ impl<Prim: WithBoolean> From<Prelude> for Type<Prim> {
         match value {
             Prelude::True | Prelude::False => Type::BOOL,
 
-            Prelude::If => FnType::builder()
+            Prelude::If => Function::builder()
                 .with_arg(Type::BOOL)
                 .with_arg(Type::param(0))
                 .with_arg(Type::param(0))
@@ -93,14 +93,14 @@ impl<Prim: WithBoolean> From<Prelude> for Type<Prim> {
                 .into(),
 
             Prelude::While => {
-                let condition_fn = FnType::builder()
+                let condition_fn = Function::builder()
                     .with_arg(Type::param(0))
                     .returning(Type::BOOL);
-                let iter_fn = FnType::builder()
+                let iter_fn = Function::builder()
                     .with_arg(Type::param(0))
                     .returning(Type::param(0));
 
-                FnType::builder()
+                Function::builder()
                     .with_arg(Type::param(0)) // state
                     .with_arg(condition_fn)
                     .with_arg(iter_fn)
@@ -109,11 +109,11 @@ impl<Prim: WithBoolean> From<Prelude> for Type<Prim> {
             }
 
             Prelude::Map => {
-                let map_arg = FnType::builder()
+                let map_arg = Function::builder()
                     .with_arg(Type::param(0))
                     .returning(Type::param(1));
 
-                FnType::builder()
+                Function::builder()
                     .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
                     .with_arg(map_arg)
                     .returning(Type::param(1).repeat(UnknownLen::param(0)))
@@ -121,11 +121,11 @@ impl<Prim: WithBoolean> From<Prelude> for Type<Prim> {
             }
 
             Prelude::Filter => {
-                let predicate_arg = FnType::builder()
+                let predicate_arg = Function::builder()
                     .with_arg(Type::param(0))
                     .returning(Type::BOOL);
 
-                FnType::builder()
+                Function::builder()
                     .with_arg(Type::param(0).repeat(UnknownLen::Dynamic))
                     .with_arg(predicate_arg)
                     .returning(Type::param(0).repeat(UnknownLen::Dynamic))
@@ -134,12 +134,12 @@ impl<Prim: WithBoolean> From<Prelude> for Type<Prim> {
 
             Prelude::Fold => {
                 // 0th type param is slice element, 1st is accumulator
-                let fold_arg = FnType::builder()
+                let fold_arg = Function::builder()
                     .with_arg(Type::param(1))
                     .with_arg(Type::param(0))
                     .returning(Type::param(1));
 
-                FnType::builder()
+                Function::builder()
                     .with_arg(Type::param(0).repeat(UnknownLen::Dynamic))
                     .with_arg(Type::param(1))
                     .with_arg(fold_arg)
@@ -147,13 +147,13 @@ impl<Prim: WithBoolean> From<Prelude> for Type<Prim> {
                     .into()
             }
 
-            Prelude::Push => FnType::builder()
+            Prelude::Push => Function::builder()
                 .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
                 .with_arg(Type::param(0))
                 .returning(Type::param(0).repeat(UnknownLen::param(0) + 1))
                 .into(),
 
-            Prelude::Merge => FnType::builder()
+            Prelude::Merge => Function::builder()
                 .with_arg(Type::param(0).repeat(UnknownLen::Dynamic))
                 .with_arg(Type::param(0).repeat(UnknownLen::Dynamic))
                 .returning(Type::param(0).repeat(UnknownLen::Dynamic))
@@ -210,11 +210,11 @@ pub enum Assertions {
 impl<Prim: WithBoolean> From<Assertions> for Type<Prim> {
     fn from(value: Assertions) -> Self {
         match value {
-            Assertions::Assert => FnType::builder()
+            Assertions::Assert => Function::builder()
                 .with_arg(Type::BOOL)
                 .returning(Type::void())
                 .into(),
-            Assertions::AssertEq => FnType::builder()
+            Assertions::AssertEq => Function::builder()
                 .with_arg(Type::param(0))
                 .with_arg(Type::param(0))
                 .returning(Type::void())

@@ -10,7 +10,7 @@ use arithmetic_typing::{
     },
     error::{ErrorLocation, OpErrors},
     visit::Visit,
-    Annotated, Assertions, DynConstraints, FnType, Prelude, PrimitiveType, Substitutions, Type,
+    Annotated, Assertions, DynConstraints, Function, Prelude, PrimitiveType, Substitutions, Type,
     TypeEnvironment, UnknownLen,
 };
 
@@ -30,18 +30,18 @@ impl Parse<'_> for U64Grammar {
     const FEATURES: Features = Features::all();
 }
 
-fn dbg_fn<Prim: PrimitiveType>() -> FnType<Prim> {
-    FnType::builder()
+fn dbg_fn<Prim: PrimitiveType>() -> Function<Prim> {
+    Function::builder()
         .with_varargs(Type::Any, UnknownLen::param(0))
         .returning(Type::void())
 }
 
 fn prepare_imprecise_env() -> TypeEnvironment {
-    let rand_scalar = FnType::builder().returning(Type::NUM);
-    let hash_to_scalar = FnType::builder()
+    let rand_scalar = Function::builder().returning(Type::NUM);
+    let hash_to_scalar = Function::builder()
         .with_varargs(DynConstraints::just(Hashed), UnknownLen::param(0))
         .returning(Type::NUM);
-    let to_scalar = FnType::builder().with_arg(Type::NUM).returning(Type::NUM);
+    let to_scalar = Function::builder().with_arg(Type::NUM).returning(Type::NUM);
 
     let mut env: TypeEnvironment = Prelude::iter().chain(Assertions::iter()).collect();
     env.insert("dbg", dbg_fn())
@@ -245,11 +245,11 @@ impl TypeArithmetic<GroupPrim> for GroupArithmetic {
 }
 
 fn prepare_env() -> TypeEnvironment<GroupPrim> {
-    let rand_scalar = FnType::builder().returning(SC);
-    let hash_to_scalar = FnType::builder()
+    let rand_scalar = Function::builder().returning(SC);
+    let hash_to_scalar = Function::builder()
         .with_varargs(DynConstraints::just(Hashed), UnknownLen::param(0))
         .returning(SC);
-    let to_scalar = FnType::builder().with_arg(GE).returning(SC);
+    let to_scalar = Function::builder().with_arg(GE).returning(SC);
 
     let mut env: TypeEnvironment<GroupPrim> = Prelude::iter().chain(Assertions::iter()).collect();
     env.insert("dbg", dbg_fn())

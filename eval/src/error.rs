@@ -181,7 +181,7 @@ pub enum ErrorKind {
     #[display(fmt = "`{}` is not a valid field name", _0)]
     InvalidFieldName(String),
 
-    /// Value is not callable (i.e., is not a function).
+    /// Value is not callable (i.e., it is not a function).
     #[display(fmt = "Value is not callable")]
     CannotCall,
     /// Value cannot be indexed (i.e., it is not a tuple).
@@ -203,7 +203,7 @@ pub enum ErrorKind {
         /// Actual tuple length.
         len: usize,
     },
-    /// Field is absent when attempting to access it.
+    /// Object does not have a required field.
     #[display(fmt = "Object does not have field {}", field)]
     NoField {
         /// Missing field.
@@ -234,14 +234,6 @@ pub enum ErrorKind {
     /// cannot.
     #[display(fmt = "Value cannot be compared to other values")]
     CannotCompare,
-
-    /// Unexpected result of a comparison function invocation. The comparison function should
-    /// always return -1, 0, or 1.
-    #[display(
-        fmt = "Unexpected result of a comparison function invocation. The comparison function \
-            should only return -1, 0, or 1."
-    )]
-    InvalidCmpResult,
 
     /// Construct not supported by the interpreter.
     #[display(fmt = "Unsupported {}", _0)]
@@ -294,7 +286,6 @@ impl ErrorKind {
             Self::Wrapper(err) => err.to_string(),
             Self::UnexpectedOperand { op } => format!("Unexpected operand type for {}", op),
             Self::CannotCompare => "Value is not comparable".to_owned(),
-            Self::InvalidCmpResult => "Invalid comparison result".to_owned(),
             Self::Unsupported(_) => "Grammar construct not supported".to_owned(),
             Self::Arithmetic(_) => "Arithmetic error".to_owned(),
         }
@@ -320,7 +311,6 @@ impl ErrorKind {
             Self::CannotCall | Self::NativeCall(_) | Self::Wrapper(_) => "Failed call".to_owned(),
             Self::UnexpectedOperand { .. } => "Operand of wrong type".to_owned(),
             Self::CannotCompare => "Cannot be compared".to_owned(),
-            Self::InvalidCmpResult => "Comparison function must return -1, 0 or 1".to_owned(),
             Self::Unsupported(ty) => format!("Unsupported {}", ty),
             Self::Arithmetic(e) => e.to_string(),
         }

@@ -8,17 +8,18 @@
 [![crate docs (master)](https://img.shields.io/badge/master-yellow.svg?label=docs)](https://slowli.github.io/arithmetic-parser/arithmetic_eval/) 
 [![changelog](https://img.shields.io/badge/-changelog-orange)](CHANGELOG.md)
 
-The library provides a simple interpreter, which can be used for *some* grammars
+The library provides a simple interpreter, which can be used for some grammars
 recognized by [`arithmetic-parser`], e.g., integer-, real-, complex-valued and modular arithmetic.
 (Both built-in integer types and big integers from [`num-bigint`] are supported.)
 The interpreter provides support for native functions,
 which allows to overcome some syntax limitations (e.g., the lack of control flow
-can be solved with native `if` / `loop` functions).
+can be solved with native `if` / `loop` functions). Native functions and opaque reference types
+allow effectively embedding the interpreter into larger Rust applications.
 
-In general, the interpreter is quite opinionated on how to interpret language features.
+The interpreter is somewhat opinionated on how to interpret language features
+(e.g., in terms of arithmetic ops for tuple / object arguments).
 The primary goal is to be intuitive for simple grammars (such as the aforementioned
-real-valued arithmetic), even if this comes at the cost of rendering the interpreter
-unusable for other grammars. Universality is explicitly not the design goal.
+real-valued arithmetic), even if this makes the interpreter difficult to use for other grammars.
 
 The interpreter is quite slow – 1–2 orders of magnitude slower than native arithmetic.
 
@@ -31,9 +32,9 @@ Add this to your `Crate.toml`:
 arithmetic-eval = "0.2.0"
 ```
 
-### Code samples
+### Script samples
 
-A simple program relying entirely on standard functions.
+A simple script relying entirely on standard functions.
 
 ```text
 minmax = |xs| xs.fold(#{ min: INF, max: -INF }, |acc, x| #{

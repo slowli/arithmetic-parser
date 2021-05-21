@@ -11,8 +11,10 @@ use crate::{
 ///
 /// # Type
 ///
+/// (using [`arithmetic-typing`](https://docs.rs/arithmetic-typing/) notation)
+///
 /// ```text
-/// fn<T>(bool, T, T) -> T
+/// (Bool, 'T, 'T) -> 'T
 /// ```
 ///
 /// # Examples
@@ -77,8 +79,11 @@ impl<T> NativeFn<T> for If {
 ///
 /// # Type
 ///
+/// (using [`arithmetic-typing`](https://docs.rs/arithmetic-typing/) notation with custom
+/// notation for union types; they are not supported in the typing crate)
+///
 /// ```text
-/// fn<T, R>(T, fn(T) -> (false, R) | (true, T)) -> R
+/// ('T, ('T) -> (false, 'R) | (true, 'T)) -> 'R
 /// ```
 ///
 /// # Examples
@@ -164,8 +169,10 @@ impl<T: Clone> NativeFn<T> for Loop {
 ///
 /// # Type
 ///
+/// (using [`arithmetic-typing`](https://docs.rs/arithmetic-typing/) notation)
+///
 /// ```text
-/// fn<T>(T, fn(T) -> bool, fn(T) -> T) -> T
+/// ('T, ('T) -> Bool, ('T) -> 'T) -> 'T
 /// ```
 ///
 /// # Examples

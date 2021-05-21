@@ -8,7 +8,7 @@ use crate::{
 };
 
 /// Error raised when a value cannot be converted to the expected type when using
-/// [`FnWrapper`].
+/// [`FnWrapper`](crate::fns::FnWrapper).
 #[derive(Debug, Clone)]
 pub struct FromValueError {
     kind: FromValueErrorKind,
@@ -104,6 +104,8 @@ impl fmt::Display for FromValueErrorKind {
 /// If the corresponding type in the wrapper is defined as a tuple, then
 /// a [`Tuple`](FromValueErrorLocation::Tuple) element will be added to the location; otherwise,
 /// an [`Array`](FromValueErrorLocation::Array) will be added.
+///
+/// [`FnWrapper`]: crate::fns::FnWrapper
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum FromValueErrorLocation {
@@ -233,7 +235,8 @@ try_from_value_for_tuple!(8 => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z, 
 try_from_value_for_tuple!(9 => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z, x7: A, x8: B);
 try_from_value_for_tuple!(10 => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z, x7: A, x8: B, x9: C);
 
-/// Generic error output encompassing all error types supported by [wrapped functions](FnWrapper).
+/// Generic error output encompassing all error types supported by
+/// [wrapped functions](crate::fns::FnWrapper).
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum ErrorOutput<'a> {
@@ -254,7 +257,8 @@ impl<'a> ErrorOutput<'a> {
 }
 
 /// Converts type into `Value` or an error. This is used to convert the return type
-/// of [wrapped functions](FnWrapper) to the result expected by [`NativeFn`].
+/// of [wrapped functions](crate::fns::FnWrapper) to the result expected by
+/// [`NativeFn`](crate::NativeFn).
 ///
 /// Unlike with `TryInto` trait from the standard library, the erroneous result here does not
 /// mean that the conversion *itself* is impossible. Rather, it means that the function evaluation

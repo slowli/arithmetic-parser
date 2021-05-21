@@ -35,6 +35,7 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// [`Environment::insert_wrapped_fn()`]: crate::Environment::insert_wrapped_fn()
 /// [`wrap_fn`]: crate::wrap_fn
 /// [`wrap_fn_with_context`]: crate::wrap_fn_with_context
+/// [`Value::wrapped_fn()`]: crate::Value::wrapped_fn()
 ///
 /// # Examples
 ///
@@ -201,6 +202,9 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 /// must implement [`IntoEvalResult`]. Unlike `wrap`, the arguments / return result do not
 /// need to have a `'static` lifetime; examples include [`Value`]s, [`Function`]s
 /// and [`EvalResult`]s. Lifetimes of all arguments and the return result must match.
+///
+/// [`Value`]: crate::Value
+/// [`Function`]: crate::Function
 ///
 /// # Examples
 ///

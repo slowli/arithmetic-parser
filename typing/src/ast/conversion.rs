@@ -31,21 +31,19 @@ use arithmetic_parser::{ErrorKind as ParseErrorKind, InputSpan, NomResult, Spann
 /// # Examples
 ///
 /// ```
-/// use arithmetic_parser::grammars::{Parse, NumGrammar, Typed};
+/// use arithmetic_parser::grammars::{Parse, F32Grammar};
 /// use arithmetic_typing::{
 ///     ast::AstConversionError, ErrorKind, Annotated, TypeEnvironment,
 /// };
 /// # use assert_matches::assert_matches;
 ///
-/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
-///
 /// # fn main() -> anyhow::Result<()> {
 /// let code = "bogus_slice: ['T; _] = (1, 2, 3);";
-/// let code = Parser::parse_statements(code)?;
+/// let code = Annotated::<F32Grammar>::parse_statements(code)?;
 ///
 /// let errors = TypeEnvironment::new().process_statements(&code).unwrap_err();
 /// let err = errors.into_iter().next().unwrap();
-/// assert_eq!(*err.span().fragment(), "'T");
+/// assert_eq!(*err.main_span().fragment(), "'T");
 /// assert_matches!(
 ///     err.kind(),
 ///     ErrorKind::AstConversion(AstConversionError::FreeTypeVar(id))

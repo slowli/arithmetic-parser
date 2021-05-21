@@ -3,7 +3,7 @@
 use std::{fmt, str::FromStr};
 
 use arithmetic_parser::{
-    grammars::{NumGrammar, NumLiteral, Parse, Typed},
+    grammars::{NumGrammar, NumLiteral, Parse},
     BinaryOp, InputSpan, NomResult,
 };
 use arithmetic_typing::{
@@ -163,7 +163,7 @@ impl TypeArithmetic<NumOrBytesType> for NumOrBytesArithmetic {
     }
 }
 
-type Parser = Typed<Annotated<NumGrammar<NumOrBytes>>>;
+type Parser = Annotated<NumGrammar<NumOrBytes>>;
 
 fn main() -> anyhow::Result<()> {
     let code = r#"

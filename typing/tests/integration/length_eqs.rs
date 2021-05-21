@@ -2,13 +2,13 @@
 
 use assert_matches::assert_matches;
 
-use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+use arithmetic_parser::grammars::{NumGrammar, Parse};
 use arithmetic_typing::{
     error::{Error, ErrorKind, Errors, TupleContext},
     Annotated, Function, Num, Prelude, TupleLen, Type, TypeEnvironment, UnknownLen,
 };
 
-type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
+type F32Grammar = Annotated<NumGrammar<f32>>;
 
 trait SingleError<'a> {
     fn single(self) -> Error<'a, Num>;

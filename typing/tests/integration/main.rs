@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use arithmetic_parser::grammars::{NumGrammar, Typed};
+use arithmetic_parser::grammars::{NumGrammar};
 use arithmetic_typing::{
     arith::{Constraint, ObjectSafeConstraint},
     error::{Error, ErrorKind, Errors, OpErrors},
@@ -17,7 +17,7 @@ mod examples;
 mod length_eqs;
 mod object;
 
-type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
+type F32Grammar = Annotated<NumGrammar<f32>>;
 
 trait ErrorsExt<'a, Prim: PrimitiveType> {
     fn single(self) -> Error<'a, Prim>;

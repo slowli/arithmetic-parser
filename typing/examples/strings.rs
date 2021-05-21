@@ -4,7 +4,7 @@
 use std::{fmt, str::FromStr};
 
 use arithmetic_parser::{
-    grammars::{Parse, ParseLiteral, Typed},
+    grammars::{Parse, ParseLiteral},
     BinaryOp, InputSpan, NomResult,
 };
 use arithmetic_typing::{
@@ -145,7 +145,7 @@ impl TypeArithmetic<StrType> for StrArithmetic {
     }
 }
 
-type Parser = Typed<Annotated<StrGrammar>>;
+type Parser = Annotated<StrGrammar>;
 
 fn main() -> anyhow::Result<()> {
     let code = r#"

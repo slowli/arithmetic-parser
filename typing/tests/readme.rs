@@ -2,12 +2,12 @@
 
 use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag};
 
-use arithmetic_parser::grammars::{F32Grammar, Parse, Typed};
+use arithmetic_parser::grammars::{F32Grammar, Parse};
 use arithmetic_typing::{
     arith::NumArithmetic, Annotated, Assertions, Num, Prelude, Type, TypeEnvironment,
 };
 
-type Grammar = Typed<Annotated<F32Grammar>>;
+type Grammar = Annotated<F32Grammar>;
 
 fn check_sample(code_sample: &str) {
     let program = Grammar::parse_statements(code_sample).unwrap();

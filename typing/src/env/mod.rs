@@ -32,9 +32,9 @@ use self::processor::TypeProcessor;
 /// or other methods.
 ///
 /// ```
-/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse};
 /// # use arithmetic_typing::{Annotated, Prelude, TypeEnvironment};
-/// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
+/// # type Parser = Annotated<F32Grammar>;
 /// # fn main() -> anyhow::Result<()> {
 /// // An easy way to get a non-concrete type is to involve `any`.
 /// let code = "(x, ...) = (1, 2, 3) as any;";

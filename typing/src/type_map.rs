@@ -20,13 +20,12 @@ use crate::{arith::WithBoolean, Function, PrimitiveType, Type, UnknownLen};
 /// Function counting number of zeros in a slice:
 ///
 /// ```
-/// use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// use arithmetic_parser::grammars::{F32Grammar, Parse};
 /// use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, Type};
 ///
 /// # fn main() -> anyhow::Result<()> {
-/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// let code = "|xs| xs.fold(0, |acc, x| if(x == 0, acc + 1, acc))";
-/// let ast = Parser::parse_statements(code)?;
+/// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 ///
 /// let mut env: TypeEnvironment = Prelude::iter().collect();
 /// let count_zeros_fn = env.process_statements(&ast)?;
@@ -38,18 +37,17 @@ use crate::{arith::WithBoolean, Function, PrimitiveType, Type, UnknownLen};
 /// Limitations of `merge`:
 ///
 /// ```
-/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse};
 /// # use arithmetic_typing::{ErrorKind, Annotated, Prelude, TypeEnvironment, Type};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
-/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// let code = r#"
 ///     len = |xs| xs.fold(0, |acc, _| acc + 1);
 ///     slice = (1, 2).merge((3, 4));
 ///     slice.len(); // methods working on slices are applicable
 ///     (_, _, _, z) = slice; // but destructring is not
 /// "#;
-/// let ast = Parser::parse_statements(code)?;
+/// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 ///
 /// let mut env: TypeEnvironment = Prelude::iter().collect();
 /// let errors = env.process_statements(&ast).unwrap_err();

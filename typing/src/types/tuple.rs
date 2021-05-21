@@ -594,11 +594,11 @@ pub(crate) enum IndexError {
 /// # Examples
 ///
 /// ```
-/// use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// use arithmetic_parser::grammars::{F32Grammar, Parse};
 /// use arithmetic_typing::{Annotated, TupleLen, TypeEnvironment, Type};
 ///
 /// # fn main() -> anyhow::Result<()> {
-/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
+/// type Parser = Annotated<F32Grammar>;
 /// let ast = Parser::parse_statements("xs: [Num; _] = (1, 2, 3);")?;
 /// let mut env = TypeEnvironment::new();
 /// env.process_statements(&ast)?;

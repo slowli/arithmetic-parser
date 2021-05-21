@@ -65,13 +65,12 @@
 //! # Examples
 //!
 //! ```
-//! use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+//! use arithmetic_parser::grammars::{F32Grammar, Parse};
 //! use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, Type};
 //!
-//! type Parser = Typed<Annotated<NumGrammar<f32>>>;
 //! # fn main() -> anyhow::Result<()> {
 //! let code = "sum = |xs| xs.fold(0, |acc, x| acc + x);";
-//! let ast = Parser::parse_statements(code)?;
+//! let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 //!
 //! let mut env = TypeEnvironment::new();
 //! env.insert("fold", Prelude::Fold);
@@ -87,12 +86,11 @@
 //! Defining and using generic functions:
 //!
 //! ```
-//! # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+//! # use arithmetic_parser::grammars::{F32Grammar, Parse};
 //! # use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, Type};
-//! # type Parser = Typed<Annotated<NumGrammar<f32>>>;
 //! # fn main() -> anyhow::Result<()> {
 //! let code = "sum_with = |xs, init| xs.fold(init, |acc, x| acc + x);";
-//! let ast = Parser::parse_statements(code)?;
+//! let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 //!
 //! let mut env = TypeEnvironment::new();
 //! env.insert("fold", Prelude::Fold);
@@ -111,7 +109,7 @@
 //!     num_sum: Num = (1, 2, 3).sum_with(0);
 //!     tuple_sum: (Num, Num) = ((1, 2), (3, 4)).sum_with((0, 0));
 //! "#;
-//! let ast = Parser::parse_statements(usage_code)?;
+//! let ast = Annotated::<F32Grammar>::parse_statements(usage_code)?;
 //! // Both lengths and element types differ in these invocations,
 //! // but it works fine since they are treated independently.
 //! env.process_statements(&ast)?;
@@ -137,7 +135,7 @@
 use std::{fmt, marker::PhantomData, str::FromStr};
 
 use arithmetic_parser::{
-    grammars::{Grammar, ParseLiteral},
+    grammars::{Grammar, Parse, ParseLiteral},
     InputSpan, NomResult,
 };
 
@@ -165,6 +163,7 @@ use self::{
     arith::{ConstraintSet, LinearType, Linearity, Ops, WithBoolean},
     ast::TypeAst,
 };
+use arithmetic_parser::grammars::Features;
 
 /// Primitive types in a certain type system.
 ///
@@ -299,14 +298,12 @@ impl LinearType for Num {
 /// # Examples
 ///
 /// ```
-/// use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// use arithmetic_parser::grammars::{F32Grammar, Parse};
 /// use arithmetic_typing::Annotated;
-///
-/// type F32Grammar = Annotated<NumGrammar<f32>>;
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let code = "x: [Num] = (1, 2, 3);";
-/// let ast = Typed::<F32Grammar>::parse_statements(code)?;
+/// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 /// # assert_eq!(ast.statements.len(), 1);
 /// # Ok(())
 /// # }
@@ -329,4 +326,11 @@ impl<'a, T: ParseLiteral> Grammar<'a> for Annotated<T> {
         use nom::combinator::map;
         map(TypeAst::parse, |ast| ast.extra)(input)
     }
+}
+
+/// Supports all syntax features.
+impl<T: ParseLiteral> Parse<'_> for Annotated<T> {
+    type Base = Self;
+
+    const FEATURES: Features = Features::all();
 }

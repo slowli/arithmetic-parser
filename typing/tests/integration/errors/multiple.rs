@@ -2,10 +2,10 @@
 
 use assert_matches::assert_matches;
 
-use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+use arithmetic_parser::grammars::{NumGrammar, Parse};
 use arithmetic_typing::{error::ErrorKind, Annotated, Prelude, TupleLen, Type, TypeEnvironment};
 
-type F32Grammar = Typed<Annotated<NumGrammar<f32>>>;
+type F32Grammar = Annotated<NumGrammar<f32>>;
 
 #[test]
 fn multiple_independent_errors() {

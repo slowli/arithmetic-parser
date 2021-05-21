@@ -180,12 +180,11 @@ impl<'a, Prim: PrimitiveType> Error<'a, Prim> {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse};
 /// # use arithmetic_typing::{error::Errors, Annotated, Prelude, TypeEnvironment};
 /// # use std::collections::HashSet;
-/// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// # fn main() -> anyhow::Result<()> {
-/// let buggy_code = Parser::parse_statements(r#"
+/// let buggy_code = Annotated::<F32Grammar>::parse_statements(r#"
 ///     numbers: ['T; _] = (1, 2, 3);
 ///     numbers.filter(|x| x, 1)
 /// "#)?;

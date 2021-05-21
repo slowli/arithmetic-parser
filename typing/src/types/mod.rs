@@ -139,10 +139,9 @@ impl TypeVar {
 /// Thus, the same `any` variable can be treated as a function, a tuple, a primitive type, etc.
 ///
 /// ```
-/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse};
 /// # use arithmetic_typing::{Annotated, TypeEnvironment, Type};
 /// # use assert_matches::assert_matches;
-/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let code = r#"
@@ -151,15 +150,15 @@ impl TypeVar {
 ///     (x, y, ...) = wildcard; // destructuring `any` always succeeds
 ///     wildcard(1, |x| x + 1); // calling `any` as a funcion works as well
 /// "#;
-/// let ast = Parser::parse_statements(code)?;
+/// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 /// let mut env = TypeEnvironment::new();
 /// env.process_statements(&ast)?;
 ///
 /// // Destructure outputs are certain types that can be inferred
 /// // from their usage, rather than `any`!
 /// assert_matches!(env["x"], Type::Var(_));
-/// let bogus_usage_code = "x + 1 == 2; x(1)";
-/// let ast = Parser::parse_statements(bogus_usage_code)?;
+/// let bogus_code = "x + 1 == 2; x(1)";
+/// let ast = Annotated::<F32Grammar>::parse_statements(bogus_code)?;
 /// let errors = env.process_statements(&ast).unwrap_err();
 /// # assert_eq!(errors.len(), 1);
 /// let err = errors.iter().next().unwrap();
@@ -372,12 +371,11 @@ impl<Prim: PrimitiveType> Type<Prim> {
 /// should be accepted.
 ///
 /// ```
-/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse};
 /// # use arithmetic_typing::{
 /// #     Annotated, Prelude, TypeEnvironment, Type, Function,
 /// # };
 /// #
-/// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// # fn main() -> anyhow::Result<()> {
 /// let code = r#"
 ///     sum_lengths = |...pts: dyn { x: _, y: _ }| {
@@ -385,7 +383,7 @@ impl<Prim: PrimitiveType> Type<Prim> {
 ///     };
 ///     sum_lengths(#{ x: 1, y: 2 }, #{ x: 3, y: 4, z: 5 })
 /// "#;
-/// let ast = Parser::parse_statements(code)?;
+/// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 ///
 /// let mut env = TypeEnvironment::new();
 /// let sqrt = Function::builder().with_arg(Type::NUM).returning(Type::NUM);
@@ -403,14 +401,13 @@ impl<Prim: PrimitiveType> Type<Prim> {
 /// One of primary use cases of `dyn _` is restricting varargs of a function:
 ///
 /// ```
-/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse};
 /// # use arithmetic_typing::{
 /// #     ast::TypeAst, ErrorKind, Annotated, Prelude, TypeEnvironment, Type,
 /// # };
 /// # use std::convert::TryFrom;
 /// # use assert_matches::assert_matches;
 /// #
-/// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// # fn main() -> anyhow::Result<()> {
 /// // Function that accepts any amount of linear args (not necessarily
 /// // of the same type) and returns a number.
@@ -422,7 +419,7 @@ impl<Prim: PrimitiveType> Type<Prim> {
 ///     digest(1, 2, (3, 4), #{ x: 5, y: (6,) }) == 1;
 ///     digest(3, true) == 0; // fails: `true` is not linear
 /// "#;
-/// let ast = Parser::parse_statements(code)?;
+/// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 /// let errors = env.process_statements(&ast).unwrap_err();
 ///
 /// let err = errors.iter().next().unwrap();

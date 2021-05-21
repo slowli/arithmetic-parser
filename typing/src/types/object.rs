@@ -26,17 +26,16 @@ use crate::{
 /// the function cannot be called with an arg of type `{ x: Num, y: Num, z: Num }`:
 ///
 /// ```
-/// # use arithmetic_parser::grammars::{Parse, Typed, NumGrammar};
+/// # use arithmetic_parser::grammars::{Parse, F32Grammar};
 /// # use arithmetic_typing::{error::ErrorKind, Annotated, TypeEnvironment};
 /// # use assert_matches::assert_matches;
-/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// # fn main() -> anyhow::Result<()> {
 /// let code = r#"
 ///     manhattan = |pt: { x: Num, y: Num }| pt.x + pt.y;
 ///     manhattan(#{ x: 3, y: 4 }); // OK
 ///     manhattan(#{ x: 3, y: 4, z: 5 }); // fails
 /// "#;
-/// let ast = Parser::parse_statements(code)?;
+/// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 /// let err = TypeEnvironment::new().process_statements(&ast).unwrap_err();
 /// # assert_eq!(err.len(), 1);
 /// let err = err.iter().next().unwrap();
@@ -52,17 +51,16 @@ use crate::{
 /// possible:
 ///
 /// ```
-/// # use arithmetic_parser::grammars::{Parse, Typed, NumGrammar};
+/// # use arithmetic_parser::grammars::{Parse, F32Grammar};
 /// # use arithmetic_typing::{error::ErrorKind, Annotated, TypeEnvironment};
 /// # use assert_matches::assert_matches;
-/// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// # fn main() -> anyhow::Result<()> {
 /// let code = r#"
 ///     manhattan = |pt| pt.x + pt.y;
 ///     manhattan(#{ x: 3, y: 4 }); // OK
 ///     manhattan(#{ x: 3, y: 4, z: 5 }); // also OK
 /// "#;
-/// let ast = Parser::parse_statements(code)?;
+/// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 /// let mut env = TypeEnvironment::new();
 /// env.process_statements(&ast)?;
 /// assert_eq!(

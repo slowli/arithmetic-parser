@@ -31,7 +31,53 @@ Add this to your `Crate.toml`:
 arithmetic-eval = "0.2.0"
 ```
 
-Please see the crate docs and [examples](examples) for the examples of usage.
+### Code samples
+
+A simple program relying entirely on standard functions.
+
+```text
+minmax = |xs| xs.fold(#{ min: INF, max: -INF }, |acc, x| #{
+     min: if(x < acc.min, x, acc.min),
+     max: if(x > acc.max, x, acc.max),
+});
+assert_eq((3, 7, 2, 4).minmax().min, 2);
+assert_eq((5, -4, 6, 9, 1).minmax(), #{ min: -4, max: 9 });
+```
+
+Recursive quick sort implementation:
+
+```text
+quick_sort = |xs, quick_sort| {
+    // We need to pass a function as an arg since the top-level fn
+    // is undefined at this point.
+  
+    if(xs == (), || (), || {
+        (pivot, ...rest) = xs;
+        lesser_part = rest.filter(|x| x < pivot).quick_sort(quick_sort);
+        greater_part = rest.filter(|x| x >= pivot).quick_sort(quick_sort);
+        lesser_part.push(pivot).merge(greater_part)
+    })()
+};
+// Shortcut to get rid of an awkward fn signature.
+sort = |xs| xs.quick_sort(quick_sort);
+
+assert_eq((1, 7, -3, 2, -1, 4, 2).sort(), (-3, -1, 1, 2, 2, 4, 7));
+
+// Generate a larger array to sort. `rand_num` is a custom native function
+// that generates random numbers in the specified range.
+xs = array(1000, |_| rand_num(0, 100)).sort();
+// Check that elements in `xs` are monotonically non-decreasing.
+{ sorted } = xs.fold(
+    #{ prev: -1, sorted: true },
+    |{ prev, sorted }, x| #{
+        prev: x,
+        sorted: sorted && prev <= x
+    },
+);
+assert(sorted);
+```
+
+Please see the crate docs and [examples](examples) for more examples.
 
 ## License
 
@@ -44,3 +90,4 @@ shall be dual licensed as above, without any additional terms or conditions.
 
 [`arithmetic-parser`]: https://docs.rs/crates/arithmetic-parser
 [`num-bigint`]: https://crates.io/crates/num-bigint
+[Schnorr signatures]: https://en.wikipedia.org/wiki/Schnorr_signature

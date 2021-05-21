@@ -1,6 +1,6 @@
 //! `TypeMap` trait and standard implementations.
 
-use crate::{arith::WithBoolean, Function, Type, UnknownLen};
+use crate::{arith::WithBoolean, Function, PrimitiveType, Type, UnknownLen};
 
 /// Map containing type definitions for all variables from `Prelude` in the eval crate,
 /// except for `loop` function.
@@ -10,7 +10,10 @@ use crate::{arith::WithBoolean, Function, Type, UnknownLen};
 /// - `true` and `false` Boolean constants
 /// - `if`, `while`, `map`, `filter`, `fold`, `push` and `merge` functions
 ///
-/// `merge` function has somewhat imprecise typing; its return value is a dynamically-sized slice.
+/// The `merge` function has somewhat imprecise typing; its return value is
+/// a dynamically-sized slice.
+///
+/// The `array` function is available separately via [`Self::array()`].
 ///
 /// # Examples
 ///
@@ -189,6 +192,21 @@ impl Prelude {
         }
     }
 
+    /// Returns the type of the `array` generation function from the eval crate.
+    ///
+    /// The `array` function is **not** included into [`Self::iter()`] because in the general case
+    /// we don't know the type of indexes.
+    pub fn array<T: PrimitiveType>(index_type: T) -> Function<T> {
+        Function::builder()
+            .with_arg(Type::Prim(index_type.clone()))
+            .with_arg(
+                Function::builder()
+                    .with_arg(Type::Prim(index_type))
+                    .returning(Type::param(0)),
+            )
+            .returning(Type::param(0).repeat(UnknownLen::Dynamic))
+    }
+
     /// Returns an iterator over all type definitions in the `Prelude`.
     pub fn iter<Prim: WithBoolean>() -> impl Iterator<Item = (&'static str, Type<Prim>)> {
         Self::VALUES
@@ -272,5 +290,11 @@ mod tests {
                 .collect::<HashSet<_>>(),
             expected_types.keys().copied().collect::<HashSet<_>>()
         );
+    }
+
+    #[test]
+    fn string_presentation_of_array_type() {
+        let array_fn = Prelude::array(Num::Num);
+        assert_eq!(array_fn.to_string(), "(Num, (Num) -> 'T) -> ['T]");
     }
 }

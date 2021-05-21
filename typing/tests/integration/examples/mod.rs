@@ -10,8 +10,8 @@ use arithmetic_typing::{
     },
     error::{ErrorLocation, OpErrors},
     visit::Visit,
-    Annotated, Assertions, DynConstraints, Function, Prelude, PrimitiveType, Substitutions, Type,
-    TypeEnvironment, UnknownLen,
+    Annotated, Assertions, DynConstraints, Function, Num, Prelude, PrimitiveType, Substitutions,
+    Type, TypeEnvironment, UnknownLen,
 };
 
 use crate::Hashed;
@@ -456,4 +456,27 @@ fn rfold() {
     );
     assert_eq!(env["min"], Type::NUM);
     assert_eq!(env["max"], Type::NUM);
+}
+
+#[test]
+fn quick_sort() {
+    let code = include_str!("quick_sort.script");
+    let code = U64Grammar::parse_statements(code).unwrap();
+
+    let rand_num = Function::builder()
+        .with_arg(Type::NUM)
+        .with_arg(Type::NUM)
+        .returning(Type::NUM);
+
+    let mut env: TypeEnvironment = Prelude::iter().chain(Assertions::iter()).collect();
+    env.insert("array", Prelude::array(Num::Num))
+        .insert("rand_num", rand_num)
+        .process_with_arithmetic(&NumArithmetic::with_comparisons(), &code)
+        .unwrap();
+
+    assert_eq!(
+        env["quick_sort"].to_string(),
+        "([Num; N], ([Num], any) -> [Num]) -> [Num]"
+    );
+    assert_eq!(env["sort"].to_string(), "([Num; N]) -> [Num]");
 }

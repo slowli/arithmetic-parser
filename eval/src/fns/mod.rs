@@ -42,7 +42,7 @@ mod wrapper;
 #[cfg(feature = "std")]
 pub use self::std::Dbg;
 pub use self::{
-    array::{Filter, Fold, Map, Merge, Push},
+    array::{Array, Filter, Fold, Len, Map, Merge, Push},
     assertions::{Assert, AssertEq},
     flow::{If, Loop, While},
     wrapper::{

@@ -253,7 +253,10 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for ParamPlacement<Prim> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{arith::CompleteConstraints, Num, Object};
+    use crate::{
+        arith::{CompleteConstraints, Num},
+        Object,
+    };
 
     #[test]
     fn analyzing_map_fn() {

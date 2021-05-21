@@ -9,8 +9,9 @@ use arithmetic_parser::{
 };
 use arithmetic_typing::{
     arith::*,
+    defs::Assertions,
     error::{ErrorLocation, OpErrors},
-    Annotated, Assertions, PrimitiveType, Substitutions, Type, TypeEnvironment,
+    Annotated, PrimitiveType, Type, TypeEnvironment,
 };
 
 /// Primitive type: string or boolean.

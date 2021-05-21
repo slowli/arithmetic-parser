@@ -4,8 +4,9 @@ use assert_matches::assert_matches;
 
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
+    defs::Prelude,
     error::{ErrorContext, ErrorKind, ErrorLocation},
-    Prelude, TupleLen, Type, TypeEnvironment, UnknownLen,
+    TupleLen, Type, TypeEnvironment, UnknownLen,
 };
 
 use crate::{assert_incompatible_types, hash_fn_type, ErrorsExt, F32Grammar, Hashed};

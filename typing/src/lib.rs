@@ -30,6 +30,8 @@
 //!   As an example, [`Num`] has a few known constraints, such as type [`Linearity`].
 //!
 //! [`Constraint`]: crate::arith::Constraint
+//! [`Num`]: crate::arith::Num
+//! [`Linearity`]: crate::arith::Linearity
 //!
 //! # Inference rules
 //!
@@ -46,6 +48,7 @@
 //! See the example below for more details.
 //!
 //! [Hindley–Milner typing rules]: https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system#Typing_rules
+//! [`Substitutions`]: crate::arith::Substitutions
 //! [`TypeArithmetic`]: crate::arith::TypeArithmetic
 //!
 //! # Operations
@@ -66,7 +69,7 @@
 //!
 //! ```
 //! use arithmetic_parser::grammars::{F32Grammar, Parse};
-//! use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, Type};
+//! use arithmetic_typing::{defs::Prelude, Annotated, TypeEnvironment, Type};
 //!
 //! # fn main() -> anyhow::Result<()> {
 //! let code = "sum = |xs| xs.fold(0, |acc, x| acc + x);";
@@ -87,7 +90,7 @@
 //!
 //! ```
 //! # use arithmetic_parser::grammars::{F32Grammar, Parse};
-//! # use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, Type};
+//! # use arithmetic_typing::{defs::Prelude, Annotated, TypeEnvironment, Type};
 //! # fn main() -> anyhow::Result<()> {
 //! let code = "sum_with = |xs, init| xs.fold(init, |acc, x| acc + x);";
 //! let ast = Annotated::<F32Grammar>::parse_statements(code)?;
@@ -135,35 +138,27 @@
 use std::{fmt, marker::PhantomData, str::FromStr};
 
 use arithmetic_parser::{
-    grammars::{Grammar, Parse, ParseLiteral},
+    grammars::{Features, Grammar, Parse, ParseLiteral},
     InputSpan, NomResult,
 };
 
 pub mod arith;
 pub mod ast;
+pub mod defs;
 mod env;
 pub mod error;
-mod substitutions;
-mod type_map;
 mod types;
 pub mod visit;
 
 pub use self::{
     env::TypeEnvironment,
-    error::{Error, ErrorKind},
-    substitutions::Substitutions,
-    type_map::{Assertions, Prelude},
     types::{
         DynConstraints, FnWithConstraints, Function, FunctionBuilder, LengthVar, Object, Slice,
         Tuple, TupleIndex, TupleLen, Type, TypeVar, UnknownLen,
     },
 };
 
-use self::{
-    arith::{ConstraintSet, LinearType, Linearity, Ops, WithBoolean},
-    ast::TypeAst,
-};
-use arithmetic_parser::grammars::Features;
+use self::{arith::ConstraintSet, ast::TypeAst};
 
 /// Primitive types in a certain type system.
 ///
@@ -185,6 +180,7 @@ use arithmetic_parser::grammars::Features;
 ///
 /// [`Grammar`]: arithmetic_parser::grammars::Grammar
 /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
+/// [`WithBoolean`]: crate::arith::WithBoolean
 /// [`BoolArithmetic`]: crate::arith::BoolArithmetic
 /// [`NumArithmetic`]: crate::arith::NumArithmetic
 ///
@@ -241,55 +237,6 @@ pub trait PrimitiveType:
     /// The default implementation returns an empty set.
     fn well_known_constraints() -> ConstraintSet<Self> {
         ConstraintSet::default()
-    }
-}
-
-/// Primitive types for numeric arithmetic.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Num {
-    /// Numeric type (e.g., 1).
-    Num,
-    /// Boolean value (true or false).
-    Bool,
-}
-
-impl fmt::Display for Num {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::Num => "Num",
-            Self::Bool => "Bool",
-        })
-    }
-}
-
-impl FromStr for Num {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Num" => Ok(Self::Num),
-            "Bool" => Ok(Self::Bool),
-            _ => Err(anyhow::anyhow!("Expected `Num` or `Bool`")),
-        }
-    }
-}
-
-impl PrimitiveType for Num {
-    fn well_known_constraints() -> ConstraintSet<Self> {
-        let mut constraints = ConstraintSet::default();
-        constraints.insert_object_safe(Linearity);
-        constraints.insert(Ops);
-        constraints
-    }
-}
-
-impl WithBoolean for Num {
-    const BOOL: Self = Self::Bool;
-}
-
-impl LinearType for Num {
-    fn is_linear(&self) -> bool {
-        matches!(self, Self::Num) // numbers are linear, booleans are not
     }
 }
 

@@ -7,8 +7,9 @@ use std::convert::TryFrom;
 use arithmetic_parser::{grammars::Parse, InputSpan};
 use arithmetic_typing::{
     ast::{AstConversionError, TypeAst},
+    defs::Prelude,
     error::{ErrorContext, ErrorKind, TupleContext},
-    Prelude, TupleLen, Type, TypeEnvironment,
+    TupleLen, Type, TypeEnvironment,
 };
 
 use crate::{

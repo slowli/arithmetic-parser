@@ -1,4 +1,6 @@
-//! `TypeMap` trait and standard implementations.
+//! Type definitions for the standard types from the [`arithmetic-eval`] crate.
+//!
+//! [`arithmetic-eval`]: https://docs.rs/arithmetic-eval/
 
 use crate::{arith::WithBoolean, Function, PrimitiveType, Type, UnknownLen};
 
@@ -21,7 +23,7 @@ use crate::{arith::WithBoolean, Function, PrimitiveType, Type, UnknownLen};
 ///
 /// ```
 /// use arithmetic_parser::grammars::{F32Grammar, Parse};
-/// use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, Type};
+/// use arithmetic_typing::{defs::Prelude, Annotated, TypeEnvironment, Type};
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let code = "|xs| xs.fold(0, |acc, x| if(x == 0, acc + 1, acc))";
@@ -38,7 +40,7 @@ use crate::{arith::WithBoolean, Function, PrimitiveType, Type, UnknownLen};
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse};
-/// # use arithmetic_typing::{ErrorKind, Annotated, Prelude, TypeEnvironment, Type};
+/// # use arithmetic_typing::{defs::Prelude, error::ErrorKind, Annotated, TypeEnvironment, Type};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// let code = r#"
@@ -192,7 +194,7 @@ impl Prelude {
 
     /// Returns the type of the `array` generation function from the eval crate.
     ///
-    /// The `array` function is **not** included into [`Self::iter()`] because in the general case
+    /// The `array` function is not included into [`Self::iter()`] because in the general case
     /// we don't know the type of indexes.
     pub fn array<T: PrimitiveType>(index_type: T) -> Function<T> {
         Function::builder()
@@ -258,7 +260,7 @@ impl Assertions {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Num;
+    use crate::arith::Num;
 
     use std::collections::{HashMap, HashSet};
 

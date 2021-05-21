@@ -3,8 +3,8 @@
 use std::{borrow::Cow, fmt};
 
 use crate::{
-    arith::{CompleteConstraints, ConstraintSet, ObjectSafeConstraint, WithBoolean},
-    Num, PrimitiveType,
+    arith::{CompleteConstraints, ConstraintSet, Num, ObjectSafeConstraint, WithBoolean},
+    PrimitiveType,
 };
 
 mod fn_type;
@@ -372,9 +372,7 @@ impl<Prim: PrimitiveType> Type<Prim> {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse};
-/// # use arithmetic_typing::{
-/// #     Annotated, Prelude, TypeEnvironment, Type, Function,
-/// # };
+/// # use arithmetic_typing::{defs::Prelude, Annotated, TypeEnvironment, Type, Function};
 /// #
 /// # fn main() -> anyhow::Result<()> {
 /// let code = r#"
@@ -403,7 +401,7 @@ impl<Prim: PrimitiveType> Type<Prim> {
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse};
 /// # use arithmetic_typing::{
-/// #     ast::TypeAst, ErrorKind, Annotated, Prelude, TypeEnvironment, Type,
+/// #     ast::TypeAst, defs::Prelude, error::ErrorKind, Annotated, TypeEnvironment, Type,
 /// # };
 /// # use std::convert::TryFrom;
 /// # use assert_matches::assert_matches;

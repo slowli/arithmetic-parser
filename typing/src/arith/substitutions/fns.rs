@@ -2,11 +2,11 @@
 
 use std::{collections::HashMap, sync::Arc};
 
-use crate::arith::CompleteConstraints;
 use crate::{
+    arith::{CompleteConstraints, Substitutions},
     types::{FnParams, ParamConstraints, ParamQuantifier},
     visit::{self, VisitMut},
-    Function, Object, PrimitiveType, Substitutions, TupleLen, Type, UnknownLen,
+    Function, Object, PrimitiveType, TupleLen, Type, UnknownLen,
 };
 
 impl<Prim: PrimitiveType> Function<Prim> {

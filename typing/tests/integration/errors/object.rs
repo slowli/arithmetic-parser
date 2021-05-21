@@ -5,8 +5,9 @@ use assert_matches::assert_matches;
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
     arith::NumArithmetic,
+    defs::Prelude,
     error::{ErrorContext, ErrorKind, ErrorLocation},
-    Prelude, Type, TypeEnvironment,
+    Type, TypeEnvironment,
 };
 
 use crate::{errors::fn_arg, hash_fn_type, ErrorsExt, F32Grammar};

@@ -4,7 +4,9 @@ use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag};
 
 use arithmetic_parser::grammars::{F32Grammar, Parse};
 use arithmetic_typing::{
-    arith::NumArithmetic, Annotated, Assertions, Num, Prelude, Type, TypeEnvironment,
+    arith::{Num, NumArithmetic},
+    defs::{Assertions, Prelude},
+    Annotated, Type, TypeEnvironment,
 };
 
 type Grammar = Annotated<F32Grammar>;

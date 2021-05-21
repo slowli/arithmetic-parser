@@ -35,7 +35,7 @@ pub(crate) use self::conversion::AstConversionState;
 ///
 /// ```
 /// use arithmetic_parser::InputSpan;
-/// # use arithmetic_typing::{ast::TypeAst, Num};
+/// # use arithmetic_typing::ast::TypeAst;
 /// # use assert_matches::assert_matches;
 ///
 /// # fn main() -> anyhow::Result<()> {
@@ -128,7 +128,7 @@ pub struct SliceAst<'a> {
 /// ```
 /// use arithmetic_parser::InputSpan;
 /// # use assert_matches::assert_matches;
-/// # use arithmetic_typing::{ast::{FunctionAst, TypeAst}, Num};
+/// # use arithmetic_typing::ast::{FunctionAst, TypeAst};
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let input = InputSpan::new("([Num; N]) -> Num");

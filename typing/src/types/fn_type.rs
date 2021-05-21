@@ -7,9 +7,9 @@ use std::{
 };
 
 use crate::{
-    arith::{CompleteConstraints, Constraint, ConstraintSet},
+    arith::{CompleteConstraints, Constraint, ConstraintSet, Num},
     types::ParamQuantifier,
-    LengthVar, Num, PrimitiveType, Tuple, TupleLen, Type, TypeVar,
+    LengthVar, PrimitiveType, Tuple, TupleLen, Type, TypeVar,
 };
 
 #[derive(Debug, Clone)]

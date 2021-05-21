@@ -6,7 +6,10 @@ use std::collections::HashSet;
 
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
-    arith::NumArithmetic, Assertions, ErrorKind, Prelude, Type, TypeEnvironment,
+    arith::NumArithmetic,
+    defs::{Assertions, Prelude},
+    error::ErrorKind,
+    Type, TypeEnvironment,
 };
 
 use crate::{ErrorsExt, F32Grammar};

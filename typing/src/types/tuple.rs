@@ -2,7 +2,7 @@
 
 use std::{borrow::Cow, cmp, fmt, iter, ops};
 
-use crate::{Num, PrimitiveType, Type};
+use crate::{arith::Num, PrimitiveType, Type};
 
 /// Length variable.
 ///
@@ -125,12 +125,12 @@ impl UnknownLen {
 /// even if they are of the same type. This constraint is denoted as `len! N, M, ...`
 /// in the function quantifier, e.g., `for<len! N> (['T; N]) -> 'T`.
 ///
-/// If the constraint fails, an error will be raised with the [kind](crate::Error::kind)
+/// If the constraint fails, an error will be raised with the [kind](crate::error::Error::kind)
 /// set to [`ErrorKind::DynamicLen`].
 ///
 /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
 /// [`Ops`]: crate::arith::Ops
-/// [`ErrorKind::DynamicLen`]: crate::ErrorKind::DynamicLen
+/// [`ErrorKind::DynamicLen`]: crate::error::ErrorKind::DynamicLen
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TupleLen {
     var: Option<UnknownLen>,

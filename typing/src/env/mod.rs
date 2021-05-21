@@ -4,13 +4,13 @@ use std::{collections::HashMap, iter::FromIterator, ops};
 
 use crate::{
     arith::{
-        Constraint, ConstraintSet, MapPrimitiveType, NumArithmetic, ObjectSafeConstraint,
-        TypeArithmetic,
+        Constraint, ConstraintSet, MapPrimitiveType, Num, NumArithmetic, ObjectSafeConstraint,
+        Substitutions, TypeArithmetic,
     },
     ast::TypeAst,
     error::Errors,
     types::{ParamConstraints, ParamQuantifier},
-    Num, PrimitiveType, Substitutions, Type,
+    PrimitiveType, Type,
 };
 use arithmetic_parser::{grammars::Grammar, Block};
 
@@ -33,7 +33,7 @@ use self::processor::TypeProcessor;
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse};
-/// # use arithmetic_typing::{Annotated, Prelude, TypeEnvironment};
+/// # use arithmetic_typing::{defs::Prelude, Annotated, TypeEnvironment};
 /// # type Parser = Annotated<F32Grammar>;
 /// # fn main() -> anyhow::Result<()> {
 /// // An easy way to get a non-concrete type is to involve `any`.

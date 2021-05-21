@@ -163,9 +163,8 @@ where
 /// # Examples
 ///
 /// ```
-/// use arithmetic_typing::{
-///     ast::TypeAst, visit::{self, VisitMut}, Num, Type,
-/// };
+/// use arithmetic_typing::{ast::TypeAst, arith::Num, Type};
+/// use arithmetic_typing::visit::{self, VisitMut};
 /// # use std::convert::TryFrom;
 ///
 /// /// Replaces all primitive types with `Num`.

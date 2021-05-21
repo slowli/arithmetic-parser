@@ -102,7 +102,7 @@ pub enum ErrorKind<Prim: PrimitiveType> {
     /// type inference, so this error
     /// can only occur with types manually supplied to `Substitutions::unify()`.
     ///
-    /// [`Substitutions::unify()`]: crate::Substitutions::unify()
+    /// [`Substitutions::unify()`]: crate::arith::Substitutions::unify()
     UnresolvedParam,
 
     /// Failure when applying constraint to a type.

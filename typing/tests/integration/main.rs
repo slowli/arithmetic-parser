@@ -2,12 +2,12 @@
 
 use std::fmt;
 
-use arithmetic_parser::grammars::{NumGrammar};
+use arithmetic_parser::grammars::NumGrammar;
 use arithmetic_typing::{
-    arith::{Constraint, ObjectSafeConstraint},
+    arith::{Constraint, Num, ObjectSafeConstraint, Substitutions},
     error::{Error, ErrorKind, Errors, OpErrors},
     visit::Visit,
-    Annotated, DynConstraints, Function, Num, PrimitiveType, Substitutions, Type, UnknownLen,
+    Annotated, DynConstraints, Function, PrimitiveType, Type, UnknownLen,
 };
 
 mod annotations;

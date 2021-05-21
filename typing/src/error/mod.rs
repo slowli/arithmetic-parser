@@ -181,7 +181,7 @@ impl<'a, Prim: PrimitiveType> Error<'a, Prim> {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse};
-/// # use arithmetic_typing::{error::Errors, Annotated, Prelude, TypeEnvironment};
+/// # use arithmetic_typing::{defs::Prelude, error::Errors, Annotated, TypeEnvironment};
 /// # use std::collections::HashSet;
 /// # fn main() -> anyhow::Result<()> {
 /// let buggy_code = Annotated::<F32Grammar>::parse_statements(r#"

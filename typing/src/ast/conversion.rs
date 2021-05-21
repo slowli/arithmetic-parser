@@ -26,14 +26,14 @@ use arithmetic_parser::{ErrorKind as ParseErrorKind, InputSpan, NomResult, Spann
 /// During type inference, errors of this type are wrapped into the [`AstConversion`]
 /// variant of typing errors.
 ///
-/// [`AstConversion`]: crate::ErrorKind::AstConversion
+/// [`AstConversion`]: crate::error::ErrorKind::AstConversion
 ///
 /// # Examples
 ///
 /// ```
 /// use arithmetic_parser::grammars::{Parse, F32Grammar};
 /// use arithmetic_typing::{
-///     ast::AstConversionError, ErrorKind, Annotated, TypeEnvironment,
+///     ast::AstConversionError, error::ErrorKind, Annotated, TypeEnvironment,
 /// };
 /// # use assert_matches::assert_matches;
 ///
@@ -530,7 +530,7 @@ mod tests {
     use assert_matches::assert_matches;
 
     use super::*;
-    use crate::Num;
+    use crate::arith::Num;
 
     #[test]
     fn converting_raw_fn_type() {

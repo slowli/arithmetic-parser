@@ -5,8 +5,9 @@ use assert_matches::assert_matches;
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
     arith::{BinaryOpContext, Linearity, NumArithmetic},
+    defs::Prelude,
     error::{ErrorContext, ErrorKind, ErrorLocation, TupleContext},
-    DynConstraints, Prelude, TupleIndex, TupleLen, Type, TypeEnvironment,
+    DynConstraints, TupleIndex, TupleLen, Type, TypeEnvironment,
 };
 
 use crate::{assert_incompatible_types, hash_fn_type, zip_fn_type, ErrorsExt, F32Grammar};

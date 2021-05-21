@@ -3,9 +3,10 @@
 use std::{collections::HashMap, fmt, marker::PhantomData};
 
 use crate::{
+    arith::Substitutions,
     error::{ErrorKind, OpErrors},
     visit::{self, Visit},
-    Function, Object, PrimitiveType, Slice, Substitutions, Tuple, Type, TypeVar,
+    Function, Object, PrimitiveType, Slice, Tuple, Type, TypeVar,
 };
 
 /// Constraint that can be placed on [`Type`]s.
@@ -98,8 +99,8 @@ pub trait ObjectSafeConstraint<Prim: PrimitiveType>: Constraint<Prim> {}
 ///
 /// ```
 /// # use arithmetic_typing::{
-/// #     arith::{Constraint, StructConstraint}, error::OpErrors, visit::Visit,
-/// #     PrimitiveType, Substitutions, Type,
+/// #     arith::{Constraint, StructConstraint, Substitutions}, error::OpErrors, visit::Visit,
+/// #     PrimitiveType, Type,
 /// # };
 /// # use std::fmt;
 /// /// Constraint for hashable types.
@@ -143,7 +144,8 @@ where
     C: Constraint<Prim> + Clone,
     F: Fn(&Prim) -> bool + 'static,
 {
-    /// Creates a new helper.
+    /// Creates a new helper. `predicate` determines whether a particular primitive type
+    /// should satisfy the `constraint`.
     pub fn new(constraint: C, predicate: F) -> Self {
         Self {
             constraint,
@@ -262,7 +264,7 @@ where
 /// in `T op Num` / `Num op T` operations.
 ///
 /// Defined recursively as [linear](LinearType) primitive types and tuples / objects consisting
-/// of `Lin` types.
+/// of linear types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Linearity;
 

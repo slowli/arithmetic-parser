@@ -4,9 +4,10 @@ use assert_matches::assert_matches;
 
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
-    arith::NumArithmetic,
+    arith::{Num, NumArithmetic},
+    defs::Prelude,
     error::{ErrorContext, ErrorKind, ErrorLocation},
-    Function, Num, Prelude, TupleLen, Type, TypeEnvironment, UnknownLen,
+    Function, TupleLen, Type, TypeEnvironment, UnknownLen,
 };
 
 use crate::{assert_incompatible_types, hash_fn_type, zip_fn_type, ErrorsExt, F32Grammar};

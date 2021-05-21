@@ -3,18 +3,22 @@
 
 use num_traits::NumOps;
 
+use std::{fmt, str::FromStr};
+
 use crate::{
     error::{ErrorKind, ErrorLocation, OpErrors},
-    Num, PrimitiveType, Substitutions, Type,
+    PrimitiveType, Type,
 };
 use arithmetic_parser::{BinaryOp, UnaryOp};
 
 mod constraints;
+mod substitutions;
 
 pub(crate) use self::constraints::CompleteConstraints;
 pub use self::constraints::{
     Constraint, ConstraintSet, LinearType, Linearity, ObjectSafeConstraint, Ops, StructConstraint,
 };
+pub use self::substitutions::Substitutions;
 
 /// Maps a literal value from a certain [`Grammar`] to its type. This assumes that all literals
 /// are primitive.
@@ -169,15 +173,61 @@ impl<Prim: PrimitiveType> Clone for OpConstraintSettings<'_, Prim> {
 
 impl<Prim: PrimitiveType> Copy for OpConstraintSettings<'_, Prim> {}
 
+/// Primitive types for the numeric arithmetic: `Num`eric type and `Bool`ean.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Num {
+    /// Numeric type (e.g., 1).
+    Num,
+    /// Boolean value (true or false).
+    Bool,
+}
+
+impl fmt::Display for Num {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Num => "Num",
+            Self::Bool => "Bool",
+        })
+    }
+}
+
+impl FromStr for Num {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Num" => Ok(Self::Num),
+            "Bool" => Ok(Self::Bool),
+            _ => Err(anyhow::anyhow!("Expected `Num` or `Bool`")),
+        }
+    }
+}
+
+impl PrimitiveType for Num {
+    fn well_known_constraints() -> ConstraintSet<Self> {
+        let mut constraints = ConstraintSet::default();
+        constraints.insert_object_safe(Linearity);
+        constraints.insert(Ops);
+        constraints
+    }
+}
+
+impl WithBoolean for Num {
+    const BOOL: Self = Self::Bool;
+}
+
+/// `Num`bers are linear, `Bool`ean values are not.
+impl LinearType for Num {
+    fn is_linear(&self) -> bool {
+        matches!(self, Self::Num)
+    }
+}
+
 /// Arithmetic on [`Num`]bers.
-///
-/// # Type inference for literals
-///
-/// All literals have a single type, [`Num`].
 ///
 /// # Unary ops
 ///
-/// - Unary minus is follows the equation `-T == T`, where `T` is any linear type.
+/// - Unary minus is follows the equation `-T == T`, where `T` is any [linear](Linearity) type.
 /// - Unary negation is only defined for `Bool`s.
 ///
 /// # Binary ops

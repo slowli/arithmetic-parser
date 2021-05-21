@@ -4,9 +4,9 @@ use assert_matches::assert_matches;
 
 use super::*;
 use crate::{
-    arith::{ConstraintSet, Linearity, Ops},
+    arith::{ConstraintSet, Linearity, Num, Ops},
     error::TupleContext,
-    DynConstraints, Num,
+    DynConstraints,
 };
 
 fn extract_errors<Prim: PrimitiveType>(

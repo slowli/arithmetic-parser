@@ -5,13 +5,13 @@ use std::{fmt, str::FromStr};
 use arithmetic_parser::grammars::{Features, NumGrammar, Parse};
 use arithmetic_typing::{
     arith::{
-        BinaryOpContext, BoolArithmetic, Constraint, MapPrimitiveType, NumArithmetic,
-        TypeArithmetic, UnaryOpContext, WithBoolean,
+        BinaryOpContext, BoolArithmetic, Constraint, MapPrimitiveType, Num, NumArithmetic,
+        Substitutions, TypeArithmetic, UnaryOpContext, WithBoolean,
     },
+    defs::{Assertions, Prelude},
     error::{ErrorLocation, OpErrors},
     visit::Visit,
-    Annotated, Assertions, DynConstraints, Function, Num, Prelude, PrimitiveType, Substitutions,
-    Type, TypeEnvironment, UnknownLen,
+    Annotated, DynConstraints, Function, PrimitiveType, Type, TypeEnvironment, UnknownLen,
 };
 
 use crate::Hashed;

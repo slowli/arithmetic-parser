@@ -3,7 +3,9 @@
 use assert_matches::assert_matches;
 
 use arithmetic_parser::grammars::{NumGrammar, Parse};
-use arithmetic_typing::{error::ErrorKind, Annotated, Prelude, TupleLen, Type, TypeEnvironment};
+use arithmetic_typing::{
+    defs::Prelude, error::ErrorKind, Annotated, TupleLen, Type, TypeEnvironment,
+};
 
 type F32Grammar = Annotated<NumGrammar<f32>>;
 

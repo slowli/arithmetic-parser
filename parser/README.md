@@ -26,7 +26,7 @@ function definitions, blocks, methods, and type annotations.
 
 See the crate docs for more details on the supported features.
 
-### Code Sample
+### Code sample
 
 Here is an example of code parsed with the grammar with real-valued literals
 and the only supported type `Num`:
@@ -34,18 +34,30 @@ and the only supported type `Num`:
 ```text
 // This is a comment.
 x = 1 + 2.5 * 3 + sin(a^3 / b^2);
+
 // Function declarations have syntax similar to Rust closures.
-some_function = |a, b: Num| (a + b, a - b);
-other_function = |x| {
+some_function = |x| {
     r = min(rand(), 0.5);
     r * x
 };
-// Tuples and blocks are supported and have a similar syntax to Rust.
-(y, z: Num) = some_function({ x = x - 0.5; x }, x);
-other_function(y - z)
+
+// Objects are similar to JavaScript, except they require
+// a preceding hash `#`, like in Rhai (https://rhai.rs/).
+other_function = |a, b: Num| #{ sum: a + b, diff: a - b };
+
+// Object destructuring is supported as well.
+{ sum, diff: Num } = other_function(
+    x,
+    // Blocks are supported and have a similar syntax to Rust.
+    some_function({ x = x - 0.5; x }),
+);
+
+// Tuples have syntax similar to Rust (besides spread syntax
+// in destructuring, which is similar to one in JavaScript).
+(x, ...tail) = (1, 2).map(some_function);
 ```
 
-## Implementation Details 
+## Implementation details
 
 The parser is based on the [`nom`](https://docs.rs/nom/) crate. The core trait of the library,
 `Grammar`, is designed in such a way that switching optional features

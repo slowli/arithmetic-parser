@@ -9,8 +9,8 @@
 Hindley–Milner type inference for arithmetic expressions parsed
 by the [`arithmetic-parser`] crate.
 
-This crate allows parsing type annotations as a part of grammars, and to infer
-and check types for expressions / statements produced by `arithmetic-parser`.
+This crate allows parsing type annotations as a part of grammars, and inferring /
+checking types for ASTs produced by `arithmetic-parser`.
 Type inference is *partially* compatible with the interpreter from [`arithmetic-eval`];
 if the inference algorithm succeeds on a certain expression / statement / block,
 it will execute successfully, but not all successfully executing items pass type inference.
@@ -24,7 +24,59 @@ Add this to your `Crate.toml`:
 arithmetic-typing = "0.2.0"
 ```
 
-Please see the crate docs and [examples](examples) for the examples of usage.
+### Quick overview
+
+The type system supports all major constructions from [`arithmetic-parser`],
+such as tuples, objects, and functional types. Functions and arithmetic operations
+can place constraints on involved types, which are similar to Rust traits
+(except *much* more limited). There is an equivalent for dynamic typing / trait objects
+as well. Finally, the `any` type can be used to circumvent type system limitations.
+
+The type system is generic with respect to primitive types. This allows customizing
+processing of arithmetic ops and constraints, quite similar to `Arithmetic`s
+in the [`arithmetic-eval`] crate.
+
+For simple scripts, type inference may be successful without any annotations.
+In the examples below, the only annotation is added to *test* type inference,
+rather than to drive it:
+
+```text
+minmax: ([Num; N]) -> { max: Num, min: Num } = 
+    |xs| xs.fold(#{ min: INF, max: -INF }, |acc, x| #{
+         min: if(x < acc.min, x, acc.min),
+         max: if(x > acc.max, x, acc.max),
+    });
+assert_eq((3, 7, 2, 4).minmax().min, 2);
+assert_eq((5, -4, 6, 9, 1).minmax(), #{ min: -4, max: 9 });
+```
+
+```text
+INF_PT = #{ x: INF, y: INF };
+
+min_point: ([{ x: Num, y: Num }; N]) -> { x: Num, y: Num } = 
+    |points| points
+        .map(|pt| (pt, pt.x * pt.x + pt.y * pt.y))
+        .fold(
+            #{ min_r: INF, pt: INF_PT },
+            |acc, (pt, r)| if(r < acc.min_r, #{ min_r: r, pt }, acc),
+        )
+        .pt;
+
+assert_eq(
+    array(10, |x| #{ x, y: 10 - x }).min_point(),
+    #{ x: 5, y: 5 }
+);
+```
+
+Please see the crate docs and [examples](examples) for info on type notation
+and more examples of usage.
+
+## Missing or incomplete features
+
+- Sum / tagged union types
+- Type constraints beyond simplest ones
+- Specifying type vars in type annotations (beyond simplest cases)
+- Type aliases
 
 ## License
 

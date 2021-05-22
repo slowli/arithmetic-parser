@@ -20,11 +20,18 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 - Support object destructuring via `Lvalue::Object`. Destructuring is non-exhaustive,
   i.e., the destructured object may have extra fields. (#86)
 
+- Add `Array` and `Len` functions to generate arrays and get array / tuple length,
+  respectively. (#88)
+
 ### Changed
 
 - Rename `AuxErrorInfo::UnbalancedRhs` to `AuxErrorInfo::UnbalancedRhsTuple`. (#86)
 
 - Re-license the crate to MIT or Apache-2.0. (#87)
+
+### Removed
+
+- Remove `ErrorKind::InvalidCmpResult` as obsolete. (#88)
 
 ## 0.2.0 - 2020-12-05
 

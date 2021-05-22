@@ -24,6 +24,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Add object destructuring via `Lvalue::Object`. (#86)
 
+- Allow to mock type parsing if the list of type annotations is statically known. (#88)
+
 ### Changed
 
 - Make `Grammar` and `Parse` traits parametric on the lifetime of input.

@@ -330,9 +330,9 @@ impl<T: ReplLiteral> Env<T> {
 
             Value::Tuple(fragments) => {
                 writeln!(writer, "(")?;
-                for (i, fragment) in fragments.iter().enumerate() {
+                for (i, element) in fragments.iter().enumerate() {
                     write!(writer, "{}", " ".repeat(indent + 2))?;
-                    Self::dump_value(writer, fragment, indent + 2)?;
+                    Self::dump_value(writer, element, indent + 2)?;
                     if i + 1 < fragments.len() {
                         writeln!(writer, ",")?;
                     } else {
@@ -340,6 +340,20 @@ impl<T: ReplLiteral> Env<T> {
                     }
                 }
                 write!(writer, "{})", " ".repeat(indent))
+            }
+
+            Value::Object(fields) => {
+                writeln!(writer, "#{{")?;
+                for (i, (name, value)) in fields.iter().enumerate() {
+                    write!(writer, "{}{}: ", " ".repeat(indent + 2), name)?;
+                    Self::dump_value(writer, value, indent + 2)?;
+                    if i + 1 < fields.len() {
+                        writeln!(writer, ",")?;
+                    } else {
+                        writeln!(writer)?;
+                    }
+                }
+                write!(writer, "{}}}", " ".repeat(indent))
             }
 
             Value::Ref(opaque_ref) => {

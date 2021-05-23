@@ -115,36 +115,24 @@ impl<T> ParseAndEvalResult<T> {
     }
 }
 
-pub struct Env<T> {
+pub struct Reporter {
     code_map: CodeMap,
     writer: StandardStream,
     config: ReportingConfig,
-    original_env: Environment<'static, T>,
-    original_type_env: Option<TypeEnvironment>,
-    env: Environment<'static, T>,
-    type_env: Option<TypeEnvironment>,
-    arithmetic: Box<dyn OrdArithmetic<T>>,
 }
 
-impl<T: ReplLiteral> Env<T> {
-    pub fn new(
-        arithmetic: Box<dyn OrdArithmetic<T>>,
-        env: Environment<'static, T>,
-        type_env: Option<TypeEnvironment>,
-    ) -> Self {
+impl Default for Reporter {
+    fn default() -> Self {
         Self {
             code_map: CodeMap::default(),
-            writer: StandardStream::stderr(ColorChoice::Auto),
+            writer: StandardStream::stdout(ColorChoice::Auto),
             config: ReportingConfig::default(),
-            original_env: env.clone(),
-            original_type_env: type_env.clone(),
-            env,
-            type_env,
-            arithmetic,
         }
     }
+}
 
-    pub fn print_greeting(&mut self) -> io::Result<()> {
+impl Reporter {
+    fn print_greeting(&self) -> io::Result<()> {
         let mut writer = self.writer.lock();
         writer.set_color(ColorSpec::new().set_bold(true))?;
         writeln!(
@@ -192,7 +180,7 @@ impl<T: ReplLiteral> Env<T> {
     }
 
     /// Reports a parsing error.
-    pub fn report_parse_error(&self, err: ParseError<'_>) -> io::Result<()> {
+    fn report_parse_error(&self, err: ParseError<'_>) -> io::Result<()> {
         // Parsing errors are always reported for the most recently added snippet.
         let (file, range) = self.code_map.locate_in_most_recent_file(&err.span());
 
@@ -232,7 +220,7 @@ impl<T: ReplLiteral> Env<T> {
         diagnostic
     }
 
-    pub fn report_error(&self, diagnostic: &Diagnostic<FileId>) -> io::Result<()> {
+    fn report_error(&self, diagnostic: &Diagnostic<FileId>) -> io::Result<()> {
         emit(
             &mut self.writer.lock(),
             &self.config,
@@ -245,7 +233,7 @@ impl<T: ReplLiteral> Env<T> {
         })
     }
 
-    pub fn report_eval_error(&self, e: &ErrorWithBacktrace<'_>) -> io::Result<()> {
+    fn report_eval_error(&self, e: &ErrorWithBacktrace<'_>) -> io::Result<()> {
         let mut diagnostic = self.create_diagnostic(e.source());
 
         let mut calls_iter = e.backtrace().peekable();
@@ -280,17 +268,60 @@ impl<T: ReplLiteral> Env<T> {
         self.report_error(&diagnostic)
     }
 
+    fn report_typing_errors(&self, errors: &TypingErrors<'_, Num>) -> io::Result<()> {
+        for err in errors.iter() {
+            let (file, range) = self.code_map.locate_in_most_recent_file(&err.main_span());
+
+            let label = Label::primary(file, range).with_message("Error occurred here");
+            let diagnostic = Diagnostic::error()
+                .with_message(err.kind().to_string())
+                .with_code("TYPE")
+                .with_labels(vec![label]);
+
+            self.report_error(&diagnostic)?;
+        }
+        Ok(())
+    }
+
     fn spans_are_equal(span: &CodeInModule<'_>, other: &CodeInModule<'_>) -> bool {
         span.code() == other.code()
             && span.module_id().downcast_ref::<IndexedId>()
                 == other.module_id().downcast_ref::<IndexedId>()
     }
 
-    pub fn newline(&mut self) -> io::Result<()> {
-        writeln!(self.writer)
+    fn parse_streaming<'a, P: Parse<'a>>(
+        &mut self,
+        line: &'a str,
+    ) -> io::Result<ParseAndEvalResult<Block<'a, P::Base>>> {
+        self.code_map.add(line.to_owned());
+
+        P::parse_streaming_statements(line)
+            .map(ParseAndEvalResult::Ok)
+            .or_else(|e| {
+                if e.kind().is_incomplete() {
+                    Ok(ParseAndEvalResult::Incomplete)
+                } else {
+                    self.report_parse_error(e)
+                        .map(|()| ParseAndEvalResult::Errored)
+                }
+            })
     }
 
-    fn dump_value(
+    pub fn parse<'a, T: ReplLiteral>(
+        &mut self,
+        line: &'a str,
+    ) -> io::Result<ParseAndEvalResult<Block<'a, Annotated<NumGrammar<T>>>>> {
+        self.code_map.add(line.to_owned());
+
+        Annotated::<NumGrammar<T>>::parse_statements(line)
+            .map(ParseAndEvalResult::Ok)
+            .or_else(|e| {
+                self.report_parse_error(e)
+                    .map(|()| ParseAndEvalResult::Errored)
+            })
+    }
+
+    fn dump_value<T: ReplLiteral>(
         writer: &mut StandardStream,
         value: &Value<'_, T>,
         indent: usize,
@@ -380,6 +411,41 @@ impl<T: ReplLiteral> Env<T> {
         }
     }
 
+    fn report_value<T: ReplLiteral>(&mut self, value: &Value<'_, T>) -> io::Result<()> {
+        Self::dump_value(&mut self.writer, value, 0)?;
+        writeln!(self.writer)
+    }
+}
+
+pub struct Env<T> {
+    reporter: Reporter,
+    original_env: Environment<'static, T>,
+    original_type_env: Option<TypeEnvironment>,
+    env: Environment<'static, T>,
+    type_env: Option<TypeEnvironment>,
+    arithmetic: Box<dyn OrdArithmetic<T>>,
+}
+
+impl<T: ReplLiteral> Env<T> {
+    pub fn new(
+        arithmetic: Box<dyn OrdArithmetic<T>>,
+        env: Environment<'static, T>,
+        type_env: Option<TypeEnvironment>,
+    ) -> Self {
+        Self {
+            reporter: Reporter::default(),
+            original_env: env.clone(),
+            original_type_env: type_env.clone(),
+            env,
+            type_env,
+            arithmetic,
+        }
+    }
+
+    pub fn print_greeting(&self) -> io::Result<()> {
+        self.reporter.print_greeting()
+    }
+
     fn dump_scope(&mut self, dump_original_scope: bool) -> io::Result<()> {
         for (name, var) in &self.env {
             if let Some(original_var) = self.original_env.get(name) {
@@ -389,29 +455,10 @@ impl<T: ReplLiteral> Env<T> {
                 }
             }
 
-            write!(self.writer, "{} = ", name)?;
-            Self::dump_value(&mut self.writer, var, 0)?;
-            writeln!(self.writer)?;
+            write!(self.reporter.writer, "{} = ", name)?;
+            self.reporter.report_value(var)?;
         }
         Ok(())
-    }
-
-    pub fn parse<'a, P: Parse<'a>>(
-        &mut self,
-        line: &'a str,
-    ) -> io::Result<ParseAndEvalResult<Block<'a, P::Base>>> {
-        self.code_map.add(line.to_owned());
-
-        P::parse_streaming_statements(line)
-            .map(ParseAndEvalResult::Ok)
-            .or_else(|e| {
-                if e.kind().is_incomplete() {
-                    Ok(ParseAndEvalResult::Incomplete)
-                } else {
-                    self.report_parse_error(e)
-                        .map(|()| ParseAndEvalResult::Errored)
-                }
-            })
     }
 
     pub fn parse_and_eval(&mut self, line: &str) -> io::Result<ParseAndEvalResult> {
@@ -420,7 +467,9 @@ impl<T: ReplLiteral> Env<T> {
             return Ok(ParseAndEvalResult::Ok(()));
         }
 
-        let parse_result = self.parse::<Annotated<NumGrammar<T>>>(line)?;
+        let parse_result = self
+            .reporter
+            .parse_streaming::<Annotated<NumGrammar<T>>>(line)?;
         Ok(if let ParseAndEvalResult::Ok(statements) = parse_result {
             if self.process_types(&statements)? {
                 self.compile_and_execute(&statements)?
@@ -434,8 +483,8 @@ impl<T: ReplLiteral> Env<T> {
 
     fn process_command(&mut self, line: &str) -> io::Result<()> {
         let line = line.trim();
-        self.code_map.add(line.to_owned());
-        let file_id = *self.code_map.file_ids.last().expect("no files");
+        self.reporter.code_map.add(line.to_owned());
+        let file_id = *self.reporter.code_map.file_ids.last().expect("no files");
 
         match line {
             ".clear" => {
@@ -444,13 +493,13 @@ impl<T: ReplLiteral> Env<T> {
             }
             ".dump" => self.dump_scope(false)?,
             ".dump all" => self.dump_scope(true)?,
-            ".help" => self.print_help()?,
+            ".help" => self.reporter.print_help()?,
 
             line if line.starts_with(".type ") && self.type_env.is_some() => {
                 let ident = line[6..].trim_start();
                 let ty = self.type_env.as_ref().unwrap().get(ident);
                 if let Some(ty) = ty {
-                    writeln!(self.writer, "{}", ty)?;
+                    writeln!(self.reporter.writer, "{}", ty)?;
                 } else {
                     let label =
                         Label::primary(file_id, 6..line.len()).with_message("Undefined variable");
@@ -458,7 +507,7 @@ impl<T: ReplLiteral> Env<T> {
                         .with_message(format!("Variable `{}` is not defined", ident))
                         .with_code("CMD")
                         .with_labels(vec![label]);
-                    self.report_error(&diagnostic)?;
+                    self.reporter.report_error(&diagnostic)?;
                 }
             }
 
@@ -469,8 +518,7 @@ impl<T: ReplLiteral> Env<T> {
                     .with_message("Unknown command")
                     .with_code("CMD")
                     .with_labels(vec![label]);
-
-                self.report_error(&diagnostic)?;
+                self.reporter.report_error(&diagnostic)?;
             }
         }
 
@@ -488,25 +536,10 @@ impl<T: ReplLiteral> Env<T> {
         Ok(match res {
             Ok(_) => true,
             Err(errors) => {
-                self.report_typing_errors(&errors)?;
+                self.reporter.report_typing_errors(&errors)?;
                 false
             }
         })
-    }
-
-    fn report_typing_errors(&self, errors: &TypingErrors<'_, Num>) -> io::Result<()> {
-        for err in errors.iter() {
-            let (file, range) = self.code_map.locate_in_most_recent_file(&err.main_span());
-
-            let label = Label::primary(file, range).with_message("Error occurred here");
-            let diagnostic = Diagnostic::error()
-                .with_message(err.kind().to_string())
-                .with_code("TYPE")
-                .with_labels(vec![label]);
-
-            self.report_error(&diagnostic)?;
-        }
-        Ok(())
     }
 
     fn compile_and_execute<'a, G>(
@@ -516,11 +549,12 @@ impl<T: ReplLiteral> Env<T> {
     where
         G: Grammar<'a, Lit = T>,
     {
-        let module_id = self.code_map.latest_module_id();
+        let module_id = self.reporter.code_map.latest_module_id();
         let module = match self.env.compile_module(module_id, statements) {
             Ok(builder) => builder,
             Err(err) => {
-                self.report_error(&self.create_diagnostic(&err))?;
+                self.reporter
+                    .report_error(&self.reporter.create_diagnostic(&err))?;
                 return Ok(ParseAndEvalResult::Errored);
             }
         };
@@ -532,14 +566,13 @@ impl<T: ReplLiteral> Env<T> {
         {
             Ok(value) => value,
             Err(err) => {
-                self.report_eval_error(&err)?;
+                self.reporter.report_eval_error(&err)?;
                 return Ok(ParseAndEvalResult::Errored);
             }
         };
 
         if !value.is_void() {
-            Self::dump_value(&mut self.writer, &value, 0)?;
-            self.newline()?;
+            self.reporter.report_value(&value)?;
         }
         Ok(ParseAndEvalResult::Ok(()))
     }

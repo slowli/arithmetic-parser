@@ -25,29 +25,29 @@ impl ReplTester {
 
     fn new(with_types: bool) -> Self {
         let mut command = Command::new(PATH_TO_BIN);
+        command.env("TERM", "dumb").arg("eval");
         if with_types {
             command.arg("--types");
         }
 
         let mut repl_process = command
-            .env("TERM", "dumb")
             .arg("-a")
             .arg("f64")
             .arg("-i")
             .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
             .spawn()
             .expect("Cannot spawn repl");
 
-        let stderr = repl_process.stderr.take().expect("REPL stderr");
-        let stderr = BufReader::new(stderr);
+        let stdout = repl_process.stdout.take().expect("REPL stderr");
+        let stdout = BufReader::new(stdout);
         let stdin = repl_process.stdin.take().expect("REPL stdin");
         let stdin = LineWriter::new(stdin);
 
         let (err_lines_sx, err_lines_rx) = mpsc::channel();
         let io_handle = thread::spawn(move || {
-            let mut lines = stderr.lines();
+            let mut lines = stdout.lines();
             while let Some(Ok(line)) = lines.next() {
                 if err_lines_sx.send(line).is_err() {
                     break; // the receiver was dropped, we don't care any more

@@ -476,11 +476,18 @@ impl<T: ReplLiteral> Env<T> {
         } else {
             self.reporter.parse::<T>(line)?
         };
-        Ok(if let ParseAndEvalResult::Ok(statements) = parse_result {
-            if self.process_types(&statements)? {
-                self.compile_and_execute(&statements)?
-            } else {
-                ParseAndEvalResult::Errored
+        Ok(if let ParseAndEvalResult::Ok(mut block) = parse_result {
+            match self.process_types(&block)? {
+                Ok(()) => self.compile_and_execute(&block)?,
+                Err(errors) => {
+                    // We still want to execute non-failing statements in the block
+                    // so that vars in ordinary and type envs align.
+                    block.return_value = None;
+                    block.statements.truncate(errors.first_failing_statement());
+
+                    self.compile_and_execute(&block)?;
+                    ParseAndEvalResult::Errored
+                }
             }
         } else {
             parse_result.map(drop)
@@ -533,30 +540,23 @@ impl<T: ReplLiteral> Env<T> {
 
     fn process_types<'a>(
         &mut self,
-        statements: &Block<'a, Annotated<NumGrammar<T>>>,
-    ) -> io::Result<bool> {
+        block: &Block<'a, Annotated<NumGrammar<T>>>,
+    ) -> io::Result<Result<(), TypingErrors<'a, Num>>> {
         let res = self.type_env.as_mut().map_or(Ok(Type::Any), |type_env| {
-            type_env.process_with_arithmetic(&NumArithmetic::with_comparisons(), statements)
+            type_env.process_with_arithmetic(&NumArithmetic::with_comparisons(), block)
         });
-
-        Ok(match res {
-            Ok(_) => true,
-            Err(errors) => {
-                self.reporter.report_typing_errors(&errors)?;
-                false
-            }
-        })
+        if let Err(errors) = &res {
+            self.reporter.report_typing_errors(&errors)?;
+        }
+        Ok(res.map(drop))
     }
 
-    fn compile_and_execute<'a, G>(
-        &mut self,
-        statements: &Block<'a, G>,
-    ) -> io::Result<ParseAndEvalResult>
+    fn compile_and_execute<'a, G>(&mut self, block: &Block<'a, G>) -> io::Result<ParseAndEvalResult>
     where
         G: Grammar<'a, Lit = T>,
     {
         let module_id = self.reporter.code_map.latest_module_id();
-        let module = match self.env.compile_module(module_id, statements) {
+        let module = match self.env.compile_module(module_id, block) {
             Ok(builder) => builder,
             Err(err) => {
                 self.reporter

@@ -236,3 +236,29 @@ fn variable_type() {
     let ty = repl.send_line(".type all");
     assert_eq!(ty, "(['T; N], ('T) -> Bool) -> Bool");
 }
+
+#[test]
+fn error_recovery() {
+    let mut repl = ReplTester::new(true);
+    repl.assert_intro();
+    let response = repl.send_line("x = 1; y = !x;");
+    assert!(response.contains("error[TYPE]"));
+    let x_response = repl.send_line("x");
+    assert_eq!(x_response, "1");
+    let y_response = repl.send_line("y");
+    assert!(
+        y_response.contains("error[TYPE]") && y_response.contains("`y` is not defined"),
+        "{}",
+        y_response
+    );
+}
+
+#[test]
+fn error_recovery_on_error_in_return_value() {
+    let mut repl = ReplTester::new(true);
+    repl.assert_intro();
+    let response = repl.send_line("x = 1; x + false");
+    assert!(response.contains("error[TYPE]"));
+    let x_response = repl.send_line("x");
+    assert_eq!(x_response, "1");
+}

@@ -159,7 +159,7 @@ where
 }
 
 pub fn create_modular_env(modulus: u64) -> (Environment<'static, u64>, TypeEnvironment) {
-    let mut env: Environment<u64> = Prelude.iter().chain(Assertions.iter()).collect();
+    let mut env: Environment<'_, u64> = Prelude.iter().chain(Assertions.iter()).collect();
     env.insert("MAX_VALUE", Value::Number(modulus - 1));
 
     let type_env = defs::Prelude::iter()

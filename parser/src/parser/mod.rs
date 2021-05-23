@@ -698,7 +698,7 @@ type DestructureTail<'a, T> = (
 
 fn destructure_tail<'a, T, Ty>(
     input: InputSpan<'a>,
-) -> NomResult<'a, DestructureTail<'a, <T::Base as Grammar>::Type>>
+) -> NomResult<'a, DestructureTail<'a, <T::Base as Grammar<'a>>::Type>>
 where
     T: Parse<'a>,
     Ty: GrammarType,
@@ -712,7 +712,7 @@ where
 /// Parse the destructuring *without* the surrounding delimiters.
 fn destructure<'a, T, Ty>(
     input: InputSpan<'a>,
-) -> NomResult<'a, Destructure<'a, <T::Base as Grammar>::Type>>
+) -> NomResult<'a, Destructure<'a, <T::Base as Grammar<'a>>::Type>>
 where
     T: Parse<'a>,
     Ty: GrammarType,

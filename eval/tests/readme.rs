@@ -9,7 +9,7 @@ use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 fn check_sample(code_sample: &str) {
     let program = Untyped::<F32Grammar>::parse_statements(code_sample).unwrap();
 
-    let mut env: Environment<f32> = Prelude.iter().chain(Assertions.iter()).collect();
+    let mut env: Environment<'_, f32> = Prelude.iter().chain(Assertions.iter()).collect();
     env.insert("array", Value::native_fn(fns::Array)).insert(
         "rand_num",
         Value::wrapped_fn(|min: f32, max: f32| thread_rng().gen_range(min..max)),

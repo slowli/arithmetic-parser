@@ -52,7 +52,7 @@ pub trait Constraint<Prim: PrimitiveType>: fmt::Display + Send + Sync + 'static 
 }
 
 impl<Prim: PrimitiveType> fmt::Debug for dyn Constraint<Prim> {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_tuple("dyn Constraint")
             .field(&self.to_string())

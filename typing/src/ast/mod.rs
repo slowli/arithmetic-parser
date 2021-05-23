@@ -438,7 +438,7 @@ fn fn_definition(input: InputSpan<'_>) -> NomResult<'_, FunctionAst<'_>> {
     )(input)
 }
 
-fn fn_definition_with_constraints(input: InputSpan<'_>) -> NomResult<'_, TypeAst> {
+fn fn_definition_with_constraints(input: InputSpan<'_>) -> NomResult<'_, TypeAst<'_>> {
     map(
         tuple((with_span(constraints), ws, cut(with_span(fn_definition)))),
         |(constraints, _, function)| TypeAst::FunctionWithConstraints {

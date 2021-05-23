@@ -206,11 +206,15 @@ impl<'a, Prim: PrimitiveType> Error<'a, Prim> {
 #[derive(Debug, Clone)]
 pub struct Errors<'a, Prim: PrimitiveType> {
     inner: Vec<Error<'a, Prim>>,
+    first_failing_statement: usize,
 }
 
 impl<'a, Prim: PrimitiveType> Errors<'a, Prim> {
     pub(crate) fn new() -> Self {
-        Self { inner: vec![] }
+        Self {
+            inner: vec![],
+            first_failing_statement: 0,
+        }
     }
 
     pub(crate) fn push(&mut self, err: Error<'a, Prim>) {
@@ -234,6 +238,17 @@ impl<'a, Prim: PrimitiveType> Errors<'a, Prim> {
     /// Iterates over errors contained in this list.
     pub fn iter(&self) -> impl Iterator<Item = &Error<'a, Prim>> + '_ {
         self.inner.iter()
+    }
+
+    /// Returns the index of the first failing statement within a `Block` that has errored.
+    /// If the error is in the return value, this index will be equal to the number of statements
+    /// in the block.
+    pub fn first_failing_statement(&self) -> usize {
+        self.first_failing_statement
+    }
+
+    pub(crate) fn set_first_failing_statement(&mut self, index: usize) {
+        self.first_failing_statement = index;
     }
 
     /// Post-processes these errors, resolving the contained `Type`s using

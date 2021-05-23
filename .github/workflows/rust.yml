@@ -10,7 +10,7 @@ env:
   # Minimum supported Rust version.
   msrv: 1.44.0
   # Nightly Rust toolchain for building docs.
-  nightly: nightly-2020-10-24
+  nightly: nightly-2021-04-15
 
 jobs:
   # Checks minimum supported Rust version.

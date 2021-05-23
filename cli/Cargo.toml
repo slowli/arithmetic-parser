@@ -18,6 +18,10 @@ rustyline = "8.0.0"
 structopt = "0.3.13"
 unindent = "0.1.6"
 
+[[bin]]
+name = "arithmetic-parser"
+path = "src/main.rs"
+
 [dependencies.arithmetic-parser]
 version = "0.2.0"
 path = "../parser"
@@ -26,6 +30,10 @@ path = "../parser"
 version = "0.2.0"
 path = "../eval"
 features = ["complex"]
+
+[dependencies.arithmetic-typing]
+version = "0.2.0"
+path = "../typing"
 
 [dev-dependencies]
 assert_cmd = "1.0.1"

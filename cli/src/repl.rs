@@ -4,19 +4,22 @@ use rustyline::{error::ReadlineError, Editor};
 
 use std::io;
 
+use arithmetic_eval::arith::OrdArithmetic;
+use arithmetic_eval::Environment;
+use arithmetic_typing::TypeEnvironment;
+
 use crate::{
     common::{Env, ParseAndEvalResult},
     library::ReplLiteral,
 };
-use arithmetic_eval::arith::OrdArithmetic;
-use arithmetic_eval::Environment;
 
 pub fn repl<T: ReplLiteral>(
     arithmetic: Box<dyn OrdArithmetic<T>>,
     env: Environment<'static, T>,
+    type_env: Option<TypeEnvironment>,
 ) -> io::Result<()> {
     let mut rl = Editor::<()>::new();
-    let mut env = Env::new(arithmetic, env);
+    let mut env = Env::new(arithmetic, env, type_env);
     env.print_greeting()?;
 
     let mut snippet = String::new();

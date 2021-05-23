@@ -6,10 +6,12 @@ use unindent::unindent;
 
 use std::process::Command;
 
+const PATH_TO_BIN: &str = env!("CARGO_BIN_EXE_arithmetic-parser");
+
 const ERROR_EXIT_CODE: i32 = 2;
 
 fn create_command(program: &str, arithmetic: &str) -> Command {
-    let mut command = Command::cargo_bin(env!("CARGO_PKG_NAME")).expect("CLI binary");
+    let mut command = Command::new(PATH_TO_BIN);
     command
         .env("TERM", "dumb")
         .arg("-a")
@@ -302,6 +304,73 @@ fn assertion_error() {
     "#;
 
     let assert = create_command("assert_eq(1 + 2, 3 / 2)", "f64").assert();
+    assert
+        .failure()
+        .code(ERROR_EXIT_CODE)
+        .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+}
+
+#[test]
+fn typing_error_simple() {
+    const EXPECTED_ERR: &str = r#"
+        error[TYPE]: Function expects 2 args, but is called with 3 args
+          ┌─ Snippet #1:1:1
+          │
+        1 │ (1, 2, 3).map(|x| x, 1)
+          │ ^^^^^^^^^^^^^^^^^^^^^^^ Error occurred here
+    "#;
+
+    let assert = create_command("(1, 2, 3).map(|x| x, 1)", "f64")
+        .arg("--types")
+        .assert();
+    assert
+        .failure()
+        .code(ERROR_EXIT_CODE)
+        .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+}
+
+#[test]
+fn typing_error_complex() {
+    const PROGRAM: &str = r#"
+        all = |array, predicate| array.fold(true, |acc, x| acc && predicate(x));
+        (1, 2, map).all(|x| 0 < x)
+    "#;
+    const EXPECTED_ERR: &str = r#"
+        error[TYPE]: Type `(['T; N], ('T) -> 'U) -> ['U; N]` is not assignable to type `Num`
+          ┌─ Snippet #1:2:8
+          │
+        2 │ (1, 2, map).all(|x| 0 < x)
+          │        ^^^ Error occurred here
+    "#;
+
+    let assert = create_command(&unindent(PROGRAM), "f64")
+        .arg("--types")
+        .assert();
+    assert
+        .failure()
+        .code(ERROR_EXIT_CODE)
+        .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+}
+
+#[test]
+fn multiple_typing_errors() {
+    const EXPECTED_ERR: &str = r#"
+        error[TYPE]: Type `(Num, Num)` is not assignable to type `Num`
+          ┌─ Snippet #1:1:5
+          │
+        1 │ (1, (2, 3)).filter(|x| x + 1)
+          │     ^^^^^^ Error occurred here
+
+        error[TYPE]: Type `Num` is not assignable to type `Bool`
+          ┌─ Snippet #1:1:20
+          │
+        1 │ (1, (2, 3)).filter(|x| x + 1)
+          │                    ^^^^^^^^^ Error occurred here
+    "#;
+
+    let assert = create_command("(1, (2, 3)).filter(|x| x + 1)", "f64")
+        .arg("--types")
+        .assert();
     assert
         .failure()
         .code(ERROR_EXIT_CODE)

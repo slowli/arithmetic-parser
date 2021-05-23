@@ -20,8 +20,13 @@ use arithmetic_eval::{
     Environment, Error as EvalError, Function, IndexedId, ModuleId, Value, VariableMap,
 };
 use arithmetic_parser::{
-    grammars::{Grammar, NumGrammar, Parse, Untyped},
+    grammars::{Grammar, NumGrammar, Parse},
     Block, CodeFragment, Error as ParseError, LocatedSpan, LvalueLen, StripCode,
+};
+use arithmetic_typing::{
+    arith::{Num, NumArithmetic},
+    error::Errors as TypingErrors,
+    Annotated, Type, TypeEnvironment,
 };
 
 use crate::library::ReplLiteral;
@@ -115,18 +120,26 @@ pub struct Env<T> {
     writer: StandardStream,
     config: ReportingConfig,
     original_env: Environment<'static, T>,
+    original_type_env: Option<TypeEnvironment>,
     env: Environment<'static, T>,
+    type_env: Option<TypeEnvironment>,
     arithmetic: Box<dyn OrdArithmetic<T>>,
 }
 
 impl<T: ReplLiteral> Env<T> {
-    pub fn new(arithmetic: Box<dyn OrdArithmetic<T>>, env: Environment<'static, T>) -> Self {
+    pub fn new(
+        arithmetic: Box<dyn OrdArithmetic<T>>,
+        env: Environment<'static, T>,
+        type_env: Option<TypeEnvironment>,
+    ) -> Self {
         Self {
             code_map: CodeMap::default(),
             writer: StandardStream::stderr(ColorChoice::Auto),
             config: ReportingConfig::default(),
             original_env: env.clone(),
+            original_type_env: type_env.clone(),
             env,
+            type_env,
             arithmetic,
         }
     }
@@ -170,6 +183,7 @@ impl<T: ReplLiteral> Env<T> {
                 .help     Displays help.
                 .dump     Outputs all defined variables. Use '.dump all' to include
                           built-in vars.
+                .type     Outputs type of a variable. Requires `--types` flag.
                 .clear    Resets the interpreter state to the original one.
         ";
 
@@ -406,9 +420,13 @@ impl<T: ReplLiteral> Env<T> {
             return Ok(ParseAndEvalResult::Ok(()));
         }
 
-        let parse_result = self.parse::<Untyped<NumGrammar<T>>>(line)?;
+        let parse_result = self.parse::<Annotated<NumGrammar<T>>>(line)?;
         Ok(if let ParseAndEvalResult::Ok(statements) = parse_result {
-            self.compile_and_execute(&statements)?
+            if self.process_types(&statements)? {
+                self.compile_and_execute(&statements)?
+            } else {
+                ParseAndEvalResult::Errored
+            }
         } else {
             parse_result.map(drop)
         })
@@ -420,10 +438,29 @@ impl<T: ReplLiteral> Env<T> {
         let file_id = *self.code_map.file_ids.last().expect("no files");
 
         match line {
-            ".clear" => self.env.clone_from(&self.original_env),
+            ".clear" => {
+                self.env.clone_from(&self.original_env);
+                self.type_env.clone_from(&self.original_type_env);
+            }
             ".dump" => self.dump_scope(false)?,
             ".dump all" => self.dump_scope(true)?,
             ".help" => self.print_help()?,
+
+            line if line.starts_with(".type ") && self.type_env.is_some() => {
+                let ident = line[6..].trim_start();
+                let ty = self.type_env.as_ref().unwrap().get(ident);
+                if let Some(ty) = ty {
+                    writeln!(self.writer, "{}", ty)?;
+                } else {
+                    let label =
+                        Label::primary(file_id, 6..line.len()).with_message("Undefined variable");
+                    let diagnostic = Diagnostic::error()
+                        .with_message(format!("Variable `{}` is not defined", ident))
+                        .with_code("CMD")
+                        .with_labels(vec![label]);
+                    self.report_error(&diagnostic)?;
+                }
+            }
 
             _ => {
                 let label = Label::primary(file_id, 0..line.len())
@@ -437,6 +474,38 @@ impl<T: ReplLiteral> Env<T> {
             }
         }
 
+        Ok(())
+    }
+
+    fn process_types<'a>(
+        &mut self,
+        statements: &Block<'a, Annotated<NumGrammar<T>>>,
+    ) -> io::Result<bool> {
+        let res = self.type_env.as_mut().map_or(Ok(Type::Any), |type_env| {
+            type_env.process_with_arithmetic(&NumArithmetic::with_comparisons(), statements)
+        });
+
+        Ok(match res {
+            Ok(_) => true,
+            Err(errors) => {
+                self.report_typing_errors(&errors)?;
+                false
+            }
+        })
+    }
+
+    fn report_typing_errors(&self, errors: &TypingErrors<'_, Num>) -> io::Result<()> {
+        for err in errors.iter() {
+            let (file, range) = self.code_map.locate_in_most_recent_file(&err.main_span());
+
+            let label = Label::primary(file, range).with_message("Error occurred here");
+            let diagnostic = Diagnostic::error()
+                .with_message(err.kind().to_string())
+                .with_code("TYPE")
+                .with_labels(vec![label]);
+
+            self.report_error(&diagnostic)?;
+        }
         Ok(())
     }
 

@@ -6,6 +6,16 @@ use structopt::StructOpt;
 
 use std::{io, process, str::FromStr};
 
+use arithmetic_eval::{
+    arith::{
+        ArithmeticExt, CheckedArithmetic, ModularArithmetic, OrdArithmetic, StdArithmetic,
+        WrappingArithmetic,
+    },
+    Environment,
+};
+use arithmetic_parser::grammars::NumGrammar;
+use arithmetic_typing::{Annotated, TypeEnvironment};
+
 mod common;
 mod library;
 mod repl;
@@ -17,14 +27,6 @@ use crate::{
     },
     repl::repl,
 };
-use arithmetic_eval::{
-    arith::{
-        ArithmeticExt, CheckedArithmetic, ModularArithmetic, OrdArithmetic, StdArithmetic,
-        WrappingArithmetic,
-    },
-    Environment,
-};
-use arithmetic_parser::grammars::{NumGrammar, Untyped};
 
 const ABOUT: &str = "CLI and REPL for parsing and evaluating arithmetic expressions.";
 
@@ -85,6 +87,10 @@ struct Args {
     /// Only output parsed AST without interpreting it.
     #[structopt(name = "ast", long, conflicts_with = "interactive")]
     ast: bool,
+
+    /// Check / infer types before evaluation.
+    #[structopt(name = "types", long, conflicts_with = "ast")]
+    types: bool,
 
     /// Type of numbers to use. Available values are `u64`, `i64`, `u128`, `i128`,
     /// `f32`, `f64`, `complex32`, `complex64`, and `u64/$mod`, where `$mod` is the modulus
@@ -161,12 +167,14 @@ impl Args {
     fn run_inner<T: ReplLiteral>(
         self,
         arithmetic: Box<dyn OrdArithmetic<T>>,
-        env: Environment<'static, T>,
+        (env, type_env): (Environment<'static, T>, TypeEnvironment),
     ) -> io::Result<()> {
+        let type_env = if self.types { Some(type_env) } else { None };
+
         if self.interactive {
-            repl(arithmetic, env)
+            repl(arithmetic, env, type_env)
         } else {
-            self.run_command(arithmetic, env)
+            self.run_command(arithmetic, env, type_env)
         }
     }
 
@@ -174,12 +182,13 @@ impl Args {
         self,
         arithmetic: Box<dyn OrdArithmetic<T>>,
         env: Environment<'static, T>,
+        type_env: Option<TypeEnvironment>,
     ) -> io::Result<()> {
         let command = self.command.unwrap_or_default();
-        let mut env = Env::new(arithmetic, env);
+        let mut env = Env::new(arithmetic, env, type_env);
 
         let res = if self.ast {
-            env.parse::<Untyped<NumGrammar<T>>>(&command)?
+            env.parse::<Annotated<NumGrammar<T>>>(&command)?
                 .map(|parsed| println!("{:#?}", parsed))
         } else {
             env.parse_and_eval(&command)?

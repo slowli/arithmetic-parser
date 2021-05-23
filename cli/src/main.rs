@@ -253,7 +253,7 @@ impl EvalArgs {
         };
         let mut env = Env::new(arithmetic, env, type_env);
 
-        match env.parse_and_eval(&command)? {
+        match env.parse_and_eval(&command, false)? {
             ParseAndEvalResult::Ok(()) => Ok(()),
             ParseAndEvalResult::Incomplete | ParseAndEvalResult::Errored => {
                 process::exit(ERROR_EXIT_CODE);

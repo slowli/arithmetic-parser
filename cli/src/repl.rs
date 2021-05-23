@@ -30,7 +30,7 @@ pub fn repl<T: ReplLiteral>(
         match line {
             Ok(line) => {
                 snippet.push_str(&line);
-                let result = env.parse_and_eval(&snippet)?;
+                let result = env.parse_and_eval(&snippet, true)?;
                 match result {
                     ParseAndEvalResult::Ok(_) => {
                         prompt = ">>> ";

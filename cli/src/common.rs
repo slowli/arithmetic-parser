@@ -289,13 +289,13 @@ impl Reporter {
                 == other.module_id().downcast_ref::<IndexedId>()
     }
 
-    fn parse_streaming<'a, P: Parse<'a>>(
+    fn parse_streaming<'a, T: ReplLiteral>(
         &mut self,
         line: &'a str,
-    ) -> io::Result<ParseAndEvalResult<Block<'a, P::Base>>> {
+    ) -> io::Result<ParseAndEvalResult<Block<'a, Annotated<NumGrammar<T>>>>> {
         self.code_map.add(line.to_owned());
 
-        P::parse_streaming_statements(line)
+        Annotated::<NumGrammar<T>>::parse_streaming_statements(line)
             .map(ParseAndEvalResult::Ok)
             .or_else(|e| {
                 if e.kind().is_incomplete() {
@@ -461,15 +461,21 @@ impl<T: ReplLiteral> Env<T> {
         Ok(())
     }
 
-    pub fn parse_and_eval(&mut self, line: &str) -> io::Result<ParseAndEvalResult> {
+    pub fn parse_and_eval(
+        &mut self,
+        line: &str,
+        streaming: bool,
+    ) -> io::Result<ParseAndEvalResult> {
         if line.starts_with('.') {
             self.process_command(line)?;
             return Ok(ParseAndEvalResult::Ok(()));
         }
 
-        let parse_result = self
-            .reporter
-            .parse_streaming::<Annotated<NumGrammar<T>>>(line)?;
+        let parse_result = if streaming {
+            self.reporter.parse_streaming::<T>(line)?
+        } else {
+            self.reporter.parse::<T>(line)?
+        };
         Ok(if let ParseAndEvalResult::Ok(statements) = parse_result {
             if self.process_types(&statements)? {
                 self.compile_and_execute(&statements)?

@@ -37,7 +37,7 @@ fn successful_execution_for_ast() {
     let assert = create_ast_command("1 + 2 * 3", "u64").assert();
     assert
         .success()
-        .stdout(predicate::str::contains("BinaryOp"));
+        .stdout(predicate::str::contains("Binary {"));
 }
 
 #[test]
@@ -133,6 +133,22 @@ fn syntax_error_with_ast_command() {
 }
 
 #[test]
+fn incomplete_error_with_ast_command() {
+    const EXPECTED_ERR: &str = r#"
+        error[PARSE]: Unfinished arithmetic expression
+          ┌─ Snippet #1:1:6
+          │
+        1 │ x = {
+          │      ^ Error occurred here
+    "#;
+    let assert = create_ast_command("x = {", "f64").assert();
+    assert
+        .failure()
+        .code(ERROR_EXIT_CODE)
+        .stdout(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+}
+
+#[test]
 fn syntax_error() {
     const EXPECTED_ERR: &str = r#"
         error[PARSE]: Uninterpreted characters after parsing
@@ -143,6 +159,22 @@ fn syntax_error() {
     "#;
 
     let assert = create_command("let x = 5", "f64").assert();
+    assert
+        .failure()
+        .code(ERROR_EXIT_CODE)
+        .stdout(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+}
+
+#[test]
+fn incomplete_error() {
+    const EXPECTED_ERR: &str = r#"
+        error[PARSE]: Unfinished arithmetic expression
+          ┌─ Snippet #1:1:6
+          │
+        1 │ x = {
+          │      ^ Error occurred here
+    "#;
+    let assert = create_command("x = {", "f64").assert();
     assert
         .failure()
         .code(ERROR_EXIT_CODE)

@@ -4,13 +4,18 @@
 //!
 //! - Multiplication of `ELEMENTS` randomly selected numbers
 //! - List reversal (worst-case by the number of re-allocations)
+//! - Quicksort implementation from the README
+//!
+//! Generally, the interpreter seems to be ~50x slower than the comparable native code.
 
 use criterion::{criterion_group, criterion_main, BatchSize, Bencher, Criterion, Throughput};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use typed_arena::Arena;
 
+use std::cmp::Ordering;
+
 use arithmetic_eval::{
-    arith::StdArithmetic, fns, CallContext, ExecutableModule, NativeFn, Value, WildcardId,
+    arith::StdArithmetic, fns, CallContext, ExecutableModule, NativeFn, Prelude, Value, WildcardId,
 };
 use arithmetic_parser::{
     grammars::{F32Grammar, Parse, Untyped},
@@ -19,6 +24,7 @@ use arithmetic_parser::{
 
 const SEED: u64 = 123;
 const ELEMENTS: u64 = 50;
+const SORT_ELEMENTS: u64 = 1_000;
 
 fn bench_mul_native(bencher: &mut Bencher<'_>) {
     let mut rng = StdRng::seed_from_u64(SEED);
@@ -237,5 +243,102 @@ fn bench_interpreter(criterion: &mut Criterion) {
         .bench_function("int", bench_reverse);
 }
 
-criterion_group!(benches, bench_interpreter);
+fn bench_quick_sort_native(bencher: &mut Bencher<'_>) {
+    let mut rng = StdRng::seed_from_u64(SEED);
+    bencher.iter_batched(
+        || {
+            (0..SORT_ELEMENTS)
+                .map(|_| rng.gen_range(0.0_f32..100.0))
+                .collect::<Vec<_>>()
+        },
+        |mut items| {
+            items.sort_unstable_by(|x, y| x.partial_cmp(y).unwrap_or(Ordering::Equal));
+            items
+        },
+        BatchSize::SmallInput,
+    );
+}
+
+fn bench_quick_sort_native_slow(bencher: &mut Bencher<'_>) {
+    // Subpar implementation of quick sort that is more or less equivalent to
+    // the interpreted one.
+    fn quick_sort(items: &[f32]) -> Vec<f32> {
+        if let Some(pivot) = items.first().copied() {
+            let lesser: Vec<_> = items[1..].iter().copied().filter(|&x| x < pivot).collect();
+            let lesser = quick_sort(&lesser);
+            let greater: Vec<_> = items[1..].iter().copied().filter(|&x| x >= pivot).collect();
+            let greater = quick_sort(&greater);
+
+            let mut all = lesser;
+            all.push(pivot);
+            all.extend_from_slice(&greater);
+            all
+        } else {
+            vec![]
+        }
+    }
+
+    let mut rng = StdRng::seed_from_u64(SEED);
+    bencher.iter_batched(
+        || {
+            (0..SORT_ELEMENTS)
+                .map(|_| rng.gen_range(0.0_f32..100.0))
+                .collect::<Vec<_>>()
+        },
+        |items| quick_sort(&items),
+        BatchSize::SmallInput,
+    );
+}
+
+fn bench_quick_sort_interpreted(bencher: &mut Bencher<'_>) {
+    let program = r#"
+        quick_sort = |xs, quick_sort| {
+            if(xs == (), || (), || {
+                (pivot, ...rest) = xs;
+                lesser_part = rest.filter(|x| x < pivot).quick_sort(quick_sort);
+                greater_part = rest.filter(|x| x >= pivot).quick_sort(quick_sort);
+                lesser_part.push(pivot).merge(greater_part)
+            })()
+        };
+        |xs| xs.quick_sort(quick_sort)
+    "#;
+    let program = Untyped::<F32Grammar>::parse_statements(program).unwrap();
+    let sort_module = ExecutableModule::builder("sort", &program)
+        .unwrap()
+        .with_imports_from(&Prelude)
+        .build();
+    let sort = match sort_module.run().unwrap() {
+        Value::Function(function) => function,
+        other => panic!("Unexpected module export: {:?}", other),
+    };
+
+    let mut rng = StdRng::seed_from_u64(SEED);
+    bencher.iter_batched(
+        || {
+            Value::Tuple(
+                (0..SORT_ELEMENTS)
+                    .map(|_| Value::Number(rng.gen_range(0.0_f32..100.0)))
+                    .collect(),
+            )
+        },
+        |items| {
+            let mut ctx =
+                CallContext::mock(&"test", MaybeSpanned::from_str("", ..), &StdArithmetic);
+            let items = MaybeSpanned::from_str("", ..).copy_with_extra(items);
+            sort.evaluate(vec![items], &mut ctx).unwrap()
+        },
+        BatchSize::SmallInput,
+    );
+}
+
+fn bench_quick_sort(criterion: &mut Criterion) {
+    criterion
+        .benchmark_group("quick_sort")
+        .bench_function("native", bench_quick_sort_native)
+        .bench_function("native_slow", bench_quick_sort_native_slow)
+        .bench_function("int", bench_quick_sort_interpreted)
+        .throughput(Throughput::Elements(SORT_ELEMENTS));
+}
+
+criterion_group!(benches, bench_interpreter, bench_quick_sort);
 criterion_main!(benches);

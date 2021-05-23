@@ -13,7 +13,7 @@ const ERROR_EXIT_CODE: i32 = 2;
 fn create_ast_command(program: &str, arithmetic: &str) -> Command {
     let mut command = Command::new(PATH_TO_BIN);
     command
-        .env("TERM", "dumb")
+        .env("NO_COLOR", "1")
         .arg("ast")
         .arg("-a")
         .arg(arithmetic)
@@ -24,7 +24,7 @@ fn create_ast_command(program: &str, arithmetic: &str) -> Command {
 fn create_command(program: &str, arithmetic: &str) -> Command {
     let mut command = Command::new(PATH_TO_BIN);
     command
-        .env("TERM", "dumb")
+        .env("NO_COLOR", "1")
         .arg("eval")
         .arg("-a")
         .arg(arithmetic)

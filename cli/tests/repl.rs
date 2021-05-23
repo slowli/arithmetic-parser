@@ -25,7 +25,7 @@ impl ReplTester {
 
     fn new(with_types: bool) -> Self {
         let mut command = Command::new(PATH_TO_BIN);
-        command.env("TERM", "dumb").arg("eval");
+        command.env("NO_COLOR", "1").arg("eval");
         if with_types {
             command.arg("--types");
         }

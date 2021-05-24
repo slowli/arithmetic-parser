@@ -66,6 +66,11 @@ The parser is based on the [`nom`](https://docs.rs/nom/) crate. The core trait o
 should not induce run-time overhead; the unused parsing code paths should be removed during
 compilation.
 
+## See also
+
+- [`arithmetic-eval`] is a simple interpreter that could be used on parsed ASTs.
+- [`arithmetic-typing`] is a type checker / inference tool for parsed ASTs.
+
 ## License
 
 Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE)
@@ -74,3 +79,6 @@ or [MIT license](LICENSE-MIT) at your option.
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in `arithmetic-parser` by you, as defined in the Apache-2.0 license,
 shall be dual licensed as above, without any additional terms or conditions.
+
+[`arithmetic-eval`]: https://crates.io/crates/arithmetic-eval
+[`arithmetic-typing`]: https://crates.io/crates/arithmetic-typing

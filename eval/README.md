@@ -82,6 +82,11 @@ assert(sorted);
 
 Please see the crate docs and [examples](examples) for more examples.
 
+## See also
+
+- [`arithmetic-typing`] is a type checker / inference tool for ASTs evaluated
+  by this crate.
+
 ## License
 
 Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE)
@@ -91,6 +96,7 @@ Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in `arithmetic-eval` by you, as defined in the Apache-2.0 license,
 shall be dual licensed as above, without any additional terms or conditions.
 
-[`arithmetic-parser`]: https://docs.rs/crates/arithmetic-parser
+[`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
+[`arithmetic-typing`]: https://crates.io/crates/arithmetic-typing
 [`num-bigint`]: https://crates.io/crates/num-bigint
 [Schnorr signatures]: https://en.wikipedia.org/wiki/Schnorr_signature

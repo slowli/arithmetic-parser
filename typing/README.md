@@ -78,6 +78,11 @@ and more examples of usage.
 - Specifying type vars in type annotations (beyond simplest cases)
 - Type aliases
 
+## See also
+
+- [`arithmetic-eval`] is a simple interpreter that could be used on ASTs
+  consumed by this crate.
+
 ## License
 
 Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE)

@@ -196,7 +196,7 @@ fn boolean_ops_when_switched_off() {
 }
 
 #[test]
-fn object_blocks_when_switched_off() {
+fn object_expressions_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
@@ -223,7 +223,7 @@ fn object_blocks_when_switched_off() {
 }
 
 #[test]
-fn object_blocks_when_blocks_are_switched_off() {
+fn object_expressions_when_blocks_are_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 

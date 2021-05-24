@@ -1,0 +1,537 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `eval/src/lib.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>lib.rs - source</title><link rel="stylesheet" type="text/css" href="../../normalize.css"><link rel="stylesheet" type="text/css" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../light.css"  id="themeStyle"><link rel="stylesheet" type="text/css" href="../../dark.css" disabled ><link rel="stylesheet" type="text/css" href="../../ayu.css" disabled ><script id="default-settings"></script><script src="../../storage.js"></script><script src="../../crates.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="alternate icon" type="image/png" href="../../favicon-16x16.png">
+<link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><style type="text/css">#crate-search{background-image:url("../../down-arrow.svg");}</style></head><body class="rustdoc source"><!--[if lte IE 8]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu" role="button">&#9776;</div><a href='../../arithmetic_eval/index.html'><div class='logo-container rust-logo'><img src='../../rust-logo.png' alt='logo'></div></a></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu"><img src="../../brush.svg" width="18" height="18" alt="Pick another theme!"></button><div id="theme-choices" role="menu"></div></div><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><button type="button" class="help-button">?</button>
+                <a id="settings-menu" href="../../settings.html"><img src="../../wheel.svg" width="18" height="18" alt="Change settings"></a></div></form></nav><section id="main" class="content"><pre class="line-numbers"><span id="1">  1</span>
+<span id="2">  2</span>
+<span id="3">  3</span>
+<span id="4">  4</span>
+<span id="5">  5</span>
+<span id="6">  6</span>
+<span id="7">  7</span>
+<span id="8">  8</span>
+<span id="9">  9</span>
+<span id="10"> 10</span>
+<span id="11"> 11</span>
+<span id="12"> 12</span>
+<span id="13"> 13</span>
+<span id="14"> 14</span>
+<span id="15"> 15</span>
+<span id="16"> 16</span>
+<span id="17"> 17</span>
+<span id="18"> 18</span>
+<span id="19"> 19</span>
+<span id="20"> 20</span>
+<span id="21"> 21</span>
+<span id="22"> 22</span>
+<span id="23"> 23</span>
+<span id="24"> 24</span>
+<span id="25"> 25</span>
+<span id="26"> 26</span>
+<span id="27"> 27</span>
+<span id="28"> 28</span>
+<span id="29"> 29</span>
+<span id="30"> 30</span>
+<span id="31"> 31</span>
+<span id="32"> 32</span>
+<span id="33"> 33</span>
+<span id="34"> 34</span>
+<span id="35"> 35</span>
+<span id="36"> 36</span>
+<span id="37"> 37</span>
+<span id="38"> 38</span>
+<span id="39"> 39</span>
+<span id="40"> 40</span>
+<span id="41"> 41</span>
+<span id="42"> 42</span>
+<span id="43"> 43</span>
+<span id="44"> 44</span>
+<span id="45"> 45</span>
+<span id="46"> 46</span>
+<span id="47"> 47</span>
+<span id="48"> 48</span>
+<span id="49"> 49</span>
+<span id="50"> 50</span>
+<span id="51"> 51</span>
+<span id="52"> 52</span>
+<span id="53"> 53</span>
+<span id="54"> 54</span>
+<span id="55"> 55</span>
+<span id="56"> 56</span>
+<span id="57"> 57</span>
+<span id="58"> 58</span>
+<span id="59"> 59</span>
+<span id="60"> 60</span>
+<span id="61"> 61</span>
+<span id="62"> 62</span>
+<span id="63"> 63</span>
+<span id="64"> 64</span>
+<span id="65"> 65</span>
+<span id="66"> 66</span>
+<span id="67"> 67</span>
+<span id="68"> 68</span>
+<span id="69"> 69</span>
+<span id="70"> 70</span>
+<span id="71"> 71</span>
+<span id="72"> 72</span>
+<span id="73"> 73</span>
+<span id="74"> 74</span>
+<span id="75"> 75</span>
+<span id="76"> 76</span>
+<span id="77"> 77</span>
+<span id="78"> 78</span>
+<span id="79"> 79</span>
+<span id="80"> 80</span>
+<span id="81"> 81</span>
+<span id="82"> 82</span>
+<span id="83"> 83</span>
+<span id="84"> 84</span>
+<span id="85"> 85</span>
+<span id="86"> 86</span>
+<span id="87"> 87</span>
+<span id="88"> 88</span>
+<span id="89"> 89</span>
+<span id="90"> 90</span>
+<span id="91"> 91</span>
+<span id="92"> 92</span>
+<span id="93"> 93</span>
+<span id="94"> 94</span>
+<span id="95"> 95</span>
+<span id="96"> 96</span>
+<span id="97"> 97</span>
+<span id="98"> 98</span>
+<span id="99"> 99</span>
+<span id="100">100</span>
+<span id="101">101</span>
+<span id="102">102</span>
+<span id="103">103</span>
+<span id="104">104</span>
+<span id="105">105</span>
+<span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
+<span id="109">109</span>
+<span id="110">110</span>
+<span id="111">111</span>
+<span id="112">112</span>
+<span id="113">113</span>
+<span id="114">114</span>
+<span id="115">115</span>
+<span id="116">116</span>
+<span id="117">117</span>
+<span id="118">118</span>
+<span id="119">119</span>
+<span id="120">120</span>
+<span id="121">121</span>
+<span id="122">122</span>
+<span id="123">123</span>
+<span id="124">124</span>
+<span id="125">125</span>
+<span id="126">126</span>
+<span id="127">127</span>
+<span id="128">128</span>
+<span id="129">129</span>
+<span id="130">130</span>
+<span id="131">131</span>
+<span id="132">132</span>
+<span id="133">133</span>
+<span id="134">134</span>
+<span id="135">135</span>
+<span id="136">136</span>
+<span id="137">137</span>
+<span id="138">138</span>
+<span id="139">139</span>
+<span id="140">140</span>
+<span id="141">141</span>
+<span id="142">142</span>
+<span id="143">143</span>
+<span id="144">144</span>
+<span id="145">145</span>
+<span id="146">146</span>
+<span id="147">147</span>
+<span id="148">148</span>
+<span id="149">149</span>
+<span id="150">150</span>
+<span id="151">151</span>
+<span id="152">152</span>
+<span id="153">153</span>
+<span id="154">154</span>
+<span id="155">155</span>
+<span id="156">156</span>
+<span id="157">157</span>
+<span id="158">158</span>
+<span id="159">159</span>
+<span id="160">160</span>
+<span id="161">161</span>
+<span id="162">162</span>
+<span id="163">163</span>
+<span id="164">164</span>
+<span id="165">165</span>
+<span id="166">166</span>
+<span id="167">167</span>
+<span id="168">168</span>
+<span id="169">169</span>
+<span id="170">170</span>
+<span id="171">171</span>
+<span id="172">172</span>
+<span id="173">173</span>
+<span id="174">174</span>
+<span id="175">175</span>
+<span id="176">176</span>
+<span id="177">177</span>
+<span id="178">178</span>
+<span id="179">179</span>
+<span id="180">180</span>
+<span id="181">181</span>
+<span id="182">182</span>
+<span id="183">183</span>
+<span id="184">184</span>
+<span id="185">185</span>
+<span id="186">186</span>
+<span id="187">187</span>
+<span id="188">188</span>
+<span id="189">189</span>
+<span id="190">190</span>
+<span id="191">191</span>
+<span id="192">192</span>
+<span id="193">193</span>
+<span id="194">194</span>
+<span id="195">195</span>
+<span id="196">196</span>
+<span id="197">197</span>
+<span id="198">198</span>
+<span id="199">199</span>
+<span id="200">200</span>
+<span id="201">201</span>
+<span id="202">202</span>
+<span id="203">203</span>
+<span id="204">204</span>
+<span id="205">205</span>
+<span id="206">206</span>
+<span id="207">207</span>
+<span id="208">208</span>
+<span id="209">209</span>
+<span id="210">210</span>
+<span id="211">211</span>
+<span id="212">212</span>
+<span id="213">213</span>
+<span id="214">214</span>
+<span id="215">215</span>
+<span id="216">216</span>
+<span id="217">217</span>
+<span id="218">218</span>
+<span id="219">219</span>
+<span id="220">220</span>
+<span id="221">221</span>
+<span id="222">222</span>
+<span id="223">223</span>
+<span id="224">224</span>
+<span id="225">225</span>
+<span id="226">226</span>
+<span id="227">227</span>
+<span id="228">228</span>
+<span id="229">229</span>
+<span id="230">230</span>
+<span id="231">231</span>
+<span id="232">232</span>
+<span id="233">233</span>
+<span id="234">234</span>
+<span id="235">235</span>
+<span id="236">236</span>
+<span id="237">237</span>
+<span id="238">238</span>
+<span id="239">239</span>
+<span id="240">240</span>
+<span id="241">241</span>
+<span id="242">242</span>
+<span id="243">243</span>
+<span id="244">244</span>
+<span id="245">245</span>
+<span id="246">246</span>
+<span id="247">247</span>
+<span id="248">248</span>
+<span id="249">249</span>
+<span id="250">250</span>
+<span id="251">251</span>
+<span id="252">252</span>
+<span id="253">253</span>
+<span id="254">254</span>
+<span id="255">255</span>
+<span id="256">256</span>
+<span id="257">257</span>
+<span id="258">258</span>
+<span id="259">259</span>
+<span id="260">260</span>
+<span id="261">261</span>
+<span id="262">262</span>
+<span id="263">263</span>
+<span id="264">264</span>
+<span id="265">265</span>
+</pre><div class="example-wrap"><pre class="rust ">
+<span class="doccomment">//! Simple interpreter for ASTs produced by [`arithmetic-parser`].</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! # How it works</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! 1. A `Block` of statements is *compiled* into an [`ExecutableModule`]. Internally,</span>
+<span class="doccomment">//!   compilation processes the AST of the block and transforms it into a non-recusrive form.</span>
+<span class="doccomment">//!   An [`ExecutableModule`] may require *imports* (such as [`NativeFn`]s or constant [`Value`]s),</span>
+<span class="doccomment">//!   which can be taken from a [`VariableMap`] (e.g., an [`Environment`]).</span>
+<span class="doccomment">//! 2. [`ExecutableModule`] can then be executed, for the return value and/or for the</span>
+<span class="doccomment">//!   changes at the top-level variable scope. There are two major variables influencing</span>
+<span class="doccomment">//!   the execution outcome. An [arithmetic](crate::arith) is used to define arithmetic ops</span>
+<span class="doccomment">//!   (`+`, unary and binary `-`, `*`, `/`, `^`) and comparisons (`==`, `!=`, `&gt;`, `&lt;`, `&gt;=`, `&lt;=`).</span>
+<span class="doccomment">//!   Imports may be redefined at this stage as well.</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! # Type system</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! [`Value`]s have 5 major types:</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! - **Primitive values** corresponding to literals in the parsed `Block`</span>
+<span class="doccomment">//! - **Boolean values**</span>
+<span class="doccomment">//! - **Functions,** which are further subdivided into native functions (defined in the Rust code)</span>
+<span class="doccomment">//!   and interpreted ones (defined within a module)</span>
+<span class="doccomment">//! - [**Tuples / arrays**](#tuples).</span>
+<span class="doccomment">//! - [**Objects**](#objects).</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! Besides these types, there is an auxiliary one: [`OpaqueRef`], which represents a</span>
+<span class="doccomment">//! reference-counted native value, which can be returned from native functions or provided to</span>
+<span class="doccomment">//! them as an arg, but is otherwise opaque from the point of view of the interpreted code</span>
+<span class="doccomment">//! (cf. `anyref` in WASM).</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! # Semantics</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! - All variables are immutable. Re-declaring a var shadows the previous declaration.</span>
+<span class="doccomment">//! - Functions are first-class (in fact, a function is just a variant of the [`Value`] enum).</span>
+<span class="doccomment">//! - Functions can capture variables (including other functions). All captures are by value.</span>
+<span class="doccomment">//! - Arithmetic operations are defined on primitive values, tuples and objects. Ops on primitives are defined</span>
+<span class="doccomment">//!   via an [`Arithmetic`]. With tuples and objects, operations are performed per element / field.</span>
+<span class="doccomment">//!   Binary operations require tuples of the same size / objects of the same shape,</span>
+<span class="doccomment">//!   or a tuple / object and a primitive value.</span>
+<span class="doccomment">//!   As an example, `(1, 2) + 3` and `#{ x: 2, y: 3 } / #{ x: 4, y: 5 }` are valid,</span>
+<span class="doccomment">//!   but `(1, 2) * (3, 4, 5)` isn&#39;t.</span>
+<span class="doccomment">//! - Methods are considered syntactic sugar for functions, with the method receiver considered</span>
+<span class="doccomment">//!   the first function argument. For example, `(1, 2).map(sin)` is equivalent to</span>
+<span class="doccomment">//!   `map((1, 2), sin)`.</span>
+<span class="doccomment">//! - No type checks are performed before evaluation.</span>
+<span class="doccomment">//! - Type annotations and type casts are completely ignored.</span>
+<span class="doccomment">//!   This means that the interpreter may execute  code that is incorrect with annotations</span>
+<span class="doccomment">//!   (e.g., assignment of a tuple to a variable which is annotated to have a numeric type).</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! ## Value comparisons</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! Equality comparisons (`==`, `!=`) are defined on all types of values.</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! - For bool values, the comparisons work as expected.</span>
+<span class="doccomment">//! - For functions, the equality is determined by the pointer (2 functions are equal</span>
+<span class="doccomment">//!   iff they alias each other).</span>
+<span class="doccomment">//! - `OpaqueRef`s either use the [`PartialEq`] impl of the underlying type or</span>
+<span class="doccomment">//!   the pointer equality, depending on how the reference was created; see [`OpaqueRef`] docs</span>
+<span class="doccomment">//!   for more details.</span>
+<span class="doccomment">//! - Equality for primitive values is determined by the [`Arithmetic`].</span>
+<span class="doccomment">//! - Tuples are equal if they contain the same number of elements and elements are pairwise</span>
+<span class="doccomment">//!   equal.</span>
+<span class="doccomment">//! - Different types of values are always non-equal.</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! Order comparisons (`&gt;`, `&lt;`, `&gt;=`, `&lt;=`) are defined for primitive values only and use</span>
+<span class="doccomment">//! [`OrdArithmetic`].</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! ## Tuples</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! - Tuples are created using a [`Tuple` expression], e.g., `(x, 1, 5)`.</span>
+<span class="doccomment">//! - Indexing for tuples is performed via [`FieldAccess`] with a numeric field name: `xs.0`.</span>
+<span class="doccomment">//!   Thus, the index is always a &quot;compile-time&quot; constant. An error is raised if the index</span>
+<span class="doccomment">//!   is out of bounds or the receiver is not a tuple.</span>
+<span class="doccomment">//! - Tuples can be destructured using a [`Destructure`] LHS of an assignment, e.g.,</span>
+<span class="doccomment">//!   `(x, y, ...) = (1, 2, 3, 4)`. An error will be raised if the destructured value is</span>
+<span class="doccomment">//!   not a tuple, or has an incompatible length.</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! ## Objects</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! - Objects can be created using [object expressions], which are similar to ones in JavaScript.</span>
+<span class="doccomment">//!   For example, `#{ x: 1, y: (2, 3) }` will create an object with two fields:</span>
+<span class="doccomment">//!   `x` equal to 1 and `y` equal to `(2, 3)`. Similar to Rust / modern JavaScript, shortcut</span>
+<span class="doccomment">//!   field initialization is available: `#{ x, y }` will take vars `x` and `y` from the context.</span>
+<span class="doccomment">//! - Object fields can be accessed via [`FieldAccess`] with a field name that is a valid</span>
+<span class="doccomment">//!   variable name. No other values have such fields. An error will be raised if the object</span>
+<span class="doccomment">//!   does not have the specified field.</span>
+<span class="doccomment">//! - Objects can be destructured using an [`ObjectDestructure`] LHS of an assignment, e.g.,</span>
+<span class="doccomment">//!   `{ x, y } = obj`. An error will be raised if the destructured value is not an object</span>
+<span class="doccomment">//!   or does not have the specified fields. Destructuring is not exhaustive; i.e.,</span>
+<span class="doccomment">//!   the destructured object may have extra fields.</span>
+<span class="doccomment">//! - Functional fields are permitted. Similar to Rust, to call a function field, it must</span>
+<span class="doccomment">//!   be enclosed in parentheses: `(obj.run)(arg0, arg1)`.</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! # Crate features</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! - `std`. Enables support of types from `std`, such as the `Error` trait, and propagates</span>
+<span class="doccomment">//!   to dependencies. Importantly, `std` is necessary for floating-point arithmetics.</span>
+<span class="doccomment">//! - `complex`. Implements [`Number`] for floating-point complex numbers from</span>
+<span class="doccomment">//!   the [`num-complex`] crate (i.e., `Complex32` and `Complex64`). Enables complex number parsing</span>
+<span class="doccomment">//!   in `arithmetic-parser`.</span>
+<span class="doccomment">//! - `bigint`. Implements `Number` and a couple of other helpers for big integers</span>
+<span class="doccomment">//!   from the [`num-bigint`] crate (i.e., `BigInt` and `BigUint`). Enables big integer parsing</span>
+<span class="doccomment">//!   in `arithmetic-parser`.</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! [`Arithmetic`]: crate::arith::Arithmetic</span>
+<span class="doccomment">//! [`OrdArithmetic`]: crate::arith::OrdArithmetic</span>
+<span class="doccomment">//! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser</span>
+<span class="doccomment">//! [`num-complex`]: https://crates.io/crates/num-complex</span>
+<span class="doccomment">//! [`num-bigint`]: https://crates.io/crates/num-bigint</span>
+<span class="doccomment">//! [`Tuple` expression]: arithmetic_parser::Expr::Tuple</span>
+<span class="doccomment">//! [`Destructure`]: arithmetic_parser::Destructure</span>
+<span class="doccomment">//! [`ObjectDestructure`]: arithmetic_parser::ObjectDestructure</span>
+<span class="doccomment">//! [`FieldAccess`]: arithmetic_parser::Expr::FieldAccess</span>
+<span class="doccomment">//! [object expressions]: arithmetic_parser::Expr::Object</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! # Examples</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! ```</span>
+<span class="doccomment">//! use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};</span>
+<span class="doccomment">//! use arithmetic_eval::{</span>
+<span class="doccomment">//!     Assertions, Comparisons, Environment, Prelude, Value, VariableMap,</span>
+<span class="doccomment">//! };</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! # fn main() -&gt; anyhow::Result&lt;()&gt; {</span>
+<span class="doccomment">//! let program = r#&quot;</span>
+<span class="doccomment">//!     // The interpreter supports all parser features, including</span>
+<span class="doccomment">//!     // function definitions, tuples and blocks.</span>
+<span class="doccomment">//!     order = |x, y| (min(x, y), max(x, y));</span>
+<span class="doccomment">//!     assert_eq(order(0.5, -1), (-1, 0.5));</span>
+<span class="doccomment">//!     (_, M) = order(3^2, { x = 3; x + 5 });</span>
+<span class="doccomment">//!     M</span>
+<span class="doccomment">//! &quot;#;</span>
+<span class="doccomment">//! let program = Untyped::&lt;F32Grammar&gt;::parse_statements(program)?;</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! let mut env = Environment::new();</span>
+<span class="doccomment">//! // Add some native functions to the environment.</span>
+<span class="doccomment">//! env.extend(Prelude.iter());</span>
+<span class="doccomment">//! env.extend(Assertions.iter());</span>
+<span class="doccomment">//! env.extend(Comparisons.iter());</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! // To execute statements, we first compile them into a module.</span>
+<span class="doccomment">//! let module = env.compile_module(&quot;test&quot;, &amp;program)?;</span>
+<span class="doccomment">//! // Then, the module can be run.</span>
+<span class="doccomment">//! assert_eq!(module.run()?, Value::Prim(9.0));</span>
+<span class="doccomment">//! # Ok(())</span>
+<span class="doccomment">//! # }</span>
+<span class="doccomment">//! ```</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! Using objects:</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! ```</span>
+<span class="doccomment">//! # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};</span>
+<span class="doccomment">//! # use arithmetic_eval::{Assertions, Environment, Prelude, Value, VariableMap};</span>
+<span class="doccomment">//! # fn main() -&gt; anyhow::Result&lt;()&gt; {</span>
+<span class="doccomment">//! let program = r#&quot;</span>
+<span class="doccomment">//!     minmax = |xs| xs.fold(#{ min: INF, max: -INF }, |acc, x| #{</span>
+<span class="doccomment">//!          min: if(x &lt; acc.min, x, acc.min),</span>
+<span class="doccomment">//!          max: if(x &gt; acc.max, x, acc.max),</span>
+<span class="doccomment">//!     });</span>
+<span class="doccomment">//!     assert_eq((3, 7, 2, 4).minmax().min, 2);</span>
+<span class="doccomment">//!     assert_eq((5, -4, 6, 9, 1).minmax(), #{ min: -4, max: 9 });</span>
+<span class="doccomment">//! &quot;#;</span>
+<span class="doccomment">//! let program = Untyped::&lt;F32Grammar&gt;::parse_statements(program)?;</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! let mut env = Environment::new();</span>
+<span class="doccomment">//! env.extend(Prelude.iter());</span>
+<span class="doccomment">//! env.extend(Assertions.iter());</span>
+<span class="doccomment">//! let module = env.compile_module(&quot;minmax&quot;, &amp;program)?;</span>
+<span class="doccomment">//! module.run()?;</span>
+<span class="doccomment">//! # Ok(())</span>
+<span class="doccomment">//! # }</span>
+<span class="doccomment">//! ```</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! More complex examples are available in the `examples` directory of the crate.</span>
+
+<span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">not</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;std&quot;</span>), <span class="ident">no_std</span>)]</span>
+<span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">docsrs</span>, <span class="ident">feature</span>(<span class="ident">doc_cfg</span>))]</span>
+<span class="attribute">#![<span class="ident">doc</span>(<span class="ident">html_root_url</span> <span class="op">=</span> <span class="string">&quot;https://docs.rs/arithmetic-eval/0.3.0&quot;</span>)]</span>
+<span class="attribute">#![<span class="ident">warn</span>(<span class="ident">missing_docs</span>, <span class="ident">missing_debug_implementations</span>)]</span>
+<span class="attribute">#![<span class="ident">warn</span>(<span class="ident">clippy::all</span>, <span class="ident">clippy::pedantic</span>)]</span>
+<span class="attribute">#![<span class="ident">allow</span>(
+    <span class="ident">clippy::missing_errors_doc</span>,
+    <span class="ident">clippy::must_use_candidate</span>,
+    <span class="ident">clippy::module_name_repetitions</span>
+)]</span>
+
+<span class="comment">// Polyfill for `alloc` types.</span>
+<span class="kw">mod</span> <span class="ident">alloc</span> {
+    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">not</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;std&quot;</span>))]</span>
+    <span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">alloc</span>;
+
+    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">not</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;std&quot;</span>))]</span>
+    <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">alloc</span>::{
+        <span class="ident">borrow::ToOwned</span>,
+        <span class="ident">boxed::Box</span>,
+        <span class="ident">format</span>,
+        <span class="ident">rc::Rc</span>,
+        <span class="ident">string</span>::{<span class="ident">String</span>, <span class="ident">ToString</span>},
+        <span class="ident">vec</span>,
+        <span class="ident">vec::Vec</span>,
+    };
+
+    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;std&quot;</span>)]</span>
+    <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">std</span>::{
+        <span class="ident">borrow::ToOwned</span>,
+        <span class="ident">boxed::Box</span>,
+        <span class="ident">format</span>,
+        <span class="ident">rc::Rc</span>,
+        <span class="ident">string</span>::{<span class="ident">String</span>, <span class="ident">ToString</span>},
+        <span class="ident">vec</span>,
+        <span class="ident">vec::Vec</span>,
+    };
+}
+
+<span class="kw">pub</span> <span class="kw">use</span> <span class="self">self</span>::{
+    <span class="ident">compiler::CompilerExt</span>,
+    <span class="ident">error</span>::{<span class="ident">Error</span>, <span class="ident">ErrorKind</span>, <span class="ident">EvalResult</span>},
+    <span class="ident">executable</span>::{
+        <span class="ident">ExecutableModule</span>, <span class="ident">ExecutableModuleBuilder</span>, <span class="ident">IndexedId</span>, <span class="ident">ModuleId</span>, <span class="ident">ModuleImports</span>, <span class="ident">WildcardId</span>,
+        <span class="ident">WithArithmetic</span>,
+    },
+    <span class="ident">values</span>::{
+        <span class="ident">Assertions</span>, <span class="ident">CallContext</span>, <span class="ident">Comparisons</span>, <span class="ident">Environment</span>, <span class="ident">Function</span>, <span class="ident">InterpretedFn</span>, <span class="ident">NativeFn</span>,
+        <span class="ident">OpaqueRef</span>, <span class="ident">Prelude</span>, <span class="ident">SpannedValue</span>, <span class="ident">Value</span>, <span class="ident">ValueType</span>, <span class="ident">VariableMap</span>,
+    },
+};
+
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">arith</span>;
+<span class="kw">mod</span> <span class="ident">compiler</span>;
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">error</span>;
+<span class="kw">mod</span> <span class="ident">executable</span>;
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">fns</span>;
+<span class="kw">mod</span> <span class="ident">values</span>;
+
+<span class="doccomment">/// Marker trait for possible literals.</span>
+<span class="doccomment">///</span>
+<span class="doccomment">/// This trait is somewhat of a crutch, necessary to ensure that [function wrappers] can accept</span>
+<span class="doccomment">/// number arguments and distinguish them from other types (booleans, vectors, tuples, etc.).</span>
+<span class="doccomment">///</span>
+<span class="doccomment">/// [function wrappers]: crate::fns::FnWrapper</span>
+<span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">Number</span>: <span class="ident">Clone</span> <span class="op">+</span> <span class="lifetime">&#39;static</span> {}
+
+<span class="kw">impl</span> <span class="ident">Number</span> <span class="kw">for</span> <span class="ident">i8</span> {}
+<span class="kw">impl</span> <span class="ident">Number</span> <span class="kw">for</span> <span class="ident">u8</span> {}
+<span class="kw">impl</span> <span class="ident">Number</span> <span class="kw">for</span> <span class="ident">i16</span> {}
+<span class="kw">impl</span> <span class="ident">Number</span> <span class="kw">for</span> <span class="ident">u16</span> {}
+<span class="kw">impl</span> <span class="ident">Number</span> <span class="kw">for</span> <span class="ident">i32</span> {}
+<span class="kw">impl</span> <span class="ident">Number</span> <span class="kw">for</span> <span class="ident">u32</span> {}
+<span class="kw">impl</span> <span class="ident">Number</span> <span class="kw">for</span> <span class="ident">i64</span> {}
+<span class="kw">impl</span> <span class="ident">Number</span> <span class="kw">for</span> <span class="ident">u64</span> {}
+<span class="kw">impl</span> <span class="ident">Number</span> <span class="kw">for</span> <span class="ident">i128</span> {}
+<span class="kw">impl</span> <span class="ident">Number</span> <span class="kw">for</span> <span class="ident">u128</span> {}
+
+<span class="kw">impl</span> <span class="ident">Number</span> <span class="kw">for</span> <span class="ident">f32</span> {}
+<span class="kw">impl</span> <span class="ident">Number</span> <span class="kw">for</span> <span class="ident">f64</span> {}
+
+<span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;num-complex&quot;</span>)]</span>
+<span class="kw">impl</span> <span class="ident">Number</span> <span class="kw">for</span> <span class="ident">num_complex::Complex32</span> {}
+<span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;num-complex&quot;</span>)]</span>
+<span class="kw">impl</span> <span class="ident">Number</span> <span class="kw">for</span> <span class="ident">num_complex::Complex64</span> {}
+
+<span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;num-bigint&quot;</span>)]</span>
+<span class="kw">impl</span> <span class="ident">Number</span> <span class="kw">for</span> <span class="ident">num_bigint::BigInt</span> {}
+<span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;num-bigint&quot;</span>)]</span>
+<span class="kw">impl</span> <span class="ident">Number</span> <span class="kw">for</span> <span class="ident">num_bigint::BigUint</span> {}
+</pre></div>
+</section><section id="search" class="content hidden"></section><section class="footer"></section><div id="rustdoc-vars" data-root-path="../../" data-current-crate="arithmetic_eval" data-search-js="../../search-index.js"></div>
+    <script src="../../main.js"></script><script src="../../source-script.js"></script><script src="../../source-files.js"></script></body></html>

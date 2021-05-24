@@ -8,7 +8,7 @@
 [![crate docs (master)](https://img.shields.io/badge/master-yellow.svg?label=docs)](https://slowli.github.io/arithmetic-parser/arithmetic_eval/) 
 [![changelog](https://img.shields.io/badge/-changelog-orange)](CHANGELOG.md)
 
-The library provides a simple interpreter, which can be used for some grammars
+This library provides a simple interpreter, which can be used for some grammars
 recognized by [`arithmetic-parser`], e.g., integer-, real-, complex-valued and modular arithmetic.
 (Both built-in integer types and big integers from [`num-bigint`] are supported.)
 The interpreter provides support for native functions,
@@ -18,8 +18,10 @@ allow effectively embedding the interpreter into larger Rust applications.
 
 The interpreter is somewhat opinionated on how to interpret language features
 (e.g., in terms of arithmetic ops for tuple / object arguments).
+On the other hand, handling primitive types is fully customizable, just like their parsing
+in `arithmetic-parser`.
 The primary goal is to be intuitive for simple grammars (such as the aforementioned
-real-valued arithmetic), even if this makes the interpreter difficult to use for other grammars.
+real-valued arithmetic).
 
 The interpreter is quite slow – 1–2 orders of magnitude slower than native arithmetic.
 
@@ -29,7 +31,7 @@ Add this to your `Crate.toml`:
 
 ```toml
 [dependencies]
-arithmetic-eval = "0.2.0"
+arithmetic-eval = "0.3.0"
 ```
 
 ### Script samples
@@ -80,6 +82,11 @@ assert(sorted);
 
 Please see the crate docs and [examples](examples) for more examples.
 
+## See also
+
+- [`arithmetic-typing`] is a type checker / inference tool for ASTs evaluated
+  by this crate.
+
 ## License
 
 Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE)
@@ -89,6 +96,7 @@ Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in `arithmetic-eval` by you, as defined in the Apache-2.0 license,
 shall be dual licensed as above, without any additional terms or conditions.
 
-[`arithmetic-parser`]: https://docs.rs/crates/arithmetic-parser
+[`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
+[`arithmetic-typing`]: https://crates.io/crates/arithmetic-typing
 [`num-bigint`]: https://crates.io/crates/num-bigint
 [Schnorr signatures]: https://en.wikipedia.org/wiki/Schnorr_signature

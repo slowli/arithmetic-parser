@@ -1,6 +1,6 @@
 [package]
 name = "arithmetic-parser"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Alex Ostrovski <ostrovski.alex@gmail.com>"]
 edition = "2018"
 readme = "README.md"
@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 description = "Parser for arithmetic expressions with flexible literals and type annotations."
 repository = "https://github.com/slowli/arithmetic-parser"
 categories = ["parser-implementations", "mathematics"]
-keywords = ["parser", "arithmetic"]
+keywords = ["parser", "arithmetic", "scripting", "language"]
 
 [package.metadata.docs.rs]
 all-features = true

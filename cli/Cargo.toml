@@ -1,6 +1,6 @@
 [package]
 name = "arithmetic-parser-cli"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Alex Ostrovski <ostrovski.alex@gmail.com>"]
 edition = "2018"
 readme = "README.md"
@@ -16,6 +16,7 @@ num-complex = "0.4.0"
 num-traits = "0.2.14"
 rustyline = "8.0.0"
 structopt = "0.3.13"
+textwrap = "0.11.0"
 unindent = "0.1.6"
 
 [[bin]]
@@ -23,16 +24,16 @@ name = "arithmetic-parser"
 path = "src/main.rs"
 
 [dependencies.arithmetic-parser]
-version = "0.2.0"
+version = "0.3.0"
 path = "../parser"
 
 [dependencies.arithmetic-eval]
-version = "0.2.0"
+version = "0.3.0"
 path = "../eval"
 features = ["complex"]
 
 [dependencies.arithmetic-typing]
-version = "0.2.0"
+version = "0.3.0"
 path = "../typing"
 
 [dev-dependencies]

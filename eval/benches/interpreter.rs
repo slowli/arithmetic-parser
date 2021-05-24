@@ -47,14 +47,14 @@ fn bench_mul_native_with_value(bencher: &mut Bencher<'_>) {
         || {
             (0..ELEMENTS)
                 .map(|_| rng.gen_range(0.5_f32..1.5))
-                .map(Value::Number)
+                .map(Value::Prim)
                 .collect::<Vec<_>>()
         },
         |values| {
             values
                 .into_iter()
-                .fold(Value::Number(1.0), |acc, x| match (acc, x) {
-                    (Value::Number(acc), Value::Number(x)) => Value::Number(acc * x),
+                .fold(Value::Prim(1.0), |acc, x| match (acc, x) {
+                    (Value::Prim(acc), Value::Prim(x)) => Value::Prim(acc * x),
                     _ => unreachable!(),
                 })
         },
@@ -98,7 +98,7 @@ fn bench_mul_fold(bencher: &mut Bencher<'_>) {
 
             let values: Vec<_> = (0..ELEMENTS)
                 .map(|_| rng.gen_range(0.5_f32..1.5))
-                .map(Value::Number)
+                .map(Value::Prim)
                 .collect();
             module.set_import("xs", Value::Tuple(values));
             module
@@ -110,7 +110,7 @@ fn bench_mul_fold(bencher: &mut Bencher<'_>) {
 
 fn bench_fold_fn(bencher: &mut Bencher<'_>) {
     let mut ctx = CallContext::mock(&WildcardId, MaybeSpanned::from_str("", ..), &StdArithmetic);
-    let acc = ctx.apply_call_span(Value::Number(1.0));
+    let acc = ctx.apply_call_span(Value::Prim(1.0));
     let fold_fn = fns::Binary::new(|x: f32, y| x * y);
     let fold_fn = ctx.apply_call_span(Value::native_fn(fold_fn));
 
@@ -120,7 +120,7 @@ fn bench_fold_fn(bencher: &mut Bencher<'_>) {
         || {
             (0..ELEMENTS)
                 .map(|_| rng.gen_range(0.5_f32..1.5))
-                .map(Value::Number)
+                .map(Value::Prim)
                 .collect::<Vec<_>>()
         },
         |array| {
@@ -152,7 +152,7 @@ fn bench_interpreted_fn(bencher: &mut Bencher<'_>) {
         || {
             (0..ELEMENTS)
                 .map(|_| rng.gen_range(0.5_f32..1.5))
-                .map(Value::Number)
+                .map(Value::Prim)
                 .collect::<Vec<_>>()
         },
         |array| {
@@ -214,7 +214,7 @@ fn bench_reverse(bencher: &mut Bencher<'_>) {
         || {
             (0..ELEMENTS)
                 .map(|_| rng.gen_range(0.5_f32..1.5))
-                .map(Value::Number)
+                .map(Value::Prim)
                 .collect::<Vec<_>>()
         },
         |values| {
@@ -317,7 +317,7 @@ fn bench_quick_sort_interpreted(bencher: &mut Bencher<'_>) {
         || {
             Value::Tuple(
                 (0..SORT_ELEMENTS)
-                    .map(|_| Value::Number(rng.gen_range(0.0_f32..100.0)))
+                    .map(|_| Value::Prim(rng.gen_range(0.0_f32..100.0)))
                     .collect(),
             )
         },

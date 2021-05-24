@@ -21,7 +21,7 @@ Add this to your `Crate.toml`:
 
 ```toml
 [dependencies]
-arithmetic-typing = "0.2.0"
+arithmetic-typing = "0.3.0"
 ```
 
 ### Quick overview
@@ -77,6 +77,11 @@ and more examples of usage.
 - Type constraints beyond simplest ones
 - Specifying type vars in type annotations (beyond simplest cases)
 - Type aliases
+
+## See also
+
+- [`arithmetic-eval`] is a simple interpreter that could be used on ASTs
+  consumed by this crate.
 
 ## License
 

@@ -10,7 +10,7 @@ The repository also contains several auxiliary crates (for example, a simple int
 ## Contents
 
 - [`arithmetic-parser`](parser) is the core parsing library.
-- [`arithmetic-eval`](eval) is a simple interpreter, which could be used on parsed expressions
+- [`arithmetic-eval`](eval) is a simple interpreter that could be used on parsed expressions
   in *some* cases. See the crate docs for more details on its limitations.
 - [`arithmetic-typing`](typing) is Hindley–Milner type inference for parsed expressions.
 - [`arithmetic-parser-cli`](cli) is the CLI / REPL for the library.

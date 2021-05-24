@@ -48,13 +48,13 @@ where
     A: OrdArithmetic<T>,
 {
     let value = evaluate::<T, _>(&mut Environment::new(), "2 * 2 + 1 - 2", arithmetic);
-    assert_eq!(value, Value::Number(3_u8.into()));
+    assert_eq!(value, Value::Prim(3_u8.into()));
 
     let program_with_tuples = "(1, 2, 3) * 3 - 1";
     let value = evaluate::<T, _>(&mut Environment::new(), program_with_tuples, arithmetic);
     let expected_numbers = vec![2_u8, 5, 8]
         .into_iter()
-        .map(|num| Value::Number(num.into()))
+        .map(|num| Value::Prim(num.into()))
         .collect();
     assert_eq!(value, Value::Tuple(expected_numbers));
 
@@ -125,7 +125,7 @@ where
     test_arithmetic_base::<T, _>(&arithmetic);
 
     let value = evaluate::<T, _>(&mut Environment::new(), "1 - 2 + 5", &arithmetic);
-    assert_eq!(value, Value::Number(4_u8.into()));
+    assert_eq!(value, Value::Prim(4_u8.into()));
 
     let err = try_evaluate::<T, _>(&mut Environment::new(), "-2 / 0 + 1", &arithmetic).unwrap_err();
     let err_kind = err.source().kind();
@@ -178,9 +178,9 @@ where
     test_arithmetic_base::<T, _>(&arithmetic);
 
     let value = evaluate::<T, _>(&mut Environment::new(), "1 - 2 + 5", &arithmetic);
-    assert_eq!(value, Value::Number(4_u8.into()));
+    assert_eq!(value, Value::Prim(4_u8.into()));
     let value = evaluate::<T, _>(&mut Environment::new(), "-1", &arithmetic);
-    assert_eq!(value, Value::Number(T::max_value()));
+    assert_eq!(value, Value::Prim(T::max_value()));
 }
 
 #[test]

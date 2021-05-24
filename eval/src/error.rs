@@ -16,7 +16,7 @@ use arithmetic_parser::{
     BinaryOp, CodeFragment, LocatedSpan, LvalueLen, MaybeSpanned, Op, StripCode, UnaryOp,
 };
 
-/// Arithmetic errors raised by [`Arithmetic`] operations on numbers.
+/// Arithmetic errors raised by [`Arithmetic`] operations on primitive values.
 ///
 /// [`Arithmetic`]: crate::arith::Arithmetic
 #[derive(Debug)]
@@ -230,7 +230,7 @@ pub enum ErrorKind {
         op: Op,
     },
 
-    /// Value cannot be compared to other values. Only numbers can be compared; other value types
+    /// Value cannot be compared to other values. Only primitive values can be compared; other value types
     /// cannot.
     #[display(fmt = "Value cannot be compared to other values")]
     CannotCompare,
@@ -327,9 +327,7 @@ impl ErrorKind {
                 "If both args of {} are objects, their field names must be the same",
                 op
             ),
-            Self::CannotDestructure => {
-                "Only tuples can be destructured; numbers, functions and booleans cannot".to_owned()
-            }
+            Self::CannotDestructure => "Only tuples can be destructured".to_owned(),
             Self::RepeatedAssignment { context } => format!(
                 "In {}, all assigned variables must have different names",
                 context
@@ -341,24 +339,33 @@ impl ErrorKind {
                 .to_owned(),
             Self::CannotIndex => "Only tuples can be indexed".to_owned(),
             Self::CannotAccessFields => "Only objects have fields".to_owned(),
+
             Self::UnexpectedOperand { op: Op::Binary(op) } if op.is_arithmetic() => {
-                "Operands of binary arithmetic ops must be numbers or tuples containing numbers"
+                "Operands of binary arithmetic ops must be primitive values or tuples / objects \
+                 consisting of primitive values"
                     .to_owned()
             }
             Self::UnexpectedOperand { op: Op::Binary(op) } if op.is_comparison() => {
-                "Operands of comparison ops must be numbers or tuples containing numbers".to_owned()
-            }
-            Self::UnexpectedOperand { op: Op::Binary(_) } => {
-                "Operands of binary boolean ops must be boolean".to_owned()
+                "Operands of comparison ops must be primitive values".to_owned()
             }
             Self::UnexpectedOperand {
+                op: Op::Binary(BinaryOp::And),
+            }
+            | Self::UnexpectedOperand {
+                op: Op::Binary(BinaryOp::Or),
+            } => "Operands of binary boolean ops must be boolean".to_owned(),
+            Self::UnexpectedOperand {
                 op: Op::Unary(UnaryOp::Neg),
-            } => "Operand of negation must be a number or a tuple".to_owned(),
+            } => "Operand of negation must be primitive values or tuples / objects \
+                  consisting of primitive values"
+                .to_owned(),
             Self::UnexpectedOperand {
                 op: Op::Unary(UnaryOp::Not),
             } => "Operand of boolean negation must be boolean".to_owned(),
 
-            Self::CannotCompare => "Only numbers can be compared; complex values cannot".to_owned(),
+            Self::CannotCompare => {
+                "Only primitive values can be compared; complex values cannot".to_owned()
+            }
 
             _ => return None,
         })

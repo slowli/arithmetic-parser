@@ -7,7 +7,7 @@ use num_traits::{FromPrimitive, One, Zero};
 use crate::{
     alloc::{vec, Vec},
     error::AuxErrorInfo,
-    fns::{extract_array, extract_fn, extract_number},
+    fns::{extract_array, extract_fn, extract_primitive},
     CallContext, ErrorKind, EvalResult, NativeFn, SpannedValue, Value,
 };
 
@@ -55,7 +55,7 @@ where
             args.pop().unwrap(),
             "`array` requires second arg to be a generation function",
         )?;
-        let len = extract_number(
+        let len = extract_primitive(
             ctx,
             args.pop().unwrap(),
             "`array` requires first arg to be a number",
@@ -71,7 +71,7 @@ where
 
             let cmp = ctx.arithmetic().partial_cmp(&next_index, &len);
             if matches!(cmp, Some(Ordering::Less) | Some(Ordering::Equal)) {
-                let spanned = ctx.apply_call_span(Value::Number(index));
+                let spanned = ctx.apply_call_span(Value::Prim(index));
                 array.push(generation_fn.evaluate(vec![spanned], ctx)?);
                 index = next_index;
             } else {
@@ -134,7 +134,7 @@ impl<T: FromPrimitive> NativeFn<T> for Len {
             let err = ErrorKind::native("Cannot convert length to number");
             ctx.call_site_error(err)
         })?;
-        Ok(Value::Number(len))
+        Ok(Value::Prim(len))
     }
 }
 

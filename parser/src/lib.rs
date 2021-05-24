@@ -37,11 +37,10 @@
 //! - **Blocks.** A block is several `;`-delimited statements enclosed in `{}` braces,
 //!   e.g, `{ z = max(x, y); (z - x, z - y) }`. The blocks can be used in all contexts
 //!   instead of a simple expression; for example, `min({ z = 5; z - 1 }, 3)`.
-//! - **Objects.** Object is a mapping of string fields to values. It is defined via an
-//!   *object block*, which is a block with an additional `#` before the opening brace;
-//!   for example, `#{ x = 1; y = 2; }`. Unlike ordinary blocks, object blocks cannot end
-//!   with a return expression. All other block content is permitted, including `;`-terminated
-//!   expressions and variable redefinition.
+//! - **Objects.** Object is a mapping of string fields to values. Objects are defined via
+//!   *object expressions*, which look similar to struct initialization in Rust or object
+//!   initialization in JavaScript; for example, `#{ x: 1, y }`. (Note the `#` char at the start
+//!   of the block; it is used to distinguish object expressions from blocks.)
 //! - **Methods.** Method call is a function call separated from the receiver with a `.` char;
 //!   for example, `foo.bar(2, x)`.
 //! - **Type annotations.** A type annotation in the form `var: Type` can be present
@@ -59,8 +58,7 @@
 //! - Functions are only defined via the closure syntax.
 //! - There is "rest" destructuting for tuples and function arguments.
 //! - Type annotations are placed within tuple elements, for example, `(x: Num, _) = y`.
-//! - Objects are created using differing syntax; they are closer to blocks than to
-//!   `{ x: 1, y: 2 }` exressions found in Rust and some other programming languages.
+//! - Object expressions are enclosed in `#{ ... }`, similarly to [Rhai](https://rhai.rs/).
 //!
 //! # Crate features
 //!
@@ -121,7 +119,7 @@
 //! ```
 
 #![cfg_attr(not(feature = "std"), no_std)]
-#![doc(html_root_url = "https://docs.rs/arithmetic-parser/0.2.0")]
+#![doc(html_root_url = "https://docs.rs/arithmetic-parser/0.3.0")]
 #![warn(missing_docs, missing_debug_implementations)]
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(
@@ -168,7 +166,8 @@ mod spans;
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct ObjectExpr<'a, T: Grammar<'a>> {
-    /// Fields. Each field is the field name and an optional expression.
+    /// Fields. Each field is the field name and an optional expression (that is, parts
+    /// before and after the colon char `:`, respectively).
     pub fields: Vec<(Spanned<'a>, Option<SpannedExpr<'a, T>>)>,
 }
 
@@ -566,11 +565,16 @@ pub struct ObjectDestructure<'a, T> {
 }
 
 /// Single field in [`ObjectDestructure`], such as `x` and `y: new_y` in `{ x, y: new_y }`.
+///
+/// In addition to the "ordinary" `field: lvalue` syntax for a field with binding,
+/// an alternative one is supported: `field -> lvalue`. This makes the case
+/// of a field with type annotation easier to recognize (for humans); `field -> lvalue: Type` is
+/// arguably more readable than `field: lvalue: Type` (although the latter is still valid syntax).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ObjectDestructureField<'a, T> {
-    /// Field name.
+    /// Field name, such as `xs` in `xs: (x, ...tail)`.
     pub field_name: Spanned<'a>,
-    /// Binding for the field.
+    /// Binding for the field, such as `(x, ...tail)` in `xs: (x, ...tail)`.
     pub binding: Option<SpannedLvalue<'a, T>>,
 }
 

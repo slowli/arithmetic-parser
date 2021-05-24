@@ -1,6 +1,6 @@
 [package]
 name = "arithmetic-typing"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Alex Ostrovski <ostrovski.alex@gmail.com>"]
 edition = "2018"
 readme = "README.md"
@@ -8,10 +8,10 @@ license = "MIT OR Apache-2.0"
 description = "Hindley-Milner type inference for arithmetic expressions."
 repository = "https://github.com/slowli/arithmetic-parser"
 categories = ["mathematics"]
-keywords = ["typing", "arithmetic"]
+keywords = ["typing", "type-system", "arithmetic", "scripting", "language"]
 
 [dependencies]
-arithmetic-parser = { version = "0.2.0", path = "../parser" }
+arithmetic-parser = { version = "0.3.0", path = "../parser" }
 
 anyhow = "1.0.27"
 nom = "6.0.0"

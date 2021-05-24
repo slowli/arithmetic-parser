@@ -16,7 +16,7 @@
 //!
 //! [`Value`]s have 5 major types:
 //!
-//! - **Numbers** corresponding to literals in the parsed `Block`
+//! - **Primitive values** corresponding to literals in the parsed `Block`
 //! - **Boolean values**
 //! - **Functions,** which are further subdivided into native functions (defined in the Rust code)
 //!   and interpreted ones (defined within a module)
@@ -33,8 +33,8 @@
 //! - All variables are immutable. Re-declaring a var shadows the previous declaration.
 //! - Functions are first-class (in fact, a function is just a variant of the [`Value`] enum).
 //! - Functions can capture variables (including other functions). All captures are by value.
-//! - Arithmetic operations are defined on numbers, tuples and objects. Ops or numbers are defined
-//!   via the [`Arithmetic`]. With tuples and object, operations are performed per-element / field.
+//! - Arithmetic operations are defined on primitive values, tuples and objects. Ops on primitives are defined
+//!   via an [`Arithmetic`]. With tuples and objects, operations are performed per element / field.
 //!   Binary operations require tuples of the same size / objects of the same shape,
 //!   or a tuple / object and a primitive value.
 //!   As an example, `(1, 2) + 3` and `#{ x: 2, y: 3 } / #{ x: 4, y: 5 }` are valid,
@@ -57,7 +57,7 @@
 //! - `OpaqueRef`s either use the [`PartialEq`] impl of the underlying type or
 //!   the pointer equality, depending on how the reference was created; see [`OpaqueRef`] docs
 //!   for more details.
-//! - Equality for numbers is determined by the [`Arithmetic`].
+//! - Equality for primitive values is determined by the [`Arithmetic`].
 //! - Tuples are equal if they contain the same number of elements and elements are pairwise
 //!   equal.
 //! - Different types of values are always non-equal.
@@ -141,7 +141,7 @@
 //! // To execute statements, we first compile them into a module.
 //! let module = env.compile_module("test", &program)?;
 //! // Then, the module can be run.
-//! assert_eq!(module.run()?, Value::Number(9.0));
+//! assert_eq!(module.run()?, Value::Prim(9.0));
 //! # Ok(())
 //! # }
 //! ```
@@ -175,7 +175,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![doc(html_root_url = "https://docs.rs/arithmetic-eval/0.2.0")]
+#![doc(html_root_url = "https://docs.rs/arithmetic-eval/0.3.0")]
 #![warn(missing_docs, missing_debug_implementations)]
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(

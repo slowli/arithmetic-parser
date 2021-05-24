@@ -559,7 +559,7 @@ mod tests {
             .unwrap_err();
 
         let err_message = err.source().kind().to_short_string();
-        assert!(err_message.contains("Cannot convert number to bool"));
+        assert!(err_message.contains("Cannot convert primitive value to bool"));
         assert!(err_message.contains("location: arg0[1].0"));
     }
 }

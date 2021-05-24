@@ -284,7 +284,7 @@ fn error_with_call_trace() {
         2 │ is_positive(3) && !is_positive((1, 2))
           │                    ------------------- Call at depth 1
           │
-          = Only numbers can be compared; complex values cannot
+          = Only primitive values can be compared; complex values cannot
     "#;
 
     let assert = create_command(&unindent(PROGRAM), "f64").assert();
@@ -315,7 +315,8 @@ fn error_with_call_complex_call_trace() {
         3 │ quadruple(true)
           │ --------------- Call at depth 2
           │
-          = Operands of binary arithmetic ops must be numbers or tuples containing numbers
+          = Operands of binary arithmetic ops must be primitive values or tuples /
+            objects consisting of primitive values
     "#;
 
     let assert = create_command(&unindent(PROGRAM), "f64").assert();
@@ -347,7 +348,7 @@ fn error_with_call_complex_call_trace_and_native_fns() {
           │ │               The error occurred in function `predicate`
           │ Call at depth 3
           │
-          = Only numbers can be compared; complex values cannot
+          = Only primitive values can be compared; complex values cannot
     "#;
 
     let assert = create_command(&unindent(PROGRAM), "f64").assert();

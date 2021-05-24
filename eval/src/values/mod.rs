@@ -28,8 +28,8 @@ pub use self::{
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum ValueType {
-    /// Number.
-    Number,
+    /// Primitive type other than `Bool`ean.
+    Prim,
     /// Boolean value.
     Bool,
     /// Function value.
@@ -50,7 +50,7 @@ pub enum ValueType {
 impl fmt::Display for ValueType {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Number => formatter.write_str("number"),
+            Self::Prim => formatter.write_str("primitive value"),
             Self::Bool => formatter.write_str("boolean value"),
             Self::Function => formatter.write_str("function"),
             Self::Tuple(1) => formatter.write_str("tuple with 1 element"),
@@ -176,8 +176,12 @@ impl fmt::Display for OpaqueRef {
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Value<'a, T> {
-    /// Primitive value: a single literal.
-    Number(T),
+    /// Primitive value, such as a number. This does not include Boolean values,
+    /// which are a separate variant.
+    ///
+    /// Literals must necessarily map to primitive values, but there may be some primitive values
+    /// not representable as literals.
+    Prim(T),
     /// Boolean value.
     Bool(bool),
     /// Function.
@@ -232,7 +236,7 @@ impl<'a, T> Value<'a, T> {
     /// Returns the type of this value.
     pub fn value_type(&self) -> ValueType {
         match self {
-            Self::Number(_) => ValueType::Number,
+            Self::Prim(_) => ValueType::Prim,
             Self::Bool(_) => ValueType::Bool,
             Self::Function(_) => ValueType::Function,
             Self::Tuple(elements) => ValueType::Tuple(elements.len()),
@@ -255,7 +259,7 @@ impl<'a, T> Value<'a, T> {
 impl<T: Clone> Clone for Value<'_, T> {
     fn clone(&self) -> Self {
         match self {
-            Self::Number(lit) => Self::Number(lit.clone()),
+            Self::Prim(lit) => Self::Prim(lit.clone()),
             Self::Bool(bool) => Self::Bool(*bool),
             Self::Function(function) => Self::Function(function.clone()),
             Self::Tuple(tuple) => Self::Tuple(tuple.clone()),
@@ -270,7 +274,7 @@ impl<T: 'static + Clone> StripCode for Value<'_, T> {
 
     fn strip_code(self) -> Self::Stripped {
         match self {
-            Self::Number(lit) => Value::Number(lit),
+            Self::Prim(lit) => Value::Prim(lit),
             Self::Bool(bool) => Value::Bool(bool),
             Self::Function(function) => Value::Function(function.strip_code()),
             Self::Tuple(tuple) => {
@@ -296,7 +300,7 @@ impl<'a, T: Clone> From<&Value<'a, T>> for Value<'a, T> {
 impl<T: PartialEq> PartialEq for Value<'_, T> {
     fn eq(&self, rhs: &Self) -> bool {
         match (self, rhs) {
-            (Self::Number(this), Self::Number(other)) => this == other,
+            (Self::Prim(this), Self::Prim(other)) => this == other,
             (Self::Bool(this), Self::Bool(other)) => this == other,
             (Self::Tuple(this), Self::Tuple(other)) => this == other,
             (Self::Object(this), Self::Object(other)) => this == other,
@@ -310,7 +314,7 @@ impl<T: PartialEq> PartialEq for Value<'_, T> {
 impl<T: fmt::Display> fmt::Display for Value<'_, T> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Number(number) => fmt::Display::fmt(number, formatter),
+            Self::Prim(value) => fmt::Display::fmt(value, formatter),
             Self::Bool(true) => formatter.write_str("true"),
             Self::Bool(false) => formatter.write_str("false"),
             Self::Ref(opaque_ref) => fmt::Display::fmt(opaque_ref, formatter),

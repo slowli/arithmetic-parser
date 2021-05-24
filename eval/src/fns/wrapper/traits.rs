@@ -137,8 +137,8 @@ pub trait TryFromValue<'a, T>: Sized {
 impl<'a, T: Number> TryFromValue<'a, T> for T {
     fn try_from_value(value: Value<'a, T>) -> Result<Self, FromValueError> {
         match value {
-            Value::Number(number) => Ok(number),
-            _ => Err(FromValueError::invalid_type(ValueType::Number, &value)),
+            Value::Prim(number) => Ok(number),
+            _ => Err(FromValueError::invalid_type(ValueType::Prim, &value)),
         }
     }
 }
@@ -295,7 +295,7 @@ where
 
 impl<'a, T: Number> IntoEvalResult<'a, T> for T {
     fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
-        Ok(Value::Number(self))
+        Ok(Value::Prim(self))
     }
 }
 

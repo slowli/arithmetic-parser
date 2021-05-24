@@ -30,7 +30,7 @@ fn create_module<'a>(
         .strip_err()?
         .with_imports_from(&Prelude)
         .with_imports_from(&Assertions)
-        .with_import("INF", Value::Number(f64::INFINITY))
+        .with_import("INF", Value::Prim(f64::INFINITY))
         .set_imports(|_| Value::void()))
 }
 
@@ -58,7 +58,7 @@ fn main() -> anyhow::Result<()> {
     let mut test_module = create_module("test", "(1, 2, -5).sum()")?;
     test_module.set_import("sum", sum_fn.clone());
     let sum_value = test_module.run()?;
-    assert_eq!(sum_value, Value::Number(-2.0)); // 1 + 2 - 5
+    assert_eq!(sum_value, Value::Prim(-2.0)); // 1 + 2 - 5
 
     // Errors are handled as well.
     let bogus_module = create_module("bogus", "(1, true, -5).sum()")?;
@@ -94,7 +94,7 @@ fn main() -> anyhow::Result<()> {
     let mut test_module = test_module;
     test_module.set_import("sum", rfold_sum);
     let sum_value = test_module.run().strip_err()?;
-    assert_eq!(sum_value, Value::Number(-2.0));
+    assert_eq!(sum_value, Value::Prim(-2.0));
 
     Ok(())
 }

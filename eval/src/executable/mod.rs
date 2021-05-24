@@ -36,6 +36,10 @@ pub(crate) use self::{
 /// of the module execution, but the intermediate results as well. Use [`Self::run_in_env()`]
 /// for such cases.
 ///
+/// `ExecutableModule`s are generic with respect to the primitive value type, just like [`Value`].
+/// The lifetime of a module depends on the lifetime of the code, but this dependency
+/// can be eliminated via [`StripCode`] implementation.
+///
 /// # Examples
 ///
 /// ## Basic usage
@@ -43,7 +47,7 @@ pub(crate) use self::{
 /// ```
 /// use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// use arithmetic_eval::{fns, Comparisons, ExecutableModule, Prelude, Value};
-/// # use core::{f32, iter::FromIterator};
+/// # use core::iter::FromIterator;
 /// # use hashbrown::HashSet;
 ///
 /// # fn main() -> anyhow::Result<()> {
@@ -51,12 +55,12 @@ pub(crate) use self::{
 /// let mut module = ExecutableModule::builder("test", &module)?
 ///     .with_imports_from(&Prelude)
 ///     .with_imports_from(&Comparisons)
-///     .with_import("INFINITY", Value::Number(f32::INFINITY))
+///     .with_import("INFINITY", Value::Prim(f32::INFINITY))
 ///     // Set remaining imports to a fixed value.
 ///     .set_imports(|_| Value::void());
 ///
 /// // With the original imports, the returned value is `-INFINITY`.
-/// assert_eq!(module.run()?, Value::Number(f32::NEG_INFINITY));
+/// assert_eq!(module.run()?, Value::Prim(f32::NEG_INFINITY));
 ///
 /// // Imports can be changed. Let's check that `xs` is indeed an import.
 /// assert!(module.imports().contains("xs"));
@@ -71,10 +75,10 @@ pub(crate) use self::{
 ///
 /// // Change the `xs` import and run the module again.
 /// let array = [1.0, -3.0, 2.0, 0.5].iter().copied()
-///     .map(Value::Number)
+///     .map(Value::Prim)
 ///     .collect();
 /// module.set_import("xs", Value::Tuple(array));
-/// assert_eq!(module.run()?, Value::Number(2.0));
+/// assert_eq!(module.run()?, Value::Prim(2.0));
 /// # Ok(())
 /// # }
 /// ```
@@ -90,14 +94,14 @@ pub(crate) use self::{
 /// # fn main() -> anyhow::Result<()> {
 /// let block = Untyped::<F32Grammar>::parse_statements("x + y")?;
 /// let mut module = ExecutableModule::builder("test", &block)?
-///     .with_import("x", Value::Number(3.0))
-///     .with_import("y", Value::Number(5.0))
+///     .with_import("x", Value::Prim(3.0))
+///     .with_import("y", Value::Prim(5.0))
 ///     .build();
-/// assert_eq!(module.run()?, Value::Number(8.0));
+/// assert_eq!(module.run()?, Value::Prim(8.0));
 ///
 /// let mut env = Environment::from_iter(module.imports());
-/// env.insert("x", Value::Number(-1.0));
-/// assert_eq!(module.run_in_env(&mut env)?, Value::Number(4.0));
+/// env.insert("x", Value::Prim(-1.0));
+/// assert_eq!(module.run_in_env(&mut env)?, Value::Prim(4.0));
 /// # Ok(())
 /// # }
 /// ```
@@ -118,7 +122,7 @@ pub(crate) use self::{
 ///
 /// let mut env = Environment::from_iter(module.imports());
 /// assert!(module.run_in_env(&mut env).is_err());
-/// assert_eq!(env["x"], Value::Number(5.0));
+/// assert_eq!(env["x"], Value::Prim(5.0));
 /// # Ok(())
 /// # }
 /// ```
@@ -472,12 +476,12 @@ mod tests {
         let (mut module, _) = Compiler::compile_module(WildcardId, &block).unwrap();
 
         let mut module_copy = module.clone();
-        module_copy.set_import("x", Value::Number(10.0));
+        module_copy.set_import("x", Value::Prim(10.0));
         let value = module_copy.run().unwrap();
-        assert_eq!(value, Value::Number(33.0));
+        assert_eq!(value, Value::Prim(33.0));
 
-        module.set_import("x", Value::Number(5.0));
+        module.set_import("x", Value::Prim(5.0));
         let value = module.run().unwrap();
-        assert_eq!(value, Value::Number(18.0));
+        assert_eq!(value, Value::Prim(18.0));
     }
 }

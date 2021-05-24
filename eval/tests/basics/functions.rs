@@ -17,7 +17,7 @@ fn program_with_interpreted_function() {
     let program = "foo = |x| x + 5; foo(3.0)";
     let mut env = Environment::new();
     let return_value = evaluate(&mut env, program);
-    assert_eq!(return_value, Value::Number(8.0));
+    assert_eq!(return_value, Value::Prim(8.0));
     assert!(env["foo"].is_function());
 }
 
@@ -28,10 +28,10 @@ fn destructuring_in_fn_args() {
         swap(1, (2, 3))
     "#;
     let return_value = evaluate(&mut Environment::new(), program);
-    let inner_tuple = Value::Tuple(vec![Value::Number(1.0), Value::Number(2.0)]);
+    let inner_tuple = Value::Tuple(vec![Value::Prim(1.0), Value::Prim(2.0)]);
     assert_eq!(
         return_value,
-        Value::Tuple(vec![inner_tuple, Value::Number(3.0)])
+        Value::Tuple(vec![inner_tuple, Value::Prim(3.0)])
     );
 }
 
@@ -42,7 +42,7 @@ fn destructuring_in_fn_args_with_wildcard() {
         add(1, (2, 3))
     "#;
     let return_value = evaluate(&mut Environment::new(), program);
-    assert_eq!(return_value, Value::Number(4.0));
+    assert_eq!(return_value, Value::Prim(4.0));
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn captures_in_function() {
         foo(-3)
     "#;
     let return_value = evaluate(&mut Environment::new(), program);
-    assert_eq!(return_value, Value::Number(2.0));
+    assert_eq!(return_value, Value::Prim(2.0));
 }
 
 #[test]
@@ -67,7 +67,7 @@ fn captures_in_function_with_shadowing() {
         foo(-3)
     "#;
     let return_value = evaluate(&mut Environment::new(), program);
-    assert_eq!(return_value, Value::Number(2.0));
+    assert_eq!(return_value, Value::Prim(2.0));
 }
 
 #[test]
@@ -80,7 +80,7 @@ fn fn_captures_in_function() {
         foo(-3)
     "#;
     let return_value = evaluate(&mut Environment::new(), program);
-    assert_eq!(return_value, Value::Number(2.0));
+    assert_eq!(return_value, Value::Prim(2.0));
 }
 
 #[test]
@@ -94,7 +94,7 @@ fn captured_function() {
     let return_value = evaluate(&mut env, program);
     assert_eq!(
         return_value,
-        Value::Tuple(vec![Value::Number(0.0), Value::Number(0.0)])
+        Value::Tuple(vec![Value::Prim(0.0), Value::Prim(0.0)])
     );
 
     {
@@ -125,12 +125,8 @@ fn variadic_function() {
     let mut env = Environment::new();
     let return_value = evaluate(&mut env, program);
 
-    let first = Value::Tuple(vec![
-        Value::Number(-1.0),
-        Value::Number(-2.0),
-        Value::Number(3.5),
-    ]);
-    let second = Value::Tuple(vec![Value::Number(0.25), Value::Number(-8.0)]);
+    let first = Value::Tuple(vec![Value::Prim(-1.0), Value::Prim(-2.0), Value::Prim(3.5)]);
+    let second = Value::Tuple(vec![Value::Prim(0.25), Value::Prim(-8.0)]);
     assert_eq!(return_value, Value::Tuple(vec![first, second]));
 }
 
@@ -196,11 +192,11 @@ fn embedded_function() {
     "#;
     let mut env = Environment::new();
     let return_value = evaluate(&mut env, program);
-    assert_eq!(return_value, Value::Number(2.0));
+    assert_eq!(return_value, Value::Prim(2.0));
 
     let other_program = "add = gen_add(-3); add(-1)";
     let return_value = evaluate(&mut env, other_program);
-    assert_eq!(return_value, Value::Number(-4.0));
+    assert_eq!(return_value, Value::Prim(-4.0));
 
     let function = match &env["add"] {
         Value::Function(Function::Interpreted(function)) => function,
@@ -209,7 +205,7 @@ fn embedded_function() {
     let captures = function.captures();
     assert_eq!(
         captures,
-        HashMap::from_iter(vec![("x", &Value::Number(-3.0))])
+        HashMap::from_iter(vec![("x", &Value::Prim(-3.0))])
     );
 }
 
@@ -222,7 +218,7 @@ fn first_class_functions_apply() {
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(
         return_value,
-        Value::Tuple(vec![Value::Number(4.0), Value::Number(1.0)])
+        Value::Tuple(vec![Value::Prim(4.0), Value::Prim(1.0)])
     );
 }
 
@@ -243,7 +239,7 @@ fn first_class_functions_repeat() {
 
     assert_eq!(
         return_value,
-        Value::Tuple(vec![Value::Number(8.0), Value::Number(-1.5)])
+        Value::Tuple(vec![Value::Prim(8.0), Value::Prim(-1.5)])
     );
     assert!(env.get("lambda").is_none());
 }
@@ -252,21 +248,21 @@ fn first_class_functions_repeat() {
 fn immediately_executed_function() {
     let program = "-|x| { x + 5 }(-3)";
     let return_value = evaluate(&mut Environment::new(), program);
-    assert_eq!(return_value, Value::Number(-2.0));
+    assert_eq!(return_value, Value::Prim(-2.0));
 }
 
 #[test]
 fn immediately_executed_function_priority() {
     let program = "2 + |x| { x + 5 }(-3)";
     let return_value = evaluate(&mut Environment::new(), program);
-    assert_eq!(return_value, Value::Number(4.0));
+    assert_eq!(return_value, Value::Prim(4.0));
 }
 
 #[test]
 fn immediately_executed_function_in_other_call() {
     let program = "add = |x, y| x + y; add(10, |x| { x + 5 }(-3))";
     let return_value = evaluate(&mut Environment::new(), program);
-    assert_eq!(return_value, Value::Number(12.0));
+    assert_eq!(return_value, Value::Prim(12.0));
 }
 
 #[test]
@@ -276,7 +272,7 @@ fn program_with_native_function() {
 
     let program = "sin(1.0) - 3";
     let return_value = evaluate(&mut env, program);
-    assert_eq!(return_value, Value::Number(1.0_f32.sin() - 3.0));
+    assert_eq!(return_value, Value::Prim(1.0_f32.sin() - 3.0));
 }
 
 #[test]
@@ -286,7 +282,7 @@ fn function_aliasing() {
 
     let program = "alias = sin; alias(1.0)";
     let return_value = evaluate(&mut env, program);
-    assert_eq!(return_value, Value::Number(1.0_f32.sin()));
+    assert_eq!(return_value, Value::Prim(1.0_f32.sin()));
 
     let sin = &env["sin"];
     let sin = match sin {
@@ -311,7 +307,7 @@ fn function_aliasing() {
 fn method_call() {
     let program = "add = |x, y| x + y; 1.0.add(2)";
     let return_value = evaluate(&mut Environment::new(), program);
-    assert_eq!(return_value, Value::Number(3.0));
+    assert_eq!(return_value, Value::Prim(3.0));
 }
 
 #[test]
@@ -347,7 +343,7 @@ fn native_fn_error() {
     assert_eq!(*err.main_span().code().fragment(), "sin((-5, 2))");
 
     let expected_err_kind = FromValueErrorKind::InvalidType {
-        expected: ValueType::Number,
+        expected: ValueType::Prim,
         actual: ValueType::Tuple(2),
     };
     assert_matches!(
@@ -360,16 +356,16 @@ fn native_fn_error() {
 fn single_statement_fn() {
     let program = "(|| 5)()";
     let return_value = evaluate(&mut Environment::new(), program);
-    assert_eq!(return_value, Value::Number(5.0));
+    assert_eq!(return_value, Value::Prim(5.0));
 
     let other_program = "x = 3; (|| x)()";
     let return_value = evaluate(&mut Environment::new(), other_program);
-    assert_eq!(return_value, Value::Number(3.0));
+    assert_eq!(return_value, Value::Prim(3.0));
 }
 
 #[test]
 fn function_with_non_linear_flow() {
     let program = "(|x| { y = x - 3; x })(2)";
     let return_value = evaluate(&mut Environment::new(), program);
-    assert_eq!(return_value, Value::Number(2.0));
+    assert_eq!(return_value, Value::Prim(2.0));
 }

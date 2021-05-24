@@ -17,10 +17,10 @@ fn object_basics() {
     };
 
     assert_eq!(fields.len(), 2);
-    assert_eq!(fields["x"], Value::Number(1.0));
+    assert_eq!(fields["x"], Value::Prim(1.0));
     assert_eq!(
         fields["y"],
-        Value::Tuple(vec![Value::Number(2.0), Value::Number(3.0)])
+        Value::Tuple(vec![Value::Prim(2.0), Value::Prim(3.0)])
     );
 }
 
@@ -47,8 +47,8 @@ fn capturing_vars_in_object() {
     };
 
     assert_eq!(fields.len(), 2);
-    assert_eq!(fields["x"], Value::Number(1.0));
-    assert_eq!(fields["y"], Value::Number(3.0));
+    assert_eq!(fields["x"], Value::Prim(1.0));
+    assert_eq!(fields["y"], Value::Prim(3.0));
 }
 
 #[test]
@@ -66,8 +66,8 @@ fn object_expr_does_not_capture_surroundings() {
     };
 
     assert_eq!(fields.len(), 2);
-    assert_eq!(fields["x"], Value::Number(1.0));
-    assert_eq!(fields["y"], Value::Number(5.0));
+    assert_eq!(fields["x"], Value::Prim(1.0));
+    assert_eq!(fields["y"], Value::Prim(5.0));
 }
 
 #[test]
@@ -86,11 +86,11 @@ fn object_expr_does_not_capture_inner_scopes() {
     };
 
     assert_eq!(fields.len(), 3);
-    assert_eq!(fields["x"], Value::Number(1.0));
-    assert_eq!(fields["y"], Value::Number(6.0));
+    assert_eq!(fields["x"], Value::Prim(1.0));
+    assert_eq!(fields["y"], Value::Prim(6.0));
     assert_eq!(
         fields["vec"],
-        Value::Tuple(vec![Value::Number(1.0), Value::Number(6.0)])
+        Value::Tuple(vec![Value::Prim(1.0), Value::Prim(6.0)])
     );
 }
 
@@ -110,15 +110,15 @@ fn object_in_object() {
     };
 
     assert_eq!(fields.len(), 2);
-    assert_eq!(fields["pt_x"], Value::Number(1.0));
+    assert_eq!(fields["pt_x"], Value::Prim(1.0));
 
     let inner_fields = match &fields["pt"] {
         Value::Object(fields) => fields,
         other => panic!("Unexpected inner object: {:?}", other),
     };
     assert_eq!(inner_fields.len(), 2);
-    assert_eq!(inner_fields["x"], Value::Number(1.0));
-    assert_eq!(inner_fields["y"], Value::Number(2.0));
+    assert_eq!(inner_fields["x"], Value::Prim(1.0));
+    assert_eq!(inner_fields["y"], Value::Prim(2.0));
 }
 
 #[test]
@@ -152,14 +152,14 @@ fn accessing_fields_within_object() {
         fields["pt"],
         Value::Object(
             vec![
-                ("x".to_owned(), Value::Number(3.0)),
-                ("y".to_owned(), Value::Number(4.0))
+                ("x".to_owned(), Value::Prim(3.0)),
+                ("y".to_owned(), Value::Prim(4.0))
             ]
             .into_iter()
             .collect()
         )
     );
-    assert_eq!(fields["len_sq"], Value::Number(25.0));
+    assert_eq!(fields["len_sq"], Value::Prim(25.0));
 }
 
 #[test]

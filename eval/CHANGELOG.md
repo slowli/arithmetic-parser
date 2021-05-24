@@ -5,6 +5,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ## [Unreleased]
 
+## 0.3.0 - 2021-05-24
+
 ### Added
 
 - Support `Expr::TypeCast` as a no-op. (#83)
@@ -28,6 +30,9 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 - Rename `AuxErrorInfo::UnbalancedRhs` to `AuxErrorInfo::UnbalancedRhsTuple`. (#86)
 
 - Re-license the crate to MIT or Apache-2.0. (#87)
+
+- Rename `Value::Number` variant to `Prim` to better correspond to possible crate
+  usage. (#89)
 
 ### Removed
 

@@ -5,6 +5,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ## [Unreleased]
 
+## 0.3.0 - 2021-05-24
+
 ### Added
 
 - Parse type annotations for varargs and tuples with a middle, such as

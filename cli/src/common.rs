@@ -34,6 +34,9 @@ use crate::library::ReplLiteral;
 /// Exit code on parse or evaluation error.
 pub const ERROR_EXIT_CODE: i32 = 2;
 
+/// Width of help notes in chars.
+const HELP_WIDTH: usize = 72;
+
 /// Helper trait for possible `LocationSpan.fragment` types.
 trait SizedFragment {
     fn fragment_len(&self) -> usize;
@@ -214,6 +217,7 @@ impl Reporter {
             .with_labels(labels);
 
         if let Some(help) = e.kind().help() {
+            let help = textwrap::fill(&help, HELP_WIDTH);
             diagnostic = diagnostic.with_notes(vec![help]);
         }
 
@@ -367,7 +371,7 @@ impl Reporter {
                 Ok(())
             }
 
-            Value::Number(num) => {
+            Value::Prim(num) => {
                 writer.set_color(&num_color)?;
                 write!(writer, "{}", num)?;
                 writer.reset()

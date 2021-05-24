@@ -2,11 +2,11 @@
 //!
 //! # Traits
 //!
-//! An [`Arithmetic`] defines fallible arithmetic operations on literals
+//! An [`Arithmetic`] defines fallible arithmetic operations on primitive values
 //! of an [`ExecutableModule`], namely, addition, subtraction, multiplication, division,
 //! exponentiation (all binary ops), and negation (a unary op). Any module can be run
-//! with any `Arithmetic` on its literals, although some modules are reasonably tied
-//! to a particular arithmetic or class of arithmetics (e.g., arithmetics on finite fields).
+//! with any `Arithmetic` on its primitive values, although some modules are reasonably tied
+//! to a particular arithmetic or a class of arithmetics (e.g., arithmetics on finite fields).
 //!
 //! [`OrdArithmetic`] extends [`Arithmetic`] with a partial comparison operation
 //! (i.e., an analogue to [`PartialOrd`]). This is motivated by the fact that comparisons
@@ -52,34 +52,34 @@ pub use self::{
     modular::{DoubleWidth, ModularArithmetic},
 };
 
-/// Encapsulates arithmetic operations on a certain number type.
+/// Encapsulates arithmetic operations on a certain primitive type (or an enum of primitive types).
 ///
 /// Unlike operations on built-in integer types, arithmetic operations may be fallible.
 /// Additionally, the arithmetic can have a state. This is used, for example, in
 /// [`ModularArithmetic`], which stores the modulus in the state.
 pub trait Arithmetic<T> {
-    /// Adds two numbers.
+    /// Adds two values.
     ///
     /// # Errors
     ///
     /// Returns an error if the operation is unsuccessful (e.g., on integer overflow).
     fn add(&self, x: T, y: T) -> Result<T, ArithmeticError>;
 
-    /// Subtracts two numbers.
+    /// Subtracts two values.
     ///
     /// # Errors
     ///
     /// Returns an error if the operation is unsuccessful (e.g., on integer underflow).
     fn sub(&self, x: T, y: T) -> Result<T, ArithmeticError>;
 
-    /// Multiplies two numbers.
+    /// Multiplies two values.
     ///
     /// # Errors
     ///
     /// Returns an error if the operation is unsuccessful (e.g., on integer overflow).
     fn mul(&self, x: T, y: T) -> Result<T, ArithmeticError>;
 
-    /// Divides two numbers.
+    /// Divides two values.
     ///
     /// # Errors
     ///
@@ -94,21 +94,21 @@ pub trait Arithmetic<T> {
     /// Returns an error if the operation is unsuccessful (e.g., on integer overflow).
     fn pow(&self, x: T, y: T) -> Result<T, ArithmeticError>;
 
-    /// Negates a number.
+    /// Negates a value.
     ///
     /// # Errors
     ///
     /// Returns an error if the operation is unsuccessful (e.g., on integer overflow).
     fn neg(&self, x: T) -> Result<T, ArithmeticError>;
 
-    /// Checks if two numbers are equal. Note that equality can be a non-trivial operation;
+    /// Checks if two values are equal. Note that equality can be a non-trivial operation;
     /// e.g., different numbers may be equal as per modular arithmetic.
     fn eq(&self, x: &T, y: &T) -> bool;
 }
 
-/// Extends an [`Arithmetic`] with a comparison operation on numbers.
+/// Extends an [`Arithmetic`] with a comparison operation on values.
 pub trait OrdArithmetic<T>: Arithmetic<T> {
-    /// Compares two numbers. Returns `None` if the numbers are not comparable, or the comparison
+    /// Compares two values. Returns `None` if the numbers are not comparable, or the comparison
     /// result otherwise.
     fn partial_cmp(&self, x: &T, y: &T) -> Option<Ordering>;
 }
@@ -199,7 +199,7 @@ where
     }
 }
 
-/// Extension trait for [`Arithmetic`] allowing to combine the arithmetic with a number comparison.
+/// Extension trait for [`Arithmetic`] allowing to combine the arithmetic with comparisons.
 ///
 /// # Examples
 ///
@@ -246,7 +246,7 @@ where
 /// # }
 /// ```
 pub trait ArithmeticExt<T>: Arithmetic<T> + Sized {
-    /// Combines this arithmetic with a comparison function that assumes any two numbers are
+    /// Combines this arithmetic with a comparison function that assumes any two values are
     /// incomparable.
     fn without_comparisons(self) -> FullArithmetic<T, Self> {
         FullArithmetic {

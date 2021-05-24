@@ -1,6 +1,6 @@
 [package]
 name = "arithmetic-typing"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Alex Ostrovski <ostrovski.alex@gmail.com>"]
 edition = "2018"
 readme = "README.md"
@@ -11,7 +11,7 @@ categories = ["mathematics"]
 keywords = ["typing", "arithmetic"]
 
 [dependencies]
-arithmetic-parser = { version = "0.2.0", path = "../parser" }
+arithmetic-parser = { version = "0.3.0", path = "../parser" }
 
 anyhow = "1.0.27"
 nom = "6.0.0"

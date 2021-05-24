@@ -29,7 +29,7 @@ Add this to your `Crate.toml`:
 
 ```toml
 [dependencies]
-arithmetic-eval = "0.2.0"
+arithmetic-eval = "0.3.0"
 ```
 
 ### Script samples

@@ -52,13 +52,13 @@ pub use self::{
     },
 };
 
-fn extract_number<'a, T, A>(
+fn extract_primitive<'a, T, A>(
     ctx: &CallContext<'_, 'a, A>,
     value: SpannedValue<'a, T>,
     error_msg: &str,
 ) -> Result<T, Error<'a>> {
     match value.extra {
-        Value::Number(value) => Ok(value),
+        Value::Prim(value) => Ok(value),
         _ => Err(ctx
             .call_site_error(ErrorKind::native(error_msg))
             .with_span(&value, AuxErrorInfo::InvalidArg)),
@@ -95,7 +95,7 @@ fn extract_fn<'a, T, A>(
     }
 }
 
-/// Comparator functions on two number arguments. All functions use [`Arithmetic`] to determine
+/// Comparator functions on two primitive arguments. All functions use [`Arithmetic`] to determine
 /// ordering between the args.
 ///
 /// # Type
@@ -123,7 +123,7 @@ fn extract_fn<'a, T, A>(
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
-///     .insert("INFINITY", Value::Number(f32::INFINITY))
+///     .insert("INFINITY", Value::Prim(f32::INFINITY))
 ///     .insert_native_fn("fold", fns::Fold)
 ///     .insert_native_fn("min", fns::Compare::Min)
 ///     .compile_module("test_min", &program)?;
@@ -157,27 +157,27 @@ pub enum Compare {
     /// Returns an [`Ordering`] wrapped into an [`OpaqueRef`](crate::OpaqueRef),
     /// or [`Value::void()`] if the provided values are not comparable.
     Raw,
-    /// Returns the minimum of the two numbers. If the numbers are equal, returns the first one.
+    /// Returns the minimum of the two values. If the values are equal / not comparable, returns the first one.
     Min,
-    /// Returns the maximum of the two numbers. If the numbers are equal, returns the first one.
+    /// Returns the maximum of the two values. If the values are equal / not comparable, returns the first one.
     Max,
 }
 
 impl Compare {
-    fn extract_numbers<'a, T>(
+    fn extract_primitives<'a, T>(
         mut args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a, T>,
     ) -> Result<(T, T), Error<'a>> {
         ctx.check_args_count(&args, 2)?;
         let y = args.pop().unwrap();
         let x = args.pop().unwrap();
-        let x = extract_number(ctx, x, COMPARE_ERROR_MSG)?;
-        let y = extract_number(ctx, y, COMPARE_ERROR_MSG)?;
+        let x = extract_primitive(ctx, x, COMPARE_ERROR_MSG)?;
+        let y = extract_primitive(ctx, y, COMPARE_ERROR_MSG)?;
         Ok((x, y))
     }
 }
 
-const COMPARE_ERROR_MSG: &str = "Compare requires 2 number arguments";
+const COMPARE_ERROR_MSG: &str = "Compare requires 2 primitive arguments";
 
 impl<T> NativeFn<T> for Compare {
     fn evaluate<'a>(
@@ -185,7 +185,7 @@ impl<T> NativeFn<T> for Compare {
         args: Vec<SpannedValue<'a, T>>,
         ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
-        let (x, y) = Self::extract_numbers(args, ctx)?;
+        let (x, y) = Self::extract_primitives(args, ctx)?;
         let maybe_ordering = ctx.arithmetic().partial_cmp(&x, &y);
 
         if let Self::Raw = self {
@@ -199,7 +199,7 @@ impl<T> NativeFn<T> for Compare {
                 | (Ordering::Greater, Self::Max) => x,
                 _ => y,
             };
-            Ok(Value::Number(value))
+            Ok(Value::Prim(value))
         }
     }
 }
@@ -223,7 +223,7 @@ mod tests {
             .unwrap()
             .with_import("if", Value::native_fn(If))
             .build();
-        assert_eq!(module.run().unwrap(), Value::Number(6.0));
+        assert_eq!(module.run().unwrap(), Value::Prim(6.0));
     }
 
     #[test]
@@ -237,7 +237,7 @@ mod tests {
             .unwrap()
             .with_import("if", Value::native_fn(If))
             .build();
-        assert_eq!(module.run().unwrap(), Value::Number(-1.5));
+        assert_eq!(module.run().unwrap(), Value::Prim(-1.5));
     }
 
     #[test]
@@ -286,11 +286,11 @@ mod tests {
         assert_eq!(
             module.run().unwrap(),
             Value::Tuple(vec![
-                Value::Number(0.0),
-                Value::Number(1.0),
-                Value::Number(2.0),
-                Value::Number(2.0),
-                Value::Number(9.0),
+                Value::Prim(0.0),
+                Value::Prim(1.0),
+                Value::Prim(2.0),
+                Value::Prim(2.0),
+                Value::Prim(9.0),
             ])
         );
     }
@@ -307,7 +307,7 @@ mod tests {
 
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
-            .with_import("Inf", Value::Number(f32::INFINITY))
+            .with_import("Inf", Value::Prim(f32::INFINITY))
             .with_import("fold", Value::native_fn(Fold))
             .with_import("if", Value::native_fn(If))
             .build();
@@ -348,8 +348,8 @@ mod tests {
             .set_imports(|_| Value::void());
 
         for &(input, expected) in SAMPLES {
-            let input = input.iter().copied().map(Value::Number).collect();
-            let expected = expected.iter().copied().map(Value::Number).collect();
+            let input = input.iter().copied().map(Value::Prim).collect();
+            let expected = expected.iter().copied().map(Value::Prim).collect();
             test_module.set_import("xs", Value::Tuple(input));
             assert_eq!(test_module.run().unwrap(), Value::Tuple(expected));
         }
@@ -369,7 +369,7 @@ mod tests {
         assert_eq!(*err.main_span().code().fragment(), "min(1, (2, 3))");
         assert_matches!(
             err.kind(),
-            ErrorKind::NativeCall(ref msg) if msg.contains("requires 2 number arguments")
+            ErrorKind::NativeCall(ref msg) if msg.contains("requires 2 primitive arguments")
         );
     }
 
@@ -379,7 +379,7 @@ mod tests {
         let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
-            .with_import("NAN", Value::Number(f32::NAN))
+            .with_import("NAN", Value::Prim(f32::NAN))
             .with_import("min", Value::native_fn(Compare::Min))
             .build();
 

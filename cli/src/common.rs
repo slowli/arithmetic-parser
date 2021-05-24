@@ -367,7 +367,7 @@ impl Reporter {
                 Ok(())
             }
 
-            Value::Number(num) => {
+            Value::Prim(num) => {
                 writer.set_color(&num_color)?;
                 write!(writer, "{}", num)?;
                 writer.reset()

@@ -27,11 +27,11 @@ use crate::{
 /// let mut env: Environment<'_, f64> = Prelude.iter()
 ///     .chain(Comparisons.iter())
 ///     // Add a custom variable for a good measure.
-///     .chain(vec![("x", Value::Number(1.0))])
+///     .chain(vec![("x", Value::Prim(1.0))])
 ///     .collect();
 ///
 /// assert_eq!(env["true"], Value::Bool(true));
-/// assert_eq!(env["x"], Value::Number(1.0));
+/// assert_eq!(env["x"], Value::Prim(1.0));
 /// for (name, value) in &env {
 ///     println!("{} -> {:?}", name, value);
 /// }

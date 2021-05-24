@@ -55,7 +55,7 @@ fn initialize_env(env: &mut Environment<'_, f64>) {
     ];
 
     for (name, c) in CONSTANTS {
-        env.insert(name, Value::Number(*c));
+        env.insert(name, Value::Prim(*c));
     }
     for (name, unary_fn) in UNARY_FNS {
         env.insert_native_fn(name, fns::Unary::new(*unary_fn));
@@ -80,7 +80,7 @@ pub fn evaluate(program: &str) -> Result<JsValue, JsValue> {
         .map_err(|err| Error::new(&err.to_string()))?;
 
     match value {
-        Value::Number(number) => Ok(JsValue::from(number)),
+        Value::Prim(number) => Ok(JsValue::from(number)),
         Value::Bool(flag) => Ok(JsValue::from(flag)),
         _ => Err(Error::new("returned value is not presentable").into()),
     }

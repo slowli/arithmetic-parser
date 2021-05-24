@@ -39,9 +39,9 @@ fn evaluate<'a>(env: &mut Environment<'a, f32>, program: &'a str) -> Value<'a, f
 fn basic_program() {
     let mut env = Environment::new();
     let return_value = evaluate(&mut env, "x = 1; y = 2; x + y");
-    assert_eq!(return_value, Value::Number(3.0));
-    assert_eq!(*env.get("x").unwrap(), Value::Number(1.0));
-    assert_eq!(*env.get("y").unwrap(), Value::Number(2.0));
+    assert_eq!(return_value, Value::Prim(3.0));
+    assert_eq!(*env.get("x").unwrap(), Value::Prim(1.0));
+    assert_eq!(*env.get("y").unwrap(), Value::Prim(2.0));
 }
 
 #[test]
@@ -51,9 +51,9 @@ fn basic_program_with_tuples() {
     assert_eq!(return_value, Value::void());
     assert_eq!(
         env["tuple"],
-        Value::Tuple(vec![Value::Number(-2.0), Value::Number(2.0)])
+        Value::Tuple(vec![Value::Prim(-2.0), Value::Prim(2.0)])
     );
-    assert_eq!(env["x"], Value::Number(-2.0));
+    assert_eq!(env["x"], Value::Prim(-2.0));
 }
 
 #[test]
@@ -67,25 +67,25 @@ fn arithmetic_ops_on_tuples() {
     evaluate(&mut env, program);
     assert_eq!(
         env["x"],
-        Value::Tuple(vec![Value::Number(4.0), Value::Number(6.0)])
+        Value::Tuple(vec![Value::Prim(4.0), Value::Prim(6.0)])
     );
-    assert_eq!(env["y"], Value::Number(-4.0));
-    assert_eq!(env["z"], Value::Number(-4.5));
+    assert_eq!(env["y"], Value::Prim(-4.0));
+    assert_eq!(env["z"], Value::Prim(-4.5));
     assert_eq!(
         env["u"],
-        Value::Tuple(vec![Value::Number(2.5), Value::Number(-11.5)])
+        Value::Tuple(vec![Value::Prim(2.5), Value::Prim(-11.5)])
     );
 
     assert_eq!(
         evaluate(&mut env, "1 / (2, 4)"),
-        Value::Tuple(vec![Value::Number(0.5), Value::Number(0.25)])
+        Value::Tuple(vec![Value::Prim(0.5), Value::Prim(0.25)])
     );
 
     assert_eq!(
         evaluate(&mut env, "1 / (2, (4, 0.2))"),
         Value::Tuple(vec![
-            Value::Number(0.5),
-            Value::Tuple(vec![Value::Number(0.25), Value::Number(5.0)])
+            Value::Prim(0.5),
+            Value::Tuple(vec![Value::Prim(0.25), Value::Prim(5.0)])
         ])
     );
 
@@ -141,7 +141,7 @@ fn program_with_blocks() {
     let mut env = Environment::new();
     let return_value = evaluate(&mut env, "z = { x = 1; x + 3 };");
     assert_eq!(return_value, Value::void());
-    assert_eq!(env["z"], Value::Number(4.0));
+    assert_eq!(env["z"], Value::Prim(4.0));
     assert!(env.get("x").is_none());
 }
 

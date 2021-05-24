@@ -55,8 +55,8 @@ fn main() -> anyhow::Result<()> {
         let two = BigUint::from(2_u32);
 
         el_gamal_encryption
-            .set_import("GEN", Value::Number(generator))
-            .set_import("ORDER", Value::Number(prime_subgroup_order.clone()))
+            .set_import("GEN", Value::Prim(generator))
+            .set_import("ORDER", Value::Prim(prime_subgroup_order.clone()))
             .set_import(
                 "rand_scalar",
                 Value::wrapped_fn(move || {

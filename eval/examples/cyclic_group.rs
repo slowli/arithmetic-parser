@@ -131,8 +131,8 @@ impl CyclicGroupArithmetic {
         let generator = GroupLiteral::GroupElement(self.generator.clone());
         let prime_subgroup_order = GroupLiteral::Scalar(self.for_group.modulus().to_owned());
         module
-            .set_import("GEN", Value::Number(generator))
-            .set_import("ORDER", Value::Number(prime_subgroup_order))
+            .set_import("GEN", Value::Prim(generator))
+            .set_import("ORDER", Value::Prim(prime_subgroup_order))
             .set_import("rand_scalar", Value::wrapped_fn(self.rand_scalar()))
             .set_import("hash_to_scalar", Value::native_fn(self.hash_to_scalar()));
     }
@@ -178,8 +178,8 @@ impl NativeFn<GroupLiteral> for HashToScalar {
         let mut hasher = Sha256::default();
         for arg in &args {
             match &arg.extra {
-                Value::Number(GroupLiteral::Scalar(sc)) => self.hash_scalar(&mut hasher, sc),
-                Value::Number(GroupLiteral::GroupElement(ge)) => {
+                Value::Prim(GroupLiteral::Scalar(sc)) => self.hash_scalar(&mut hasher, sc),
+                Value::Prim(GroupLiteral::GroupElement(ge)) => {
                     self.hash_group_element(&mut hasher, ge);
                 }
                 _ => {
@@ -195,7 +195,7 @@ impl NativeFn<GroupLiteral> for HashToScalar {
         // Reduce the scalar by the modulus.
         hash_scalar %= &self.modulus;
 
-        Ok(Value::Number(GroupLiteral::Scalar(hash_scalar)))
+        Ok(Value::Prim(GroupLiteral::Scalar(hash_scalar)))
     }
 }
 

@@ -101,7 +101,7 @@ impl<'a, T: Clone> Value<'a, T> {
         arithmetic: &dyn OrdArithmetic<T>,
     ) -> Result<Self, BinaryOpError> {
         match (self, rhs) {
-            (Self::Number(this), Self::Number(other)) => {
+            (Self::Prim(this), Self::Prim(other)) => {
                 let op_result = match op {
                     BinaryOp::Add => arithmetic.add(this, other),
                     BinaryOp::Sub => arithmetic.sub(this, other),
@@ -111,18 +111,18 @@ impl<'a, T: Clone> Value<'a, T> {
                     _ => unreachable!(),
                 };
                 op_result
-                    .map(Self::Number)
+                    .map(Self::Prim)
                     .map_err(|e| BinaryOpError::new(op).with_error_kind(ErrorKind::Arithmetic(e)))
             }
 
-            (this @ Self::Number(_), Self::Tuple(other)) => {
+            (this @ Self::Prim(_), Self::Tuple(other)) => {
                 let output: Result<Vec<_>, _> = other
                     .into_iter()
                     .map(|y| this.clone().try_binary_op_inner(y, op, arithmetic))
                     .collect();
                 output.map(Self::Tuple)
             }
-            (Self::Tuple(this), other @ Self::Number(_)) => {
+            (Self::Tuple(this), other @ Self::Prim(_)) => {
                 let output: Result<Vec<_>, _> = this
                     .into_iter()
                     .map(|x| x.try_binary_op_inner(other.clone(), op, arithmetic))
@@ -143,7 +143,7 @@ impl<'a, T: Clone> Value<'a, T> {
                 }
             }
 
-            (this @ Self::Number(_), Self::Object(other)) => {
+            (this @ Self::Prim(_), Self::Object(other)) => {
                 let output: Result<HashMap<_, _>, _> = other
                     .into_iter()
                     .map(|(name, y)| {
@@ -154,7 +154,7 @@ impl<'a, T: Clone> Value<'a, T> {
                     .collect();
                 output.map(Self::Object)
             }
-            (Self::Object(this), other @ Self::Number(_)) => {
+            (Self::Object(this), other @ Self::Prim(_)) => {
                 let output: Result<HashMap<_, _>, _> = this
                     .into_iter()
                     .map(|(name, x)| {
@@ -184,7 +184,7 @@ impl<'a, T: Clone> Value<'a, T> {
                 }
             }
 
-            (Self::Number(_), _) | (Self::Tuple(_), _) => {
+            (Self::Prim(_), _) | (Self::Tuple(_), _) => {
                 Err(BinaryOpError::new(op).with_side(OpSide::Rhs))
             }
             _ => Err(BinaryOpError::new(op).with_side(OpSide::Lhs)),
@@ -211,9 +211,9 @@ impl<'a, T: Clone> Value<'a, T> {
 impl<'a, T> Value<'a, T> {
     pub(crate) fn try_neg(self, arithmetic: &dyn OrdArithmetic<T>) -> Result<Self, ErrorKind> {
         match self {
-            Self::Number(val) => arithmetic
+            Self::Prim(val) => arithmetic
                 .neg(val)
-                .map(Self::Number)
+                .map(Self::Prim)
                 .map_err(ErrorKind::Arithmetic),
 
             Self::Tuple(tuple) => {
@@ -247,7 +247,7 @@ impl<'a, T> Value<'a, T> {
     // **NB.** Must match `PartialEq` impl for `Value`!
     pub(crate) fn eq_by_arithmetic(&self, rhs: &Self, arithmetic: &dyn OrdArithmetic<T>) -> bool {
         match (self, rhs) {
-            (Self::Number(this), Self::Number(other)) => arithmetic.eq(this, other),
+            (Self::Prim(this), Self::Prim(other)) => arithmetic.eq(this, other),
             (Self::Bool(this), Self::Bool(other)) => this == other,
             (Self::Tuple(this), Self::Tuple(other)) => {
                 if this.len() == other.len() {
@@ -287,17 +287,17 @@ impl<'a, T> Value<'a, T> {
         op: BinaryOp,
         arithmetic: &dyn OrdArithmetic<T>,
     ) -> Result<Self, Error<'a>> {
-        // We only know how to compare numbers.
-        let lhs_number = match &lhs.extra {
-            Value::Number(number) => number,
+        // We only know how to compare primitive values.
+        let lhs_value = match &lhs.extra {
+            Value::Prim(value) => value,
             _ => return Err(Error::new(module_id, &lhs, ErrorKind::CannotCompare)),
         };
-        let rhs_number = match &rhs.extra {
-            Value::Number(number) => number,
+        let rhs_value = match &rhs.extra {
+            Value::Prim(value) => value,
             _ => return Err(Error::new(module_id, &rhs, ErrorKind::CannotCompare)),
         };
 
-        let maybe_ordering = arithmetic.partial_cmp(lhs_number, rhs_number);
+        let maybe_ordering = arithmetic.partial_cmp(lhs_value, rhs_value);
         let cmp_result = maybe_ordering.map_or(false, |ordering| match op {
             BinaryOp::Gt => ordering == Ordering::Greater,
             BinaryOp::Lt => ordering == Ordering::Less,

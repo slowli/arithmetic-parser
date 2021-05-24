@@ -8,7 +8,7 @@
 [![crate docs (master)](https://img.shields.io/badge/master-yellow.svg?label=docs)](https://slowli.github.io/arithmetic-parser/arithmetic_eval/) 
 [![changelog](https://img.shields.io/badge/-changelog-orange)](CHANGELOG.md)
 
-The library provides a simple interpreter, which can be used for some grammars
+This library provides a simple interpreter, which can be used for some grammars
 recognized by [`arithmetic-parser`], e.g., integer-, real-, complex-valued and modular arithmetic.
 (Both built-in integer types and big integers from [`num-bigint`] are supported.)
 The interpreter provides support for native functions,

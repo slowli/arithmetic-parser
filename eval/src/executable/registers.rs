@@ -542,7 +542,7 @@ impl<'a, T: Clone> Registers<'a, T> {
     fn resolve_atom(&self, atom: &Atom<T>) -> Value<'a, T> {
         match atom {
             Atom::Register(index) => self.registers[*index].clone(),
-            Atom::Constant(value) => Value::Number(value.clone()),
+            Atom::Constant(value) => Value::Prim(value.clone()),
             Atom::Void => Value::void(),
         }
     }
@@ -562,9 +562,9 @@ mod tests {
         assert_eq!(module.inner.commands.len(), 1); // push `x` from r0 to r1
 
         let mut env = Registers::new();
-        env.insert_var("x", Value::Number(5.0));
+        env.insert_var("x", Value::Prim(5.0));
         module.imports = ModuleImports { inner: env };
         let value = module.run().unwrap();
-        assert_eq!(value, Value::Number(5.0));
+        assert_eq!(value, Value::Prim(5.0));
     }
 }

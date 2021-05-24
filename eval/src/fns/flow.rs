@@ -29,7 +29,7 @@ use crate::{
 /// let module = Environment::new()
 ///     .insert_native_fn("if", fns::If)
 ///     .compile_module("if_test", &program)?;
-/// assert_eq!(module.run()?, Value::Number(4.0));
+/// assert_eq!(module.run()?, Value::Prim(4.0));
 /// # Ok(())
 /// # }
 /// ```
@@ -47,7 +47,7 @@ use crate::{
 /// let module = Environment::new()
 ///     .insert_native_fn("if", fns::If)
 ///     .compile_module("if_test", &program)?;
-/// assert_eq!(module.run()?, Value::Number(4.0));
+/// assert_eq!(module.run()?, Value::Prim(4.0));
 /// # Ok(())
 /// # }
 /// ```

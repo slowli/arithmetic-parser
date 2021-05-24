@@ -31,6 +31,9 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Re-license the crate to MIT or Apache-2.0. (#87)
 
+- Rename `Value::Number` variant to `Prim` to better correspond to possible crate
+  usage. (#89)
+
 ### Removed
 
 - Remove `ErrorKind::InvalidCmpResult` as obsolete. (#88)

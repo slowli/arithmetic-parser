@@ -23,6 +23,8 @@ arithmetic-parser = "0.3.0"
 The parser is overall similar to Rust. It supports variables, literals, comments,
 arithmetic and boolean operations, parentheses, function calls, tuples and tuple destructuring,
 function definitions, blocks, methods, and type annotations.
+In other words, the parser forms a foundation of a minimalistic scripting language,
+while leaving certain aspects up to user (most of all, specification of literals).
 
 See the crate docs for more details on the supported features.
 

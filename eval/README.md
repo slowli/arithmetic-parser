@@ -18,8 +18,10 @@ allow effectively embedding the interpreter into larger Rust applications.
 
 The interpreter is somewhat opinionated on how to interpret language features
 (e.g., in terms of arithmetic ops for tuple / object arguments).
+On the other hand, handling primitive types is fully customizable, just like their parsing
+in `arithmetic-parser`.
 The primary goal is to be intuitive for simple grammars (such as the aforementioned
-real-valued arithmetic), even if this makes the interpreter difficult to use for other grammars.
+real-valued arithmetic).
 
 The interpreter is quite slow – 1–2 orders of magnitude slower than native arithmetic.
 

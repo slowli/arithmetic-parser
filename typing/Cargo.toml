@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 description = "Hindley-Milner type inference for arithmetic expressions."
 repository = "https://github.com/slowli/arithmetic-parser"
 categories = ["mathematics"]
-keywords = ["typing", "arithmetic"]
+keywords = ["typing", "type-system", "arithmetic", "scripting", "language"]
 
 [dependencies]
 arithmetic-parser = { version = "0.3.0", path = "../parser" }

@@ -1,26 +1,37 @@
-//! Tests that the README code sample actually parses.
+//! Tests that the README code samples actually work.
 
 use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag};
 
-use arithmetic_parser::grammars::{F64Grammar, MockTypes, Parse, WithMockedTypes};
+use std::fs;
 
-struct MockedTypesList;
+use arithmetic_parser::grammars::{F32Grammar, Parse};
+use arithmetic_typing::{
+    arith::{Num, NumArithmetic},
+    defs::{Assertions, Prelude},
+    Annotated, Type, TypeEnvironment,
+};
 
-impl MockTypes for MockedTypesList {
-    const MOCKED_TYPES: &'static [&'static str] = &["Num"];
+type Grammar = Annotated<F32Grammar>;
+
+fn read_file(path: &str) -> String {
+    fs::read_to_string(path).unwrap_or_else(|err| panic!("Cannot read file {}: {}", path, err))
 }
 
-type Grammar = WithMockedTypes<F64Grammar, MockedTypesList>;
-
 fn check_sample(code_sample: &str) {
-    Grammar::parse_statements(code_sample).unwrap();
+    let program = Grammar::parse_statements(code_sample).unwrap();
+
+    let mut env: TypeEnvironment = Prelude::iter().chain(Assertions::iter()).collect();
+    env.insert("INF", Type::NUM)
+        .insert("array", Prelude::array(Num::Num));
+    env.process_with_arithmetic(&NumArithmetic::with_comparisons(), &program)
+        .unwrap();
 }
 
 #[test]
-fn code_sample_in_readme_is_parsed() {
-    const README: &str = include_str!("../README.md");
+fn code_samples_in_readme_are_valid() {
+    let readme = read_file("README.md");
 
-    let parser = Parser::new(README);
+    let parser = Parser::new(&readme);
     let mut code: Option<String> = None;
     for event in parser {
         match event {

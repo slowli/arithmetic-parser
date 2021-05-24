@@ -1,31 +1,34 @@
 //! Tests that the README code samples actually work.
 
 use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag};
+use rand::{thread_rng, Rng};
 
-use arithmetic_parser::grammars::{F32Grammar, Parse};
-use arithmetic_typing::{
-    arith::{Num, NumArithmetic},
-    defs::{Assertions, Prelude},
-    Annotated, Type, TypeEnvironment,
-};
+use std::fs;
 
-type Grammar = Annotated<F32Grammar>;
+use arithmetic_eval::{fns, Assertions, Environment, Prelude, Value, VariableMap};
+use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+
+fn read_file(path: &str) -> String {
+    fs::read_to_string(path).unwrap_or_else(|err| panic!("Cannot read file {}: {}", path, err))
+}
 
 fn check_sample(code_sample: &str) {
-    let program = Grammar::parse_statements(code_sample).unwrap();
+    let program = Untyped::<F32Grammar>::parse_statements(code_sample).unwrap();
 
-    let mut env: TypeEnvironment = Prelude::iter().chain(Assertions::iter()).collect();
-    env.insert("INF", Type::NUM)
-        .insert("array", Prelude::array(Num::Num));
-    env.process_with_arithmetic(&NumArithmetic::with_comparisons(), &program)
-        .unwrap();
+    let mut env: Environment<'_, f32> = Prelude.iter().chain(Assertions.iter()).collect();
+    env.insert("array", Value::native_fn(fns::Array)).insert(
+        "rand_num",
+        Value::wrapped_fn(|min: f32, max: f32| thread_rng().gen_range(min..max)),
+    );
+    let module = env.compile_module("test", &program).unwrap();
+    module.run().unwrap();
 }
 
 #[test]
 fn code_samples_in_readme_are_valid() {
-    const README: &str = include_str!("../README.md");
+    let readme = read_file("README.md");
 
-    let parser = Parser::new(README);
+    let parser = Parser::new(&readme);
     let mut code: Option<String> = None;
     for event in parser {
         match event {

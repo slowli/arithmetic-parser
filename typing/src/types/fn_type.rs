@@ -1,4 +1,4 @@
-//! Functional type (`FnType`) and closely related types.
+//! Functional type (`Function`) and closely related types.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -7,9 +7,9 @@ use std::{
 };
 
 use crate::{
-    arith::{CompleteConstraints, Constraint, ConstraintSet},
+    arith::{CompleteConstraints, Constraint, ConstraintSet, Num},
     types::ParamQuantifier,
-    LengthVar, Num, PrimitiveType, Tuple, TupleLen, Type, TypeVar,
+    LengthVar, PrimitiveType, Tuple, TupleLen, Type, TypeVar,
 };
 
 #[derive(Debug, Clone)]
@@ -149,11 +149,11 @@ impl<Prim: PrimitiveType> FnParams<Prim> {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_typing::{ast::FnTypeAst, FnType, Slice, Type};
+/// # use arithmetic_typing::{ast::FunctionAst, Function, Slice, Type};
 /// # use std::convert::TryFrom;
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
-/// let fn_type: FnType = FnTypeAst::try_from("([Num; N]) -> Num")?
+/// let fn_type: Function = FunctionAst::try_from("([Num; N]) -> Num")?
 ///     .try_convert()?;
 /// assert_eq!(*fn_type.return_type(), Type::NUM);
 /// assert_matches!(
@@ -165,7 +165,7 @@ impl<Prim: PrimitiveType> FnParams<Prim> {
 /// # }
 /// ```
 #[derive(Debug, Clone, PartialEq)]
-pub struct FnType<Prim: PrimitiveType = Num> {
+pub struct Function<Prim: PrimitiveType = Num> {
     /// Type of function arguments.
     pub(crate) args: Tuple<Prim>,
     /// Type of the value returned by the function.
@@ -174,7 +174,7 @@ pub struct FnType<Prim: PrimitiveType = Num> {
     pub(crate) params: Option<Arc<FnParams<Prim>>>,
 }
 
-impl<Prim: PrimitiveType> fmt::Display for FnType<Prim> {
+impl<Prim: PrimitiveType> fmt::Display for Function<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let constraints = self
             .params
@@ -192,7 +192,7 @@ impl<Prim: PrimitiveType> fmt::Display for FnType<Prim> {
     }
 }
 
-impl<Prim: PrimitiveType> FnType<Prim> {
+impl<Prim: PrimitiveType> Function<Prim> {
     pub(crate) fn new(args: Tuple<Prim>, return_type: Type<Prim>) -> Self {
         Self {
             args,
@@ -201,9 +201,9 @@ impl<Prim: PrimitiveType> FnType<Prim> {
         }
     }
 
-    /// Returns a builder for `FnType`s.
-    pub fn builder() -> FnTypeBuilder<Prim> {
-        FnTypeBuilder::default()
+    /// Returns a builder for `Function`s.
+    pub fn builder() -> FunctionBuilder<Prim> {
+        FunctionBuilder::default()
     }
 
     /// Gets the argument types of this function.
@@ -290,10 +290,10 @@ impl<Prim: PrimitiveType> FnType<Prim> {
 /// Function together with constraints on type variables contained either in the function itself
 /// or any of the child functions.
 ///
-/// Constructed via [`FnType::with_constraints()`].
+/// Constructed via [`Function::with_constraints()`].
 #[derive(Debug)]
 pub struct FnWithConstraints<Prim: PrimitiveType> {
-    function: FnType<Prim>,
+    function: Function<Prim>,
     constraints: ParamConstraints<Prim>,
 }
 
@@ -329,7 +329,7 @@ impl<Prim: PrimitiveType> FnWithConstraints<Prim> {
     }
 }
 
-impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for FnType<Prim> {
+impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for Function<Prim> {
     fn from(value: FnWithConstraints<Prim>) -> Self {
         let mut function = value.function;
         ParamQuantifier::set_params(&mut function, value.constraints);
@@ -339,7 +339,7 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for FnType<Prim> {
 
 impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for Type<Prim> {
     fn from(value: FnWithConstraints<Prim>) -> Self {
-        FnType::from(value).into()
+        Function::from(value).into()
     }
 }
 
@@ -353,8 +353,8 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for Type<Prim> {
 /// Signature for a function summing a slice of numbers:
 ///
 /// ```
-/// # use arithmetic_typing::{FnType, UnknownLen, Type, TypeEnvironment};
-/// let sum_fn_type = FnType::builder()
+/// # use arithmetic_typing::{Function, UnknownLen, Type, TypeEnvironment};
+/// let sum_fn_type = Function::builder()
 ///     .with_arg(Type::NUM.repeat(UnknownLen::param(0)))
 ///     .returning(Type::NUM);
 /// assert_eq!(sum_fn_type.to_string(), "([Num; N]) -> Num");
@@ -363,13 +363,13 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for Type<Prim> {
 /// Signature for a slice mapping function:
 ///
 /// ```
-/// # use arithmetic_typing::{arith::Linearity, FnType, UnknownLen, Type};
+/// # use arithmetic_typing::{arith::Linearity, Function, UnknownLen, Type};
 /// // Definition of the mapping arg.
-/// let map_fn_arg = <FnType>::builder()
+/// let map_fn_arg = <Function>::builder()
 ///     .with_arg(Type::param(0))
 ///     .returning(Type::param(1));
 ///
-/// let map_fn_type = <FnType>::builder()
+/// let map_fn_type = <Function>::builder()
 ///     .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
 ///     .with_arg(map_fn_arg)
 ///     .returning(Type::param(1).repeat(UnknownLen::Dynamic))
@@ -383,19 +383,19 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for Type<Prim> {
 /// Signature of a function with varargs:
 ///
 /// ```
-/// # use arithmetic_typing::{FnType, UnknownLen, Type};
-/// let fn_type = <FnType>::builder()
+/// # use arithmetic_typing::{Function, UnknownLen, Type};
+/// let fn_type = <Function>::builder()
 ///     .with_varargs(Type::param(0), UnknownLen::param(0))
 ///     .with_arg(Type::BOOL)
 ///     .returning(Type::param(0));
 /// assert_eq!(fn_type.to_string(), "(...['T; N], Bool) -> 'T");
 /// ```
 #[derive(Debug, Clone)]
-pub struct FnTypeBuilder<Prim: PrimitiveType = Num> {
+pub struct FunctionBuilder<Prim: PrimitiveType = Num> {
     args: Tuple<Prim>,
 }
 
-impl<Prim: PrimitiveType> Default for FnTypeBuilder<Prim> {
+impl<Prim: PrimitiveType> Default for FunctionBuilder<Prim> {
     fn default() -> Self {
         Self {
             args: Tuple::empty(),
@@ -403,7 +403,7 @@ impl<Prim: PrimitiveType> Default for FnTypeBuilder<Prim> {
     }
 }
 
-impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
+impl<Prim: PrimitiveType> FunctionBuilder<Prim> {
     /// Adds a new argument to the function definition.
     pub fn with_arg(mut self, arg: impl Into<Type<Prim>>) -> Self {
         self.args.push(arg.into());
@@ -421,8 +421,8 @@ impl<Prim: PrimitiveType> FnTypeBuilder<Prim> {
     }
 
     /// Declares the return type of the function and builds it.
-    pub fn returning(self, return_type: impl Into<Type<Prim>>) -> FnType<Prim> {
-        FnType::new(self.args, return_type.into())
+    pub fn returning(self, return_type: impl Into<Type<Prim>>) -> Function<Prim> {
+        Function::new(self.args, return_type.into())
     }
 }
 
@@ -451,7 +451,7 @@ mod tests {
 
     #[test]
     fn fn_with_constraints_display() {
-        let sum_fn = <FnType>::builder()
+        let sum_fn = <Function>::builder()
             .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
             .returning(Type::param(0))
             .with_constraints(&[0], Linearity);
@@ -460,14 +460,14 @@ mod tests {
 
     #[test]
     fn fn_builder_with_quantified_arg() {
-        let sum_fn: FnType = FnType::builder()
+        let sum_fn: Function = Function::builder()
             .with_arg(Type::NUM.repeat(UnknownLen::param(0)))
             .returning(Type::NUM)
             .with_constraints(&[], Linearity)
             .into();
         assert_eq!(sum_fn.to_string(), "([Num; N]) -> Num");
 
-        let complex_fn: FnType = FnType::builder()
+        let complex_fn: Function = Function::builder()
             .with_arg(Type::NUM)
             .with_arg(sum_fn.clone())
             .returning(Type::NUM)
@@ -475,7 +475,7 @@ mod tests {
             .into();
         assert_eq!(complex_fn.to_string(), "(Num, ([Num; N]) -> Num) -> Num");
 
-        let other_complex_fn: FnType = FnType::builder()
+        let other_complex_fn: Function = Function::builder()
             .with_varargs(Type::NUM, UnknownLen::param(0))
             .with_arg(sum_fn)
             .returning(Type::NUM)

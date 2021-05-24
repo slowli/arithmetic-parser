@@ -1,6 +1,5 @@
 //! E2E tests for interactive binary usage.
 
-use assert_cmd::cargo::CommandCargoExt;
 use unindent::unindent;
 
 use std::time::Duration;
@@ -10,6 +9,8 @@ use std::{
     sync::mpsc,
     thread::{self, JoinHandle},
 };
+
+const PATH_TO_BIN: &str = env!("CARGO_BIN_EXE_arithmetic-parser");
 
 #[derive(Debug)]
 struct ReplTester {
@@ -22,27 +23,31 @@ struct ReplTester {
 impl ReplTester {
     const TIMEOUT: Duration = Duration::from_millis(20);
 
-    fn new() -> Self {
-        let mut repl_process = Command::cargo_bin(env!("CARGO_PKG_NAME"))
-            .expect("CLI binary")
-            .env("TERM", "dumb")
+    fn new(with_types: bool) -> Self {
+        let mut command = Command::new(PATH_TO_BIN);
+        command.env("NO_COLOR", "1").arg("eval");
+        if with_types {
+            command.arg("--types");
+        }
+
+        let mut repl_process = command
             .arg("-a")
             .arg("f64")
             .arg("-i")
             .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
             .spawn()
             .expect("Cannot spawn repl");
 
-        let stderr = repl_process.stderr.take().expect("REPL stderr");
-        let stderr = BufReader::new(stderr);
+        let stdout = repl_process.stdout.take().expect("REPL stderr");
+        let stdout = BufReader::new(stdout);
         let stdin = repl_process.stdin.take().expect("REPL stdin");
         let stdin = LineWriter::new(stdin);
 
         let (err_lines_sx, err_lines_rx) = mpsc::channel();
         let io_handle = thread::spawn(move || {
-            let mut lines = stderr.lines();
+            let mut lines = stdout.lines();
             while let Some(Ok(line)) = lines.next() {
                 if err_lines_sx.send(line).is_err() {
                     break; // the receiver was dropped, we don't care any more
@@ -112,7 +117,7 @@ impl Drop for ReplTester {
 
 #[test]
 fn repl_basics() {
-    let mut repl = ReplTester::new();
+    let mut repl = ReplTester::new(false);
     repl.assert_intro();
     let response = repl.send_line("sin");
     assert!(response.contains("(native fn)"));
@@ -138,7 +143,7 @@ fn repl_basics() {
 
 #[test]
 fn incomplete_statements() {
-    let mut repl = ReplTester::new();
+    let mut repl = ReplTester::new(false);
     repl.assert_intro();
 
     let response = repl.send_line("sum = |...xs| {");
@@ -153,7 +158,7 @@ fn incomplete_statements() {
 
 #[test]
 fn multiline_comments() {
-    let mut repl = ReplTester::new();
+    let mut repl = ReplTester::new(false);
     repl.assert_intro();
 
     let response = repl.send_line("x = 1; /* Comment starts");
@@ -166,7 +171,7 @@ fn multiline_comments() {
 
 #[test]
 fn undefined_var_error() {
-    let mut repl = ReplTester::new();
+    let mut repl = ReplTester::new(false);
     repl.assert_intro();
 
     let response = repl.send_line("foo(3)");
@@ -188,7 +193,7 @@ fn undefined_var_error() {
 
 #[test]
 fn getting_help() {
-    let mut repl = ReplTester::new();
+    let mut repl = ReplTester::new(false);
     repl.assert_intro();
 
     let response = repl.send_line(".help");
@@ -198,7 +203,7 @@ fn getting_help() {
 
 #[test]
 fn dumping_all_vars() {
-    let mut repl = ReplTester::new();
+    let mut repl = ReplTester::new(false);
     repl.assert_intro();
 
     let response = repl.send_line(".dump all");
@@ -208,7 +213,7 @@ fn dumping_all_vars() {
 
 #[test]
 fn unknown_command() {
-    let mut repl = ReplTester::new();
+    let mut repl = ReplTester::new(false);
     repl.assert_intro();
 
     let response = repl.send_line(".exit");
@@ -220,4 +225,40 @@ fn unknown_command() {
           │ ^^^^^ Use `.help` to find out commands
     "#;
     assert_eq!(response, unindent(expected_err));
+}
+
+#[test]
+fn variable_type() {
+    let mut repl = ReplTester::new(true);
+    repl.assert_intro();
+    let response = repl.send_line("all = |xs, pred| xs.fold(true, |acc, x| acc && pred(x));");
+    assert!(response.is_empty(), "{}", response);
+    let ty = repl.send_line(".type all");
+    assert_eq!(ty, "(['T; N], ('T) -> Bool) -> Bool");
+}
+
+#[test]
+fn error_recovery() {
+    let mut repl = ReplTester::new(true);
+    repl.assert_intro();
+    let response = repl.send_line("x = 1; y = !x;");
+    assert!(response.contains("error[TYPE]"));
+    let x_response = repl.send_line("x");
+    assert_eq!(x_response, "1");
+    let y_response = repl.send_line("y");
+    assert!(
+        y_response.contains("error[TYPE]") && y_response.contains("`y` is not defined"),
+        "{}",
+        y_response
+    );
+}
+
+#[test]
+fn error_recovery_on_error_in_return_value() {
+    let mut repl = ReplTester::new(true);
+    repl.assert_intro();
+    let response = repl.send_line("x = 1; x + false");
+    assert!(response.contains("error[TYPE]"));
+    let x_response = repl.send_line("x");
+    assert_eq!(x_response, "1");
 }

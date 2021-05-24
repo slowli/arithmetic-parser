@@ -15,7 +15,7 @@ use arithmetic_parser::{grammars::Grammar, Destructure, Spanned, SpannedExpr, Sp
 /// Supplied as an argument to [`TypeArithmetic`] methods and [`Substitutions::unify()`].
 ///
 /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
-/// [`Substitutions::unify()`]: crate::Substitutions::unify()
+/// [`Substitutions::unify()`]: crate::arith::Substitutions::unify()
 #[derive(Debug)]
 pub struct OpErrors<'a, Prim: PrimitiveType> {
     errors: Goat<'a, Vec<ErrorPrecursor<Prim>>>,

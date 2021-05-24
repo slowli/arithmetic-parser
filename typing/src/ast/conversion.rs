@@ -11,12 +11,13 @@ use std::{
 use crate::{
     arith::{CompleteConstraints, Constraint, ConstraintSet},
     ast::{
-        ConstraintsAst, FnTypeAst, ObjectAst, SliceAst, SpannedTypeAst, TupleAst, TupleLenAst,
+        ConstraintsAst, FunctionAst, ObjectAst, SliceAst, SpannedTypeAst, TupleAst, TupleLenAst,
         TypeAst, TypeConstraintsAst,
     },
     error::{Error, Errors},
     types::{ParamConstraints, ParamQuantifier},
-    DynConstraints, FnType, Object, PrimitiveType, Slice, Tuple, Type, TypeEnvironment, UnknownLen,
+    DynConstraints, Function, Object, PrimitiveType, Slice, Tuple, Type, TypeEnvironment,
+    UnknownLen,
 };
 use arithmetic_parser::{ErrorKind as ParseErrorKind, InputSpan, NomResult, Spanned, SpannedError};
 
@@ -25,26 +26,24 @@ use arithmetic_parser::{ErrorKind as ParseErrorKind, InputSpan, NomResult, Spann
 /// During type inference, errors of this type are wrapped into the [`AstConversion`]
 /// variant of typing errors.
 ///
-/// [`AstConversion`]: crate::ErrorKind::AstConversion
+/// [`AstConversion`]: crate::error::ErrorKind::AstConversion
 ///
 /// # Examples
 ///
 /// ```
-/// use arithmetic_parser::grammars::{Parse, NumGrammar, Typed};
+/// use arithmetic_parser::grammars::{Parse, F32Grammar};
 /// use arithmetic_typing::{
-///     ast::AstConversionError, ErrorKind, Annotated, TypeEnvironment,
+///     ast::AstConversionError, error::ErrorKind, Annotated, TypeEnvironment,
 /// };
 /// # use assert_matches::assert_matches;
 ///
-/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
-///
 /// # fn main() -> anyhow::Result<()> {
 /// let code = "bogus_slice: ['T; _] = (1, 2, 3);";
-/// let code = Parser::parse_statements(code)?;
+/// let code = Annotated::<F32Grammar>::parse_statements(code)?;
 ///
 /// let errors = TypeEnvironment::new().process_statements(&code).unwrap_err();
 /// let err = errors.into_iter().next().unwrap();
-/// assert_eq!(*err.span().fragment(), "'T");
+/// assert_eq!(*err.main_span().fragment(), "'T");
 /// assert_matches!(
 ///     err.kind(),
 ///     ErrorKind::AstConversion(AstConversionError::FreeTypeVar(id))
@@ -269,7 +268,7 @@ impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
 
     fn convert_fn(
         &mut self,
-        function: &FnTypeAst<'a>,
+        function: &FunctionAst<'a>,
         constraints: Option<&Spanned<'a, ConstraintsAst<'a>>>,
     ) -> Type<Prim> {
         if self.is_in_function {
@@ -441,18 +440,18 @@ impl<'a> ObjectAst<'a> {
     }
 }
 
-impl<'a> FnTypeAst<'a> {
+impl<'a> FunctionAst<'a> {
     fn convert<Prim: PrimitiveType>(
         &self,
         state: &mut AstConversionState<'_, 'a, Prim>,
-    ) -> FnType<Prim> {
+    ) -> Function<Prim> {
         let args = self.args.extra.convert(state);
         let return_type = state.convert_type(&self.return_type);
-        FnType::new(args, return_type)
+        Function::new(args, return_type)
     }
 
-    /// Tries to convert this type into [`FnType`].
-    pub fn try_convert<Prim>(&self) -> Result<FnType<Prim>, Errors<'a, Prim>>
+    /// Tries to convert this type into a [`Function`].
+    pub fn try_convert<Prim>(&self) -> Result<Function<Prim>, Errors<'a, Prim>>
     where
         Prim: PrimitiveType,
     {
@@ -469,7 +468,7 @@ impl<'a> FnTypeAst<'a> {
     }
 }
 
-/// Shared parsing code for `TypeAst` and `FnTypeAst`.
+/// Shared parsing code for `TypeAst` and `FunctionAst`.
 fn parse_inner<'a, Ast>(
     parser: fn(InputSpan<'a>) -> NomResult<'a, Ast>,
     input: InputSpan<'a>,
@@ -482,7 +481,7 @@ fn parse_inner<'a, Ast>(
     Ok((rest, ast))
 }
 
-/// Shared `TryFrom<&str>` logic for `TypeAst` and `FnTypeAst`.
+/// Shared `TryFrom<&str>` logic for `TypeAst` and `FunctionAst`.
 fn from_str<'a, Ast>(
     parser: fn(InputSpan<'a>) -> NomResult<'a, Ast>,
     def: &'a str,
@@ -518,11 +517,11 @@ impl<'a, Prim: PrimitiveType> TryFrom<&SpannedTypeAst<'a>> for Type<Prim> {
     }
 }
 
-impl<'a> TryFrom<&'a str> for FnTypeAst<'a> {
+impl<'a> TryFrom<&'a str> for FunctionAst<'a> {
     type Error = SpannedError<&'a str>;
 
     fn try_from(def: &'a str) -> Result<Self, Self::Error> {
-        from_str(FnTypeAst::parse, def)
+        from_str(FunctionAst::parse, def)
     }
 }
 
@@ -531,12 +530,12 @@ mod tests {
     use assert_matches::assert_matches;
 
     use super::*;
-    use crate::Num;
+    use crate::arith::Num;
 
     #[test]
     fn converting_raw_fn_type() {
         let input = InputSpan::new("(['T; N], ('T) -> Bool) -> Bool");
-        let (_, fn_type) = FnTypeAst::parse(input).unwrap();
+        let (_, fn_type) = FunctionAst::parse(input).unwrap();
         let fn_type = fn_type.try_convert::<Num>().unwrap();
 
         assert_eq!(fn_type.to_string(), *input.fragment());

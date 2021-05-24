@@ -6,12 +6,26 @@ use unindent::unindent;
 
 use std::process::Command;
 
+const PATH_TO_BIN: &str = env!("CARGO_BIN_EXE_arithmetic-parser");
+
 const ERROR_EXIT_CODE: i32 = 2;
 
-fn create_command(program: &str, arithmetic: &str) -> Command {
-    let mut command = Command::cargo_bin(env!("CARGO_PKG_NAME")).expect("CLI binary");
+fn create_ast_command(program: &str, arithmetic: &str) -> Command {
+    let mut command = Command::new(PATH_TO_BIN);
     command
-        .env("TERM", "dumb")
+        .env("NO_COLOR", "1")
+        .arg("ast")
+        .arg("-a")
+        .arg(arithmetic)
+        .arg(program);
+    command
+}
+
+fn create_command(program: &str, arithmetic: &str) -> Command {
+    let mut command = Command::new(PATH_TO_BIN);
+    command
+        .env("NO_COLOR", "1")
+        .arg("eval")
         .arg("-a")
         .arg(arithmetic)
         .arg(program);
@@ -19,27 +33,35 @@ fn create_command(program: &str, arithmetic: &str) -> Command {
 }
 
 #[test]
+fn successful_execution_for_ast() {
+    let assert = create_ast_command("1 + 2 * 3", "u64").assert();
+    assert
+        .success()
+        .stdout(predicate::str::contains("Binary {"));
+}
+
+#[test]
 fn successful_execution_for_u64_arithmetic() {
     let assert = create_command("1 + 2 * 3", "u64").assert();
-    assert.success().stderr("7\n");
+    assert.success().stdout("7\n");
 }
 
 #[test]
 fn successful_execution_for_i64_arithmetic() {
     let assert = create_command("1 - 2 * 3", "i64").assert();
-    assert.success().stderr("-5\n");
+    assert.success().stdout("-5\n");
 }
 
 #[test]
 fn successful_execution_for_u128_arithmetic() {
     let assert = create_command("1 + 2 * 3", "u128").assert();
-    assert.success().stderr("7\n");
+    assert.success().stdout("7\n");
 }
 
 #[test]
 fn successful_execution_for_i128_arithmetic() {
     let assert = create_command("1 - 2 * 3", "i128").assert();
-    assert.success().stderr("-5\n");
+    assert.success().stdout("-5\n");
 }
 
 #[test]
@@ -47,43 +69,43 @@ fn successful_execution_for_wrapping_int_arithmetic() {
     let assert = create_command("1 - 2 + 3", "u128")
         .arg("--wrapping")
         .assert();
-    assert.success().stderr("2\n");
+    assert.success().stdout("2\n");
 }
 
 #[test]
 fn successful_execution_for_f32_arithmetic() {
     let assert = create_command("1 + 3 / 2", "f32").assert();
-    assert.success().stderr("2.5\n");
+    assert.success().stdout("2.5\n");
 }
 
 #[test]
 fn successful_execution_for_f64_arithmetic() {
     let assert = create_command("1 + 3 / 2", "f64").assert();
-    assert.success().stderr("2.5\n");
+    assert.success().stdout("2.5\n");
 }
 
 #[test]
 fn successful_execution_for_c32_arithmetic() {
     let assert = create_command("2 / (1 - i)", "c32").assert();
-    assert.success().stderr("1+1i\n");
+    assert.success().stdout("1+1i\n");
 }
 
 #[test]
 fn successful_execution_for_c64_arithmetic() {
     let assert = create_command("2 / (1 - i)", "c64").assert();
-    assert.success().stderr("1+1i\n");
+    assert.success().stdout("1+1i\n");
 }
 
 #[test]
 fn successful_execution_for_u64_modular_arithmetic() {
     let assert = create_command("5 / 9", "u64/11").assert();
-    assert.success().stderr("3\n");
+    assert.success().stdout("3\n");
 }
 
 #[test]
 fn outputting_native_function() {
     let assert = create_command("if", "f64").assert();
-    assert.success().stderr("(native fn)\n");
+    assert.success().stdout("(native fn)\n");
 }
 
 #[test]
@@ -91,7 +113,39 @@ fn outputting_interpreted_function() {
     const PROGRAM: &str = "is_positive = |x| x > 0; is_positive";
 
     let assert = create_command(PROGRAM, "f64").assert();
-    assert.success().stderr("fn(1 arg)\n");
+    assert.success().stdout("fn(1 arg)\n");
+}
+
+#[test]
+fn syntax_error_with_ast_command() {
+    const EXPECTED_ERR: &str = r#"
+        error[PARSE]: Uninterpreted characters after parsing
+          ┌─ Snippet #1:1:5
+          │
+        1 │ let x = 5
+          │     ^^^^^ Error occurred here
+    "#;
+    let assert = create_ast_command("let x = 5", "f64").assert();
+    assert
+        .failure()
+        .code(ERROR_EXIT_CODE)
+        .stdout(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+}
+
+#[test]
+fn incomplete_error_with_ast_command() {
+    const EXPECTED_ERR: &str = r#"
+        error[PARSE]: Unfinished arithmetic expression
+          ┌─ Snippet #1:1:6
+          │
+        1 │ x = {
+          │      ^ Error occurred here
+    "#;
+    let assert = create_ast_command("x = {", "f64").assert();
+    assert
+        .failure()
+        .code(ERROR_EXIT_CODE)
+        .stdout(predicate::str::starts_with(unindent(EXPECTED_ERR)));
 }
 
 #[test]
@@ -108,7 +162,23 @@ fn syntax_error() {
     assert
         .failure()
         .code(ERROR_EXIT_CODE)
-        .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+        .stdout(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+}
+
+#[test]
+fn incomplete_error() {
+    const EXPECTED_ERR: &str = r#"
+        error[PARSE]: Unfinished arithmetic expression
+          ┌─ Snippet #1:1:6
+          │
+        1 │ x = {
+          │      ^ Error occurred here
+    "#;
+    let assert = create_command("x = {", "f64").assert();
+    assert
+        .failure()
+        .code(ERROR_EXIT_CODE)
+        .stdout(predicate::str::starts_with(unindent(EXPECTED_ERR)));
 }
 
 #[test]
@@ -125,7 +195,7 @@ fn undefined_variable_error() {
     assert
         .failure()
         .code(ERROR_EXIT_CODE)
-        .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+        .stdout(predicate::str::starts_with(unindent(EXPECTED_ERR)));
 }
 
 #[test]
@@ -142,7 +212,7 @@ fn integer_overflow_for_u64_arithmetic() {
     assert
         .failure()
         .code(ERROR_EXIT_CODE)
-        .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+        .stdout(predicate::str::starts_with(unindent(EXPECTED_ERR)));
 }
 
 #[test]
@@ -159,7 +229,7 @@ fn integer_overflow_for_i64_arithmetic() {
     assert
         .failure()
         .code(ERROR_EXIT_CODE)
-        .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+        .stdout(predicate::str::starts_with(unindent(EXPECTED_ERR)));
 }
 
 #[test]
@@ -176,7 +246,7 @@ fn negative_exp_for_integer_arithmetic() {
     assert
         .failure()
         .code(ERROR_EXIT_CODE)
-        .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+        .stdout(predicate::str::starts_with(unindent(EXPECTED_ERR)));
 }
 
 #[test]
@@ -193,7 +263,7 @@ fn incompatible_arg_count_error() {
     assert
         .failure()
         .code(ERROR_EXIT_CODE)
-        .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+        .stdout(predicate::str::starts_with(unindent(EXPECTED_ERR)));
 }
 
 #[test]
@@ -221,7 +291,7 @@ fn error_with_call_trace() {
     assert
         .failure()
         .code(ERROR_EXIT_CODE)
-        .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+        .stdout(predicate::str::starts_with(unindent(EXPECTED_ERR)));
 }
 
 #[test]
@@ -252,7 +322,7 @@ fn error_with_call_complex_call_trace() {
     assert
         .failure()
         .code(ERROR_EXIT_CODE)
-        .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+        .stdout(predicate::str::starts_with(unindent(EXPECTED_ERR)));
 }
 
 #[test]
@@ -284,7 +354,7 @@ fn error_with_call_complex_call_trace_and_native_fns() {
     assert
         .failure()
         .code(ERROR_EXIT_CODE)
-        .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+        .stdout(predicate::str::starts_with(unindent(EXPECTED_ERR)));
 }
 
 #[test]
@@ -305,5 +375,72 @@ fn assertion_error() {
     assert
         .failure()
         .code(ERROR_EXIT_CODE)
-        .stderr(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+        .stdout(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+}
+
+#[test]
+fn typing_error_simple() {
+    const EXPECTED_ERR: &str = r#"
+        error[TYPE]: Function expects 2 args, but is called with 3 args
+          ┌─ Snippet #1:1:1
+          │
+        1 │ (1, 2, 3).map(|x| x, 1)
+          │ ^^^^^^^^^^^^^^^^^^^^^^^ Error occurred here
+    "#;
+
+    let assert = create_command("(1, 2, 3).map(|x| x, 1)", "f64")
+        .arg("--types")
+        .assert();
+    assert
+        .failure()
+        .code(ERROR_EXIT_CODE)
+        .stdout(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+}
+
+#[test]
+fn typing_error_complex() {
+    const PROGRAM: &str = r#"
+        all = |array, predicate| array.fold(true, |acc, x| acc && predicate(x));
+        (1, 2, map).all(|x| 0 < x)
+    "#;
+    const EXPECTED_ERR: &str = r#"
+        error[TYPE]: Type `(['T; N], ('T) -> 'U) -> ['U; N]` is not assignable to type `Num`
+          ┌─ Snippet #1:2:8
+          │
+        2 │ (1, 2, map).all(|x| 0 < x)
+          │        ^^^ Error occurred here
+    "#;
+
+    let assert = create_command(&unindent(PROGRAM), "f64")
+        .arg("--types")
+        .assert();
+    assert
+        .failure()
+        .code(ERROR_EXIT_CODE)
+        .stdout(predicate::str::starts_with(unindent(EXPECTED_ERR)));
+}
+
+#[test]
+fn multiple_typing_errors() {
+    const EXPECTED_ERR: &str = r#"
+        error[TYPE]: Type `(Num, Num)` is not assignable to type `Num`
+          ┌─ Snippet #1:1:5
+          │
+        1 │ (1, (2, 3)).filter(|x| x + 1)
+          │     ^^^^^^ Error occurred here
+
+        error[TYPE]: Type `Num` is not assignable to type `Bool`
+          ┌─ Snippet #1:1:20
+          │
+        1 │ (1, (2, 3)).filter(|x| x + 1)
+          │                    ^^^^^^^^^ Error occurred here
+    "#;
+
+    let assert = create_command("(1, (2, 3)).filter(|x| x + 1)", "f64")
+        .arg("--types")
+        .assert();
+    assert
+        .failure()
+        .code(ERROR_EXIT_CODE)
+        .stdout(predicate::str::starts_with(unindent(EXPECTED_ERR)));
 }

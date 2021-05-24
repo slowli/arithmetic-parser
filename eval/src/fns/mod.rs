@@ -42,7 +42,7 @@ mod wrapper;
 #[cfg(feature = "std")]
 pub use self::std::Dbg;
 pub use self::{
-    array::{Filter, Fold, Map, Merge, Push},
+    array::{Array, Filter, Fold, Len, Map, Merge, Push},
     assertions::{Assert, AssertEq},
     flow::{If, Loop, While},
     wrapper::{
@@ -338,7 +338,7 @@ mod tests {
             .with_import("fold", Value::native_fn(Fold))
             .build();
 
-        let mut env = module.imports().into_iter().collect::<Environment<_>>();
+        let mut env = module.imports().into_iter().collect::<Environment<'_, _>>();
         assert_eq!(module.run_in_env(&mut env).unwrap(), Value::Bool(true));
 
         let test_block = Untyped::<F32Grammar>::parse_statements("xs.reverse()").unwrap();

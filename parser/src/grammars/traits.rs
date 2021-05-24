@@ -328,3 +328,71 @@ impl<'a, T: Grammar<'a>> Parse<'a> for Typed<T> {
 
     const FEATURES: Features = Features::all();
 }
+
+/// Trait allowing to mock out type annotation support together with [`WithMockedTypes`].
+/// It specifies recognized type annotations; if any other annotation is used, an error
+/// will be raised.
+///
+/// When used as a [`Parse`]r, all [`Features`] are on.
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::grammars::{F64Grammar, MockTypes, WithMockedTypes};
+/// struct MockedTypesList;
+///
+/// impl MockTypes for MockedTypesList {
+///     const MOCKED_TYPES: &'static [&'static str] = &["Num"];
+/// }
+///
+/// // Grammar that recognizes `Num` type annotation.
+/// type Grammar = WithMockedTypes<F64Grammar, MockedTypesList>;
+/// ```
+pub trait MockTypes: 'static {
+    /// List of mocked type annotations.
+    const MOCKED_TYPES: &'static [&'static str];
+}
+
+/// Decorator for a grammar that mocks type parsing.
+///
+/// # Examples
+///
+/// See [`MockTypes`] for examples of usage.
+#[derive(Debug)]
+pub struct WithMockedTypes<T, Ty>(PhantomData<(T, Ty)>);
+
+impl<T: ParseLiteral, Ty: MockTypes> ParseLiteral for WithMockedTypes<T, Ty> {
+    type Lit = T::Lit;
+
+    fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
+        T::parse_literal(input)
+    }
+}
+
+impl<T: ParseLiteral, Ty: MockTypes> Grammar<'_> for WithMockedTypes<T, Ty> {
+    type Type = ();
+
+    fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
+        use nom::Slice;
+
+        fn type_parser<M: MockTypes>(input: InputSpan<'_>) -> NomResult<'_, ()> {
+            for &annotation in M::MOCKED_TYPES {
+                if input.fragment().starts_with(annotation) {
+                    let rest = input.slice(annotation.len()..);
+                    return Ok((rest, ()));
+                }
+            }
+            let err = anyhow!("Unrecognized type annotation");
+            let err = SpannedError::new(input, ErrorKind::Type(err));
+            Err(NomErr::Failure(err))
+        }
+
+        type_parser::<Ty>(input)
+    }
+}
+
+impl<T: ParseLiteral, Ty: MockTypes> Parse<'_> for WithMockedTypes<T, Ty> {
+    type Base = Self;
+
+    const FEATURES: Features = Features::all();
+}

@@ -8,7 +8,7 @@ use std::{
 use crate::{
     types::{FnParams, ParamConstraints},
     visit::{self, Visit, VisitMut},
-    FnType, Object, PrimitiveType, Tuple, Type, UnknownLen,
+    Function, Object, PrimitiveType, Tuple, Type, UnknownLen,
 };
 
 #[derive(Debug, Default)]
@@ -120,7 +120,7 @@ impl<'a, Prim: PrimitiveType> ParamQuantifier<'a, Prim> {
         constraints.object.as_ref()
     }
 
-    pub fn set_params(function: &mut FnType<Prim>, constraints: ParamConstraints<Prim>) {
+    pub fn set_params(function: &mut Function<Prim>, constraints: ParamConstraints<Prim>) {
         let mut analyzer = ParamQuantifier::new(&constraints);
         analyzer.visit_function(function);
         let mut placement = analyzer.output.place_params(constraints);
@@ -162,7 +162,7 @@ impl<Prim: PrimitiveType> Visit<Prim> for ParamQuantifier<'_, Prim> {
         visit::visit_tuple(self, tuple);
     }
 
-    fn visit_function(&mut self, function: &FnType<Prim>) {
+    fn visit_function(&mut self, function: &Function<Prim>) {
         let this_function_idx = self.output.functions.len();
         let old_function_idx = mem::replace(&mut self.current_function_idx, this_function_idx);
 
@@ -208,7 +208,7 @@ impl<Prim: PrimitiveType> ParamPlacement<Prim> {
 
 impl<Prim: PrimitiveType> VisitMut<Prim> for ParamPlacement<Prim> {
     // TODO: what if the params are already present on the `function`?
-    fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {
+    fn visit_function_mut(&mut self, function: &mut Function<Prim>) {
         let this_function_idx = self.function_count;
         let old_function_idx = mem::replace(&mut self.current_function_idx, this_function_idx);
         self.function_count += 1;
@@ -253,14 +253,17 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for ParamPlacement<Prim> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{arith::CompleteConstraints, Num, Object};
+    use crate::{
+        arith::{CompleteConstraints, Num},
+        Object,
+    };
 
     #[test]
     fn analyzing_map_fn() {
-        let map_arg = FnType::builder()
+        let map_arg = Function::builder()
             .with_arg(Type::param(0))
             .returning(Type::param(1));
-        let mut map_fn = <FnType>::builder()
+        let mut map_fn = <Function>::builder()
             .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
             .with_arg(map_arg)
             .returning(Type::param(1).repeat(UnknownLen::param(0)));
@@ -309,7 +312,7 @@ mod tests {
             static_lengths: HashSet::new(),
         };
 
-        let identity_fn = FnType::builder()
+        let identity_fn = Function::builder()
             .with_arg(Type::param(0))
             .returning(Type::param(0));
 

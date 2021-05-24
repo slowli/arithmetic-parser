@@ -3,14 +3,15 @@
 use std::{collections::HashMap, fmt, marker::PhantomData};
 
 use crate::{
+    arith::Substitutions,
     error::{ErrorKind, OpErrors},
     visit::{self, Visit},
-    FnType, Object, PrimitiveType, Slice, Substitutions, Tuple, Type, TypeVar,
+    Function, Object, PrimitiveType, Slice, Tuple, Type, TypeVar,
 };
 
 /// Constraint that can be placed on [`Type`]s.
 ///
-/// Constraints can be placed on [function](crate::FnType) type variables, and can be applied
+/// Constraints can be placed on [`Function`] type variables, and can be applied
 /// to types in [`TypeArithmetic`] impls. For example, [`NumArithmetic`] places
 /// the [`Linearity`] constraint on types involved in arithmetic ops.
 ///
@@ -51,7 +52,7 @@ pub trait Constraint<Prim: PrimitiveType>: fmt::Display + Send + Sync + 'static 
 }
 
 impl<Prim: PrimitiveType> fmt::Debug for dyn Constraint<Prim> {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_tuple("dyn Constraint")
             .field(&self.to_string())
@@ -98,8 +99,8 @@ pub trait ObjectSafeConstraint<Prim: PrimitiveType>: Constraint<Prim> {}
 ///
 /// ```
 /// # use arithmetic_typing::{
-/// #     arith::{Constraint, StructConstraint}, error::OpErrors, visit::Visit,
-/// #     PrimitiveType, Substitutions, Type,
+/// #     arith::{Constraint, StructConstraint, Substitutions}, error::OpErrors, visit::Visit,
+/// #     PrimitiveType, Type,
 /// # };
 /// # use std::fmt;
 /// /// Constraint for hashable types.
@@ -143,7 +144,8 @@ where
     C: Constraint<Prim> + Clone,
     F: Fn(&Prim) -> bool + 'static,
 {
-    /// Creates a new helper.
+    /// Creates a new helper. `predicate` determines whether a particular primitive type
+    /// should satisfy the `constraint`.
     pub fn new(constraint: C, predicate: F) -> Self {
         Self {
             constraint,
@@ -250,7 +252,7 @@ where
         }
     }
 
-    fn visit_function(&mut self, function: &FnType<Prim>) {
+    fn visit_function(&mut self, function: &Function<Prim>) {
         self.errors.push(ErrorKind::failed_constraint(
             function.clone().into(),
             self.inner.constraint.clone(),
@@ -262,7 +264,7 @@ where
 /// in `T op Num` / `Num op T` operations.
 ///
 /// Defined recursively as [linear](LinearType) primitive types and tuples / objects consisting
-/// of `Lin` types.
+/// of linear types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Linearity;
 

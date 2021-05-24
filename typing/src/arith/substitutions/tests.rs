@@ -4,9 +4,9 @@ use assert_matches::assert_matches;
 
 use super::*;
 use crate::{
-    arith::{ConstraintSet, Linearity, Ops},
+    arith::{ConstraintSet, Linearity, Num, Ops},
     error::TupleContext,
-    DynConstraints, Num,
+    DynConstraints,
 };
 
 fn extract_errors<Prim: PrimitiveType>(
@@ -258,7 +258,7 @@ fn any_can_be_unified_with_anything() {
         (Type::BOOL, Type::NUM).into(),
         Type::NUM.repeat(3).into(),
         Type::NUM.repeat(UnknownLen::free_var(0)).into(),
-        FnType::new(vec![Type::BOOL, Type::NUM].into(), Type::void()).into(),
+        Function::new(vec![Type::BOOL, Type::NUM].into(), Type::void()).into(),
         Type::Any,
     ];
     for rhs in rhs_samples {
@@ -285,7 +285,7 @@ fn unifying_dyn_type_as_rhs() {
         (Type::BOOL, Type::NUM).into(),
         Type::NUM.repeat(3).into(),
         Type::NUM.repeat(UnknownLen::free_var(0)).into(),
-        FnType::new(vec![Type::BOOL, Type::NUM].into(), Type::void()).into(),
+        Function::new(vec![Type::BOOL, Type::NUM].into(), Type::void()).into(),
     ];
 
     for lhs in invalid_lhs {
@@ -360,7 +360,7 @@ fn unifying_dyn_type_as_lhs() {
     let invalid_rhs = &[
         Type::BOOL,
         (Type::NUM, Type::BOOL).into(),
-        FnType::new(vec![Type::BOOL, Type::NUM].into(), Type::void()).into(),
+        Function::new(vec![Type::BOOL, Type::NUM].into(), Type::void()).into(),
     ];
 
     for rhs in invalid_rhs {
@@ -457,7 +457,7 @@ fn unifying_dyn_object_as_lhs() {
         (Type::BOOL, Type::NUM).into(),
         Type::NUM.repeat(3).into(),
         Type::NUM.repeat(UnknownLen::free_var(0)).into(),
-        FnType::new(vec![Type::BOOL, Type::NUM].into(), Type::void()).into(),
+        Function::new(vec![Type::BOOL, Type::NUM].into(), Type::void()).into(),
     ];
     for rhs in invalid_rhs {
         let mut substitutions = Substitutions::<Num>::default();

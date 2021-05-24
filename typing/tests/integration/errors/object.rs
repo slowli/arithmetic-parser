@@ -5,8 +5,9 @@ use assert_matches::assert_matches;
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
     arith::NumArithmetic,
+    defs::Prelude,
     error::{ErrorContext, ErrorKind, ErrorLocation},
-    Prelude, Type, TypeEnvironment,
+    Type, TypeEnvironment,
 };
 
 use crate::{errors::fn_arg, hash_fn_type, ErrorsExt, F32Grammar};
@@ -44,7 +45,7 @@ fn tuple_as_object() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.span().fragment(), "(1, 2)");
+    assert_eq!(*err.main_span().fragment(), "(1, 2)");
     assert_matches!(err.kind(), ErrorKind::CannotAccessFields);
 }
 
@@ -57,7 +58,7 @@ fn object_and_tuple_constraints() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.span().fragment(), "(x, ...)");
+    assert_eq!(*err.main_span().fragment(), "(x, ...)");
     assert_matches!(err.kind(), ErrorKind::CannotAccessFields);
 }
 
@@ -70,7 +71,7 @@ fn object_and_tuple_constraints_via_fields() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.span().fragment(), "obj.0");
+    assert_eq!(*err.main_span().fragment(), "obj.0");
     assert_matches!(err.kind(), ErrorKind::CannotIndex);
     assert_matches!(
         err.context(),
@@ -90,7 +91,7 @@ fn no_required_field() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.span().fragment(), "#{ y: 2 }");
+    assert_eq!(*err.main_span().fragment(), "#{ y: 2 }");
     assert_eq!(err.location(), [fn_arg(0)]);
     assert_matches!(
         err.kind(),
@@ -112,7 +113,7 @@ fn incompatible_field_types() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.span().fragment(), "#{ x: (1, 2) }");
+    assert_eq!(*err.main_span().fragment(), "#{ x: (1, 2) }");
     assert_eq!(err.location(), [fn_arg(0), ErrorLocation::from("x")]);
     assert_matches!(err.context(), ErrorContext::FnCall { .. });
     assert_matches!(
@@ -130,7 +131,7 @@ fn incompatible_field_types_via_accesses() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.span().fragment(), "!obj.x");
+    assert_eq!(*err.main_span().fragment(), "!obj.x");
     assert_eq!(err.location(), []);
     assert_matches!(err.context(), ErrorContext::UnaryOp(_));
     assert_matches!(
@@ -151,7 +152,7 @@ fn incompatible_field_types_via_fn() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.span().fragment(), "obj");
+    assert_eq!(*err.main_span().fragment(), "obj");
     assert_eq!(err.location(), [fn_arg(0), ErrorLocation::from("x")]);
     assert_matches!(err.context(), ErrorContext::FnCall { .. });
     assert_matches!(
@@ -170,7 +171,7 @@ fn incompatible_fields_via_constraints_for_concrete_object() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.span().fragment(), "#{ x: 1, y: || 2 }");
+    assert_eq!(*err.main_span().fragment(), "#{ x: 1, y: || 2 }");
     assert_eq!(err.location(), [fn_arg(0), ErrorLocation::from("y")]);
     assert_matches!(err.context(), ErrorContext::FnCall { .. });
     assert_matches!(
@@ -190,7 +191,7 @@ fn incompatible_fields_via_constraints_for_object_constraint() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.span().fragment(), "(obj.run)()");
+    assert_eq!(*err.main_span().fragment(), "(obj.run)()");
     assert_eq!(err.location(), []);
     assert_matches!(err.context(), ErrorContext::FnCall { .. });
     assert_matches!(
@@ -210,7 +211,7 @@ fn incompatible_fields_via_constraints_for_object_constraint_rev() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.span().fragment(), "obj");
+    assert_eq!(*err.main_span().fragment(), "obj");
     assert_eq!(err.location(), [fn_arg(0), ErrorLocation::from("run")]);
     assert_matches!(err.context(), ErrorContext::FnCall { .. });
     assert_matches!(
@@ -317,8 +318,8 @@ fn repeated_field_in_object_initialization() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.span().fragment(), "x");
-    assert_eq!(err.span().location_offset(), 15);
+    assert_eq!(*err.main_span().fragment(), "x");
+    assert_eq!(err.main_span().location_offset(), 15);
     assert_matches!(err.kind(), ErrorKind::RepeatedField(field) if field == "x");
 }
 
@@ -331,7 +332,7 @@ fn repeated_field_in_object_destructure() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.span().fragment(), "x");
-    assert_eq!(err.span().location_offset(), 5);
+    assert_eq!(*err.main_span().fragment(), "x");
+    assert_eq!(err.main_span().location_offset(), 5);
     assert_matches!(err.kind(), ErrorKind::RepeatedField(field) if field == "x");
 }

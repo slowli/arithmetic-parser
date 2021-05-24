@@ -18,8 +18,8 @@
 //!
 //! This module defines the following kinds of arithmetics:
 //!
-//! - [`StdArithmetic`] takes all implementations from the corresponding [`ops`] traits. This
-//!   means that it's safe to use *provided* the ops are infallible. As a counter-example,
+//! - [`StdArithmetic`] takes all implementations from the corresponding [`ops`](core::ops) traits.
+//!   This means that it's safe to use *provided* the ops are infallible. As a counter-example,
 //!   using [`StdArithmetic`] with built-in integer types (such as `u64`) is usually not a good
 //!   idea since the corresponding ops have failure modes (e.g., division by zero or integer
 //!   overflow).

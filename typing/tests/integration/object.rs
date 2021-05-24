@@ -4,7 +4,10 @@ use assert_matches::assert_matches;
 
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
-    arith::NumArithmetic, error::ErrorKind, Assertions, Prelude, TupleLen, Type, TypeEnvironment,
+    arith::NumArithmetic,
+    defs::{Assertions, Prelude},
+    error::ErrorKind,
+    TupleLen, Type, TypeEnvironment,
 };
 
 use crate::{hash_fn_type, ErrorsExt, F32Grammar};
@@ -52,9 +55,9 @@ fn object_field_access() {
 #[test]
 fn applying_object_constraints() {
     let code = r#"
-        manhattan = |pt| pt.x + pt.y;
-        manhattan(#{ x: 1, y: -3 }) == -2;
-        manhattan(#{ x: (1, 2), y: (-3, 4) })
+        sum_coords = |pt| pt.x + pt.y;
+        sum_coords(#{ x: 1, y: -3 }) == -2;
+        sum_coords(#{ x: (1, 2), y: (-3, 4) })
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let output = TypeEnvironment::new().process_statements(&block).unwrap();

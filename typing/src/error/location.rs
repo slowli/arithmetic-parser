@@ -248,21 +248,21 @@ mod tests {
     use crate::Annotated;
 
     use arithmetic_parser::{
-        grammars::{NumGrammar, Parse, Typed},
+        grammars::{NumGrammar, Parse},
         Statement,
     };
 
     type F32Grammar = Annotated<NumGrammar<f32>>;
 
     fn parse_expr(code: &str) -> SpannedExpr<'_, F32Grammar> {
-        *Typed::<F32Grammar>::parse_statements(code)
+        *F32Grammar::parse_statements(code)
             .unwrap()
             .return_value
             .unwrap()
     }
 
     fn parse_lvalue(code: &str) -> SpannedLvalue<'_, TypeAst<'_>> {
-        let statement = Typed::<F32Grammar>::parse_statements(code)
+        let statement = F32Grammar::parse_statements(code)
             .unwrap()
             .statements
             .pop()

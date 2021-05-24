@@ -4,13 +4,14 @@
 use std::{fmt, str::FromStr};
 
 use arithmetic_parser::{
-    grammars::{Parse, ParseLiteral, Typed},
+    grammars::{Parse, ParseLiteral},
     BinaryOp, InputSpan, NomResult,
 };
 use arithmetic_typing::{
     arith::*,
+    defs::Assertions,
     error::{ErrorLocation, OpErrors},
-    Annotated, Assertions, PrimitiveType, Substitutions, Type, TypeEnvironment,
+    Annotated, PrimitiveType, Type, TypeEnvironment,
 };
 
 /// Primitive type: string or boolean.
@@ -145,7 +146,7 @@ impl TypeArithmetic<StrType> for StrArithmetic {
     }
 }
 
-type Parser = Typed<Annotated<StrGrammar>>;
+type Parser = Annotated<StrGrammar>;
 
 fn main() -> anyhow::Result<()> {
     let code = r#"

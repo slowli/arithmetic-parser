@@ -5,13 +5,13 @@ use std::{fmt, str::FromStr};
 use arithmetic_parser::grammars::{Features, NumGrammar, Parse};
 use arithmetic_typing::{
     arith::{
-        BinaryOpContext, BoolArithmetic, Constraint, MapPrimitiveType, NumArithmetic,
-        TypeArithmetic, UnaryOpContext, WithBoolean,
+        BinaryOpContext, BoolArithmetic, Constraint, MapPrimitiveType, Num, NumArithmetic,
+        Substitutions, TypeArithmetic, UnaryOpContext, WithBoolean,
     },
+    defs::{Assertions, Prelude},
     error::{ErrorLocation, OpErrors},
     visit::Visit,
-    Annotated, Assertions, DynConstraints, FnType, Prelude, PrimitiveType, Substitutions, Type,
-    TypeEnvironment, UnknownLen,
+    Annotated, DynConstraints, Function, PrimitiveType, Type, TypeEnvironment, UnknownLen,
 };
 
 use crate::Hashed;
@@ -30,18 +30,18 @@ impl Parse<'_> for U64Grammar {
     const FEATURES: Features = Features::all();
 }
 
-fn dbg_fn<Prim: PrimitiveType>() -> FnType<Prim> {
-    FnType::builder()
+fn dbg_fn<Prim: PrimitiveType>() -> Function<Prim> {
+    Function::builder()
         .with_varargs(Type::Any, UnknownLen::param(0))
         .returning(Type::void())
 }
 
 fn prepare_imprecise_env() -> TypeEnvironment {
-    let rand_scalar = FnType::builder().returning(Type::NUM);
-    let hash_to_scalar = FnType::builder()
+    let rand_scalar = Function::builder().returning(Type::NUM);
+    let hash_to_scalar = Function::builder()
         .with_varargs(DynConstraints::just(Hashed), UnknownLen::param(0))
         .returning(Type::NUM);
-    let to_scalar = FnType::builder().with_arg(Type::NUM).returning(Type::NUM);
+    let to_scalar = Function::builder().with_arg(Type::NUM).returning(Type::NUM);
 
     let mut env: TypeEnvironment = Prelude::iter().chain(Assertions::iter()).collect();
     env.insert("dbg", dbg_fn())
@@ -245,11 +245,11 @@ impl TypeArithmetic<GroupPrim> for GroupArithmetic {
 }
 
 fn prepare_env() -> TypeEnvironment<GroupPrim> {
-    let rand_scalar = FnType::builder().returning(SC);
-    let hash_to_scalar = FnType::builder()
+    let rand_scalar = Function::builder().returning(SC);
+    let hash_to_scalar = Function::builder()
         .with_varargs(DynConstraints::just(Hashed), UnknownLen::param(0))
         .returning(SC);
-    let to_scalar = FnType::builder().with_arg(GE).returning(SC);
+    let to_scalar = Function::builder().with_arg(GE).returning(SC);
 
     let mut env: TypeEnvironment<GroupPrim> = Prelude::iter().chain(Assertions::iter()).collect();
     env.insert("dbg", dbg_fn())
@@ -289,7 +289,7 @@ fn schnorr_signatures_error() {
 
     assert_eq!(errors.len(), 1);
     let err = errors.into_iter().next().unwrap();
-    assert_eq!(*err.span().fragment(), "R");
+    assert_eq!(*err.main_span().fragment(), "R");
     assert_eq!(
         err.kind().to_string(),
         "Type `Ge` is not assignable to type `Sc`"
@@ -456,4 +456,27 @@ fn rfold() {
     );
     assert_eq!(env["min"], Type::NUM);
     assert_eq!(env["max"], Type::NUM);
+}
+
+#[test]
+fn quick_sort() {
+    let code = include_str!("quick_sort.script");
+    let code = U64Grammar::parse_statements(code).unwrap();
+
+    let rand_num = Function::builder()
+        .with_arg(Type::NUM)
+        .with_arg(Type::NUM)
+        .returning(Type::NUM);
+
+    let mut env: TypeEnvironment = Prelude::iter().chain(Assertions::iter()).collect();
+    env.insert("array", Prelude::array(Num::Num))
+        .insert("rand_num", rand_num)
+        .process_with_arithmetic(&NumArithmetic::with_comparisons(), &code)
+        .unwrap();
+
+    assert_eq!(
+        env["quick_sort"].to_string(),
+        "([Num; N], ([Num], any) -> [Num]) -> [Num]"
+    );
+    assert_eq!(env["sort"].to_string(), "([Num; N]) -> [Num]");
 }

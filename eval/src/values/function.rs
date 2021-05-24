@@ -91,7 +91,7 @@ impl<'r, 'a, T> CallContext<'r, 'a, T> {
 /// Function on zero or more [`Value`]s.
 ///
 /// Native functions are defined in the Rust code and then can be used from the interpreted
-/// code. See [`fns`] module docs for different ways to define native functions.
+/// code. See [`fns`](crate::fns) module docs for different ways to define native functions.
 pub trait NativeFn<T> {
     /// Executes the function on the specified arguments.
     fn evaluate<'a>(

@@ -27,11 +27,14 @@ use nom::{
     Slice,
 };
 
-use core::{f32, f64, fmt, marker::PhantomData};
+use core::{fmt, marker::PhantomData};
 
 mod traits;
 
-pub use self::traits::{Features, Grammar, IntoInputSpan, Parse, ParseLiteral, Typed, Untyped};
+pub use self::traits::{
+    Features, Grammar, IntoInputSpan, MockTypes, Parse, ParseLiteral, Typed, Untyped,
+    WithMockedTypes,
+};
 
 use crate::{spans::NomResult, ErrorKind, InputSpan};
 
@@ -227,7 +230,6 @@ mod tests {
     use crate::Expr;
 
     use assert_matches::assert_matches;
-    use core::f32::INFINITY;
     use nom::Err as NomErr;
 
     #[test]
@@ -278,11 +280,11 @@ mod tests {
     fn parsing_infinity() {
         let parsed = Untyped::<F32Grammar>::parse_statements("Inf").unwrap();
         let ret = parsed.return_value.unwrap().extra;
-        assert_matches!(ret, Expr::Literal(lit) if lit == INFINITY);
+        assert_matches!(ret, Expr::Literal(lit) if lit == f32::INFINITY);
 
         let parsed = Untyped::<F32Grammar>::parse_statements("-Inf").unwrap();
         let ret = parsed.return_value.unwrap().extra;
-        assert_matches!(ret, Expr::Literal(lit) if lit == -INFINITY);
+        assert_matches!(ret, Expr::Literal(lit) if lit == -f32::INFINITY);
 
         let parsed = Untyped::<F32Grammar>::parse_statements("Infty").unwrap();
         let ret = parsed.return_value.unwrap().extra;
@@ -357,11 +359,11 @@ mod tests {
         let (_, u32_val) = <u32 as NumLiteral>::parse(InputSpan::new("1111111111")).unwrap();
         assert_eq!(u32_val, 1_111_111_111);
         let (_, u64_val) =
-            <u64 as NumLiteral>::parse(InputSpan::new(&u64::max_value().to_string())).unwrap();
-        assert_eq!(u64_val, u64::max_value());
+            <u64 as NumLiteral>::parse(InputSpan::new(&u64::MAX.to_string())).unwrap();
+        assert_eq!(u64_val, u64::MAX);
         let (_, u128_val) =
-            <u128 as NumLiteral>::parse(InputSpan::new(&u128::max_value().to_string())).unwrap();
-        assert_eq!(u128_val, u128::max_value());
+            <u128 as NumLiteral>::parse(InputSpan::new(&u128::MAX.to_string())).unwrap();
+        assert_eq!(u128_val, u128::MAX);
     }
 
     #[test]

@@ -5,7 +5,7 @@
 
 This repository contains a versatile parser for arithmetic expressions
 which allows customizing literal definitions, type annotations and several other aspects of parsing.
-The repository also contains several auxiliary crates (for example, a simple interpreter). 
+The repository also contains several auxiliary crates (for example, a simple interpreter).
 
 ## Contents
 
@@ -15,11 +15,35 @@ The repository also contains several auxiliary crates (for example, a simple int
 - [`arithmetic-typing`](typing) is Hindley–Milner type inference for parsed expressions.
 - [`arithmetic-parser-cli`](cli) is the CLI / REPL for the library.
 
+## Why?
+
+- The parser is designed to be reusable and customizable for simple scripting use cases.
+  For example, it's used to dynamically define and process complex-valued functions
+  in a [Julia set renderer](https://github.com/slowli/julia-set-rs).
+  Customization specifically extends to literals; e.g., it is possible
+  to have a single numeric literal / primitive type.
+- Interpreter and type inference are natural complementary tools for the parser
+  that allow evaluating parsed ASTs and reasoning about their correctness. Again,
+  it is possible to fully customize primitive types and their mapping from literals,
+  as well as semantics of arithmetic ops and (in case of typing) constraints they put on
+  operands.
+- Type inference is a challenging (and therefore interesting!) problem given the requirements
+  (being able to work without any explicit type annotations).
+
+## Project status 🚧
+
+Early-stage; quite a bit of functionality is lacking, especially in interpreter and typing.
+As an example, method resolution is a mess (methods are just syntax sugar for functions).
+
+## Alternatives / similar tools
+
+- Scripting languages like [Rhai](https://rhai.rs/book/) and [Gluon](https://gluon-lang.org/)
+  are significantly more mature and have a sizable standard library, but are less customizable.
+  E.g., there is a pre-determined set of primitive types with unchangeable semantics and type constraints.
+  Rhai also does not have parser / interpreter separation or type inference support,
+  and Gluon's syntax is a bit academic at times.
+
 ## License
 
 All code in this repository is licensed under either of [Apache License, Version 2.0](LICENSE-APACHE)
 or [MIT license](LICENSE-MIT) at your option.
-
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in `arithmetic-*` crates by you, as defined in the Apache-2.0 license,
-shall be dual licensed as above, without any additional terms or conditions. 

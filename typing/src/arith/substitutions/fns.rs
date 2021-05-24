@@ -2,14 +2,14 @@
 
 use std::{collections::HashMap, sync::Arc};
 
-use crate::arith::CompleteConstraints;
 use crate::{
+    arith::{CompleteConstraints, Substitutions},
     types::{FnParams, ParamConstraints, ParamQuantifier},
     visit::{self, VisitMut},
-    FnType, Object, PrimitiveType, Substitutions, TupleLen, Type, UnknownLen,
+    Function, Object, PrimitiveType, TupleLen, Type, UnknownLen,
 };
 
-impl<Prim: PrimitiveType> FnType<Prim> {
+impl<Prim: PrimitiveType> Function<Prim> {
     /// Performs final transformations on this function, bounding all of its type vars
     /// to the function or its child functions.
     pub(crate) fn finalize(&mut self, substitutions: &Substitutions<Prim>) {
@@ -134,7 +134,10 @@ pub(super) struct MonoTypeTransformer<'a> {
 }
 
 impl<'a> MonoTypeTransformer<'a> {
-    pub fn transform<Prim: PrimitiveType>(mapping: &'a ParamMapping, function: &mut FnType<Prim>) {
+    pub fn transform<Prim: PrimitiveType>(
+        mapping: &'a ParamMapping,
+        function: &mut Function<Prim>,
+    ) {
         function.params = None;
         Self { mapping }.visit_function_mut(function);
     }
@@ -176,7 +179,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for MonoTypeTransformer<'_> {
         }
     }
 
-    fn visit_function_mut(&mut self, function: &mut FnType<Prim>) {
+    fn visit_function_mut(&mut self, function: &mut Function<Prim>) {
         visit::visit_function_mut(self, function);
 
         if let Some(params) = function.params.as_deref() {

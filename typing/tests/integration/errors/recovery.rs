@@ -6,7 +6,10 @@ use std::collections::HashSet;
 
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
-    arith::NumArithmetic, Assertions, ErrorKind, Prelude, Type, TypeEnvironment,
+    arith::NumArithmetic,
+    defs::{Assertions, Prelude},
+    error::ErrorKind,
+    Type, TypeEnvironment,
 };
 
 use crate::{ErrorsExt, F32Grammar};
@@ -20,13 +23,38 @@ fn vars_are_not_assigned_beyond_first_error() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("map", Prelude::Map);
-    let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.span().fragment(), "x");
+    let errors = type_env.process_statements(&block).unwrap_err();
+    assert_eq!(errors.first_failing_statement(), 1);
+
+    let err = errors.single();
+    assert_eq!(*err.main_span().fragment(), "x");
     assert_eq!(*err.root_span().fragment(), "x.map(x)");
     assert_matches!(err.kind(), ErrorKind::TypeMismatch(..));
     assert_eq!(type_env["x"], Type::slice(Type::NUM, 2));
     assert!(type_env.get("y").is_none());
+}
+
+#[test]
+fn first_failing_statement_is_not_overwritten() {
+    let code = "x = (1, 2); !x; x = x.map(x);";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.insert("map", Prelude::Map);
+
+    let errors = type_env.process_statements(&block).unwrap_err();
+    assert_eq!(errors.first_failing_statement(), 1);
+}
+
+#[test]
+fn first_failing_statement_on_error_in_return_value() {
+    let code = "x = (1, 2); x; x.map(x)";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.insert("map", Prelude::Map);
+
+    let errors = type_env.process_statements(&block).unwrap_err();
+    assert_eq!(errors.first_failing_statement(), 2);
 }
 
 #[test]
@@ -38,9 +66,12 @@ fn vars_are_not_redefined_beyond_first_error() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("map", Prelude::Map);
-    let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.span().fragment(), "x");
+    let errors = type_env.process_statements(&block).unwrap_err();
+    assert_eq!(errors.first_failing_statement(), 1);
+
+    let err = errors.single();
+    assert_eq!(*err.main_span().fragment(), "x");
     assert_matches!(err.kind(), ErrorKind::TypeMismatch(..));
     assert_eq!(type_env["x"], Type::slice(Type::NUM, 2));
 }
@@ -57,7 +88,7 @@ fn vars_are_not_assigned_beyond_first_error_in_expr() {
     type_env.insert("map", Prelude::Map);
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.span().fragment(), "x");
+    assert_eq!(*err.main_span().fragment(), "x");
     assert_matches!(err.kind(), ErrorKind::TypeMismatch(..));
     assert_eq!(type_env["x"], Type::slice(Type::NUM, 2));
     assert!(type_env.get("y").is_none());
@@ -72,9 +103,12 @@ fn errors_in_inner_scopes_are_handled_adequately() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("map", Prelude::Map);
-    let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.span().fragment(), "bogus");
+    let errors = type_env.process_statements(&block).unwrap_err();
+    assert_eq!(errors.first_failing_statement(), 1);
+
+    let err = errors.single();
+    assert_eq!(*err.main_span().fragment(), "bogus");
     assert_eq!(*err.root_span().fragment(), "x.map(bogus)");
     assert_matches!(err.kind(), ErrorKind::TypeMismatch(..));
     assert_eq!(type_env["x"], Type::slice(Type::NUM, 2));
@@ -91,9 +125,12 @@ fn errors_in_functions_are_handled_adequately() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("map", Prelude::Map);
-    let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.span().fragment(), "bogus");
+    let errors = type_env.process_statements(&block).unwrap_err();
+    assert_eq!(errors.first_failing_statement(), 1);
+
+    let err = errors.single();
+    assert_eq!(*err.main_span().fragment(), "bogus");
     assert_matches!(err.kind(), ErrorKind::TypeMismatch(..));
     assert_eq!(type_env["x"], Type::slice(Type::NUM, 2));
     assert!(type_env.get("y").is_none());

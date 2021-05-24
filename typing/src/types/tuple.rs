@@ -2,12 +2,12 @@
 
 use std::{borrow::Cow, cmp, fmt, iter, ops};
 
-use crate::{Num, PrimitiveType, Type};
+use crate::{arith::Num, PrimitiveType, Type};
 
 /// Length variable.
 ///
 /// A variable represents a certain unknown length. Variables can be either *free*
-/// or *bound* to a [function](crate::FnType) (similar to const params in Rust, except lengths
+/// or *bound* to a [`Function`](crate::Function) (similar to const params in Rust, except lengths
 /// always have the `usize` type).
 /// Just as with [`TypeVar`](crate::TypeVar)s, types input to a [`TypeEnvironment`]
 /// can only have bounded length variables (this is
@@ -45,7 +45,7 @@ impl LengthVar {
     }
 
     /// Creates a bounded length variable that can be used to
-    /// [build functions](crate::FnTypeBuilder).
+    /// [build functions](crate::FunctionBuilder).
     pub const fn param(index: usize) -> Self {
         Self {
             index,
@@ -95,7 +95,7 @@ impl ops::Add<usize> for UnknownLen {
 }
 
 impl UnknownLen {
-    /// Creates a bounded type variable that can be used to [build functions](crate::FnTypeBuilder).
+    /// Creates a bounded type variable that can be used to [build functions](crate::FunctionBuilder).
     pub const fn param(index: usize) -> Self {
         Self::Var(LengthVar::param(index))
     }
@@ -125,12 +125,12 @@ impl UnknownLen {
 /// even if they are of the same type. This constraint is denoted as `len! N, M, ...`
 /// in the function quantifier, e.g., `for<len! N> (['T; N]) -> 'T`.
 ///
-/// If the constraint fails, an error will be raised with the [kind](crate::Error::kind)
+/// If the constraint fails, an error will be raised with the [kind](crate::error::Error::kind)
 /// set to [`ErrorKind::DynamicLen`].
 ///
 /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
 /// [`Ops`]: crate::arith::Ops
-/// [`ErrorKind::DynamicLen`]: crate::ErrorKind::DynamicLen
+/// [`ErrorKind::DynamicLen`]: crate::error::ErrorKind::DynamicLen
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TupleLen {
     var: Option<UnknownLen>,
@@ -594,11 +594,11 @@ pub(crate) enum IndexError {
 /// # Examples
 ///
 /// ```
-/// use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// use arithmetic_parser::grammars::{F32Grammar, Parse};
 /// use arithmetic_typing::{Annotated, TupleLen, TypeEnvironment, Type};
 ///
 /// # fn main() -> anyhow::Result<()> {
-/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
+/// type Parser = Annotated<F32Grammar>;
 /// let ast = Parser::parse_statements("xs: [Num; _] = (1, 2, 3);")?;
 /// let mut env = TypeEnvironment::new();
 /// env.process_statements(&ast)?;
@@ -614,7 +614,7 @@ pub(crate) enum IndexError {
 /// let errors = env.process_statements(&ast).unwrap_err();
 ///
 /// let err = errors.iter().next().unwrap();
-/// assert_eq!(*err.span().fragment(), "(_, _, z)");
+/// assert_eq!(*err.main_span().fragment(), "(_, _, z)");
 /// assert_eq!(env["ys"], env["xs"]);
 /// # Ok(())
 /// # }

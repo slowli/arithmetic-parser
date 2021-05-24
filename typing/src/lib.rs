@@ -30,6 +30,8 @@
 //!   As an example, [`Num`] has a few known constraints, such as type [`Linearity`].
 //!
 //! [`Constraint`]: crate::arith::Constraint
+//! [`Num`]: crate::arith::Num
+//! [`Linearity`]: crate::arith::Linearity
 //!
 //! # Inference rules
 //!
@@ -46,6 +48,7 @@
 //! See the example below for more details.
 //!
 //! [Hindley–Milner typing rules]: https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system#Typing_rules
+//! [`Substitutions`]: crate::arith::Substitutions
 //! [`TypeArithmetic`]: crate::arith::TypeArithmetic
 //!
 //! # Operations
@@ -65,13 +68,12 @@
 //! # Examples
 //!
 //! ```
-//! use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-//! use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, Type};
+//! use arithmetic_parser::grammars::{F32Grammar, Parse};
+//! use arithmetic_typing::{defs::Prelude, Annotated, TypeEnvironment, Type};
 //!
-//! type Parser = Typed<Annotated<NumGrammar<f32>>>;
 //! # fn main() -> anyhow::Result<()> {
 //! let code = "sum = |xs| xs.fold(0, |acc, x| acc + x);";
-//! let ast = Parser::parse_statements(code)?;
+//! let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 //!
 //! let mut env = TypeEnvironment::new();
 //! env.insert("fold", Prelude::Fold);
@@ -87,12 +89,11 @@
 //! Defining and using generic functions:
 //!
 //! ```
-//! # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-//! # use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, Type};
-//! # type Parser = Typed<Annotated<NumGrammar<f32>>>;
+//! # use arithmetic_parser::grammars::{F32Grammar, Parse};
+//! # use arithmetic_typing::{defs::Prelude, Annotated, TypeEnvironment, Type};
 //! # fn main() -> anyhow::Result<()> {
 //! let code = "sum_with = |xs, init| xs.fold(init, |acc, x| acc + x);";
-//! let ast = Parser::parse_statements(code)?;
+//! let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 //!
 //! let mut env = TypeEnvironment::new();
 //! env.insert("fold", Prelude::Fold);
@@ -111,7 +112,7 @@
 //!     num_sum: Num = (1, 2, 3).sum_with(0);
 //!     tuple_sum: (Num, Num) = ((1, 2), (3, 4)).sum_with((0, 0));
 //! "#;
-//! let ast = Parser::parse_statements(usage_code)?;
+//! let ast = Annotated::<F32Grammar>::parse_statements(usage_code)?;
 //! // Both lengths and element types differ in these invocations,
 //! // but it works fine since they are treated independently.
 //! env.process_statements(&ast)?;
@@ -137,38 +138,31 @@
 use std::{fmt, marker::PhantomData, str::FromStr};
 
 use arithmetic_parser::{
-    grammars::{Grammar, ParseLiteral},
+    grammars::{Features, Grammar, Parse, ParseLiteral},
     InputSpan, NomResult,
 };
 
 pub mod arith;
 pub mod ast;
+pub mod defs;
 mod env;
 pub mod error;
-mod substitutions;
-mod type_map;
 mod types;
 pub mod visit;
 
 pub use self::{
     env::TypeEnvironment,
-    error::{Error, ErrorKind},
-    substitutions::Substitutions,
-    type_map::{Assertions, Prelude},
     types::{
-        DynConstraints, FnType, FnTypeBuilder, FnWithConstraints, LengthVar, Object, Slice, Tuple,
-        TupleIndex, TupleLen, Type, TypeVar, UnknownLen,
+        DynConstraints, FnWithConstraints, Function, FunctionBuilder, LengthVar, Object, Slice,
+        Tuple, TupleIndex, TupleLen, Type, TypeVar, UnknownLen,
     },
 };
 
-use self::{
-    arith::{ConstraintSet, LinearType, Linearity, Ops, WithBoolean},
-    ast::TypeAst,
-};
+use self::{arith::ConstraintSet, ast::TypeAst};
 
 /// Primitive types in a certain type system.
 ///
-/// More complex types, like [`Type`] and [`FnType`], are defined with a type param
+/// More complex types, like [`Type`] and [`Function`], are defined with a type param
 /// which determines the primitive type(s). This type param must implement [`PrimitiveType`].
 ///
 /// [`TypeArithmetic`] has a `PrimitiveType` impl as an associated type, and one of the required
@@ -186,6 +180,7 @@ use self::{
 ///
 /// [`Grammar`]: arithmetic_parser::grammars::Grammar
 /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
+/// [`WithBoolean`]: crate::arith::WithBoolean
 /// [`BoolArithmetic`]: crate::arith::BoolArithmetic
 /// [`NumArithmetic`]: crate::arith::NumArithmetic
 ///
@@ -245,68 +240,17 @@ pub trait PrimitiveType:
     }
 }
 
-/// Primitive types for numeric arithmetic.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Num {
-    /// Numeric type (e.g., 1).
-    Num,
-    /// Boolean value (true or false).
-    Bool,
-}
-
-impl fmt::Display for Num {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::Num => "Num",
-            Self::Bool => "Bool",
-        })
-    }
-}
-
-impl FromStr for Num {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Num" => Ok(Self::Num),
-            "Bool" => Ok(Self::Bool),
-            _ => Err(anyhow::anyhow!("Expected `Num` or `Bool`")),
-        }
-    }
-}
-
-impl PrimitiveType for Num {
-    fn well_known_constraints() -> ConstraintSet<Self> {
-        let mut constraints = ConstraintSet::default();
-        constraints.insert_object_safe(Linearity);
-        constraints.insert(Ops);
-        constraints
-    }
-}
-
-impl WithBoolean for Num {
-    const BOOL: Self = Self::Bool;
-}
-
-impl LinearType for Num {
-    fn is_linear(&self) -> bool {
-        matches!(self, Self::Num) // numbers are linear, booleans are not
-    }
-}
-
 /// Grammar with support of type annotations. Works as a decorator.
 ///
 /// # Examples
 ///
 /// ```
-/// use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// use arithmetic_parser::grammars::{F32Grammar, Parse};
 /// use arithmetic_typing::Annotated;
-///
-/// type F32Grammar = Annotated<NumGrammar<f32>>;
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let code = "x: [Num] = (1, 2, 3);";
-/// let ast = Typed::<F32Grammar>::parse_statements(code)?;
+/// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 /// # assert_eq!(ast.statements.len(), 1);
 /// # Ok(())
 /// # }
@@ -329,4 +273,11 @@ impl<'a, T: ParseLiteral> Grammar<'a> for Annotated<T> {
         use nom::combinator::map;
         map(TypeAst::parse, |ast| ast.extra)(input)
     }
+}
+
+/// Supports all syntax features.
+impl<T: ParseLiteral> Parse<'_> for Annotated<T> {
+    type Base = Self;
+
+    const FEATURES: Features = Features::all();
 }

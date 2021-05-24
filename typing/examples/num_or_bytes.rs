@@ -3,12 +3,12 @@
 use std::{fmt, str::FromStr};
 
 use arithmetic_parser::{
-    grammars::{NumGrammar, NumLiteral, Parse, Typed},
+    grammars::{NumGrammar, NumLiteral, Parse},
     BinaryOp, InputSpan, NomResult,
 };
 use arithmetic_typing::{
-    arith::*, error::OpErrors, visit::Visit, Annotated, Prelude, PrimitiveType, Substitutions,
-    Type, TypeEnvironment,
+    arith::*, defs::Prelude, error::OpErrors, visit::Visit, Annotated, PrimitiveType, Type,
+    TypeEnvironment,
 };
 
 /// Literal for arithmetic: either an integer or a byte buffer.
@@ -163,7 +163,7 @@ impl TypeArithmetic<NumOrBytesType> for NumOrBytesArithmetic {
     }
 }
 
-type Parser = Typed<Annotated<NumGrammar<NumOrBytes>>>;
+type Parser = Annotated<NumGrammar<NumOrBytes>>;
 
 fn main() -> anyhow::Result<()> {
     let code = r#"

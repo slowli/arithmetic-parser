@@ -9,7 +9,7 @@ use crate::{
     error::{Error, ErrorContext, ErrorKind, Errors, OpErrors, TupleContext},
     types::IndexError,
     visit::VisitMut,
-    FnType, Object, PrimitiveType, Slice, Tuple, TupleLen, Type,
+    Function, Object, PrimitiveType, Slice, Tuple, TupleLen, Type,
 };
 use arithmetic_parser::{
     grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Destructure, DestructureRest, Expr,
@@ -23,6 +23,7 @@ pub(super) struct TypeProcessor<'a, 'env, Val, Prim: PrimitiveType> {
     scopes: Vec<HashMap<String, Type<Prim>>>,
     scope_before_first_error: Option<HashMap<String, Type<Prim>>>,
     arithmetic: &'env dyn FullArithmetic<Val, Prim>,
+    /// Are we currently evaluating a function?
     is_in_function: bool,
     /// Variables assigned within the current lvalue (if it is being processed).
     /// Used to determine duplicate vars.
@@ -179,14 +180,34 @@ where
     where
         T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
     {
-        for statement in &block.statements {
+        let top_level = self.scopes.len() == 1;
+        for (i, statement) in block.statements.iter().enumerate() {
+            // Backup assignments in the root scope if there are no errors yet.
+            let backup = if top_level && self.errors.is_empty() {
+                self.scopes.first().cloned()
+            } else {
+                None
+            };
+
             self.process_statement(statement);
+
+            if backup.is_some() && !self.errors.is_empty() {
+                self.errors.set_first_failing_statement(i);
+                self.scope_before_first_error = backup;
+            }
         }
+
         block
             .return_value
             .as_ref()
             .map_or_else(Type::void, |return_value| {
-                self.process_expr_inner(return_value)
+                let no_errors = self.errors.is_empty();
+                let return_type = self.process_expr_inner(return_value);
+                if top_level && no_errors && !self.errors.is_empty() {
+                    self.errors
+                        .set_first_failing_statement(block.statements.len());
+                }
+                return_type
             })
     }
 
@@ -438,7 +459,7 @@ where
     {
         let arg_types: Vec<_> = args.map(|arg| self.process_expr_inner(arg)).collect();
         let return_type = self.new_type();
-        let call_signature = FnType::new(arg_types.into(), return_type.clone()).into();
+        let call_signature = Function::new(arg_types.into(), return_type.clone()).into();
 
         let mut errors = OpErrors::new();
         self.env
@@ -506,7 +527,7 @@ where
         output
     }
 
-    fn process_fn_def<T>(&mut self, def: &FnDefinition<'a, T>) -> FnType<Prim>
+    fn process_fn_def<T>(&mut self, def: &FnDefinition<'a, T>) -> Function<Prim>
     where
         T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
     {
@@ -527,7 +548,7 @@ where
         self.scopes.pop();
         self.is_in_function = was_in_function;
 
-        let mut fn_type = FnType::new(arg_types, return_type);
+        let mut fn_type = Function::new(arg_types, return_type);
         let substitutions = &self.env.substitutions;
         substitutions.resolver().visit_function_mut(&mut fn_type);
 
@@ -541,14 +562,7 @@ where
     where
         T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
     {
-        // Backup assignments in the root scope if there are no errors yet.
-        let backup = if self.scopes.len() == 1 && self.errors.is_empty() {
-            self.scopes.first().cloned()
-        } else {
-            None
-        };
-
-        let output = match &statement.extra {
+        match &statement.extra {
             Statement::Expr(expr) => self.process_expr_inner(expr),
 
             Statement::Assignment { lhs, rhs } => {
@@ -577,12 +591,7 @@ where
                 // No better choice than to go with `Some` type.
                 self.new_type()
             }
-        };
-
-        if backup.is_some() && !self.errors.is_empty() {
-            self.scope_before_first_error = backup;
         }
-        output
     }
 
     pub fn process_statements<T>(

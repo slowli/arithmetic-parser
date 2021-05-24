@@ -1,6 +1,8 @@
-//! `TypeMap` trait and standard implementations.
+//! Type definitions for the standard types from the [`arithmetic-eval`] crate.
+//!
+//! [`arithmetic-eval`]: https://docs.rs/arithmetic-eval/
 
-use crate::{arith::WithBoolean, FnType, Type, UnknownLen};
+use crate::{arith::WithBoolean, Function, PrimitiveType, Type, UnknownLen};
 
 /// Map containing type definitions for all variables from `Prelude` in the eval crate,
 /// except for `loop` function.
@@ -10,20 +12,22 @@ use crate::{arith::WithBoolean, FnType, Type, UnknownLen};
 /// - `true` and `false` Boolean constants
 /// - `if`, `while`, `map`, `filter`, `fold`, `push` and `merge` functions
 ///
-/// `merge` function has somewhat imprecise typing; its return value is a dynamically-sized slice.
+/// The `merge` function has somewhat imprecise typing; its return value is
+/// a dynamically-sized slice.
+///
+/// The `array` function is available separately via [`Self::array()`].
 ///
 /// # Examples
 ///
 /// Function counting number of zeros in a slice:
 ///
 /// ```
-/// use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-/// use arithmetic_typing::{Annotated, Prelude, TypeEnvironment, Type};
+/// use arithmetic_parser::grammars::{F32Grammar, Parse};
+/// use arithmetic_typing::{defs::Prelude, Annotated, TypeEnvironment, Type};
 ///
 /// # fn main() -> anyhow::Result<()> {
-/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// let code = "|xs| xs.fold(0, |acc, x| if(x == 0, acc + 1, acc))";
-/// let ast = Parser::parse_statements(code)?;
+/// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 ///
 /// let mut env: TypeEnvironment = Prelude::iter().collect();
 /// let count_zeros_fn = env.process_statements(&ast)?;
@@ -35,24 +39,23 @@ use crate::{arith::WithBoolean, FnType, Type, UnknownLen};
 /// Limitations of `merge`:
 ///
 /// ```
-/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-/// # use arithmetic_typing::{ErrorKind, Annotated, Prelude, TypeEnvironment, Type};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse};
+/// # use arithmetic_typing::{defs::Prelude, error::ErrorKind, Annotated, TypeEnvironment, Type};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
-/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// let code = r#"
 ///     len = |xs| xs.fold(0, |acc, _| acc + 1);
 ///     slice = (1, 2).merge((3, 4));
 ///     slice.len(); // methods working on slices are applicable
 ///     (_, _, _, z) = slice; // but destructring is not
 /// "#;
-/// let ast = Parser::parse_statements(code)?;
+/// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 ///
 /// let mut env: TypeEnvironment = Prelude::iter().collect();
 /// let errors = env.process_statements(&ast).unwrap_err();
 /// assert_eq!(errors.len(), 1);
 /// let err = errors.iter().next().unwrap();
-/// assert_eq!(*err.span().fragment(), "(_, _, _, z)");
+/// assert_eq!(*err.main_span().fragment(), "(_, _, _, z)");
 /// # assert_matches!(err.kind(), ErrorKind::TupleLenMismatch { .. });
 /// # Ok(())
 /// # }
@@ -85,7 +88,7 @@ impl<Prim: WithBoolean> From<Prelude> for Type<Prim> {
         match value {
             Prelude::True | Prelude::False => Type::BOOL,
 
-            Prelude::If => FnType::builder()
+            Prelude::If => Function::builder()
                 .with_arg(Type::BOOL)
                 .with_arg(Type::param(0))
                 .with_arg(Type::param(0))
@@ -93,14 +96,14 @@ impl<Prim: WithBoolean> From<Prelude> for Type<Prim> {
                 .into(),
 
             Prelude::While => {
-                let condition_fn = FnType::builder()
+                let condition_fn = Function::builder()
                     .with_arg(Type::param(0))
                     .returning(Type::BOOL);
-                let iter_fn = FnType::builder()
+                let iter_fn = Function::builder()
                     .with_arg(Type::param(0))
                     .returning(Type::param(0));
 
-                FnType::builder()
+                Function::builder()
                     .with_arg(Type::param(0)) // state
                     .with_arg(condition_fn)
                     .with_arg(iter_fn)
@@ -109,11 +112,11 @@ impl<Prim: WithBoolean> From<Prelude> for Type<Prim> {
             }
 
             Prelude::Map => {
-                let map_arg = FnType::builder()
+                let map_arg = Function::builder()
                     .with_arg(Type::param(0))
                     .returning(Type::param(1));
 
-                FnType::builder()
+                Function::builder()
                     .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
                     .with_arg(map_arg)
                     .returning(Type::param(1).repeat(UnknownLen::param(0)))
@@ -121,11 +124,11 @@ impl<Prim: WithBoolean> From<Prelude> for Type<Prim> {
             }
 
             Prelude::Filter => {
-                let predicate_arg = FnType::builder()
+                let predicate_arg = Function::builder()
                     .with_arg(Type::param(0))
                     .returning(Type::BOOL);
 
-                FnType::builder()
+                Function::builder()
                     .with_arg(Type::param(0).repeat(UnknownLen::Dynamic))
                     .with_arg(predicate_arg)
                     .returning(Type::param(0).repeat(UnknownLen::Dynamic))
@@ -134,12 +137,12 @@ impl<Prim: WithBoolean> From<Prelude> for Type<Prim> {
 
             Prelude::Fold => {
                 // 0th type param is slice element, 1st is accumulator
-                let fold_arg = FnType::builder()
+                let fold_arg = Function::builder()
                     .with_arg(Type::param(1))
                     .with_arg(Type::param(0))
                     .returning(Type::param(1));
 
-                FnType::builder()
+                Function::builder()
                     .with_arg(Type::param(0).repeat(UnknownLen::Dynamic))
                     .with_arg(Type::param(1))
                     .with_arg(fold_arg)
@@ -147,13 +150,13 @@ impl<Prim: WithBoolean> From<Prelude> for Type<Prim> {
                     .into()
             }
 
-            Prelude::Push => FnType::builder()
+            Prelude::Push => Function::builder()
                 .with_arg(Type::param(0).repeat(UnknownLen::param(0)))
                 .with_arg(Type::param(0))
                 .returning(Type::param(0).repeat(UnknownLen::param(0) + 1))
                 .into(),
 
-            Prelude::Merge => FnType::builder()
+            Prelude::Merge => Function::builder()
                 .with_arg(Type::param(0).repeat(UnknownLen::Dynamic))
                 .with_arg(Type::param(0).repeat(UnknownLen::Dynamic))
                 .returning(Type::param(0).repeat(UnknownLen::Dynamic))
@@ -189,6 +192,21 @@ impl Prelude {
         }
     }
 
+    /// Returns the type of the `array` generation function from the eval crate.
+    ///
+    /// The `array` function is not included into [`Self::iter()`] because in the general case
+    /// we don't know the type of indexes.
+    pub fn array<T: PrimitiveType>(index_type: T) -> Function<T> {
+        Function::builder()
+            .with_arg(Type::Prim(index_type.clone()))
+            .with_arg(
+                Function::builder()
+                    .with_arg(Type::Prim(index_type))
+                    .returning(Type::param(0)),
+            )
+            .returning(Type::param(0).repeat(UnknownLen::Dynamic))
+    }
+
     /// Returns an iterator over all type definitions in the `Prelude`.
     pub fn iter<Prim: WithBoolean>() -> impl Iterator<Item = (&'static str, Type<Prim>)> {
         Self::VALUES
@@ -210,11 +228,11 @@ pub enum Assertions {
 impl<Prim: WithBoolean> From<Assertions> for Type<Prim> {
     fn from(value: Assertions) -> Self {
         match value {
-            Assertions::Assert => FnType::builder()
+            Assertions::Assert => Function::builder()
                 .with_arg(Type::BOOL)
                 .returning(Type::void())
                 .into(),
-            Assertions::AssertEq => FnType::builder()
+            Assertions::AssertEq => Function::builder()
                 .with_arg(Type::param(0))
                 .with_arg(Type::param(0))
                 .returning(Type::void())
@@ -242,7 +260,7 @@ impl Assertions {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Num;
+    use crate::arith::Num;
 
     use std::collections::{HashMap, HashSet};
 
@@ -272,5 +290,11 @@ mod tests {
                 .collect::<HashSet<_>>(),
             expected_types.keys().copied().collect::<HashSet<_>>()
         );
+    }
+
+    #[test]
+    fn string_presentation_of_array_type() {
+        let array_fn = Prelude::array(Num::Num);
+        assert_eq!(array_fn.to_string(), "(Num, (Num) -> 'T) -> ['T]");
     }
 }

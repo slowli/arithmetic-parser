@@ -1,10 +1,10 @@
-//! Base types, such as `Type` and `FnType`.
+//! Base types, such as `Type` and `DynConstraints`.
 
 use std::{borrow::Cow, fmt};
 
 use crate::{
-    arith::{CompleteConstraints, ConstraintSet, ObjectSafeConstraint, WithBoolean},
-    Num, PrimitiveType,
+    arith::{CompleteConstraints, ConstraintSet, Num, ObjectSafeConstraint, WithBoolean},
+    PrimitiveType,
 };
 
 mod fn_type;
@@ -18,7 +18,7 @@ pub(crate) use self::{
     tuple::IndexError,
 };
 pub use self::{
-    fn_type::{FnType, FnTypeBuilder, FnWithConstraints},
+    fn_type::{FnWithConstraints, Function, FunctionBuilder},
     object::Object,
     tuple::{LengthVar, Slice, Tuple, TupleIndex, TupleLen, UnknownLen},
 };
@@ -26,7 +26,7 @@ pub use self::{
 /// Type variable.
 ///
 /// A variable represents a certain unknown type. Variables can be either *free*
-/// or *bound* to a [function](FnType) (these are known as type params in Rust).
+/// or *bound* to a [`Function`] (these are known as type params in Rust).
 /// Types input to a [`TypeEnvironment`] can only have bounded variables (this is
 /// verified in runtime), but types output by the inference process can contain both.
 ///
@@ -64,7 +64,7 @@ impl TypeVar {
         )
     }
 
-    /// Creates a bounded type variable that can be used to [build functions](FnTypeBuilder).
+    /// Creates a bounded type variable that can be used to [build functions](FunctionBuilder).
     pub const fn param(index: usize) -> Self {
         Self {
             index,
@@ -94,7 +94,7 @@ impl TypeVar {
 /// - [`Prim`](Self::Prim)itive types are represented using the [`Display`](fmt::Display)
 ///   implementation of the corresponding [`PrimitiveType`].
 /// - [`Var`](Self::Var)s are represented as documented in [`TypeVar`].
-/// - Notation for [functional](FnType) and [tuple](Tuple) types is documented separately.
+/// - Notation for [functional](Function) and [tuple](Tuple) types is documented separately.
 ///
 /// [`ConstraintSet`]: crate::arith::ConstraintSet
 ///
@@ -103,12 +103,12 @@ impl TypeVar {
 /// There are conversions to construct `Type`s eloquently:
 ///
 /// ```
-/// # use arithmetic_typing::{FnType, UnknownLen, Type};
+/// # use arithmetic_typing::{Function, UnknownLen, Type};
 /// let tuple: Type = (Type::BOOL, Type::NUM).into();
 /// assert_eq!(tuple.to_string(), "(Bool, Num)");
 /// let slice = tuple.repeat(UnknownLen::param(0));
 /// assert_eq!(slice.to_string(), "[(Bool, Num); N]");
-/// let fn_type: Type = FnType::builder()
+/// let fn_type: Type = Function::builder()
 ///     .with_arg(slice)
 ///     .returning(Type::NUM)
 ///     .into();
@@ -139,10 +139,9 @@ impl TypeVar {
 /// Thus, the same `any` variable can be treated as a function, a tuple, a primitive type, etc.
 ///
 /// ```
-/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse};
 /// # use arithmetic_typing::{Annotated, TypeEnvironment, Type};
 /// # use assert_matches::assert_matches;
-/// type Parser = Typed<Annotated<NumGrammar<f32>>>;
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let code = r#"
@@ -151,19 +150,19 @@ impl TypeVar {
 ///     (x, y, ...) = wildcard; // destructuring `any` always succeeds
 ///     wildcard(1, |x| x + 1); // calling `any` as a funcion works as well
 /// "#;
-/// let ast = Parser::parse_statements(code)?;
+/// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 /// let mut env = TypeEnvironment::new();
 /// env.process_statements(&ast)?;
 ///
 /// // Destructure outputs are certain types that can be inferred
 /// // from their usage, rather than `any`!
 /// assert_matches!(env["x"], Type::Var(_));
-/// let bogus_usage_code = "x + 1 == 2; x(1)";
-/// let ast = Parser::parse_statements(bogus_usage_code)?;
+/// let bogus_code = "x + 1 == 2; x(1)";
+/// let ast = Annotated::<F32Grammar>::parse_statements(bogus_code)?;
 /// let errors = env.process_statements(&ast).unwrap_err();
 /// # assert_eq!(errors.len(), 1);
 /// let err = errors.iter().next().unwrap();
-/// assert_eq!(*err.span().fragment(), "x(1)");
+/// assert_eq!(*err.main_span().fragment(), "x(1)");
 /// # Ok(())
 /// # }
 /// ```
@@ -181,7 +180,7 @@ pub enum Type<Prim: PrimitiveType = Num> {
     /// Primitive type.
     Prim(Prim),
     /// Functional type.
-    Function(Box<FnType<Prim>>),
+    Function(Box<Function<Prim>>),
     /// Tuple type.
     Tuple(Tuple<Prim>),
     /// Object type.
@@ -225,8 +224,8 @@ impl<Prim: PrimitiveType> fmt::Display for Type<Prim> {
     }
 }
 
-impl<Prim: PrimitiveType> From<FnType<Prim>> for Type<Prim> {
-    fn from(fn_type: FnType<Prim>) -> Self {
+impl<Prim: PrimitiveType> From<Function<Prim>> for Type<Prim> {
+    fn from(fn_type: Function<Prim>) -> Self {
         Self::Function(Box::new(fn_type))
     }
 }
@@ -372,12 +371,9 @@ impl<Prim: PrimitiveType> Type<Prim> {
 /// should be accepted.
 ///
 /// ```
-/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-/// # use arithmetic_typing::{
-/// #     Annotated, Prelude, TypeEnvironment, Type, FnType,
-/// # };
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse};
+/// # use arithmetic_typing::{defs::Prelude, Annotated, TypeEnvironment, Type, Function};
 /// #
-/// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// # fn main() -> anyhow::Result<()> {
 /// let code = r#"
 ///     sum_lengths = |...pts: dyn { x: _, y: _ }| {
@@ -385,10 +381,10 @@ impl<Prim: PrimitiveType> Type<Prim> {
 ///     };
 ///     sum_lengths(#{ x: 1, y: 2 }, #{ x: 3, y: 4, z: 5 })
 /// "#;
-/// let ast = Parser::parse_statements(code)?;
+/// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 ///
 /// let mut env = TypeEnvironment::new();
-/// let sqrt = FnType::builder().with_arg(Type::NUM).returning(Type::NUM);
+/// let sqrt = Function::builder().with_arg(Type::NUM).returning(Type::NUM);
 /// env.insert("fold", Prelude::Fold).insert("sqrt", sqrt);
 /// env.process_statements(&ast)?;
 ///
@@ -403,14 +399,13 @@ impl<Prim: PrimitiveType> Type<Prim> {
 /// One of primary use cases of `dyn _` is restricting varargs of a function:
 ///
 /// ```
-/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse};
 /// # use arithmetic_typing::{
-/// #     ast::TypeAst, ErrorKind, Annotated, Prelude, TypeEnvironment, Type,
+/// #     ast::TypeAst, defs::Prelude, error::ErrorKind, Annotated, TypeEnvironment, Type,
 /// # };
 /// # use std::convert::TryFrom;
 /// # use assert_matches::assert_matches;
 /// #
-/// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// # fn main() -> anyhow::Result<()> {
 /// // Function that accepts any amount of linear args (not necessarily
 /// // of the same type) and returns a number.
@@ -422,11 +417,11 @@ impl<Prim: PrimitiveType> Type<Prim> {
 ///     digest(1, 2, (3, 4), #{ x: 5, y: (6,) }) == 1;
 ///     digest(3, true) == 0; // fails: `true` is not linear
 /// "#;
-/// let ast = Parser::parse_statements(code)?;
+/// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 /// let errors = env.process_statements(&ast).unwrap_err();
 ///
 /// let err = errors.iter().next().unwrap();
-/// assert_eq!(*err.span().fragment(), "true");
+/// assert_eq!(*err.main_span().fragment(), "true");
 /// assert_matches!(err.kind(), ErrorKind::FailedConstraint { .. });
 /// # Ok(())
 /// # }
@@ -569,7 +564,7 @@ mod tests {
         let sample_types = &[
             Type::free_var(2),
             (Type::NUM, Type::free_var(0)).into(),
-            FnType::builder()
+            Function::builder()
                 .with_arg(Type::free_var(0))
                 .returning(Type::void())
                 .into(),

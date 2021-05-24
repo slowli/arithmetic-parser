@@ -13,8 +13,10 @@ use arithmetic_parser::CodeFragment;
 ///
 /// # Type
 ///
+/// (using [`arithmetic-typing`](https://docs.rs/arithmetic-typing/) notation)
+///
 /// ```text
-/// fn(bool)
+/// (Bool) -> ()
 /// ```
 ///
 /// # Examples
@@ -78,8 +80,10 @@ impl<T> NativeFn<T> for Assert {
 ///
 /// # Type
 ///
+/// (using [`arithmetic-typing`](https://docs.rs/arithmetic-typing/) notation)
+///
 /// ```text
-/// fn(T, T)
+/// ('T, 'T) -> ()
 /// ```
 ///
 /// # Examples

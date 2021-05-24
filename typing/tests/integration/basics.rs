@@ -4,9 +4,10 @@ use assert_matches::assert_matches;
 
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
-    arith::NumArithmetic,
+    arith::{Num, NumArithmetic},
+    defs::Prelude,
     error::{ErrorContext, ErrorKind, ErrorLocation},
-    FnType, Num, Prelude, TupleLen, Type, TypeEnvironment, UnknownLen,
+    Function, TupleLen, Type, TypeEnvironment, UnknownLen,
 };
 
 use crate::{assert_incompatible_types, hash_fn_type, zip_fn_type, ErrorsExt, F32Grammar};
@@ -102,7 +103,7 @@ fn method_basics() {
     "#;
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
-    let plus_type = FnType::builder()
+    let plus_type = Function::builder()
         .with_arg(Type::NUM)
         .with_arg(Type::NUM)
         .returning(Type::NUM);
@@ -648,7 +649,7 @@ fn comparison_type_errors() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.span().fragment(), "(2 <= 1)");
+    assert_eq!(*err.main_span().fragment(), "(2 <= 1)");
     assert_eq!(err.location(), [ErrorLocation::Lhs]);
     assert_matches!(err.context(), ErrorContext::BinaryOp(_));
     assert_matches!(
@@ -752,7 +753,7 @@ fn unifying_types_containing_any() {
     let code = "digest(1, (2, 3), |x| x + 1)";
     let block = F32Grammar::parse_statements(code).unwrap();
 
-    let digest_type = FnType::builder()
+    let digest_type = Function::builder()
         .with_arg(Type::NUM)
         .with_varargs(Type::Any, UnknownLen::param(0))
         .returning(Type::NUM);

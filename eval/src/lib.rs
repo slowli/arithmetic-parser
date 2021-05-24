@@ -109,6 +109,7 @@
 //! [`num-bigint`]: https://crates.io/crates/num-bigint
 //! [`Tuple` expression]: arithmetic_parser::Expr::Tuple
 //! [`Destructure`]: arithmetic_parser::Destructure
+//! [`ObjectDestructure`]: arithmetic_parser::ObjectDestructure
 //! [`FieldAccess`]: arithmetic_parser::Expr::FieldAccess
 //! [object expressions]: arithmetic_parser::Expr::Object
 //!

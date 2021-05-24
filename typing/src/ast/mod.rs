@@ -3,7 +3,7 @@
 //! # Overview
 //!
 //! This module contains types representing AST for parsed type annotations; for example,
-//! [`TypeAst`] and [`FnTypeAst`]. These two types expose `parse` method which
+//! [`TypeAst`] and [`FunctionAst`]. These two types expose `parse` method which
 //! allows to integrate them into `nom` parsing.
 
 use nom::{
@@ -35,7 +35,7 @@ pub(crate) use self::conversion::AstConversionState;
 ///
 /// ```
 /// use arithmetic_parser::InputSpan;
-/// # use arithmetic_typing::{ast::TypeAst, Num};
+/// # use arithmetic_typing::ast::TypeAst;
 /// # use assert_matches::assert_matches;
 ///
 /// # fn main() -> anyhow::Result<()> {
@@ -68,13 +68,13 @@ pub enum TypeAst<'a> {
     /// Ticked identifier, e.g., `'T`.
     Param,
     /// Functional type.
-    Function(Box<FnTypeAst<'a>>),
+    Function(Box<FunctionAst<'a>>),
     /// Functional type with constraints.
     FunctionWithConstraints {
         /// Constraints on function params.
         constraints: Spanned<'a, ConstraintsAst<'a>>,
         /// Function body.
-        function: Box<Spanned<'a, FnTypeAst<'a>>>,
+        function: Box<Spanned<'a, FunctionAst<'a>>>,
     },
     /// Tuple type; for example, `(Num, Bool)`.
     Tuple(TupleAst<'a>),
@@ -118,21 +118,21 @@ pub struct SliceAst<'a> {
 
 /// Parsed functional type.
 ///
-/// In contrast to [`FnType`], this struct corresponds to AST, not to the logical representation
+/// In contrast to [`Function`], this struct corresponds to AST, not to the logical representation
 /// of functional types.
 ///
-/// [`FnType`]: crate::FnType
+/// [`Function`]: crate::Function
 ///
 /// # Examples
 ///
 /// ```
 /// use arithmetic_parser::InputSpan;
 /// # use assert_matches::assert_matches;
-/// # use arithmetic_typing::{ast::{FnTypeAst, TypeAst}, Num};
+/// # use arithmetic_typing::ast::{FunctionAst, TypeAst};
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let input = InputSpan::new("([Num; N]) -> Num");
-/// let (rest, ty) = FnTypeAst::parse(input)?;
+/// let (rest, ty) = FunctionAst::parse(input)?;
 /// assert!(rest.fragment().is_empty());
 /// assert_matches!(ty.args.extra.start[0].extra, TypeAst::Slice(_));
 /// assert_eq!(ty.return_type.extra, TypeAst::Ident);
@@ -141,14 +141,14 @@ pub struct SliceAst<'a> {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-pub struct FnTypeAst<'a> {
+pub struct FunctionAst<'a> {
     /// Function arguments.
     pub args: Spanned<'a, TupleAst<'a>>,
     /// Return type of the function.
     pub return_type: SpannedTypeAst<'a>,
 }
 
-impl<'a> FnTypeAst<'a> {
+impl<'a> FunctionAst<'a> {
     /// Parses `input` as a functional type. This parser can be composed using `nom` infrastructure.
     pub fn parse(input: InputSpan<'a>) -> NomResult<'a, Self> {
         fn_definition(input)
@@ -423,7 +423,7 @@ fn fn_or_tuple(input: InputSpan<'_>) -> NomResult<'_, TypeAst<'_>> {
         tuple((with_span(tuple_definition), opt(return_type))),
         |(args, return_type)| {
             if let Some(return_type) = return_type {
-                TypeAst::Function(Box::new(FnTypeAst { args, return_type }))
+                TypeAst::Function(Box::new(FunctionAst { args, return_type }))
             } else {
                 TypeAst::Tuple(args.extra)
             }
@@ -431,14 +431,14 @@ fn fn_or_tuple(input: InputSpan<'_>) -> NomResult<'_, TypeAst<'_>> {
     )(input)
 }
 
-fn fn_definition(input: InputSpan<'_>) -> NomResult<'_, FnTypeAst<'_>> {
+fn fn_definition(input: InputSpan<'_>) -> NomResult<'_, FunctionAst<'_>> {
     map(
         tuple((with_span(tuple_definition), return_type)),
-        |(args, return_type)| FnTypeAst { args, return_type },
+        |(args, return_type)| FunctionAst { args, return_type },
     )(input)
 }
 
-fn fn_definition_with_constraints(input: InputSpan<'_>) -> NomResult<'_, TypeAst> {
+fn fn_definition_with_constraints(input: InputSpan<'_>) -> NomResult<'_, TypeAst<'_>> {
     map(
         tuple((with_span(constraints), ws, cut(with_span(fn_definition)))),
         |(constraints, _, function)| TypeAst::FunctionWithConstraints {

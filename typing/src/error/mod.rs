@@ -35,8 +35,8 @@ impl<Prim: PrimitiveType> fmt::Display for Error<'_, Prim> {
         write!(
             formatter,
             "{}:{}: {}",
-            self.span().location_line(),
-            self.span().get_column(),
+            self.main_span().location_line(),
+            self.main_span().get_column(),
             self.kind()
         )
     }
@@ -154,11 +154,11 @@ impl<'a, Prim: PrimitiveType> Error<'a, Prim> {
     }
 
     /// Gets the most specific code span of this error.
-    pub fn span(&self) -> Spanned<'a> {
+    pub fn main_span(&self) -> Spanned<'a> {
         self.inner.with_no_extra()
     }
 
-    /// Gets the root code span of the failed operation. May coincide with [`Self::span()`].
+    /// Gets the root code span of the failed operation. May coincide with [`Self::main_span()`].
     pub fn root_span(&self) -> Spanned<'a> {
         self.root_span
     }
@@ -180,12 +180,11 @@ impl<'a, Prim: PrimitiveType> Error<'a, Prim> {
 /// # Examples
 ///
 /// ```
-/// # use arithmetic_parser::grammars::{NumGrammar, Parse, Typed};
-/// # use arithmetic_typing::{error::Errors, Annotated, Prelude, TypeEnvironment};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse};
+/// # use arithmetic_typing::{defs::Prelude, error::Errors, Annotated, TypeEnvironment};
 /// # use std::collections::HashSet;
-/// # type Parser = Typed<Annotated<NumGrammar<f32>>>;
 /// # fn main() -> anyhow::Result<()> {
-/// let buggy_code = Parser::parse_statements(r#"
+/// let buggy_code = Annotated::<F32Grammar>::parse_statements(r#"
 ///     numbers: ['T; _] = (1, 2, 3);
 ///     numbers.filter(|x| x, 1)
 /// "#)?;
@@ -207,11 +206,15 @@ impl<'a, Prim: PrimitiveType> Error<'a, Prim> {
 #[derive(Debug, Clone)]
 pub struct Errors<'a, Prim: PrimitiveType> {
     inner: Vec<Error<'a, Prim>>,
+    first_failing_statement: usize,
 }
 
 impl<'a, Prim: PrimitiveType> Errors<'a, Prim> {
     pub(crate) fn new() -> Self {
-        Self { inner: vec![] }
+        Self {
+            inner: vec![],
+            first_failing_statement: 0,
+        }
     }
 
     pub(crate) fn push(&mut self, err: Error<'a, Prim>) {
@@ -235,6 +238,17 @@ impl<'a, Prim: PrimitiveType> Errors<'a, Prim> {
     /// Iterates over errors contained in this list.
     pub fn iter(&self) -> impl Iterator<Item = &Error<'a, Prim>> + '_ {
         self.inner.iter()
+    }
+
+    /// Returns the index of the first failing statement within a `Block` that has errored.
+    /// If the error is in the return value, this index will be equal to the number of statements
+    /// in the block.
+    pub fn first_failing_statement(&self) -> usize {
+        self.first_failing_statement
+    }
+
+    pub(crate) fn set_first_failing_statement(&mut self, index: usize) {
+        self.first_failing_statement = index;
     }
 
     /// Post-processes these errors, resolving the contained `Type`s using
@@ -286,7 +300,7 @@ pub enum ErrorContext<Prim: PrimitiveType> {
     },
     /// Function call.
     FnCall {
-        /// Function definition. Note that this is not necessarily a [`FnType`](crate::FnType).
+        /// Function definition. Note that this is not necessarily a [`Function`](crate::Function).
         definition: Type<Prim>,
         /// Signature of the call.
         call_signature: Type<Prim>,

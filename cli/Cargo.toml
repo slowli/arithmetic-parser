@@ -38,4 +38,4 @@ path = "../typing"
 
 [dev-dependencies]
 assert_cmd = "1.0.1"
-predicates = "1.0.5"
+predicates = "2.0.1"

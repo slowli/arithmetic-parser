@@ -37,5 +37,5 @@ version = "0.3.0"
 path = "../typing"
 
 [dev-dependencies]
-assert_cmd = "1.0.1"
+assert_cmd = "2.0.0"
 predicates = "1.0.5"

@@ -17,7 +17,7 @@ all-features = true
 # Public dependencies (present in the public API).
 anyhow = { version = "1.0.27", default_features = false }
 bitflags = "1.2.1"
-nom = { version = "6.0.0", default_features = false, features = ["alloc"] }
+nom = { version = "7.0.0", default_features = false, features = ["alloc"] }
 nom_locate = { version = "3.0.0", default_features = false, features = ["alloc"] }
 num-traits = { version = "0.2.14", default_features = false }
 num-complex = { version = "0.4.0", optional = true }

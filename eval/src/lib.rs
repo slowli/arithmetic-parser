@@ -163,6 +163,7 @@
 //! let program = Untyped::<F32Grammar>::parse_statements(program)?;
 //!
 //! let mut env = Environment::new();
+//! env.insert("INF", Value::Prim(f32::INFINITY));
 //! env.extend(Prelude.iter());
 //! env.extend(Assertions.iter());
 //! let module = env.compile_module("minmax", &program)?;

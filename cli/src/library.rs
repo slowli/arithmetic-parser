@@ -174,7 +174,11 @@ macro_rules! declare_real_functions {
     ($type:ident) => {
         impl ReplLiteral for $type {
             const STD_LIB: StdLibrary<$type> = StdLibrary {
-                constants: &[("E", std::$type::consts::E), ("PI", std::$type::consts::PI)],
+                constants: &[
+                    ("INF", $type::INFINITY),
+                    ("E", std::$type::consts::E),
+                    ("PI", std::$type::consts::PI),
+                ],
 
                 unary: &[
                     // Rounding functions.
@@ -233,6 +237,7 @@ macro_rules! declare_complex_functions {
         impl ReplLiteral for $type {
             const STD_LIB: StdLibrary<$type> = StdLibrary {
                 constants: &[
+                    ("INF", Complex::new($real::INFINITY, 0.0)),
                     ("E", Complex::new(std::$real::consts::E, 0.0)),
                     ("PI", Complex::new(std::$real::consts::PI, 0.0)),
                 ],

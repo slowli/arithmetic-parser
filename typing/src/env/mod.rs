@@ -204,7 +204,7 @@ where
     Ty: Into<Type<Prim>>,
 {
     fn extend<I: IntoIterator<Item = (S, Ty)>>(&mut self, iter: I) {
-        self.variables.extend(convert_iter(iter))
+        self.variables.extend(convert_iter(iter));
     }
 }
 

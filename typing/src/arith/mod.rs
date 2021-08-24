@@ -154,21 +154,12 @@ impl<Prim: WithBoolean> TypeArithmetic<Prim> for BoolArithmetic {
 }
 
 /// Settings for constraints placed on arguments of binary arithmetic operations.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OpConstraintSettings<'a, Prim: PrimitiveType> {
     /// Constraint applied to the argument of `T op Num` / `Num op T` ops.
     pub lin: &'a dyn Constraint<Prim>,
     /// Constraint applied to the arguments of in-kind binary arithmetic ops (`T op T`).
     pub ops: &'a dyn Constraint<Prim>,
-}
-
-impl<Prim: PrimitiveType> Clone for OpConstraintSettings<'_, Prim> {
-    fn clone(&self) -> Self {
-        Self {
-            lin: self.lin,
-            ops: self.ops,
-        }
-    }
 }
 
 impl<Prim: PrimitiveType> Copy for OpConstraintSettings<'_, Prim> {}

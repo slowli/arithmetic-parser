@@ -57,8 +57,7 @@ where
         self.scopes
             .iter()
             .rev()
-            .flat_map(|scope| scope.get(name))
-            .next()
+            .find_map(|scope| scope.get(name))
             .or_else(|| self.env.get(name))
     }
 

@@ -56,7 +56,7 @@ pub trait Visit<Prim: PrimitiveType> {
     /// The default implementation calls one of more specific methods corresponding to the `ty`
     /// variant.
     fn visit_type(&mut self, ty: &Type<Prim>) {
-        visit_type(self, ty)
+        visit_type(self, ty);
     }
 
     /// Visits a type variable.
@@ -194,7 +194,7 @@ pub trait VisitMut<Prim: PrimitiveType> {
     /// The default implementation calls one of more specific methods corresponding to the `ty`
     /// variant. For "simple" types (variables, params, primitive types) does nothing.
     fn visit_type_mut(&mut self, ty: &mut Type<Prim>) {
-        visit_type_mut(self, ty)
+        visit_type_mut(self, ty);
     }
 
     /// Visits a tuple type.

@@ -239,8 +239,8 @@ pub enum Function<'a, T> {
 impl<T> Clone for Function<'_, T> {
     fn clone(&self) -> Self {
         match self {
-            Self::Native(function) => Self::Native(Rc::clone(&function)),
-            Self::Interpreted(function) => Self::Interpreted(Rc::clone(&function)),
+            Self::Native(function) => Self::Native(Rc::clone(function)),
+            Self::Interpreted(function) => Self::Interpreted(Rc::clone(function)),
         }
     }
 }

@@ -247,7 +247,7 @@ impl Reporter {
         {
             if let Some(def_span) = def_span {
                 let (file_id, def_range) =
-                    self.code_map.locate(def_span.module_id(), &def_span.code());
+                    self.code_map.locate(def_span.module_id(), def_span.code());
                 let def_label = Label::secondary(file_id, def_range)
                     .with_message(format!("The error occurred in function `{}`", fn_name));
                 diagnostic.labels.push(def_label);
@@ -262,7 +262,7 @@ impl Reporter {
 
                 let (file_id, call_range) = self
                     .code_map
-                    .locate(call_span.module_id(), &call_span.code());
+                    .locate(call_span.module_id(), call_span.code());
                 let call_label = Label::secondary(file_id, call_range)
                     .with_message(format!("Call at depth {}", depth + 1));
                 diagnostic.labels.push(call_label);
@@ -550,7 +550,7 @@ impl<T: ReplLiteral> Env<T> {
             type_env.process_with_arithmetic(&NumArithmetic::with_comparisons(), block)
         });
         if let Err(errors) = &res {
-            self.reporter.report_typing_errors(&errors)?;
+            self.reporter.report_typing_errors(errors)?;
         }
         Ok(res.map(drop))
     }

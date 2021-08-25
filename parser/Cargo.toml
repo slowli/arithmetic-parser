@@ -17,11 +17,15 @@ all-features = true
 # Public dependencies (present in the public API).
 anyhow = { version = "1.0.27", default_features = false }
 bitflags = "1.2.1"
-nom = { version = "6.0.0", default_features = false, features = ["alloc"] }
-nom_locate = { version = "3.0.0", default_features = false, features = ["alloc"] }
+nom = { version = "7", default_features = false, features = ["alloc"] }
 num-traits = { version = "0.2.14", default_features = false }
 num-complex = { version = "0.4.0", optional = true }
 num-bigint = { version = "0.4.0", optional = true }
+
+[dependencies.nom_locate] # TODO: use published version
+version = "4"
+git = "https://github.com/fflorent/nom_locate.git"
+rev = "f3e8955230aeb17d3657c79faffd0c362a191eb0"
 
 [dev-dependencies]
 assert_matches = "1.3.0"
@@ -33,7 +37,7 @@ version-sync = "0.9"
 default = ["std"]
 # Enables support of types from `std`, such as the `Error` trait, and propagates
 # to dependencies.
-std = ["anyhow/std", "nom/std", "nom/lexical"]
+std = ["anyhow/std", "nom/std"]
 
 [[example]]
 name = "complex_c"

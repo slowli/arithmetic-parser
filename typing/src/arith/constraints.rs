@@ -550,7 +550,7 @@ impl<Prim: PrimitiveType> CompleteConstraints<Prim> {
     ) {
         if let Some(object) = &self.object {
             self.simple
-                .apply_all_to_object(&object, substitutions, errors);
+                .apply_all_to_object(object, substitutions, errors);
         }
     }
 }

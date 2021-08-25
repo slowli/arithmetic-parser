@@ -35,7 +35,7 @@ impl TupleIndex {
                     DestructureRest::Named { variable, .. } => {
                         Some(LvalueTree::from_span(variable))
                     }
-                    _ => None,
+                    DestructureRest::Unnamed => None,
                 }),
             Self::End(i) => destructure.end.get(i).map(LvalueTree::from_lvalue),
         }

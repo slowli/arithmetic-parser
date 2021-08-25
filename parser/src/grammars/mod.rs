@@ -274,35 +274,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "std")]
-    // ^-- This behavior is specific to `lexical-core` dependency, which is switched on with `std`.
-    #[test]
-    fn parsing_infinity() {
-        let parsed = Untyped::<F32Grammar>::parse_statements("Inf").unwrap();
-        let ret = parsed.return_value.unwrap().extra;
-        assert_matches!(ret, Expr::Literal(lit) if lit == f32::INFINITY);
-
-        let parsed = Untyped::<F32Grammar>::parse_statements("-Inf").unwrap();
-        let ret = parsed.return_value.unwrap().extra;
-        assert_matches!(ret, Expr::Literal(lit) if lit == -f32::INFINITY);
-
-        let parsed = Untyped::<F32Grammar>::parse_statements("Infty").unwrap();
-        let ret = parsed.return_value.unwrap().extra;
-        assert_matches!(ret, Expr::Variable);
-
-        let parsed = Untyped::<F32Grammar>::parse_statements("Infer(1)").unwrap();
-        let ret = parsed.return_value.unwrap().extra;
-        assert_matches!(ret, Expr::Function { .. });
-
-        let parsed = Untyped::<F32Grammar>::parse_statements("-Infty").unwrap();
-        let ret = parsed.return_value.unwrap().extra;
-        assert_matches!(ret, Expr::Unary { .. });
-
-        let parsed = Untyped::<F32Grammar>::parse_statements("-Infer(2, 3)").unwrap();
-        let ret = parsed.return_value.unwrap().extra;
-        assert_matches!(ret, Expr::Unary { .. });
-    }
-
     #[cfg(feature = "num-complex")]
     #[test]
     fn parsing_i() {

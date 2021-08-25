@@ -62,7 +62,7 @@ impl fmt::Display for Evaluated {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Value(val) => write!(formatter, "(float2)({}, {})", val.re, val.im),
-            Self::Symbolic { content, .. } => formatter.write_str(&content),
+            Self::Symbolic { content, .. } => formatter.write_str(content),
         }
     }
 }

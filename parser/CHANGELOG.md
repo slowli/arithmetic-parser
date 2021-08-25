@@ -5,6 +5,10 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ## [Unreleased]
 
+### Changed
+
+- Update `nom` parser dependency to v7. (#99)
+
 ## 0.3.0 - 2021-05-24
 
 ### Added
@@ -26,7 +30,7 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Add object destructuring via `Lvalue::Object`. (#86)
 
-- Allow to mock type parsing if the list of type annotations is statically known. (#88)
+- Allow mocking type parsing if the list of type annotations is statically known. (#88)
 
 ### Changed
 

@@ -621,7 +621,7 @@ fn fold_binary_expr<'a, T: Grammar<'a>>(
                 };
             }
 
-            *parent = unite_spans(input, &parent, &expr).copy_with_extra(parent.extra.clone());
+            *parent = unite_spans(input, parent, &expr).copy_with_extra(parent.extra.clone());
             if let Expr::Binary { ref mut rhs, .. } = parent.extra {
                 let rhs_span = unite_spans(input, rhs, &expr);
                 if chained_comparison {

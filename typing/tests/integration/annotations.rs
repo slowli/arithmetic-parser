@@ -116,7 +116,7 @@ fn fn_narrowed_via_type_hint() {
 
     assert_eq!(type_env["identity"].to_string(), "(Num) -> Num");
     assert_incompatible_types(
-        &err.kind(),
+        err.kind(),
         &Type::NUM,
         &Type::Tuple(vec![Type::NUM; 2].into()),
     )
@@ -129,7 +129,7 @@ fn fn_incorrectly_narrowed_via_type_hint() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_incompatible_types(&err.kind(), &Type::NUM, &Type::BOOL);
+    assert_incompatible_types(err.kind(), &Type::NUM, &Type::BOOL);
 }
 
 #[test]

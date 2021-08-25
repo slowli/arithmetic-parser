@@ -551,7 +551,7 @@ impl<'a, T> DestructureRest<'a, T> {
             Self::Named { variable, .. } => {
                 Some(variable.copy_with_extra(Lvalue::Variable { ty: None }))
             }
-            _ => None,
+            Self::Unnamed => None,
         }
     }
 }

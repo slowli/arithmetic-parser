@@ -290,11 +290,11 @@ impl<'a, T> Value<'a, T> {
         // We only know how to compare primitive values.
         let lhs_value = match &lhs.extra {
             Value::Prim(value) => value,
-            _ => return Err(Error::new(module_id, &lhs, ErrorKind::CannotCompare)),
+            _ => return Err(Error::new(module_id, lhs, ErrorKind::CannotCompare)),
         };
         let rhs_value = match &rhs.extra {
             Value::Prim(value) => value,
-            _ => return Err(Error::new(module_id, &rhs, ErrorKind::CannotCompare)),
+            _ => return Err(Error::new(module_id, rhs, ErrorKind::CannotCompare)),
         };
 
         let maybe_ordering = arithmetic.partial_cmp(lhs_value, rhs_value);
@@ -319,13 +319,13 @@ impl<'a, T> Value<'a, T> {
                 let err = ErrorKind::UnexpectedOperand {
                     op: BinaryOp::And.into(),
                 };
-                Err(Error::new(module_id, &rhs, err))
+                Err(Error::new(module_id, rhs, err))
             }
             _ => {
                 let err = ErrorKind::UnexpectedOperand {
                     op: BinaryOp::And.into(),
                 };
-                Err(Error::new(module_id, &lhs, err))
+                Err(Error::new(module_id, lhs, err))
             }
         }
     }
@@ -341,13 +341,13 @@ impl<'a, T> Value<'a, T> {
                 let err = ErrorKind::UnexpectedOperand {
                     op: BinaryOp::Or.into(),
                 };
-                Err(Error::new(module_id, &rhs, err))
+                Err(Error::new(module_id, rhs, err))
             }
             _ => {
                 let err = ErrorKind::UnexpectedOperand {
                     op: BinaryOp::Or.into(),
                 };
-                Err(Error::new(module_id, &lhs, err))
+                Err(Error::new(module_id, lhs, err))
             }
         }
     }

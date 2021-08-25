@@ -138,7 +138,7 @@ impl Compiler {
         block: &Block<'a, T>,
     ) -> Result<(Registers<'a, T::Lit>, ImportSpans<'a>), Error<'a>> {
         let mut extractor = CapturesExtractor::new(module_id);
-        extractor.eval_block(&block)?;
+        extractor.eval_block(block)?;
 
         let mut captures = Registers::new();
         for &var_name in extractor.captures.keys() {

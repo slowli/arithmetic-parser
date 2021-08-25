@@ -169,7 +169,7 @@ fn parametric_fn_passed_as_arg_with_unsatisfiable_requirements() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_incompatible_types(
-        &err.kind(),
+        err.kind(),
         &Type::NUM,
         &Type::Tuple(vec![Type::NUM; 2].into()),
     );
@@ -260,7 +260,7 @@ fn function_passed_as_arg_invalid_input() {
             if definition.to_string() == "(('T, 'T), ('T) -> 'U) -> ('U, 'U)"
             || call_signature.to_string() == "((Num, Bool), (Num) -> Num) -> (Num, Num)"
     );
-    assert_incompatible_types(&err.kind(), &Type::NUM, &Type::BOOL);
+    assert_incompatible_types(err.kind(), &Type::NUM, &Type::BOOL);
     assert_eq!(
         err.kind().to_string(),
         "Type `Bool` is not assignable to type `Num`"
@@ -284,7 +284,7 @@ fn incorrect_arg_in_slices() {
             if definition.to_string() == "(['T; N], ('T) -> 'U) -> ['U; N]"
             && call_signature.to_string() == "((Num, Bool), ('T) -> 'T) -> (Num, Num)"
     );
-    assert_incompatible_types(&err.kind(), &Type::NUM, &Type::BOOL);
+    assert_incompatible_types(err.kind(), &Type::NUM, &Type::BOOL);
 }
 
 #[test]

@@ -74,7 +74,7 @@ impl Literal {
                             hex::decode(digits.fragment()).map_err(ErrorKind::literal)
                         },
                     ),
-                    vec![],
+                    Vec::new,
                     |mut acc, digits| {
                         acc.extend_from_slice(&digits);
                         acc

@@ -161,7 +161,7 @@ fn contradicting_type_hint_with_slice() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_incompatible_types(&err.kind(), &Type::NUM, &Type::BOOL);
+    assert_incompatible_types(err.kind(), &Type::NUM, &Type::BOOL);
 }
 
 #[test]
@@ -190,7 +190,7 @@ fn invalid_type_hint_with_fn_declaration() {
     type_env.insert("map", Prelude::Map);
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_incompatible_types(&err.kind(), &Type::NUM, &Type::BOOL);
+    assert_incompatible_types(err.kind(), &Type::NUM, &Type::BOOL);
 }
 
 #[test]

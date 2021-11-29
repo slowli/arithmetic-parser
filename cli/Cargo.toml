@@ -39,3 +39,5 @@ path = "../typing"
 [dev-dependencies]
 assert_cmd = "2.0.0"
 predicates = "2.0.2"
+# FIXME: use public version
+term-transcript = { version = "0.1.0", path = "../../term-transcript" }

@@ -1,7 +1,9 @@
 # Snapshots for `arithmetic-parser` CLI
 
-This document lists all snapshots used in E2E testing the CLI,
+This document lists all snapshots used in E2E testing the `arithmetic-parser` CLI,
 with a brief explanation what each snapshot does.
+
+Snapshots for REPL mode (`eval -i` command) are described in [a separate file](repl/README.md).
 
 ## Basics
 

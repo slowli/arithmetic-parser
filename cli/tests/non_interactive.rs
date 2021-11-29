@@ -1,5 +1,8 @@
 //! E2E tests for a non-interactive binary usage.
 
+// Some tests use multi-line formatting, which is awkward to achieve on Windows.
+#![cfg(unix)]
+
 use term_transcript::{
     svg::{ScrollOptions, Template, TemplateOptions},
     test::{MatchKind, TestConfig},

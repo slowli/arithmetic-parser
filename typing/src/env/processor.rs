@@ -81,7 +81,7 @@ where
 
     fn process_annotation(&mut self, ty: Option<&SpannedTypeAst<'a>>) -> Type<Prim> {
         if let Some(ty) = ty {
-            AstConversionState::new(&mut self.env, &mut self.errors).convert_type(ty)
+            AstConversionState::new(self.env, &mut self.errors).convert_type(ty)
         } else {
             self.new_type()
         }

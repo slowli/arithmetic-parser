@@ -1,5 +1,9 @@
 //! `Registers` for executing commands and closely related types.
 
+#![allow(renamed_and_removed_lints, clippy::unknown_clippy_lints)]
+// ^ `needless_option_as_deref` is newer than MSRV, and `clippy::unknown_clippy_lints` is removed
+// since Rust 1.51.
+
 use hashbrown::HashMap;
 
 use crate::{
@@ -280,6 +284,7 @@ impl<'a, T: Clone> Registers<'a, T> {
             })
     }
 
+    #[allow(clippy::needless_option_as_deref)] // false positive
     fn execute_inner(
         &mut self,
         executable: &Executable<'a, T>,
@@ -515,6 +520,7 @@ impl<'a, T: Clone> Registers<'a, T> {
         }
     }
 
+    #[allow(clippy::needless_option_as_deref)] // false positive
     fn eval_function(
         function: &Function<'a, T>,
         fn_name: &str,
@@ -525,7 +531,7 @@ impl<'a, T: Clone> Registers<'a, T> {
         mut backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
         let full_call_span = CodeInModule::new(module_id, call_span);
-        if let Some(backtrace) = backtrace.as_deref_mut() {
+        if let Some(backtrace) = &mut backtrace {
             backtrace.push_call(fn_name, function.def_span(), full_call_span.clone());
         }
         let mut context = CallContext::new(full_call_span, backtrace.as_deref_mut(), arithmetic);

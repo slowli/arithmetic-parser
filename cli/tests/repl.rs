@@ -1,6 +1,7 @@
 //! E2E tests for interactive binary usage.
 
 use term_transcript::{
+    svg::{ScrollOptions, Template, TemplateOptions},
     test::{MatchKind, TestConfig},
     ShellOptions, UserInput,
 };
@@ -8,6 +9,14 @@ use term_transcript::{
 use std::{process::Command, time::Duration};
 
 const PATH_TO_BIN: &str = env!("CARGO_BIN_EXE_arithmetic-parser");
+
+fn scroll_template() -> Template {
+    Template::new(TemplateOptions {
+        scroll: Some(ScrollOptions::default()),
+        window_frame: true,
+        ..TemplateOptions::default()
+    })
+}
 
 fn test_config(with_types: bool) -> TestConfig {
     let mut command = Command::new(PATH_TO_BIN);
@@ -47,13 +56,15 @@ fn cont(input: &str) -> UserInput {
 
 #[test]
 fn repl_basics() {
-    test_config(false).test(
+    test_config(false).with_template(scroll_template()).test(
         "tests/snapshots/repl/basics.svg",
         vec![
-            repl("sin"),
-            repl("is_positive = |x| x > 0;"),
-            repl("(1, 0, -1).map(is_positive)"),
-            repl("is_positive"),
+            repl("1 + 2*3"),
+            repl("all = |array, pred| array.fold(true, |acc, x| acc && pred(x));"),
+            repl("all"),
+            repl("(1, 2, 5).all(|x| 0 < x)"),
+            repl("(1, -2, 5).all(|x| 0 < x)"),
+            repl("(1, 2, 5, map).all(|x| 0 < x)"),
         ],
     );
 }

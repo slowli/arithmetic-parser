@@ -6,7 +6,7 @@ Supports integer, modular, real and complex-valued arithmetic.
 Each arithmetic is supplied with all standard functions from the `arithmetic-eval` crate
 (`map`, `assert` and so on) and some functions / constants specific to the number type.
 
-![REPL example](repl-example.svg)
+![REPL example](tests/snapshots/repl/basics.svg)
 
 ## Usage
 

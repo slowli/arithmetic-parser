@@ -1,5 +1,5 @@
 <!-- Created with term-transcript v0.1.0 (https://github.com/slowli/term-transcript) -->
-<svg viewBox="0 0 720 270" width="720" height="270" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 -22 720 384" width="720" height="384" xmlns="http://www.w3.org/2000/svg">
   <style>
     :root {
       --black: #1c1c1c; --i-black: #666666;
@@ -30,6 +30,7 @@
       padding: 2px 10px;
     }
     .term-output { margin-bottom: 6px; }
+    .scrollbar { fill: rgba(255, 255, 255, 0.35); }
     .bold,.prompt { font-weight: bold; }
     .italic { font-style: italic; }
     .underline { text-decoration: underline; }
@@ -64,23 +65,53 @@
     .fg14 { color: var(--i-cyan); } .bg14 { background: var(--i-cyan); }
     .fg15 { color: var(--i-white); } .bg15 { background: var(--i-white); }
   </style>
-  <rect width="100%" height="100%" y="0" rx="4.5" style="fill: var(--black);" />
-  <svg x="0" y="10" width="720" height="250" viewBox="0 0 720 250">
-    <foreignObject width="720" height="250">
+  <rect width="100%" height="100%" y="-22" rx="4.5" style="fill: var(--black);" />
+  <rect width="100%" height="26" y="-22" clip-path="inset(0 0 -10 0 round 4.5)" style="fill: var(--hl-black);"/>
+  <circle cx="17" cy="-9" r="7" style="fill: var(--red);"/>
+  <circle cx="37" cy="-9" r="7" style="fill: var(--yellow);"/>
+  <circle cx="57" cy="-9" r="7" style="fill: var(--green);"/>
+  <svg x="0" y="10" width="720" height="342" viewBox="0 0 720 342">
+    <animate attributeName="viewBox" values="0 0 720 342;0 72 720 342;0 144 720 342;0 216 720 342;0 288 720 342;0 360 720 342" dur="20s" repeatCount="indefinite" calcMode="discrete" />
+    <foreignObject width="720" height="660">
       <div xmlns="http://www.w3.org/1999/xhtml" class="container">
-        <div class="user-input"><pre><span class="prompt">&gt;&gt;&gt;</span> sin</pre></div>
-        <div class="term-output"><pre>(native fn)</pre></div>
-        <div class="user-input"><pre><span class="prompt">&gt;&gt;&gt;</span> is_positive &#x3D; |x| x &gt; 0;</pre></div>
+        <div class="user-input"><pre><span class="prompt">&gt;&gt;&gt;</span> 1 + 2*3</pre></div>
+        <div class="term-output"><pre><span class="fg2">7</span></pre></div>
+        <div class="user-input"><pre><span class="prompt">&gt;&gt;&gt;</span> all &#x3D; |array, pred| array.fold(true, |acc, x| acc &amp;&amp; pred(x));</pre></div>
         <div class="term-output"><pre></pre></div>
-        <div class="user-input"><pre><span class="prompt">&gt;&gt;&gt;</span> (1, 0, -1).map(is_positive)</pre></div>
-        <div class="term-output"><pre>(
-  <span class="fg6">true</span>,
-  <span class="fg6">false</span>,
-  <span class="fg6">false</span>
-)</pre></div>
-        <div class="user-input"><pre><span class="prompt">&gt;&gt;&gt;</span> is_positive</pre></div>
-        <div class="term-output"><pre>fn(1 arg)</pre></div>
+        <div class="user-input"><pre><span class="prompt">&gt;&gt;&gt;</span> all</pre></div>
+        <div class="term-output"><pre>fn(2 args)[
+  fold = (native fn),
+  true = <span class="fg6">true</span>
+]</pre></div>
+        <div class="user-input"><pre><span class="prompt">&gt;&gt;&gt;</span> (1, 2, 5).all(|x| 0 &lt; x)</pre></div>
+        <div class="term-output"><pre><span class="fg6">true</span></pre></div>
+        <div class="user-input"><pre><span class="prompt">&gt;&gt;&gt;</span> (1, -2, 5).all(|x| 0 &lt; x)</pre></div>
+        <div class="term-output"><pre><span class="fg6">false</span></pre></div>
+        <div class="user-input"><pre><span class="prompt">&gt;&gt;&gt;</span> (1, 2, 5, map).all(|x| 0 &lt; x)</pre></div>
+        <div class="term-output"><pre><span class="bold fg9">error[EVAL]</span><span class="bold">: Value is not comparable</span>
+  <span class="fg4">┌─</span> Snippet #6:1:28
+  <span class="fg4">│</span>
+<span class="fg4">1</span> <span class="fg4">│</span> (1, 2, 5, map).all(|x| 0 &lt; <span class="fg1">x</span>)
+  <span class="fg4">│</span> <span class="fg4">---------------------------</span><span class="fg1">^</span><span class="fg4">-</span>
+  <span class="fg4">│</span> <span class="fg4">│</span>                  <span class="fg4">│</span>       <span class="fg1">│</span>
+  <span class="fg4">│</span> <span class="fg4">│</span>                  <span class="fg4">│</span>       <span class="fg1">Cannot be compared</span>
+  <span class="fg4">│</span> <span class="fg4">│</span>                  <span class="fg4">The error occurred in function `pred`</span>
+  <span class="fg4">│</span> <span class="fg4">Call at depth 3</span>
+  <span class="fg4">│</span>
+  <span class="fg4">┌─</span> Snippet #2:1:21
+  <span class="fg4">│</span>
+<span class="fg4">1</span> <span class="fg4">│</span> all = |array, pred| array.fold(true, |acc, x| acc &amp;&amp; pred(x));
+  <span class="fg4">│</span>                     <span class="fg4">-----------------------------------------</span>
+  <span class="fg4">│</span>                     <span class="fg4">│</span>                                <span class="fg4">│</span>
+  <span class="fg4">│</span>                     <span class="fg4">│</span>                                <span class="fg4">Call at depth 1</span>
+  <span class="fg4">│</span>                     <span class="fg4">Call at depth 2</span>
+  <span class="fg4">│</span>
+  <span class="fg4">=</span> Only primitive values can be compared; complex values cannot
+</pre></div>
       </div>
     </foreignObject>
   </svg>
+  <rect class="scrollbar" x="713" y="10" width="5" height="40">
+    <animateTransform attributeName="transform" attributeType="XML" type="translate" values="0 0;0 60;0 121;0 181;0 242;0 302" dur="20s" repeatCount="indefinite" calcMode="discrete" />
+  </rect>
 </svg>

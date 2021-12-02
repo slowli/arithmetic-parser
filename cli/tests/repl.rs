@@ -19,8 +19,18 @@ fn test_config(with_types: bool) -> TestConfig {
 
     let shell_options = ShellOptions::new(command)
         .with_env("COLOR", "always")
-        .with_io_timeout(Duration::from_millis(250));
-    TestConfig::new(shell_options).with_match_kind(MatchKind::Precise)
+        .with_io_timeout(Duration::from_millis(250))
+        .with_init_timeout(Duration::from_secs(1));
+
+    // `codespan_reporting` uses some different colors on Windows:
+    // https://docs.rs/codespan-reporting/0.11.1/codespan_reporting/term/struct.Styles.html;
+    // hence, we check only text correspondence on Windows.
+    let match_kind = if cfg!(windows) {
+        MatchKind::TextOnly
+    } else {
+        MatchKind::Precise
+    };
+    TestConfig::new(shell_options).with_match_kind(match_kind)
 }
 
 // Helper commands to create `UserInput`s.

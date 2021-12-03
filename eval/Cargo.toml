@@ -7,7 +7,7 @@ readme = "README.md"
 license = "MIT OR Apache-2.0"
 description = "Simple interpreter for arithmetic expressions."
 repository = "https://github.com/slowli/arithmetic-parser"
-categories = ["mathematics", "compilers"]
+categories = ["mathematics", "compilers", "no-std"]
 keywords = ["interpreter", "arithmetic", "scripting", "language"]
 
 [package.metadata.docs.rs]

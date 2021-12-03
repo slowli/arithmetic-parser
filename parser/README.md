@@ -2,9 +2,10 @@
 
 [![Build Status](https://github.com/slowli/arithmetic-parser/workflows/Rust/badge.svg?branch=master)](https://github.com/slowli/arithmetic-parser/actions)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue)](https://github.com/slowli/arithmetic-parser#license)
-![rust 1.46+ required](https://img.shields.io/badge/rust-1.46+-blue.svg) 
+![rust 1.46+ required](https://img.shields.io/badge/rust-1.46+-blue.svg)
+![no_std supported](https://img.shields.io/badge/no__std-tested-green.svg)
 
-**Links:** [![Docs.rs](https://docs.rs/arithmetic-parser/badge.svg)](https://docs.rs/arithmetic-parser/)
+**Links:** [![Docs.rs](https://img.shields.io/docsrs/arithmetic-parser)](https://docs.rs/arithmetic-parser/)
 [![crate docs (master)](https://img.shields.io/badge/master-yellow.svg?label=docs)](https://slowli.github.io/arithmetic-parser/arithmetic_parser/) 
 [![changelog](https://img.shields.io/badge/-changelog-orange)](CHANGELOG.md)
 
@@ -26,7 +27,7 @@ function definitions, blocks, methods, and type annotations.
 In other words, the parser forms a foundation of a minimalistic scripting language,
 while leaving certain aspects up to user (most of all, specification of literals).
 
-See the crate docs for more details on the supported features.
+See the crate docs for more details on the supported syntax features.
 
 ### Code sample
 

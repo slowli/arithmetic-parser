@@ -124,17 +124,15 @@ pub struct Reporter {
     config: ReportingConfig,
 }
 
-impl Default for Reporter {
-    fn default() -> Self {
+impl Reporter {
+    pub fn new(color_choice: ColorChoice) -> Self {
         Self {
             code_map: CodeMap::default(),
-            writer: StandardStream::stdout(ColorChoice::Auto),
+            writer: StandardStream::stdout(color_choice),
             config: ReportingConfig::default(),
         }
     }
-}
 
-impl Reporter {
     fn print_greeting(&self) -> io::Result<()> {
         let mut writer = self.writer.lock();
         writer.set_color(ColorSpec::new().set_bold(true))?;
@@ -448,9 +446,10 @@ impl<T: ReplLiteral> Env<T> {
         arithmetic: Box<dyn OrdArithmetic<T>>,
         env: Environment<'static, T>,
         type_env: Option<TypeEnvironment>,
+        color_choice: ColorChoice,
     ) -> Self {
         Self {
-            reporter: Reporter::default(),
+            reporter: Reporter::new(color_choice),
             original_env: env.clone(),
             original_type_env: type_env.clone(),
             env,

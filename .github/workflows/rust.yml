@@ -10,7 +10,7 @@ env:
   # Minimum supported Rust version.
   msrv: 1.46.0
   # Minimum supported Rust version for CLI.
-  msrv_cli: 1.51.0
+  msrv_cli: 1.52.0
   # Nightly Rust toolchain for building docs.
   nightly: nightly-2021-04-15
 

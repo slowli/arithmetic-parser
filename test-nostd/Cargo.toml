@@ -1,0 +1,29 @@
+[package]
+name = "arithmetic-parser-nostd"
+version = "0.0.0"
+authors = ["Alex Ostrovski <ostrovski.alex@gmail.com>"]
+edition = "2018"
+license = "MIT OR Apache-2.0"
+description = "Testing usability of `arithmetic-parser` in no-std env"
+repository = "https://github.com/slowli/arithmetic-parser"
+publish = false
+
+[dependencies]
+# Cortex-M dependencies
+cortex-m-rt = "0.7"
+cortex-m-semihosting = "0.3.7"
+alloc-cortex-m = "0.4.1"
+panic-halt = "0.2.0"
+
+rand_chacha = { version = "0.3.1", default-features = false }
+
+# Arithmetic dependencies
+arithmetic-parser = { path = "../parser", default-features = false }
+arithmetic-eval = { path = "../eval", default-features = false }
+
+[profile.release]
+opt-level = "z" # Optimize for size, rather than speed
+lto = true
+codegen-units = 1
+
+[workspace]

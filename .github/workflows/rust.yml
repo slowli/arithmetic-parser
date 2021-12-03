@@ -196,9 +196,9 @@ jobs:
           args: -p arithmetic-typing --example num_or_bytes
 
       - name: Compile WASM
-        run: (cd test-wasm; wasm-pack build --target nodejs)
+        run: (cd e2e-tests/wasm; wasm-pack build --target nodejs)
       - name: Run WASM
-        run: node test-wasm/test.js
+        run: node e2e-tests/wasm/test.js
 
   # Checks that the crate actually builds without `std`. To do this,
   # we take a target (`thumbv7m-none-eabi`) that does not have `std` support.
@@ -206,6 +206,9 @@ jobs:
     needs:
       - build
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: e2e-tests/no-std
 
     steps:
       - uses: actions/checkout@v2
@@ -220,20 +223,19 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: ${{ env.nightly }}
-          profile: minimal
           override: true
+          components: rustfmt, clippy
           target: thumbv7m-none-eabi
 
-      - name: Build parser
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: -p arithmetic-parser --lib --no-default-features --target thumbv7m-none-eabi -Z avoid-dev-deps
-      - name: Build eval
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: -p arithmetic-eval --lib --no-default-features --target thumbv7m-none-eabi -Z avoid-dev-deps
+      # Since it's impossible to include the `nostd` crate into the common workspace,
+      # we need to perform fmt / clippy checks for it separately.
+      - name: Format
+        run: cargo fmt -- --check
+      - name: Clippy
+        run: cargo clippy --bin arithmetic-parser-nostd --all-features -- -D warnings
+
+      - name: Run binary
+        run: cargo run --release
 
   document:
     if: github.event_name == 'push'
@@ -241,6 +243,7 @@ jobs:
       - build
       - build-msrv
       - build-msrv-cli
+      - build-nostd
     runs-on: ubuntu-latest
 
     steps:

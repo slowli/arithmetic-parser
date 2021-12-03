@@ -1,6 +1,6 @@
 # Rust
 target
 /Cargo.lock
-/test-nostd/Cargo.lock
+/e2e-tests/no-std/Cargo.lock
 # IDE
 .idea

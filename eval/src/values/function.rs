@@ -1,5 +1,9 @@
 //! `Function` and closely related types.
 
+#![allow(renamed_and_removed_lints, clippy::unknown_clippy_lints)]
+// ^ `needless_option_as_deref` is newer than MSRV, and `clippy::unknown_clippy_lints` is removed
+// since Rust 1.51.
+
 use hashbrown::HashMap;
 
 use core::fmt;
@@ -47,6 +51,7 @@ impl<'r, 'a, T> CallContext<'r, 'a, T> {
         }
     }
 
+    #[allow(clippy::needless_option_as_deref)] // false positive
     pub(crate) fn backtrace(&mut self) -> Option<&mut Backtrace<'a>> {
         self.backtrace.as_deref_mut()
     }

@@ -421,6 +421,36 @@ fn function_instantiations_are_independent() {
 }
 
 #[test]
+fn function_instantiations_with_alias() {
+    let code = r#"
+        identity = |x| x;
+        alias = identity;
+        x = (identity(5), alias(alias(1 == 2)));
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env.process_statements(&block).unwrap();
+
+    assert_eq!(type_env.get("x").unwrap().to_string(), "(Num, Bool)");
+}
+
+#[test]
+fn aliasing_generic_native_function() {
+    let code = r#"
+        reduce = fold;
+        (#{ x: 1, y: 2 }, #{ x: 3, y: 4 }).reduce(0, |acc, { x, y }| acc + x + y);
+        (1, 2, 3).reduce(0, |acc, x| acc + x)
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let output = TypeEnvironment::new()
+        .insert("fold", Prelude::Fold)
+        .process_statements(&block)
+        .unwrap();
+
+    assert_eq!(output, Type::NUM);
+}
+
+#[test]
 fn function_passed_as_arg() {
     let code = r#"
         mapper = |(x, y), map| (map(x), map(y));

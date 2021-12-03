@@ -1,6 +1,7 @@
 //! Simple CLI / REPL for evaluating arithmetic expressions.
 
 use anyhow::format_err;
+use codespan_reporting::term::{termcolor::ColorChoice, ColorArg};
 use num_complex::{Complex32, Complex64};
 use structopt::StructOpt;
 
@@ -93,6 +94,15 @@ enum Args {
         /// Command to interpret. If omitted, the command will be read from stdin.
         #[structopt(name = "command")]
         command: Option<String>,
+        /// Controls coloring of the output.
+        #[structopt(
+            long,
+            default_value = "auto",
+            possible_values = ColorArg::VARIANTS,
+            case_insensitive = true,
+            env
+        )]
+        color: ColorArg,
     },
     /// Evaluate the input, optionally checking types beforehand.
     Eval(EvalArgs),
@@ -118,6 +128,15 @@ struct EvalArgs {
     /// Command to interpret. If omitted, the command will be read from stdin.
     #[structopt(name = "command", conflicts_with = "interactive")]
     command: Option<String>,
+    /// Controls coloring of the output.
+    #[structopt(
+        long,
+        default_value = "auto",
+        possible_values = ColorArg::VARIANTS,
+        case_insensitive = true,
+        env
+    )]
+    color: ColorArg,
 }
 
 impl Args {
@@ -126,13 +145,31 @@ impl Args {
             Self::Ast {
                 arithmetic,
                 command,
-            } => Self::output_ast(arithmetic, command),
+                color,
+            } => Self::output_ast(arithmetic, command, Self::color_choice(color)),
 
             Self::Eval(eval_args) => eval_args.run(),
         }
     }
 
-    fn output_ast(arithmetic: ArithmeticType, command: Option<String>) -> io::Result<()> {
+    fn color_choice(color_arg: ColorArg) -> ColorChoice {
+        match color_arg.into() {
+            ColorChoice::Auto => {
+                if atty::is(atty::Stream::Stdout) {
+                    ColorChoice::Auto
+                } else {
+                    ColorChoice::Never
+                }
+            }
+            other => other,
+        }
+    }
+
+    fn output_ast(
+        arithmetic: ArithmeticType,
+        command: Option<String>,
+        color_choice: ColorChoice,
+    ) -> io::Result<()> {
         let command = match command {
             Some(command) => command,
             None => {
@@ -144,20 +181,27 @@ impl Args {
 
         match arithmetic {
             ArithmeticType::U64 | ArithmeticType::Modular64(_) => {
-                Self::parse_and_output_block::<u64>(&command)
+                Self::parse_and_output_block::<u64>(&command, color_choice)
             }
-            ArithmeticType::I64 => Self::parse_and_output_block::<i64>(&command),
-            ArithmeticType::U128 => Self::parse_and_output_block::<u128>(&command),
-            ArithmeticType::I128 => Self::parse_and_output_block::<i128>(&command),
-            ArithmeticType::F32 => Self::parse_and_output_block::<f32>(&command),
-            ArithmeticType::F64 => Self::parse_and_output_block::<f64>(&command),
-            ArithmeticType::Complex32 => Self::parse_and_output_block::<Complex32>(&command),
-            ArithmeticType::Complex64 => Self::parse_and_output_block::<Complex64>(&command),
+            ArithmeticType::I64 => Self::parse_and_output_block::<i64>(&command, color_choice),
+            ArithmeticType::U128 => Self::parse_and_output_block::<u128>(&command, color_choice),
+            ArithmeticType::I128 => Self::parse_and_output_block::<i128>(&command, color_choice),
+            ArithmeticType::F32 => Self::parse_and_output_block::<f32>(&command, color_choice),
+            ArithmeticType::F64 => Self::parse_and_output_block::<f64>(&command, color_choice),
+            ArithmeticType::Complex32 => {
+                Self::parse_and_output_block::<Complex32>(&command, color_choice)
+            }
+            ArithmeticType::Complex64 => {
+                Self::parse_and_output_block::<Complex64>(&command, color_choice)
+            }
         }
     }
 
-    fn parse_and_output_block<T: ReplLiteral>(command: &str) -> io::Result<()> {
-        let mut reporter = Reporter::default();
+    fn parse_and_output_block<T: ReplLiteral>(
+        command: &str,
+        color_choice: ColorChoice,
+    ) -> io::Result<()> {
+        let mut reporter = Reporter::new(color_choice);
         let block = reporter.parse::<T>(command)?;
         if let ParseAndEvalResult::Ok(block) = &block {
             println!("{:#?}", block);
@@ -231,7 +275,7 @@ impl EvalArgs {
         let type_env = if self.types { Some(type_env) } else { None };
 
         if self.interactive {
-            repl(arithmetic, env, type_env)
+            repl(arithmetic, env, type_env, Args::color_choice(self.color))
         } else {
             self.run_command(arithmetic, env, type_env)
         }
@@ -251,7 +295,7 @@ impl EvalArgs {
                 buffer
             }
         };
-        let mut env = Env::new(arithmetic, env, type_env);
+        let mut env = Env::new(arithmetic, env, type_env, Args::color_choice(self.color));
 
         match env.parse_and_eval(&command, false)? {
             ParseAndEvalResult::Ok(()) => Ok(()),

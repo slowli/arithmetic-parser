@@ -263,7 +263,7 @@ pub trait ArithmeticExt<T>: Arithmetic<T> + Sized {
     {
         FullArithmetic {
             base: self,
-            comparison: |x, y| x.partial_cmp(y),
+            comparison: T::partial_cmp,
         }
     }
 

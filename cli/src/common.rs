@@ -124,17 +124,15 @@ pub struct Reporter {
     config: ReportingConfig,
 }
 
-impl Default for Reporter {
-    fn default() -> Self {
+impl Reporter {
+    pub fn new(color_choice: ColorChoice) -> Self {
         Self {
             code_map: CodeMap::default(),
-            writer: StandardStream::stdout(ColorChoice::Auto),
+            writer: StandardStream::stdout(color_choice),
             config: ReportingConfig::default(),
         }
     }
-}
 
-impl Reporter {
     fn print_greeting(&self) -> io::Result<()> {
         let mut writer = self.writer.lock();
         writer.set_color(ColorSpec::new().set_bold(true))?;
@@ -356,11 +354,14 @@ impl Reporter {
 
                 let captures = function.captures();
                 if !captures.is_empty() {
+                    let captures_count = captures.len();
+                    let captures = order_vars(captures);
+
                     writeln!(writer, "[")?;
-                    for (i, (var_name, capture)) in captures.iter().enumerate() {
+                    for (i, (var_name, capture)) in captures.enumerate() {
                         write!(writer, "{}{} = ", " ".repeat(indent + 2), var_name)?;
                         Self::dump_value(writer, capture, indent + 2)?;
-                        if i + 1 < captures.len() {
+                        if i + 1 < captures_count {
                             writeln!(writer, ",")?;
                         } else {
                             writeln!(writer)?;
@@ -377,12 +378,12 @@ impl Reporter {
                 writer.reset()
             }
 
-            Value::Tuple(fragments) => {
+            Value::Tuple(elements) => {
                 writeln!(writer, "(")?;
-                for (i, element) in fragments.iter().enumerate() {
+                for (i, element) in elements.iter().enumerate() {
                     write!(writer, "{}", " ".repeat(indent + 2))?;
                     Self::dump_value(writer, element, indent + 2)?;
-                    if i + 1 < fragments.len() {
+                    if i + 1 < elements.len() {
                         writeln!(writer, ",")?;
                     } else {
                         writeln!(writer)?;
@@ -392,11 +393,13 @@ impl Reporter {
             }
 
             Value::Object(fields) => {
+                let fields_count = fields.len();
+                let fields = order_vars(fields.iter().map(|(name, var)| (name.as_str(), var)));
                 writeln!(writer, "#{{")?;
-                for (i, (name, value)) in fields.iter().enumerate() {
+                for (i, (name, value)) in fields.enumerate() {
                     write!(writer, "{}{}: ", " ".repeat(indent + 2), name)?;
                     Self::dump_value(writer, value, indent + 2)?;
-                    if i + 1 < fields.len() {
+                    if i + 1 < fields_count {
                         writeln!(writer, ",")?;
                     } else {
                         writeln!(writer)?;
@@ -421,6 +424,14 @@ impl Reporter {
     }
 }
 
+fn order_vars<'a, 'v: 'a, T: 'a>(
+    values: impl IntoIterator<Item = (&'a str, &'a Value<'v, T>)>,
+) -> impl Iterator<Item = (&'a str, &'a Value<'v, T>)> {
+    let mut values: Vec<_> = values.into_iter().collect();
+    values.sort_unstable_by_key(|(name, _)| *name);
+    values.into_iter()
+}
+
 pub struct Env<T> {
     reporter: Reporter,
     original_env: Environment<'static, T>,
@@ -435,9 +446,10 @@ impl<T: ReplLiteral> Env<T> {
         arithmetic: Box<dyn OrdArithmetic<T>>,
         env: Environment<'static, T>,
         type_env: Option<TypeEnvironment>,
+        color_choice: ColorChoice,
     ) -> Self {
         Self {
-            reporter: Reporter::default(),
+            reporter: Reporter::new(color_choice),
             original_env: env.clone(),
             original_type_env: type_env.clone(),
             env,
@@ -451,7 +463,7 @@ impl<T: ReplLiteral> Env<T> {
     }
 
     fn dump_scope(&mut self, dump_original_scope: bool) -> io::Result<()> {
-        for (name, var) in &self.env {
+        for (name, var) in order_vars(&self.env) {
             if let Some(original_var) = self.original_env.get(name) {
                 if !dump_original_scope && original_var == var {
                     // The variable is present in the original scope, no need to output it.

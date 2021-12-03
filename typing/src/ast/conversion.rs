@@ -190,7 +190,7 @@ impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
 
     fn new_type(&mut self, span: Option<&SpannedTypeAst<'a>>) -> Type<Prim> {
         let errors = &mut *self.errors;
-        self.env.as_deref_mut().map_or_else(
+        self.env.as_mut().map_or_else(
             || {
                 if let Some(span) = span {
                     let err = AstConversionError::InvalidSomeType;
@@ -206,7 +206,7 @@ impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
 
     fn new_len(&mut self, span: Option<&Spanned<'a, TupleLenAst>>) -> UnknownLen {
         let errors = &mut *self.errors;
-        self.env.as_deref_mut().map_or_else(
+        self.env.as_mut().map_or_else(
             || {
                 if let Some(span) = span {
                     let err = AstConversionError::InvalidSomeLength;

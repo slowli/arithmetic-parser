@@ -31,7 +31,7 @@ decrypt = |{ R, B }, sk| {
     i - 1
 });
 
-// Advanced testing making use of partial homomorhicity of encryption.
+// Advanced testing making use of partial homomorphicity of encryption.
 ONE = GEN ^ 0;
 encrypt_and_combine = |messages, pk| {
     messages.map(|msg| msg.encrypt(pk)).fold(

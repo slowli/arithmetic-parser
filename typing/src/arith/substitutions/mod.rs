@@ -684,6 +684,11 @@ impl<Prim: PrimitiveType> Visit<Prim> for OccurrenceChecker<'_, Prim> {
     }
 
     fn visit_var(&mut self, var: TypeVar) {
+        if !var.is_free() {
+            // Can happen with assigned generic functions, e.g., `reduce = fold; ...`.
+            return;
+        }
+
         let var_idx = var.index();
         if self.var_indexes.contains(&var_idx) {
             self.recursive_var = Some(var_idx);
@@ -755,7 +760,7 @@ impl ops::Not for Variance {
 }
 
 /// Visitor that swaps `any` types / lengths with new vars, but only if they are in a covariant
-/// position (return types, args of arg functions, etc.).
+/// position (return types, args of function args, etc.).
 ///
 /// This is used when assigning to a type containing `any`.
 #[derive(Debug)]

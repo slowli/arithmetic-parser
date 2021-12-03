@@ -9,6 +9,8 @@ on:
 env:
   # Minimum supported Rust version.
   msrv: 1.46.0
+  # Minimum supported Rust version for CLI.
+  msrv_cli: 1.51.0
   # Nightly Rust toolchain for building docs.
   nightly: nightly-2021-04-15
 
@@ -21,7 +23,7 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: Cache cargo build
-        uses: actions/cache@v1
+        uses: actions/cache@v2
         with:
           path: target
           key: ${{ runner.os }}-msrv-cargo-build-target
@@ -42,6 +44,7 @@ jobs:
         with:
           command: test
           args: --all --all-features --doc
+
       - name: Run parser example
         uses: actions-rs/cargo@v1
         with:
@@ -73,6 +76,32 @@ jobs:
           command: run
           args: -p arithmetic-typing --example num_or_bytes
 
+  build-msrv-cli:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Cache cargo build
+        uses: actions/cache@v2
+        with:
+          path: |
+            target/
+            cli/target/
+          key: ${{ runner.os }}-msrv-cli-cargo-build-target
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.msrv_cli }}
+          override: true
+
+      - name: Build CLI
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --manifest-path=cli/Cargo.toml --all-features --all-targets
+
   build:
     runs-on: ubuntu-latest
 
@@ -80,9 +109,11 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: Cache cargo build
-        uses: actions/cache@v1
+        uses: actions/cache@v2
         with:
-          path: target
+          path: |
+            target/
+            cli/target/
           key: ${{ runner.os }}-cargo-build-target
 
       - name: Install Rust
@@ -110,12 +141,23 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --all --all-features --all-targets -- -D warnings
+      - name: Clippy CLI
+        uses: actions-rs/clippy-check@v1
+        with:
+          name: "clippy (CLI)"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --manifest-path=cli/Cargo.toml --all-features --all-targets -- -D warnings
 
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
           command: test
           args: --all --all-features --all-targets
+      - name: Run CLI tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --manifest-path=cli/Cargo.toml --all-features --all-targets
       - name: Run doc tests
         uses: actions-rs/cargo@v1
         with:
@@ -163,6 +205,7 @@ jobs:
     needs:
       - build
       - build-msrv
+      - build-msrv-cli
     runs-on: ubuntu-latest
 
     steps:
@@ -171,7 +214,7 @@ jobs:
           persist-credentials: false
 
       - name: Cache cargo build
-        uses: actions/cache@v1
+        uses: actions/cache@v2
         with:
           path: target
           key: ${{ runner.os }}-cargo-document-target

@@ -11,8 +11,8 @@ env:
   msrv: 1.46.0
   # Minimum supported Rust version for CLI.
   msrv_cli: 1.52.0
-  # Nightly Rust toolchain for building docs.
-  nightly: nightly-2021-04-15
+  # Nightly Rust toolchain for building docs and checking nostd support.
+  nightly: nightly-2021-12-03
 
 jobs:
   # Checks minimum supported Rust version.
@@ -199,6 +199,41 @@ jobs:
         run: (cd test-wasm; wasm-pack build --target nodejs)
       - name: Run WASM
         run: node test-wasm/test.js
+
+  # Checks that the crate actually builds without `std`. To do this,
+  # we take a target (`thumbv7m-none-eabi`) that does not have `std` support.
+  build-nostd:
+    needs:
+      - build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Cache cargo build
+        uses: actions/cache@v1
+        with:
+          path: target
+          key: ${{ runner.os }}-nostd-cargo-build-target
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.nightly }}
+          profile: minimal
+          override: true
+          target: thumbv7m-none-eabi
+
+      - name: Build parser
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: -p arithmetic-parser --lib --no-default-features --target thumbv7m-none-eabi -Z avoid-dev-deps
+      - name: Build eval
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: -p arithmetic-eval --lib --no-default-features --target thumbv7m-none-eabi -Z avoid-dev-deps
 
   document:
     if: github.event_name == 'push'

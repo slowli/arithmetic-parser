@@ -42,3 +42,6 @@ path = "../typing"
 version = "0.1.0"
 git = "https://github.com/slowli/term-transcript.git"
 rev = "685eabc356cd86a826d1bdf11bbcf7548f170c62"
+
+[workspace]
+# Separate workspace since we need a lockfile

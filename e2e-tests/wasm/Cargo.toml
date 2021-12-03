@@ -12,7 +12,7 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-arithmetic-parser = { version = "0.3.0", path = "../../parser", default_features = false }
+arithmetic-parser = { version = "0.3.0", path = "../../parser", default-features = false }
 arithmetic-eval = { version = "0.3.0", path = "../../eval" }
 
 # WASM glue

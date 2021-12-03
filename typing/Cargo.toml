@@ -14,7 +14,7 @@ keywords = ["typing", "type-system", "arithmetic", "scripting", "language"]
 arithmetic-parser = { version = "0.3.0", path = "../parser" }
 
 anyhow = "1.0.27"
-nom = { version = "7", default_features = false, features = ["alloc"] }
+nom = "7"
 num-traits = "0.2.14"
 
 [dev-dependencies]

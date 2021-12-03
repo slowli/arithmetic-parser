@@ -38,12 +38,12 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all --all-features --all-targets
+          args: --workspace --all-features --all-targets
       - name: Run doc tests
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all --all-features --doc
+          args: --all --features=nom/std --doc
 
       - name: Run parser example
         uses: actions-rs/cargo@v1
@@ -140,7 +140,7 @@ jobs:
         uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all --all-features --all-targets -- -D warnings
+          args: --workspace --all-features --all-targets -- -D warnings
       - name: Clippy CLI
         uses: actions-rs/clippy-check@v1
         with:
@@ -152,7 +152,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all --all-features --all-targets
+          args: --workspace --all-features --all-targets
       - name: Run CLI tests
         uses: actions-rs/cargo@v1
         with:
@@ -162,7 +162,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all --all-features --doc
+          args: --workspace --features=nom/std --doc
 
       - name: Run parser example
         uses: actions-rs/cargo@v1

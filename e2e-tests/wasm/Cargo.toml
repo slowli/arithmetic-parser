@@ -12,8 +12,8 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-arithmetic-parser = { version = "0.3.0", path = "../parser", default_features = false }
-arithmetic-eval = { version = "0.3.0", path = "../eval" }
+arithmetic-parser = { version = "0.3.0", path = "../../parser", default-features = false }
+arithmetic-eval = { version = "0.3.0", path = "../../eval" }
 
 # WASM glue
 wasm-bindgen = { version = "0.2.73", features = ["serde-serialize"] }

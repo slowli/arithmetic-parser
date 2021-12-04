@@ -5,9 +5,13 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ## [Unreleased]
 
+### Added
+
+- Make crate no-std-compatible and check compatibility in CI.
+
 ### Changed
 
-- Update `nom` parser dependency to v7. (#99)
+- Update `nom` parser dependency to v7 and `nom_locate` to v4. (#99, #100)
 
 ## 0.3.0 - 2021-05-24
 

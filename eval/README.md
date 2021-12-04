@@ -2,9 +2,10 @@
 
 [![Build Status](https://github.com/slowli/arithmetic-parser/workflows/Rust/badge.svg?branch=master)](https://github.com/slowli/arithmetic-parser/actions)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue)](https://github.com/slowli/arithmetic-parser#license)
-![rust 1.46+ required](https://img.shields.io/badge/rust-1.46+-blue.svg) 
+![rust 1.46+ required](https://img.shields.io/badge/rust-1.46+-blue.svg)
+![no_std supported](https://img.shields.io/badge/no__std-tested-green.svg)
 
-**Links:** [![Docs on docs.rs](https://docs.rs/arithmetic-eval/badge.svg)](https://docs.rs/arithmetic-eval/)
+**Links:** [![Docs on docs.rs](https://img.shields.io/docsrs/arithmetic-eval)](https://docs.rs/arithmetic-eval/)
 [![crate docs (master)](https://img.shields.io/badge/master-yellow.svg?label=docs)](https://slowli.github.io/arithmetic-parser/arithmetic_eval/) 
 [![changelog](https://img.shields.io/badge/-changelog-orange)](CHANGELOG.md)
 

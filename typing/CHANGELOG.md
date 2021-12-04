@@ -9,7 +9,7 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Fix false positive during recursive type check for native parameterized functions.
   Previously, an assignment such as `reduce = fold;` (with `fold` being
-  a native parametric function) led to an error.
+  a native parametric function) led to an error. (#100)
 
 ## 0.3.0 - 2021-05-24
 

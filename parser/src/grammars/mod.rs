@@ -110,7 +110,11 @@ macro_rules! impl_num_literal_for_uint {
         $(
         impl NumLiteral for $num {
             fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
-                let parser = |s: InputSpan<'_>| s.fragment().parse().map_err(ErrorKind::literal);
+                let parser = |s: InputSpan<'_>| {
+                    s.fragment()
+                        .parse::<$num>()
+                        .map_err(|err| ErrorKind::literal(anyhow::anyhow!(err)))
+                };
                 map_res(digit1, parser)(input)
             }
         }
@@ -125,7 +129,11 @@ macro_rules! impl_num_literal_for_int {
         $(
         impl NumLiteral for $num {
             fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
-                let parser = |s: InputSpan<'_>| s.fragment().parse().map_err(ErrorKind::literal);
+                let parser = |s: InputSpan<'_>| {
+                    s.fragment()
+                        .parse::<$num>()
+                        .map_err(|err| ErrorKind::literal(anyhow::anyhow!(err)))
+                };
                 map_res(recognize(tuple((opt(tag_char('-')), digit1))), parser)(input)
             }
         }
@@ -208,7 +216,8 @@ mod bigint {
     impl NumLiteral for BigInt {
         fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
             let parser = |s: InputSpan<'_>| {
-                BigInt::from_str_radix(s.fragment(), 10).map_err(ErrorKind::literal)
+                BigInt::from_str_radix(s.fragment(), 10)
+                    .map_err(|err| ErrorKind::literal(anyhow::anyhow!(err)))
             };
             map_res(recognize(tuple((opt(tag_char('-')), digit1))), parser)(input)
         }
@@ -217,7 +226,8 @@ mod bigint {
     impl NumLiteral for BigUint {
         fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
             let parser = |s: InputSpan<'_>| {
-                BigUint::from_str_radix(s.fragment(), 10).map_err(ErrorKind::literal)
+                BigUint::from_str_radix(s.fragment(), 10)
+                    .map_err(|err| ErrorKind::literal(anyhow::anyhow!(err)))
             };
             map_res(digit1, parser)(input)
         }

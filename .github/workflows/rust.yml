@@ -11,8 +11,8 @@ env:
   msrv: 1.46.0
   # Minimum supported Rust version for CLI.
   msrv_cli: 1.52.0
-  # Nightly Rust toolchain for building docs.
-  nightly: nightly-2021-04-15
+  # Nightly Rust toolchain for building docs and checking nostd support.
+  nightly: nightly-2021-12-03
 
 jobs:
   # Checks minimum supported Rust version.
@@ -38,7 +38,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all --all-features --all-targets
+          args: --workspace --all-features --all-targets
       - name: Run doc tests
         uses: actions-rs/cargo@v1
         with:
@@ -54,17 +54,17 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: run
-          args: -p arithmetic-eval --example owned_module
+          args: --manifest-path eval/Cargo.toml --example owned_module --features arithmetic-parser/std
       - name: Run ElGamal encryption example
         uses: actions-rs/cargo@v1
         with:
           command: run
-          args: --manifest-path eval/Cargo.toml --example el_gamal --features bigint,num-bigint/rand
+          args: --manifest-path eval/Cargo.toml --example el_gamal --features bigint,num-bigint/rand,arithmetic-parser/std
       - name: Run cyclic group example
         uses: actions-rs/cargo@v1
         with:
           command: run
-          args: --manifest-path eval/Cargo.toml --example cyclic_group --features bigint,num-bigint/rand
+          args: --manifest-path eval/Cargo.toml --example cyclic_group --features bigint,num-bigint/rand,arithmetic-parser/std
       - name: Run typing example (strings)
         uses: actions-rs/cargo@v1
         with:
@@ -140,7 +140,7 @@ jobs:
         uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all --all-features --all-targets -- -D warnings
+          args: --workspace --all-features --all-targets -- -D warnings
       - name: Clippy CLI
         uses: actions-rs/clippy-check@v1
         with:
@@ -152,7 +152,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all --all-features --all-targets
+          args: --workspace --all-features --all-targets
       - name: Run CLI tests
         uses: actions-rs/cargo@v1
         with:
@@ -162,7 +162,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all --all-features --doc
+          args: --workspace --features=nom/std --doc
 
       - name: Run parser example
         uses: actions-rs/cargo@v1
@@ -173,17 +173,17 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: run
-          args: -p arithmetic-eval --example owned_module
+          args: --manifest-path eval/Cargo.toml --example owned_module --features arithmetic-parser/std
       - name: Run ElGamal encryption example
         uses: actions-rs/cargo@v1
         with:
           command: run
-          args: --manifest-path eval/Cargo.toml --example el_gamal --features bigint,num-bigint/rand
+          args: --manifest-path eval/Cargo.toml --example el_gamal --features bigint,num-bigint/rand,arithmetic-parser/std
       - name: Run cyclic group example
         uses: actions-rs/cargo@v1
         with:
           command: run
-          args: --manifest-path eval/Cargo.toml --example cyclic_group --features bigint,num-bigint/rand
+          args: --manifest-path eval/Cargo.toml --example cyclic_group --features bigint,num-bigint/rand,arithmetic-parser/std
       - name: Run typing example (strings)
         uses: actions-rs/cargo@v1
         with:
@@ -196,9 +196,51 @@ jobs:
           args: -p arithmetic-typing --example num_or_bytes
 
       - name: Compile WASM
-        run: (cd test-wasm; wasm-pack build --target nodejs)
+        run: (cd e2e-tests/wasm; wasm-pack build --target nodejs)
       - name: Run WASM
-        run: node test-wasm/test.js
+        run: node e2e-tests/wasm/test.js
+
+  # Checks that the crate actually builds without `std`. To do this,
+  # we take a target (`thumbv7m-none-eabi`) that does not have `std` support.
+  build-nostd:
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: e2e-tests/no-std
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install qemu
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-suggests --no-install-recommends qemu-system-arm
+
+      - name: Cache cargo build
+        uses: actions/cache@v1
+        with:
+          path: e2e-tests/no-std/target
+          key: ${{ runner.os }}-nostd-cargo-build-target
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.nightly }}
+          override: true
+          components: rustfmt, clippy
+          target: thumbv7m-none-eabi
+
+      # Since it's impossible to include the `nostd` crate into the common workspace,
+      # we need to perform fmt / clippy checks for it separately.
+      - name: Format
+        run: cargo fmt -- --check
+      - name: Clippy
+        run: cargo clippy --bin arithmetic-parser-nostd --all-features -- -D warnings
+
+      - name: Run binary
+        run: cargo run --release
 
   document:
     if: github.event_name == 'push'
@@ -206,6 +248,7 @@ jobs:
       - build
       - build-msrv
       - build-msrv-cli
+      - build-nostd
     runs-on: ubuntu-latest
 
     steps:
@@ -226,14 +269,13 @@ jobs:
           profile: minimal
           override: true
 
-      # TODO: fix `nom_locate` version once it is published
       - name: Build docs
         run: |
           cargo clean --doc && \
           cargo rustdoc -p arithmetic-parser --all-features -- -Z unstable-options \
             --extern-html-root-url anyhow=https://docs.rs/anyhow/~1.0.27 \
             --extern-html-root-url nom=https://docs.rs/nom/~7.0.0 \
-            --extern-html-root-url nom_locate=https://docs.rs/nom_locate/~3.0.0 && \
+            --extern-html-root-url nom_locate=https://docs.rs/nom_locate/~4.0.0 && \
           cargo rustdoc -p arithmetic-eval --all-features -- --cfg docsrs
           cargo rustdoc -p arithmetic-typing --all-features -- --cfg docsrs
 

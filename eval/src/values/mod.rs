@@ -1,26 +1,25 @@
 //! Values used by the interpreter.
 
-use hashbrown::HashMap;
-
 use core::{
     any::{type_name, Any},
     fmt,
 };
 
-use crate::{
-    alloc::{vec, Rc, String, Vec},
-    fns,
-};
+use crate::{alloc::Rc, fns};
 use arithmetic_parser::{MaybeSpanned, StripCode};
 
 mod env;
 mod function;
+mod object;
 mod ops;
+mod tuple;
 mod variable_map;
 
 pub use self::{
     env::Environment,
     function::{CallContext, Function, InterpretedFn, NativeFn},
+    object::Object,
+    tuple::Tuple,
     variable_map::{Assertions, Comparisons, Prelude, VariableMap},
 };
 
@@ -187,9 +186,9 @@ pub enum Value<'a, T> {
     /// Function.
     Function(Function<'a, T>),
     /// Tuple of zero or more values.
-    Tuple(Vec<Value<'a, T>>),
+    Tuple(Tuple<'a, T>),
     /// Object with zero or more named fields.
-    Object(HashMap<String, Value<'a, T>>),
+    Object(Object<'a, T>),
     /// Opaque reference to a native value.
     Ref(OpaqueRef),
 }
@@ -225,7 +224,7 @@ impl<'a, T> Value<'a, T> {
 
     /// Creates a void value (an empty tuple).
     pub fn void() -> Self {
-        Self::Tuple(vec![])
+        Self::Tuple(Tuple::void())
     }
 
     /// Creates a reference to a native variable.
@@ -253,6 +252,12 @@ impl<'a, T> Value<'a, T> {
     /// Checks if this value is a function.
     pub fn is_function(&self) -> bool {
         matches!(self, Self::Function(_))
+    }
+}
+
+impl<'a, T> From<Vec<Self>> for Value<'a, T> {
+    fn from(elements: Vec<Self>) -> Self {
+        Self::Tuple(Tuple::from(elements))
     }
 }
 

@@ -28,10 +28,10 @@ fn destructuring_in_fn_args() {
         swap(1, (2, 3))
     "#;
     let return_value = evaluate(&mut Environment::new(), program);
-    let inner_tuple = Value::Tuple(vec![Value::Prim(1.0), Value::Prim(2.0)]);
+    let inner_tuple = Value::from(vec![Value::Prim(1.0), Value::Prim(2.0)]);
     assert_eq!(
         return_value,
-        Value::Tuple(vec![inner_tuple, Value::Prim(3.0)])
+        Value::from(vec![inner_tuple, Value::Prim(3.0)])
     );
 }
 
@@ -94,7 +94,7 @@ fn captured_function() {
     let return_value = evaluate(&mut env, program);
     assert_eq!(
         return_value,
-        Value::Tuple(vec![Value::Prim(0.0), Value::Prim(0.0)])
+        Value::from(vec![Value::Prim(0.0), Value::Prim(0.0)])
     );
 
     {
@@ -125,9 +125,9 @@ fn variadic_function() {
     let mut env = Environment::new();
     let return_value = evaluate(&mut env, program);
 
-    let first = Value::Tuple(vec![Value::Prim(-1.0), Value::Prim(-2.0), Value::Prim(3.5)]);
-    let second = Value::Tuple(vec![Value::Prim(0.25), Value::Prim(-8.0)]);
-    assert_eq!(return_value, Value::Tuple(vec![first, second]));
+    let first = Value::from(vec![Value::Prim(-1.0), Value::Prim(-2.0), Value::Prim(3.5)]);
+    let second = Value::from(vec![Value::Prim(0.25), Value::Prim(-8.0)]);
+    assert_eq!(return_value, Value::from(vec![first, second]));
 }
 
 #[test]
@@ -218,7 +218,7 @@ fn first_class_functions_apply() {
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(
         return_value,
-        Value::Tuple(vec![Value::Prim(4.0), Value::Prim(1.0)])
+        Value::from(vec![Value::Prim(4.0), Value::Prim(1.0)])
     );
 }
 
@@ -239,7 +239,7 @@ fn first_class_functions_repeat() {
 
     assert_eq!(
         return_value,
-        Value::Tuple(vec![Value::Prim(8.0), Value::Prim(-1.5)])
+        Value::from(vec![Value::Prim(8.0), Value::Prim(-1.5)])
     );
     assert!(env.get("lambda").is_none());
 }

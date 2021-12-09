@@ -138,8 +138,9 @@ impl<T: Clone> NativeFn<T> for Loop {
 
         let mut arg = args.pop().unwrap();
         loop {
-            if let Value::Tuple(mut tuple) = iter.evaluate(vec![arg], ctx)? {
+            if let Value::Tuple(tuple) = iter.evaluate(vec![arg], ctx)? {
                 let (ret_or_next_arg, flag) = if tuple.len() == 2 {
+                    let mut tuple = Vec::from(tuple);
                     (tuple.pop().unwrap(), tuple.pop().unwrap())
                 } else {
                     let err = ErrorKind::native(Self::ITER_ERROR);

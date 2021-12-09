@@ -20,7 +20,7 @@ fn object_basics() {
     assert_eq!(fields["x"], Value::Prim(1.0));
     assert_eq!(
         fields["y"],
-        Value::Tuple(vec![Value::Prim(2.0), Value::Prim(3.0)])
+        Value::from(vec![Value::Prim(2.0), Value::Prim(3.0)])
     );
 }
 
@@ -90,7 +90,7 @@ fn object_expr_does_not_capture_inner_scopes() {
     assert_eq!(fields["y"], Value::Prim(6.0));
     assert_eq!(
         fields["vec"],
-        Value::Tuple(vec![Value::Prim(1.0), Value::Prim(6.0)])
+        Value::from(vec![Value::Prim(1.0), Value::Prim(6.0)])
     );
 }
 

@@ -111,7 +111,7 @@ impl<'a, T: Clone> Executable<'a, T> {
         ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         let mut registers = captures;
-        registers.push(Value::Tuple(args));
+        registers.push(Value::Tuple(args.into()));
         let mut env = Registers {
             registers,
             ..Registers::new()
@@ -331,7 +331,7 @@ impl<'a, T: Clone> Registers<'a, T> {
                     unchecked,
                 } => {
                     let source = self.registers[*source].clone();
-                    if let Value::Tuple(mut elements) = source {
+                    if let Value::Tuple(elements) = source {
                         if !*unchecked && !lvalue_len.matches(elements.len()) {
                             let err = ErrorKind::TupleLenMismatch {
                                 lhs: *lvalue_len,
@@ -341,10 +341,11 @@ impl<'a, T: Clone> Registers<'a, T> {
                             return Err(executable.create_error(command, err));
                         }
 
+                        let mut elements = Vec::from(elements);
                         let mut tail = elements.split_off(*start_len);
                         self.registers.extend(elements);
                         let end = tail.split_off(tail.len() - *end_len);
-                        self.registers.push(Value::Tuple(tail));
+                        self.registers.push(Value::Tuple(tail.into()));
                         self.registers.extend(end);
                     } else {
                         let err = ErrorKind::CannotDestructure;
@@ -410,7 +411,7 @@ impl<'a, T: Clone> Registers<'a, T> {
                 receiver,
                 field: FieldName::Index(index),
             } => {
-                if let Value::Tuple(mut tuple) = self.resolve_atom(&receiver.extra) {
+                if let Value::Tuple(tuple) = self.resolve_atom(&receiver.extra) {
                     let len = tuple.len();
                     if *index >= len {
                         Err(executable.create_error(
@@ -418,7 +419,7 @@ impl<'a, T: Clone> Registers<'a, T> {
                             ErrorKind::IndexOutOfBounds { index: *index, len },
                         ))
                     } else {
-                        Ok(tuple.swap_remove(*index))
+                        Ok(Vec::from(tuple).swap_remove(*index))
                     }
                 } else {
                     Err(executable.create_error(&span, ErrorKind::CannotIndex))
@@ -433,7 +434,7 @@ impl<'a, T: Clone> Registers<'a, T> {
                     obj.remove(name).ok_or_else(|| {
                         let err = ErrorKind::NoField {
                             field: name.clone(),
-                            available_fields: obj.keys().cloned().collect(),
+                            available_fields: obj.field_names().map(String::from).collect(),
                         };
                         executable.create_error(&span, err)
                     })

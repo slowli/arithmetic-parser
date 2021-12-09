@@ -51,7 +51,7 @@ fn basic_program_with_tuples() {
     assert_eq!(return_value, Value::void());
     assert_eq!(
         env["tuple"],
-        Value::Tuple(vec![Value::Prim(-2.0), Value::Prim(2.0)])
+        Value::from(vec![Value::Prim(-2.0), Value::Prim(2.0)])
     );
     assert_eq!(env["x"], Value::Prim(-2.0));
 }
@@ -67,25 +67,25 @@ fn arithmetic_ops_on_tuples() {
     evaluate(&mut env, program);
     assert_eq!(
         env["x"],
-        Value::Tuple(vec![Value::Prim(4.0), Value::Prim(6.0)])
+        Value::from(vec![Value::Prim(4.0), Value::Prim(6.0)])
     );
     assert_eq!(env["y"], Value::Prim(-4.0));
     assert_eq!(env["z"], Value::Prim(-4.5));
     assert_eq!(
         env["u"],
-        Value::Tuple(vec![Value::Prim(2.5), Value::Prim(-11.5)])
+        Value::from(vec![Value::Prim(2.5), Value::Prim(-11.5)])
     );
 
     assert_eq!(
         evaluate(&mut env, "1 / (2, 4)"),
-        Value::Tuple(vec![Value::Prim(0.5), Value::Prim(0.25)])
+        Value::from(vec![Value::Prim(0.5), Value::Prim(0.25)])
     );
 
     assert_eq!(
         evaluate(&mut env, "1 / (2, (4, 0.2))"),
-        Value::Tuple(vec![
+        Value::from(vec![
             Value::Prim(0.5),
-            Value::Tuple(vec![Value::Prim(0.25), Value::Prim(5.0)])
+            Value::from(vec![Value::Prim(0.25), Value::Prim(5.0)])
         ])
     );
 

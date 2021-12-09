@@ -1,14 +1,11 @@
 //! Operations on `Value`s.
 
-use hashbrown::HashMap;
-
 use core::cmp::Ordering;
 
 use crate::{
-    alloc::{String, Vec},
     arith::OrdArithmetic,
     error::{AuxErrorInfo, TupleLenMismatchContext},
-    Error, ErrorKind, ModuleId, Value,
+    Error, ErrorKind, ModuleId, Object, Tuple, Value,
 };
 use arithmetic_parser::{BinaryOp, MaybeSpanned, Op, UnaryOp};
 
@@ -43,7 +40,7 @@ impl BinaryOpError {
         }
     }
 
-    fn object<T>(op: BinaryOp, lhs: HashMap<String, T>, rhs: HashMap<String, T>) -> Self {
+    fn object<T>(op: BinaryOp, lhs: Object<'_, T>, rhs: Object<'_, T>) -> Self {
         Self {
             inner: ErrorKind::FieldsMismatch {
                 lhs_fields: lhs.into_iter().map(|(name, _)| name).collect(),
@@ -116,14 +113,14 @@ impl<'a, T: Clone> Value<'a, T> {
             }
 
             (this @ Self::Prim(_), Self::Tuple(other)) => {
-                let output: Result<Vec<_>, _> = other
+                let output: Result<Tuple<_>, _> = other
                     .into_iter()
                     .map(|y| this.clone().try_binary_op_inner(y, op, arithmetic))
                     .collect();
                 output.map(Self::Tuple)
             }
             (Self::Tuple(this), other @ Self::Prim(_)) => {
-                let output: Result<Vec<_>, _> = this
+                let output: Result<Tuple<_>, _> = this
                     .into_iter()
                     .map(|x| x.try_binary_op_inner(other.clone(), op, arithmetic))
                     .collect();
@@ -132,7 +129,7 @@ impl<'a, T: Clone> Value<'a, T> {
 
             (Self::Tuple(this), Self::Tuple(other)) => {
                 if this.len() == other.len() {
-                    let output: Result<Vec<_>, _> = this
+                    let output: Result<Tuple<_>, _> = this
                         .into_iter()
                         .zip(other)
                         .map(|(x, y)| x.try_binary_op_inner(y, op, arithmetic))
@@ -144,7 +141,7 @@ impl<'a, T: Clone> Value<'a, T> {
             }
 
             (this @ Self::Prim(_), Self::Object(other)) => {
-                let output: Result<HashMap<_, _>, _> = other
+                let output: Result<Object<_>, _> = other
                     .into_iter()
                     .map(|(name, y)| {
                         this.clone()
@@ -155,7 +152,7 @@ impl<'a, T: Clone> Value<'a, T> {
                 output.map(Self::Object)
             }
             (Self::Object(this), other @ Self::Prim(_)) => {
-                let output: Result<HashMap<_, _>, _> = this
+                let output: Result<Object<_>, _> = this
                     .into_iter()
                     .map(|(name, x)| {
                         x.try_binary_op_inner(other.clone(), op, arithmetic)
@@ -166,10 +163,10 @@ impl<'a, T: Clone> Value<'a, T> {
             }
 
             (Self::Object(this), Self::Object(mut other)) => {
-                let same_keys =
-                    this.len() == other.len() && this.keys().all(|key| other.contains_key(key));
+                let same_keys = this.len() == other.len()
+                    && this.field_names().all(|key| other.contains_field(key));
                 if same_keys {
-                    let output: Result<HashMap<_, _>, _> = this
+                    let output: Result<Object<_>, _> = this
                         .into_iter()
                         .map(|(name, x)| {
                             let y = other.remove(&name).unwrap();
@@ -217,7 +214,7 @@ impl<'a, T> Value<'a, T> {
                 .map_err(ErrorKind::Arithmetic),
 
             Self::Tuple(tuple) => {
-                let res: Result<Vec<_>, _> = tuple
+                let res: Result<Tuple<_>, _> = tuple
                     .into_iter()
                     .map(|elem| Value::try_neg(elem, arithmetic))
                     .collect();
@@ -234,7 +231,7 @@ impl<'a, T> Value<'a, T> {
         match self {
             Self::Bool(val) => Ok(Self::Bool(!val)),
             Self::Tuple(tuple) => {
-                let res: Result<Vec<_>, _> = tuple.into_iter().map(Value::try_not).collect();
+                let res: Result<Tuple<_>, _> = tuple.into_iter().map(Value::try_not).collect();
                 res.map(Self::Tuple)
             }
 

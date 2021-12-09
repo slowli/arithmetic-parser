@@ -8,7 +8,7 @@ use crate::{
     alloc::{vec, Vec},
     error::AuxErrorInfo,
     fns::{extract_array, extract_fn, extract_primitive},
-    CallContext, ErrorKind, EvalResult, NativeFn, SpannedValue, Value,
+    CallContext, ErrorKind, EvalResult, NativeFn, SpannedValue, Tuple, Value,
 };
 
 /// Function generating an array by mapping its indexes.
@@ -78,7 +78,7 @@ where
                 break;
             }
         }
-        Ok(Value::Tuple(array))
+        Ok(Value::Tuple(array.into()))
     }
 }
 
@@ -189,7 +189,7 @@ impl<T: Clone> NativeFn<T> for Map {
             "`map` requires first arg to be a tuple",
         )?;
 
-        let mapped: Result<Vec<_>, _> = array
+        let mapped: Result<Tuple<_>, _> = array
             .into_iter()
             .map(|value| {
                 let spanned = ctx.apply_call_span(value);
@@ -265,7 +265,7 @@ impl<T: Clone> NativeFn<T> for Filter {
                 }
             }
         }
-        Ok(Value::Tuple(filtered))
+        Ok(Value::Tuple(filtered.into()))
     }
 }
 
@@ -382,7 +382,7 @@ impl<T> NativeFn<T> for Push {
         )?;
 
         array.push(elem);
-        Ok(Value::Tuple(array))
+        Ok(Value::Tuple(array.into()))
     }
 }
 
@@ -439,7 +439,7 @@ impl<T: Clone> NativeFn<T> for Merge {
         )?;
 
         first.extend_from_slice(&second);
-        Ok(Value::Tuple(first))
+        Ok(Value::Tuple(first.into()))
     }
 }
 
@@ -493,7 +493,7 @@ mod tests {
         let block = Untyped::<NumGrammar<i8>>::parse_statements(code).unwrap();
         let mut env = Environment::new();
         let module = env
-            .insert("xs", Value::Tuple(vec![Value::Bool(true); 128]))
+            .insert("xs", Value::from(vec![Value::Bool(true); 128]))
             .insert("len", Value::native_fn(Len))
             .compile_module("len", &block)
             .unwrap();

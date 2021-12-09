@@ -4,7 +4,7 @@ use core::{cmp, fmt};
 
 use crate::{
     alloc::{vec, String, Vec},
-    CallContext, Error, ErrorKind, Function, Number, Value, ValueType,
+    CallContext, Error, ErrorKind, Function, Number, Tuple, Value, ValueType,
 };
 
 /// Error raised when a value cannot be converted to the expected type when using
@@ -337,7 +337,7 @@ where
         let values = self
             .into_iter()
             .map(U::into_eval_result)
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Tuple<_>, _>>()?;
         Ok(Value::Tuple(values))
     }
 }
@@ -349,7 +349,7 @@ macro_rules! into_value_for_tuple {
             $($ty: IntoEvalResult<'a, Num>,)+
         {
             fn into_eval_result(self) -> Result<Value<'a, Num>, ErrorOutput<'a>> {
-                Ok(Value::Tuple(vec![$(self.$i.into_eval_result()?,)+]))
+                Ok(Value::from(vec![$(self.$i.into_eval_result()?,)+]))
             }
         }
     };

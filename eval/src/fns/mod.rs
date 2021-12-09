@@ -71,7 +71,7 @@ fn extract_array<'a, T, A>(
     error_msg: &str,
 ) -> Result<Vec<Value<'a, T>>, Error<'a>> {
     if let Value::Tuple(array) = value.extra {
-        Ok(array)
+        Ok(array.into())
     } else {
         let err = ErrorKind::native(error_msg);
         Err(ctx
@@ -285,7 +285,7 @@ mod tests {
 
         assert_eq!(
             module.run().unwrap(),
-            Value::Tuple(vec![
+            Value::from(vec![
                 Value::Prim(0.0),
                 Value::Prim(1.0),
                 Value::Prim(2.0),

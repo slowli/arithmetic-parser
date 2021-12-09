@@ -100,7 +100,7 @@ fn bench_mul_fold(bencher: &mut Bencher<'_>) {
                 .map(|_| rng.gen_range(0.5_f32..1.5))
                 .map(Value::Prim)
                 .collect();
-            module.set_import("xs", Value::Tuple(values));
+            module.set_import("xs", Value::from(values));
             module
         },
         |module| module.run(),
@@ -124,7 +124,7 @@ fn bench_fold_fn(bencher: &mut Bencher<'_>) {
                 .collect::<Vec<_>>()
         },
         |array| {
-            let array = ctx.apply_call_span(Value::Tuple(array));
+            let array = ctx.apply_call_span(Value::from(array));
             fns::Fold
                 .evaluate(vec![array, acc.clone(), fold_fn.clone()], &mut ctx)
                 .unwrap()
@@ -218,7 +218,7 @@ fn bench_reverse(bencher: &mut Bencher<'_>) {
                 .collect::<Vec<_>>()
         },
         |values| {
-            program.set_import("xs", Value::Tuple(values));
+            program.set_import("xs", Value::from(values));
             program.run().unwrap()
         },
         BatchSize::SmallInput,

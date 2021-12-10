@@ -29,7 +29,7 @@ use core::cmp::Ordering;
 
 use crate::{
     alloc::Vec, error::AuxErrorInfo, CallContext, Error, ErrorKind, EvalResult, Function, NativeFn,
-    SpannedValue, Value,
+    Object, Prototype, SpannedValue, Value,
 };
 
 mod array;
@@ -72,6 +72,21 @@ fn extract_array<'a, T, A>(
 ) -> Result<Vec<Value<'a, T>>, Error<'a>> {
     if let Value::Tuple(array) = value.extra {
         Ok(array.into())
+    } else {
+        let err = ErrorKind::native(error_msg);
+        Err(ctx
+            .call_site_error(err)
+            .with_span(&value, AuxErrorInfo::InvalidArg))
+    }
+}
+
+fn extract_object<'a, T, A>(
+    ctx: &CallContext<'_, 'a, A>,
+    value: SpannedValue<'a, T>,
+    error_msg: &str,
+) -> Result<Object<'a, T>, Error<'a>> {
+    if let Value::Object(object) = value.extra {
+        Ok(object)
     } else {
         let err = ErrorKind::native(error_msg);
         Err(ctx
@@ -201,6 +216,26 @@ impl<T> NativeFn<T> for Compare {
             };
             Ok(Value::Prim(value))
         }
+    }
+}
+
+/// Creates a new [`Prototype`] from the provided [`Object`].
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CreatePrototype;
+
+impl<T> NativeFn<T> for CreatePrototype {
+    fn evaluate<'a>(
+        &self,
+        mut args: Vec<SpannedValue<'a, T>>,
+        ctx: &mut CallContext<'_, 'a, T>,
+    ) -> EvalResult<'a, T> {
+        ctx.check_args_count(&args, 1)?;
+        let object = extract_object(
+            ctx,
+            args.pop().unwrap(),
+            "Function argument must be an object",
+        )?;
+        Ok(Prototype::from(object).into())
     }
 }
 

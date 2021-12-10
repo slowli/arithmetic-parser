@@ -13,6 +13,7 @@ use arithmetic_parser::{
 
 mod functions;
 mod objects;
+mod prototypes;
 
 const SIN: fns::Unary<f32> = fns::Unary::new(f32::sin);
 

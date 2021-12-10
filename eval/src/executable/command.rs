@@ -48,10 +48,15 @@ pub(crate) enum CompiledExpr<'a, T> {
         receiver: SpannedAtom<'a, T>,
         field: FieldName,
     },
-    Function {
+    FunctionCall {
         name: SpannedAtom<'a, T>,
         // Original function name if it is a proper variable name.
         original_name: Option<String>,
+        args: Vec<SpannedAtom<'a, T>>,
+    },
+    MethodCall {
+        name: MaybeSpanned<'a, String>,
+        receiver: SpannedAtom<'a, T>,
         args: Vec<SpannedAtom<'a, T>>,
     },
     DefineFunction {
@@ -88,13 +93,22 @@ impl<T: Clone> Clone for CompiledExpr<'_, T> {
                 field: index.clone(),
             },
 
-            Self::Function {
+            Self::FunctionCall {
                 name,
                 original_name,
                 args,
-            } => Self::Function {
+            } => Self::FunctionCall {
                 name: name.clone(),
                 original_name: original_name.clone(),
+                args: args.clone(),
+            },
+            Self::MethodCall {
+                name,
+                receiver,
+                args,
+            } => Self::MethodCall {
+                name: name.clone(),
+                receiver: receiver.clone(),
                 args: args.clone(),
             },
 
@@ -139,13 +153,22 @@ impl<T: 'static + Clone> StripCode for CompiledExpr<'_, T> {
                 field: index,
             },
 
-            Self::Function {
+            Self::FunctionCall {
                 name,
                 original_name,
                 args,
-            } => CompiledExpr::Function {
+            } => CompiledExpr::FunctionCall {
                 name: name.strip_code(),
                 original_name,
+                args: args.into_iter().map(StripCode::strip_code).collect(),
+            },
+            Self::MethodCall {
+                name,
+                receiver,
+                args,
+            } => CompiledExpr::MethodCall {
+                name: name.strip_code(),
+                receiver: receiver.strip_code(),
                 args: args.into_iter().map(StripCode::strip_code).collect(),
             },
 

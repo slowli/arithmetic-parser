@@ -18,7 +18,7 @@ mod variable_map;
 pub use self::{
     env::Environment,
     function::{CallContext, Function, InterpretedFn, NativeFn},
-    object::Object,
+    object::{Object, Prototype},
     tuple::Tuple,
     variable_map::{Assertions, Comparisons, Prelude, VariableMap},
 };
@@ -252,6 +252,13 @@ impl<'a, T> Value<'a, T> {
     /// Checks if this value is a function.
     pub fn is_function(&self) -> bool {
         matches!(self, Self::Function(_))
+    }
+
+    pub(crate) fn as_object(&self) -> Option<&Object<'a, T>> {
+        match self {
+            Self::Object(object) => Some(object),
+            _ => None,
+        }
     }
 }
 

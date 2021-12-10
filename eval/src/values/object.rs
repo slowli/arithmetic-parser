@@ -8,7 +8,7 @@ use core::{
     ops,
 };
 
-use crate::Value;
+use crate::{alloc::Rc, Value};
 use arithmetic_parser::StripCode;
 
 /// Object with zero or more named fields.
@@ -40,6 +40,7 @@ use arithmetic_parser::StripCode;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Object<'a, T> {
     fields: HashMap<String, Value<'a, T>>,
+    prototype: Option<Prototype<'a, T>>,
 }
 
 impl<'a, T> From<Object<'a, T>> for Value<'a, T> {
@@ -52,6 +53,7 @@ impl<T> Default for Object<'_, T> {
     fn default() -> Self {
         Self {
             fields: HashMap::new(),
+            prototype: None,
         }
     }
 }
@@ -118,6 +120,16 @@ impl<'a, T> Object<'a, T> {
     pub fn remove(&mut self, field_name: &str) -> Option<Value<'a, T>> {
         self.fields.remove(field_name)
     }
+
+    /// Returns the prototype of this object, or `None` if it does not exist.
+    pub fn prototype(&self) -> Option<&Prototype<'a, T>> {
+        self.prototype.as_ref()
+    }
+
+    /// Sets the object prototype.
+    pub fn set_prototype(&mut self, prototype: Prototype<'a, T>) {
+        self.prototype = Some(prototype);
+    }
 }
 
 impl<T: 'static + Clone> StripCode for Object<'_, T> {
@@ -130,6 +142,7 @@ impl<T: 'static + Clone> StripCode for Object<'_, T> {
                 .into_iter()
                 .map(|(name, value)| (name, value.strip_code()))
                 .collect(),
+            prototype: self.prototype.map(StripCode::strip_code),
         }
     }
 }
@@ -180,6 +193,7 @@ where
                 .into_iter()
                 .map(|(name, value)| (name.into(), value.into()))
                 .collect(),
+            prototype: None,
         }
     }
 }
@@ -194,6 +208,51 @@ where
             .into_iter()
             .map(|(name, value)| (name.into(), value.into()));
         self.fields.extend(new_fields);
+    }
+}
+
+/// Prototype of an [`Object`] or a [`Tuple`].
+#[derive(Debug)]
+pub struct Prototype<'a, T> {
+    inner: Rc<Object<'a, T>>,
+}
+
+impl<'a, T> From<Object<'a, T>> for Prototype<'a, T> {
+    fn from(object: Object<'a, T>) -> Self {
+        Self {
+            inner: Rc::new(object),
+        }
+    }
+}
+
+impl<T> Clone for Prototype<'_, T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Rc::clone(&self.inner),
+        }
+    }
+}
+
+impl<T> PartialEq for Prototype<'_, T> {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.inner, &other.inner)
+    }
+}
+
+impl<'a, T> Prototype<'a, T> {
+    pub(crate) fn as_object(&self) -> &Object<'a, T> {
+        &self.inner
+    }
+}
+
+impl<T: 'static + Clone> StripCode for Prototype<'_, T> {
+    type Stripped = Prototype<'static, T>;
+
+    fn strip_code(self) -> Self::Stripped {
+        let inner = Rc::try_unwrap(self.inner).unwrap_or_else(|rc| (*rc).clone());
+        Prototype {
+            inner: Rc::new(inner.strip_code()),
+        }
     }
 }
 

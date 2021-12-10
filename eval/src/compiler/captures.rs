@@ -97,17 +97,11 @@ impl<'a> CapturesExtractor<'a> {
                 self.eval(receiver)?;
             }
 
-            Expr::Method {
-                args,
-                receiver,
-                name,
-            } => {
+            Expr::Method { args, receiver, .. } => {
                 self.eval(receiver)?;
                 for arg in args {
                     self.eval(arg)?;
                 }
-
-                self.eval_local_var(name);
             }
 
             Expr::Block(block) => {

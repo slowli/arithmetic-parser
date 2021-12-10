@@ -4,7 +4,7 @@ use core::{fmt, iter::FromIterator, ops};
 
 use crate::{
     alloc::{vec, Vec},
-    Value,
+    Prototype, Value,
 };
 use arithmetic_parser::StripCode;
 
@@ -32,6 +32,7 @@ use arithmetic_parser::StripCode;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tuple<'a, T> {
     elements: Vec<Value<'a, T>>,
+    prototype: Option<Prototype<'a, T>>,
 }
 
 impl<'a, T> Default for Tuple<'a, T> {
@@ -48,7 +49,10 @@ impl<'a, T> From<Tuple<'a, T>> for Value<'a, T> {
 
 impl<'a, T> From<Vec<Value<'a, T>>> for Tuple<'a, T> {
     fn from(elements: Vec<Value<'a, T>>) -> Self {
-        Self { elements }
+        Self {
+            elements,
+            prototype: None,
+        }
     }
 }
 
@@ -78,6 +82,7 @@ impl<'a, T> Tuple<'a, T> {
     pub const fn void() -> Self {
         Self {
             elements: Vec::new(),
+            prototype: None,
         }
     }
 
@@ -100,6 +105,16 @@ impl<'a, T> Tuple<'a, T> {
     pub fn push(&mut self, value: impl Into<Value<'a, T>>) {
         self.elements.push(value.into());
     }
+
+    /// Returns the prototype of this object, or `None` if it does not exist.
+    pub fn prototype(&self) -> Option<&Prototype<'a, T>> {
+        self.prototype.as_ref()
+    }
+
+    /// Sets the object prototype.
+    pub fn set_prototype(&mut self, prototype: Prototype<'a, T>) {
+        self.prototype = Some(prototype);
+    }
 }
 
 impl<T: 'static + Clone> StripCode for Tuple<'_, T> {
@@ -108,6 +123,7 @@ impl<T: 'static + Clone> StripCode for Tuple<'_, T> {
     fn strip_code(self) -> Self::Stripped {
         Tuple {
             elements: self.elements.into_iter().map(Value::strip_code).collect(),
+            prototype: self.prototype.map(StripCode::strip_code),
         }
     }
 }
@@ -147,6 +163,7 @@ where
     fn from_iter<I: IntoIterator<Item = V>>(iter: I) -> Self {
         Self {
             elements: iter.into_iter().map(Into::into).collect(),
+            prototype: None,
         }
     }
 }

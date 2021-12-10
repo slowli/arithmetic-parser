@@ -222,7 +222,7 @@ pub use self::{
     },
     values::{
         Assertions, CallContext, Comparisons, Environment, Function, InterpretedFn, NativeFn,
-        Object, OpaqueRef, Prelude, SpannedValue, Tuple, Value, ValueType, VariableMap,
+        Object, OpaqueRef, Prelude, Prototype, SpannedValue, Tuple, Value, ValueType, VariableMap,
     },
 };
 

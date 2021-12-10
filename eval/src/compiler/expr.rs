@@ -139,7 +139,7 @@ impl Compiler {
             .iter()
             .map(|arg| self.compile_expr(executable, arg))
             .collect::<Result<Vec<_>, _>>()?;
-        let function = CompiledExpr::Function {
+        let function = CompiledExpr::FunctionCall {
             name,
             original_name,
             args,
@@ -182,18 +182,17 @@ impl Compiler {
         receiver: &SpannedExpr<'a, T>,
         args: &[SpannedExpr<'a, T>],
     ) -> Result<Atom<T::Lit>, Error<'a>> {
-        let original_name = Some((*name.fragment()).to_owned());
-        let name: MaybeSpanned<'_, _> = name
-            .copy_with_extra(Atom::Register(self.vars_to_registers[*name.fragment()]))
-            .into();
-        let args = iter::once(receiver)
-            .chain(args)
+        let name_string = String::from(*name.fragment());
+        let name: MaybeSpanned<'_, _> = name.copy_with_extra(name_string).into();
+        let receiver = self.compile_expr(executable, receiver)?;
+        let args = args
+            .iter()
             .map(|arg| self.compile_expr(executable, arg))
             .collect::<Result<Vec<_>, _>>()?;
 
-        let function = CompiledExpr::Function {
+        let function = CompiledExpr::MethodCall {
             name,
-            original_name,
+            receiver,
             args,
         };
         let register = self.push_assignment(executable, function, call_expr);

@@ -6,6 +6,8 @@
 
 use hashbrown::HashMap;
 
+use core::iter;
+
 use crate::{
     alloc::{vec, Box, Rc, String, ToOwned, Vec},
     arith::OrdArithmetic,
@@ -410,40 +412,18 @@ impl<'a, T: Clone> Registers<'a, T> {
             CompiledExpr::FieldAccess {
                 receiver,
                 field: FieldName::Index(index),
-            } => {
-                if let Value::Tuple(tuple) = self.resolve_atom(&receiver.extra) {
-                    let len = tuple.len();
-                    if *index >= len {
-                        Err(executable.create_error(
-                            &span,
-                            ErrorKind::IndexOutOfBounds { index: *index, len },
-                        ))
-                    } else {
-                        Ok(Vec::from(tuple).swap_remove(*index))
-                    }
-                } else {
-                    Err(executable.create_error(&span, ErrorKind::CannotIndex))
-                }
-            }
+            } => self
+                .access_index_field(&receiver.extra, *index)
+                .map_err(|err| executable.create_error(&span, err)),
 
             CompiledExpr::FieldAccess {
                 receiver,
                 field: FieldName::Name(name),
-            } => {
-                if let Value::Object(mut obj) = self.resolve_atom(&receiver.extra) {
-                    obj.remove(name).ok_or_else(|| {
-                        let err = ErrorKind::NoField {
-                            field: name.clone(),
-                            available_fields: obj.field_names().map(String::from).collect(),
-                        };
-                        executable.create_error(&span, err)
-                    })
-                } else {
-                    Err(executable.create_error(&span, ErrorKind::CannotAccessFields))
-                }
-            }
+            } => self
+                .access_named_field(&receiver.extra, name)
+                .map_err(|err| executable.create_error(&span, err)),
 
-            CompiledExpr::Function {
+            CompiledExpr::FunctionCall {
                 name,
                 original_name,
                 args,
@@ -466,6 +446,30 @@ impl<'a, T: Clone> Registers<'a, T> {
                 } else {
                     Err(executable.create_error(&span, ErrorKind::CannotCall))
                 }
+            }
+
+            CompiledExpr::MethodCall {
+                name,
+                receiver,
+                args,
+            } => {
+                let receiver = receiver.copy_with_extra(self.resolve_atom(&receiver.extra));
+                let method = Self::resolve_method(&receiver.extra, &name.extra)
+                    .map_err(|err| executable.create_error(name, err))?;
+                let arg_values = args
+                    .iter()
+                    .map(|arg| arg.copy_with_extra(self.resolve_atom(&arg.extra)));
+                let arg_values = iter::once(receiver).chain(arg_values).collect();
+
+                Self::eval_function(
+                    &method,
+                    &name.extra,
+                    executable.id.as_ref(),
+                    span,
+                    arg_values,
+                    arithmetic,
+                    backtrace,
+                )
             }
 
             CompiledExpr::DefineFunction {
@@ -518,6 +522,76 @@ impl<'a, T: Clone> Registers<'a, T> {
             }
 
             _ => unreachable!("Checked during compilation"),
+        }
+    }
+
+    fn access_index_field(
+        &self,
+        receiver: &Atom<T>,
+        index: usize,
+    ) -> Result<Value<'a, T>, ErrorKind> {
+        let receiver = match receiver {
+            Atom::Register(idx) => &self.registers[*idx],
+            Atom::Constant(_) => {
+                return Err(ErrorKind::CannotIndex);
+            }
+            Atom::Void => {
+                return Err(ErrorKind::IndexOutOfBounds { index, len: 0 });
+            }
+        };
+
+        if let Value::Tuple(tuple) = receiver {
+            let len = tuple.len();
+            if index >= len {
+                Err(ErrorKind::IndexOutOfBounds { index, len })
+            } else {
+                Ok(tuple[index].clone())
+            }
+        } else {
+            Err(ErrorKind::CannotIndex)
+        }
+    }
+
+    fn access_named_field(
+        &self,
+        receiver: &Atom<T>,
+        name: &str,
+    ) -> Result<Value<'a, T>, ErrorKind> {
+        let receiver = if let Atom::Register(idx) = receiver {
+            &self.registers[*idx]
+        } else {
+            return Err(ErrorKind::CannotAccessFields);
+        };
+        let object = receiver.as_object().ok_or(ErrorKind::CannotAccessFields)?;
+        object.get(name).cloned().ok_or_else(|| ErrorKind::NoField {
+            field: name.to_owned(),
+            available_fields: object.field_names().map(String::from).collect(),
+        })
+    }
+
+    fn resolve_method(
+        receiver: &Value<'a, T>,
+        method_name: &str,
+    ) -> Result<Function<'a, T>, ErrorKind> {
+        let proto = if let Some(object) = receiver.as_object() {
+            object.prototype()
+        } else if let Value::Tuple(tuple) = receiver {
+            tuple.prototype()
+        } else {
+            None
+        };
+        let proto = proto
+            .ok_or_else(|| ErrorKind::NoPrototype(receiver.value_type()))?
+            .as_object();
+
+        let field = proto.get(method_name).ok_or_else(|| ErrorKind::NoField {
+            field: method_name.to_owned(),
+            available_fields: proto.field_names().map(String::from).collect(),
+        })?;
+        if let Value::Function(function) = field {
+            Ok(function.clone())
+        } else {
+            Err(ErrorKind::CannotCall)
         }
     }
 

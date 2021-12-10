@@ -331,24 +331,9 @@ impl<T: fmt::Display> fmt::Display for Value<'_, T> {
             Self::Bool(true) => formatter.write_str("true"),
             Self::Bool(false) => formatter.write_str("false"),
             Self::Ref(opaque_ref) => fmt::Display::fmt(opaque_ref, formatter),
-            Self::Function(_) => formatter.write_str("[function]"),
-            Self::Object(fields) => {
-                formatter.write_str("#{ ")?;
-                for (name, value) in fields.iter() {
-                    write!(formatter, "{} = {}; ", name, value)?;
-                }
-                formatter.write_str("}")
-            }
-            Self::Tuple(elements) => {
-                formatter.write_str("(")?;
-                for (i, element) in elements.iter().enumerate() {
-                    fmt::Display::fmt(element, formatter)?;
-                    if i + 1 < elements.len() {
-                        formatter.write_str(", ")?;
-                    }
-                }
-                formatter.write_str(")")
-            }
+            Self::Function(function) => fmt::Display::fmt(function, formatter),
+            Self::Object(object) => fmt::Display::fmt(object, formatter),
+            Self::Tuple(tuple) => fmt::Display::fmt(tuple, formatter),
         }
     }
 }

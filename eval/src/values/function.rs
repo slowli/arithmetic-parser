@@ -253,6 +253,24 @@ impl<T> Clone for Function<'_, T> {
     }
 }
 
+impl<T: fmt::Display> fmt::Display for Function<'_, T> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Native(_) => formatter.write_str("(native fn)"),
+            Self::Interpreted(function) => {
+                formatter.write_str("(interpreted fn @ ")?;
+                let location =
+                    CodeInModule::new(function.module_id(), function.definition.def_span);
+                location.fmt_location(formatter)?;
+                formatter.write_str(")")
+            }
+            Self::Prototype(proto) => {
+                write!(formatter, "(prototype {})", proto.as_object())
+            }
+        }
+    }
+}
+
 impl<T: 'static + Clone> StripCode for Function<'_, T> {
     type Stripped = Function<'static, T>;
 

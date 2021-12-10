@@ -588,7 +588,7 @@ impl<'a, T> CodeInModule<'a, T> {
         &self.code
     }
 
-    fn fmt_location(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    pub(crate) fn fmt_location(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
             "{}:{}:{}",

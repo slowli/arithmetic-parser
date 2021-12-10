@@ -98,4 +98,17 @@ fn defining_prototype_in_script() {
         assert_eq(pt.dist(other_pt), 6);
     "#;
     evaluate(&mut env, program);
+
+    let proto_string = env["Manhattan"].to_string();
+    assert!(proto_string.contains("prototype"), "{}", proto_string);
+    assert!(
+        proto_string.contains("dist: (interpreted fn @ *:4:32)"),
+        "{}",
+        proto_string
+    );
+    assert!(
+        proto_string.contains("len: (interpreted fn @ *:3:19)"),
+        "{}",
+        proto_string
+    );
 }

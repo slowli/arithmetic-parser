@@ -459,8 +459,8 @@ mod tests {
         Len: NativeFn<T>,
     {
         let code = r#"
-            (1, 2, 3).len() == 3 && ().len() == 0 &&
-            #{}.len() == 0 && #{ x: 1 }.len() == 1 && #{ x: 1, y: 2 }.len() == 2
+            len((1, 2, 3)) == 3 && len(()) == 0 &&
+            len(#{}) == 0 && len(#{ x: 1 }) == 1 && len(#{ x: 1, y: 2 }) == 2
         "#;
         let block = Untyped::<NumGrammar<T>>::parse_statements(code).unwrap();
         let mut env = Environment::new();
@@ -489,7 +489,7 @@ mod tests {
 
     #[test]
     fn len_function_with_number_overflow() {
-        let code = "xs.len()";
+        let code = "len(xs)";
         let block = Untyped::<NumGrammar<i8>>::parse_statements(code).unwrap();
         let mut env = Environment::new();
         let module = env

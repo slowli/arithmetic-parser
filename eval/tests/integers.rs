@@ -219,7 +219,7 @@ fn modular_arithmetic() {
     let value = evaluate(&mut Environment::new(), modular_eq_program, &arithmetic);
     assert_eq!(value, Value::Bool(true));
 
-    let fermat_theorem_check = "1.while(|i| i != 0, |i| { assert_eq(i^60, 1); i + 1 })";
+    let fermat_theorem_check = "while(1, |i| i != 0, |i| { assert_eq(i^60, 1); i + 1 })";
     let mut env = Prelude
         .iter()
         .chain(Comparisons.iter())

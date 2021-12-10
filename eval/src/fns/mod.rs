@@ -328,7 +328,7 @@ mod tests {
                 fold(xs, (), |acc, x| merge((x,), acc))
             };
             xs = (-4, 3, 0, 1);
-            xs.reverse() == (1, 0, 3, -4)
+            reverse(xs) == (1, 0, 3, -4)
         "#;
         let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
 
@@ -341,7 +341,7 @@ mod tests {
         let mut env = module.imports().into_iter().collect::<Environment<'_, _>>();
         assert_eq!(module.run_in_env(&mut env).unwrap(), Value::Bool(true));
 
-        let test_block = Untyped::<F32Grammar>::parse_statements("xs.reverse()").unwrap();
+        let test_block = Untyped::<F32Grammar>::parse_statements("reverse(xs)").unwrap();
         let mut test_module = ExecutableModule::builder("test", &test_block)
             .unwrap()
             .with_import("reverse", env["reverse"].clone())

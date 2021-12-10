@@ -422,7 +422,7 @@ mod tests {
     #[test]
     fn functions_with_composite_args() {
         let program = r#"
-            (1, 5, -3, 2, 1).array_min_max() == (-3, 5) &&
+            array_min_max((1, 5, -3, 2, 1)) == (-3, 5) &&
                 total_sum(((1, 2), (3, 4)), ((5, 6, 7), 8)) == 36
         "#;
         let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
@@ -445,7 +445,7 @@ mod tests {
 
     #[test]
     fn fallible_function() {
-        let program = "(1, 2, 3).sum_arrays((4, 5, 6)) == (5, 7, 9)";
+        let program = "sum_arrays((1, 2, 3), (4, 5, 6)) == (5, 7, 9)";
         let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
@@ -456,7 +456,7 @@ mod tests {
 
     #[test]
     fn fallible_function_with_bogus_program() {
-        let program = "(1, 2, 3).sum_arrays((4, 5))";
+        let program = "sum_arrays((1, 2, 3), (4, 5))";
         let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
 
         let err = ExecutableModule::builder(WildcardId, &block)
@@ -476,7 +476,7 @@ mod tests {
     fn function_with_bool_return_value() {
         let contains = wrap(|(a, b): (f32, f32), x: f32| (a..=b).contains(&x));
 
-        let program = "(-1, 2).contains(0) && !(1, 3).contains(0)";
+        let program = "contains((-1, 2), 0) && !contains((1, 3), 0)";
         let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
         let module = ExecutableModule::builder(WildcardId, &block)
             .unwrap()
@@ -539,7 +539,7 @@ mod tests {
 
     #[test]
     fn error_reporting_with_destructuring() {
-        let program = "((true, 1), (2, 3)).destructure()";
+        let program = "destructure(((true, 1), (2, 3)))";
         let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
 
         let err = ExecutableModule::builder(WildcardId, &block)

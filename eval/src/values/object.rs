@@ -8,7 +8,10 @@ use core::{
     ops,
 };
 
-use crate::{alloc::Rc, Value};
+use crate::{
+    alloc::Rc, error::AuxErrorInfo, CallContext, ErrorKind, EvalResult, Function, SpannedValue,
+    Value,
+};
 use arithmetic_parser::StripCode;
 
 /// Object with zero or more named fields.
@@ -239,9 +242,46 @@ impl<T> PartialEq for Prototype<'_, T> {
     }
 }
 
+impl<'a, T> From<Prototype<'a, T>> for Function<'a, T> {
+    fn from(prototype: Prototype<'a, T>) -> Self {
+        Self::Prototype(prototype)
+    }
+}
+
+impl<'a, T> From<Prototype<'a, T>> for Value<'a, T> {
+    fn from(prototype: Prototype<'a, T>) -> Self {
+        Self::Function(Function::from(prototype))
+    }
+}
+
 impl<'a, T> Prototype<'a, T> {
     pub(crate) fn as_object(&self) -> &Object<'a, T> {
         &self.inner
+    }
+
+    pub(crate) fn evaluate(
+        &self,
+        mut args: Vec<SpannedValue<'a, T>>,
+        ctx: &mut CallContext<'_, 'a, T>,
+    ) -> EvalResult<'a, T> {
+        ctx.check_args_count(&args, 1)?;
+        let mut arg = args.pop().unwrap();
+
+        match &mut arg.extra {
+            Value::Object(object) => {
+                object.set_prototype(self.clone());
+            }
+            Value::Tuple(tuple) => {
+                tuple.set_prototype(self.clone());
+            }
+            _ => {
+                let err = ErrorKind::native("Function argument must be an object or tuple");
+                return Err(ctx
+                    .call_site_error(err)
+                    .with_span(&arg, AuxErrorInfo::InvalidArg));
+            }
+        }
+        Ok(arg.extra)
     }
 }
 

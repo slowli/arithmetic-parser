@@ -13,7 +13,7 @@ use crate::{
     arith::OrdArithmetic,
     error::{Backtrace, CodeInModule},
     executable::ExecutableFn,
-    Error, ErrorKind, EvalResult, ModuleId, SpannedValue, Value,
+    Error, ErrorKind, EvalResult, ModuleId, Prototype, SpannedValue, Value,
 };
 use arithmetic_parser::{LvalueLen, MaybeSpanned, StripCode};
 
@@ -239,6 +239,8 @@ pub enum Function<'a, T> {
     Native(Rc<dyn NativeFn<T>>),
     /// Interpreted function.
     Interpreted(Rc<InterpretedFn<'a, T>>),
+    /// Value prototype.
+    Prototype(Prototype<'a, T>),
 }
 
 impl<T> Clone for Function<'_, T> {
@@ -246,6 +248,7 @@ impl<T> Clone for Function<'_, T> {
         match self {
             Self::Native(function) => Self::Native(Rc::clone(function)),
             Self::Interpreted(function) => Self::Interpreted(Rc::clone(function)),
+            Self::Prototype(proto) => Self::Prototype(proto.clone()),
         }
     }
 }
@@ -259,6 +262,7 @@ impl<T: 'static + Clone> StripCode for Function<'_, T> {
             Self::Interpreted(function) => {
                 Function::Interpreted(Rc::new(function.to_stripped_code()))
             }
+            Self::Prototype(proto) => Function::Prototype(proto.strip_code()),
         }
     }
 }
@@ -274,13 +278,14 @@ impl<'a, T> Function<'a, T> {
         match (self, other) {
             (Self::Native(this), Self::Native(other)) => this.data_ptr() == other.data_ptr(),
             (Self::Interpreted(this), Self::Interpreted(other)) => Rc::ptr_eq(this, other),
+            (Self::Prototype(this), Self::Prototype(other)) => this == other,
             _ => false,
         }
     }
 
     pub(crate) fn def_span(&self) -> Option<CodeInModule<'a>> {
         match self {
-            Self::Native(_) => None,
+            Self::Native(_) | Self::Prototype(_) => None,
             Self::Interpreted(function) => Some(CodeInModule::new(
                 function.module_id(),
                 function.definition.def_span,
@@ -299,6 +304,7 @@ impl<'a, T: Clone> Function<'a, T> {
         match self {
             Self::Native(function) => function.evaluate(args, ctx),
             Self::Interpreted(function) => function.evaluate(args, ctx),
+            Self::Prototype(proto) => proto.evaluate(args, ctx),
         }
     }
 }

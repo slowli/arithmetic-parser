@@ -119,7 +119,7 @@ impl Loop {
         "iteration function should return a 2-element tuple with first bool value";
 }
 
-impl<T: Clone> NativeFn<T> for Loop {
+impl<T: 'static + Clone> NativeFn<T> for Loop {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -204,7 +204,7 @@ impl<T: Clone> NativeFn<T> for Loop {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct While;
 
-impl<T: Clone> NativeFn<T> for While {
+impl<T: 'static + Clone> NativeFn<T> for While {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,

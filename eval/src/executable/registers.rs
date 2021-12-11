@@ -105,7 +105,7 @@ impl<'a, T> Executable<'a, T> {
     }
 }
 
-impl<'a, T: Clone> Executable<'a, T> {
+impl<'a, T: 'static + Clone> Executable<'a, T> {
     pub fn call_function(
         &self,
         captures: Vec<Value<'a, T>>,
@@ -270,7 +270,7 @@ impl<'a, T: Clone> Registers<'a, T> {
     }
 }
 
-impl<'a, T: Clone> Registers<'a, T> {
+impl<'a, T: 'static + Clone> Registers<'a, T> {
     pub fn execute(
         &mut self,
         executable: &Executable<'a, T>,

@@ -176,6 +176,9 @@ pub enum ErrorKind {
     /// Variable with the enclosed name is not defined.
     #[display(fmt = "Variable `{}` is not defined", _0)]
     Undefined(String),
+    /// Variable is not initialized.
+    #[display(fmt = "Variable `{}` is not initialized", _0)]
+    Uninitialized(String),
 
     /// Field name is invalid.
     #[display(fmt = "`{}` is not a valid field name", _0)]
@@ -278,6 +281,7 @@ impl ErrorKind {
             }
             Self::RepeatedField => "Repeated object field".to_owned(),
             Self::Undefined(name) => format!("Variable `{}` is not defined", name),
+            Self::Uninitialized(name) => format!("Variable `{}` is not initialized", name),
             Self::InvalidFieldName(name) => format!("`{}` is not a valid field name", name),
             Self::CannotCall => "Value is not callable".to_owned(),
             Self::CannotIndex => "Value cannot be indexed".to_owned(),
@@ -310,6 +314,7 @@ impl ErrorKind {
             Self::RepeatedAssignment { .. } => "Re-assigned variable".to_owned(),
             Self::RepeatedField => "Repeated object field".to_owned(),
             Self::Undefined(_) => "Undefined variable occurrence".to_owned(),
+            Self::Uninitialized(_) => "Uninitialized value".to_owned(),
             Self::InvalidFieldName(_) => "Invalid field".to_owned(),
             Self::CannotIndex | Self::IndexOutOfBounds { .. } => "Indexing operation".to_owned(),
             Self::CannotAccessFields | Self::NoField { .. } => "Field access".to_owned(),

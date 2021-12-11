@@ -17,7 +17,7 @@ struct Repeated<T> {
     times: usize,
 }
 
-impl<T: Clone> NativeFn<T> for Repeated<T> {
+impl<T: 'static + Clone> NativeFn<T> for Repeated<T> {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,

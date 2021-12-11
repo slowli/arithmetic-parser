@@ -25,12 +25,15 @@
 //! [`Number`]: crate::Number
 //! [GAT]: https://github.com/rust-lang/rust/issues/44265
 
-use core::cmp::Ordering;
+use once_cell::unsync::OnceCell;
+
+use core::{cmp::Ordering, fmt};
 
 use crate::{
     alloc::Vec, error::AuxErrorInfo, CallContext, Error, ErrorKind, EvalResult, Function, NativeFn,
-    Object, Prototype, SpannedValue, Value,
+    Object, OpaqueRef, Prototype, SpannedValue, Value,
 };
+use arithmetic_parser::StripCode;
 
 mod array;
 mod assertions;
@@ -236,6 +239,100 @@ impl<T> NativeFn<T> for CreatePrototype {
             "Function argument must be an object",
         )?;
         Ok(Prototype::from(object).into())
+    }
+}
+
+/// Allows to define a value recursively, by referencing a value being created. This is particularly
+/// useful when defining [`Prototype`]s.
+///
+/// It works like this:
+///
+/// - Provide a function as the only argument. The (only) argument of this function is the value
+///   being created.
+/// - Do not use the uninitialized value synchronously; only use it in inner function definitions.
+/// - Return the created value from a function.
+///
+/// # Examples
+///
+/// Defining a recursive prototype:
+///
+/// ```
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # fn main() -> anyhow::Result<()> {
+/// let program = r#"
+///     Stack = defer(|Self| impl(#{
+///         push: |self, item| Self((...self, item)),
+///         // ^ since `Self` is used in function definition, this is OK
+///     }));
+///     stack = Stack((1, 2)).push(3).push(4);
+///     assert_eq(stack, Stack((1, 2, 3, 4)));
+/// "#;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+///
+/// Environment::new()
+///     .insert_native_fn("defer", fns::Defer)
+///     .insert_native_fn("impl", fns::CreatePrototype)
+///     .insert_native_fn("assert_eq", fns::AssertEq)
+///     .compile_module("test_defer", &program)?
+///     .run()?;
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Defer;
+
+impl<T: Clone + 'static> NativeFn<T> for Defer {
+    fn evaluate<'a>(
+        &self,
+        mut args: Vec<SpannedValue<'a, T>>,
+        ctx: &mut CallContext<'_, 'a, T>,
+    ) -> EvalResult<'a, T> {
+        const ARG_ERROR: &str = "Argument must be a function";
+
+        ctx.check_args_count(&args, 1)?;
+        let function = extract_fn(ctx, args.pop().unwrap(), ARG_ERROR)?;
+        let cell = OpaqueRef::with_identity_eq(ValueCell::<T>::default());
+        let spanned_cell = ctx.apply_call_span(Value::Ref(cell.clone()));
+        let return_value = function.evaluate(vec![spanned_cell], ctx)?;
+
+        let cell = cell.downcast_ref::<ValueCell<T>>().unwrap();
+        // ^ `unwrap()` is safe by construction
+        cell.set(return_value.clone().strip_code());
+        Ok(return_value)
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct ValueCell<T> {
+    inner: OnceCell<Value<'static, T>>,
+}
+
+impl<T> Default for ValueCell<T> {
+    fn default() -> Self {
+        Self {
+            inner: OnceCell::new(),
+        }
+    }
+}
+
+impl<'a, T: 'static + fmt::Debug> From<ValueCell<T>> for Value<'a, T> {
+    fn from(cell: ValueCell<T>) -> Self {
+        Self::Ref(OpaqueRef::with_identity_eq(cell))
+    }
+}
+
+impl<T> ValueCell<T> {
+    /// Gets the internally stored value, or `None` if the cell was not initialized yet.
+    pub fn get(&self) -> Option<&Value<'static, T>> {
+        self.inner.get()
+    }
+
+    fn set(&self, value: Value<'static, T>) {
+        self.inner
+            .set(value)
+            .map_err(drop)
+            .expect("Repeated `ValueCell` assignment");
     }
 }
 

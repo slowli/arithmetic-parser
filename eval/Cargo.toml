@@ -26,6 +26,7 @@ num-bigint = { version = "0.4.0", default-features = false, optional = true }
 # Private dependencies.
 derive_more = "0.99.7"
 hashbrown = "0.11.0"
+once_cell = { version = "1.8.0", default-features = false }
 
 [dev-dependencies]
 anyhow = "1.0.27"
@@ -43,7 +44,7 @@ version-sync = "0.9"
 [features]
 default = ["std"]
 # Enables support of types from `std`, such as the `Error` trait.
-std = ["anyhow/std", "num-traits/std"]
+std = ["anyhow/std", "num-traits/std", "arithmetic-parser/std"]
 # Enables support of grammars with complex-valued literals.
 complex = ["std", "num-complex", "arithmetic-parser/num-complex"]
 # Enables support of grammars with arbitrary-precision integers.

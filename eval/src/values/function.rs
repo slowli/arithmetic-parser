@@ -9,10 +9,11 @@ use hashbrown::HashMap;
 use core::fmt;
 
 use crate::{
-    alloc::{Rc, String, Vec},
+    alloc::{Rc, String, ToOwned, Vec},
     arith::OrdArithmetic,
     error::{Backtrace, CodeInModule},
     executable::ExecutableFn,
+    fns::ValueCell,
     Error, ErrorKind, EvalResult, ModuleId, Prototype, SpannedValue, Value,
 };
 use arithmetic_parser::{LvalueLen, MaybeSpanned, StripCode};
@@ -209,7 +210,7 @@ impl<T: 'static + Clone> InterpretedFn<'_, T> {
     }
 }
 
-impl<'a, T: Clone> InterpretedFn<'a, T> {
+impl<'a, T: 'static + Clone> InterpretedFn<'a, T> {
     /// Evaluates this function with the provided arguments and the execution context.
     pub fn evaluate(
         &self,
@@ -225,9 +226,30 @@ impl<'a, T: Clone> InterpretedFn<'a, T> {
         }
 
         let args = args.into_iter().map(|arg| arg.extra).collect();
-        self.definition
-            .inner
-            .call_function(self.captures.clone(), args, ctx)
+        let captures: Result<Vec<_>, _> = self
+            .captures
+            .iter()
+            .zip(&self.capture_names)
+            .map(|(capture, name)| Self::deref_capture(capture, name))
+            .collect();
+        let captures = captures.map_err(|err| ctx.call_site_error(err))?;
+
+        self.definition.inner.call_function(captures, args, ctx)
+    }
+
+    fn deref_capture(capture: &Value<'a, T>, name: &str) -> Result<Value<'a, T>, ErrorKind> {
+        Ok(match capture {
+            Value::Ref(opaque_ref) => {
+                if let Some(cell) = opaque_ref.downcast_ref::<ValueCell<T>>() {
+                    cell.get()
+                        .cloned()
+                        .ok_or_else(|| ErrorKind::Uninitialized(name.to_owned()))?
+                } else {
+                    capture.clone()
+                }
+            }
+            _ => capture.clone(),
+        })
     }
 }
 
@@ -312,7 +334,7 @@ impl<'a, T> Function<'a, T> {
     }
 }
 
-impl<'a, T: Clone> Function<'a, T> {
+impl<'a, T: 'static + Clone> Function<'a, T> {
     /// Evaluates the function on the specified arguments.
     pub fn evaluate(
         &self,

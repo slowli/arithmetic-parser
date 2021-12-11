@@ -1,6 +1,6 @@
 //! Executables output by a `Compiler` and related types.
 
-use core::{fmt, ops};
+use core::ops;
 
 use crate::{
     alloc::{Box, String},
@@ -196,7 +196,7 @@ impl<'a, T> ExecutableModule<'a, T> {
     }
 }
 
-impl<'a, T: Clone + fmt::Debug> ExecutableModule<'a, T> {
+impl<'a, T: 'static + Clone> ExecutableModule<'a, T> {
     /// Starts building a new module.
     pub fn builder<G, Id>(
         id: Id,
@@ -222,7 +222,7 @@ impl<'a, T: Clone + fmt::Debug> ExecutableModule<'a, T> {
     }
 }
 
-impl<'a, T: Clone + fmt::Debug> ExecutableModule<'a, T>
+impl<'a, T: 'static + Clone> ExecutableModule<'a, T>
 where
     StdArithmetic: OrdArithmetic<T>,
 {
@@ -265,10 +265,7 @@ impl<T> Clone for WithArithmetic<'_, '_, T> {
 
 impl<T> Copy for WithArithmetic<'_, '_, T> {}
 
-impl<'a, T> WithArithmetic<'_, 'a, T>
-where
-    T: Clone + fmt::Debug,
-{
+impl<'a, T: 'static + Clone> WithArithmetic<'_, 'a, T> {
     /// Runs the module with the previously provided [`OrdArithmetic`] and the current values
     /// of imports.
     ///

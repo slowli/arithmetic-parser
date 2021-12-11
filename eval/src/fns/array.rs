@@ -42,7 +42,7 @@ pub struct Array;
 
 impl<T> NativeFn<T> for Array
 where
-    T: Clone + Zero + One,
+    T: 'static + Clone + Zero + One,
 {
     fn evaluate<'a>(
         &self,
@@ -171,7 +171,7 @@ impl<T: FromPrimitive> NativeFn<T> for Len {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Map;
 
-impl<T: Clone> NativeFn<T> for Map {
+impl<T: 'static + Clone> NativeFn<T> for Map {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -233,7 +233,7 @@ impl<T: Clone> NativeFn<T> for Map {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Filter;
 
-impl<T: Clone> NativeFn<T> for Filter {
+impl<T: 'static + Clone> NativeFn<T> for Filter {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -301,7 +301,7 @@ impl<T: Clone> NativeFn<T> for Filter {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Fold;
 
-impl<T: Clone> NativeFn<T> for Fold {
+impl<T: 'static + Clone> NativeFn<T> for Fold {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,

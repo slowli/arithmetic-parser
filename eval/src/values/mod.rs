@@ -112,10 +112,7 @@ impl OpaqueRef {
     ///
     /// Prefer [`Self::new()`] when possible.
     #[allow(clippy::missing_panics_doc)] // false positive; `unwrap()`s never panic
-    pub fn with_identity_eq<T>(value: T) -> Self
-    where
-        T: Any + fmt::Debug,
-    {
+    pub fn with_identity_eq<T: Any>(value: T) -> Self {
         Self {
             value: Rc::new(value),
             type_name: type_name::<T>(),
@@ -125,10 +122,7 @@ impl OpaqueRef {
                 let other_data = (other as *const dyn Any).cast::<()>();
                 this_data == other_data
             },
-            dyn_fmt: |this, formatter| {
-                let this_cast = this.downcast_ref::<T>().unwrap();
-                fmt::Debug::fmt(this_cast, formatter)
-            },
+            dyn_fmt: |this, formatter| fmt::Debug::fmt(&this.type_id(), formatter),
         }
     }
 
@@ -172,7 +166,7 @@ impl fmt::Display for OpaqueRef {
 }
 
 /// Values produced by expressions during their interpretation.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum Value<'a, T> {
     /// Primitive value, such as a number. This does not include Boolean values,
@@ -266,19 +260,6 @@ impl<'a, T> Value<'a, T> {
 impl<'a, T> From<Vec<Self>> for Value<'a, T> {
     fn from(elements: Vec<Self>) -> Self {
         Self::Tuple(Tuple::from(elements))
-    }
-}
-
-impl<T: Clone> Clone for Value<'_, T> {
-    fn clone(&self) -> Self {
-        match self {
-            Self::Prim(lit) => Self::Prim(lit.clone()),
-            Self::Bool(bool) => Self::Bool(*bool),
-            Self::Function(function) => Self::Function(function.clone()),
-            Self::Tuple(tuple) => Self::Tuple(tuple.clone()),
-            Self::Object(fields) => Self::Object(fields.clone()),
-            Self::Ref(reference) => Self::Ref(reference.clone()),
-        }
     }
 }
 

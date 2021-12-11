@@ -11,6 +11,7 @@ use arithmetic_parser::{
     BinaryOp, LvalueLen, UnaryOp,
 };
 
+mod defer;
 mod functions;
 mod objects;
 mod prototypes;

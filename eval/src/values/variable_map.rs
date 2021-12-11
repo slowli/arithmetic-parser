@@ -26,7 +26,7 @@ pub trait VariableMap<'a, T> {
     where
         Id: ModuleId,
         G: Grammar<'a, Lit = T>,
-        T: Clone + fmt::Debug,
+        T: 'static + Clone,
     {
         ExecutableModule::builder(id, block)?
             .with_imports_from(self)
@@ -60,9 +60,13 @@ pub struct Prelude;
 impl Prelude {
     /// Creates an iterator over contained values and the corresponding names.
     #[allow(clippy::missing_panics_doc)] // false positive; `unwrap()` never panics
-    pub fn iter<T: Clone>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
+    pub fn iter<T>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)>
+    where
+        T: 'static + Clone,
+    {
         const VAR_NAMES: &[&str] = &[
             "false", "true", "if", "loop", "while", "map", "filter", "fold", "push", "merge",
+            "impl", "defer",
         ];
 
         VAR_NAMES
@@ -71,11 +75,13 @@ impl Prelude {
     }
 }
 
-impl<'a, T: Clone> VariableMap<'a, T> for Prelude {
+impl<'a, T: 'static + Clone> VariableMap<'a, T> for Prelude {
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
         Some(match name {
             "false" => Value::Bool(false),
             "true" => Value::Bool(true),
+            "impl" => Value::native_fn(fns::CreatePrototype),
+            "defer" => Value::native_fn(fns::Defer),
             "if" => Value::native_fn(fns::If),
             "loop" => Value::native_fn(fns::Loop),
             "while" => Value::native_fn(fns::While),

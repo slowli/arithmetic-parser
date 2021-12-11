@@ -13,8 +13,8 @@ use crate::{
     arith::OrdArithmetic,
     error::{Backtrace, CodeInModule, EvalResult, TupleLenMismatchContext},
     executable::command::{Atom, Command, CompiledExpr, FieldName, SpannedAtom, SpannedCommand},
-    CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, ModuleId, SpannedValue,
-    StandardPrototypes, Value,
+    CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, ModuleId, Prototype,
+    SpannedValue, StandardPrototypes, Value,
 };
 use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
 
@@ -626,12 +626,12 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
         };
 
         let proto = proto
+            .map(Prototype::as_object)
             .or_else(|| {
                 let ty = receiver.value_type();
                 standard_prototypes.and_then(|prototypes| prototypes.get(ty))
             })
-            .ok_or_else(|| ErrorKind::NoPrototype(receiver.value_type()))?
-            .as_object();
+            .ok_or_else(|| ErrorKind::NoPrototype(receiver.value_type()))?;
 
         let field = proto.get(method_name).ok_or_else(|| ErrorKind::NoField {
             field: method_name.to_owned(),

@@ -256,14 +256,15 @@ fn object_destructuring_in_fn_args() {
 #[test]
 fn object_destructuring_in_pipeline() {
     let program = r#"
-        minmax = |xs| xs.fold(#{ min: INF, max: -INF }, |{ min, max }, x| #{
+        minmax = |...xs| xs.fold(#{ min: INF, max: -INF }, |{ min, max }, x| #{
             min: if(x < min, x, min),
             max: if(x > max, x, max),
         });
-        assert_eq((5, -4, 6, 9, 1).minmax(), #{ min: -4, max: 9 });
+        assert_eq(minmax(5, -4, 6, 9, 1), #{ min: -4, max: 9 });
     "#;
     let mut env = Environment::new();
-    env.insert("INF", Value::Prim(f32::INFINITY));
+    env.insert("INF", Value::Prim(f32::INFINITY))
+        .insert_prototypes(Prelude.prototypes());
     env.extend(Prelude.iter());
     env.extend(Assertions.iter());
     evaluate(&mut env, program);

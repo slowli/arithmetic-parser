@@ -447,6 +447,7 @@ impl<'a, T> ExecutableModuleBuilder<'a, T> {
     /// Sets the undefined imports using the provided closure and returns the resulting module.
     /// The closure is called with the name of each undefined import and should return
     /// the corresponding [`Value`].
+    // TODO: encourages bad usage patterns; consider changing
     pub fn set_imports<F>(mut self, mut setter: F) -> ExecutableModule<'a, T>
     where
         F: FnMut(&str) -> Value<'a, T>,

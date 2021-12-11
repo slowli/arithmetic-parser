@@ -297,34 +297,25 @@ impl<T: 'static + Clone> StripCode for Prototype<'_, T> {
 }
 
 /// [`Prototype`]s for standard types, such as [`Object`] and [`Tuple`].
-#[derive(Debug, PartialEq)]
+///
+/// # Merging
+///
+/// FIXME: describe merging
+#[derive(Debug, Clone, PartialEq)]
 pub struct StandardPrototypes<T> {
-    object_proto: Option<Prototype<'static, T>>,
-    array_proto: Option<Prototype<'static, T>>,
-    function_proto: Option<Prototype<'static, T>>,
-    prim_proto: Option<Prototype<'static, T>>,
-    bool_proto: Option<Prototype<'static, T>>,
+    object_proto: Option<Object<'static, T>>,
+    array_proto: Option<Object<'static, T>>,
+    function_proto: Option<Object<'static, T>>,
+    prim_proto: Option<Object<'static, T>>,
+    bool_proto: Option<Object<'static, T>>,
 }
 
-impl<T: 'static> Default for StandardPrototypes<T> {
+impl<T> Default for StandardPrototypes<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T> Clone for StandardPrototypes<T> {
-    fn clone(&self) -> Self {
-        Self {
-            object_proto: self.object_proto.clone(),
-            array_proto: self.array_proto.clone(),
-            function_proto: self.function_proto.clone(),
-            prim_proto: self.prim_proto.clone(),
-            bool_proto: self.bool_proto.clone(),
-        }
-    }
-}
-
-// FIXME: implement merging
 impl<T> StandardPrototypes<T> {
     /// Creates an empty instance.
     pub const fn new() -> Self {
@@ -337,13 +328,37 @@ impl<T> StandardPrototypes<T> {
         }
     }
 
-    /// Sets the object prototype and returns the modified instance for chaining.
-    pub fn with_array_proto(mut self, proto: Prototype<'static, T>) -> Self {
+    /// Sets the object prototype.
+    pub fn with_object_proto(mut self, proto: Object<'static, T>) -> Self {
+        self.object_proto = Some(proto);
+        self
+    }
+
+    /// Sets the array / tuple prototype.
+    pub fn with_array_proto(mut self, proto: Object<'static, T>) -> Self {
         self.array_proto = Some(proto);
         self
     }
 
-    pub(crate) fn get(&self, value_type: ValueType) -> Option<&Prototype<'static, T>> {
+    /// Sets the function prototype.
+    pub fn with_function_proto(mut self, proto: Object<'static, T>) -> Self {
+        self.function_proto = Some(proto);
+        self
+    }
+
+    /// Sets the primitive value prototype.
+    pub fn with_primitive_proto(mut self, proto: Object<'static, T>) -> Self {
+        self.prim_proto = Some(proto);
+        self
+    }
+
+    /// Sets the Boolean value prototype.
+    pub fn with_bool_proto(mut self, proto: Object<'static, T>) -> Self {
+        self.bool_proto = Some(proto);
+        self
+    }
+
+    pub(crate) fn get(&self, value_type: ValueType) -> Option<&Object<'static, T>> {
         match value_type {
             ValueType::Object => self.object_proto.as_ref(),
             ValueType::Tuple(_) | ValueType::Array => self.array_proto.as_ref(),
@@ -353,11 +368,35 @@ impl<T> StandardPrototypes<T> {
             _ => None,
         }
     }
+
+    fn merge_proto(
+        old_proto: &mut Option<Object<'static, T>>,
+        new_proto: Option<Object<'static, T>>,
+    ) {
+        if let Some(old_proto) = old_proto {
+            if let Some(new_proto) = new_proto {
+                old_proto.extend(new_proto);
+            }
+        } else {
+            *old_proto = new_proto;
+        }
+    }
+}
+
+impl<T> ops::AddAssign for StandardPrototypes<T> {
+    fn add_assign(&mut self, rhs: Self) {
+        Self::merge_proto(&mut self.object_proto, rhs.object_proto);
+        Self::merge_proto(&mut self.array_proto, rhs.array_proto);
+        Self::merge_proto(&mut self.function_proto, rhs.function_proto);
+        Self::merge_proto(&mut self.prim_proto, rhs.prim_proto);
+        Self::merge_proto(&mut self.bool_proto, rhs.bool_proto);
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fns;
 
     #[test]
     fn object_to_string() {
@@ -376,5 +415,29 @@ mod tests {
             "Unexpected obj_string: {}",
             obj_string
         );
+    }
+
+    #[test]
+    fn merging_prototypes() {
+        let array_proto = vec![("fold", Value::native_fn(fns::Fold))]
+            .into_iter()
+            .collect();
+        let mut prototypes = StandardPrototypes::<f32>::new().with_array_proto(array_proto);
+
+        let new_array_proto = vec![("len", Value::native_fn(fns::Len))]
+            .into_iter()
+            .collect();
+        let object_proto = vec![("len", Value::native_fn(fns::Len))]
+            .into_iter()
+            .collect();
+        let new_prototypes = StandardPrototypes::<f32>::new()
+            .with_array_proto(new_array_proto)
+            .with_object_proto(object_proto);
+
+        prototypes += new_prototypes;
+        assert!(prototypes.object_proto.unwrap()["len"].is_function());
+        let array_proto = prototypes.array_proto.unwrap();
+        assert!(array_proto["len"].is_function());
+        assert!(array_proto["fold"].is_function());
     }
 }

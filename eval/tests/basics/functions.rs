@@ -6,7 +6,8 @@ use hashbrown::HashMap;
 use core::iter::FromIterator;
 
 use arithmetic_eval::{
-    fns::FromValueErrorKind, Environment, ErrorKind, Function, NativeFn, Value, ValueType,
+    fns::FromValueErrorKind, Environment, ErrorKind, Function, NativeFn, StandardPrototypes, Value,
+    ValueType,
 };
 use arithmetic_parser::LvalueLen;
 
@@ -305,16 +306,20 @@ fn function_aliasing() {
 
 #[test]
 fn method_call() {
-    let program = "add = |x, y| x + y; 1.0.add(2)";
-    let return_value = evaluate(&mut Environment::new(), program);
+    let program = "1.0.add(2)";
+    let mut env = Environment::new();
+    let proto = vec![("add", Value::wrapped_fn(|x: f32, y: f32| x + y))];
+    let proto = proto.into_iter().collect();
+    env.insert_prototypes(StandardPrototypes::new().with_primitive_proto(proto));
+    let return_value = evaluate(&mut env, program);
     assert_eq!(return_value, Value::Prim(3.0));
 }
 
 #[test]
-fn method_call_on_returned_fn() {
+fn function_call_on_returned_fn() {
     let program = r#"
         gen = |x| { |y| x + y };
-        (1, -2).gen()(3) == (4, 1)
+        gen((1, -2))(3) == (4, 1)
     "#;
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(return_value, Value::Bool(true));

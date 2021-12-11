@@ -4,7 +4,8 @@ use assert_matches::assert_matches;
 
 use arithmetic_eval::{
     error::{ErrorWithBacktrace, RepeatedAssignmentContext},
-    fns, Comparisons, Environment, Error, ErrorKind, Value, VariableMap, WildcardId,
+    fns, Comparisons, Environment, Error, ErrorKind, StandardPrototypes, Value, VariableMap,
+    WildcardId,
 };
 use arithmetic_parser::{
     grammars::{F32Grammar, Parse, Untyped},
@@ -386,7 +387,9 @@ fn comparison_error_within_capture() {
 fn priority_of_unary_ops_and_methods() {
     let program = "-1.abs() == -1 && -1.0.abs() == -1 && --1.abs() == 1 && (-1).abs() == 1";
     let mut env = Environment::new();
-    env.insert_wrapped_fn("abs", f32::abs);
+    let proto = vec![("abs", Value::wrapped_fn(f32::abs))];
+    let proto = proto.into_iter().collect();
+    env.insert_prototypes(StandardPrototypes::new().with_primitive_proto(proto));
     let return_value = evaluate(&mut env, program);
     assert_eq!(return_value, Value::Bool(true));
 }

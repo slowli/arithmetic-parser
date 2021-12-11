@@ -9,8 +9,7 @@ use arithmetic_parser::{grammars::Grammar, Block};
 use core::{cmp::Ordering, fmt};
 
 use crate::{
-    fns, Environment, Error, ExecutableModule, ModuleId, ModuleImports, Object, StandardPrototypes,
-    Value,
+    fns, Environment, Error, ExecutableModule, ModuleId, ModuleImports, StandardPrototypes, Value,
 };
 
 /// Encapsulates read access to named variables.
@@ -21,7 +20,6 @@ pub trait VariableMap<'a, T> {
     /// Creates a module based on imports solely from this map.
     ///
     /// The default implementation is reasonable for most cases.
-    // FIXME: move to `Environment`? (Otherwise, prototypes are lost on running!)
     fn compile_module<Id, G>(
         &self,
         id: Id,
@@ -88,11 +86,11 @@ impl Prelude {
     {
         const ARRAY_FNS: &[&str] = &["map", "filter", "fold", "push", "merge"];
 
-        let array_proto: Object<T> = ARRAY_FNS
+        let array_proto = ARRAY_FNS
             .iter()
             .map(|&var_name| (var_name, self.get_variable(var_name).unwrap()))
             .collect();
-        StandardPrototypes::new().with_array_proto(array_proto.into())
+        StandardPrototypes::new().with_array_proto(array_proto)
     }
 }
 

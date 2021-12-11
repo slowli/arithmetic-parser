@@ -124,9 +124,10 @@ impl<'a, T> Environment<'a, T> {
         &self.prototypes
     }
 
-    /// Sets prototypes for standard types.
-    pub fn set_prototypes(&mut self, prototypes: StandardPrototypes<T>) -> &mut Self {
-        self.prototypes = prototypes;
+    /// Inserts prototypes for standard types, [merging](StandardPrototypes#merging) them
+    /// with the existing ones.
+    pub fn insert_prototypes(&mut self, prototypes: StandardPrototypes<T>) -> &mut Self {
+        self.prototypes += prototypes;
         self
     }
 }

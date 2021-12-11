@@ -152,8 +152,11 @@ pub struct Assertions;
 impl Assertions {
     /// Creates an iterator over contained values and the corresponding names.
     #[allow(clippy::missing_panics_doc)] // false positive; `unwrap()` never panics
-    pub fn iter<T: fmt::Display>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
-        const VAR_NAMES: &[&str] = &["assert", "assert_eq"];
+    pub fn iter<T>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)>
+    where
+        T: 'static + Clone + fmt::Display,
+    {
+        const VAR_NAMES: &[&str] = &["assert", "assert_eq", "assert_fails"];
 
         VAR_NAMES
             .iter()
@@ -161,11 +164,15 @@ impl Assertions {
     }
 }
 
-impl<'a, T: fmt::Display> VariableMap<'a, T> for Assertions {
+impl<'a, T> VariableMap<'a, T> for Assertions
+where
+    T: 'static + Clone + fmt::Display,
+{
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
         Some(match name {
             "assert" => Value::native_fn(fns::Assert),
             "assert_eq" => Value::native_fn(fns::AssertEq),
+            "assert_fails" => Value::native_fn(fns::AssertFails::default()),
             _ => return None,
         })
     }

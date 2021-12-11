@@ -46,7 +46,7 @@ mod wrapper;
 pub use self::std::Dbg;
 pub use self::{
     array::{Array, Filter, Fold, Len, Map, Merge, Push},
-    assertions::{Assert, AssertEq},
+    assertions::{Assert, AssertClose, AssertEq, AssertFails},
     flow::{If, Loop, While},
     wrapper::{
         enforce_closure_type, wrap, Binary, ErrorOutput, FnWrapper, FromValueError,

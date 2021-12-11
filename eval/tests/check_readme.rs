@@ -17,7 +17,8 @@ fn check_sample(code_sample: &str) {
 
     let mut env: Environment<'_, f32> = Prelude.iter().chain(Assertions.iter()).collect();
     env.insert("INF", Value::Prim(f32::INFINITY))
-        .insert("array", Value::native_fn(fns::Array))
+        .insert_native_fn("array", fns::Array)
+        .insert_native_fn("assert_close", fns::AssertClose::new(1e-4))
         .insert_wrapped_fn("sqrt", f32::sqrt)
         .insert_wrapped_fn("rand_num", |min: f32, max: f32| {
             thread_rng().gen_range(min..max)

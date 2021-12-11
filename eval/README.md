@@ -91,12 +91,6 @@ Vector = defer(|Self| impl(#{
     )(),
 }));
 
-// FIXME: define native fn
-assert_close = |act, exp| {
-    diff = act - exp;
-    assert(diff > -0.0001 && diff < 0.0001);
-};
-
 assert_eq(
     Vector(#{ x: 3, y: 4 }).add(Vector(#{ x: -1, y: 1 })),
     Vector(#{ x: 2, y: 5 }),

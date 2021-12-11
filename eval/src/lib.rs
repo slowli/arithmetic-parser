@@ -213,6 +213,7 @@ mod alloc {
     };
 }
 
+// FIXME: organize this mess
 pub use self::{
     compiler::CompilerExt,
     error::{Error, ErrorKind, EvalResult},
@@ -221,9 +222,9 @@ pub use self::{
         WithArithmetic,
     },
     values::{
-        Assertions, CallContext, Comparisons, Environment, Function, InterpretedFn, NativeFn,
-        Object, OpaqueRef, Prelude, Prototype, SpannedValue, StandardPrototypes, Tuple, Value,
-        ValueType, VariableMap,
+        Assertions, CallContext, Comparisons, Environment, Filler, Function, InterpretedFn,
+        NativeFn, Object, OpaqueRef, Prelude, Prototype, SpannedValue, StandardPrototypes, Tuple,
+        Value, ValueType, VariableMap,
     },
 };
 

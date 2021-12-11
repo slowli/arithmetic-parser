@@ -339,7 +339,7 @@ impl<T> ValueCell<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Environment, ExecutableModule, WildcardId};
+    use crate::{Environment, ExecutableModule, Filler, WildcardId};
 
     use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
     use assert_matches::assert_matches;
@@ -477,7 +477,8 @@ mod tests {
         let mut test_module = ExecutableModule::builder("test", &test_block)
             .unwrap()
             .with_import("reverse", env["reverse"].clone())
-            .set_imports(|_| Value::void());
+            .with_imports_from(&Filler::void(&["xs"]))
+            .build();
 
         for &(input, expected) in SAMPLES {
             let input = input.iter().copied().map(Value::Prim).collect();

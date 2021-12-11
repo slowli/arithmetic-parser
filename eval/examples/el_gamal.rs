@@ -13,7 +13,7 @@ use std::cell::RefCell;
 
 use arithmetic_eval::{
     arith::{ArithmeticExt, ModularArithmetic},
-    fns, Assertions, Environment, ExecutableModule, Prelude, Value,
+    fns, Assertions, Environment, ExecutableModule, Filler, Prelude, Value,
 };
 use arithmetic_parser::grammars::{NumGrammar, Parse, Untyped};
 
@@ -38,7 +38,8 @@ fn main() -> anyhow::Result<()> {
         .with_imports_from(&Prelude)
         .with_imports_from(&Assertions)
         .with_import("dbg", Value::native_fn(fns::Dbg))
-        .set_imports(|_| Value::void());
+        .with_imports_from(&Filler::void(&["GEN", "ORDER", "rand_scalar"]))
+        .build();
 
     // Run the compiled module with different groups.
     for i in 0..5 {

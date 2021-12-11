@@ -4,7 +4,9 @@ use assert_matches::assert_matches;
 
 use core::iter::FromIterator;
 
-use arithmetic_eval::{Assertions, Environment, ErrorKind, ExecutableModule, Prelude, Value};
+use arithmetic_eval::{
+    Assertions, Environment, ErrorKind, ExecutableModule, Filler, Prelude, Value,
+};
 use arithmetic_parser::{
     grammars::{F64Grammar, MockTypes, Parse, WithMockedTypes},
     BinaryOp, StripCode, StripResultExt,
@@ -24,6 +26,7 @@ type Grammar = WithMockedTypes<F64Grammar, MockedTypesList>;
 fn create_module<'a>(
     module_name: &'static str,
     program: &'a str,
+    deferred_imports: &[&str],
 ) -> anyhow::Result<ExecutableModule<'a, f64>> {
     let block = Grammar::parse_statements(program).strip_err()?;
     Ok(ExecutableModule::builder(module_name, &block)
@@ -31,7 +34,8 @@ fn create_module<'a>(
         .with_imports_from(&Prelude)
         .with_imports_from(&Assertions)
         .with_import("INF", Value::Prim(f64::INFINITY))
-        .set_imports(|_| Value::void()))
+        .with_imports_from(&Filler::void(deferred_imports))
+        .build())
 }
 
 fn create_static_module(
@@ -40,7 +44,7 @@ fn create_static_module(
 ) -> anyhow::Result<ExecutableModule<'static, f64>> {
     // By default, the module is tied by its lifetime to the `program`. However,
     // we can break this tie using the `StripCode` trait.
-    create_module(module_name, program).map(StripCode::strip_code)
+    create_module(module_name, program, &[]).map(StripCode::strip_code)
 }
 
 fn main() -> anyhow::Result<()> {
@@ -55,13 +59,13 @@ fn main() -> anyhow::Result<()> {
     assert!(sum_fn.is_function());
 
     // Let's import the function into another module and check that it works.
-    let mut test_module = create_module("test", "sum(1, 2, -5)")?;
+    let mut test_module = create_module("test", "sum(1, 2, -5)", &["sum"])?;
     test_module.set_import("sum", sum_fn.clone());
     let sum_value = test_module.run()?;
     assert_eq!(sum_value, Value::Prim(-2.0)); // 1 + 2 - 5
 
     // Errors are handled as well.
-    let bogus_module = create_module("bogus", "sum(1, true, -5)")?;
+    let bogus_module = create_module("bogus", "sum(1, true, -5)", &["sum"])?;
     let mut env = Environment::from_iter(bogus_module.imports());
     env.insert("sum", sum_fn);
 
@@ -82,7 +86,7 @@ fn main() -> anyhow::Result<()> {
     // Importing into a stripped module also works. Let's redefine the `fold` import.
     let fold_program = include_str!("rfold.script");
     let fold_program = String::from(fold_program);
-    let fold_module = create_module("rfold", &fold_program)?;
+    let fold_module = create_module("rfold", &fold_program, &[])?;
     let rfold_fn = fold_module.run().strip_err()?;
 
     let mut env = Environment::from_iter(sum_module.imports());

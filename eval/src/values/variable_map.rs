@@ -48,6 +48,37 @@ impl<'a, T: Clone> VariableMap<'a, T> for ModuleImports<'a, T> {
     }
 }
 
+/// [`VariableMap`] implementation that fills specified variables with a constant value.
+/// Useful when building an [`ExecutableModule`] and some variables need to be set
+/// later.
+///
+/// [`ExecutableModule`]: crate::ExecutableModule
+#[derive(Debug, Clone)]
+pub struct Filler<'s, 'a, T> {
+    value: Value<'a, T>,
+    var_names: &'s [&'s str],
+}
+
+impl<'s, T> Filler<'s, '_, T> {
+    /// Creates a `Filler` that returns [`Value::void()`] for all variables in `var_names`.
+    pub const fn void(var_names: &'s [&'s str]) -> Self {
+        Self {
+            value: Value::void(),
+            var_names,
+        }
+    }
+}
+
+impl<'a, T: Clone> VariableMap<'a, T> for Filler<'_, 'a, T> {
+    fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
+        if self.var_names.contains(&name) {
+            Some(self.value.clone())
+        } else {
+            None
+        }
+    }
+}
+
 /// Commonly used constants and functions from the [`fns` module](fns).
 ///
 /// # Contents

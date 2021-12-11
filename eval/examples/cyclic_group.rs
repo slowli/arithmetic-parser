@@ -17,8 +17,8 @@ use std::{cell::RefCell, fmt};
 use arithmetic_eval::{
     arith::{Arithmetic, ArithmeticExt, ModularArithmetic},
     error::{ArithmeticError, AuxErrorInfo},
-    fns, Assertions, CallContext, ErrorKind, EvalResult, ExecutableModule, NativeFn, Number,
-    Prelude, SpannedValue, Value,
+    fns, Assertions, CallContext, ErrorKind, EvalResult, ExecutableModule, Filler, NativeFn,
+    Number, Prelude, SpannedValue, Value,
 };
 use arithmetic_parser::{
     grammars::{Features, NumGrammar, NumLiteral, Parse, Untyped},
@@ -127,7 +127,7 @@ impl CyclicGroupArithmetic {
     }
 
     /// Sets generic imports for the provided `module`.
-    fn set_imports(&self, module: &mut ExecutableModule<'_, GroupLiteral>) {
+    fn define_imports(&self, module: &mut ExecutableModule<'_, GroupLiteral>) {
         let generator = GroupLiteral::GroupElement(self.generator.clone());
         let prime_subgroup_order = GroupLiteral::Scalar(self.for_group.modulus().to_owned());
         module
@@ -136,6 +136,9 @@ impl CyclicGroupArithmetic {
             .set_import("rand_scalar", Value::wrapped_fn(self.rand_scalar()))
             .set_import("hash_to_scalar", Value::native_fn(self.hash_to_scalar()));
     }
+
+    const DEFERRED_IMPORTS: &'static [&'static str] =
+        &["GEN", "ORDER", "rand_scalar", "hash_to_scalar"];
 }
 
 /// Function that hashes data to a scalar.
@@ -304,21 +307,24 @@ fn main() -> anyhow::Result<()> {
         .with_imports_from(&Prelude)
         .with_imports_from(&Assertions)
         .with_import("dbg", Value::native_fn(fns::Dbg))
-        .set_imports(|_| Value::void());
+        .with_imports_from(&Filler::void(CyclicGroupArithmetic::DEFERRED_IMPORTS))
+        .build();
 
     let dsa_signatures = GroupGrammar::parse_statements(DSA_SIGNATURES)?;
     let mut dsa_signatures = ExecutableModule::builder("dsa", &dsa_signatures)?
         .with_imports_from(&Prelude)
         .with_imports_from(&Assertions)
         .with_import("dbg", Value::native_fn(fns::Dbg))
-        .set_imports(|_| Value::void());
+        .with_imports_from(&Filler::void(CyclicGroupArithmetic::DEFERRED_IMPORTS))
+        .with_import("to_scalar", Value::void())
+        .build();
 
     for i in 0..5 {
         println!("\nRunning sample #{}", i);
 
         let arithmetic = CyclicGroupArithmetic::new(BIT_LENGTH);
-        arithmetic.set_imports(&mut schnorr_signatures);
-        arithmetic.set_imports(&mut dsa_signatures);
+        arithmetic.define_imports(&mut schnorr_signatures);
+        arithmetic.define_imports(&mut dsa_signatures);
         dsa_signatures.set_import("to_scalar", Value::wrapped_fn(arithmetic.to_scalar()));
 
         let arithmetic = arithmetic.without_comparisons();

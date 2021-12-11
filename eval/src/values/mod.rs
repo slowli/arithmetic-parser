@@ -20,7 +20,7 @@ pub use self::{
     function::{CallContext, Function, InterpretedFn, NativeFn},
     object::{Object, Prototype, StandardPrototypes},
     tuple::Tuple,
-    variable_map::{Assertions, Comparisons, Prelude, VariableMap},
+    variable_map::{Assertions, Comparisons, Filler, Prelude, VariableMap},
 };
 
 /// Possible high-level types of [`Value`]s.
@@ -217,7 +217,7 @@ impl<'a, T> Value<'a, T> {
     }
 
     /// Creates a void value (an empty tuple).
-    pub fn void() -> Self {
+    pub const fn void() -> Self {
         Self::Tuple(Tuple::void())
     }
 

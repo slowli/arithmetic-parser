@@ -15,7 +15,8 @@ use typed_arena::Arena;
 use std::cmp::Ordering;
 
 use arithmetic_eval::{
-    arith::StdArithmetic, fns, CallContext, ExecutableModule, NativeFn, Prelude, Value, WildcardId,
+    arith::StdArithmetic, fns, CallContext, ExecutableModule, Filler, NativeFn, Prelude, Value,
+    WildcardId,
 };
 use arithmetic_parser::{
     grammars::{F32Grammar, Parse, Untyped},
@@ -208,7 +209,8 @@ fn bench_reverse(bencher: &mut Bencher<'_>) {
     let mut program = ExecutableModule::builder("rev_fn", &program)
         .unwrap()
         .with_import("reverse", rev_fn)
-        .set_imports(|_| Value::void());
+        .with_imports_from(&Filler::void(&["xs"]))
+        .build();
 
     bencher.iter_batched(
         || {

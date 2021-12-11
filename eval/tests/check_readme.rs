@@ -16,13 +16,15 @@ fn check_sample(code_sample: &str) {
     let program = Untyped::<F32Grammar>::parse_statements(code_sample).unwrap();
 
     let mut env: Environment<'_, f32> = Prelude.iter().chain(Assertions.iter()).collect();
-    env.insert("INF", Value::Prim(f32::INFINITY));
-    env.insert("array", Value::native_fn(fns::Array)).insert(
-        "rand_num",
-        Value::wrapped_fn(|min: f32, max: f32| thread_rng().gen_range(min..max)),
-    );
+    env.insert("INF", Value::Prim(f32::INFINITY))
+        .insert("array", Value::native_fn(fns::Array))
+        .insert_wrapped_fn("sqrt", f32::sqrt)
+        .insert_wrapped_fn("rand_num", |min: f32, max: f32| {
+            thread_rng().gen_range(min..max)
+        })
+        .insert_prototypes(Prelude.prototypes());
     let module = env.compile_module("test", &program).unwrap();
-    module.run().unwrap();
+    module.run_in_env(&mut env).unwrap();
 }
 
 #[test]

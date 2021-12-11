@@ -40,36 +40,34 @@ arithmetic-eval = "0.3.0"
 A simple script relying entirely on standard functions.
 
 ```text
-minmax = |xs| xs.fold(#{ min: INF, max: -INF }, |acc, x| #{
+minmax = |...xs| xs.fold(#{ min: INF, max: -INF }, |acc, x| #{
      min: if(x < acc.min, x, acc.min),
      max: if(x > acc.max, x, acc.max),
 });
-assert_eq((3, 7, 2, 4).minmax().min, 2);
-assert_eq((5, -4, 6, 9, 1).minmax(), #{ min: -4, max: 9 });
+assert_eq(minmax(3, 7, 2, 4).min, 2);
+assert_eq(minmax(5, -4, 6, 9, 1), #{ min: -4, max: 9 });
 ```
 
 Recursive quick sort implementation:
 
 ```text
-quick_sort = |xs, quick_sort| {
-    // We need to pass a function as an arg since the top-level fn
-    // is undefined at this point.
-  
-    if(xs == (), || (), || {
-        (pivot, ...rest) = xs;
-        lesser_part = rest.filter(|x| x < pivot).quick_sort(quick_sort);
-        greater_part = rest.filter(|x| x >= pivot).quick_sort(quick_sort);
-        lesser_part.push(pivot).merge(greater_part)
-    })()
-};
-// Shortcut to get rid of an awkward fn signature.
-sort = |xs| xs.quick_sort(quick_sort);
+sort = defer(|sort| {
+    // `defer` allows to define a function recursively
+    |xs| {
+        if(xs == (), || (), || {
+            (pivot, ...rest) = xs;
+            lesser_part = sort(rest.filter(|x| x < pivot));
+            greater_part = sort(rest.filter(|x| x >= pivot));
+            lesser_part.push(pivot).merge(greater_part)
+        })()
+    }
+});
 
-assert_eq((1, 7, -3, 2, -1, 4, 2).sort(), (-3, -1, 1, 2, 2, 4, 7));
+assert_eq(sort((1, 7, -3, 2, -1, 4, 2)), (-3, -1, 1, 2, 2, 4, 7));
 
 // Generate a larger array to sort. `rand_num` is a custom native function
 // that generates random numbers in the specified range.
-xs = array(1000, |_| rand_num(0, 100)).sort();
+xs = sort(array(1000, |_| rand_num(0, 100)));
 // Check that elements in `xs` are monotonically non-decreasing.
 { sorted } = xs.fold(
     #{ prev: -1, sorted: true },
@@ -79,6 +77,34 @@ xs = array(1000, |_| rand_num(0, 100)).sort();
     },
 );
 assert(sorted);
+```
+
+Defining a type:
+
+```text
+Vector = defer(|Self| impl(#{
+    len: |{ x, y }| sqrt(x * x + y * y),
+    add: |self, other| Self(self + other),
+    to_unit: |self| if(self.x == 0 && self.y == 0,
+        || self,
+        || Self(self / self.len()),
+    )(),
+}));
+
+// FIXME: define native fn
+assert_close = |act, exp| {
+    diff = act - exp;
+    assert(diff > -0.0001 && diff < 0.0001);
+};
+
+assert_eq(
+    Vector(#{ x: 3, y: 4 }).add(Vector(#{ x: -1, y: 1 })),
+    Vector(#{ x: 2, y: 5 }),
+);
+scaled = Vector(#{ x: 3, y: -4 }).to_unit();
+assert_close(scaled.len(), 1);
+assert_close(scaled.x, 0.6);
+assert_close(scaled.y, -0.8);
 ```
 
 Please see the crate docs and [examples](examples) for more examples.

@@ -45,7 +45,7 @@ fn create_static_module(
 
 fn main() -> anyhow::Result<()> {
     let sum_module = {
-        let dynamic_program = String::from("|var| var.fold(0, |acc, x| acc + x)");
+        let dynamic_program = String::from("|...vars| fold(vars, 0, |acc, x| acc + x)");
         create_static_module("sum", &dynamic_program)?
         // Ensure that the program is indeed dropped by using a separate scope.
     };
@@ -55,13 +55,13 @@ fn main() -> anyhow::Result<()> {
     assert!(sum_fn.is_function());
 
     // Let's import the function into another module and check that it works.
-    let mut test_module = create_module("test", "(1, 2, -5).sum()")?;
+    let mut test_module = create_module("test", "sum(1, 2, -5)")?;
     test_module.set_import("sum", sum_fn.clone());
     let sum_value = test_module.run()?;
     assert_eq!(sum_value, Value::Prim(-2.0)); // 1 + 2 - 5
 
     // Errors are handled as well.
-    let bogus_module = create_module("bogus", "(1, true, -5).sum()")?;
+    let bogus_module = create_module("bogus", "sum(1, true, -5)")?;
     let mut env = Environment::from_iter(bogus_module.imports());
     env.insert("sum", sum_fn);
 
@@ -76,7 +76,7 @@ fn main() -> anyhow::Result<()> {
     // but rather contain info sufficient to be recoverable.
     assert_eq!(
         err.source().main_span().code().code_or_location("call"),
-        "call at 1:34"
+        "call at 1:40"
     );
 
     // Importing into a stripped module also works. Let's redefine the `fold` import.

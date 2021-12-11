@@ -14,7 +14,7 @@ use crate::{
     error::{Backtrace, CodeInModule},
     executable::ExecutableFn,
     fns::ValueCell,
-    Error, ErrorKind, EvalResult, ModuleId, Prototype, SpannedValue, Value,
+    Error, ErrorKind, EvalResult, ModuleId, Prototype, SpannedValue, StandardPrototypes, Value,
 };
 use arithmetic_parser::{LvalueLen, MaybeSpanned, StripCode};
 
@@ -24,6 +24,7 @@ pub struct CallContext<'r, 'a, T> {
     call_span: CodeInModule<'a>,
     backtrace: Option<&'r mut Backtrace<'a>>,
     arithmetic: &'r dyn OrdArithmetic<T>,
+    prototypes: Option<&'r StandardPrototypes<T>>,
 }
 
 impl<'r, 'a, T> CallContext<'r, 'a, T> {
@@ -37,6 +38,7 @@ impl<'r, 'a, T> CallContext<'r, 'a, T> {
             call_span: CodeInModule::new(module_id, call_span),
             backtrace: None,
             arithmetic,
+            prototypes: None,
         }
     }
 
@@ -44,11 +46,13 @@ impl<'r, 'a, T> CallContext<'r, 'a, T> {
         call_span: CodeInModule<'a>,
         backtrace: Option<&'r mut Backtrace<'a>>,
         arithmetic: &'r dyn OrdArithmetic<T>,
+        prototypes: Option<&'r StandardPrototypes<T>>,
     ) -> Self {
         Self {
             call_span,
             backtrace,
             arithmetic,
+            prototypes,
         }
     }
 
@@ -59,6 +63,10 @@ impl<'r, 'a, T> CallContext<'r, 'a, T> {
 
     pub(crate) fn arithmetic(&self) -> &'r dyn OrdArithmetic<T> {
         self.arithmetic
+    }
+
+    pub(crate) fn prototypes(&self) -> Option<&'r StandardPrototypes<T>> {
+        self.prototypes
     }
 
     /// Returns the call span of the currently executing function.

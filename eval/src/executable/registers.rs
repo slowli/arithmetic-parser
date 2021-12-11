@@ -14,7 +14,7 @@ use crate::{
     error::{Backtrace, CodeInModule, EvalResult, TupleLenMismatchContext},
     executable::command::{Atom, Command, CompiledExpr, FieldName, SpannedAtom, SpannedCommand},
     CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, ModuleId, SpannedValue,
-    Value,
+    StandardPrototypes, Value,
 };
 use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
 
@@ -118,7 +118,8 @@ impl<'a, T: 'static + Clone> Executable<'a, T> {
             registers,
             ..Registers::new()
         };
-        env.execute(self, ctx.arithmetic(), ctx.backtrace())
+        let operations = Operations::new(ctx.arithmetic(), ctx.prototypes());
+        env.execute(self, operations, ctx.backtrace())
     }
 }
 
@@ -148,6 +149,46 @@ impl<T: 'static + Clone> StripCode for ExecutableFn<'_, T> {
             inner: self.inner.strip_code(),
             def_span: self.def_span.strip_code(),
             arg_count: self.arg_count,
+        }
+    }
+}
+
+/// Encompasses all irreducible operations defined externally for `Value`s; for now, these are
+/// arithmetic ops and prototypes for standard types.
+#[derive(Debug)]
+pub(crate) struct Operations<'r, T> {
+    arithmetic: &'r dyn OrdArithmetic<T>,
+    prototypes: Option<&'r StandardPrototypes<T>>,
+}
+
+impl<T> Clone for Operations<'_, T> {
+    fn clone(&self) -> Self {
+        Self {
+            arithmetic: self.arithmetic,
+            prototypes: self.prototypes,
+        }
+    }
+}
+
+impl<T> Copy for Operations<'_, T> {}
+
+impl<'r, T: 'static> From<&'r dyn OrdArithmetic<T>> for Operations<'r, T> {
+    fn from(arithmetic: &'r dyn OrdArithmetic<T>) -> Self {
+        Self {
+            arithmetic,
+            prototypes: None,
+        }
+    }
+}
+
+impl<'r, T> Operations<'r, T> {
+    pub fn new(
+        arithmetic: &'r dyn OrdArithmetic<T>,
+        prototypes: Option<&'r StandardPrototypes<T>>,
+    ) -> Self {
+        Self {
+            arithmetic,
+            prototypes,
         }
     }
 }
@@ -274,10 +315,10 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
     pub fn execute(
         &mut self,
         executable: &Executable<'a, T>,
-        arithmetic: &dyn OrdArithmetic<T>,
+        operations: Operations<'_, T>,
         backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
-        self.execute_inner(executable, arithmetic, backtrace)
+        self.execute_inner(executable, operations, backtrace)
             .map_err(|err| {
                 if let Some(scope_start) = self.inner_scope_start.take() {
                     self.registers.truncate(scope_start);
@@ -290,7 +331,7 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
     fn execute_inner(
         &mut self,
         executable: &Executable<'a, T>,
-        arithmetic: &dyn OrdArithmetic<T>,
+        operations: Operations<'_, T>,
         mut backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
         if let Some(additional_capacity) = executable
@@ -308,7 +349,7 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
                         expr_span,
                         expr,
                         executable,
-                        arithmetic,
+                        operations,
                         backtrace.as_deref_mut(),
                     )?;
                     self.registers.push(expr_value);
@@ -378,7 +419,7 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
         span: MaybeSpanned<'a>,
         expr: &CompiledExpr<'a, T>,
         executable: &Executable<'a, T>,
-        arithmetic: &dyn OrdArithmetic<T>,
+        operations: Operations<'_, T>,
         backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
         match expr {
@@ -398,7 +439,7 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
             CompiledExpr::Unary { op, inner } => {
                 let inner_value = self.resolve_atom(&inner.extra);
                 match op {
-                    UnaryOp::Neg => inner_value.try_neg(arithmetic),
+                    UnaryOp::Neg => inner_value.try_neg(operations.arithmetic),
                     UnaryOp::Not => inner_value.try_not(),
                     _ => unreachable!("Checked during compilation"),
                 }
@@ -406,7 +447,8 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
             }
 
             CompiledExpr::Binary { op, lhs, rhs } => {
-                self.execute_binary_expr(executable.id(), span, *op, lhs, rhs, arithmetic)
+                let arith = operations.arithmetic;
+                self.execute_binary_expr(executable.id(), span, *op, lhs, rhs, arith)
             }
 
             CompiledExpr::FieldAccess {
@@ -440,7 +482,7 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
                         executable.id.as_ref(),
                         span,
                         arg_values,
-                        arithmetic,
+                        operations,
                         backtrace,
                     )
                 } else {
@@ -454,8 +496,9 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
                 args,
             } => {
                 let receiver = receiver.copy_with_extra(self.resolve_atom(&receiver.extra));
-                let method = Self::resolve_method(&receiver.extra, &name.extra)
-                    .map_err(|err| executable.create_error(name, err))?;
+                let method =
+                    Self::resolve_method(&receiver.extra, &name.extra, operations.prototypes)
+                        .map_err(|err| executable.create_error(name, err))?;
                 let arg_values = args
                     .iter()
                     .map(|arg| arg.copy_with_extra(self.resolve_atom(&arg.extra)));
@@ -467,7 +510,7 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
                     executable.id.as_ref(),
                     span,
                     arg_values,
-                    arithmetic,
+                    operations,
                     backtrace,
                 )
             }
@@ -572,6 +615,7 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
     fn resolve_method(
         receiver: &Value<'a, T>,
         method_name: &str,
+        standard_prototypes: Option<&StandardPrototypes<T>>,
     ) -> Result<Function<'a, T>, ErrorKind> {
         let proto = if let Some(object) = receiver.as_object() {
             object.prototype()
@@ -580,7 +624,12 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
         } else {
             None
         };
+
         let proto = proto
+            .or_else(|| {
+                let ty = receiver.value_type();
+                standard_prototypes.and_then(|prototypes| prototypes.get(ty))
+            })
             .ok_or_else(|| ErrorKind::NoPrototype(receiver.value_type()))?
             .as_object();
 
@@ -602,14 +651,19 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
         module_id: &dyn ModuleId,
         call_span: MaybeSpanned<'a>,
         arg_values: Vec<SpannedValue<'a, T>>,
-        arithmetic: &dyn OrdArithmetic<T>,
+        operations: Operations<'_, T>,
         mut backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
         let full_call_span = CodeInModule::new(module_id, call_span);
         if let Some(backtrace) = &mut backtrace {
             backtrace.push_call(fn_name, function.def_span(), full_call_span.clone());
         }
-        let mut context = CallContext::new(full_call_span, backtrace.as_deref_mut(), arithmetic);
+        let mut context = CallContext::new(
+            full_call_span,
+            backtrace.as_deref_mut(),
+            operations.arithmetic,
+            operations.prototypes,
+        );
 
         function.evaluate(arg_values, &mut context).map(|value| {
             if let Some(backtrace) = backtrace {

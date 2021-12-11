@@ -10,7 +10,7 @@ use core::{
 
 use crate::{
     alloc::Rc, error::AuxErrorInfo, CallContext, ErrorKind, EvalResult, Function, SpannedValue,
-    Value,
+    Value, ValueType,
 };
 use arithmetic_parser::StripCode;
 
@@ -292,6 +292,65 @@ impl<T: 'static + Clone> StripCode for Prototype<'_, T> {
         let inner = Rc::try_unwrap(self.inner).unwrap_or_else(|rc| (*rc).clone());
         Prototype {
             inner: Rc::new(inner.strip_code()),
+        }
+    }
+}
+
+/// [`Prototype`]s for standard types, such as [`Object`] and [`Tuple`].
+#[derive(Debug, PartialEq)]
+pub struct StandardPrototypes<T> {
+    object_proto: Option<Prototype<'static, T>>,
+    array_proto: Option<Prototype<'static, T>>,
+    function_proto: Option<Prototype<'static, T>>,
+    prim_proto: Option<Prototype<'static, T>>,
+    bool_proto: Option<Prototype<'static, T>>,
+}
+
+impl<T: 'static> Default for StandardPrototypes<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T> Clone for StandardPrototypes<T> {
+    fn clone(&self) -> Self {
+        Self {
+            object_proto: self.object_proto.clone(),
+            array_proto: self.array_proto.clone(),
+            function_proto: self.function_proto.clone(),
+            prim_proto: self.prim_proto.clone(),
+            bool_proto: self.bool_proto.clone(),
+        }
+    }
+}
+
+// FIXME: implement merging
+impl<T> StandardPrototypes<T> {
+    /// Creates an empty instance.
+    pub const fn new() -> Self {
+        Self {
+            object_proto: None,
+            array_proto: None,
+            function_proto: None,
+            prim_proto: None,
+            bool_proto: None,
+        }
+    }
+
+    /// Sets the object prototype and returns the modified instance for chaining.
+    pub fn with_array_proto(mut self, proto: Prototype<'static, T>) -> Self {
+        self.array_proto = Some(proto);
+        self
+    }
+
+    pub(crate) fn get(&self, value_type: ValueType) -> Option<&Prototype<'static, T>> {
+        match value_type {
+            ValueType::Object => self.object_proto.as_ref(),
+            ValueType::Tuple(_) | ValueType::Array => self.array_proto.as_ref(),
+            ValueType::Function => self.function_proto.as_ref(),
+            ValueType::Prim => self.prim_proto.as_ref(),
+            ValueType::Bool => self.bool_proto.as_ref(),
+            _ => None,
         }
     }
 }

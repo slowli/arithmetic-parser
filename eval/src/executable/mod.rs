@@ -18,7 +18,7 @@ mod registers;
 pub use self::module_id::{IndexedId, ModuleId, WildcardId};
 pub(crate) use self::{
     command::{Atom, Command, CompiledExpr, FieldName, SpannedAtom},
-    registers::{Executable, ExecutableFn, Registers},
+    registers::{Executable, ExecutableFn, Operations, Registers},
 };
 
 /// Executable module together with its imports.
@@ -213,11 +213,11 @@ impl<'a, T: 'static + Clone> ExecutableModule<'a, T> {
     fn run_with_registers(
         &self,
         registers: &mut Registers<'a, T>,
-        arithmetic: &dyn OrdArithmetic<T>,
+        operations: Operations<'_, T>,
     ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
         let mut backtrace = Backtrace::default();
         registers
-            .execute(&self.inner, arithmetic, Some(&mut backtrace))
+            .execute(&self.inner, operations, Some(&mut backtrace))
             .map_err(|err| ErrorWithBacktrace::new(err, backtrace))
     }
 }
@@ -273,7 +273,7 @@ impl<'a, T: 'static + Clone> WithArithmetic<'_, 'a, T> {
     pub fn run(self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
         let mut registers = self.module.imports.inner.clone();
         self.module
-            .run_with_registers(&mut registers, self.arithmetic)
+            .run_with_registers(&mut registers, self.arithmetic.into())
     }
 
     /// Runs the module with the specified [`Environment`]. The environment may contain some of
@@ -287,9 +287,8 @@ impl<'a, T: 'static + Clone> WithArithmetic<'_, 'a, T> {
         let mut registers = self.module.imports.inner.clone();
         registers.update_from_env(env);
 
-        let result = self
-            .module
-            .run_with_registers(&mut registers, self.arithmetic);
+        let operations = Operations::new(self.arithmetic, Some(env.prototypes()));
+        let result = self.module.run_with_registers(&mut registers, operations);
         registers.update_env(env);
         result
     }

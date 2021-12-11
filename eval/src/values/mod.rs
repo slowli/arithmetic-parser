@@ -18,7 +18,7 @@ mod variable_map;
 pub use self::{
     env::Environment,
     function::{CallContext, Function, InterpretedFn, NativeFn},
-    object::{Object, Prototype},
+    object::{Object, Prototype, StandardPrototypes},
     tuple::Tuple,
     variable_map::{Assertions, Comparisons, Prelude, VariableMap},
 };

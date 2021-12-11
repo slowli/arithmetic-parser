@@ -9,7 +9,7 @@ use core::{
 
 use crate::{
     alloc::{String, ToOwned},
-    fns, NativeFn, Value,
+    fns, NativeFn, StandardPrototypes, Value,
 };
 
 /// Environment containing named `Value`s.
@@ -45,6 +45,7 @@ use crate::{
 #[derive(Debug)]
 pub struct Environment<'a, T> {
     variables: HashMap<String, Value<'a, T>>,
+    prototypes: StandardPrototypes<T>,
 }
 
 impl<T> Default for Environment<'_, T> {
@@ -57,13 +58,14 @@ impl<T: Clone> Clone for Environment<'_, T> {
     fn clone(&self) -> Self {
         Self {
             variables: self.variables.clone(),
+            prototypes: self.prototypes.clone(),
         }
     }
 }
 
 impl<T: PartialEq> PartialEq for Environment<'_, T> {
     fn eq(&self, other: &Self) -> bool {
-        self.variables == other.variables
+        self.variables == other.variables && self.prototypes == other.prototypes
     }
 }
 
@@ -72,6 +74,7 @@ impl<'a, T> Environment<'a, T> {
     pub fn new() -> Self {
         Self {
             variables: HashMap::new(),
+            prototypes: StandardPrototypes::new(),
         }
     }
 
@@ -115,6 +118,16 @@ impl<'a, T> Environment<'a, T> {
     {
         let wrapped = fns::wrap::<Args, _>(fn_to_wrap);
         self.insert(name, Value::native_fn(wrapped))
+    }
+
+    pub(crate) fn prototypes(&self) -> &StandardPrototypes<T> {
+        &self.prototypes
+    }
+
+    /// Sets prototypes for standard types.
+    pub fn set_prototypes(&mut self, prototypes: StandardPrototypes<T>) -> &mut Self {
+        self.prototypes = prototypes;
+        self
     }
 }
 
@@ -213,6 +226,7 @@ where
             .map(|(var_name, value)| (var_name.into(), value.into()));
         Self {
             variables: variables.collect(),
+            prototypes: StandardPrototypes::new(),
         }
     }
 }

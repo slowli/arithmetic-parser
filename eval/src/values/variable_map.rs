@@ -8,7 +8,10 @@ use arithmetic_parser::{grammars::Grammar, Block};
 
 use core::{cmp::Ordering, fmt};
 
-use crate::{fns, Environment, Error, ExecutableModule, ModuleId, ModuleImports, Value};
+use crate::{
+    fns, Environment, Error, ExecutableModule, ModuleId, ModuleImports, Object, StandardPrototypes,
+    Value,
+};
 
 /// Encapsulates read access to named variables.
 pub trait VariableMap<'a, T> {
@@ -18,6 +21,7 @@ pub trait VariableMap<'a, T> {
     /// Creates a module based on imports solely from this map.
     ///
     /// The default implementation is reasonable for most cases.
+    // FIXME: move to `Environment`? (Otherwise, prototypes are lost on running!)
     fn compile_module<Id, G>(
         &self,
         id: Id,
@@ -57,9 +61,9 @@ impl<'a, T: Clone> VariableMap<'a, T> for ModuleImports<'a, T> {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Prelude;
 
+#[allow(clippy::missing_panics_doc)] // false positive; `unwrap()` never panics
 impl Prelude {
     /// Creates an iterator over contained values and the corresponding names.
-    #[allow(clippy::missing_panics_doc)] // false positive; `unwrap()` never panics
     pub fn iter<T>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)>
     where
         T: 'static + Clone,
@@ -72,6 +76,23 @@ impl Prelude {
         VAR_NAMES
             .iter()
             .map(move |&var_name| (var_name, self.get_variable(var_name).unwrap()))
+    }
+
+    /// Returns standard prototypes corresponding to the contained functions.
+    ///
+    /// Currently, this only sets a prototype for tuples / arrays containing
+    /// `map`, `filter`, `fold`, `push` and `merge` functions.
+    pub fn prototypes<T>(self) -> StandardPrototypes<T>
+    where
+        T: 'static + Clone,
+    {
+        const ARRAY_FNS: &[&str] = &["map", "filter", "fold", "push", "merge"];
+
+        let array_proto: Object<T> = ARRAY_FNS
+            .iter()
+            .map(|&var_name| (var_name, self.get_variable(var_name).unwrap()))
+            .collect();
+        StandardPrototypes::new().with_array_proto(array_proto.into())
     }
 }
 

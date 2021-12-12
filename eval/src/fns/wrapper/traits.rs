@@ -4,7 +4,7 @@ use core::{cmp, fmt};
 
 use crate::{
     alloc::{vec, String, Vec},
-    CallContext, Error, ErrorKind, Function, Number, Tuple, Value, ValueType,
+    CallContext, Error, ErrorKind, Function, Number, Object, Tuple, Value, ValueType,
 };
 
 /// Error raised when a value cannot be converted to the expected type when using
@@ -163,6 +163,24 @@ impl<'a, T> TryFromValue<'a, T> for Function<'a, T> {
         match value {
             Value::Function(function) => Ok(function),
             _ => Err(FromValueError::invalid_type(ValueType::Function, &value)),
+        }
+    }
+}
+
+impl<'a, T> TryFromValue<'a, T> for Tuple<'a, T> {
+    fn try_from_value(value: Value<'a, T>) -> Result<Self, FromValueError> {
+        match value {
+            Value::Tuple(tuple) => Ok(tuple),
+            _ => Err(FromValueError::invalid_type(ValueType::Array, &value)),
+        }
+    }
+}
+
+impl<'a, T> TryFromValue<'a, T> for Object<'a, T> {
+    fn try_from_value(value: Value<'a, T>) -> Result<Self, FromValueError> {
+        match value {
+            Value::Object(object) => Ok(object),
+            _ => Err(FromValueError::invalid_type(ValueType::Object, &value)),
         }
     }
 }
@@ -326,6 +344,18 @@ impl<'a, T> IntoEvalResult<'a, T> for Value<'a, T> {
 impl<'a, T> IntoEvalResult<'a, T> for Function<'a, T> {
     fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
         Ok(Value::Function(self))
+    }
+}
+
+impl<'a, T> IntoEvalResult<'a, T> for Tuple<'a, T> {
+    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
+        Ok(Value::Tuple(self))
+    }
+}
+
+impl<'a, T> IntoEvalResult<'a, T> for Object<'a, T> {
+    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
+        Ok(Value::Object(self))
     }
 }
 

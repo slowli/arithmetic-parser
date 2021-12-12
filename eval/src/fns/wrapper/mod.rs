@@ -1,7 +1,5 @@
 //! Wrapper for eloquent `NativeFn` definitions.
 
-// FIXME: allow for `Tuple` / `Object` args and return values.
-
 use core::{fmt, marker::PhantomData};
 
 use crate::{
@@ -375,7 +373,7 @@ mod tests {
     use super::*;
     use crate::{
         alloc::{format, ToOwned},
-        Environment, ExecutableModule, Prelude, Value, WildcardId,
+        Environment, ExecutableModule, Object, Prelude, Tuple, Value, WildcardId,
     };
 
     use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
@@ -535,6 +533,31 @@ mod tests {
                 "flip_sign",
                 Value::wrapped_fn(|val: f32, flag: bool| if flag { -val } else { val }),
             )
+            .build();
+        assert_eq!(module.run().unwrap(), Value::Bool(true));
+    }
+
+    #[test]
+    #[allow(clippy::cast_precision_loss)] // fine for this test
+    fn function_with_object_and_tuple() {
+        fn test_function(tuple: Tuple<'_, f32>) -> Object<'_, f32> {
+            let mut obj = Object::default();
+            obj.insert("len", Value::Prim(tuple.len() as f32));
+            obj.insert("tuple", tuple.into());
+            obj
+        }
+
+        let program = r#"
+            { len, tuple } = test((1, 1, 1));
+            len == 3 && tuple == (1, 1, 1)
+        "#;
+        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
+
+        let test_function = Value::native_fn(wrap_fn!(1, test_function));
+        let module = ExecutableModule::builder(WildcardId, &block)
+            .unwrap()
+            .with_imports_from(&Prelude)
+            .with_import("test", test_function)
             .build();
         assert_eq!(module.run().unwrap(), Value::Bool(true));
     }

@@ -184,7 +184,8 @@ impl<T: 'static + Clone> NativeFn<T> for Loop {
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     factorial = |x| {
-///         (_, acc) = (x, 1).while(
+///         (_, acc) = while(
+///             (x, 1),
 ///             |(i, _)| i >= 1,
 ///             |(i, acc)| (i - 1, acc * i),
 ///         );

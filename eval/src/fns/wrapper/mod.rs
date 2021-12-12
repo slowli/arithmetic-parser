@@ -1,5 +1,7 @@
 //! Wrapper for eloquent `NativeFn` definitions.
 
+// FIXME: allow for `Tuple` / `Object` args and return values.
+
 use core::{fmt, marker::PhantomData};
 
 use crate::{
@@ -72,7 +74,7 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// }
 ///
 /// # fn main() -> anyhow::Result<()> {
-/// let program = "(1, 2, 3).zip((4, 5, 6)) == ((1, 4), (2, 5), (3, 6))";
+/// let program = "zip((1, 2, 3), (4, 5, 6)) == ((1, 4), (2, 5), (3, 6))";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
@@ -241,7 +243,7 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 /// }
 ///
 /// # fn main() -> anyhow::Result<()> {
-/// let program = "(1, 2).take_if(true) == (1, 2) && (3, 4).take_if(false) != (3, 4)";
+/// let program = "take_if((1, 2), true) == (1, 2) && take_if((3, 4), false) != (3, 4)";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::from_iter(Prelude.iter())
@@ -325,7 +327,7 @@ macro_rules! wrap_fn {
 /// }
 ///
 /// # fn main() -> anyhow::Result<()> {
-/// let program = "(1, 2, 3).map(|x| x + 3) == (4, 5, 6)";
+/// let program = "map((1, 2, 3), |x| x + 3) == (4, 5, 6)";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()

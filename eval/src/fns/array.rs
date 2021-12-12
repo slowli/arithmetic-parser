@@ -98,7 +98,7 @@ where
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
 /// # fn main() -> anyhow::Result<()> {
-/// let program = r#"().len() == 0 && (1, 2, 3).len() == 3"#;
+/// let program = r#"len(()) == 0 && len((1, 2, 3)) == 3"#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
 /// let module = Environment::new()
@@ -345,7 +345,8 @@ impl<T: 'static + Clone> NativeFn<T> for Fold {
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     repeat = |x, times| {
-///         (_, acc) = (0, ()).while(
+///         (_, acc) = while(
+///             (0, ()),
 ///             |(i, _)| i < times,
 ///             |(i, acc)| (i + 1, push(acc, x)),
 ///         );

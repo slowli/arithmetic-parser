@@ -153,21 +153,21 @@
 //! # use arithmetic_eval::{Assertions, Environment, Prelude, Value, VariableMap};
 //! # fn main() -> anyhow::Result<()> {
 //! let program = r#"
-//!     minmax = |xs| xs.fold(#{ min: INF, max: -INF }, |acc, x| #{
+//!     minmax = |...xs| xs.fold(#{ min: INF, max: -INF }, |acc, x| #{
 //!          min: if(x < acc.min, x, acc.min),
 //!          max: if(x > acc.max, x, acc.max),
 //!     });
-//!     assert_eq((3, 7, 2, 4).minmax().min, 2);
-//!     assert_eq((5, -4, 6, 9, 1).minmax(), #{ min: -4, max: 9 });
+//!     assert_eq(minmax(3, 7, 2, 4).min, 2);
+//!     assert_eq(minmax(5, -4, 6, 9, 1), #{ min: -4, max: 9 });
 //! "#;
 //! let program = Untyped::<F32Grammar>::parse_statements(program)?;
 //!
 //! let mut env = Environment::new();
-//! env.insert("INF", Value::Prim(f32::INFINITY));
-//! env.extend(Prelude.iter());
-//! env.extend(Assertions.iter());
+//! env.extend(Prelude.iter().chain(Assertions.iter()));
+//! env.insert("INF", Value::Prim(f32::INFINITY))
+//!     .insert_prototypes(Prelude.prototypes());
 //! let module = env.compile_module("minmax", &program)?;
-//! module.run()?;
+//! module.run_in_env(&mut env)?;
 //! # Ok(())
 //! # }
 //! ```

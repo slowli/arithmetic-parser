@@ -135,7 +135,7 @@ fn extract_fn<'a, T, A>(
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     // Finds a minimum number in an array.
-///     extended_min = |...xs| xs.fold(INFINITY, min);
+///     extended_min = |...xs| fold(xs, INFINITY, min);
 ///     extended_min(2, -3, 7, 1, 3) == -3
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
@@ -158,7 +158,7 @@ fn extract_fn<'a, T, A>(
 /// # use core::iter::FromIterator;
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
-///     (1, -7, 0, 2).map(|x| cmp(x, 0)) == (GREATER, LESS, EQUAL, GREATER)
+///     map((1, -7, 0, 2), |x| cmp(x, 0)) == (GREATER, LESS, EQUAL, GREATER)
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 ///
@@ -223,6 +223,69 @@ impl<T> NativeFn<T> for Compare {
 }
 
 /// Creates a new [`Prototype`] from the provided [`Object`].
+///
+/// The functions in the provided `Object` will ber used in method resolution when applying
+/// methods to [`Value`]s having this prototype. All object fields can be accessed
+/// from the prototype using generic field access notation. The prototype itself is a function
+/// which will wrap provided tuples or objects so that they have this prototype.
+///
+/// See [`Prototype`] docs for more details on prototype mechanics.
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # fn main() -> anyhow::Result<()> {
+/// let program = r#"
+///     Point = impl(#{
+///         len: |{x, y}| sqrt(x * x + y * y),
+///     });
+///     pt = Point(#{ x: 3, y: 4 });
+///     assert_close(pt.len(), 5);
+/// "#;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+///
+/// Environment::new()
+///     .insert_wrapped_fn("sqrt", f32::sqrt)
+///     .insert_native_fn("impl", fns::CreatePrototype)
+///     .insert_native_fn("assert_close", fns::AssertClose::new(1e-4))
+///     .compile_module("test_impl", &program)?
+///     .run()?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// It is possible to define prototype hierarchies as well:
+///
+/// ```
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # fn main() -> anyhow::Result<()> {
+/// let program = r#"
+///     PointStatics = impl(#{
+///         new: |Self, x, y| Self(#{ x, y }),
+///         zero: |Self| Self(#{ x: 0, y: 0 }),
+///     });
+///     Point = impl(PointStatics(#{
+///         len: |{x, y}| sqrt(x * x + y * y),
+///     }));
+///     pt = Point.new(3, 4);
+///     assert_close(pt.len(), 5);
+///     assert_eq(Point.zero().len(), 0);
+/// "#;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// // Testing snipped (virtually identical to the previous case)
+/// # Environment::new()
+/// #   .insert_wrapped_fn("sqrt", f32::sqrt)
+/// #   .insert_native_fn("impl", fns::CreatePrototype)
+/// #   .insert_native_fn("assert_eq", fns::AssertEq)
+/// #   .insert_native_fn("assert_close", fns::AssertClose::new(1e-4))
+/// #   .compile_module("test_impl", &program)?
+/// #   .run()?;
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CreatePrototype;
 
@@ -262,7 +325,7 @@ impl<T> NativeFn<T> for CreatePrototype {
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     Stack = defer(|Self| impl(#{
-///         push: |self, item| Self((...self, item)),
+///         push: |self, item| Self(push(self, item)),
 ///         // ^ since `Self` is used in function definition, this is OK
 ///     }));
 ///     stack = Stack((1, 2)).push(3).push(4);
@@ -273,6 +336,7 @@ impl<T> NativeFn<T> for CreatePrototype {
 /// Environment::new()
 ///     .insert_native_fn("defer", fns::Defer)
 ///     .insert_native_fn("impl", fns::CreatePrototype)
+///     .insert_native_fn("push", fns::Push)
 ///     .insert_native_fn("assert_eq", fns::AssertEq)
 ///     .compile_module("test_defer", &program)?
 ///     .run()?;

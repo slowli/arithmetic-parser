@@ -111,6 +111,7 @@ impl<'a, T> Object<'a, T> {
     }
 
     /// Inserts a field into this object.
+    // TODO: inconsistency w/ Environment::insert()
     pub fn insert(
         &mut self,
         field_name: impl Into<String>,
@@ -215,6 +216,57 @@ where
 }
 
 /// Prototype of an [`Object`] or a [`Tuple`].
+///
+/// A prototype is quite similar to an [`Object`]; it is a collection of named [`Value`]s.
+/// Prototype fields are used for method lookup similar to JavaScript; if an value has a prototype,
+/// its method is looked up as the prototype field with the corresponding name, which should
+/// be a function. The method call is translated to calling this function with the first argument
+/// being the method receiver.
+///
+/// Non-functional fields may make sense in the prototype as well; they can be viewed as
+/// static members of the prototype. All fields can be accessed in the script code identically
+/// to object fields.
+///
+/// A prototype can be converted to a [`Function`], and prototypes defined in the script code
+/// *are* callable. Such a function associates the prototype with the provided value
+/// (an object or a tuple).
+///
+/// Prototypes can be defined both in the host code, and in scripts via [`CreatePrototype`].
+///
+/// [`CreatePrototype`]: crate::fns::CreatePrototype
+///
+/// # Examples
+///
+/// Defining a prototype in the host code.
+///
+/// ```
+/// # use arithmetic_eval::{fns, Environment, Object, Prototype, Value, VariableMap};
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # fn main() -> anyhow::Result<()> {
+/// let mut proto = Object::default();
+/// proto.insert("len", Value::native_fn(fns::Len)); // returns number of fields
+/// proto.insert("EMPTY", Object::default());
+/// let proto = Prototype::from(proto);
+///
+/// // Let's associate an object with this prototype in the host code.
+/// let mut object = Object::<f32>::default();
+/// object.insert("x", Value::Prim(3.0));
+/// object.insert("y", Value::Prim(-4.0));
+/// object.set_prototype(proto.clone());
+///
+/// let mut env = Environment::new();
+/// env.insert("Object", proto.into()).insert("pt", object.into());
+/// let program = r#"
+///     pt.len() == 2 &&
+///     Object(#{ foo: 1 }).len() == 1 &&
+///     (Object.len)(Object.EMPTY) == 0
+/// "#;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let ret = env.compile_module("proto", &program)?.run()?;
+/// assert_eq!(ret, Value::Bool(true));
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug)]
 pub struct Prototype<'a, T> {
     inner: Rc<Object<'a, T>>,
@@ -298,9 +350,50 @@ impl<T: 'static + Clone> StripCode for Prototype<'_, T> {
 
 /// [`Prototype`]s for standard types, such as [`Object`] and [`Tuple`].
 ///
+/// Unlike user-defined prototypes, standard prototypes are not directly accessible
+/// from the script code and cannot be extended / redefined there; this is only possible
+/// from the host.
+///
 /// # Merging
 ///
-/// FIXME: describe merging
+/// [`AddAssign`](core::ops::AddAssign) implementation merges two sets of prototypes.
+/// Each prototype (as an [`Object`]) is [`Extend`]ed with the new values, replacing existing
+/// values if necessary. Merging is used in [`Environment::insert_prototypes()`].
+///
+/// [`Environment::insert_prototypes()`]: crate::Environment::insert_prototypes()
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_eval::{
+/// #     fns, Environment, Object, Prelude, StandardPrototypes, Value, VariableMap,
+/// # };
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # fn main() -> anyhow::Result<()> {
+/// let mut num_proto = Object::default();
+/// num_proto.insert("abs", Value::wrapped_fn(f32::abs));
+/// num_proto.insert("sin", Value::wrapped_fn(f32::sin));
+/// let mut array_proto = Object::default();
+/// array_proto.insert("len", Value::native_fn(fns::Len));
+///
+/// let prototypes = StandardPrototypes::new()
+///     .with_primitive_proto(num_proto)
+///     .with_array_proto(array_proto);
+/// let mut env = Environment::new();
+/// env.insert_prototypes(prototypes)
+///     .insert_prototypes(Prelude.prototypes());
+/// // ^ also insert "standard" prototypes
+///
+/// let program = r#"
+///     array = (1, -2, 3).map(|x| x.abs());
+///     array.len() == 3 && array.1 > 0
+/// "#;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let ret = env.compile_module("proto", &program)?.run_in_env(&mut env)?;
+/// assert_eq!(ret, Value::Bool(true));
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct StandardPrototypes<T> {
     object_proto: Option<Object<'static, T>>,

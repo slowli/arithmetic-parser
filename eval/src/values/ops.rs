@@ -1,5 +1,8 @@
 //! Operations on `Value`s.
 
+// FIXME: inconsistent behavior of unary minus vs binary ops for objects / tuples
+// FIXME: copy prototype on same-kind ops?
+
 use core::cmp::Ordering;
 
 use crate::{

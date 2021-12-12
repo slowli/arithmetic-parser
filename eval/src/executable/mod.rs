@@ -51,13 +51,13 @@ pub(crate) use self::{
 /// # use hashbrown::HashSet;
 ///
 /// # fn main() -> anyhow::Result<()> {
-/// let module = Untyped::<F32Grammar>::parse_statements("xs.fold(-INFINITY, max)")?;
+/// let module = Untyped::<F32Grammar>::parse_statements("fold(xs, -INFINITY, max)")?;
 /// let mut module = ExecutableModule::builder("test", &module)?
 ///     .with_imports_from(&Prelude)
 ///     .with_imports_from(&Comparisons)
 ///     .with_import("INFINITY", Value::Prim(f32::INFINITY))
-///     // Set remaining imports to a fixed value.
-///     .set_imports(|_| Value::void());
+///     .with_import("xs", Value::void())
+///     .build();
 ///
 /// // With the original imports, the returned value is `-INFINITY`.
 /// assert_eq!(module.run()?, Value::Prim(f32::NEG_INFINITY));
@@ -126,6 +126,7 @@ pub(crate) use self::{
 /// # Ok(())
 /// # }
 /// ```
+// TODO: investigate storing `StandardPrototypes` in module
 #[derive(Debug)]
 pub struct ExecutableModule<'a, T> {
     inner: Executable<'a, T>,

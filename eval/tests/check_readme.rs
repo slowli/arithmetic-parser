@@ -25,7 +25,7 @@ fn check_sample(code_sample: &str) {
         })
         .insert_prototypes(Prelude.prototypes());
     let module = env.compile_module("test", &program).unwrap();
-    module.run_in_env(&mut env).unwrap();
+    module.run().unwrap();
 }
 
 #[test]

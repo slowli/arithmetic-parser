@@ -167,7 +167,7 @@
 //! env.insert("INF", Value::Prim(f32::INFINITY))
 //!     .insert_prototypes(Prelude.prototypes());
 //! let module = env.compile_module("minmax", &program)?;
-//! module.run_in_env(&mut env)?;
+//! module.run()?;
 //! # Ok(())
 //! # }
 //! ```

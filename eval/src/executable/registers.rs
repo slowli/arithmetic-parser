@@ -698,7 +698,10 @@ mod tests {
 
         let mut env = Registers::new();
         env.insert_var("x", Value::Prim(5.0));
-        module.imports = ModuleImports { inner: env };
+        module.imports = ModuleImports {
+            inner: env,
+            prototypes: StandardPrototypes::new(),
+        };
         let value = module.run().unwrap();
         assert_eq!(value, Value::Prim(5.0));
     }

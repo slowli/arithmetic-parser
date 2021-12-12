@@ -12,10 +12,18 @@ use crate::{
     fns, Environment, Error, ExecutableModule, ModuleId, ModuleImports, StandardPrototypes, Value,
 };
 
-/// Encapsulates read access to named variables.
+/// Encapsulates read access to named variables and, optionally, [`StandardPrototypes`].
 pub trait VariableMap<'a, T> {
     /// Returns value of the named variable, or `None` if it is not defined.
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>>;
+
+    /// Gets [`Prototype`]s for standard types defined by this map, or `None` if this map
+    /// does not define such prototypes.
+    ///
+    /// The default implementation returns [`StandardPrototypes::new()`] (i.e., none).
+    fn get_prototypes(&self) -> StandardPrototypes<T> {
+        StandardPrototypes::new()
+    }
 
     /// Creates a module based on imports solely from this map.
     ///
@@ -40,11 +48,19 @@ impl<'a, T: Clone> VariableMap<'a, T> for Environment<'a, T> {
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
         self.get(name).cloned()
     }
+
+    fn get_prototypes(&self) -> StandardPrototypes<T> {
+        self.prototypes().clone()
+    }
 }
 
 impl<'a, T: Clone> VariableMap<'a, T> for ModuleImports<'a, T> {
     fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
         self.get(name).cloned()
+    }
+
+    fn get_prototypes(&self) -> StandardPrototypes<T> {
+        self.prototypes().clone()
     }
 }
 

@@ -111,13 +111,12 @@ impl<'a, T> Object<'a, T> {
     }
 
     /// Inserts a field into this object.
-    // TODO: inconsistency w/ Environment::insert()
     pub fn insert(
         &mut self,
         field_name: impl Into<String>,
-        value: impl Into<Value<'a, T>>,
+        value: Value<'a, T>,
     ) -> Option<Value<'a, T>> {
-        self.fields.insert(field_name.into(), value.into())
+        self.fields.insert(field_name.into(), value)
     }
 
     /// Removes and returns the specified field from this object.
@@ -389,7 +388,7 @@ impl<T: 'static + Clone> StripCode for Prototype<'_, T> {
 ///     array.len() == 3 && array.1 > 0
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let ret = env.compile_module("proto", &program)?.run_in_env(&mut env)?;
+/// let ret = env.compile_module("proto", &program)?.run()?;
 /// assert_eq!(ret, Value::Bool(true));
 /// # Ok(())
 /// # }

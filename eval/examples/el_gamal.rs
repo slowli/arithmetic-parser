@@ -13,7 +13,7 @@ use std::cell::RefCell;
 
 use arithmetic_eval::{
     arith::{ArithmeticExt, ModularArithmetic},
-    fns, Assertions, Environment, ExecutableModule, Filler, Prelude, Value,
+    fns, Assertions, ExecutableModule, Filler, Prelude, Value,
 };
 use arithmetic_parser::grammars::{NumGrammar, Parse, Untyped};
 
@@ -34,7 +34,7 @@ const EL_GAMAL_ENCRYPTION: &str = include_str!("elgamal.script");
 fn main() -> anyhow::Result<()> {
     let el_gamal_encryption =
         Untyped::<NumGrammar<BigUint>>::parse_statements(EL_GAMAL_ENCRYPTION)?;
-    let el_gamal_encryption = ExecutableModule::builder("el_gamal", &el_gamal_encryption)?
+    let mut el_gamal_encryption = ExecutableModule::builder("el_gamal", &el_gamal_encryption)?
         .with_imports_from(&Prelude)
         .with_imports_from(&Assertions)
         .with_import("dbg", Value::native_fn(fns::Dbg))
@@ -49,24 +49,24 @@ fn main() -> anyhow::Result<()> {
         println!("Generated safe prime: {}", modulus);
 
         let prime_subgroup_order: BigUint = &modulus >> 1;
+        let order_value = Value::Prim(prime_subgroup_order.clone());
         let generator = find_generator(&modulus);
         let arithmetic = ModularArithmetic::new(modulus).without_comparisons();
 
         let rng = RefCell::new(thread_rng());
         let two = BigUint::from(2_u32);
+        let rand_scalar = Value::wrapped_fn(move || {
+            rng.borrow_mut()
+                .gen_biguint_range(&two, &prime_subgroup_order)
+        });
 
-        let mut env = Environment::new();
-        env.insert("GEN", Value::Prim(generator))
-            .insert("ORDER", Value::Prim(prime_subgroup_order.clone()))
-            .insert_wrapped_fn("rand_scalar", move || {
-                rng.borrow_mut()
-                    .gen_biguint_range(&two, &prime_subgroup_order)
-            })
-            .insert_prototypes(Prelude.prototypes());
         el_gamal_encryption
+            .set_import("GEN", Value::Prim(generator))
+            .set_import("ORDER", order_value)
+            .set_import("rand_scalar", rand_scalar)
+            .insert_prototypes(Prelude.prototypes())
             .with_arithmetic(&arithmetic)
-            .run_in_env(&mut env)?;
+            .run()?;
     }
-
     Ok(())
 }

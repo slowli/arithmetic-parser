@@ -7,7 +7,7 @@ use crate::{
     arith::{OrdArithmetic, StdArithmetic},
     compiler::{Compiler, ImportSpans},
     error::{Backtrace, ErrorWithBacktrace},
-    Environment, Error, ErrorKind, Value, VariableMap,
+    Environment, Error, ErrorKind, StandardPrototypes, Value, VariableMap,
 };
 use arithmetic_parser::{grammars::Grammar, Block, StripCode};
 
@@ -126,7 +126,6 @@ pub(crate) use self::{
 /// # Ok(())
 /// # }
 /// ```
-// TODO: investigate storing `StandardPrototypes` in module
 #[derive(Debug)]
 pub struct ExecutableModule<'a, T> {
     inner: Executable<'a, T>,
@@ -157,7 +156,10 @@ impl<'a, T> ExecutableModule<'a, T> {
     pub(crate) fn from_parts(inner: Executable<'a, T>, imports: Registers<'a, T>) -> Self {
         Self {
             inner,
-            imports: ModuleImports { inner: imports },
+            imports: ModuleImports {
+                inner: imports,
+                prototypes: StandardPrototypes::new(),
+            },
         }
     }
 
@@ -180,7 +182,14 @@ impl<'a, T> ExecutableModule<'a, T> {
         self
     }
 
-    /// Returns shared reference to imports of this module.
+    /// Imports prototypes for standard types, [merging](StandardPrototypes#merging) them with
+    /// the existing prototypes if they were imported previously.
+    pub fn insert_prototypes(&mut self, prototypes: StandardPrototypes<T>) -> &mut Self {
+        self.imports.prototypes += prototypes;
+        self
+    }
+
+    /// Returns a shared reference to imports of this module.
     pub fn imports(&self) -> &ModuleImports<'a, T> {
         &self.imports
     }
@@ -235,6 +244,9 @@ where
 
     /// Runs the module with the specified [`Environment`]. The environment may contain some of
     /// module imports; they will be used to override imports defined in the module.
+    /// [`StandardPrototype`]s found in the environment will be merged to the
+    /// prototypes previously [imported](Self::insert_prototypes()) into this module, if any,
+    /// with the environment prototypes taking precedence.
     ///
     /// On execution, the environment is modified to reflect assignments in the topmost scope
     /// of the module. The modification takes place regardless of whether or not the execution
@@ -273,8 +285,9 @@ impl<'a, T: 'static + Clone> WithArithmetic<'_, 'a, T> {
     /// See [`ExecutableModule::run()`] for more details.
     pub fn run(self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
         let mut registers = self.module.imports.inner.clone();
-        self.module
-            .run_with_registers(&mut registers, self.arithmetic.into())
+        let prototypes = self.module.imports.prototypes();
+        let operations = Operations::new(self.arithmetic, Some(prototypes));
+        self.module.run_with_registers(&mut registers, operations)
     }
 
     /// Runs the module with the specified [`Environment`]. The environment may contain some of
@@ -287,8 +300,10 @@ impl<'a, T: 'static + Clone> WithArithmetic<'_, 'a, T> {
     ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
         let mut registers = self.module.imports.inner.clone();
         registers.update_from_env(env);
+        let mut prototypes = self.module.imports.prototypes().clone();
+        prototypes += env.prototypes().clone();
 
-        let operations = Operations::new(self.arithmetic, Some(env.prototypes()));
+        let operations = Operations::new(self.arithmetic, Some(&prototypes));
         let result = self.module.run_with_registers(&mut registers, operations);
         registers.update_env(env);
         result
@@ -299,17 +314,10 @@ impl<'a, T: 'static + Clone> WithArithmetic<'_, 'a, T> {
 ///
 /// Note that imports implement [`Index`](ops::Index) trait, which allows to eloquently
 /// get imports by name.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ModuleImports<'a, T> {
     inner: Registers<'a, T>,
-}
-
-impl<T: Clone> Clone for ModuleImports<'_, T> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-        }
-    }
+    prototypes: StandardPrototypes<T>,
 }
 
 impl<T: 'static + Clone> StripCode for ModuleImports<'_, T> {
@@ -318,6 +326,7 @@ impl<T: 'static + Clone> StripCode for ModuleImports<'_, T> {
     fn strip_code(self) -> Self::Stripped {
         ModuleImports {
             inner: self.inner.strip_code(),
+            prototypes: self.prototypes,
         }
     }
 }
@@ -337,6 +346,11 @@ impl<'a, T> ModuleImports<'a, T> {
     /// Iterates over imported variables.
     pub fn iter(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
         self.inner.variables()
+    }
+
+    /// Gets prototypes for the standard types imported to the module.
+    pub fn prototypes(&self) -> &StandardPrototypes<T> {
+        &self.prototypes
     }
 }
 
@@ -406,12 +420,15 @@ impl<'a, T> ExecutableModuleBuilder<'a, T> {
     }
 
     /// Sets undefined imports from the specified source. Imports defined previously and present
-    /// in the source are **not** overridden.
+    /// in the source are **not** overridden. [`StandardPrototypes`] from the source are
+    /// [merged](StandardPrototypes#merging) with the previously imported ones, with the source
+    /// taking precedence.
     pub fn with_imports_from<V>(mut self, source: &V) -> Self
     where
         V: VariableMap<'a, T> + ?Sized,
     {
         let module = &mut self.module;
+        module.insert_prototypes(source.get_prototypes());
         self.undefined_imports.retain(|var_name, _| {
             source.get_variable(var_name).map_or(true, |value| {
                 module.set_import(var_name, value);

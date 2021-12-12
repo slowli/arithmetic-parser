@@ -6,6 +6,9 @@
 
 **Links:** [![crate docs (master)](https://img.shields.io/badge/master-yellow.svg?label=docs)](https://slowli.github.io/arithmetic-parser/arithmetic_typing/)
 
+> 🚧 The crate is not yet aware of changes in handling methods in the eval crate.
+> Thus, it works incorrectly if methods are involved. This will be fixed shortly (hopefully). 
+
 Hindley–Milner type inference for arithmetic expressions parsed
 by the [`arithmetic-parser`] crate.
 

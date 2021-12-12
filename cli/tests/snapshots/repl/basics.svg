@@ -72,7 +72,7 @@
   <circle cx="57" cy="-9" r="7" style="fill: var(--green);"/>
   <svg x="0" y="10" width="720" height="342" viewBox="0 0 720 342">
     <animate attributeName="viewBox" values="0 0 720 342;0 72 720 342;0 144 720 342;0 216 720 342;0 288 720 342;0 360 720 342" dur="20s" repeatCount="indefinite" calcMode="discrete" />
-    <foreignObject width="720" height="660">
+    <foreignObject width="720" height="642">
       <div xmlns="http://www.w3.org/1999/xhtml" class="container">
         <div class="user-input"><pre><span class="prompt">&gt;&gt;&gt;</span> 1 + 2*3</pre></div>
         <div class="term-output"><pre><span class="fg2">7</span></pre></div>
@@ -80,33 +80,32 @@
         <div class="term-output"><pre></pre></div>
         <div class="user-input"><pre><span class="prompt">&gt;&gt;&gt;</span> all</pre></div>
         <div class="term-output"><pre>fn(2 args)[
-  fold = (native fn),
   true = <span class="fg6">true</span>
 ]</pre></div>
-        <div class="user-input"><pre><span class="prompt">&gt;&gt;&gt;</span> (1, 2, 5).all(|x| 0 &lt; x)</pre></div>
+        <div class="user-input"><pre><span class="prompt">&gt;&gt;&gt;</span> all((1, 2, 5), |x| 0 &lt; x)</pre></div>
         <div class="term-output"><pre><span class="fg6">true</span></pre></div>
-        <div class="user-input"><pre><span class="prompt">&gt;&gt;&gt;</span> (1, -2, 5).all(|x| 0 &lt; x)</pre></div>
+        <div class="user-input"><pre><span class="prompt">&gt;&gt;&gt;</span> all((1, -2, 5), |x| 0 &lt; x)</pre></div>
         <div class="term-output"><pre><span class="fg6">false</span></pre></div>
-        <div class="user-input"><pre><span class="prompt">&gt;&gt;&gt;</span> (1, 2, 5, map).all(|x| 0 &lt; x)</pre></div>
+        <div class="user-input"><pre><span class="prompt">&gt;&gt;&gt;</span> all((1, 2, 5, map), |x| 0 &lt; x)</pre></div>
         <div class="term-output"><pre><span class="bold fg9">error[EVAL]</span><span class="bold">: Value is not comparable</span>
-  <span class="fg4">┌─</span> Snippet #6:1:28
-  <span class="fg4">│</span>
-<span class="fg4">1</span> <span class="fg4">│</span> (1, 2, 5, map).all(|x| 0 &lt; <span class="fg1">x</span>)
-  <span class="fg4">│</span> <span class="fg4">---------------------------</span><span class="fg1">^</span><span class="fg4">-</span>
-  <span class="fg4">│</span> <span class="fg4">│</span>                  <span class="fg4">│</span>       <span class="fg1">│</span>
-  <span class="fg4">│</span> <span class="fg4">│</span>                  <span class="fg4">│</span>       <span class="fg1">Cannot be compared</span>
-  <span class="fg4">│</span> <span class="fg4">│</span>                  <span class="fg4">The error occurred in function `pred`</span>
-  <span class="fg4">│</span> <span class="fg4">Call at depth 3</span>
-  <span class="fg4">│</span>
-  <span class="fg4">┌─</span> Snippet #2:1:21
-  <span class="fg4">│</span>
-<span class="fg4">1</span> <span class="fg4">│</span> all = |array, pred| array.fold(true, |acc, x| acc &amp;&amp; pred(x));
-  <span class="fg4">│</span>                     <span class="fg4">-----------------------------------------</span>
-  <span class="fg4">│</span>                     <span class="fg4">│</span>                                <span class="fg4">│</span>
-  <span class="fg4">│</span>                     <span class="fg4">│</span>                                <span class="fg4">Call at depth 1</span>
-  <span class="fg4">│</span>                     <span class="fg4">Call at depth 2</span>
-  <span class="fg4">│</span>
-  <span class="fg4">=</span> Only primitive values can be compared; complex values cannot
+  <span class="fg6">┌─</span> Snippet #6:1:29
+  <span class="fg6">│</span>
+<span class="fg6">1</span> <span class="fg6">│</span> all((1, 2, 5, map), |x| 0 &lt; <span class="fg1">x</span>)
+  <span class="fg6">│</span> <span class="fg6">----------------------------</span><span class="fg1">^</span><span class="fg6">-</span>
+  <span class="fg6">│</span> <span class="fg6">│</span>                   <span class="fg6">│</span>       <span class="fg1">│</span>
+  <span class="fg6">│</span> <span class="fg6">│</span>                   <span class="fg6">│</span>       <span class="fg1">Cannot be compared</span>
+  <span class="fg6">│</span> <span class="fg6">│</span>                   <span class="fg6">The error occurred in function `pred`</span>
+  <span class="fg6">│</span> <span class="fg6">Call at depth 3</span>
+  <span class="fg6">│</span>
+  <span class="fg6">┌─</span> Snippet #2:1:21
+  <span class="fg6">│</span>
+<span class="fg6">1</span> <span class="fg6">│</span> all = |array, pred| array.fold(true, |acc, x| acc &amp;&amp; pred(x));
+  <span class="fg6">│</span>                     <span class="fg6">-----------------------------------------</span>
+  <span class="fg6">│</span>                     <span class="fg6">│</span>                                <span class="fg6">│</span>
+  <span class="fg6">│</span>                     <span class="fg6">│</span>                                <span class="fg6">Call at depth 1</span>
+  <span class="fg6">│</span>                     <span class="fg6">Call at depth 2</span>
+  <span class="fg6">│</span>
+  <span class="fg6">=</span> Only primitive values can be compared; complex values cannot
 </pre></div>
       </div>
     </foreignObject>

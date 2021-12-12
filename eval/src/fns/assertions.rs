@@ -190,6 +190,7 @@ impl<T: fmt::Display> NativeFn<T> for AssertEq {
 /// # Ok(())
 /// # }
 /// ```
+// TODO: support structured values?
 #[derive(Debug, Clone, Copy)]
 pub struct AssertClose<T> {
     tolerance: T,

@@ -16,8 +16,10 @@ use std::{
 
 use arithmetic_eval::{
     arith::OrdArithmetic,
-    error::{BacktraceElement, CodeInModule, ErrorWithBacktrace},
-    Environment, Error as EvalError, Function, IndexedId, ModuleId, Value, VariableMap,
+    env::VariableMap,
+    error::{BacktraceElement, CodeInModule, Error as EvalError, ErrorWithBacktrace},
+    exec::{IndexedId, ModuleId},
+    Environment, Function, Object, Value,
 };
 use arithmetic_parser::{
     grammars::{Grammar, NumGrammar, Parse},
@@ -330,6 +332,7 @@ impl Reporter {
     ) -> io::Result<()> {
         let bool_color = ColorSpec::new().set_fg(Some(Color::Cyan)).clone();
         let num_color = ColorSpec::new().set_fg(Some(Color::Green)).clone();
+        let proto_color = ColorSpec::new().set_fg(Some(Color::Yellow)).clone();
         let opaque_ref_color = ColorSpec::new()
             .set_fg(Some(Color::Black))
             .set_bg(Some(Color::White))
@@ -343,6 +346,16 @@ impl Reporter {
             }
 
             Value::Function(Function::Native(_)) => write!(writer, "(native fn)"),
+
+            Value::Function(Function::Prototype(proto)) => {
+                writer.set_color(&proto_color)?;
+                write!(writer, "impl(")?;
+                writer.reset()?;
+                Self::dump_object(writer, proto.as_object(), indent)?;
+                writer.set_color(&proto_color)?;
+                write!(writer, ")")?;
+                writer.reset()
+            }
 
             Value::Function(Function::Interpreted(function)) => {
                 let plurality = if function.arg_count() == LvalueLen::Exact(1) {
@@ -378,12 +391,12 @@ impl Reporter {
                 writer.reset()
             }
 
-            Value::Tuple(elements) => {
+            Value::Tuple(tuple) => {
                 writeln!(writer, "(")?;
-                for (i, element) in elements.iter().enumerate() {
+                for (i, element) in tuple.iter().enumerate() {
                     write!(writer, "{}", " ".repeat(indent + 2))?;
                     Self::dump_value(writer, element, indent + 2)?;
-                    if i + 1 < elements.len() {
+                    if i + 1 < tuple.len() {
                         writeln!(writer, ",")?;
                     } else {
                         writeln!(writer)?;
@@ -392,21 +405,7 @@ impl Reporter {
                 write!(writer, "{})", " ".repeat(indent))
             }
 
-            Value::Object(fields) => {
-                let fields_count = fields.len();
-                let fields = order_vars(fields.iter().map(|(name, var)| (name.as_str(), var)));
-                writeln!(writer, "#{{")?;
-                for (i, (name, value)) in fields.enumerate() {
-                    write!(writer, "{}{}: ", " ".repeat(indent + 2), name)?;
-                    Self::dump_value(writer, value, indent + 2)?;
-                    if i + 1 < fields_count {
-                        writeln!(writer, ",")?;
-                    } else {
-                        writeln!(writer)?;
-                    }
-                }
-                write!(writer, "{}}}", " ".repeat(indent))
-            }
+            Value::Object(object) => Self::dump_object(writer, object, indent),
 
             Value::Ref(opaque_ref) => {
                 writer.set_color(&opaque_ref_color)?;
@@ -416,6 +415,26 @@ impl Reporter {
 
             _ => unreachable!(),
         }
+    }
+
+    fn dump_object<T: ReplLiteral>(
+        writer: &mut StandardStream,
+        object: &Object<'_, T>,
+        indent: usize,
+    ) -> io::Result<()> {
+        let fields_count = object.len();
+        let fields = order_vars(object.iter());
+        writeln!(writer, "#{{")?;
+        for (i, (name, value)) in fields.enumerate() {
+            write!(writer, "{}{}: ", " ".repeat(indent + 2), name)?;
+            Self::dump_value(writer, value, indent + 2)?;
+            if i + 1 < fields_count {
+                writeln!(writer, ",")?;
+            } else {
+                writeln!(writer)?;
+            }
+        }
+        write!(writer, "{}}}", " ".repeat(indent))
     }
 
     fn report_value<T: ReplLiteral>(&mut self, value: &Value<'_, T>) -> io::Result<()> {

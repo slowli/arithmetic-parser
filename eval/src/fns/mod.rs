@@ -25,6 +25,8 @@
 //! [`Number`]: crate::Number
 //! [GAT]: https://github.com/rust-lang/rust/issues/44265
 
+// TODO: function to extract value prototype
+
 use once_cell::unsync::OnceCell;
 
 use core::{cmp::Ordering, fmt};

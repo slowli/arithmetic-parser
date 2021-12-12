@@ -314,7 +314,8 @@ impl<'a, T> From<Prototype<'a, T>> for Value<'a, T> {
 }
 
 impl<'a, T> Prototype<'a, T> {
-    pub(crate) fn as_object(&self) -> &Object<'a, T> {
+    /// Returns a reference to the inner `Object` that this prototype holds.
+    pub fn as_object(&self) -> &Object<'a, T> {
         &self.inner
     }
 

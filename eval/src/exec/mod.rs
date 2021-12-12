@@ -1,5 +1,8 @@
 //! [`ExecutableModule`] and related types.
 
+// TODO: `ExecutableModule` largely duplicates `Environment` functionality
+//   could make sense decoupling
+
 use core::ops;
 
 use crate::{

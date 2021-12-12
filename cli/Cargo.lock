@@ -38,6 +38,7 @@ dependencies = [
  "hashbrown",
  "num-complex",
  "num-traits",
+ "once_cell",
 ]
 
 [[package]]

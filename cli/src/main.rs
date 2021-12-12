@@ -251,10 +251,10 @@ impl EvalArgs {
             }
 
             ArithmeticType::F32 => {
-                self.run_inner(Box::new(StdArithmetic), create_float_env::<f32>())
+                self.run_inner(Box::new(StdArithmetic), create_float_env::<f32>(1e-5))
             }
             ArithmeticType::F64 => {
-                self.run_inner(Box::new(StdArithmetic), create_float_env::<f32>())
+                self.run_inner(Box::new(StdArithmetic), create_float_env::<f64>(1e-5))
             }
             ArithmeticType::Complex32 => self.run_inner(
                 Box::new(StdArithmetic.without_comparisons()),

@@ -6,7 +6,8 @@ use num_traits::{CheckedRem, Num, WrappingNeg};
 use std::{fmt, ops};
 
 use arithmetic_eval::{
-    fns, Assertions, Comparisons, Environment, Number, Prelude, Value, VariableMap,
+    env::{Assertions, Comparisons, Prelude, VariableMap},
+    fns, Environment, Number, StandardPrototypes, Value,
 };
 use arithmetic_parser::grammars::NumLiteral;
 use arithmetic_typing::{arith::Num as NumType, defs, Function, Type, TypeEnvironment};
@@ -127,9 +128,8 @@ where
         .chain(T::STD_LIB.variables())
         .collect();
 
-    env.insert_native_fn("array", fns::Array);
-    if wrapping {
-        env.insert_wrapped_fn("rem", |x: T, y: T| {
+    let rem = if wrapping {
+        Value::wrapped_fn(|x: T, y: T| {
             if y == T::zero() {
                 Err(REM_ERROR_MSG.to_owned())
             } else if y.wrapping_neg().is_one() {
@@ -138,12 +138,20 @@ where
             } else {
                 Ok(x % y)
             }
-        });
+        })
     } else {
-        env.insert_wrapped_fn("rem", |x: T, y: T| {
-            x.checked_rem(&y).ok_or_else(|| REM_ERROR_MSG.to_owned())
-        });
-    }
+        Value::wrapped_fn(|x: T, y: T| x.checked_rem(&y).ok_or_else(|| REM_ERROR_MSG.to_owned()))
+    };
+    let primitive_proto = T::STD_LIB
+        .variables()
+        .filter(|(_, value)| value.is_function())
+        .chain(vec![("rem", rem.clone())]);
+    let prototypes = StandardPrototypes::new().with_primitive_proto(primitive_proto.collect());
+
+    env.insert_native_fn("array", fns::Array)
+        .insert("rem", rem)
+        .insert_prototypes(Prelude.prototypes())
+        .insert_prototypes(prototypes);
 
     let type_env = defs::Prelude::iter()
         .chain(defs::Assertions::iter())
@@ -160,7 +168,8 @@ where
 
 pub fn create_modular_env(modulus: u64) -> (Environment<'static, u64>, TypeEnvironment) {
     let mut env: Environment<'_, u64> = Prelude.iter().chain(Assertions.iter()).collect();
-    env.insert("MAX_VALUE", Value::Prim(modulus - 1));
+    env.insert("MAX_VALUE", Value::Prim(modulus - 1))
+        .insert_prototypes(Prelude.prototypes());
 
     let type_env = defs::Prelude::iter()
         .chain(defs::Assertions::iter())
@@ -202,6 +211,9 @@ macro_rules! declare_real_functions {
                     ("asin", $type::asin),
                     ("acos", $type::acos),
                     ("atan", $type::atan),
+                    // Misc functions.
+                    ("sqrt", $type::sqrt),
+                    ("cbrt", $type::cbrt),
                 ],
 
                 binary: &[],
@@ -213,14 +225,25 @@ macro_rules! declare_real_functions {
 declare_real_functions!(f32);
 declare_real_functions!(f64);
 
-pub fn create_float_env<T: ReplLiteral>() -> (Environment<'static, T>, TypeEnvironment) {
+pub fn create_float_env<T: ReplLiteral>(
+    tolerance: T,
+) -> (Environment<'static, T>, TypeEnvironment) {
     let mut env: Environment<'static, T> = Prelude
         .iter()
         .chain(Assertions.iter())
         .chain(Comparisons.iter())
         .chain(T::STD_LIB.variables())
         .collect();
-    env.insert_native_fn("array", fns::Array);
+
+    let primitive_proto = T::STD_LIB
+        .variables()
+        .filter(|(_, value)| value.is_function());
+    let prototypes = StandardPrototypes::new().with_primitive_proto(primitive_proto.collect());
+
+    env.insert_native_fn("array", fns::Array)
+        .insert_native_fn("assert_close", fns::AssertClose::new(tolerance))
+        .insert_prototypes(Prelude.prototypes())
+        .insert_prototypes(prototypes);
 
     let type_env = defs::Prelude::iter()
         .chain(defs::Assertions::iter())
@@ -273,11 +296,18 @@ declare_complex_functions!(Complex32, f32);
 declare_complex_functions!(Complex64, f64);
 
 pub fn create_complex_env<T: ReplLiteral>() -> (Environment<'static, T>, TypeEnvironment) {
-    let env = Prelude
+    let mut env: Environment<'_, T> = Prelude
         .iter()
         .chain(Assertions.iter())
         .chain(T::STD_LIB.variables())
         .collect();
+
+    let primitive_proto = T::STD_LIB
+        .variables()
+        .filter(|(_, value)| value.is_function());
+    let prototypes = StandardPrototypes::new().with_primitive_proto(primitive_proto.collect());
+    env.insert_prototypes(Prelude.prototypes())
+        .insert_prototypes(prototypes);
 
     let type_env = defs::Prelude::iter()
         .chain(defs::Assertions::iter())

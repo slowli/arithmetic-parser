@@ -222,17 +222,25 @@ where
 /// be a function. The method call is translated to calling this function with the first argument
 /// being the method receiver.
 ///
+/// For example, if method `len()` is called on a value, then field `len` is obtained
+/// from the value prototype and is called with the only argument being the value on which
+/// the method is called.
+///
 /// Non-functional fields may make sense in the prototype as well; they can be viewed as
 /// static members of the prototype. All fields can be accessed in the script code identically
 /// to object fields.
 ///
 /// A prototype can be converted to a [`Function`], and prototypes defined in the script code
 /// *are* callable. Such a function associates the prototype with the provided value
-/// (an object or a tuple).
+/// (an object or a tuple). For values without an associated prototype, method resolution
+/// is performed using [`StandardPrototypes`], which can be set for an [`Environment`]
+/// or an [`ExecutableModule`].
 ///
 /// Prototypes can be defined both in the host code, and in scripts via [`CreatePrototype`].
 ///
 /// [`CreatePrototype`]: crate::fns::CreatePrototype
+/// [`Environment`]: crate::Environment
+/// [`ExecutableModule`]: crate::ExecutableModule
 ///
 /// # Examples
 ///

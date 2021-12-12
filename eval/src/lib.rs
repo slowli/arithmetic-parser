@@ -39,7 +39,11 @@
 //!   or a tuple / object and a primitive value.
 //!   As an example, `(1, 2) + 3` and `#{ x: 2, y: 3 } / #{ x: 4, y: 5 }` are valid,
 //!   but `(1, 2) * (3, 4, 5)` isn't.
-//! - Methods are FIXME
+//! - Methods are resolved using [`Prototype`]s, quite similar to JavaScript. A prototype is
+//!   an [`Object`], the fields of which are looked up whenever a method is called on a `Value`
+//!   for which this prototype was set. Besides providing object interface, prototypes are
+//!   callable; the call associated the target value with the prototype.
+//!   See `Prototype` docs for more details.
 //! - No type checks are performed before evaluation.
 //! - Type annotations and type casts are completely ignored.
 //!   This means that the interpreter may execute  code that is incorrect with annotations

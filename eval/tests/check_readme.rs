@@ -5,7 +5,10 @@ use rand::{thread_rng, Rng};
 
 use std::fs;
 
-use arithmetic_eval::{fns, Assertions, Environment, Prelude, Value, VariableMap};
+use arithmetic_eval::{
+    env::{Assertions, Environment, Prelude, VariableMap},
+    fns, Value,
+};
 use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 
 fn read_file(path: &str) -> String {

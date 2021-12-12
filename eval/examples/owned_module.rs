@@ -5,7 +5,8 @@ use assert_matches::assert_matches;
 use core::iter::FromIterator;
 
 use arithmetic_eval::{
-    Assertions, Environment, ErrorKind, ExecutableModule, Filler, Prelude, Value,
+    env::{Assertions, Environment, Filler, Prelude},
+    ErrorKind, ExecutableModule, Value,
 };
 use arithmetic_parser::{
     grammars::{F64Grammar, MockTypes, Parse, WithMockedTypes},

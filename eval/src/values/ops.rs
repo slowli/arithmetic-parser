@@ -4,8 +4,9 @@ use core::cmp::Ordering;
 
 use crate::{
     arith::OrdArithmetic,
-    error::{AuxErrorInfo, TupleLenMismatchContext},
-    Error, ErrorKind, ModuleId, Object, Tuple, Value,
+    error::{AuxErrorInfo, Error, ErrorKind, TupleLenMismatchContext},
+    exec::ModuleId,
+    Object, Tuple, Value,
 };
 use arithmetic_parser::{BinaryOp, MaybeSpanned, Op, UnaryOp};
 

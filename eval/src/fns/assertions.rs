@@ -24,7 +24,7 @@ use arithmetic_parser::CodeFragment;
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, ErrorKind, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ErrorKind, env::VariableMap};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
@@ -101,7 +101,7 @@ fn create_error_with_values<'a, T: fmt::Display>(
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, ErrorKind, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ErrorKind, env::VariableMap};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
@@ -169,7 +169,7 @@ impl<T: fmt::Display> NativeFn<T> for AssertEq {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, env::VariableMap};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
@@ -269,7 +269,7 @@ impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, env::VariableMap};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
@@ -295,7 +295,7 @@ impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{error::ErrorKind, fns, Environment, VariableMap};
+/// # use arithmetic_eval::{ErrorKind, fns, Environment, env::VariableMap};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// let assert_fails = fns::AssertFails::new(|err| {
@@ -378,7 +378,7 @@ mod tests {
     use super::*;
     use crate::{
         arith::{CheckedArithmetic, StdArithmetic},
-        WildcardId,
+        exec::WildcardId,
     };
 
     use arithmetic_parser::{LvalueLen, MaybeSpanned};

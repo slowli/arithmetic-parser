@@ -1,4 +1,4 @@
-//! Executables output by a `Compiler` and related types.
+//! [`ExecutableModule`] and related types.
 
 use core::ops;
 
@@ -6,8 +6,9 @@ use crate::{
     alloc::{Box, String},
     arith::{OrdArithmetic, StdArithmetic},
     compiler::{Compiler, ImportSpans},
-    error::{Backtrace, ErrorWithBacktrace},
-    Environment, Error, ErrorKind, StandardPrototypes, Value, VariableMap,
+    env::{Environment, VariableMap},
+    error::{Backtrace, Error, ErrorKind, ErrorWithBacktrace},
+    StandardPrototypes, Value,
 };
 use arithmetic_parser::{grammars::Grammar, Block, StripCode};
 
@@ -20,6 +21,7 @@ pub(crate) use self::{
     command::{Atom, Command, CompiledExpr, FieldName, SpannedAtom},
     registers::{Executable, ExecutableFn, Operations, Registers},
 };
+pub use crate::compiler::CompilerExt;
 
 /// Executable module together with its imports.
 ///
@@ -46,15 +48,15 @@ pub(crate) use self::{
 ///
 /// ```
 /// use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// use arithmetic_eval::{fns, Comparisons, ExecutableModule, Prelude, Value};
+/// use arithmetic_eval::{env, fns, ExecutableModule, Value};
 /// # use core::iter::FromIterator;
 /// # use hashbrown::HashSet;
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let module = Untyped::<F32Grammar>::parse_statements("fold(xs, -INFINITY, max)")?;
 /// let mut module = ExecutableModule::builder("test", &module)?
-///     .with_imports_from(&Prelude)
-///     .with_imports_from(&Comparisons)
+///     .with_imports_from(&env::Prelude)
+///     .with_imports_from(&env::Comparisons)
 ///     .with_import("INFINITY", Value::Prim(f32::INFINITY))
 ///     .with_import("xs", Value::void())
 ///     .build();
@@ -112,7 +114,7 @@ pub(crate) use self::{
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{Assertions, Environment, ExecutableModule, Value};
+/// # use arithmetic_eval::{env::Assertions, Environment, ExecutableModule, Value};
 /// # use core::iter::FromIterator;
 /// # fn main() -> anyhow::Result<()> {
 /// let module = Untyped::<F32Grammar>::parse_statements("x = 5; assert_eq(x, 4);")?;
@@ -244,7 +246,7 @@ where
 
     /// Runs the module with the specified [`Environment`]. The environment may contain some of
     /// module imports; they will be used to override imports defined in the module.
-    /// [`StandardPrototype`]s found in the environment will be merged to the
+    /// [`StandardPrototypes`] found in the environment will be merged to the
     /// prototypes previously [imported](Self::insert_prototypes()) into this module, if any,
     /// with the environment prototypes taking precedence.
     ///
@@ -466,7 +468,7 @@ impl<'a, T> ExecutableModuleBuilder<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{compiler::Compiler, WildcardId};
+    use crate::{compiler::Compiler, exec::WildcardId};
 
     use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 

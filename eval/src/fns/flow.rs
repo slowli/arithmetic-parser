@@ -21,7 +21,7 @@ use crate::{
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = "x = 3; if(x == 2, -1, x + 1)";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
@@ -39,7 +39,7 @@ use crate::{
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = "x = 3; if(x == 2, || -1, || x + 1)()";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
@@ -90,7 +90,7 @@ impl<T> NativeFn<T> for If {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     factorial = |x| {
@@ -180,7 +180,7 @@ impl<T: 'static + Clone> NativeFn<T> for Loop {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     factorial = |x| {

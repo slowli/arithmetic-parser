@@ -131,7 +131,7 @@ fn extract_fn<'a, T, A>(
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     // Finds a minimum number in an array.
@@ -150,11 +150,11 @@ fn extract_fn<'a, T, A>(
 /// # }
 /// ```
 ///
-/// Using `cmp` function with [`Comparisons`](crate::Comparisons).
+/// Using `cmp` function with [`Comparisons`](crate::env::Comparisons).
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Comparisons, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, env::{Comparisons, VariableMap}, Environment, Value};
 /// # use core::iter::FromIterator;
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
@@ -235,7 +235,7 @@ impl<T> NativeFn<T> for Compare {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     Point = impl(#{
@@ -260,7 +260,7 @@ impl<T> NativeFn<T> for Compare {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     PointStatics = impl(#{
@@ -321,7 +321,7 @@ impl<T> NativeFn<T> for CreatePrototype {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     Stack = defer(|Self| impl(#{
@@ -403,7 +403,10 @@ impl<T> ValueCell<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Environment, ExecutableModule, Filler, WildcardId};
+    use crate::{
+        env::{Environment, Filler},
+        exec::{ExecutableModule, WildcardId},
+    };
 
     use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
     use assert_matches::assert_matches;

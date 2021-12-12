@@ -8,9 +8,10 @@ use arithmetic_eval::{
         ArithmeticExt, Checked, CheckedArithmetic, ModularArithmetic, OrdArithmetic,
         WrappingArithmetic,
     },
-    error::ErrorWithBacktrace,
-    Assertions, Comparisons, Environment, ErrorKind, Number, Prelude, Value, VariableMap,
-    WildcardId,
+    env::{Assertions, Comparisons, Environment, Prelude, VariableMap},
+    error::{ErrorKind, ErrorWithBacktrace},
+    exec::WildcardId,
+    Number, Value,
 };
 use arithmetic_parser::grammars::{NumGrammar, NumLiteral, Parse, Untyped};
 

@@ -16,9 +16,9 @@ use std::{cell::RefCell, fmt};
 
 use arithmetic_eval::{
     arith::{Arithmetic, ArithmeticExt, ModularArithmetic},
-    error::{ArithmeticError, AuxErrorInfo},
-    fns, Assertions, CallContext, ErrorKind, EvalResult, ExecutableModule, Filler, NativeFn,
-    Number, Prelude, SpannedValue, Value,
+    env::{Assertions, Filler, Prelude},
+    error::{ArithmeticError, AuxErrorInfo, ErrorKind},
+    fns, CallContext, EvalResult, ExecutableModule, NativeFn, Number, SpannedValue, Value,
 };
 use arithmetic_parser::{
     grammars::{Features, NumGrammar, NumLiteral, Parse, Untyped},

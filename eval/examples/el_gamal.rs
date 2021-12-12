@@ -13,7 +13,8 @@ use std::cell::RefCell;
 
 use arithmetic_eval::{
     arith::{ArithmeticExt, ModularArithmetic},
-    fns, Assertions, ExecutableModule, Filler, Prelude, Value,
+    env::{Assertions, Filler, Prelude},
+    fns, ExecutableModule, Value,
 };
 use arithmetic_parser::grammars::{NumGrammar, Parse, Untyped};
 

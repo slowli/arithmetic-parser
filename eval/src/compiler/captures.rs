@@ -6,8 +6,8 @@ use core::iter;
 
 use crate::{
     alloc::{vec, Box, Vec},
-    error::{AuxErrorInfo, RepeatedAssignmentContext},
-    Error, ErrorKind, ModuleId, WildcardId,
+    error::{AuxErrorInfo, Error, ErrorKind, RepeatedAssignmentContext},
+    exec::{ModuleId, WildcardId},
 };
 use arithmetic_parser::{
     grammars::Grammar, Block, Destructure, Expr, FnDefinition, Lvalue, Spanned, SpannedExpr,

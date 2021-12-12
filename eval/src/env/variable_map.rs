@@ -9,7 +9,8 @@ use arithmetic_parser::{grammars::Grammar, Block};
 use core::{cmp::Ordering, fmt};
 
 use crate::{
-    fns, Environment, Error, ExecutableModule, ModuleId, ModuleImports, StandardPrototypes, Value,
+    exec::{ExecutableModule, ModuleId, ModuleImports},
+    fns, Environment, Error, StandardPrototypes, Value,
 };
 
 /// Encapsulates read access to named variables and, optionally, [`StandardPrototypes`].
@@ -20,7 +21,10 @@ pub trait VariableMap<'a, T> {
     /// Gets [`Prototype`]s for standard types defined by this map, or `None` if this map
     /// does not define such prototypes.
     ///
-    /// The default implementation returns [`StandardPrototypes::new()`] (i.e., none).
+    /// The default implementation returns [`StandardPrototypes::new()`] (i.e., empty prototypes
+    /// for all standard types).
+    ///
+    /// [`Prototype`]: crate::Prototype
     fn get_prototypes(&self) -> StandardPrototypes<T> {
         StandardPrototypes::new()
     }
@@ -158,6 +162,10 @@ impl<'a, T: 'static + Clone> VariableMap<'a, T> for Prelude {
             "merge" => Value::native_fn(fns::Merge),
             _ => return None,
         })
+    }
+
+    fn get_prototypes(&self) -> StandardPrototypes<T> {
+        self.prototypes()
     }
 }
 

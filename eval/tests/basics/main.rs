@@ -3,9 +3,10 @@
 use assert_matches::assert_matches;
 
 use arithmetic_eval::{
-    error::{ErrorWithBacktrace, RepeatedAssignmentContext},
-    fns, Comparisons, Environment, Error, ErrorKind, StandardPrototypes, Value, VariableMap,
-    WildcardId,
+    env::{Comparisons, Environment, VariableMap},
+    error::{Error, ErrorKind, ErrorWithBacktrace, RepeatedAssignmentContext},
+    exec::WildcardId,
+    fns, StandardPrototypes, Value,
 };
 use arithmetic_parser::{
     grammars::{F32Grammar, Parse, Untyped},

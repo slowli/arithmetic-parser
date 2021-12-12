@@ -8,7 +8,7 @@ use super::{captures::extract_vars_iter, CapturesExtractor, Compiler};
 use crate::{
     alloc::{ToOwned, Vec},
     error::RepeatedAssignmentContext,
-    executable::{Atom, Command, CompiledExpr, Executable, ExecutableFn, FieldName, SpannedAtom},
+    exec::{Atom, Command, CompiledExpr, Executable, ExecutableFn, FieldName, SpannedAtom},
     Error, ErrorKind,
 };
 use arithmetic_parser::{

@@ -39,9 +39,7 @@
 //!   or a tuple / object and a primitive value.
 //!   As an example, `(1, 2) + 3` and `#{ x: 2, y: 3 } / #{ x: 4, y: 5 }` are valid,
 //!   but `(1, 2) * (3, 4, 5)` isn't.
-//! - Methods are considered syntactic sugar for functions, with the method receiver considered
-//!   the first function argument. For example, `(1, 2).map(sin)` is equivalent to
-//!   `map((1, 2), sin)`.
+//! - Methods are FIXME
 //! - No type checks are performed before evaluation.
 //! - Type annotations and type casts are completely ignored.
 //!   This means that the interpreter may execute  code that is incorrect with annotations
@@ -104,6 +102,7 @@
 //!
 //! [`Arithmetic`]: crate::arith::Arithmetic
 //! [`OrdArithmetic`]: crate::arith::OrdArithmetic
+//! [`VariableMap`]: crate::env::VariableMap
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
 //! [`num-complex`]: https://crates.io/crates/num-complex
 //! [`num-bigint`]: https://crates.io/crates/num-bigint
@@ -118,7 +117,7 @@
 //! ```
 //! use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 //! use arithmetic_eval::{
-//!     Assertions, Comparisons, Environment, Prelude, Value, VariableMap,
+//!     env::{Assertions, Comparisons, Environment, Prelude, VariableMap}, Value,
 //! };
 //!
 //! # fn main() -> anyhow::Result<()> {
@@ -150,7 +149,7 @@
 //!
 //! ```
 //! # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-//! # use arithmetic_eval::{Assertions, Environment, Prelude, Value, VariableMap};
+//! # use arithmetic_eval::{env::{Assertions, Environment, Prelude, VariableMap}, Value};
 //! # fn main() -> anyhow::Result<()> {
 //! let program = r#"
 //!     minmax = |...xs| xs.fold(#{ min: INF, max: -INF }, |acc, x| #{
@@ -213,25 +212,21 @@ mod alloc {
     };
 }
 
-// FIXME: organize this mess
 pub use self::{
-    compiler::CompilerExt,
+    env::Environment,
     error::{Error, ErrorKind, EvalResult},
-    executable::{
-        ExecutableModule, ExecutableModuleBuilder, IndexedId, ModuleId, ModuleImports, WildcardId,
-        WithArithmetic,
-    },
+    exec::ExecutableModule,
     values::{
-        Assertions, CallContext, Comparisons, Environment, Filler, Function, InterpretedFn,
-        NativeFn, Object, OpaqueRef, Prelude, Prototype, SpannedValue, StandardPrototypes, Tuple,
-        Value, ValueType, VariableMap,
+        CallContext, Function, InterpretedFn, NativeFn, Object, OpaqueRef, Prototype, SpannedValue,
+        StandardPrototypes, Tuple, Value, ValueType,
     },
 };
 
 pub mod arith;
 mod compiler;
+pub mod env;
 pub mod error;
-mod executable;
+pub mod exec;
 pub mod fns;
 mod values;
 

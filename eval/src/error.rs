@@ -9,8 +9,9 @@ use core::fmt;
 
 use crate::{
     alloc::{format, vec, Box, String, ToOwned, ToString, Vec},
+    exec::ModuleId,
     fns::FromValueError,
-    ModuleId, Value, ValueType,
+    Value, ValueType,
 };
 use arithmetic_parser::{
     BinaryOp, CodeFragment, LocatedSpan, LvalueLen, MaybeSpanned, Op, StripCode, UnaryOp,
@@ -453,14 +454,14 @@ impl fmt::Display for AuxErrorInfo {
 ///
 /// ```
 /// # use arithmetic_parser::{grammars::{F64Grammar, Parse, Untyped}, StripResultExt};
-/// # use arithmetic_eval::{Environment, Error, ExecutableModule, VariableMap, WildcardId};
+/// # use arithmetic_eval::{env::{Environment, VariableMap}, Error, ExecutableModule};
 /// fn compile_code(code: &str) -> anyhow::Result<ExecutableModule<'_, f64>> {
 ///     let block = Untyped::<F64Grammar>::parse_statements(code).strip_err()?;
 ///
 ///     // Without `strip_err()` call, the code below won't compile:
 ///     // `Error<'_>` in general cannot be boxed into `anyhow::Error`,
 ///     // only `Error<'static>` can.
-///     Ok(Environment::new().compile_module(WildcardId, &block).strip_err()?)
+///     Ok(Environment::new().compile_module("module", &block).strip_err()?)
 /// }
 /// ```
 #[derive(Debug)]

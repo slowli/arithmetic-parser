@@ -214,7 +214,7 @@ where
     }
 }
 
-/// Prototype of an [`Object`] or a [`Tuple`].
+/// Prototype of an [`Object`] or a [`Tuple`](crate::Tuple).
 ///
 /// A prototype is quite similar to an [`Object`]; it is a collection of named [`Value`]s.
 /// Prototype fields are used for method lookup similar to JavaScript; if an value has a prototype,
@@ -239,12 +239,12 @@ where
 /// Defining a prototype in the host code.
 ///
 /// ```
-/// # use arithmetic_eval::{fns, Environment, Object, Prototype, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, Object, Prototype, Value, env::VariableMap};
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # fn main() -> anyhow::Result<()> {
 /// let mut proto = Object::default();
 /// proto.insert("len", Value::native_fn(fns::Len)); // returns number of fields
-/// proto.insert("EMPTY", Object::default());
+/// proto.insert("EMPTY", Object::default().into());
 /// let proto = Prototype::from(proto);
 ///
 /// // Let's associate an object with this prototype in the host code.
@@ -347,7 +347,7 @@ impl<T: 'static + Clone> StripCode for Prototype<'_, T> {
     }
 }
 
-/// [`Prototype`]s for standard types, such as [`Object`] and [`Tuple`].
+/// [`Prototype`]s for standard types, such as [`Object`] and [`Tuple`](crate::Tuple).
 ///
 /// Unlike user-defined prototypes, standard prototypes are not directly accessible
 /// from the script code and cannot be extended / redefined there; this is only possible
@@ -365,7 +365,7 @@ impl<T: 'static + Clone> StripCode for Prototype<'_, T> {
 ///
 /// ```
 /// # use arithmetic_eval::{
-/// #     fns, Environment, Object, Prelude, StandardPrototypes, Value, VariableMap,
+/// #     fns, Environment, Object, StandardPrototypes, Value, env::{Prelude, VariableMap},
 /// # };
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # fn main() -> anyhow::Result<()> {

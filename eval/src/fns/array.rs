@@ -25,7 +25,7 @@ use crate::{
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"array(3, |i| 2 * i + 1) == (1, 3, 5)"#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
@@ -96,7 +96,7 @@ where
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"len(()) == 0 && len((1, 2, 3)) == 3"#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
@@ -152,7 +152,7 @@ impl<T: FromPrimitive> NativeFn<T> for Len {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     xs = (1, -2, 3, -0.3);
@@ -215,7 +215,7 @@ impl<T: 'static + Clone> NativeFn<T> for Map {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     xs = (1, -2, 3, -7, -0.3);
@@ -283,7 +283,7 @@ impl<T: 'static + Clone> NativeFn<T> for Filter {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     xs = (1, -2, 3, -7);
@@ -341,7 +341,7 @@ impl<T: 'static + Clone> NativeFn<T> for Fold {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     repeat = |x, times| {
@@ -401,7 +401,7 @@ impl<T> NativeFn<T> for Push {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     // Merges all arguments (which should be tuples) into a single tuple.
@@ -449,7 +449,7 @@ mod tests {
     use super::*;
     use crate::{
         arith::{OrdArithmetic, StdArithmetic, WrappingArithmetic},
-        Environment, VariableMap,
+        env::{Environment, VariableMap},
     };
 
     use arithmetic_parser::grammars::{NumGrammar, NumLiteral, Parse, Untyped};

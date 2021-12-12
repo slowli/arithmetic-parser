@@ -12,9 +12,9 @@ use crate::{
     alloc::{Rc, String, ToOwned, Vec},
     arith::OrdArithmetic,
     error::{Backtrace, CodeInModule},
-    executable::ExecutableFn,
+    exec::{ExecutableFn, ModuleId},
     fns::ValueCell,
-    Error, ErrorKind, EvalResult, ModuleId, Prototype, SpannedValue, StandardPrototypes, Value,
+    Error, ErrorKind, EvalResult, Prototype, SpannedValue, StandardPrototypes, Value,
 };
 use arithmetic_parser::{LvalueLen, MaybeSpanned, StripCode};
 

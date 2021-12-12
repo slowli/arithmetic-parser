@@ -8,19 +8,15 @@ use core::{
 use crate::{alloc::Rc, fns};
 use arithmetic_parser::{MaybeSpanned, StripCode};
 
-mod env;
 mod function;
 mod object;
 mod ops;
 mod tuple;
-mod variable_map;
 
 pub use self::{
-    env::Environment,
     function::{CallContext, Function, InterpretedFn, NativeFn},
     object::{Object, Prototype, StandardPrototypes},
     tuple::Tuple,
-    variable_map::{Assertions, Comparisons, Filler, Prelude, VariableMap},
 };
 
 /// Possible high-level types of [`Value`]s.

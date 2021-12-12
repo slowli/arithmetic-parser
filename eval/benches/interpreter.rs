@@ -15,8 +15,10 @@ use typed_arena::Arena;
 use std::cmp::Ordering;
 
 use arithmetic_eval::{
-    arith::StdArithmetic, fns, CallContext, ExecutableModule, Filler, NativeFn, Prelude, Value,
-    WildcardId,
+    arith::StdArithmetic,
+    env::{Filler, Prelude},
+    exec::{ExecutableModule, WildcardId},
+    fns, CallContext, NativeFn, Value,
 };
 use arithmetic_parser::{
     grammars::{F32Grammar, Parse, Untyped},

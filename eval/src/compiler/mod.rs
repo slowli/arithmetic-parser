@@ -4,8 +4,10 @@ use hashbrown::HashMap;
 
 use crate::{
     alloc::{Box, String, ToOwned},
-    executable::{Atom, Command, CompiledExpr, Executable, ExecutableModule, FieldName, Registers},
-    Error, ErrorKind, ModuleId, Value,
+    exec::{
+        Atom, Command, CompiledExpr, Executable, ExecutableModule, FieldName, ModuleId, Registers,
+    },
+    Error, ErrorKind, Value,
 };
 use arithmetic_parser::{
     grammars::Grammar, BinaryOp, Block, Destructure, FnDefinition, InputSpan, Lvalue,
@@ -273,7 +275,7 @@ impl Compiler {
 ///
 /// ```
 /// use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// use arithmetic_eval::CompilerExt;
+/// use arithmetic_eval::exec::CompilerExt;
 /// # use hashbrown::HashSet;
 /// # use core::iter::FromIterator;
 ///
@@ -319,7 +321,7 @@ impl<'a, T: Grammar<'a>> CompilerExt<'a> for FnDefinition<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Value, WildcardId};
+    use crate::{exec::WildcardId, Value};
 
     use arithmetic_parser::grammars::{F32Grammar, Parse, ParseLiteral, Typed, Untyped};
     use arithmetic_parser::{Expr, NomResult};

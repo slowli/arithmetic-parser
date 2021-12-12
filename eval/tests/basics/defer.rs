@@ -1,6 +1,6 @@
 //! Tests for `defer` function.
 
-use arithmetic_eval::{fns, Assertions, Environment, ErrorKind};
+use arithmetic_eval::{env::Assertions, fns, Environment, ErrorKind};
 use assert_matches::assert_matches;
 
 use crate::{evaluate, try_evaluate};

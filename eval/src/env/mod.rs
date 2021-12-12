@@ -1,4 +1,4 @@
-//! Environment containing named `Value`s.
+//! [`Environment`] and other types related to [`Value`] collections.
 
 use hashbrown::{hash_map, HashMap};
 
@@ -6,6 +6,9 @@ use core::{
     iter::{self, FromIterator},
     ops,
 };
+
+mod variable_map;
+pub use self::variable_map::{Assertions, Comparisons, Filler, Prelude, VariableMap};
 
 use crate::{
     alloc::{String, ToOwned},
@@ -21,7 +24,7 @@ use crate::{
 /// # Examples
 ///
 /// ```
-/// use arithmetic_eval::{Environment, Comparisons, Prelude, Value};
+/// use arithmetic_eval::{env::{Comparisons, Prelude}, Environment, Value};
 ///
 /// // Load environment from the standard containers.
 /// let mut env: Environment<'_, f64> = Prelude.iter()

@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::{CallContext, EvalResult, ModuleId, NativeFn, SpannedValue, Value};
+use crate::{exec::ModuleId, CallContext, EvalResult, NativeFn, SpannedValue, Value};
 use arithmetic_parser::CodeFragment;
 
 /// Acts similarly to the `dbg!` macro, outputting the argument(s) to stderr and returning
@@ -13,7 +13,7 @@ use arithmetic_parser::CodeFragment;
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = "dbg(1 + 2) > 2.5";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;

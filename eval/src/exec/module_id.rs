@@ -94,7 +94,7 @@ impl fmt::Display for WildcardId {
 /// The ID is `Display`ed as `{prefix} #{index + 1}`:
 ///
 /// ```
-/// # use arithmetic_eval::IndexedId;
+/// # use arithmetic_eval::exec::IndexedId;
 /// let module_id = IndexedId::new("snippet", 4);
 /// assert_eq!(module_id.to_string(), "snippet #5");
 /// ```

@@ -43,7 +43,7 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let max = fns::wrap(|x: f32, y: f32| if x > y { x } else { y });
@@ -62,7 +62,7 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns::FnWrapper, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns::FnWrapper, Environment, Value, env::VariableMap};
 /// fn zip_arrays(xs: Vec<f32>, ys: Vec<f32>) -> Result<Vec<(f32, f32)>, String> {
 ///     if xs.len() == ys.len() {
 ///         Ok(xs.into_iter().zip(ys).map(|(x, y)| (x, y)).collect())
@@ -210,7 +210,7 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{wrap_fn, Function, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{wrap_fn, Function, Environment, Value, env::VariableMap};
 /// fn is_function<T>(value: Value<'_, T>) -> bool {
 ///     value.is_function()
 /// }
@@ -232,7 +232,7 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{
-/// #     wrap_fn, CallContext, Function, Environment, Prelude, Value, VariableMap,
+/// #     wrap_fn, CallContext, Function, Environment, Value, env::{Prelude, VariableMap},
 /// # };
 /// # use core::iter::FromIterator;
 /// // Note that both `Value`s have the same lifetime due to elision.
@@ -308,7 +308,7 @@ macro_rules! wrap_fn {
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{
-/// #     wrap_fn_with_context, CallContext, Function, Environment, Value, Error, VariableMap,
+/// #     wrap_fn_with_context, CallContext, Function, Environment, Value, Error, env::VariableMap,
 /// # };
 /// fn map_array<'a>(
 ///     context: &mut CallContext<'_, 'a, f32>,
@@ -373,7 +373,9 @@ mod tests {
     use super::*;
     use crate::{
         alloc::{format, ToOwned},
-        Environment, ExecutableModule, Object, Prelude, Tuple, Value, WildcardId,
+        env::{Environment, Prelude},
+        exec::{ExecutableModule, WildcardId},
+        Object, Tuple, Value,
     };
 
     use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};

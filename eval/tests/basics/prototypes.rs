@@ -1,8 +1,8 @@
 //! Test for `Prototype`s.
 
 use arithmetic_eval::{
-    fns, Assertions, CallContext, Environment, ErrorKind, EvalResult, NativeFn, Object, Prototype,
-    SpannedValue, Value,
+    env::Assertions, fns, CallContext, Environment, ErrorKind, EvalResult, NativeFn, Object,
+    Prototype, SpannedValue, Value,
 };
 
 use crate::evaluate;

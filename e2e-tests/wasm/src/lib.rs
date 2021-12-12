@@ -5,7 +5,11 @@ extern crate alloc;
 use alloc::string::ToString;
 use core::f64;
 
-use arithmetic_eval::{fns, Assertions, Environment, Prelude, Value, VariableMap, WildcardId};
+use arithmetic_eval::{
+    env::{Assertions, Environment, Prelude, VariableMap},
+    exec::WildcardId,
+    fns, Value,
+};
 use arithmetic_parser::grammars::{F64Grammar, Parse, Untyped};
 use wasm_bindgen::prelude::*;
 

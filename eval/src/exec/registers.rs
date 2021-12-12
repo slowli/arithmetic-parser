@@ -12,9 +12,10 @@ use crate::{
     alloc::{vec, Box, Rc, String, ToOwned, Vec},
     arith::OrdArithmetic,
     error::{Backtrace, CodeInModule, EvalResult, TupleLenMismatchContext},
-    executable::command::{Atom, Command, CompiledExpr, FieldName, SpannedAtom, SpannedCommand},
-    CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, ModuleId, Prototype,
-    SpannedValue, StandardPrototypes, Value,
+    exec::command::{Atom, Command, CompiledExpr, FieldName, SpannedAtom, SpannedCommand},
+    exec::ModuleId,
+    CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, Prototype, SpannedValue,
+    StandardPrototypes, Value,
 };
 use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
 
@@ -686,7 +687,10 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{compiler::Compiler, executable::ModuleImports, WildcardId};
+    use crate::{
+        compiler::Compiler,
+        exec::{ModuleImports, WildcardId},
+    };
     use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 
     #[test]

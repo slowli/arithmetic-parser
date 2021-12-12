@@ -4,7 +4,8 @@ use num_complex::Complex64;
 
 use arithmetic_eval::{
     arith::{ArithmeticExt, StdArithmetic},
-    Assertions, ExecutableModule, Prelude,
+    env::{Assertions, Prelude},
+    ExecutableModule,
 };
 use arithmetic_parser::grammars::{NumGrammar, Parse, Untyped};
 

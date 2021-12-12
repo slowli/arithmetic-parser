@@ -386,6 +386,16 @@ fn object_destructuring_repeated_assignment_complex() {
 }
 
 #[test]
+fn negation_on_object() {
+    let program = r#"
+        pt = -#{ x: -3, y: 4 };
+        pt == #{ x: 3, y: -4 }
+    "#;
+    let return_value = evaluate(&mut Environment::new(), program);
+    assert_eq!(return_value, Value::Bool(true));
+}
+
+#[test]
 fn binary_ops_on_objects() {
     let program = r#"
         #{ x: 1 } - #{ x: 2 } == #{ x: -1 } &&
@@ -406,6 +416,23 @@ fn binary_ops_on_objects_with_number_operand() {
     "#;
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(return_value, Value::Bool(true));
+}
+
+#[test]
+fn error_in_binary_op_on_object_and_invalid_operand() {
+    let lhs_program = "#{ x: 3, y: 4 } + || 5";
+    {
+        let err = try_evaluate(&mut Environment::new(), lhs_program).unwrap_err();
+        let main_span = err.source().main_span().code().fragment();
+        assert_eq!(*main_span, "|| 5");
+    }
+
+    let rhs_program = "true + #{ x: 3, y: 4 }";
+    let mut env = Environment::new();
+    env.insert("true", Value::Bool(true));
+    let err = try_evaluate(&mut env, rhs_program).unwrap_err();
+    let main_span = err.source().main_span().code().fragment();
+    assert_eq!(*main_span, "true");
 }
 
 #[test]

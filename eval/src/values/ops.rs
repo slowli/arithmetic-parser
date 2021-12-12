@@ -1,8 +1,5 @@
 //! Operations on `Value`s.
 
-// FIXME: inconsistent behavior of unary minus vs binary ops for objects / tuples
-// FIXME: copy prototype on same-kind ops?
-
 use core::cmp::Ordering;
 
 use crate::{
@@ -184,7 +181,7 @@ impl<'a, T: Clone> Value<'a, T> {
                 }
             }
 
-            (Self::Prim(_), _) | (Self::Tuple(_), _) => {
+            (Self::Prim(_), _) | (Self::Tuple(_), _) | (Self::Object(_), _) => {
                 Err(BinaryOpError::new(op).with_side(OpSide::Rhs))
             }
             _ => Err(BinaryOpError::new(op).with_side(OpSide::Lhs)),
@@ -219,9 +216,17 @@ impl<'a, T> Value<'a, T> {
             Self::Tuple(tuple) => {
                 let res: Result<Tuple<_>, _> = tuple
                     .into_iter()
-                    .map(|elem| Value::try_neg(elem, arithmetic))
+                    .map(|elem| elem.try_neg(arithmetic))
                     .collect();
                 res.map(Self::Tuple)
+            }
+
+            Self::Object(object) => {
+                let res: Result<Object<_>, _> = object
+                    .into_iter()
+                    .map(|(name, value)| value.try_neg(arithmetic).map(|mapped| (name, mapped)))
+                    .collect();
+                res.map(Self::Object)
             }
 
             _ => Err(ErrorKind::UnexpectedOperand {

@@ -69,6 +69,20 @@ impl<'r, 'a, T> CallContext<'r, 'a, T> {
         self.prototypes
     }
 
+    /// Retrieves value prototype using standard prototypes if necessary.
+    pub(crate) fn get_prototype(&self, value: &Value<'a, T>) -> Prototype<'a, T> {
+        let prototype = match value {
+            Value::Object(object) => object.prototype(),
+            Value::Tuple(tuple) => tuple.prototype(),
+            _ => None,
+        };
+        prototype.cloned().unwrap_or_else(|| {
+            self.prototypes
+                .and_then(|prototypes| prototypes.get(value.value_type()).cloned())
+                .unwrap_or_default()
+        })
+    }
+
     /// Returns the call span of the currently executing function.
     pub fn call_span(&self) -> &CodeInModule<'a> {
         &self.call_span

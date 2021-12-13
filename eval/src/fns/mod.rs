@@ -25,8 +25,6 @@
 //! [`Number`]: crate::Number
 //! [GAT]: https://github.com/rust-lang/rust/issues/44265
 
-// TODO: function to extract value prototype
-
 use once_cell::unsync::OnceCell;
 
 use core::{cmp::Ordering, fmt};
@@ -304,6 +302,46 @@ impl<T> NativeFn<T> for CreatePrototype {
             "Function argument must be an object",
         )?;
         Ok(Prototype::from(object).into())
+    }
+}
+
+/// Returns the [`Prototype`] of a value.
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # use arithmetic_eval::{fns, Environment, Value, env::{Assertions, VariableMap}};
+/// # fn main() -> anyhow::Result<()> {
+/// let program = r#"
+///     Type = impl(#{ print: dbg });
+///     value = Type(#{ test: 42 });
+///     assert_eq(prototype(value), Type);
+///     assert(prototype(value) != prototype(#{ test: 42 }));
+///     assert_eq(prototype(7), prototype(42));
+/// "#;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+///
+/// Assertions.iter().collect::<Environment<f32>>()
+///     .insert_native_fn("dbg", fns::Dbg)
+///     .insert_native_fn("impl", fns::CreatePrototype)
+///     .insert_native_fn("prototype", fns::GetPrototype)
+///     .compile_module("test_impl", &program)?
+///     .run()?;
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GetPrototype;
+
+impl<T> NativeFn<T> for GetPrototype {
+    fn evaluate<'a>(
+        &self,
+        args: Vec<SpannedValue<'a, T>>,
+        ctx: &mut CallContext<'_, 'a, T>,
+    ) -> EvalResult<'a, T> {
+        ctx.check_args_count(&args, 1)?;
+        Ok(ctx.get_prototype(&args[0].extra).into())
     }
 }
 

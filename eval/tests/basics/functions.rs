@@ -308,8 +308,7 @@ fn function_aliasing() {
 fn method_call() {
     let program = "1.0.add(2)";
     let mut env = Environment::new();
-    let proto = vec![("add", Value::wrapped_fn(|x: f32, y: f32| x + y))];
-    let proto = proto.into_iter().collect();
+    let proto = Value::wrapped_fn(|x: f32, y: f32| x + y).into_object("add");
     env.insert_prototypes(StandardPrototypes::new().with_primitive_proto(proto));
     let return_value = evaluate(&mut env, program);
     assert_eq!(return_value, Value::Prim(3.0));

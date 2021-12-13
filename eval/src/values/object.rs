@@ -295,9 +295,15 @@ impl<T> Clone for Prototype<'_, T> {
     }
 }
 
-impl<T> PartialEq for Prototype<'_, T> {
+impl<T: PartialEq> PartialEq for Prototype<'_, T> {
     fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.inner, &other.inner)
+        Rc::ptr_eq(&self.inner, &other.inner) || *self.inner == *other.inner
+    }
+}
+
+impl<T> Default for Prototype<'_, T> {
+    fn default() -> Self {
+        Self::from(Object::default())
     }
 }
 
@@ -317,6 +323,10 @@ impl<'a, T> Prototype<'a, T> {
     /// Returns a reference to the inner `Object` that this prototype holds.
     pub fn as_object(&self) -> &Object<'a, T> {
         &self.inner
+    }
+
+    pub(crate) fn is_same(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.inner, &other.inner)
     }
 
     pub(crate) fn evaluate(
@@ -381,8 +391,7 @@ impl<T: 'static + Clone> StripCode for Prototype<'_, T> {
 /// let mut num_proto = Object::default();
 /// num_proto.insert("abs", Value::wrapped_fn(f32::abs));
 /// num_proto.insert("sin", Value::wrapped_fn(f32::sin));
-/// let mut array_proto = Object::default();
-/// array_proto.insert("len", Value::native_fn(fns::Len));
+/// let array_proto = Value::native_fn(fns::Len).into_object("len");
 ///
 /// let prototypes = StandardPrototypes::new()
 ///     .with_primitive_proto(num_proto)
@@ -520,18 +529,15 @@ mod tests {
 
     #[test]
     fn merging_prototypes() {
-        let array_proto = vec![("fold", Value::native_fn(fns::Fold))]
-            .into_iter()
-            .collect();
-        let mut prototypes = StandardPrototypes::<f32>::new().with_array_proto(array_proto);
+        let mut array_proto = Object::<f32>::default();
+        array_proto.insert("fold", Value::native_fn(fns::Fold));
+        let mut prototypes = StandardPrototypes::new().with_array_proto(array_proto);
 
-        let new_array_proto = vec![("len", Value::native_fn(fns::Len))]
-            .into_iter()
-            .collect();
-        let object_proto = vec![("len", Value::native_fn(fns::Len))]
-            .into_iter()
-            .collect();
-        let new_prototypes = StandardPrototypes::<f32>::new()
+        let mut new_array_proto = Object::<f32>::default();
+        new_array_proto.insert("len", Value::native_fn(fns::Len));
+        let mut object_proto = Object::<f32>::default();
+        object_proto.insert("len", Value::native_fn(fns::Len));
+        let new_prototypes = StandardPrototypes::new()
             .with_array_proto(new_array_proto)
             .with_object_proto(object_proto);
 

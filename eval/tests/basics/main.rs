@@ -388,8 +388,7 @@ fn comparison_error_within_capture() {
 fn priority_of_unary_ops_and_methods() {
     let program = "-1.abs() == -1 && -1.0.abs() == -1 && --1.abs() == 1 && (-1).abs() == 1";
     let mut env = Environment::new();
-    let proto = vec![("abs", Value::wrapped_fn(f32::abs))];
-    let proto = proto.into_iter().collect();
+    let proto = Value::wrapped_fn(f32::abs).into_object("abs");
     env.insert_prototypes(StandardPrototypes::new().with_primitive_proto(proto));
     let return_value = evaluate(&mut env, program);
     assert_eq!(return_value, Value::Bool(true));

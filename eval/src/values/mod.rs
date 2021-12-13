@@ -1,5 +1,7 @@
 //! Values used by the interpreter.
 
+// TODO: consider removing lifetimes from `Value` (i.e., strip code spans immediately)
+
 use core::{
     any::{type_name, Any},
     fmt,
@@ -222,6 +224,13 @@ impl<'a, T> Value<'a, T> {
         Self::Ref(OpaqueRef::new(value))
     }
 
+    /// Wraps this value into an object with a single field.
+    pub fn into_object(self, field_name: impl Into<String>) -> Object<'a, T> {
+        let mut object = Object::default();
+        object.insert(field_name, self);
+        object
+    }
+
     /// Returns the type of this value.
     pub fn value_type(&self) -> ValueType {
         match self {
@@ -294,7 +303,7 @@ impl<T: PartialEq> PartialEq for Value<'_, T> {
             (Self::Bool(this), Self::Bool(other)) => this == other,
             (Self::Tuple(this), Self::Tuple(other)) => this == other,
             (Self::Object(this), Self::Object(other)) => this == other,
-            (Self::Function(this), Self::Function(other)) => this.is_same_function(other),
+            (Self::Function(this), Self::Function(other)) => this == other,
             (Self::Ref(this), Self::Ref(other)) => this == other,
             _ => false,
         }

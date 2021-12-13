@@ -301,6 +301,16 @@ impl<T: fmt::Display> fmt::Display for Function<'_, T> {
     }
 }
 
+impl<T: PartialEq> PartialEq for Function<'_, T> {
+    fn eq(&self, other: &Self) -> bool {
+        if let (Self::Prototype(this_proto), Self::Prototype(other_proto)) = (self, other) {
+            *this_proto == *other_proto
+        } else {
+            self.is_same_function(other)
+        }
+    }
+}
+
 impl<T: 'static + Clone> StripCode for Function<'_, T> {
     type Stripped = Function<'static, T>;
 
@@ -326,7 +336,7 @@ impl<'a, T> Function<'a, T> {
         match (self, other) {
             (Self::Native(this), Self::Native(other)) => this.data_ptr() == other.data_ptr(),
             (Self::Interpreted(this), Self::Interpreted(other)) => Rc::ptr_eq(this, other),
-            (Self::Prototype(this), Self::Prototype(other)) => this == other,
+            (Self::Prototype(this), Self::Prototype(other)) => this.is_same(other),
             _ => false,
         }
     }

@@ -189,7 +189,10 @@ impl<'a, T> ExecutableModule<'a, T> {
 
     /// Imports prototypes for standard types, [merging](StandardPrototypes#merging) them with
     /// the existing prototypes if they were imported previously.
-    pub fn insert_prototypes(&mut self, prototypes: StandardPrototypes<T>) -> &mut Self {
+    pub fn insert_prototypes(&mut self, prototypes: StandardPrototypes<T>) -> &mut Self
+    where
+        T: Clone,
+    {
         self.imports.prototypes += prototypes;
         self
     }
@@ -430,6 +433,7 @@ impl<'a, T> ExecutableModuleBuilder<'a, T> {
     /// taking precedence.
     pub fn with_imports_from<V>(mut self, source: &V) -> Self
     where
+        T: Clone,
         V: VariableMap<'a, T> + ?Sized,
     {
         let module = &mut self.module;

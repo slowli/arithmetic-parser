@@ -355,6 +355,20 @@ impl<'a, T> Prototype<'a, T> {
     }
 }
 
+impl<T: Clone> Prototype<'static, T> {
+    fn merge(old: &mut Option<Self>, new: Option<Self>) {
+        if let Some(old) = old {
+            if let Some(new) = new {
+                let old_object = Rc::make_mut(&mut old.inner);
+                let new_object = Rc::try_unwrap(new.inner).unwrap_or_else(|rc| (*rc).clone());
+                old_object.extend(new_object);
+            }
+        } else {
+            *old = new;
+        }
+    }
+}
+
 impl<T: 'static + Clone> StripCode for Prototype<'_, T> {
     type Stripped = Prototype<'static, T>;
 
@@ -413,11 +427,11 @@ impl<T: 'static + Clone> StripCode for Prototype<'_, T> {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct StandardPrototypes<T> {
-    object_proto: Option<Object<'static, T>>,
-    array_proto: Option<Object<'static, T>>,
-    function_proto: Option<Object<'static, T>>,
-    prim_proto: Option<Object<'static, T>>,
-    bool_proto: Option<Object<'static, T>>,
+    object_proto: Option<Prototype<'static, T>>,
+    array_proto: Option<Prototype<'static, T>>,
+    function_proto: Option<Prototype<'static, T>>,
+    prim_proto: Option<Prototype<'static, T>>,
+    bool_proto: Option<Prototype<'static, T>>,
 }
 
 impl<T> Default for StandardPrototypes<T> {
@@ -439,36 +453,36 @@ impl<T> StandardPrototypes<T> {
     }
 
     /// Sets the object prototype.
-    pub fn with_object_proto(mut self, proto: Object<'static, T>) -> Self {
-        self.object_proto = Some(proto);
+    pub fn with_object_proto(mut self, proto: impl Into<Prototype<'static, T>>) -> Self {
+        self.object_proto = Some(proto.into());
         self
     }
 
     /// Sets the array / tuple prototype.
-    pub fn with_array_proto(mut self, proto: Object<'static, T>) -> Self {
-        self.array_proto = Some(proto);
+    pub fn with_array_proto(mut self, proto: impl Into<Prototype<'static, T>>) -> Self {
+        self.array_proto = Some(proto.into());
         self
     }
 
     /// Sets the function prototype.
-    pub fn with_function_proto(mut self, proto: Object<'static, T>) -> Self {
-        self.function_proto = Some(proto);
+    pub fn with_function_proto(mut self, proto: impl Into<Prototype<'static, T>>) -> Self {
+        self.function_proto = Some(proto.into());
         self
     }
 
     /// Sets the primitive value prototype.
-    pub fn with_primitive_proto(mut self, proto: Object<'static, T>) -> Self {
-        self.prim_proto = Some(proto);
+    pub fn with_primitive_proto(mut self, proto: impl Into<Prototype<'static, T>>) -> Self {
+        self.prim_proto = Some(proto.into());
         self
     }
 
     /// Sets the Boolean value prototype.
-    pub fn with_bool_proto(mut self, proto: Object<'static, T>) -> Self {
-        self.bool_proto = Some(proto);
+    pub fn with_bool_proto(mut self, proto: impl Into<Prototype<'static, T>>) -> Self {
+        self.bool_proto = Some(proto.into());
         self
     }
 
-    pub(crate) fn get(&self, value_type: ValueType) -> Option<&Object<'static, T>> {
+    pub(crate) fn get(&self, value_type: ValueType) -> Option<&Prototype<'static, T>> {
         match value_type {
             ValueType::Object => self.object_proto.as_ref(),
             ValueType::Tuple(_) | ValueType::Array => self.array_proto.as_ref(),
@@ -478,28 +492,15 @@ impl<T> StandardPrototypes<T> {
             _ => None,
         }
     }
-
-    fn merge_proto(
-        old_proto: &mut Option<Object<'static, T>>,
-        new_proto: Option<Object<'static, T>>,
-    ) {
-        if let Some(old_proto) = old_proto {
-            if let Some(new_proto) = new_proto {
-                old_proto.extend(new_proto);
-            }
-        } else {
-            *old_proto = new_proto;
-        }
-    }
 }
 
-impl<T> ops::AddAssign for StandardPrototypes<T> {
+impl<T: Clone> ops::AddAssign for StandardPrototypes<T> {
     fn add_assign(&mut self, rhs: Self) {
-        Self::merge_proto(&mut self.object_proto, rhs.object_proto);
-        Self::merge_proto(&mut self.array_proto, rhs.array_proto);
-        Self::merge_proto(&mut self.function_proto, rhs.function_proto);
-        Self::merge_proto(&mut self.prim_proto, rhs.prim_proto);
-        Self::merge_proto(&mut self.bool_proto, rhs.bool_proto);
+        Prototype::merge(&mut self.object_proto, rhs.object_proto);
+        Prototype::merge(&mut self.array_proto, rhs.array_proto);
+        Prototype::merge(&mut self.function_proto, rhs.function_proto);
+        Prototype::merge(&mut self.prim_proto, rhs.prim_proto);
+        Prototype::merge(&mut self.bool_proto, rhs.bool_proto);
     }
 }
 
@@ -542,8 +543,9 @@ mod tests {
             .with_object_proto(object_proto);
 
         prototypes += new_prototypes;
-        assert!(prototypes.object_proto.unwrap()["len"].is_function());
-        let array_proto = prototypes.array_proto.unwrap();
+        let object_proto = prototypes.object_proto.as_ref().unwrap().as_object();
+        assert!(object_proto["len"].is_function());
+        let array_proto = prototypes.array_proto.as_ref().unwrap().as_object();
         assert!(array_proto["len"].is_function());
         assert!(array_proto["fold"].is_function());
     }

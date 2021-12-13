@@ -627,11 +627,11 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
         };
 
         let proto = proto
-            .map(Prototype::as_object)
             .or_else(|| {
                 let ty = receiver.value_type();
                 standard_prototypes.and_then(|prototypes| prototypes.get(ty))
             })
+            .map(Prototype::as_object)
             .ok_or_else(|| ErrorKind::NoPrototype(receiver.value_type()))?;
 
         let field = proto.get(method_name).ok_or_else(|| ErrorKind::NoField {

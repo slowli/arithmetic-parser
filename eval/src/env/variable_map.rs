@@ -10,7 +10,7 @@ use core::{cmp::Ordering, fmt};
 
 use crate::{
     exec::{ExecutableModule, ModuleId, ModuleImports},
-    fns, Environment, Error, StandardPrototypes, Value,
+    fns, Environment, Error, Object, StandardPrototypes, Value,
 };
 
 /// Encapsulates read access to named variables and, optionally, [`StandardPrototypes`].
@@ -137,7 +137,7 @@ impl Prelude {
     {
         const ARRAY_FNS: &[&str] = &["map", "filter", "fold", "push", "merge"];
 
-        let array_proto = ARRAY_FNS
+        let array_proto: Object<_> = ARRAY_FNS
             .iter()
             .map(|&var_name| (var_name, self.get_variable(var_name).unwrap()))
             .collect();

@@ -126,7 +126,9 @@ impl<'a, T> Environment<'a, T> {
     pub(crate) fn prototypes(&self) -> &StandardPrototypes<T> {
         &self.prototypes
     }
+}
 
+impl<T: Clone> Environment<'_, T> {
     /// Inserts prototypes for standard types, [merging](StandardPrototypes#merging) them
     /// with the existing ones.
     pub fn insert_prototypes(&mut self, prototypes: StandardPrototypes<T>) -> &mut Self {

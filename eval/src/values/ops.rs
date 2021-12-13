@@ -6,7 +6,7 @@ use crate::{
     arith::OrdArithmetic,
     error::{AuxErrorInfo, Error, ErrorKind, TupleLenMismatchContext},
     exec::ModuleId,
-    Object, Tuple, Value,
+    Function, Object, Tuple, Value,
 };
 use arithmetic_parser::{BinaryOp, MaybeSpanned, Op, UnaryOp};
 
@@ -264,22 +264,13 @@ impl<'a, T> Value<'a, T> {
                     false
                 }
             }
-            (Self::Object(this), Self::Object(that)) => {
-                if this.len() == that.len() {
-                    for (field_name, this_elem) in this {
-                        let that_elem = match that.get(field_name) {
-                            Some(elem) => elem,
-                            None => return false,
-                        };
-                        if !this_elem.eq_by_arithmetic(that_elem, arithmetic) {
-                            return false;
-                        }
-                    }
-                    true
-                } else {
-                    false
-                }
-            }
+            (Self::Object(this), Self::Object(other)) => this.eq_by_arithmetic(other, arithmetic),
+            (
+                Self::Function(Function::Prototype(this)),
+                Self::Function(Function::Prototype(other)),
+            ) => this
+                .as_object()
+                .eq_by_arithmetic(other.as_object(), arithmetic),
             (Self::Function(this), Self::Function(other)) => this.is_same_function(other),
             (Self::Ref(this), Self::Ref(other)) => this == other,
             _ => false,
@@ -355,6 +346,25 @@ impl<'a, T> Value<'a, T> {
                 };
                 Err(Error::new(module_id, lhs, err))
             }
+        }
+    }
+}
+
+impl<T> Object<'_, T> {
+    fn eq_by_arithmetic(&self, other: &Self, arithmetic: &dyn OrdArithmetic<T>) -> bool {
+        if self.len() == other.len() {
+            for (field_name, this_elem) in self {
+                let that_elem = match other.get(field_name) {
+                    Some(elem) => elem,
+                    None => return false,
+                };
+                if !this_elem.eq_by_arithmetic(that_elem, arithmetic) {
+                    return false;
+                }
+            }
+            true
+        } else {
+            false
         }
     }
 }

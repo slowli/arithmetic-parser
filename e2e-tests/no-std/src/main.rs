@@ -19,8 +19,9 @@ use alloc::vec::Vec;
 use core::cell::RefCell;
 
 use arithmetic_eval::{
-    arith::CheckedArithmetic, fns, Assertions, CallContext, EvalResult, ExecutableModule, NativeFn,
-    Prelude, SpannedValue, Value,
+    arith::CheckedArithmetic,
+    env::{Assertions, Prelude},
+    fns, CallContext, Environment, EvalResult, ExecutableModule, NativeFn, SpannedValue, Value,
 };
 use arithmetic_parser::{
     grammars::{NumGrammar, Parse, Untyped},
@@ -33,13 +34,13 @@ static ALLOCATOR: CortexMHeap = CortexMHeap::empty();
 const HEAP_SIZE: usize = 49_152;
 
 const MINMAX_SCRIPT: &str = r#"
-    minmax = |xs| xs.fold(#{ min: MAX_VALUE, max: MIN_VALUE }, |acc, x| #{
+    minmax = |xs| fold(xs, #{ min: MAX_VALUE, max: MIN_VALUE }, |acc, x| #{
          min: if(x < acc.min, x, acc.min),
          max: if(x > acc.max, x, acc.max),
     });
     xs = dbg(array(10, |_| rand_num()));
-    { min, max } = dbg(xs.minmax());
-    assert(xs.fold(true, |acc, x| acc && x >= min && x <= max));
+    { min, max } = dbg(minmax(xs));
+    assert(fold(xs, true, |acc, x| acc && x >= min && x <= max));
 "#;
 
 /// Analogue of `arithmetic_eval::fns::Dbg` that writes to the semihosting interface.
@@ -75,7 +76,10 @@ impl NativeFn<i32> for Dbg {
 }
 
 fn main_inner() {
-    let minmax = Untyped::<NumGrammar<i32>>::parse_statements(MINMAX_SCRIPT).unwrap();
+    let module = {
+        let block = Untyped::<NumGrammar<i32>>::parse_statements(MINMAX_SCRIPT).unwrap();
+        ExecutableModule::new("minmax", &block).unwrap()
+    };
 
     let epoch_seconds = unsafe { syscall!(TIME) };
     // Using a timestamp as an RNG seed is unsecure and done for simplicity only.
@@ -84,21 +88,19 @@ fn main_inner() {
     let rng = RefCell::new(rng);
     let rand_num = Value::wrapped_fn(move || rng.borrow_mut().next_u32() as i32);
 
-    let minmax = ExecutableModule::builder("minmax", &minmax)
-        .unwrap()
-        .with_imports_from(&Prelude)
-        .with_imports_from(&Assertions)
-        .with_import("dbg", Value::native_fn(Dbg))
-        .with_import("array", Value::native_fn(fns::Array))
-        .with_import("rand_num", rand_num)
-        .with_import("MIN_VALUE", Value::Prim(i32::MIN))
-        .with_import("MAX_VALUE", Value::Prim(i32::MAX))
-        .set_imports(|_| Value::void());
+    let mut env = Environment::with_arithmetic(<CheckedArithmetic>::new());
+    let prelude = Prelude
+        .iter()
+        .chain(Assertions.iter())
+        .filter(|(name, _)| module.is_import(name));
+    env.extend(prelude);
+    env.insert_native_fn("dbg", Dbg)
+        .insert_native_fn("array", fns::Array)
+        .insert("rand_num", rand_num)
+        .insert("MIN_VALUE", Value::Prim(i32::MIN))
+        .insert("MAX_VALUE", Value::Prim(i32::MAX));
 
-    minmax
-        .with_arithmetic(&<CheckedArithmetic>::new())
-        .run()
-        .unwrap();
+    module.with_env(&env).unwrap().run().unwrap();
 }
 
 #[entry]

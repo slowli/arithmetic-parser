@@ -9,7 +9,7 @@ use core::{
 };
 
 use crate::{
-    alloc::Rc, error::AuxErrorInfo, CallContext, ErrorKind, EvalResult, Function, SpannedValue,
+    alloc::{Rc, String, Vec}, error::AuxErrorInfo, CallContext, ErrorKind, EvalResult, Function, SpannedValue,
     Value, ValueType,
 };
 use arithmetic_parser::StripCode;

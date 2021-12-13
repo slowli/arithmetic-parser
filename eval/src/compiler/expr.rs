@@ -182,7 +182,7 @@ impl Compiler {
         receiver: &SpannedExpr<'a, T>,
         args: &[SpannedExpr<'a, T>],
     ) -> Result<Atom<T::Lit>, Error<'a>> {
-        let name_string = String::from(*name.fragment());
+        let name_string = (*name.fragment()).to_owned();
         let name: MaybeSpanned<'_, _> = name.copy_with_extra(name_string).into();
         let receiver = self.compile_expr(executable, receiver)?;
         let args = args

@@ -3,7 +3,7 @@
 use hashbrown::HashMap;
 
 use crate::{
-    alloc::{Box, String, ToOwned},
+    alloc::{Box, String, ToOwned, Vec},
     exec::{
         Atom, Command, CompiledExpr, Executable, ExecutableModule, FieldName, ModuleId, Registers,
     },

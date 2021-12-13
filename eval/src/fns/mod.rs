@@ -30,7 +30,7 @@ use once_cell::unsync::OnceCell;
 use core::{cmp::Ordering, fmt};
 
 use crate::{
-    alloc::Vec, error::AuxErrorInfo, CallContext, Error, ErrorKind, EvalResult, Function, NativeFn,
+    alloc::{vec, Vec}, error::AuxErrorInfo, CallContext, Error, ErrorKind, EvalResult, Function, NativeFn,
     Object, OpaqueRef, Prototype, SpannedValue, Value,
 };
 use arithmetic_parser::StripCode;

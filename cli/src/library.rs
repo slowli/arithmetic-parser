@@ -6,8 +6,12 @@ use num_traits::{CheckedRem, Num, WrappingNeg};
 use std::{fmt, ops};
 
 use arithmetic_eval::{
-    env::{Assertions, Comparisons, Prelude, VariableMap},
-    fns, Environment, Number, StandardPrototypes, Value,
+    arith::{
+        Arithmetic, ArithmeticExt, CheckedArithmetic, ModularArithmetic, OrdArithmetic,
+        StdArithmetic, WrappingArithmetic,
+    },
+    env::{Assertions, Comparisons, Prelude},
+    fns, Environment, Number, Object, StandardPrototypes, Value,
 };
 use arithmetic_parser::grammars::NumLiteral;
 use arithmetic_typing::{arith::Num as NumType, defs, Function, Type, TypeEnvironment};
@@ -38,13 +42,6 @@ pub struct StdLibrary<T: 'static> {
     constants: &'static [(&'static str, T)],
     unary: &'static [(&'static str, fn(T) -> T)],
     binary: &'static [(&'static str, fn(T, T) -> T)],
-}
-
-impl<'a, T: ReplLiteral> VariableMap<'a, T> for StdLibrary<T> {
-    fn get_variable(&self, name: &str) -> Option<Value<'a, T>> {
-        self.variables()
-            .find_map(|(var_name, value)| if var_name == name { Some(value) } else { None })
-    }
 }
 
 impl<T: ReplLiteral> StdLibrary<T> {
@@ -115,18 +112,33 @@ declare_int_functions!(i64);
 declare_int_functions!(u128);
 declare_int_functions!(i128);
 
+fn int_arithmetic<T>(wrapping: bool) -> Box<dyn OrdArithmetic<T>>
+where
+    WrappingArithmetic: OrdArithmetic<T>,
+    CheckedArithmetic: OrdArithmetic<T>,
+{
+    if wrapping {
+        Box::new(WrappingArithmetic)
+    } else {
+        Box::new(CheckedArithmetic::new())
+    }
+}
+
 pub fn create_int_env<T>(wrapping: bool) -> (Environment<'static, T>, TypeEnvironment)
 where
     T: ReplLiteral + ops::Rem + WrappingNeg + CheckedRem,
+    WrappingArithmetic: OrdArithmetic<T>,
+    CheckedArithmetic: OrdArithmetic<T>,
 {
     const REM_ERROR_MSG: &str = "Cannot calculate remainder for a divisor of zero";
 
-    let mut env: Environment<'static, T> = Prelude
+    let mut env = Environment::<T>::with_arithmetic(int_arithmetic(wrapping));
+    let vars = Prelude
         .iter()
         .chain(Assertions.iter())
         .chain(Comparisons.iter())
-        .chain(T::STD_LIB.variables())
-        .collect();
+        .chain(T::STD_LIB.variables());
+    env.extend(vars);
 
     let rem = if wrapping {
         Value::wrapped_fn(|x: T, y: T| {
@@ -142,11 +154,12 @@ where
     } else {
         Value::wrapped_fn(|x: T, y: T| x.checked_rem(&y).ok_or_else(|| REM_ERROR_MSG.to_owned()))
     };
-    let primitive_proto = T::STD_LIB
+    let primitive_proto: Object<_> = T::STD_LIB
         .variables()
         .filter(|(_, value)| value.is_function())
-        .chain(vec![("rem", rem.clone())]);
-    let prototypes = StandardPrototypes::new().with_primitive_proto(primitive_proto.collect());
+        .chain(vec![("rem", rem.clone())])
+        .collect();
+    let prototypes = StandardPrototypes::new().with_primitive_proto(primitive_proto);
 
     env.insert_native_fn("array", fns::Array)
         .insert("rem", rem)
@@ -167,7 +180,9 @@ where
 }
 
 pub fn create_modular_env(modulus: u64) -> (Environment<'static, u64>, TypeEnvironment) {
-    let mut env: Environment<'_, u64> = Prelude.iter().chain(Assertions.iter()).collect();
+    let arith = ModularArithmetic::new(modulus).without_comparisons();
+    let mut env = Environment::<u64>::with_arithmetic(arith);
+    env.extend(Prelude.iter().chain(Assertions.iter()));
     env.insert("MAX_VALUE", Value::Prim(modulus - 1))
         .insert_prototypes(Prelude.prototypes());
 
@@ -225,20 +240,24 @@ macro_rules! declare_real_functions {
 declare_real_functions!(f32);
 declare_real_functions!(f64);
 
-pub fn create_float_env<T: ReplLiteral>(
-    tolerance: T,
-) -> (Environment<'static, T>, TypeEnvironment) {
-    let mut env: Environment<'static, T> = Prelude
+pub fn create_float_env<T>(tolerance: T) -> (Environment<'static, T>, TypeEnvironment)
+where
+    T: ReplLiteral,
+    StdArithmetic: OrdArithmetic<T>,
+{
+    let mut env = Environment::<T>::new();
+    let vars = Prelude
         .iter()
         .chain(Assertions.iter())
         .chain(Comparisons.iter())
-        .chain(T::STD_LIB.variables())
-        .collect();
+        .chain(T::STD_LIB.variables());
+    env.extend(vars);
 
-    let primitive_proto = T::STD_LIB
+    let primitive_proto: Object<_> = T::STD_LIB
         .variables()
-        .filter(|(_, value)| value.is_function());
-    let prototypes = StandardPrototypes::new().with_primitive_proto(primitive_proto.collect());
+        .filter(|(_, value)| value.is_function())
+        .collect();
+    let prototypes = StandardPrototypes::new().with_primitive_proto(primitive_proto);
 
     env.insert_native_fn("array", fns::Array)
         .insert_native_fn("assert_close", fns::AssertClose::new(tolerance))
@@ -295,17 +314,24 @@ macro_rules! declare_complex_functions {
 declare_complex_functions!(Complex32, f32);
 declare_complex_functions!(Complex64, f64);
 
-pub fn create_complex_env<T: ReplLiteral>() -> (Environment<'static, T>, TypeEnvironment) {
-    let mut env: Environment<'_, T> = Prelude
+pub fn create_complex_env<T>() -> (Environment<'static, T>, TypeEnvironment)
+where
+    T: ReplLiteral,
+    StdArithmetic: Arithmetic<T>,
+{
+    let arith = StdArithmetic.without_comparisons();
+    let mut env = Environment::<T>::with_arithmetic(arith);
+    let vars = Prelude
         .iter()
         .chain(Assertions.iter())
-        .chain(T::STD_LIB.variables())
-        .collect();
+        .chain(T::STD_LIB.variables());
+    env.extend(vars);
 
-    let primitive_proto = T::STD_LIB
+    let primitive_proto: Object<_> = T::STD_LIB
         .variables()
-        .filter(|(_, value)| value.is_function());
-    let prototypes = StandardPrototypes::new().with_primitive_proto(primitive_proto.collect());
+        .filter(|(_, value)| value.is_function())
+        .collect();
+    let prototypes = StandardPrototypes::new().with_primitive_proto(primitive_proto);
     env.insert_prototypes(Prelude.prototypes())
         .insert_prototypes(prototypes);
 

@@ -5,7 +5,7 @@ use rustyline::{error::ReadlineError, Editor};
 
 use std::io;
 
-use arithmetic_eval::{arith::OrdArithmetic, Environment};
+use arithmetic_eval::Environment;
 use arithmetic_typing::TypeEnvironment;
 
 use crate::{
@@ -14,13 +14,12 @@ use crate::{
 };
 
 pub fn repl<T: ReplLiteral>(
-    arithmetic: Box<dyn OrdArithmetic<T>>,
     env: Environment<'static, T>,
     type_env: Option<TypeEnvironment>,
     color_choice: ColorChoice,
 ) -> io::Result<()> {
     let mut rl = Editor::<()>::new();
-    let mut env = Env::new(arithmetic, env, type_env, color_choice);
+    let mut env = Env::new(env, type_env, color_choice);
     env.print_greeting()?;
 
     let mut snippet = String::new();

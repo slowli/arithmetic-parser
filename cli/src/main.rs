@@ -11,13 +11,7 @@ use std::{
     str::FromStr,
 };
 
-use arithmetic_eval::{
-    arith::{
-        ArithmeticExt, CheckedArithmetic, ModularArithmetic, OrdArithmetic, StdArithmetic,
-        WrappingArithmetic,
-    },
-    Environment,
-};
+use arithmetic_eval::Environment;
 use arithmetic_typing::TypeEnvironment;
 
 mod common;
@@ -213,77 +207,35 @@ impl Args {
 }
 
 impl EvalArgs {
-    fn int_arithmetic<T>(wrapping: bool) -> Box<dyn OrdArithmetic<T>>
-    where
-        WrappingArithmetic: OrdArithmetic<T>,
-        CheckedArithmetic: OrdArithmetic<T>,
-    {
-        if wrapping {
-            Box::new(WrappingArithmetic)
-        } else {
-            Box::new(CheckedArithmetic::new())
-        }
-    }
-
     fn run(self) -> io::Result<()> {
         let wrapping = self.wrapping;
         match self.arithmetic {
-            ArithmeticType::U64 => self.run_inner(
-                Self::int_arithmetic(wrapping),
-                create_int_env::<u64>(wrapping),
-            ),
-            ArithmeticType::I64 => self.run_inner(
-                Self::int_arithmetic(wrapping),
-                create_int_env::<i64>(wrapping),
-            ),
-            ArithmeticType::U128 => self.run_inner(
-                Self::int_arithmetic(wrapping),
-                create_int_env::<u128>(wrapping),
-            ),
-            ArithmeticType::I128 => self.run_inner(
-                Self::int_arithmetic(wrapping),
-                create_int_env::<i128>(wrapping),
-            ),
-
-            ArithmeticType::Modular64(modulus) => {
-                let arithmetic = ModularArithmetic::new(modulus).without_comparisons();
-                self.run_inner(Box::new(arithmetic), create_modular_env(modulus))
-            }
-
-            ArithmeticType::F32 => {
-                self.run_inner(Box::new(StdArithmetic), create_float_env::<f32>(1e-5))
-            }
-            ArithmeticType::F64 => {
-                self.run_inner(Box::new(StdArithmetic), create_float_env::<f64>(1e-5))
-            }
-            ArithmeticType::Complex32 => self.run_inner(
-                Box::new(StdArithmetic.without_comparisons()),
-                create_complex_env::<Complex32>(),
-            ),
-            ArithmeticType::Complex64 => self.run_inner(
-                Box::new(StdArithmetic.without_comparisons()),
-                create_complex_env::<Complex64>(),
-            ),
+            ArithmeticType::U64 => self.run_inner(create_int_env::<u64>(wrapping)),
+            ArithmeticType::I64 => self.run_inner(create_int_env::<i64>(wrapping)),
+            ArithmeticType::U128 => self.run_inner(create_int_env::<u128>(wrapping)),
+            ArithmeticType::I128 => self.run_inner(create_int_env::<i128>(wrapping)),
+            ArithmeticType::Modular64(modulus) => self.run_inner(create_modular_env(modulus)),
+            ArithmeticType::F32 => self.run_inner(create_float_env::<f32>(1e-5)),
+            ArithmeticType::F64 => self.run_inner(create_float_env::<f64>(1e-5)),
+            ArithmeticType::Complex32 => self.run_inner(create_complex_env::<Complex32>()),
+            ArithmeticType::Complex64 => self.run_inner(create_complex_env::<Complex64>()),
         }
     }
 
     fn run_inner<T: ReplLiteral>(
         self,
-        arithmetic: Box<dyn OrdArithmetic<T>>,
         (env, type_env): (Environment<'static, T>, TypeEnvironment),
     ) -> io::Result<()> {
         let type_env = if self.types { Some(type_env) } else { None };
-
         if self.interactive {
-            repl(arithmetic, env, type_env, Args::color_choice(self.color))
+            repl(env, type_env, Args::color_choice(self.color))
         } else {
-            self.run_command(arithmetic, env, type_env)
+            self.run_command(env, type_env)
         }
     }
 
     fn run_command<T: ReplLiteral>(
         self,
-        arithmetic: Box<dyn OrdArithmetic<T>>,
         env: Environment<'static, T>,
         type_env: Option<TypeEnvironment>,
     ) -> io::Result<()> {
@@ -295,7 +247,7 @@ impl EvalArgs {
                 buffer
             }
         };
-        let mut env = Env::new(arithmetic, env, type_env, Args::color_choice(self.color));
+        let mut env = Env::new(env, type_env, Args::color_choice(self.color));
 
         match env.parse_and_eval(&command, false)? {
             ParseAndEvalResult::Ok(()) => Ok(()),

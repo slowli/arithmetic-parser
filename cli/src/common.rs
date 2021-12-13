@@ -15,11 +15,9 @@ use std::{
 };
 
 use arithmetic_eval::{
-    arith::OrdArithmetic,
-    env::VariableMap,
     error::{BacktraceElement, CodeInModule, Error as EvalError, ErrorWithBacktrace},
     exec::{IndexedId, ModuleId},
-    Environment, Function, Object, Value,
+    Environment, ExecutableModule, Function, Object, Value,
 };
 use arithmetic_parser::{
     grammars::{Grammar, NumGrammar, Parse},
@@ -457,12 +455,10 @@ pub struct Env<T> {
     original_type_env: Option<TypeEnvironment>,
     env: Environment<'static, T>,
     type_env: Option<TypeEnvironment>,
-    arithmetic: Box<dyn OrdArithmetic<T>>,
 }
 
 impl<T: ReplLiteral> Env<T> {
     pub fn new(
-        arithmetic: Box<dyn OrdArithmetic<T>>,
         env: Environment<'static, T>,
         type_env: Option<TypeEnvironment>,
         color_choice: ColorChoice,
@@ -473,7 +469,6 @@ impl<T: ReplLiteral> Env<T> {
             original_type_env: type_env.clone(),
             env,
             type_env,
-            arithmetic,
         }
     }
 
@@ -591,8 +586,9 @@ impl<T: ReplLiteral> Env<T> {
         G: Grammar<'a, Lit = T>,
     {
         let module_id = self.reporter.code_map.latest_module_id();
-        let module = match self.env.compile_module(module_id, block) {
-            Ok(builder) => builder,
+        let module = ExecutableModule::new(module_id, block).map(ExecutableModule::strip_code);
+        let module = match module {
+            Ok(module) => module,
             Err(err) => {
                 self.reporter
                     .report_error(&self.reporter.create_diagnostic(&err))?;
@@ -600,11 +596,17 @@ impl<T: ReplLiteral> Env<T> {
             }
         };
 
-        let value = match module
-            .strip_code()
-            .with_arithmetic(self.arithmetic.as_ref())
-            .run_in_env(&mut self.env)
-        {
+        let module = module.with_mutable_env(&mut self.env);
+        let module = match module {
+            Ok(module) => module,
+            Err(err) => {
+                self.reporter
+                    .report_error(&self.reporter.create_diagnostic(&err))?;
+                return Ok(ParseAndEvalResult::Errored);
+            }
+        };
+
+        let value = match module.run() {
             Ok(value) => value,
             Err(err) => {
                 self.reporter.report_eval_error(&err)?;

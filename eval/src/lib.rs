@@ -5,7 +5,7 @@
 //! 1. A `Block` of statements is *compiled* into an [`ExecutableModule`]. Internally,
 //!   compilation processes the AST of the block and transforms it into a non-recusrive form.
 //!   An [`ExecutableModule`] may require *imports* (such as [`NativeFn`]s or constant [`Value`]s),
-//!   which can be taken from a [`VariableMap`] (e.g., an [`Environment`]).
+//!   which can be taken from an [`Environment`].
 //! 2. [`ExecutableModule`] can then be executed, for the return value and/or for the
 //!   changes at the top-level variable scope. There are two major variables influencing
 //!   the execution outcome. An [arithmetic](crate::arith) is used to define arithmetic ops
@@ -106,7 +106,6 @@
 //!
 //! [`Arithmetic`]: crate::arith::Arithmetic
 //! [`OrdArithmetic`]: crate::arith::OrdArithmetic
-//! [`VariableMap`]: crate::env::VariableMap
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
 //! [`num-complex`]: https://crates.io/crates/num-complex
 //! [`num-bigint`]: https://crates.io/crates/num-bigint
@@ -121,7 +120,7 @@
 //! ```
 //! use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 //! use arithmetic_eval::{
-//!     env::{Assertions, Comparisons, Environment, Prelude, VariableMap}, Value,
+//!     env::{Assertions, Comparisons, Environment, Prelude}, ExecutableModule, Value,
 //! };
 //!
 //! # fn main() -> anyhow::Result<()> {
@@ -134,17 +133,18 @@
 //!     M
 //! "#;
 //! let program = Untyped::<F32Grammar>::parse_statements(program)?;
+//! // To execute statements, we first compile them into a module.
+//! let module = ExecutableModule::new("test", &program)?;
 //!
+//! // Then, we construct an environment to run the module.
 //! let mut env = Environment::new();
 //! // Add some native functions to the environment.
 //! env.extend(Prelude.iter());
 //! env.extend(Assertions.iter());
 //! env.extend(Comparisons.iter());
 //!
-//! // To execute statements, we first compile them into a module.
-//! let module = env.compile_module("test", &program)?;
 //! // Then, the module can be run.
-//! assert_eq!(module.run()?, Value::Prim(9.0));
+//! assert_eq!(module.with_env(&env)?.run()?, Value::Prim(9.0));
 //! # Ok(())
 //! # }
 //! ```
@@ -153,7 +153,7 @@
 //!
 //! ```
 //! # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-//! # use arithmetic_eval::{env::{Assertions, Environment, Prelude, VariableMap}, Value};
+//! # use arithmetic_eval::{env::{Assertions, Environment, Prelude}, ExecutableModule, Value};
 //! # fn main() -> anyhow::Result<()> {
 //! let program = r#"
 //!     minmax = |...xs| xs.fold(#{ min: INF, max: -INF }, |acc, x| #{
@@ -164,13 +164,13 @@
 //!     assert_eq(minmax(5, -4, 6, 9, 1), #{ min: -4, max: 9 });
 //! "#;
 //! let program = Untyped::<F32Grammar>::parse_statements(program)?;
+//! let module = ExecutableModule::new("minmax", &program)?;
 //!
 //! let mut env = Environment::new();
 //! env.extend(Prelude.iter().chain(Assertions.iter()));
 //! env.insert("INF", Value::Prim(f32::INFINITY))
 //!     .insert_prototypes(Prelude.prototypes());
-//! let module = env.compile_module("minmax", &program)?;
-//! module.run()?;
+//! module.with_env(&env)?.run()?;
 //! # Ok(())
 //! # }
 //! ```

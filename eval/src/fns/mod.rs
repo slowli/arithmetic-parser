@@ -131,7 +131,7 @@ fn extract_fn<'a, T, A>(
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     // Finds a minimum number in an array.
@@ -139,13 +139,13 @@ fn extract_fn<'a, T, A>(
 ///     extended_min(2, -3, 7, 1, 3) == -3
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_min", &program)?;
 ///
-/// let module = Environment::new()
-///     .insert("INFINITY", Value::Prim(f32::INFINITY))
+/// let mut env = Environment::new();
+/// env.insert("INFINITY", Value::Prim(f32::INFINITY))
 ///     .insert_native_fn("fold", fns::Fold)
-///     .insert_native_fn("min", fns::Compare::Min)
-///     .compile_module("test_min", &program)?;
-/// assert_eq!(module.run()?, Value::Bool(true));
+///     .insert_native_fn("min", fns::Compare::Min);
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
 /// # Ok(())
 /// # }
 /// ```
@@ -154,18 +154,19 @@ fn extract_fn<'a, T, A>(
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, env::{Comparisons, VariableMap}, Environment, Value};
+/// # use arithmetic_eval::{fns, env::Comparisons, Environment, ExecutableModule, Value};
 /// # use core::iter::FromIterator;
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     map((1, -7, 0, 2), |x| cmp(x, 0)) == (GREATER, LESS, EQUAL, GREATER)
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_cmp", &program)?;
 ///
-/// let module = Environment::from_iter(Comparisons.iter())
-///     .insert_native_fn("map", fns::Map)
-///     .compile_module("test_cmp", &program)?;
-/// assert_eq!(module.run()?, Value::Bool(true));
+/// let mut env = Environment::new();
+/// env.extend(Comparisons.iter());
+/// env.insert_native_fn("map", fns::Map);
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
 /// # Ok(())
 /// # }
 /// ```
@@ -235,7 +236,7 @@ impl<T> NativeFn<T> for Compare {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     Point = impl(#{
@@ -245,13 +246,13 @@ impl<T> NativeFn<T> for Compare {
 ///     assert_close(pt.len(), 5);
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_impl", &program)?;
 ///
-/// Environment::new()
-///     .insert_wrapped_fn("sqrt", f32::sqrt)
+/// let mut env = Environment::new();
+/// env.insert_wrapped_fn("sqrt", f32::sqrt)
 ///     .insert_native_fn("impl", fns::CreatePrototype)
-///     .insert_native_fn("assert_close", fns::AssertClose::new(1e-4))
-///     .compile_module("test_impl", &program)?
-///     .run()?;
+///     .insert_native_fn("assert_close", fns::AssertClose::new(1e-4));
+/// module.with_env(&env)?.run()?;
 /// # Ok(())
 /// # }
 /// ```
@@ -260,7 +261,7 @@ impl<T> NativeFn<T> for Compare {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     PointStatics = impl(#{
@@ -276,13 +277,13 @@ impl<T> NativeFn<T> for Compare {
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 /// // Testing snipped (virtually identical to the previous case)
-/// # Environment::new()
-/// #   .insert_wrapped_fn("sqrt", f32::sqrt)
-/// #   .insert_native_fn("impl", fns::CreatePrototype)
-/// #   .insert_native_fn("assert_eq", fns::AssertEq)
-/// #   .insert_native_fn("assert_close", fns::AssertClose::new(1e-4))
-/// #   .compile_module("test_impl", &program)?
-/// #   .run()?;
+/// # let module = ExecutableModule::new("test_impl", &program)?;
+/// # let mut env = Environment::new();
+/// # env.insert_wrapped_fn("sqrt", f32::sqrt)
+/// #     .insert_native_fn("impl", fns::CreatePrototype)
+/// #     .insert_native_fn("assert_eq", fns::AssertEq)
+/// #     .insert_native_fn("assert_close", fns::AssertClose::new(1e-4));
+/// # module.with_env(&env)?.run()?;
 /// # Ok(())
 /// # }
 /// ```
@@ -311,7 +312,7 @@ impl<T> NativeFn<T> for CreatePrototype {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, env::{Assertions, VariableMap}};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value, env::Assertions};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     Type = impl(#{ print: dbg });
@@ -321,13 +322,14 @@ impl<T> NativeFn<T> for CreatePrototype {
 ///     assert_eq(prototype(7), prototype(42));
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_prototype", &program)?;
 ///
-/// Assertions.iter().collect::<Environment<f32>>()
-///     .insert_native_fn("dbg", fns::Dbg)
+/// let mut env = Environment::new();
+/// env.extend(Assertions.iter());
+/// env.insert_native_fn("dbg", fns::Dbg)
 ///     .insert_native_fn("impl", fns::CreatePrototype)
-///     .insert_native_fn("prototype", fns::GetPrototype)
-///     .compile_module("test_impl", &program)?
-///     .run()?;
+///     .insert_native_fn("prototype", fns::GetPrototype);
+/// module.with_env(&env)?.run()?;
 /// # Ok(())
 /// # }
 /// ```
@@ -361,7 +363,7 @@ impl<T> NativeFn<T> for GetPrototype {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     Stack = defer(|Self| impl(#{
@@ -372,14 +374,14 @@ impl<T> NativeFn<T> for GetPrototype {
 ///     assert_eq(stack, Stack((1, 2, 3, 4)));
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_defer", &program)?;
 ///
-/// Environment::new()
-///     .insert_native_fn("defer", fns::Defer)
+/// let mut env = Environment::new();
+/// env.insert_native_fn("defer", fns::Defer)
 ///     .insert_native_fn("impl", fns::CreatePrototype)
 ///     .insert_native_fn("push", fns::Push)
-///     .insert_native_fn("assert_eq", fns::AssertEq)
-///     .compile_module("test_defer", &program)?
-///     .run()?;
+///     .insert_native_fn("assert_eq", fns::AssertEq);
+/// module.with_env(&env)?.run()?;
 /// # Ok(())
 /// # }
 /// ```

@@ -13,15 +13,15 @@ use arithmetic_parser::CodeFragment;
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = "dbg(1 + 2) > 2.5";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = Environment::new()
-///     .insert_native_fn("dbg", fns::Dbg)
-///     .compile_module("test_assert", &program)?;
+/// let module = ExecutableModule::new("test_dbg", &program)?;
 ///
-/// let value = module.run()?;
+/// let mut env = Environment::new();
+/// env.insert_native_fn("dbg", fns::Dbg);
+/// let value = module.with_env(&env)?.run()?;
 /// // Should output `[test_assert:1:5] 1 + 2 = 3` to stderr.
 /// assert_eq!(value, Value::Bool(true));
 /// # Ok(())

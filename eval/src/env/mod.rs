@@ -26,11 +26,10 @@ use crate::{
 /// use arithmetic_eval::{env::{Comparisons, Prelude}, Environment, Value};
 ///
 /// // Load environment from the standard containers.
-/// let mut env: Environment<'_, f64> = Prelude.iter()
-///     .chain(Comparisons.iter())
-///     // Add a custom variable for a good measure.
-///     .chain(vec![("x", Value::Prim(1.0))])
-///     .collect();
+/// let mut env = Environment::<f64>::new();
+/// env.extend(Prelude.iter().chain(Comparisons.iter()));
+/// // Add a custom variable for a good measure.
+/// env.insert("x", Value::Prim(1.0));
 ///
 /// assert_eq!(env["true"], Value::Bool(true));
 /// assert_eq!(env["x"], Value::Prim(1.0));
@@ -39,9 +38,10 @@ use crate::{
 /// }
 ///
 /// // It's possible to base an environment on other env, as well.
-/// let other_env: Environment<'_, _> = env.into_iter()
-///     .filter(|(_, val)| val.is_function())
-///     .collect();
+/// let mut other_env = Environment::new();
+/// other_env.extend(
+///     env.into_iter().filter(|(_, val)| val.is_function()),
+/// );
 /// assert!(other_env.get("x").is_none());
 /// ```
 #[derive(Debug)]

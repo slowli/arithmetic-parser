@@ -24,7 +24,7 @@ use arithmetic_parser::CodeFragment;
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, ErrorKind, env::VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ErrorKind, ExecutableModule};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
@@ -32,11 +32,12 @@ use arithmetic_parser::CodeFragment;
 ///     assert(3^2 > 10); // this one will fail
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = Environment::new()
-///     .insert_native_fn("assert", fns::Assert)
-///     .compile_module("test_assert", &program)?;
+/// let module = ExecutableModule::new("test_assert", &program)?;
 ///
-/// let err = module.run().unwrap_err();
+/// let mut env = Environment::new();
+/// env.insert_native_fn("assert", fns::Assert);
+///
+/// let err = module.with_env(&env)?.run().unwrap_err();
 /// assert_eq!(*err.source().main_span().code().fragment(), "assert(3^2 > 10)");
 /// assert_matches!(
 ///     err.source().kind(),
@@ -101,7 +102,7 @@ fn create_error_with_values<'a, T: fmt::Display>(
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, ErrorKind, env::VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ErrorKind, ExecutableModule};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
@@ -109,11 +110,12 @@ fn create_error_with_values<'a, T: fmt::Display>(
 ///     assert_eq(3^2, 10); // this one will fail
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = Environment::new()
-///     .insert_native_fn("assert_eq", fns::AssertEq)
-///     .compile_module("test_assert", &program)?;
+/// let module = ExecutableModule::new("test_assert", &program)?;
 ///
-/// let err = module.run().unwrap_err();
+/// let mut env = Environment::new();
+/// env.insert_native_fn("assert_eq", fns::AssertEq);
+///
+/// let err = module.with_env(&env)?.run().unwrap_err();
 /// assert_eq!(*err.source().main_span().code().fragment(), "assert_eq(3^2, 10)");
 /// assert_matches!(
 ///     err.source().kind(),
@@ -169,7 +171,7 @@ impl<T: fmt::Display> NativeFn<T> for AssertEq {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, env::VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
@@ -177,12 +179,13 @@ impl<T: fmt::Display> NativeFn<T> for AssertEq {
 ///     assert_close(sqrt(10), 3); // this one should fail
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = Environment::new()
-///     .insert_native_fn("assert_close", fns::AssertClose::new(1e-4))
-///     .insert_wrapped_fn("sqrt", f32::sqrt)
-///     .compile_module("test_assert", &program)?;
+/// let module = ExecutableModule::new("test_assert", &program)?;
 ///
-/// let err = module.run().unwrap_err();
+/// let mut env = Environment::new();
+/// env.insert_native_fn("assert_close", fns::AssertClose::new(1e-4))
+///     .insert_wrapped_fn("sqrt", f32::sqrt);
+///
+/// let err = module.with_env(&env)?.run().unwrap_err();
 /// assert_eq!(
 ///     *err.source().main_span().code().fragment(),
 ///     "assert_close(sqrt(10), 3)"
@@ -270,7 +273,7 @@ impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, env::VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
@@ -279,11 +282,12 @@ impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
 ///     assert_fails(|| obj.x); // fail: function executes successfully
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = Environment::new()
-///     .insert_native_fn("assert_fails", fns::AssertFails::default())
-///     .compile_module("test_assert", &program)?;
+/// let module = ExecutableModule::new("test_assert", &program)?;
 ///
-/// let err = module.run().unwrap_err();
+/// let mut env = Environment::new();
+/// env.insert_native_fn("assert_fails", fns::AssertFails::default());
+///
+/// let err = module.with_env(&env)?.run().unwrap_err();
 /// assert_eq!(
 ///     *err.source().main_span().code().fragment(),
 ///     "assert_fails(|| obj.x)"
@@ -296,7 +300,7 @@ impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{ErrorKind, fns, Environment, env::VariableMap};
+/// # use arithmetic_eval::{ErrorKind, fns, Environment, ExecutableModule};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
 /// let assert_fails = fns::AssertFails::new(|err| {
@@ -308,11 +312,12 @@ impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
 ///     assert_fails(assert_fails); // fail: arg len mismatch
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = Environment::new()
-///     .insert_native_fn("assert_fails", assert_fails)
-///     .compile_module("test_assert", &program)?;
+/// let module = ExecutableModule::new("test_assert", &program)?;
 ///
-/// let err = module.run().unwrap_err();
+/// let mut env = Environment::new();
+/// env.insert_native_fn("assert_fails", assert_fails);
+///
+/// let err = module.with_env(&env)?.run().unwrap_err();
 /// assert_eq!(
 ///     *err.source().main_span().code().fragment(),
 ///     "assert_fails(assert_fails)"

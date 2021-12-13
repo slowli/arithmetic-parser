@@ -1,4 +1,4 @@
-//! `VariableMap` trait and implementations.
+//! Standard collections of variables.
 
 #![allow(clippy::unused_self)] // FIXME: remove
 

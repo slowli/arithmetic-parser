@@ -25,15 +25,15 @@ use crate::{
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
-/// let program = r#"array(3, |i| 2 * i + 1) == (1, 3, 5)"#;
+/// let program = "array(3, |i| 2 * i + 1) == (1, 3, 5)";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_array", &program)?;
 ///
-/// let module = Environment::new()
-///     .insert_native_fn("array", fns::Array)
-///     .compile_module("test_array", &program)?;
-/// assert_eq!(module.run()?, Value::Bool(true));
+/// let mut env = Environment::new();
+/// env.insert_native_fn("array", fns::Array);
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
 /// # Ok(())
 /// # }
 /// ```
@@ -96,15 +96,15 @@ where
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
-/// let program = r#"len(()) == 0 && len((1, 2, 3)) == 3"#;
+/// let program = "len(()) == 0 && len((1, 2, 3)) == 3";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("tes_len", &program)?;
 ///
-/// let module = Environment::new()
-///     .insert_native_fn("len", fns::Len)
-///     .compile_module("test_len", &program)?;
-/// assert_eq!(module.run()?, Value::Bool(true));
+/// let mut env = Environment::new();
+/// env.insert_native_fn("len", fns::Len);
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
 /// # Ok(())
 /// # }
 /// ```
@@ -152,19 +152,18 @@ impl<T: FromPrimitive> NativeFn<T> for Len {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     xs = (1, -2, 3, -0.3);
 ///     map(xs, |x| if(x > 0, x, 0)) == (1, 0, 3, 0)
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_map", &program)?;
 ///
-/// let module = Environment::new()
-///     .insert_native_fn("if", fns::If)
-///     .insert_native_fn("map", fns::Map)
-///     .compile_module("test_map", &program)?;
-/// assert_eq!(module.run()?, Value::Bool(true));
+/// let mut env = Environment::new();
+/// env.insert_native_fn("if", fns::If).insert_native_fn("map", fns::Map);
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
 /// # Ok(())
 /// # }
 /// ```
@@ -215,18 +214,18 @@ impl<T: 'static + Clone> NativeFn<T> for Map {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     xs = (1, -2, 3, -7, -0.3);
 ///     filter(xs, |x| x > -1) == (1, 3, -0.3)
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_filter", &program)?;
 ///
-/// let module = Environment::new()
-///     .insert_native_fn("filter", fns::Filter)
-///     .compile_module("test_filter", &program)?;
-/// assert_eq!(module.run()?, Value::Bool(true));
+/// let mut env = Environment::new();
+/// env.insert_native_fn("filter", fns::Filter);
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
 /// # Ok(())
 /// # }
 /// ```
@@ -283,18 +282,18 @@ impl<T: 'static + Clone> NativeFn<T> for Filter {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     xs = (1, -2, 3, -7);
 ///     fold(xs, 1, |acc, x| acc * x) == 42
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_fold", &program)?;
 ///
-/// let module = Environment::new()
-///     .insert_native_fn("fold", fns::Fold)
-///     .compile_module("test_fold", &program)?;
-/// assert_eq!(module.run()?, Value::Bool(true));
+/// let mut env = Environment::new();
+/// env.insert_native_fn("fold", fns::Fold);
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
 /// # Ok(())
 /// # }
 /// ```
@@ -341,7 +340,7 @@ impl<T: 'static + Clone> NativeFn<T> for Fold {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     repeat = |x, times| {
@@ -356,12 +355,12 @@ impl<T: 'static + Clone> NativeFn<T> for Fold {
 ///         repeat((7,), 4) == ((7,), (7,), (7,), (7,))
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_push", &program)?;
 ///
-/// let module = Environment::new()
-///     .insert_native_fn("while", fns::While)
-///     .insert_native_fn("push", fns::Push)
-///     .compile_module("test_push", &program)?;
-/// assert_eq!(module.run()?, Value::Bool(true));
+/// let mut env = Environment::new();
+/// env.insert_native_fn("while", fns::While)
+///     .insert_native_fn("push", fns::Push);
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
 /// # Ok(())
 /// # }
 /// ```
@@ -401,7 +400,7 @@ impl<T> NativeFn<T> for Push {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, env::VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     // Merges all arguments (which should be tuples) into a single tuple.
@@ -409,12 +408,12 @@ impl<T> NativeFn<T> for Push {
 ///     super_merge((1, 2), (3,), (), (4, 5, 6)) == (1, 2, 3, 4, 5, 6)
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_merge", &program)?;
 ///
-/// let module = Environment::new()
-///     .insert_native_fn("fold", fns::Fold)
-///     .insert_native_fn("merge", fns::Merge)
-///     .compile_module("test_merge", &program)?;
-/// assert_eq!(module.run()?, Value::Bool(true));
+/// let mut env = Environment::new();
+/// env.insert_native_fn("fold", fns::Fold)
+///     .insert_native_fn("merge", fns::Merge);
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
 /// # Ok(())
 /// # }
 /// ```

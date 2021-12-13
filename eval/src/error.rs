@@ -454,14 +454,14 @@ impl fmt::Display for AuxErrorInfo {
 ///
 /// ```
 /// # use arithmetic_parser::{grammars::{F64Grammar, Parse, Untyped}, StripResultExt};
-/// # use arithmetic_eval::{env::{Environment, VariableMap}, Error, ExecutableModule};
+/// # use arithmetic_eval::{Error, ExecutableModule};
 /// fn compile_code(code: &str) -> anyhow::Result<ExecutableModule<'_, f64>> {
 ///     let block = Untyped::<F64Grammar>::parse_statements(code).strip_err()?;
 ///
 ///     // Without `strip_err()` call, the code below won't compile:
 ///     // `Error<'_>` in general cannot be boxed into `anyhow::Error`,
 ///     // only `Error<'static>` can.
-///     Ok(Environment::new().compile_module("module", &block).strip_err()?)
+///     Ok(ExecutableModule::new("module", &block).strip_err()?)
 /// }
 /// ```
 #[derive(Debug)]

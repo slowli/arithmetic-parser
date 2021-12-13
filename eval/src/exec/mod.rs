@@ -25,13 +25,13 @@ pub use crate::compiler::CompilerExt;
 /// [`Value`]s, such as [commonly used functions](crate::fns). Importing is performed
 /// when building the module.
 ///
-/// After the module is created, it can be [`run`](Self::run). If the last statement of the block
-/// is an expression (that is, not terminated with a `;`), it is the result of the execution;
-/// otherwise, the result is [`Value::void()`]. It is possible to run a module multiple times
-/// and to change imports by using [`Self::set_import()`].
+/// After the module is created, it can be associated with an environment via [`Self::with_env()`]
+/// and [`run`](WithEnvironment::run()).
+/// If the last statement of the block is an expression (that is, not terminated with a `;`),
+/// it is the result of the execution; otherwise, the result is [`Value::void()`].
 ///
 /// In some cases (e.g., when building a REPL) it is useful to get not only the outcome
-/// of the module execution, but the intermediate results as well. Use [`Self::run_in_env()`]
+/// of the module execution, but the intermediate results as well. Use [`Self::with_mutable_env()`]
 /// for such cases.
 ///
 /// `ExecutableModule`s are generic with respect to the primitive value type, just like [`Value`].
@@ -44,30 +44,26 @@ pub use crate::compiler::CompilerExt;
 ///
 /// ```
 /// use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// use arithmetic_eval::{env, fns, ExecutableModule, Value};
+/// use arithmetic_eval::{env, fns, Environment, ExecutableModule, Value};
 /// # use core::iter::FromIterator;
 /// # use hashbrown::HashSet;
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let module = Untyped::<F32Grammar>::parse_statements("fold(xs, -INFINITY, max)")?;
-/// let mut module = ExecutableModule::builder("test", &module)?
-///     .with_imports_from(&env::Prelude)
-///     .with_imports_from(&env::Comparisons)
-///     .with_import("INFINITY", Value::Prim(f32::INFINITY))
-///     .with_import("xs", Value::void())
-///     .build();
+/// let module = ExecutableModule::new("test", &module)?;
+///
+/// let mut env = Environment::new();
+/// env.extend(env::Prelude.iter());
+/// env.extend(env::Comparisons.iter());
+/// env.insert("INFINITY", Value::Prim(f32::INFINITY)).insert("xs", Value::void());
 ///
 /// // With the original imports, the returned value is `-INFINITY`.
-/// assert_eq!(module.run()?, Value::Prim(f32::NEG_INFINITY));
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Prim(f32::NEG_INFINITY));
 ///
 /// // Imports can be changed. Let's check that `xs` is indeed an import.
-/// assert!(module.imports().contains("xs"));
-/// // ...or even
-/// assert!(module.imports()["fold"].is_function());
+/// assert!(module.is_import("fold"));
 /// // It's possible to iterate over imports, too.
-/// let imports = module.imports().iter()
-///     .map(|(name, _)| name)
-///     .collect::<HashSet<_>>();
+/// let imports = module.import_names().collect::<HashSet<_>>();
 /// assert!(imports.is_superset(&HashSet::from_iter(vec!["max", "fold"])));
 /// # drop(imports); // necessary to please the borrow checker
 ///
@@ -75,8 +71,8 @@ pub use crate::compiler::CompilerExt;
 /// let array = [1.0, -3.0, 2.0, 0.5].iter().copied()
 ///     .map(Value::Prim)
 ///     .collect();
-/// module.set_import("xs", Value::Tuple(array));
-/// assert_eq!(module.run()?, Value::Prim(2.0));
+/// env.insert("xs", Value::Tuple(array));
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Prim(2.0));
 /// # Ok(())
 /// # }
 /// ```
@@ -91,15 +87,14 @@ pub use crate::compiler::CompilerExt;
 /// # use core::iter::FromIterator;
 /// # fn main() -> anyhow::Result<()> {
 /// let block = Untyped::<F32Grammar>::parse_statements("x + y")?;
-/// let mut module = ExecutableModule::builder("test", &block)?
-///     .with_import("x", Value::Prim(3.0))
-///     .with_import("y", Value::Prim(5.0))
-///     .build();
-/// assert_eq!(module.run()?, Value::Prim(8.0));
+/// let module = ExecutableModule::new("test", &block)?;
 ///
-/// let mut env = Environment::from_iter(module.imports());
+/// let mut env = Environment::new();
+/// env.insert("x", Value::Prim(3.0)).insert("y", Value::Prim(5.0));
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Prim(8.0));
+///
 /// env.insert("x", Value::Prim(-1.0));
-/// assert_eq!(module.run_in_env(&mut env)?, Value::Prim(4.0));
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Prim(4.0));
 /// # Ok(())
 /// # }
 /// ```
@@ -114,12 +109,11 @@ pub use crate::compiler::CompilerExt;
 /// # use core::iter::FromIterator;
 /// # fn main() -> anyhow::Result<()> {
 /// let module = Untyped::<F32Grammar>::parse_statements("x = 5; assert_eq(x, 4);")?;
-/// let module = ExecutableModule::builder("test", &module)?
-///     .with_imports_from(&Assertions)
-///     .build();
+/// let module = ExecutableModule::new("test", &module)?;
 ///
-/// let mut env = Environment::from_iter(module.imports());
-/// assert!(module.run_in_env(&mut env).is_err());
+/// let mut env = Environment::new();
+/// env.extend(Assertions.iter());
+/// assert!(module.with_mutable_env(&mut env)?.run().is_err());
 /// assert_eq!(env["x"], Value::Prim(5.0));
 /// # Ok(())
 /// # }

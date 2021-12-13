@@ -247,7 +247,7 @@ where
 /// Defining a prototype in the host code.
 ///
 /// ```
-/// # use arithmetic_eval::{fns, Environment, Object, Prototype, Value, env::VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Object, Prototype, Value};
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # fn main() -> anyhow::Result<()> {
 /// let mut proto = Object::default();
@@ -261,16 +261,17 @@ where
 /// object.insert("y", Value::Prim(-4.0));
 /// object.set_prototype(proto.clone());
 ///
-/// let mut env = Environment::new();
-/// env.insert("Object", proto.into()).insert("pt", object.into());
 /// let program = r#"
 ///     pt.len() == 2 &&
 ///     Object(#{ foo: 1 }).len() == 1 &&
 ///     (Object.len)(Object.EMPTY) == 0
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let ret = env.compile_module("proto", &program)?.run()?;
-/// assert_eq!(ret, Value::Bool(true));
+/// let module = ExecutableModule::new("test_proto", &program)?;
+///
+/// let mut env = Environment::new();
+/// env.insert("Object", proto.into()).insert("pt", object.into());
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
 /// # Ok(())
 /// # }
 /// ```
@@ -398,7 +399,7 @@ impl<T: 'static + Clone> StripCode for Prototype<'_, T> {
 ///
 /// ```
 /// # use arithmetic_eval::{
-/// #     fns, Environment, Object, StandardPrototypes, Value, env::{Prelude, VariableMap},
+/// #     fns, Environment, ExecutableModule, Object, StandardPrototypes, Value, env::Prelude,
 /// # };
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # fn main() -> anyhow::Result<()> {
@@ -420,8 +421,9 @@ impl<T: 'static + Clone> StripCode for Prototype<'_, T> {
 ///     array.len() == 3 && array.1 > 0
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let ret = env.compile_module("proto", &program)?.run()?;
-/// assert_eq!(ret, Value::Bool(true));
+/// let module = ExecutableModule::new("test_proto", &program)?;
+///
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
 /// # Ok(())
 /// # }
 /// ```

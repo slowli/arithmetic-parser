@@ -2,10 +2,8 @@
 
 use assert_matches::assert_matches;
 
-use core::iter::FromIterator;
-
 use arithmetic_eval::{
-    env::{Assertions, Environment, Filler, Prelude},
+    env::{Assertions, Environment, Prelude},
     ErrorKind, ExecutableModule, Value,
 };
 use arithmetic_parser::{
@@ -27,16 +25,9 @@ type Grammar = WithMockedTypes<F64Grammar, MockedTypesList>;
 fn create_module<'a>(
     module_name: &'static str,
     program: &'a str,
-    deferred_imports: &[&str],
 ) -> anyhow::Result<ExecutableModule<'a, f64>> {
     let block = Grammar::parse_statements(program).strip_err()?;
-    Ok(ExecutableModule::builder(module_name, &block)
-        .strip_err()?
-        .with_imports_from(&Prelude)
-        .with_imports_from(&Assertions)
-        .with_import("INF", Value::Prim(f64::INFINITY))
-        .with_imports_from(&Filler::void(deferred_imports))
-        .build())
+    Ok(ExecutableModule::new(module_name, &block).strip_err()?)
 }
 
 fn create_static_module(
@@ -45,10 +36,15 @@ fn create_static_module(
 ) -> anyhow::Result<ExecutableModule<'static, f64>> {
     // By default, the module is tied by its lifetime to the `program`. However,
     // we can break this tie using the `StripCode` trait.
-    create_module(module_name, program, &[]).map(StripCode::strip_code)
+    create_module(module_name, program).map(StripCode::strip_code)
 }
 
 fn main() -> anyhow::Result<()> {
+    let mut env = Environment::new();
+    env.extend(Prelude.iter());
+    env.extend(Assertions.iter());
+    env.insert("INF", Value::Prim(f64::INFINITY));
+
     let sum_module = {
         let dynamic_program = String::from("|...vars| fold(vars, 0, |acc, x| acc + x)");
         create_static_module("sum", &dynamic_program)?
@@ -56,21 +52,20 @@ fn main() -> anyhow::Result<()> {
     };
 
     // The code is dropped here, but the module is still usable.
-    let sum_fn = sum_module.run()?;
+    let sum_fn = sum_module.with_env(&env)?.run()?;
     assert!(sum_fn.is_function());
 
     // Let's import the function into another module and check that it works.
-    let mut test_module = create_module("test", "sum(1, 2, -5)", &["sum"])?;
-    test_module.set_import("sum", sum_fn.clone());
-    let sum_value = test_module.run()?;
+    let test_module = create_module("test", "sum(1, 2, -5)")?;
+    let mut non_static_env = env.clone();
+    non_static_env.insert("sum", sum_fn);
+    let sum_value = test_module.with_env(&non_static_env)?.run()?;
     assert_eq!(sum_value, Value::Prim(-2.0)); // 1 + 2 - 5
 
     // Errors are handled as well.
-    let bogus_module = create_module("bogus", "sum(1, true, -5)", &["sum"])?;
-    let mut env = Environment::from_iter(bogus_module.imports());
-    env.insert("sum", sum_fn);
+    let bogus_module = create_module("bogus", "sum(1, true, -5)")?;
 
-    let err = bogus_module.run_in_env(&mut env).unwrap_err();
+    let err = bogus_module.with_env(&non_static_env)?.run().unwrap_err();
     println!("Expected error:\n{:#}", err);
     assert_matches!(
         err.source().kind(),
@@ -87,18 +82,16 @@ fn main() -> anyhow::Result<()> {
     // Importing into a stripped module also works. Let's redefine the `fold` import.
     let fold_program = include_str!("rfold.script");
     let fold_program = String::from(fold_program);
-    let fold_module = create_module("rfold", &fold_program, &[])?;
-    let rfold_fn = fold_module.run().strip_err()?;
+    let fold_module = create_module("rfold", &fold_program)?;
+    let rfold_fn = fold_module.with_env(&env).strip_err()?.run().strip_err()?;
 
-    let mut env = Environment::from_iter(sum_module.imports());
-    env.insert("fold", rfold_fn);
-
-    let rfold_sum = sum_module.run_in_env(&mut env).strip_err()?;
-    // Due to lifetime checks, we need to re-assign `test_module`, since the original one
+    // Due to lifetime checks, we need to re-assign `env`, since the original one
     // is inferred to have `'static` lifetime.
-    let mut test_module = test_module;
-    test_module.set_import("sum", rfold_sum);
-    let sum_value = test_module.run().strip_err()?;
+    let mut env = env;
+    env.insert("fold", rfold_fn);
+    let rfold_sum = sum_module.with_env(&env).strip_err()?.run().strip_err()?;
+    env.insert("sum", rfold_sum);
+    let sum_value = test_module.with_env(&env).strip_err()?.run().strip_err()?;
     assert_eq!(sum_value, Value::Prim(-2.0));
 
     Ok(())

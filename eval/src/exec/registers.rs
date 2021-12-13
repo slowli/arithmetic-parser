@@ -242,11 +242,6 @@ impl<'a, T> Registers<'a, T> {
         }
     }
 
-    pub fn get_var(&self, name: &str) -> Option<&Value<'a, T>> {
-        let register = *self.vars.get(name)?;
-        Some(&self.registers[register])
-    }
-
     pub fn variables(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
         self.vars
             .iter()
@@ -259,13 +254,6 @@ impl<'a, T> Registers<'a, T> {
 
     pub fn register_count(&self) -> usize {
         self.registers.len()
-    }
-
-    pub fn set_var(&mut self, name: &str, value: Value<'a, T>) {
-        let register = *self.vars.get(name).unwrap_or_else(|| {
-            panic!("Variable `{}` is not defined", name);
-        });
-        self.registers[register] = value;
     }
 
     /// Allocates a new register with the specified name if the name was not allocated previously.
@@ -301,14 +289,6 @@ impl<'a, T: Clone> Registers<'a, T> {
 
             env.insert(var_name, value);
         }
-    }
-
-    pub fn into_variables(self) -> impl Iterator<Item = (String, Value<'a, T>)> {
-        let registers = self.registers;
-        // Moving out of `registers` is not sound because of possible aliasing.
-        self.vars
-            .into_iter()
-            .map(move |(name, register)| (name, registers[register].clone()))
     }
 }
 
@@ -687,26 +667,19 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        compiler::Compiler,
-        exec::{ModuleImports, WildcardId},
-    };
+    use crate::{compiler::Compiler, exec::WildcardId};
     use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 
     #[test]
     fn iterative_evaluation() {
         let block = Untyped::<F32Grammar>::parse_statements("x").unwrap();
-        let (mut module, _) = Compiler::compile_module(WildcardId, &block).unwrap();
+        let module = Compiler::compile_module(WildcardId, &block).unwrap();
         assert_eq!(module.inner.register_capacity, 2);
         assert_eq!(module.inner.commands.len(), 1); // push `x` from r0 to r1
 
-        let mut env = Registers::new();
-        env.insert_var("x", Value::Prim(5.0));
-        module.imports = ModuleImports {
-            inner: env,
-            prototypes: StandardPrototypes::new(),
-        };
-        let value = module.run().unwrap();
+        let mut env = Environment::new();
+        env.insert("x", Value::Prim(5.0));
+        let value = module.with_env(&env).unwrap().run().unwrap();
         assert_eq!(value, Value::Prim(5.0));
     }
 }

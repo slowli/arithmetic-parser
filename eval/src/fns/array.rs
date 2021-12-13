@@ -449,98 +449,94 @@ mod tests {
     use super::*;
     use crate::{
         arith::{OrdArithmetic, StdArithmetic, WrappingArithmetic},
-        env::{Environment, VariableMap},
+        Environment, ExecutableModule,
     };
 
     use arithmetic_parser::grammars::{NumGrammar, NumLiteral, Parse, Untyped};
     use assert_matches::assert_matches;
 
-    fn test_len_function<T: NumLiteral>(arithmetic: &dyn OrdArithmetic<T>)
+    fn test_len_function<T: NumLiteral, A>(arithmetic: A)
     where
         Len: NativeFn<T>,
+        A: OrdArithmetic<T> + 'static,
     {
         let code = r#"
             len((1, 2, 3)) == 3 && len(()) == 0 &&
             len(#{}) == 0 && len(#{ x: 1 }) == 1 && len(#{ x: 1, y: 2 }) == 2
         "#;
         let block = Untyped::<NumGrammar<T>>::parse_statements(code).unwrap();
-        let mut env = Environment::new();
-        let module = env
-            .insert("len", Value::native_fn(Len))
-            .compile_module("len", &block)
-            .unwrap();
+        let module = ExecutableModule::new("len", &block).unwrap();
+        let mut env = Environment::with_arithmetic(arithmetic);
+        env.insert_native_fn("len", Len);
 
-        let output = module.with_arithmetic(arithmetic).run().unwrap();
+        let output = module.with_env(&env).unwrap().run().unwrap();
         assert_matches!(output, Value::Bool(true));
     }
 
     #[test]
     fn len_function_in_floating_point_arithmetic() {
-        test_len_function::<f32>(&StdArithmetic);
-        test_len_function::<f64>(&StdArithmetic);
+        test_len_function::<f32, _>(StdArithmetic);
+        test_len_function::<f64, _>(StdArithmetic);
     }
 
     #[test]
     fn len_function_in_int_arithmetic() {
-        test_len_function::<u8>(&WrappingArithmetic);
-        test_len_function::<i8>(&WrappingArithmetic);
-        test_len_function::<u64>(&WrappingArithmetic);
-        test_len_function::<i64>(&WrappingArithmetic);
+        test_len_function::<u8, _>(WrappingArithmetic);
+        test_len_function::<i8, _>(WrappingArithmetic);
+        test_len_function::<u64, _>(WrappingArithmetic);
+        test_len_function::<i64, _>(WrappingArithmetic);
     }
 
     #[test]
-    fn len_function_with_number_overflow() {
+    fn len_function_with_number_overflow() -> anyhow::Result<()> {
         let code = "len(xs)";
-        let block = Untyped::<NumGrammar<i8>>::parse_statements(code).unwrap();
-        let mut env = Environment::new();
-        let module = env
-            .insert("xs", Value::from(vec![Value::Bool(true); 128]))
-            .insert("len", Value::native_fn(Len))
-            .compile_module("len", &block)
-            .unwrap();
+        let block = Untyped::<NumGrammar<i8>>::parse_statements(code)?;
+        let module = ExecutableModule::new("len", &block)?;
 
-        let err = module
-            .with_arithmetic(&WrappingArithmetic)
-            .run()
-            .unwrap_err();
+        let mut env = Environment::with_arithmetic(WrappingArithmetic);
+        env.insert("xs", Value::from(vec![Value::Bool(true); 128]))
+            .insert_native_fn("len", Len);
+
+        let err = module.with_env(&env)?.run().unwrap_err();
         assert_matches!(
             err.source().kind(),
             ErrorKind::NativeCall(msg) if msg.contains("length to number")
         );
+        Ok(())
     }
 
     #[test]
-    fn array_function_in_floating_point_arithmetic() {
+    fn array_function_in_floating_point_arithmetic() -> anyhow::Result<()> {
         let code = r#"
             array(0, |_| 1) == () && array(-1, |_| 1) == () &&
             array(0.1, |_| 1) == () && array(0.999, |_| 1) == () &&
             array(1, |_| 1) == (1,) && array(1.5, |_| 1) == (1,) &&
             array(2, |_| 1) == (1, 1) && array(3, |i| i) == (0, 1, 2)
         "#;
-        let block = Untyped::<NumGrammar<f32>>::parse_statements(code).unwrap();
-        let mut env = Environment::new();
-        let module = env
-            .insert("array", Value::native_fn(Array))
-            .compile_module("array", &block)
-            .unwrap();
+        let block = Untyped::<NumGrammar<f32>>::parse_statements(code)?;
+        let module = ExecutableModule::new("array", &block)?;
 
-        let output = module.with_arithmetic(&StdArithmetic).run().unwrap();
+        let mut env = Environment::new();
+        env.insert_native_fn("array", Array);
+
+        let output = module.with_env(&env)?.run()?;
         assert_matches!(output, Value::Bool(true));
+        Ok(())
     }
 
     #[test]
-    fn array_function_in_unsigned_int_arithmetic() {
+    fn array_function_in_unsigned_int_arithmetic() -> anyhow::Result<()> {
         let code = r#"
             array(0, |_| 1) == () && array(1, |_| 1) == (1,) && array(3, |i| i) == (0, 1, 2)
         "#;
-        let block = Untyped::<NumGrammar<u32>>::parse_statements(code).unwrap();
-        let mut env = Environment::new();
-        let module = env
-            .insert("array", Value::native_fn(Array))
-            .compile_module("array", &block)
-            .unwrap();
+        let block = Untyped::<NumGrammar<u32>>::parse_statements(code)?;
+        let module = ExecutableModule::new("array", &block)?;
 
-        let output = module.with_arithmetic(&WrappingArithmetic).run().unwrap();
+        let mut env = Environment::with_arithmetic(WrappingArithmetic);
+        env.insert_native_fn("array", Array);
+
+        let output = module.with_env(&env)?.run()?;
         assert_matches!(output, Value::Bool(true));
+        Ok(())
     }
 }

@@ -3,10 +3,10 @@
 use assert_matches::assert_matches;
 
 use arithmetic_eval::{
-    env::{Comparisons, Environment, VariableMap},
+    env::{Comparisons, Environment},
     error::{Error, ErrorKind, ErrorWithBacktrace, RepeatedAssignmentContext},
     exec::WildcardId,
-    fns, StandardPrototypes, Value,
+    fns, ExecutableModule, StandardPrototypes, Value,
 };
 use arithmetic_parser::{
     grammars::{F32Grammar, Parse, Untyped},
@@ -20,9 +20,9 @@ mod prototypes;
 
 const SIN: fns::Unary<f32> = fns::Unary::new(f32::sin);
 
-fn expect_compilation_error<'a>(env: &mut Environment<'a, f32>, program: &'a str) -> Error<'a> {
+fn expect_compilation_error(program: &str) -> Error<'_> {
     let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
-    env.compile_module(WildcardId, &block).unwrap_err()
+    ExecutableModule::new(WildcardId, &block).unwrap_err()
 }
 
 fn try_evaluate<'a>(
@@ -30,9 +30,8 @@ fn try_evaluate<'a>(
     program: &'a str,
 ) -> Result<Value<'a, f32>, ErrorWithBacktrace<'a>> {
     let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
-    env.compile_module(WildcardId, &block)
-        .unwrap()
-        .run_in_env(env)
+    let module = ExecutableModule::new(WildcardId, &block).unwrap();
+    module.with_mutable_env(env).unwrap().run()
 }
 
 fn evaluate<'a>(env: &mut Environment<'a, f32>, program: &'a str) -> Value<'a, f32> {
@@ -151,14 +150,20 @@ fn program_with_blocks() {
 
 #[test]
 fn undefined_var() {
-    let err = expect_compilation_error(&mut Environment::new(), "x + 3");
+    let block = Untyped::<F32Grammar>::parse_statements("x + 3").unwrap();
+    let module = ExecutableModule::new(WildcardId, &block).unwrap();
+
+    let err = module.with_env(&Environment::new()).unwrap_err();
     assert_eq!(*err.main_span().code().fragment(), "x");
     assert_matches!(err.kind(), ErrorKind::Undefined(ref var) if var == "x");
 }
 
 #[test]
 fn undefined_function() {
-    let err = expect_compilation_error(&mut Environment::new(), "1 + sin(-5.0)");
+    let block = Untyped::<F32Grammar>::parse_statements("1 + sin(-5.0)").unwrap();
+    let module = ExecutableModule::new(WildcardId, &block).unwrap();
+
+    let err = module.with_env(&Environment::new()).unwrap_err();
     assert_eq!(*err.main_span().code().fragment(), "sin");
     assert_matches!(err.kind(), ErrorKind::Undefined(ref var) if var == "sin");
 }
@@ -209,10 +214,8 @@ fn arg_len_mismatch_with_variadic_function() {
 
 #[test]
 fn repeated_args_in_fn_definition() {
-    let mut env = Environment::new();
-
     let program = "add = |x, x| x + 2;";
-    let err = expect_compilation_error(&mut env, program);
+    let err = expect_compilation_error(program);
     assert_eq!(*err.main_span().code().fragment(), "x");
     assert_eq!(err.main_span().code().location_offset(), 10);
     assert_matches!(
@@ -223,7 +226,7 @@ fn repeated_args_in_fn_definition() {
     );
 
     let other_program = "add = |x, (y, x)| x + y;";
-    let err = expect_compilation_error(&mut env, other_program);
+    let err = expect_compilation_error(other_program);
     assert_eq!(*err.main_span().code().fragment(), "x");
     assert_eq!(err.main_span().code().location_offset(), 14);
     assert_matches!(err.kind(), ErrorKind::RepeatedAssignment { .. });
@@ -232,7 +235,7 @@ fn repeated_args_in_fn_definition() {
 #[test]
 fn repeated_var_in_lvalue() {
     let program = "(x, x) = (1, 2);";
-    let err = expect_compilation_error(&mut Environment::new(), program);
+    let err = expect_compilation_error(program);
     assert_eq!(*err.main_span().code().fragment(), "x");
     assert_eq!(err.main_span().code().location_offset(), 4);
     assert_matches!(
@@ -243,7 +246,7 @@ fn repeated_var_in_lvalue() {
     );
 
     let other_program = "(x, ...x) = (1, 2);";
-    let err = expect_compilation_error(&mut Environment::new(), other_program);
+    let err = expect_compilation_error(other_program);
     assert_eq!(*err.main_span().code().fragment(), "x");
     assert_eq!(err.main_span().code().location_offset(), 7);
     assert_matches!(
@@ -353,7 +356,8 @@ fn comparison_of_invalid_values() {
 #[test]
 fn comparison_return_value() {
     let program = "cmp(5, 3) == GREATER && cmp(3, 5) == LESS && cmp(4, 4) == EQUAL";
-    let mut env = Comparisons.iter().collect();
+    let mut env = Environment::new();
+    env.extend(Comparisons.iter());
     let return_value = evaluate(&mut env, program);
     assert_eq!(return_value, Value::Bool(true));
 }
@@ -364,7 +368,8 @@ fn comparison_constants_are_comparable() {
         EQUAL != LESS && cmp(5, 3) != LESS && (LESS, GREATER) == (cmp(3, 4), cmp(4, -5)) &&
             EQUAL != 0 && LESS != -1
     "#;
-    let mut env = Comparisons.iter().collect();
+    let mut env = Environment::new();
+    env.extend(Comparisons.iter());
     let return_value = evaluate(&mut env, program);
     assert_eq!(return_value, Value::Bool(true));
 }
@@ -439,7 +444,7 @@ fn indexed_field_invalid_receiver_error() {
 #[test]
 fn overly_large_indexed_field() {
     let program = "x = (2, 5); x.123456789012345678901234567890";
-    let err = expect_compilation_error(&mut Environment::new(), program);
+    let err = expect_compilation_error(program);
 
     assert_eq!(
         *err.main_span().code().fragment(),

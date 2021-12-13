@@ -313,7 +313,7 @@ fn embedded_destructuring_error() {
 #[test]
 fn object_initialization_repeated_fields() {
     let program = "#{ x: 1, x: 2 }";
-    let err = expect_compilation_error(&mut Environment::new(), program);
+    let err = expect_compilation_error(program);
     let err_span = err.main_span().code();
 
     assert_eq!(*err_span.fragment(), "x");
@@ -330,7 +330,7 @@ fn object_initialization_repeated_fields() {
 #[test]
 fn object_initialization_repeated_fields_with_shorthand() {
     let program = "x = 2; #{ x: 5 + x, x }";
-    let err = expect_compilation_error(&mut Environment::new(), program);
+    let err = expect_compilation_error(program);
     let err_span = err.main_span().code();
 
     assert_eq!(*err_span.fragment(), "x");
@@ -341,7 +341,7 @@ fn object_initialization_repeated_fields_with_shorthand() {
 #[test]
 fn object_destructuring_repeated_fields() {
     let program = "{ x, x: y } = #{ x: 1, y: 2 };";
-    let err = expect_compilation_error(&mut Environment::new(), program);
+    let err = expect_compilation_error(program);
     let err_span = err.main_span().code();
 
     assert_eq!(*err_span.fragment(), "x");
@@ -358,7 +358,7 @@ fn object_destructuring_repeated_fields() {
 #[test]
 fn object_destructuring_repeated_assignment() {
     let program = "{ x, y: x } = #{ x: 1, y: 2 };";
-    let err = expect_compilation_error(&mut Environment::new(), program);
+    let err = expect_compilation_error(program);
     let err_span = err.main_span().code();
 
     assert_eq!(*err_span.fragment(), "x");
@@ -375,7 +375,7 @@ fn object_destructuring_repeated_assignment() {
 #[test]
 fn object_destructuring_repeated_assignment_complex() {
     let program = "{ x, ys: (x, ...) } = #{ x: 1, ys: (2, 3) };";
-    let err = expect_compilation_error(&mut Environment::new(), program);
+    let err = expect_compilation_error(program);
     let err_span = err.main_span().code();
 
     assert_eq!(*err_span.fragment(), "x");

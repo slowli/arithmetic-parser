@@ -10,7 +10,7 @@ use crate::{
     Error, ErrorKind, Value,
 };
 use arithmetic_parser::{
-    grammars::Grammar, BinaryOp, Block, Destructure, FnDefinition, InputSpan, Lvalue,
+    grammars::Grammar, BinaryOp, Block, Destructure, FnDefinition, InputSpan, Lvalue, MaybeSpanned,
     ObjectDestructure, Spanned, SpannedLvalue, UnaryOp,
 };
 
@@ -19,7 +19,7 @@ mod expr;
 
 use self::captures::{CapturesExtractor, CompilerExtTarget};
 
-pub(crate) type ImportSpans<'a> = HashMap<String, Spanned<'a>>;
+pub(crate) type ImportSpans<'a> = Vec<MaybeSpanned<'a>>;
 
 #[derive(Debug)]
 pub(crate) struct Compiler {
@@ -113,7 +113,7 @@ impl Compiler {
     pub fn compile_module<'a, Id: ModuleId, T: Grammar<'a>>(
         module_id: Id,
         block: &Block<'a, T>,
-    ) -> Result<(ExecutableModule<'a, T::Lit>, ImportSpans<'a>), Error<'a>> {
+    ) -> Result<ExecutableModule<'a, T::Lit>, Error<'a>> {
         let module_id = Box::new(module_id) as Box<dyn ModuleId>;
         let (captures, import_spans) = Self::extract_captures(module_id.clone_boxed(), block)?;
         let mut compiler = Self::from_env(module_id.clone_boxed(), &captures);
@@ -131,8 +131,11 @@ impl Compiler {
         );
 
         executable.finalize_block(compiler.register_count);
-        let module = ExecutableModule::from_parts(executable, captures);
-        Ok((module, import_spans))
+        Ok(ExecutableModule::from_parts(
+            executable,
+            captures,
+            import_spans,
+        ))
     }
 
     fn extract_captures<'a, T: Grammar<'a>>(
@@ -150,7 +153,7 @@ impl Compiler {
         let import_spans = extractor
             .captures
             .into_iter()
-            .map(|(var_name, var_span)| (var_name.to_owned(), var_span))
+            .map(|(_, var_span)| var_span.into())
             .collect();
 
         Ok((captures, import_spans))
@@ -321,7 +324,7 @@ impl<'a, T: Grammar<'a>> CompilerExt<'a> for FnDefinition<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{exec::WildcardId, Value};
+    use crate::{exec::WildcardId, Environment, Value};
 
     use arithmetic_parser::grammars::{F32Grammar, Parse, ParseLiteral, Typed, Untyped};
     use arithmetic_parser::{Expr, NomResult};
@@ -330,8 +333,8 @@ mod tests {
     fn compilation_basics() {
         let block = "x = 3; 1 + { y = 2; y * x } == 7";
         let block = Untyped::<F32Grammar>::parse_statements(block).unwrap();
-        let (module, _) = Compiler::compile_module(WildcardId, &block).unwrap();
-        let value = module.run().unwrap();
+        let module = Compiler::compile_module(WildcardId, &block).unwrap();
+        let value = module.with_env(&Environment::new()).unwrap().run().unwrap();
         assert_eq!(value, Value::Bool(true));
     }
 
@@ -339,16 +342,18 @@ mod tests {
     fn compiled_function() {
         let block = "add = |x, y| x + y; add(2, 3) == 5";
         let block = Untyped::<F32Grammar>::parse_statements(block).unwrap();
-        let (module, _) = Compiler::compile_module(WildcardId, &block).unwrap();
-        assert_eq!(module.run().unwrap(), Value::Bool(true));
+        let module = Compiler::compile_module(WildcardId, &block).unwrap();
+        let value = module.with_env(&Environment::new()).unwrap().run().unwrap();
+        assert_eq!(value, Value::Bool(true));
     }
 
     #[test]
     fn compiled_function_with_capture() {
         let block = "A = 2; add = |x, y| x + y / A; add(2, 3) == 3.5";
         let block = Untyped::<F32Grammar>::parse_statements(block).unwrap();
-        let (module, _) = Compiler::compile_module(WildcardId, &block).unwrap();
-        assert_eq!(module.run().unwrap(), Value::Bool(true));
+        let module = Compiler::compile_module(WildcardId, &block).unwrap();
+        let value = module.with_env(&Environment::new()).unwrap().run().unwrap();
+        assert_eq!(value, Value::Bool(true));
     }
 
     #[test]
@@ -393,9 +398,9 @@ mod tests {
             Compiler::extract_captures(Box::new(WildcardId), &module).unwrap();
 
         assert_eq!(registers.register_count(), 1);
-        assert_eq!(*registers.get_var("x").unwrap(), Value::void());
+        assert!(registers.variables_map().contains_key("x"));
         assert_eq!(import_spans.len(), 1);
-        assert_eq!(import_spans["x"], Spanned::from_str(program, 8..9));
+        assert_eq!(import_spans[0], MaybeSpanned::from_str(program, 8..9));
     }
 
     #[test]
@@ -411,13 +416,14 @@ mod tests {
         let (registers, import_spans) =
             Compiler::extract_captures(Box::new(WildcardId), &module).unwrap();
         assert_eq!(registers.register_count(), 2);
-        assert!(registers.variables_map().contains_key("x"));
+
         assert!(registers.variables_map().contains_key("PI"));
-        assert_eq!(import_spans["x"].location_line(), 2); // should be the first mention
+        let x_register = registers.variables_map()["x"];
+        assert_eq!(import_spans[x_register].location_line(), 2); // should be the first mention
     }
 
     #[test]
-    fn type_casts_are_ignored() {
+    fn type_casts_are_ignored() -> anyhow::Result<()> {
         struct TypedGrammar;
 
         impl ParseLiteral for TypedGrammar {
@@ -438,9 +444,10 @@ mod tests {
         }
 
         let block = "x = 3 as Num; 1 + { y = 2; y * x as Num } == 7";
-        let block = Typed::<TypedGrammar>::parse_statements(block).unwrap();
-        let (module, _) = Compiler::compile_module(WildcardId, &block).unwrap();
-        let value = module.run().unwrap();
+        let block = Typed::<TypedGrammar>::parse_statements(block)?;
+        let module = Compiler::compile_module(WildcardId, &block)?;
+        let value = module.with_env(&Environment::new())?.run()?;
         assert_eq!(value, Value::Bool(true));
+        Ok(())
     }
 }

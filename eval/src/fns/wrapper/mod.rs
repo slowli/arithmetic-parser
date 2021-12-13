@@ -382,7 +382,7 @@ mod tests {
     use assert_matches::assert_matches;
 
     #[test]
-    fn functions_with_primitive_args() {
+    fn functions_with_primitive_args() -> anyhow::Result<()> {
         let unary_fn = Unary::new(|x: f32| x + 3.0);
         let binary_fn = Binary::new(f32::min);
         let ternary_fn = Ternary::new(|x: f32, y, z| if x > 0.0 { y } else { z });
@@ -391,15 +391,16 @@ mod tests {
             unary_fn(2) == 5 && binary_fn(1, -3) == -3 &&
                 ternary_fn(1, 2, 3) == 2 && ternary_fn(-1, 2, 3) == 3
         "#;
-        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
 
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_import("unary_fn", Value::native_fn(unary_fn))
-            .with_import("binary_fn", Value::native_fn(binary_fn))
-            .with_import("ternary_fn", Value::native_fn(ternary_fn))
-            .build();
-        assert_eq!(module.run().unwrap(), Value::Bool(true));
+        let mut env = Environment::new();
+        env.insert_native_fn("unary_fn", unary_fn)
+            .insert_native_fn("binary_fn", binary_fn)
+            .insert_native_fn("ternary_fn", ternary_fn);
+
+        assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
+        Ok(())
     }
 
     fn array_min_max(values: Vec<f32>) -> (f32, f32) {
@@ -422,19 +423,20 @@ mod tests {
     }
 
     #[test]
-    fn functions_with_composite_args() {
+    fn functions_with_composite_args() -> anyhow::Result<()> {
         let program = r#"
             array_min_max((1, 5, -3, 2, 1)) == (-3, 5) &&
                 total_sum(((1, 2), (3, 4)), ((5, 6, 7), 8)) == 36
         "#;
-        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
 
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_import("array_min_max", Value::wrapped_fn(array_min_max))
-            .with_import("total_sum", Value::wrapped_fn(overly_convoluted_fn))
-            .build();
-        assert_eq!(module.run().unwrap(), Value::Bool(true));
+        let mut env = Environment::new();
+        env.insert_wrapped_fn("array_min_max", array_min_max)
+            .insert_wrapped_fn("total_sum", overly_convoluted_fn);
+
+        assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
+        Ok(())
     }
 
     fn sum_arrays(xs: Vec<f32>, ys: Vec<f32>) -> Result<Vec<f32>, String> {
@@ -446,49 +448,55 @@ mod tests {
     }
 
     #[test]
-    fn fallible_function() {
+    fn fallible_function() -> anyhow::Result<()> {
         let program = "sum_arrays((1, 2, 3), (4, 5, 6)) == (5, 7, 9)";
-        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_import("sum_arrays", Value::wrapped_fn(sum_arrays))
-            .build();
-        assert_eq!(module.run().unwrap(), Value::Bool(true));
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
+
+        let mut env = Environment::new();
+        env.insert_wrapped_fn("sum_arrays", sum_arrays);
+        assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
+        Ok(())
     }
 
     #[test]
-    fn fallible_function_with_bogus_program() {
+    fn fallible_function_with_bogus_program() -> anyhow::Result<()> {
         let program = "sum_arrays((1, 2, 3), (4, 5))";
-        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
 
-        let err = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_import("sum_arrays", Value::wrapped_fn(sum_arrays))
-            .build()
-            .run()
-            .unwrap_err();
+        let mut env = Environment::new();
+        env.insert_wrapped_fn("sum_arrays", sum_arrays);
+
+        let err = module.with_env(&env)?.run().unwrap_err();
         assert!(err
             .source()
             .kind()
             .to_short_string()
             .contains("Summed arrays must have the same size"));
+        Ok(())
     }
 
     #[test]
-    fn function_with_bool_return_value() {
+    fn function_with_bool_return_value() -> anyhow::Result<()> {
         let contains = wrap(|(a, b): (f32, f32), x: f32| (a..=b).contains(&x));
 
         let program = "contains((-1, 2), 0) && !contains((1, 3), 0)";
-        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_import("contains", Value::native_fn(contains))
-            .build();
-        assert_eq!(module.run().unwrap(), Value::Bool(true));
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
+
+        let mut env = Environment::new();
+        env.insert_native_fn("contains", contains);
+        assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
+        Ok(())
     }
 
     #[test]
-    fn function_with_void_return_value() {
+    fn function_with_void_return_value() -> anyhow::Result<()> {
+        let program = "assert_eq(3, 1 + 2)";
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
+
         let mut env = Environment::new();
         env.insert_wrapped_fn("assert_eq", |expected: f32, actual: f32| {
             if (expected - actual).abs() < f32::EPSILON {
@@ -501,47 +509,42 @@ mod tests {
             }
         });
 
-        let program = "assert_eq(3, 1 + 2)";
-        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_imports_from(&env)
-            .build();
-        assert!(module.run().unwrap().is_void());
+        assert!(module.with_env(&env)?.run()?.is_void());
 
         let bogus_program = "assert_eq(3, 1 - 2)";
-        let bogus_block = Untyped::<F32Grammar>::parse_statements(bogus_program).unwrap();
-        let err = ExecutableModule::builder(WildcardId, &bogus_block)
-            .unwrap()
-            .with_imports_from(&env)
-            .build()
+        let bogus_block = Untyped::<F32Grammar>::parse_statements(bogus_program)?;
+        let err = ExecutableModule::new(WildcardId, &bogus_block)?
+            .with_env(&env)?
             .run()
             .unwrap_err();
+
         assert_matches!(
             err.source().kind(),
             ErrorKind::NativeCall(ref msg) if msg.contains("Assertion failed")
         );
+        Ok(())
     }
 
     #[test]
-    fn function_with_bool_argument() {
+    fn function_with_bool_argument() -> anyhow::Result<()> {
         let program = "flip_sign(-1, true) == 1 && flip_sign(-1, false) == -1";
-        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
 
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_imports_from(&Prelude)
-            .with_import(
-                "flip_sign",
-                Value::wrapped_fn(|val: f32, flag: bool| if flag { -val } else { val }),
-            )
-            .build();
-        assert_eq!(module.run().unwrap(), Value::Bool(true));
+        let mut env = Environment::new();
+        env.extend(Prelude.iter());
+        env.insert_wrapped_fn(
+            "flip_sign",
+            |val: f32, flag: bool| if flag { -val } else { val },
+        );
+
+        assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
+        Ok(())
     }
 
     #[test]
     #[allow(clippy::cast_precision_loss)] // fine for this test
-    fn function_with_object_and_tuple() {
+    fn function_with_object_and_tuple() -> anyhow::Result<()> {
         fn test_function(tuple: Tuple<'_, f32>) -> Object<'_, f32> {
             let mut obj = Object::default();
             obj.insert("len", Value::Prim(tuple.len() as f32));
@@ -553,40 +556,36 @@ mod tests {
             { len, tuple } = test((1, 1, 1));
             len == 3 && tuple == (1, 1, 1)
         "#;
-        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
 
         let test_function = Value::native_fn(wrap_fn!(1, test_function));
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_imports_from(&Prelude)
-            .with_import("test", test_function)
-            .build();
-        assert_eq!(module.run().unwrap(), Value::Bool(true));
+        let mut env = Environment::new();
+        env.insert("test", test_function).extend(Prelude.iter());
+
+        assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
+        Ok(())
     }
 
     #[test]
-    fn error_reporting_with_destructuring() {
+    fn error_reporting_with_destructuring() -> anyhow::Result<()> {
         let program = "destructure(((true, 1), (2, 3)))";
-        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
 
-        let err = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_imports_from(&Prelude)
-            .with_import(
-                "destructure",
-                Value::wrapped_fn(|values: Vec<(bool, f32)>| {
-                    values
-                        .into_iter()
-                        .map(|(flag, x)| if flag { x } else { 0.0 })
-                        .sum::<f32>()
-                }),
-            )
-            .build()
-            .run()
-            .unwrap_err();
+        let mut env = Environment::new();
+        env.extend(Prelude.iter());
+        env.insert_wrapped_fn("destructure", |values: Vec<(bool, f32)>| {
+            values
+                .into_iter()
+                .map(|(flag, x)| if flag { x } else { 0.0 })
+                .sum::<f32>()
+        });
 
+        let err = module.with_env(&env)?.run().unwrap_err();
         let err_message = err.source().kind().to_short_string();
         assert!(err_message.contains("Cannot convert primitive value to bool"));
         assert!(err_message.contains("location: arg0[1].0"));
+        Ok(())
     }
 }

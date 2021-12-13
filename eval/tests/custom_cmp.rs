@@ -5,7 +5,7 @@ use num_complex::Complex64;
 use arithmetic_eval::{
     arith::{ArithmeticExt, StdArithmetic},
     env::{Assertions, Prelude},
-    ExecutableModule,
+    Environment, ExecutableModule,
 };
 use arithmetic_parser::grammars::{NumGrammar, Parse, Untyped};
 
@@ -13,11 +13,7 @@ type ComplexGrammar = NumGrammar<Complex64>;
 
 fn compile_module(program: &str) -> ExecutableModule<'_, Complex64> {
     let block = Untyped::<ComplexGrammar>::parse_statements(program).unwrap();
-    ExecutableModule::builder("custom_cmp", &block)
-        .unwrap()
-        .with_imports_from(&Prelude)
-        .with_imports_from(&Assertions)
-        .build()
+    ExecutableModule::new("custom_cmp", &block).unwrap()
 }
 
 #[test]
@@ -27,12 +23,12 @@ fn no_comparisons() {
         assert(!(1 < -1 || 1 <= -1 || 1 > -1 || 1 >= -1));
         assert(!(-1 + 2i < 1 + i));
     "#;
-
     let module = compile_module(PROGRAM);
-    module
-        .with_arithmetic(&StdArithmetic.without_comparisons())
-        .run()
-        .unwrap();
+
+    let mut env = Environment::with_arithmetic(StdArithmetic.without_comparisons());
+    env.extend(Prelude.iter());
+    env.extend(Assertions.iter());
+    module.with_env(&env).unwrap().run().unwrap();
 }
 
 #[test]
@@ -50,11 +46,14 @@ fn custom_cmp_function() {
         assert(!is_positive(-1));
         assert(!is_positive(0));
     "#;
-
     let module = compile_module(PROGRAM);
+
     let arithmetic =
         StdArithmetic.with_comparison(|x: &Complex64, y: &Complex64| x.re.partial_cmp(&y.re));
-    module.with_arithmetic(&arithmetic).run().unwrap();
+    let mut env = Environment::with_arithmetic(arithmetic);
+    env.extend(Prelude.iter());
+    env.extend(Assertions.iter());
+    module.with_env(&env).unwrap().run().unwrap();
 }
 
 #[test]
@@ -68,8 +67,8 @@ fn partial_cmp_function() {
         assert(!(-1 < i || -1 <= i || -1 > i || -1 >= i));
         assert(!(2i > 3 || 2i <= 3));
     "#;
-
     let module = compile_module(PROGRAM);
+
     let arithmetic = StdArithmetic.with_comparison(|x: &Complex64, y: &Complex64| {
         if x.im == 0.0 && y.im == 0.0 {
             x.re.partial_cmp(&y.re)
@@ -77,5 +76,8 @@ fn partial_cmp_function() {
             None
         }
     });
-    module.with_arithmetic(&arithmetic).run().unwrap();
+    let mut env = Environment::with_arithmetic(arithmetic);
+    env.extend(Prelude.iter());
+    env.extend(Assertions.iter());
+    module.with_env(&env).unwrap().run().unwrap();
 }

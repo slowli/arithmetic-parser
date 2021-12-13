@@ -2,16 +2,15 @@
 
 use hashbrown::{hash_map, HashMap};
 
-use core::{
-    iter::{self, FromIterator},
-    ops,
-};
+use core::{iter, ops};
 
 mod variable_map;
-pub use self::variable_map::{Assertions, Comparisons, Filler, Prelude, VariableMap};
+pub use self::variable_map::{Assertions, Comparisons, Prelude};
 
 use crate::{
-    alloc::{String, ToOwned},
+    alloc::{Rc, String, ToOwned},
+    arith::{OrdArithmetic, StdArithmetic},
+    exec::Operations,
     fns, NativeFn, StandardPrototypes, Value,
 };
 
@@ -48,10 +47,14 @@ use crate::{
 #[derive(Debug)]
 pub struct Environment<'a, T> {
     variables: HashMap<String, Value<'a, T>>,
+    arithmetic: Rc<dyn OrdArithmetic<T>>,
     prototypes: StandardPrototypes<T>,
 }
 
-impl<T> Default for Environment<'_, T> {
+impl<T> Default for Environment<'_, T>
+where
+    StdArithmetic: OrdArithmetic<T>,
+{
     fn default() -> Self {
         Self::new()
     }
@@ -61,29 +64,58 @@ impl<T: Clone> Clone for Environment<'_, T> {
     fn clone(&self) -> Self {
         Self {
             variables: self.variables.clone(),
+            arithmetic: Rc::clone(&self.arithmetic),
             prototypes: self.prototypes.clone(),
         }
     }
 }
 
+/// Compares environments by variables and prototypes; arithmetics are ignored.
 impl<T: PartialEq> PartialEq for Environment<'_, T> {
     fn eq(&self, other: &Self) -> bool {
         self.variables == other.variables && self.prototypes == other.prototypes
     }
 }
 
-impl<'a, T> Environment<'a, T> {
+impl<'a, T> Environment<'a, T>
+where
+    StdArithmetic: OrdArithmetic<T>,
+{
     /// Creates a new environment.
     pub fn new() -> Self {
         Self {
             variables: HashMap::new(),
+            arithmetic: Rc::new(StdArithmetic),
             prototypes: StandardPrototypes::new(),
         }
+    }
+}
+
+impl<'a, T> Environment<'a, T> {
+    /// Creates an environment with the specified arithmetic.
+    pub fn with_arithmetic<A>(arithmetic: A) -> Self
+    where
+        A: OrdArithmetic<T> + 'static,
+    {
+        Self {
+            variables: HashMap::new(),
+            arithmetic: Rc::new(arithmetic),
+            prototypes: StandardPrototypes::new(),
+        }
+    }
+
+    pub(crate) fn operations(&self) -> Operations<'_, T> {
+        Operations::new(&*self.arithmetic, Some(&self.prototypes))
     }
 
     /// Gets a variable by name.
     pub fn get(&self, name: &str) -> Option<&Value<'a, T>> {
         self.variables.get(name)
+    }
+
+    /// Checks if this environment contains a variable with the specified name.
+    pub fn contains(&self, name: &str) -> bool {
+        self.variables.contains_key(name)
     }
 
     /// Iterates over variables.
@@ -121,10 +153,6 @@ impl<'a, T> Environment<'a, T> {
     {
         let wrapped = fns::wrap::<Args, _>(fn_to_wrap);
         self.insert(name, Value::native_fn(wrapped))
-    }
-
-    pub(crate) fn prototypes(&self) -> &StandardPrototypes<T> {
-        &self.prototypes
     }
 }
 
@@ -218,22 +246,6 @@ impl<'r, 'a, T> Iterator for Iter<'r, 'a, T> {
 impl<T> ExactSizeIterator for Iter<'_, '_, T> {
     fn len(&self) -> usize {
         self.inner.len()
-    }
-}
-
-impl<'a, T, S, V> FromIterator<(S, V)> for Environment<'a, T>
-where
-    S: Into<String>,
-    V: Into<Value<'a, T>>,
-{
-    fn from_iter<I: IntoIterator<Item = (S, V)>>(iter: I) -> Self {
-        let variables = iter
-            .into_iter()
-            .map(|(var_name, value)| (var_name.into(), value.into()));
-        Self {
-            variables: variables.collect(),
-            prototypes: StandardPrototypes::new(),
-        }
     }
 }
 

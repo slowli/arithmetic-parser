@@ -444,7 +444,7 @@ impl<T> ValueCell<T> {
 mod tests {
     use super::*;
     use crate::{
-        env::{Environment, Filler},
+        env::Environment,
         exec::{ExecutableModule, WildcardId},
     };
 
@@ -452,56 +452,59 @@ mod tests {
     use assert_matches::assert_matches;
 
     #[test]
-    fn if_basic() {
+    fn if_basics() -> anyhow::Result<()> {
         let block = r#"
             x = 1.0;
             if(x < 2, x + 5, 3 - x)
         "#;
-        let block = Untyped::<F32Grammar>::parse_statements(block).unwrap();
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_import("if", Value::native_fn(If))
-            .build();
-        assert_eq!(module.run().unwrap(), Value::Prim(6.0));
+        let block = Untyped::<F32Grammar>::parse_statements(block)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
+        let mut env = Environment::new();
+        env.insert_native_fn("if", If);
+        assert_eq!(module.with_env(&env)?.run()?, Value::Prim(6.0));
+        Ok(())
     }
 
     #[test]
-    fn if_with_closures() {
+    fn if_with_closures() -> anyhow::Result<()> {
         let block = r#"
             x = 4.5;
             if(x < 2, || x + 5, || 3 - x)()
         "#;
-        let block = Untyped::<F32Grammar>::parse_statements(block).unwrap();
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_import("if", Value::native_fn(If))
-            .build();
-        assert_eq!(module.run().unwrap(), Value::Prim(-1.5));
+        let block = Untyped::<F32Grammar>::parse_statements(block)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
+        let mut env = Environment::new();
+        env.insert_native_fn("if", If);
+        assert_eq!(module.with_env(&env)?.run()?, Value::Prim(-1.5));
+        Ok(())
     }
 
     #[test]
-    fn cmp_sugar() {
+    fn cmp_sugar() -> anyhow::Result<()> {
         let program = "x = 1.0; x > 0 && x <= 3";
-        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .build();
-        assert_eq!(module.run().unwrap(), Value::Bool(true));
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
+        assert_eq!(
+            module.with_env(&Environment::new())?.run()?,
+            Value::Bool(true)
+        );
 
         let bogus_program = "x = 1.0; x > (1, 2)";
-        let bogus_block = Untyped::<F32Grammar>::parse_statements(bogus_program).unwrap();
-        let bogus_module = ExecutableModule::builder(WildcardId, &bogus_block)
-            .unwrap()
-            .build();
+        let bogus_block = Untyped::<F32Grammar>::parse_statements(bogus_program)?;
+        let bogus_module = ExecutableModule::new(WildcardId, &bogus_block)?;
 
-        let err = bogus_module.run().unwrap_err();
+        let err = bogus_module
+            .with_env(&Environment::new())?
+            .run()
+            .unwrap_err();
         let err = err.source();
         assert_matches!(err.kind(), ErrorKind::CannotCompare);
         assert_eq!(*err.main_span().code().fragment(), "(1, 2)");
+        Ok(())
     }
 
     #[test]
-    fn loop_basic() {
+    fn loop_basic() -> anyhow::Result<()> {
         let program = r#"
             // Finds the greatest power of 2 lesser or equal to the value.
             discrete_log2 = |x| {
@@ -514,16 +517,15 @@ mod tests {
             (discrete_log2(1), discrete_log2(2),
                 discrete_log2(4), discrete_log2(6.5), discrete_log2(1000))
         "#;
-        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
 
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_import("loop", Value::native_fn(Loop))
-            .with_import("if", Value::native_fn(If))
-            .build();
+        let module = ExecutableModule::new(WildcardId, &block)?;
+        let mut env = Environment::new();
+        env.insert_native_fn("loop", Loop)
+            .insert_native_fn("if", If);
 
         assert_eq!(
-            module.run().unwrap(),
+            module.with_env(&env)?.run()?,
             Value::from(vec![
                 Value::Prim(0.0),
                 Value::Prim(1.0),
@@ -532,30 +534,31 @@ mod tests {
                 Value::Prim(9.0),
             ])
         );
+        Ok(())
     }
 
     #[test]
-    fn max_value_with_fold() {
+    fn max_value_with_fold() -> anyhow::Result<()> {
         let program = r#"
             max_value = |...xs| {
                 fold(xs, -Inf, |acc, x| if(x > acc, x, acc))
             };
             max_value(1, -2, 7, 2, 5) == 7 && max_value(3, -5, 9) == 9
         "#;
-        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
 
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_import("Inf", Value::Prim(f32::INFINITY))
-            .with_import("fold", Value::native_fn(Fold))
-            .with_import("if", Value::native_fn(If))
-            .build();
+        let module = ExecutableModule::new(WildcardId, &block)?;
+        let mut env = Environment::new();
+        env.insert("Inf", Value::Prim(f32::INFINITY))
+            .insert_native_fn("fold", Fold)
+            .insert_native_fn("if", If);
 
-        assert_eq!(module.run().unwrap(), Value::Bool(true));
+        assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
+        Ok(())
     }
 
     #[test]
-    fn reverse_list_with_fold() {
+    fn reverse_list_with_fold() -> anyhow::Result<()> {
         const SAMPLES: &[(&[f32], &[f32])] = &[
             (&[1.0, 2.0, 3.0], &[3.0, 2.0, 1.0]),
             (&[], &[]),
@@ -569,63 +572,58 @@ mod tests {
             xs = (-4, 3, 0, 1);
             reverse(xs) == (1, 0, 3, -4)
         "#;
-        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
 
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_import("merge", Value::native_fn(Merge))
-            .with_import("fold", Value::native_fn(Fold))
-            .build();
+        let mut env = Environment::new();
+        env.insert_native_fn("merge", Merge)
+            .insert_native_fn("fold", Fold);
 
-        let mut env = module.imports().into_iter().collect::<Environment<'_, _>>();
-        assert_eq!(module.run_in_env(&mut env).unwrap(), Value::Bool(true));
+        assert_eq!(module.with_mutable_env(&mut env)?.run()?, Value::Bool(true));
 
-        let test_block = Untyped::<F32Grammar>::parse_statements("reverse(xs)").unwrap();
-        let mut test_module = ExecutableModule::builder("test", &test_block)
-            .unwrap()
-            .with_import("reverse", env["reverse"].clone())
-            .with_imports_from(&Filler::void(&["xs"]))
-            .build();
+        let test_block = Untyped::<F32Grammar>::parse_statements("reverse(xs)")?;
+        let test_module = ExecutableModule::new("test", &test_block)?;
 
         for &(input, expected) in SAMPLES {
             let input = input.iter().copied().map(Value::Prim).collect();
             let expected = expected.iter().copied().map(Value::Prim).collect();
-            test_module.set_import("xs", Value::Tuple(input));
-            assert_eq!(test_module.run().unwrap(), Value::Tuple(expected));
+            env.insert("xs", Value::Tuple(input));
+            assert_eq!(test_module.with_env(&env)?.run()?, Value::Tuple(expected));
         }
+        Ok(())
     }
 
     #[test]
-    fn error_with_min_function_args() {
+    fn error_with_min_function_args() -> anyhow::Result<()> {
         let program = "5 - min(1, (2, 3))";
-        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_import("min", Value::native_fn(Compare::Min))
-            .build();
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
+        let mut env = Environment::new();
+        env.insert_native_fn("min", Compare::Min);
 
-        let err = module.run().unwrap_err();
+        let err = module.with_env(&env)?.run().unwrap_err();
         let err = err.source();
         assert_eq!(*err.main_span().code().fragment(), "min(1, (2, 3))");
         assert_matches!(
             err.kind(),
             ErrorKind::NativeCall(ref msg) if msg.contains("requires 2 primitive arguments")
         );
+        Ok(())
     }
 
     #[test]
-    fn error_with_min_function_incomparable_args() {
+    fn error_with_min_function_incomparable_args() -> anyhow::Result<()> {
         let program = "5 - min(1, NAN)";
-        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_import("NAN", Value::Prim(f32::NAN))
-            .with_import("min", Value::native_fn(Compare::Min))
-            .build();
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
+        let mut env = Environment::new();
+        env.insert("NAN", Value::Prim(f32::NAN))
+            .insert_native_fn("min", Compare::Min);
 
-        let err = module.run().unwrap_err();
+        let err = module.with_env(&env)?.run().unwrap_err();
         let err = err.source();
         assert_eq!(*err.main_span().code().fragment(), "min(1, NAN)");
         assert_matches!(err.kind(), ErrorKind::CannotCompare);
+        Ok(())
     }
 }

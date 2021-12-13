@@ -1,19 +1,12 @@
 //! [`ExecutableModule`] and related types.
 
-// TODO: `ExecutableModule` largely duplicates `Environment` functionality
-//   could make sense decoupling
-
-use core::ops;
-
 use crate::{
-    alloc::{Box, String},
-    arith::{OrdArithmetic, StdArithmetic},
     compiler::{Compiler, ImportSpans},
-    env::{Environment, VariableMap},
+    env::Environment,
     error::{Backtrace, Error, ErrorKind, ErrorWithBacktrace},
-    StandardPrototypes, Value,
+    Value,
 };
-use arithmetic_parser::{grammars::Grammar, Block, StripCode};
+use arithmetic_parser::{grammars::Grammar, Block, MaybeSpanned, StripCode};
 
 mod command;
 mod module_id;
@@ -158,12 +151,25 @@ impl<T: 'static + Clone> StripCode for ExecutableModule<'_, T> {
 }
 
 impl<'a, T> ExecutableModule<'a, T> {
-    pub(crate) fn from_parts(inner: Executable<'a, T>, imports: Registers<'a, T>) -> Self {
+    /// Creates a new module.
+    pub fn new<G, Id>(id: Id, block: &Block<'a, G>) -> Result<Self, Error<'a>>
+    where
+        Id: ModuleId,
+        G: Grammar<'a, Lit = T>,
+    {
+        Compiler::compile_module(id, block)
+    }
+
+    pub(crate) fn from_parts(
+        inner: Executable<'a, T>,
+        imports: Registers<'a, T>,
+        import_spans: ImportSpans<'a>,
+    ) -> Self {
         Self {
             inner,
             imports: ModuleImports {
                 inner: imports,
-                prototypes: StandardPrototypes::new(),
+                spans: import_spans,
             },
         }
     }
@@ -173,61 +179,62 @@ impl<'a, T> ExecutableModule<'a, T> {
         self.inner.id()
     }
 
-    /// Sets the value of an imported variable.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the variable with the specified name is not an import. Check
-    /// that the import exists beforehand via [`imports().contains()`] if this is
-    /// unknown at compile time.
-    ///
-    /// [`imports().contains()`]: ModuleImports::contains()
-    pub fn set_import(&mut self, name: &str, value: Value<'a, T>) -> &mut Self {
-        self.imports.inner.set_var(name, value);
-        self
-    }
-
-    /// Imports prototypes for standard types, [merging](StandardPrototypes#merging) them with
-    /// the existing prototypes if they were imported previously.
-    pub fn insert_prototypes(&mut self, prototypes: StandardPrototypes<T>) -> &mut Self
-    where
-        T: Clone,
-    {
-        self.imports.prototypes += prototypes;
-        self
-    }
-
     /// Returns a shared reference to imports of this module.
-    pub fn imports(&self) -> &ModuleImports<'a, T> {
-        &self.imports
+    pub fn import_names(&self) -> impl Iterator<Item = &str> + '_ {
+        self.imports.inner.variables().map(|(name, _)| name)
     }
 
-    /// Combines this module with the specified `arithmetic`.
-    pub fn with_arithmetic<'s>(
+    /// Checks if the specified variable is an import.
+    pub fn is_import(&self, name: &str) -> bool {
+        self.imports.inner.variables_map().contains_key(name)
+    }
+
+    /// Combines this module with the specified [`Environment`]. The environment must contain
+    /// all module imports; otherwise, an error will be raised.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the environment does not contain all variables imported by this module.
+    pub fn with_env<'s>(
         &'s self,
-        arithmetic: &'s dyn OrdArithmetic<T>,
-    ) -> WithArithmetic<'s, 'a, T> {
-        WithArithmetic {
+        env: &'s Environment<'a, T>,
+    ) -> Result<WithEnvironment<'s, 'a, T>, Error<'a>> {
+        self.check_imports(env)?;
+        Ok(WithEnvironment {
             module: self,
-            arithmetic,
+            env: Reference::Shared(env),
+        })
+    }
+
+    fn check_imports(&self, env: &Environment<'a, T>) -> Result<(), Error<'a>> {
+        for (name, span) in self.imports.spanned_iter() {
+            if !env.contains(name) {
+                let err = ErrorKind::Undefined(name.into());
+                return Err(Error::new(self.inner.id(), span, err));
+            }
         }
+        Ok(())
+    }
+
+    /// Analogue of [`Self::with_env()`] that modifies the provided [`Environment`]
+    /// when the module is [run](WithEnvironment::run()).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the environment does not contain all variables imported by this module.
+    pub fn with_mutable_env<'s>(
+        &'s self,
+        env: &'s mut Environment<'a, T>,
+    ) -> Result<WithEnvironment<'s, 'a, T>, Error<'a>> {
+        self.check_imports(env)?;
+        Ok(WithEnvironment {
+            module: self,
+            env: Reference::Mutable(env),
+        })
     }
 }
 
 impl<'a, T: 'static + Clone> ExecutableModule<'a, T> {
-    /// Starts building a new module.
-    pub fn builder<G, Id>(
-        id: Id,
-        block: &Block<'a, G>,
-    ) -> Result<ExecutableModuleBuilder<'a, T>, Error<'a>>
-    where
-        Id: ModuleId,
-        G: Grammar<'a, Lit = T>,
-    {
-        let (module, import_spans) = Compiler::compile_module(id, block)?;
-        Ok(ExecutableModuleBuilder::new(module, import_spans))
-    }
-
     fn run_with_registers(
         &self,
         registers: &mut Registers<'a, T>,
@@ -240,92 +247,65 @@ impl<'a, T: 'static + Clone> ExecutableModule<'a, T> {
     }
 }
 
-impl<'a, T: 'static + Clone> ExecutableModule<'a, T>
-where
-    StdArithmetic: OrdArithmetic<T>,
-{
-    /// Runs the module with the current values of imports. This is a read-only operation;
-    /// neither the imports, nor other module state are modified by it.
-    pub fn run(&self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
-        self.with_arithmetic(&StdArithmetic).run()
-    }
+#[derive(Debug)]
+enum Reference<'a, T> {
+    Shared(&'a T),
+    Mutable(&'a mut T),
+}
 
-    /// Runs the module with the specified [`Environment`]. The environment may contain some of
-    /// module imports; they will be used to override imports defined in the module.
-    /// [`StandardPrototypes`] found in the environment will be merged to the
-    /// prototypes previously [imported](Self::insert_prototypes()) into this module, if any,
-    /// with the environment prototypes taking precedence.
-    ///
-    /// On execution, the environment is modified to reflect assignments in the topmost scope
-    /// of the module. The modification takes place regardless of whether or not the execution
-    /// succeeds. That is, if an error occurs, all preceding assignments in the topmost scope
-    /// still take place. See [the relevant example](#behavior-on-errors).
-    pub fn run_in_env(
-        &self,
-        env: &mut Environment<'a, T>,
-    ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
-        self.with_arithmetic(&StdArithmetic).run_in_env(env)
+impl<T> AsRef<T> for Reference<'_, T> {
+    fn as_ref(&self) -> &T {
+        match self {
+            Self::Shared(shared) => shared,
+            Self::Mutable(mutable) => mutable,
+        }
     }
 }
 
 /// Container for an [`ExecutableModule`] together with an [`OrdArithmetic`].
 #[derive(Debug)]
-pub struct WithArithmetic<'r, 'a, T> {
-    module: &'r ExecutableModule<'a, T>,
-    arithmetic: &'r dyn OrdArithmetic<T>,
+pub struct WithEnvironment<'env, 'a, T> {
+    module: &'env ExecutableModule<'a, T>,
+    env: Reference<'env, Environment<'a, T>>,
 }
 
-impl<T> Clone for WithArithmetic<'_, '_, T> {
-    fn clone(&self) -> Self {
-        Self {
-            module: self.module,
-            arithmetic: self.arithmetic,
-        }
-    }
-}
-
-impl<T> Copy for WithArithmetic<'_, '_, T> {}
-
-impl<'a, T: 'static + Clone> WithArithmetic<'_, 'a, T> {
-    /// Runs the module with the previously provided [`OrdArithmetic`] and the current values
-    /// of imports.
+impl<'a, T: 'static + Clone> WithEnvironment<'_, 'a, T> {
+    /// Runs the module in the previously provided [`Environment`].
     ///
-    /// See [`ExecutableModule::run()`] for more details.
+    /// If a mutable reference was provided to the environment, the environment is modified
+    /// to reflect top-level assignments in the module (both new and reassigned variables).
+    /// If an error occurs, the assignments are performed up until the error (i.e., the environment
+    /// is **not** rolled back on error).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if module execution fails.
     pub fn run(self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
         let mut registers = self.module.imports.inner.clone();
-        let prototypes = self.module.imports.prototypes();
-        let operations = Operations::new(self.arithmetic, Some(prototypes));
-        self.module.run_with_registers(&mut registers, operations)
-    }
+        registers.update_from_env(self.env.as_ref());
+        let result = self
+            .module
+            .run_with_registers(&mut registers, self.env.as_ref().operations());
 
-    /// Runs the module with the specified [`Environment`]. The environment may contain some of
-    /// module imports; they will be used to override imports defined in the module.
-    ///
-    /// See [`ExecutableModule::run_in_env()`] for more details.
-    pub fn run_in_env(
-        self,
-        env: &mut Environment<'a, T>,
-    ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
-        let mut registers = self.module.imports.inner.clone();
-        registers.update_from_env(env);
-        let mut prototypes = self.module.imports.prototypes().clone();
-        prototypes += env.prototypes().clone();
-
-        let operations = Operations::new(self.arithmetic, Some(&prototypes));
-        let result = self.module.run_with_registers(&mut registers, operations);
-        registers.update_env(env);
+        if let Reference::Mutable(env) = self.env {
+            registers.update_env(env);
+        }
         result
     }
 }
 
 /// Imports of an [`ExecutableModule`].
-///
-/// Note that imports implement [`Index`](ops::Index) trait, which allows to eloquently
-/// get imports by name.
 #[derive(Debug, Clone)]
-pub struct ModuleImports<'a, T> {
+struct ModuleImports<'a, T> {
     inner: Registers<'a, T>,
-    prototypes: StandardPrototypes<T>,
+    spans: ImportSpans<'a>,
+}
+
+impl<'a, T> ModuleImports<'a, T> {
+    fn spanned_iter(&self) -> impl Iterator<Item = (&str, &MaybeSpanned<'a>)> + '_ {
+        let iter = self.inner.variables_map().iter();
+        iter.map(move |(name, idx)| (name.as_str(), &self.spans[*idx]))
+    }
 }
 
 impl<T: 'static + Clone> StripCode for ModuleImports<'_, T> {
@@ -334,164 +314,7 @@ impl<T: 'static + Clone> StripCode for ModuleImports<'_, T> {
     fn strip_code(self) -> Self::Stripped {
         ModuleImports {
             inner: self.inner.strip_code(),
-            prototypes: self.prototypes,
+            spans: self.spans.into_iter().map(StripCode::strip_code).collect(),
         }
-    }
-}
-
-impl<'a, T> ModuleImports<'a, T> {
-    /// Checks if the imports contain a variable with the specified name.
-    pub fn contains(&self, name: &str) -> bool {
-        self.inner.variables_map().contains_key(name)
-    }
-
-    /// Gets the current value of the import with the specified name, or `None` if the import
-    /// is not defined.
-    pub fn get(&self, name: &str) -> Option<&Value<'a, T>> {
-        self.inner.get_var(name)
-    }
-
-    /// Iterates over imported variables.
-    pub fn iter(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
-        self.inner.variables()
-    }
-
-    /// Gets prototypes for the standard types imported to the module.
-    pub fn prototypes(&self) -> &StandardPrototypes<T> {
-        &self.prototypes
-    }
-}
-
-impl<'a, T> ops::Index<&str> for ModuleImports<'a, T> {
-    type Output = Value<'a, T>;
-
-    fn index(&self, index: &str) -> &Self::Output {
-        self.inner
-            .get_var(index)
-            .unwrap_or_else(|| panic!("Import `{}` is not defined", index))
-    }
-}
-
-impl<'a, T: Clone + 'a> IntoIterator for ModuleImports<'a, T> {
-    type Item = (String, Value<'a, T>);
-    type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'a>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        Box::new(self.inner.into_variables())
-    }
-}
-
-impl<'a, 'r, T> IntoIterator for &'r ModuleImports<'a, T> {
-    type Item = (&'r str, &'r Value<'a, T>);
-    type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'r>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        Box::new(self.iter())
-    }
-}
-
-/// Builder for an `ExecutableModule`.
-///
-/// The builder can be created via [`ExecutableModule::builder()`]. See [`ExecutableModule`] docs
-/// for the examples of usage.
-#[derive(Debug)]
-pub struct ExecutableModuleBuilder<'a, T> {
-    module: ExecutableModule<'a, T>,
-    undefined_imports: ImportSpans<'a>,
-}
-
-impl<'a, T> ExecutableModuleBuilder<'a, T> {
-    fn new(module: ExecutableModule<'a, T>, undefined_imports: ImportSpans<'a>) -> Self {
-        Self {
-            module,
-            undefined_imports,
-        }
-    }
-
-    /// Checks if all necessary imports are defined for this module.
-    pub fn has_undefined_imports(&self) -> bool {
-        self.undefined_imports.is_empty()
-    }
-
-    /// Iterates over the names of undefined imports.
-    pub fn undefined_imports(&self) -> impl Iterator<Item = &str> + '_ {
-        self.undefined_imports.keys().map(String::as_str)
-    }
-
-    /// Adds a single import. If the specified variable is not an import, does nothing.
-    pub fn with_import(mut self, name: &str, value: Value<'a, T>) -> Self {
-        if self.module.imports.contains(name) {
-            self.module.set_import(name, value);
-        }
-        self.undefined_imports.remove(name);
-        self
-    }
-
-    /// Sets undefined imports from the specified source. Imports defined previously and present
-    /// in the source are **not** overridden. [`StandardPrototypes`] from the source are
-    /// [merged](StandardPrototypes#merging) with the previously imported ones, with the source
-    /// taking precedence.
-    pub fn with_imports_from<V>(mut self, source: &V) -> Self
-    where
-        T: Clone,
-        V: VariableMap<'a, T> + ?Sized,
-    {
-        let module = &mut self.module;
-        module.insert_prototypes(source.get_prototypes());
-        self.undefined_imports.retain(|var_name, _| {
-            source.get_variable(var_name).map_or(true, |value| {
-                module.set_import(var_name, value);
-                false
-            })
-        });
-        self
-    }
-
-    /// Tries to build this module.
-    ///
-    /// # Errors
-    ///
-    /// Fails if this module has at least one undefined import. In this case, the returned error
-    /// highlights one of such imports.
-    pub fn try_build(self) -> Result<ExecutableModule<'a, T>, Error<'a>> {
-        if let Some((var_name, span)) = self.undefined_imports.iter().next() {
-            let err = ErrorKind::Undefined(var_name.clone());
-            Err(Error::new(self.module.id(), span, err))
-        } else {
-            Ok(self.module)
-        }
-    }
-
-    /// A version of [`Self::try_build()`] that panics if there are undefined imports.
-    ///
-    /// # Panics
-    ///
-    /// - Panics if there are undefined imports.
-    pub fn build(self) -> ExecutableModule<'a, T> {
-        self.try_build().unwrap()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{compiler::Compiler, exec::WildcardId};
-
-    use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-
-    #[test]
-    fn cloning_module() {
-        let block = "y = x + 2 * (x + 1) + 1; y";
-        let block = Untyped::<F32Grammar>::parse_statements(block).unwrap();
-        let (mut module, _) = Compiler::compile_module(WildcardId, &block).unwrap();
-
-        let mut module_copy = module.clone();
-        module_copy.set_import("x", Value::Prim(10.0));
-        let value = module_copy.run().unwrap();
-        assert_eq!(value, Value::Prim(33.0));
-
-        module.set_import("x", Value::Prim(5.0));
-        let value = module.run().unwrap();
-        assert_eq!(value, Value::Prim(18.0));
     }
 }

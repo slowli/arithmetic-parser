@@ -13,8 +13,8 @@ use std::cell::RefCell;
 
 use arithmetic_eval::{
     arith::{ArithmeticExt, ModularArithmetic},
-    env::{Assertions, Filler, Prelude},
-    fns, ExecutableModule, Value,
+    env::{Assertions, Prelude},
+    fns, Environment, ExecutableModule, Value,
 };
 use arithmetic_parser::grammars::{NumGrammar, Parse, Untyped};
 
@@ -35,12 +35,7 @@ const EL_GAMAL_ENCRYPTION: &str = include_str!("elgamal.script");
 fn main() -> anyhow::Result<()> {
     let el_gamal_encryption =
         Untyped::<NumGrammar<BigUint>>::parse_statements(EL_GAMAL_ENCRYPTION)?;
-    let mut el_gamal_encryption = ExecutableModule::builder("el_gamal", &el_gamal_encryption)?
-        .with_imports_from(&Prelude)
-        .with_imports_from(&Assertions)
-        .with_import("dbg", Value::native_fn(fns::Dbg))
-        .with_imports_from(&Filler::void(&["GEN", "ORDER", "rand_scalar"]))
-        .build();
+    let el_gamal_encryption = ExecutableModule::new("el_gamal", &el_gamal_encryption)?;
 
     // Run the compiled module with different groups.
     for i in 0..5 {
@@ -61,13 +56,16 @@ fn main() -> anyhow::Result<()> {
                 .gen_biguint_range(&two, &prime_subgroup_order)
         });
 
-        el_gamal_encryption
-            .set_import("GEN", Value::Prim(generator))
-            .set_import("ORDER", order_value)
-            .set_import("rand_scalar", rand_scalar)
-            .insert_prototypes(Prelude.prototypes())
-            .with_arithmetic(&arithmetic)
-            .run()?;
+        let mut env = Environment::with_arithmetic(arithmetic);
+        env.extend(Prelude.iter());
+        env.extend(Assertions.iter());
+        env.insert_prototypes(Prelude.prototypes())
+            .insert_native_fn("dbg", fns::Dbg)
+            .insert("GEN", Value::Prim(generator))
+            .insert("ORDER", order_value)
+            .insert("rand_scalar", rand_scalar);
+
+        el_gamal_encryption.with_env(&env)?.run()?;
     }
     Ok(())
 }

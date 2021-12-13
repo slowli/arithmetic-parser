@@ -37,7 +37,7 @@
 
 use core::{cmp::Ordering, fmt};
 
-use crate::error::ArithmeticError;
+use crate::{alloc::Box, error::ArithmeticError};
 
 #[cfg(feature = "bigint")]
 mod bigint;
@@ -116,6 +116,50 @@ pub trait OrdArithmetic<T>: Arithmetic<T> {
 impl<T> fmt::Debug for dyn OrdArithmetic<T> + '_ {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.debug_tuple("OrdArithmetic").finish()
+    }
+}
+
+impl<T> Arithmetic<T> for Box<dyn OrdArithmetic<T>> {
+    #[inline]
+    fn add(&self, x: T, y: T) -> Result<T, ArithmeticError> {
+        (**self).add(x, y)
+    }
+
+    #[inline]
+    fn sub(&self, x: T, y: T) -> Result<T, ArithmeticError> {
+        (**self).sub(x, y)
+    }
+
+    #[inline]
+    fn mul(&self, x: T, y: T) -> Result<T, ArithmeticError> {
+        (**self).mul(x, y)
+    }
+
+    #[inline]
+    fn div(&self, x: T, y: T) -> Result<T, ArithmeticError> {
+        (**self).div(x, y)
+    }
+
+    #[inline]
+    fn pow(&self, x: T, y: T) -> Result<T, ArithmeticError> {
+        (**self).pow(x, y)
+    }
+
+    #[inline]
+    fn neg(&self, x: T) -> Result<T, ArithmeticError> {
+        (**self).neg(x)
+    }
+
+    #[inline]
+    fn eq(&self, x: &T, y: &T) -> bool {
+        (**self).eq(x, y)
+    }
+}
+
+impl<T> OrdArithmetic<T> for Box<dyn OrdArithmetic<T>> {
+    #[inline]
+    fn partial_cmp(&self, x: &T, y: &T) -> Option<Ordering> {
+        (**self).partial_cmp(x, y)
     }
 }
 

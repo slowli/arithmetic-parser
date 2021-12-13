@@ -46,10 +46,8 @@ impl NativeFn<f32> for PointLen {
 
 #[test]
 fn prototype_basics() {
-    let mut proto: Object<f32> = Object::default();
-    proto.insert("len", Value::native_fn(PointLen));
+    let proto = Value::native_fn(PointLen).into_object("len");
     let proto = Prototype::from(proto);
-
     let mut point: Object<f32> = vec![("x", Value::Prim(3.0)), ("y", Value::Prim(4.0))]
         .into_iter()
         .collect();
@@ -76,6 +74,82 @@ fn prototype_basics() {
         points = map(points_data, Point);
         assert_eq(map(points, Point.len), map(points_data, Point.len));
     "#;
+    evaluate(&mut env, program);
+}
+
+fn assert_prototype_equality(this: Prototype<'_, f32>, other: Prototype<'_, f32>) {
+    assert_eq!(this, other);
+    let mut env = Environment::new();
+    env.insert_native_fn("assert_eq", fns::AssertEq)
+        .insert("this", this.into())
+        .insert("other", other.into());
+    evaluate(&mut env, "assert_eq(this, other);");
+}
+
+#[test]
+fn prototype_equality() {
+    let empty_prototype = Prototype::default();
+    assert_prototype_equality(empty_prototype.clone(), empty_prototype.clone());
+    assert_prototype_equality(empty_prototype, Prototype::default());
+
+    let native_fn = Value::native_fn(fns::Len);
+    let mut prototype = native_fn.clone().into_object("len");
+    assert_prototype_equality(prototype.clone().into(), prototype.clone().into());
+    assert_prototype_equality(
+        prototype.clone().into(),
+        native_fn.clone().into_object("len").into(),
+    );
+    assert_ne!(
+        Prototype::from(prototype.clone()),
+        Prototype::from(native_fn.into_object("length"))
+    );
+
+    let other_fn = Value::native_fn(fns::Map);
+    prototype.insert("map", other_fn.clone());
+    assert_prototype_equality(prototype.clone().into(), prototype.clone().into());
+    assert_ne!(
+        Prototype::from(prototype.clone()),
+        Prototype::from(other_fn.into_object("map"))
+    );
+
+    prototype.insert("ZERO", Value::Prim(0.0));
+    assert_prototype_equality(prototype.clone().into(), prototype.clone().into());
+    let mut mutated = prototype.clone();
+    mutated.insert("ZERO", Value::Prim(1.0));
+    assert_ne!(Prototype::from(prototype), Prototype::from(mutated));
+}
+
+#[test]
+fn prototype_equality_in_script() {
+    let program = r#"
+        Proto = impl(#{
+            len: |{x, y}| x * x + y * y,
+        });
+        assert_eq(Proto, Proto);
+
+        Other = impl(#{ len: Proto.len });
+        assert_eq(Other, Proto); assert_eq(Proto, Other);
+
+        Proto = impl(#{ len: Proto.len, ZERO: 0 });
+        assert_eq(Proto, Proto);
+        assert(Proto != Other);
+        Other = impl(#{ len: Proto.len, ZERO: 0 });
+        assert_eq(Proto, Other); assert_eq(Other, Proto);
+        {
+            Other = impl(#{ len: Proto.len, ZERO: 1 });
+            assert(Proto != Other);
+        };
+
+        Proto = impl(#{ len: Proto.len, map, ZERO: 0 });
+        assert(Proto != Other);
+        Other = impl(#{ len: Proto.len, map, ZERO: 0 });
+        assert_eq(Proto, Other); assert_eq(Other, Proto);
+    "#;
+
+    let mut env = Environment::<f32>::new();
+    env.extend(Assertions.iter());
+    env.insert_native_fn("impl", fns::CreatePrototype)
+        .insert_native_fn("map", fns::Map);
     evaluate(&mut env, program);
 }
 

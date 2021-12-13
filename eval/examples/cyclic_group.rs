@@ -310,8 +310,7 @@ fn main() -> anyhow::Result<()> {
 
         let arithmetic = CyclicGroupArithmetic::new(BIT_LENGTH);
         let mut env = Environment::with_arithmetic(arithmetic.clone().without_comparisons());
-        env.extend(Prelude.iter());
-        env.extend(Assertions.iter());
+        env.extend(Prelude::vars().chain(Assertions::vars()));
         env.insert_native_fn("dbg", fns::Dbg)
             .insert_wrapped_fn("to_scalar", arithmetic.to_scalar());
         arithmetic.define_imports(&mut env);

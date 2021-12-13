@@ -268,9 +268,8 @@ fn object_destructuring_in_pipeline() {
     "#;
     let mut env = Environment::new();
     env.insert("INF", Value::Prim(f32::INFINITY))
-        .insert_prototypes(Prelude.prototypes());
-    env.extend(Prelude.iter());
-    env.extend(Assertions.iter());
+        .insert_prototypes(Prelude::prototypes());
+    env.extend(Prelude::vars().chain(Assertions::vars()));
     evaluate(&mut env, program);
 }
 

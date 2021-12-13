@@ -8,7 +8,7 @@ use crate::{evaluate, try_evaluate};
 #[test]
 fn deferred_initialization_with_function() {
     let mut env = Environment::<f32>::new();
-    env.extend(Assertions.iter());
+    env.extend(Assertions::vars());
     env.insert_native_fn("defer", fns::Defer)
         .insert_native_fn("if", fns::If);
 
@@ -26,7 +26,7 @@ fn deferred_initialization_with_function() {
 #[test]
 fn deferred_initialization_with_prototype() {
     let mut env = Environment::<f32>::new();
-    env.extend(Assertions.iter());
+    env.extend(Assertions::vars());
     env.insert_native_fn("defer", fns::Defer)
         .insert_native_fn("impl", fns::CreatePrototype);
 
@@ -50,7 +50,7 @@ fn deferred_initialization_with_prototype() {
 #[test]
 fn uninitialized_value_usage() {
     let mut env = Environment::<f32>::new();
-    env.extend(Assertions.iter());
+    env.extend(Assertions::vars());
     env.insert_native_fn("defer", fns::Defer);
 
     let immediate_use_program = "defer(|uninit| uninit());";

@@ -53,8 +53,8 @@ pub use crate::compiler::CompilerExt;
 /// let module = ExecutableModule::new("test", &module)?;
 ///
 /// let mut env = Environment::new();
-/// env.extend(env::Prelude.iter());
-/// env.extend(env::Comparisons.iter());
+/// env.extend(env::Prelude::vars());
+/// env.extend(env::Comparisons::vars());
 /// env.insert("INFINITY", Value::Prim(f32::INFINITY)).insert("xs", Value::void());
 ///
 /// // With the original imports, the returned value is `-INFINITY`.
@@ -112,7 +112,7 @@ pub use crate::compiler::CompilerExt;
 /// let module = ExecutableModule::new("test", &module)?;
 ///
 /// let mut env = Environment::new();
-/// env.extend(Assertions.iter());
+/// env.extend(Assertions::vars());
 /// assert!(module.with_mutable_env(&mut env)?.run().is_err());
 /// assert_eq!(env["x"], Value::Prim(5.0));
 /// # Ok(())
@@ -256,7 +256,7 @@ impl<T> AsRef<T> for Reference<'_, T> {
     }
 }
 
-/// Container for an [`ExecutableModule`] together with an [`OrdArithmetic`].
+/// Container for an [`ExecutableModule`] together with an [`Environment`].
 #[derive(Debug)]
 pub struct WithEnvironment<'env, 'a, T> {
     module: &'env ExecutableModule<'a, T>,

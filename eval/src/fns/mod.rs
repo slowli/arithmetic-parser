@@ -30,8 +30,10 @@ use once_cell::unsync::OnceCell;
 use core::{cmp::Ordering, fmt};
 
 use crate::{
-    alloc::{vec, Vec}, error::AuxErrorInfo, CallContext, Error, ErrorKind, EvalResult, Function, NativeFn,
-    Object, OpaqueRef, Prototype, SpannedValue, Value,
+    alloc::{vec, Vec},
+    error::AuxErrorInfo,
+    CallContext, Error, ErrorKind, EvalResult, Function, NativeFn, Object, OpaqueRef, Prototype,
+    SpannedValue, Value,
 };
 use arithmetic_parser::StripCode;
 
@@ -164,7 +166,7 @@ fn extract_fn<'a, T, A>(
 /// let module = ExecutableModule::new("test_cmp", &program)?;
 ///
 /// let mut env = Environment::new();
-/// env.extend(Comparisons.iter());
+/// env.extend(Comparisons::vars());
 /// env.insert_native_fn("map", fns::Map);
 /// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
 /// # Ok(())
@@ -325,7 +327,7 @@ impl<T> NativeFn<T> for CreatePrototype {
 /// let module = ExecutableModule::new("test_prototype", &program)?;
 ///
 /// let mut env = Environment::new();
-/// env.extend(Assertions.iter());
+/// env.extend(Assertions::vars());
 /// env.insert_native_fn("dbg", fns::Dbg)
 ///     .insert_native_fn("impl", fns::CreatePrototype)
 ///     .insert_native_fn("prototype", fns::GetPrototype);

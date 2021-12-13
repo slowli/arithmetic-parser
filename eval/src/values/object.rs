@@ -9,8 +9,9 @@ use core::{
 };
 
 use crate::{
-    alloc::{Rc, String, Vec}, error::AuxErrorInfo, CallContext, ErrorKind, EvalResult, Function, SpannedValue,
-    Value, ValueType,
+    alloc::{Rc, String, Vec},
+    error::AuxErrorInfo,
+    CallContext, ErrorKind, EvalResult, Function, SpannedValue, Value, ValueType,
 };
 use arithmetic_parser::StripCode;
 
@@ -413,7 +414,7 @@ impl<T: 'static + Clone> StripCode for Prototype<'_, T> {
 ///     .with_array_proto(array_proto);
 /// let mut env = Environment::new();
 /// env.insert_prototypes(prototypes)
-///     .insert_prototypes(Prelude.prototypes());
+///     .insert_prototypes(Prelude::prototypes());
 /// // ^ also insert "standard" prototypes
 ///
 /// let program = r#"

@@ -357,7 +357,7 @@ fn comparison_of_invalid_values() {
 fn comparison_return_value() {
     let program = "cmp(5, 3) == GREATER && cmp(3, 5) == LESS && cmp(4, 4) == EQUAL";
     let mut env = Environment::new();
-    env.extend(Comparisons.iter());
+    env.extend(Comparisons::vars());
     let return_value = evaluate(&mut env, program);
     assert_eq!(return_value, Value::Bool(true));
 }
@@ -369,7 +369,7 @@ fn comparison_constants_are_comparable() {
             EQUAL != 0 && LESS != -1
     "#;
     let mut env = Environment::new();
-    env.extend(Comparisons.iter());
+    env.extend(Comparisons::vars());
     let return_value = evaluate(&mut env, program);
     assert_eq!(return_value, Value::Bool(true));
 }

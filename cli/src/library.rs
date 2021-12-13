@@ -133,10 +133,9 @@ where
     const REM_ERROR_MSG: &str = "Cannot calculate remainder for a divisor of zero";
 
     let mut env = Environment::<T>::with_arithmetic(int_arithmetic(wrapping));
-    let vars = Prelude
-        .iter()
-        .chain(Assertions.iter())
-        .chain(Comparisons.iter())
+    let vars = Prelude::vars()
+        .chain(Assertions::vars())
+        .chain(Comparisons::vars())
         .chain(T::STD_LIB.variables());
     env.extend(vars);
 
@@ -163,7 +162,7 @@ where
 
     env.insert_native_fn("array", fns::Array)
         .insert("rem", rem)
-        .insert_prototypes(Prelude.prototypes())
+        .insert_prototypes(Prelude::prototypes())
         .insert_prototypes(prototypes);
 
     let type_env = defs::Prelude::iter()
@@ -182,9 +181,9 @@ where
 pub fn create_modular_env(modulus: u64) -> (Environment<'static, u64>, TypeEnvironment) {
     let arith = ModularArithmetic::new(modulus).without_comparisons();
     let mut env = Environment::<u64>::with_arithmetic(arith);
-    env.extend(Prelude.iter().chain(Assertions.iter()));
+    env.extend(Prelude::vars().chain(Assertions::vars()));
     env.insert("MAX_VALUE", Value::Prim(modulus - 1))
-        .insert_prototypes(Prelude.prototypes());
+        .insert_prototypes(Prelude::prototypes());
 
     let type_env = defs::Prelude::iter()
         .chain(defs::Assertions::iter())
@@ -246,10 +245,9 @@ where
     StdArithmetic: OrdArithmetic<T>,
 {
     let mut env = Environment::<T>::new();
-    let vars = Prelude
-        .iter()
-        .chain(Assertions.iter())
-        .chain(Comparisons.iter())
+    let vars = Prelude::vars()
+        .chain(Assertions::vars())
+        .chain(Comparisons::vars())
         .chain(T::STD_LIB.variables());
     env.extend(vars);
 
@@ -261,7 +259,7 @@ where
 
     env.insert_native_fn("array", fns::Array)
         .insert_native_fn("assert_close", fns::AssertClose::new(tolerance))
-        .insert_prototypes(Prelude.prototypes())
+        .insert_prototypes(Prelude::prototypes())
         .insert_prototypes(prototypes);
 
     let type_env = defs::Prelude::iter()
@@ -321,9 +319,8 @@ where
 {
     let arith = StdArithmetic.without_comparisons();
     let mut env = Environment::<T>::with_arithmetic(arith);
-    let vars = Prelude
-        .iter()
-        .chain(Assertions.iter())
+    let vars = Prelude::vars()
+        .chain(Assertions::vars())
         .chain(T::STD_LIB.variables());
     env.extend(vars);
 
@@ -332,7 +329,7 @@ where
         .filter(|(_, value)| value.is_function())
         .collect();
     let prototypes = StandardPrototypes::new().with_primitive_proto(primitive_proto);
-    env.insert_prototypes(Prelude.prototypes())
+    env.insert_prototypes(Prelude::prototypes())
         .insert_prototypes(prototypes);
 
     let type_env = defs::Prelude::iter()

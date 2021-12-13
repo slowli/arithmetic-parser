@@ -57,9 +57,8 @@ fn main() -> anyhow::Result<()> {
         });
 
         let mut env = Environment::with_arithmetic(arithmetic);
-        env.extend(Prelude.iter());
-        env.extend(Assertions.iter());
-        env.insert_prototypes(Prelude.prototypes())
+        env.extend(Prelude::vars().chain(Assertions::vars()));
+        env.insert_prototypes(Prelude::prototypes())
             .insert_native_fn("dbg", fns::Dbg)
             .insert("GEN", Value::Prim(generator))
             .insert("ORDER", order_value)

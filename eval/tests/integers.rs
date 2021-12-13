@@ -58,7 +58,7 @@ where
 
     let program_with_comparisons = "1 < 2 && 1 + 1 == 2 && 2 ^ 3 > 7";
     let mut env = Environment::with_arithmetic(arithmetic);
-    env.extend(Comparisons.iter());
+    env.extend(Comparisons::vars());
     let value = evaluate::<T>(&mut env, program_with_comparisons);
     assert_eq!(value, Value::Bool(true));
 }
@@ -223,7 +223,6 @@ fn modular_arithmetic() {
 
     let fermat_theorem_check = "while(1, |i| i != 0, |i| { assert_eq(i^60, 1); i + 1 })";
     let mut env = Environment::with_arithmetic(arithmetic);
-    env.extend(Prelude.iter());
-    env.extend(Assertions.iter());
+    env.extend(Prelude::vars().chain(Assertions::vars()));
     evaluate(&mut env, fermat_theorem_check);
 }

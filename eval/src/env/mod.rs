@@ -17,7 +17,7 @@ use crate::{
 /// Environment containing named `Value`s.
 ///
 /// Note that the environment implements the [`Index`](ops::Index) trait, which allows to eloquently
-/// access or modify environment. Similarly, [`IntoIterator`] / [`FromIterator`] / [`Extend`] traits
+/// access or modify environment. Similarly, [`IntoIterator`] / [`Extend`] traits
 /// allow to construct environments.
 ///
 /// # Examples
@@ -27,7 +27,7 @@ use crate::{
 ///
 /// // Load environment from the standard containers.
 /// let mut env = Environment::<f64>::new();
-/// env.extend(Prelude.iter().chain(Comparisons.iter()));
+/// env.extend(Prelude::vars().chain(Comparisons::vars()));
 /// // Add a custom variable for a good measure.
 /// env.insert("x", Value::Prim(1.0));
 ///

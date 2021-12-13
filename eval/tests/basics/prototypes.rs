@@ -59,7 +59,7 @@ fn prototype_basics() {
     let return_value = as_primitive(&return_value).unwrap();
     assert!((return_value - 5.0).abs() < 1e-4, "{}", return_value);
 
-    env.extend(Assertions.iter());
+    env.extend(Assertions::vars());
     env.insert("Point", proto.into())
         .insert_native_fn("map", fns::Map)
         .insert_wrapped_fn("abs", f32::abs);
@@ -147,7 +147,7 @@ fn prototype_equality_in_script() {
     "#;
 
     let mut env = Environment::<f32>::new();
-    env.extend(Assertions.iter());
+    env.extend(Assertions::vars());
     env.insert_native_fn("impl", fns::CreatePrototype)
         .insert_native_fn("map", fns::Map);
     evaluate(&mut env, program);
@@ -156,7 +156,7 @@ fn prototype_equality_in_script() {
 #[test]
 fn defining_prototype_in_script() {
     let mut env = Environment::<f32>::new();
-    env.extend(Assertions.iter());
+    env.extend(Assertions::vars());
     env.insert_native_fn("impl", fns::CreatePrototype)
         .insert_wrapped_fn("abs", f32::abs);
 

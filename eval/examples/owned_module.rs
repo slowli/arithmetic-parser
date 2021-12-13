@@ -41,8 +41,7 @@ fn create_static_module(
 
 fn main() -> anyhow::Result<()> {
     let mut env = Environment::new();
-    env.extend(Prelude.iter());
-    env.extend(Assertions.iter());
+    env.extend(Prelude::vars().chain(Assertions::vars()));
     env.insert("INF", Value::Prim(f64::INFINITY));
 
     let sum_module = {

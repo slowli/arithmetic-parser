@@ -1,7 +1,5 @@
 //! Standard collections of variables.
 
-#![allow(clippy::unused_self)] // FIXME: remove
-
 use core::{cmp::Ordering, fmt};
 
 use crate::{alloc::vec, fns, Object, StandardPrototypes, Value};
@@ -19,7 +17,7 @@ pub struct Prelude;
 
 impl Prelude {
     /// Creates an iterator over contained values and the corresponding names.
-    pub fn iter<T>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)>
+    pub fn vars<T>() -> impl Iterator<Item = (&'static str, Value<'static, T>)>
     where
         T: 'static + Clone,
     {
@@ -44,7 +42,7 @@ impl Prelude {
     ///
     /// Currently, this only sets a prototype for tuples / arrays containing
     /// `map`, `filter`, `fold`, `push` and `merge` functions.
-    pub fn prototypes<T>(self) -> StandardPrototypes<T>
+    pub fn prototypes<T>() -> StandardPrototypes<T>
     where
         T: 'static + Clone,
     {
@@ -65,8 +63,7 @@ pub struct Assertions;
 
 impl Assertions {
     /// Creates an iterator over contained values and the corresponding names.
-    #[allow(clippy::missing_panics_doc)] // false positive; `unwrap()` never panics
-    pub fn iter<T>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)>
+    pub fn vars<T>() -> impl Iterator<Item = (&'static str, Value<'static, T>)>
     where
         T: 'static + Clone + fmt::Display,
     {
@@ -88,7 +85,7 @@ pub struct Comparisons;
 
 impl Comparisons {
     /// Creates an iterator over contained values and the corresponding names.
-    pub fn iter<T>(self) -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
+    pub fn vars<T>() -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
         let variables = vec![
             ("LESS", Value::opaque_ref(Ordering::Less)),
             ("EQUAL", Value::opaque_ref(Ordering::Equal)),

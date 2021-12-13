@@ -7,7 +7,10 @@ use core::{
     fmt,
 };
 
-use crate::{alloc::{Rc, String, Vec}, fns};
+use crate::{
+    alloc::{Rc, String, Vec},
+    fns,
+};
 use arithmetic_parser::{MaybeSpanned, StripCode};
 
 mod function;

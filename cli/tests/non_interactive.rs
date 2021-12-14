@@ -123,7 +123,7 @@ fn error_with_call_complex_call_trace_and_native_fns() {
         "tests/snapshots/errors-native-call-trace.svg",
         &["arithmetic-parser eval '\n  \
              all = |array, pred| array.fold(true, |acc, x| acc && pred(x));\n  \
-             (1, 2, map).all(|x| 0 < x)'"],
+             all((1, 2, map), |x| 0 < x)'"],
     );
 }
 
@@ -135,7 +135,7 @@ fn typing_errors_simple() {
             "arithmetic-parser eval --types '(1, 2, 3).map(|x| x, 1)'",
             "arithmetic-parser eval --types '\n  \
              all = |array, pred| array.fold(true, |acc, x| acc && pred(x));\n  \
-             (1, 2, map).all(|x| 0 < x)'",
+             all((1, 2, map), |x| 0 < x)'",
         ],
     );
 }

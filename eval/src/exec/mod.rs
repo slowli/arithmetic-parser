@@ -1,5 +1,7 @@
 //! [`ExecutableModule`] and related types.
 
+use core::fmt;
+
 use crate::{
     compiler::{Compiler, ImportSpans},
     env::Environment,
@@ -144,7 +146,7 @@ impl<T: 'static + Clone> StripCode for ExecutableModule<'_, T> {
     }
 }
 
-impl<'a, T> ExecutableModule<'a, T> {
+impl<'a, T: Clone + fmt::Debug> ExecutableModule<'a, T> {
     /// Creates a new module.
     pub fn new<G, Id>(id: Id, block: &Block<'a, G>) -> Result<Self, Error<'a>>
     where
@@ -153,7 +155,9 @@ impl<'a, T> ExecutableModule<'a, T> {
     {
         Compiler::compile_module(id, block)
     }
+}
 
+impl<'a, T> ExecutableModule<'a, T> {
     pub(crate) fn from_parts(
         inner: Executable<'a, T>,
         imports: Registers<'a, T>,

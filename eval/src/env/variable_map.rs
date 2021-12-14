@@ -2,7 +2,7 @@
 
 use core::{cmp::Ordering, fmt};
 
-use crate::{alloc::vec, fns, Object, StandardPrototypes, Value};
+use crate::{alloc::vec, fns, PrototypeField, Value};
 
 /// Commonly used constants and functions from the [`fns` module](fns).
 ///
@@ -42,18 +42,19 @@ impl Prelude {
     ///
     /// Currently, this only sets a prototype for tuples / arrays containing
     /// `map`, `filter`, `fold`, `push` and `merge` functions.
-    pub fn prototypes<T>() -> StandardPrototypes<T>
+    pub fn prototypes<T>() -> impl Iterator<Item = (PrototypeField, Value<'static, T>)>
     where
         T: 'static + Clone,
     {
-        let mut array_proto = Object::default();
-        array_proto.insert("map", Value::native_fn(fns::Map));
-        array_proto.insert("filter", Value::native_fn(fns::Filter));
-        array_proto.insert("fold", Value::native_fn(fns::Fold));
-        array_proto.insert("push", Value::native_fn(fns::Push));
-        array_proto.insert("merge", Value::native_fn(fns::Merge));
-
-        StandardPrototypes::new().with_array_proto(array_proto)
+        let array = PrototypeField::array;
+        let fields = vec![
+            (array("map"), Value::native_fn(fns::Map)),
+            (array("filter"), Value::native_fn(fns::Filter)),
+            (array("fold"), Value::native_fn(fns::Fold)),
+            (array("push"), Value::native_fn(fns::Push)),
+            (array("merge"), Value::native_fn(fns::Merge)),
+        ];
+        fields.into_iter()
     }
 }
 

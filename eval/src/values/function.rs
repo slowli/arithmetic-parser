@@ -14,7 +14,8 @@ use crate::{
     error::{Backtrace, CodeInModule},
     exec::{ExecutableFn, ModuleId},
     fns::ValueCell,
-    Error, ErrorKind, EvalResult, Prototype, SpannedValue, StandardPrototypes, Value,
+    values::StandardPrototypes,
+    Error, ErrorKind, EvalResult, Prototype, SpannedValue, Value,
 };
 use arithmetic_parser::{LvalueLen, MaybeSpanned, StripCode};
 

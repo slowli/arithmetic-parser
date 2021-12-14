@@ -18,14 +18,15 @@ mod object;
 mod ops;
 mod tuple;
 
+pub(crate) use self::object::StandardPrototypes;
 pub use self::{
     function::{CallContext, Function, InterpretedFn, NativeFn},
-    object::{Object, Prototype, StandardPrototypes},
+    object::{Object, Prototype, PrototypeField},
     tuple::Tuple,
 };
 
 /// Possible high-level types of [`Value`]s.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum ValueType {
     /// Primitive type other than `Bool`ean.
@@ -228,6 +229,7 @@ impl<'a, T> Value<'a, T> {
     }
 
     /// Wraps this value into an object with a single field.
+    // FIXME: inconsistency with typing crate - `Object::just()`
     pub fn into_object(self, field_name: impl Into<String>) -> Object<'a, T> {
         let mut object = Object::default();
         object.insert(field_name, self);

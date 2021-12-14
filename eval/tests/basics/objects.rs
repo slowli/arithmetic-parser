@@ -267,8 +267,8 @@ fn object_destructuring_in_pipeline() {
         assert_eq(minmax(5, -4, 6, 9, 1), #{ min: -4, max: 9 });
     "#;
     let mut env = Environment::new();
-    env.insert("INF", Value::Prim(f32::INFINITY))
-        .insert_prototypes(Prelude::prototypes());
+    env.insert("INF", Value::Prim(f32::INFINITY));
+    env.extend(Prelude::prototypes());
     env.extend(Prelude::vars().chain(Assertions::vars()));
     evaluate(&mut env, program);
 }

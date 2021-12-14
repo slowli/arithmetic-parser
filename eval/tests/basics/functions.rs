@@ -6,7 +6,7 @@ use hashbrown::HashMap;
 use core::iter::FromIterator;
 
 use arithmetic_eval::{
-    fns::FromValueErrorKind, Environment, ErrorKind, Function, NativeFn, StandardPrototypes, Value,
+    fns::FromValueErrorKind, Environment, ErrorKind, Function, NativeFn, PrototypeField, Value,
     ValueType,
 };
 use arithmetic_parser::LvalueLen;
@@ -308,8 +308,10 @@ fn function_aliasing() {
 fn method_call() {
     let program = "1.0.add(2)";
     let mut env = Environment::new();
-    let proto = Value::wrapped_fn(|x: f32, y: f32| x + y).into_object("add");
-    env.insert_prototypes(StandardPrototypes::new().with_primitive_proto(proto));
+    env.insert_prototype(
+        PrototypeField::prim("add"),
+        Value::wrapped_fn(|x: f32, y: f32| x + y),
+    );
     let return_value = evaluate(&mut env, program);
     assert_eq!(return_value, Value::Prim(3.0));
 }

@@ -168,8 +168,8 @@
 //!
 //! let mut env = Environment::new();
 //! env.extend(Prelude::vars().chain(Assertions::vars()));
-//! env.insert("INF", Value::Prim(f32::INFINITY))
-//!     .insert_prototypes(Prelude::prototypes());
+//! env.extend(Prelude::prototypes());
+//! env.insert("INF", Value::Prim(f32::INFINITY));
 //! module.with_env(&env)?.run()?;
 //! # Ok(())
 //! # }
@@ -221,8 +221,8 @@ pub use self::{
     error::{Error, ErrorKind, EvalResult},
     exec::ExecutableModule,
     values::{
-        CallContext, Function, InterpretedFn, NativeFn, Object, OpaqueRef, Prototype, SpannedValue,
-        StandardPrototypes, Tuple, Value, ValueType,
+        CallContext, Function, InterpretedFn, NativeFn, Object, OpaqueRef, Prototype,
+        PrototypeField, SpannedValue, Tuple, Value, ValueType,
     },
 };
 

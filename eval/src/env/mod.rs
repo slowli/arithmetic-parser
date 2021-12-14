@@ -11,7 +11,9 @@ use crate::{
     alloc::{Rc, String, ToOwned},
     arith::{OrdArithmetic, StdArithmetic},
     exec::Operations,
-    fns, NativeFn, StandardPrototypes, Value,
+    fns,
+    values::StandardPrototypes,
+    NativeFn, PrototypeField, Value,
 };
 
 /// Environment containing named `Value`s.
@@ -43,6 +45,34 @@ use crate::{
 ///     env.into_iter().filter(|(_, val)| val.is_function()),
 /// );
 /// assert!(other_env.get("x").is_none());
+/// ```
+///
+/// Extending [`Prototype`](crate::Prototype)s for standard types:
+///
+/// ```
+/// # use arithmetic_eval::{
+/// #     fns, Environment, ExecutableModule, PrototypeField, Value, env::Prelude,
+/// # };
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # fn main() -> anyhow::Result<()> {
+/// let prototypes = vec![
+///     (PrototypeField::prim("abs"), Value::wrapped_fn(f32::abs)),
+///     (PrototypeField::prim("sin"), Value::wrapped_fn(f32::sin)),
+///     (PrototypeField::array("len"), Value::native_fn(fns::Len)),
+/// ];
+/// let mut env = Environment::new();
+/// env.extend(Prelude::prototypes().chain(prototypes));
+/// // ^ also insert "standard" prototypes
+///
+/// let program = r#"
+///     array = (1, -2, 3).map(|x| x.abs());
+///     array.len() == 3 && array.1 > 0
+/// "#;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_proto", &program)?;
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct Environment<'a, T> {
@@ -157,10 +187,16 @@ impl<'a, T> Environment<'a, T> {
 }
 
 impl<T: Clone> Environment<'_, T> {
-    /// Inserts prototypes for standard types, [merging](StandardPrototypes#merging) them
-    /// with the existing ones.
-    pub fn insert_prototypes(&mut self, prototypes: StandardPrototypes<T>) -> &mut Self {
-        self.prototypes += prototypes;
+    /// Inserts a field into one of standard [`Prototype`]s.
+    ///
+    /// Use the [`Extend`] implementation to modify prototypes more efficiently in case of batch
+    /// changes.
+    pub fn insert_prototype(
+        &mut self,
+        field: PrototypeField,
+        value: Value<'static, T>,
+    ) -> &mut Self {
+        self.prototypes.insert(field, value);
         self
     }
 }
@@ -259,5 +295,15 @@ where
             .into_iter()
             .map(|(var_name, value)| (var_name.into(), value.into()));
         self.variables.extend(variables);
+    }
+}
+
+impl<T: Clone, V> Extend<(PrototypeField, V)> for Environment<'_, T>
+where
+    V: Into<Value<'static, T>>,
+{
+    fn extend<I: IntoIterator<Item = (PrototypeField, V)>>(&mut self, iter: I) {
+        let prototype_fields = iter.into_iter().map(|(field, value)| (field, value.into()));
+        self.prototypes.extend(prototype_fields);
     }
 }

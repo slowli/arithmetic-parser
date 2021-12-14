@@ -234,8 +234,7 @@ where
 /// A prototype can be converted to a [`Function`], and prototypes defined in the script code
 /// *are* callable. Such a function associates the prototype with the provided value
 /// (an object or a tuple). For values without an associated prototype, method resolution
-/// is performed using [`StandardPrototypes`], which can be set for an [`Environment`]
-/// or an [`ExecutableModule`].
+/// is performed using [`StandardPrototypes`], which can be set for an [`Environment`].
 ///
 /// Prototypes can be defined both in the host code, and in scripts via [`CreatePrototype`].
 ///
@@ -358,16 +357,9 @@ impl<'a, T> Prototype<'a, T> {
 }
 
 impl<T: Clone> Prototype<'static, T> {
-    fn merge(old: &mut Option<Self>, new: Option<Self>) {
-        if let Some(old) = old {
-            if let Some(new) = new {
-                let old_object = Rc::make_mut(&mut old.inner);
-                let new_object = Rc::try_unwrap(new.inner).unwrap_or_else(|rc| (*rc).clone());
-                old_object.extend(new_object);
-            }
-        } else {
-            *old = new;
-        }
+    fn merge_with(&mut self, new_object: Object<'static, T>) {
+        let old_object = Rc::make_mut(&mut self.inner);
+        old_object.extend(new_object);
     }
 }
 
@@ -398,43 +390,10 @@ impl<T: 'static + Clone> StripCode for Prototype<'_, T> {
 ///
 /// # Examples
 ///
-/// ```
-/// # use arithmetic_eval::{
-/// #     fns, Environment, ExecutableModule, Object, StandardPrototypes, Value, env::Prelude,
-/// # };
-/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # fn main() -> anyhow::Result<()> {
-/// let mut num_proto = Object::default();
-/// num_proto.insert("abs", Value::wrapped_fn(f32::abs));
-/// num_proto.insert("sin", Value::wrapped_fn(f32::sin));
-/// let array_proto = Value::native_fn(fns::Len).into_object("len");
-///
-/// let prototypes = StandardPrototypes::new()
-///     .with_primitive_proto(num_proto)
-///     .with_array_proto(array_proto);
-/// let mut env = Environment::new();
-/// env.insert_prototypes(prototypes)
-///     .insert_prototypes(Prelude::prototypes());
-/// // ^ also insert "standard" prototypes
-///
-/// let program = r#"
-///     array = (1, -2, 3).map(|x| x.abs());
-///     array.len() == 3 && array.1 > 0
-/// "#;
-/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = ExecutableModule::new("test_proto", &program)?;
-///
-/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
-/// # Ok(())
-/// # }
-/// ```
+
 #[derive(Debug, Clone, PartialEq)]
-pub struct StandardPrototypes<T> {
-    object_proto: Option<Prototype<'static, T>>,
-    array_proto: Option<Prototype<'static, T>>,
-    function_proto: Option<Prototype<'static, T>>,
-    prim_proto: Option<Prototype<'static, T>>,
-    bool_proto: Option<Prototype<'static, T>>,
+pub(crate) struct StandardPrototypes<T> {
+    inner: HashMap<ValueType, Prototype<'static, T>>,
 }
 
 impl<T> Default for StandardPrototypes<T> {
@@ -445,65 +404,107 @@ impl<T> Default for StandardPrototypes<T> {
 
 impl<T> StandardPrototypes<T> {
     /// Creates an empty instance.
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
-            object_proto: None,
-            array_proto: None,
-            function_proto: None,
-            prim_proto: None,
-            bool_proto: None,
+            inner: HashMap::new(),
         }
     }
 
-    /// Sets the object prototype.
-    pub fn with_object_proto(mut self, proto: impl Into<Prototype<'static, T>>) -> Self {
-        self.object_proto = Some(proto.into());
-        self
-    }
-
-    /// Sets the array / tuple prototype.
-    pub fn with_array_proto(mut self, proto: impl Into<Prototype<'static, T>>) -> Self {
-        self.array_proto = Some(proto.into());
-        self
-    }
-
-    /// Sets the function prototype.
-    pub fn with_function_proto(mut self, proto: impl Into<Prototype<'static, T>>) -> Self {
-        self.function_proto = Some(proto.into());
-        self
-    }
-
-    /// Sets the primitive value prototype.
-    pub fn with_primitive_proto(mut self, proto: impl Into<Prototype<'static, T>>) -> Self {
-        self.prim_proto = Some(proto.into());
-        self
-    }
-
-    /// Sets the Boolean value prototype.
-    pub fn with_bool_proto(mut self, proto: impl Into<Prototype<'static, T>>) -> Self {
-        self.bool_proto = Some(proto.into());
-        self
-    }
-
-    pub(crate) fn get(&self, value_type: ValueType) -> Option<&Prototype<'static, T>> {
+    pub fn get(&self, value_type: ValueType) -> Option<&Prototype<'static, T>> {
         match value_type {
-            ValueType::Object => self.object_proto.as_ref(),
-            ValueType::Tuple(_) | ValueType::Array => self.array_proto.as_ref(),
-            ValueType::Function => self.function_proto.as_ref(),
-            ValueType::Prim => self.prim_proto.as_ref(),
-            ValueType::Bool => self.bool_proto.as_ref(),
-            _ => None,
+            ValueType::Tuple(_) | ValueType::Array => self.inner.get(&ValueType::Array),
+            _ => self.inner.get(&value_type),
         }
     }
 }
 
-impl<T: Clone> ops::AddAssign for StandardPrototypes<T> {
-    fn add_assign(&mut self, rhs: Self) {
-        Prototype::merge(&mut self.object_proto, rhs.object_proto);
-        Prototype::merge(&mut self.array_proto, rhs.array_proto);
-        Prototype::merge(&mut self.function_proto, rhs.function_proto);
-        Prototype::merge(&mut self.prim_proto, rhs.prim_proto);
-        Prototype::merge(&mut self.bool_proto, rhs.bool_proto);
+impl<T: Clone> StandardPrototypes<T> {
+    pub fn insert(&mut self, field: PrototypeField, value: Value<'static, T>) {
+        if let Some(old_proto) = self.inner.get_mut(&field.ty) {
+            Rc::make_mut(&mut old_proto.inner)
+                .fields
+                .insert(field.name.into(), value);
+        } else {
+            let proto = value.into_object(field.name);
+            self.inner.insert(field.ty, Prototype::from(proto));
+        }
+    }
+
+    pub fn extend(&mut self, fields: impl Iterator<Item = (PrototypeField, Value<'static, T>)>) {
+        let mut map: HashMap<_, Object<'static, T>> = HashMap::new();
+        for (field, value) in fields {
+            map.entry(field.ty).or_default().insert(field.name, value);
+        }
+        for (ty, proto_object) in map {
+            if let Some(old_proto) = self.inner.get_mut(&ty) {
+                old_proto.merge_with(proto_object);
+            } else {
+                self.inner.insert(ty, proto_object.into());
+            }
+        }
+    }
+}
+
+/// Specifier for a field within a prototype for one of [standard types](ValueType).
+///
+/// # Examples
+///
+/// See [`Environment`] docs for an example of usage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PrototypeField {
+    ty: ValueType,
+    name: &'static str,
+}
+
+impl PrototypeField {
+    /// Field in the [array](crate::Tuple) prototype. Applied to `Tuple(_)` types as well.
+    pub const fn array(name: &'static str) -> Self {
+        Self {
+            ty: ValueType::Array,
+            name,
+        }
+    }
+
+    /// Field in the [`Object`] prototype.
+    pub const fn object(name: &'static str) -> Self {
+        Self {
+            ty: ValueType::Object,
+            name,
+        }
+    }
+
+    /// Field in the prototype for primitive values.
+    pub const fn prim(name: &'static str) -> Self {
+        Self {
+            ty: ValueType::Prim,
+            name,
+        }
+    }
+
+    /// Field in the prototype for Boolean values.
+    pub const fn bool(name: &'static str) -> Self {
+        Self {
+            ty: ValueType::Bool,
+            name,
+        }
+    }
+
+    /// Field in the [`Function`](crate::Function) prototype.
+    pub const fn function(name: &'static str) -> Self {
+        Self {
+            ty: ValueType::Function,
+            name,
+        }
+    }
+
+    /// Returns a value type this field is associated with.
+    pub fn ty(&self) -> ValueType {
+        self.ty
+    }
+
+    /// Returns the field name.
+    pub fn name(&self) -> &str {
+        self.name
     }
 }
 
@@ -533,22 +534,18 @@ mod tests {
 
     #[test]
     fn merging_prototypes() {
-        let mut array_proto = Object::<f32>::default();
-        array_proto.insert("fold", Value::native_fn(fns::Fold));
-        let mut prototypes = StandardPrototypes::new().with_array_proto(array_proto);
+        let mut prototypes = StandardPrototypes::<f32>::new();
+        let fields = vec![(PrototypeField::array("fold"), Value::native_fn(fns::Fold))];
+        prototypes.extend(fields.into_iter());
+        let new_fields = vec![
+            (PrototypeField::array("len"), Value::native_fn(fns::Len)),
+            (PrototypeField::object("len"), Value::native_fn(fns::Len)),
+        ];
+        prototypes.extend(new_fields.into_iter());
 
-        let mut new_array_proto = Object::<f32>::default();
-        new_array_proto.insert("len", Value::native_fn(fns::Len));
-        let mut object_proto = Object::<f32>::default();
-        object_proto.insert("len", Value::native_fn(fns::Len));
-        let new_prototypes = StandardPrototypes::new()
-            .with_array_proto(new_array_proto)
-            .with_object_proto(object_proto);
-
-        prototypes += new_prototypes;
-        let object_proto = prototypes.object_proto.as_ref().unwrap().as_object();
+        let object_proto = prototypes.inner[&ValueType::Object].as_object();
         assert!(object_proto["len"].is_function());
-        let array_proto = prototypes.array_proto.as_ref().unwrap().as_object();
+        let array_proto = prototypes.inner[&ValueType::Array].as_object();
         assert!(array_proto["len"].is_function());
         assert!(array_proto["fold"].is_function());
     }

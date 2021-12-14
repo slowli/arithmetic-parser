@@ -6,7 +6,7 @@ use arithmetic_eval::{
     env::{Comparisons, Environment},
     error::{Error, ErrorKind, ErrorWithBacktrace, RepeatedAssignmentContext},
     exec::WildcardId,
-    fns, ExecutableModule, StandardPrototypes, Value,
+    fns, ExecutableModule, PrototypeField, Value,
 };
 use arithmetic_parser::{
     grammars::{F32Grammar, Parse, Untyped},
@@ -393,8 +393,7 @@ fn comparison_error_within_capture() {
 fn priority_of_unary_ops_and_methods() {
     let program = "-1.abs() == -1 && -1.0.abs() == -1 && --1.abs() == 1 && (-1).abs() == 1";
     let mut env = Environment::new();
-    let proto = Value::wrapped_fn(f32::abs).into_object("abs");
-    env.insert_prototypes(StandardPrototypes::new().with_primitive_proto(proto));
+    env.insert_prototype(PrototypeField::prim("abs"), Value::wrapped_fn(f32::abs));
     let return_value = evaluate(&mut env, program);
     assert_eq!(return_value, Value::Bool(true));
 }

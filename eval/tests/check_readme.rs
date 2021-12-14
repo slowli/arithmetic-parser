@@ -21,14 +21,14 @@ fn check_sample(code_sample: &str) {
 
     let mut env = Environment::<f32>::new();
     env.extend(Prelude::vars().chain(Assertions::vars()));
+    env.extend(Prelude::prototypes());
     env.insert("INF", Value::Prim(f32::INFINITY))
         .insert_native_fn("array", fns::Array)
         .insert_native_fn("assert_close", fns::AssertClose::new(1e-4))
         .insert_wrapped_fn("sqrt", f32::sqrt)
         .insert_wrapped_fn("rand_num", |min: f32, max: f32| {
             thread_rng().gen_range(min..max)
-        })
-        .insert_prototypes(Prelude::prototypes());
+        });
 
     module.with_env(&env).unwrap().run().unwrap();
 }

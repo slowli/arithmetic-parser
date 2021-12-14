@@ -11,7 +11,7 @@ use arithmetic_eval::{
         StdArithmetic, WrappingArithmetic,
     },
     env::{Assertions, Comparisons, Prelude},
-    fns, Environment, Number, Object, StandardPrototypes, Value,
+    fns, Environment, Number, PrototypeField, Value,
 };
 use arithmetic_parser::grammars::NumLiteral;
 use arithmetic_typing::{arith::Num as NumType, defs, Function, Type, TypeEnvironment};
@@ -62,6 +62,16 @@ impl<T: ReplLiteral> StdLibrary<T> {
             .map(|(name, function)| (name, Value::native_fn(fns::Binary::new(function))));
 
         constants.chain(unary_fns).chain(binary_fns)
+    }
+
+    fn prototypes(&self) -> impl Iterator<Item = (PrototypeField, Value<'static, T>)> {
+        self.variables().filter_map(|(name, value)| {
+            if value.is_function() {
+                Some((PrototypeField::prim(name), value))
+            } else {
+                None
+            }
+        })
     }
 
     fn type_defs(&self) -> impl Iterator<Item = (&'static str, Type)> {
@@ -153,17 +163,10 @@ where
     } else {
         Value::wrapped_fn(|x: T, y: T| x.checked_rem(&y).ok_or_else(|| REM_ERROR_MSG.to_owned()))
     };
-    let primitive_proto: Object<_> = T::STD_LIB
-        .variables()
-        .filter(|(_, value)| value.is_function())
-        .chain(vec![("rem", rem.clone())])
-        .collect();
-    let prototypes = StandardPrototypes::new().with_primitive_proto(primitive_proto);
 
     env.insert_native_fn("array", fns::Array)
         .insert("rem", rem)
-        .insert_prototypes(Prelude::prototypes())
-        .insert_prototypes(prototypes);
+        .extend(Prelude::prototypes().chain(T::STD_LIB.prototypes()));
 
     let type_env = defs::Prelude::iter()
         .chain(defs::Assertions::iter())
@@ -183,7 +186,7 @@ pub fn create_modular_env(modulus: u64) -> (Environment<'static, u64>, TypeEnvir
     let mut env = Environment::<u64>::with_arithmetic(arith);
     env.extend(Prelude::vars().chain(Assertions::vars()));
     env.insert("MAX_VALUE", Value::Prim(modulus - 1))
-        .insert_prototypes(Prelude::prototypes());
+        .extend(Prelude::prototypes());
 
     let type_env = defs::Prelude::iter()
         .chain(defs::Assertions::iter())
@@ -251,16 +254,9 @@ where
         .chain(T::STD_LIB.variables());
     env.extend(vars);
 
-    let primitive_proto: Object<_> = T::STD_LIB
-        .variables()
-        .filter(|(_, value)| value.is_function())
-        .collect();
-    let prototypes = StandardPrototypes::new().with_primitive_proto(primitive_proto);
-
     env.insert_native_fn("array", fns::Array)
         .insert_native_fn("assert_close", fns::AssertClose::new(tolerance))
-        .insert_prototypes(Prelude::prototypes())
-        .insert_prototypes(prototypes);
+        .extend(Prelude::prototypes().chain(T::STD_LIB.prototypes()));
 
     let type_env = defs::Prelude::iter()
         .chain(defs::Assertions::iter())
@@ -323,14 +319,7 @@ where
         .chain(Assertions::vars())
         .chain(T::STD_LIB.variables());
     env.extend(vars);
-
-    let primitive_proto: Object<_> = T::STD_LIB
-        .variables()
-        .filter(|(_, value)| value.is_function())
-        .collect();
-    let prototypes = StandardPrototypes::new().with_primitive_proto(primitive_proto);
-    env.insert_prototypes(Prelude::prototypes())
-        .insert_prototypes(prototypes);
+    env.extend(Prelude::prototypes().chain(T::STD_LIB.prototypes()));
 
     let type_env = defs::Prelude::iter()
         .chain(defs::Assertions::iter())

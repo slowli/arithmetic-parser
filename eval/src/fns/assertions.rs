@@ -382,10 +382,7 @@ impl<T: 'static + Clone> NativeFn<T> for AssertFails {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        arith::{CheckedArithmetic, StdArithmetic},
-        exec::WildcardId,
-    };
+    use crate::{arith::CheckedArithmetic, exec::WildcardId, Environment};
 
     use arithmetic_parser::{LvalueLen, MaybeSpanned};
     use assert_matches::assert_matches;
@@ -396,8 +393,8 @@ mod tests {
 
     #[test]
     fn assert_basics() {
-        let arith = <CheckedArithmetic>::new();
-        let mut ctx = CallContext::<u32>::mock(&WildcardId, MaybeSpanned::from_str("", ..), &arith);
+        let env = Environment::with_arithmetic(<CheckedArithmetic>::new());
+        let mut ctx = CallContext::<u32>::mock(&WildcardId, MaybeSpanned::from_str("", ..), &env);
 
         let err = Assert.evaluate(vec![], &mut ctx).unwrap_err();
         assert_matches!(err.kind(), ErrorKind::ArgsLenMismatch { .. });
@@ -428,8 +425,8 @@ mod tests {
 
     #[test]
     fn assert_eq_basics() {
-        let arith = <CheckedArithmetic>::new();
-        let mut ctx = CallContext::<u32>::mock(&WildcardId, MaybeSpanned::from_str("", ..), &arith);
+        let env = Environment::with_arithmetic(<CheckedArithmetic>::new());
+        let mut ctx = CallContext::<u32>::mock(&WildcardId, MaybeSpanned::from_str("", ..), &env);
 
         let err = AssertEq.evaluate(vec![], &mut ctx).unwrap_err();
         assert_matches!(err.kind(), ErrorKind::ArgsLenMismatch { .. });
@@ -449,8 +446,8 @@ mod tests {
     #[test]
     fn assert_close_basics() {
         let assert_close = AssertClose::new(1e-3);
-        let mut ctx =
-            CallContext::<f32>::mock(&WildcardId, MaybeSpanned::from_str("", ..), &StdArithmetic);
+        let env = Environment::new();
+        let mut ctx = CallContext::<f32>::mock(&WildcardId, MaybeSpanned::from_str("", ..), &env);
 
         let err = assert_close.evaluate(vec![], &mut ctx).unwrap_err();
         assert_matches!(err.kind(), ErrorKind::ArgsLenMismatch { .. });
@@ -505,8 +502,8 @@ mod tests {
     #[test]
     fn assert_fails_basics() {
         let assert_fails = AssertFails::default();
-        let mut ctx =
-            CallContext::<f32>::mock(&WildcardId, MaybeSpanned::from_str("", ..), &StdArithmetic);
+        let env = Environment::new();
+        let mut ctx = CallContext::<f32>::mock(&WildcardId, MaybeSpanned::from_str("", ..), &env);
 
         let err = assert_fails.evaluate(vec![], &mut ctx).unwrap_err();
         assert_matches!(err.kind(), ErrorKind::ArgsLenMismatch { .. });
@@ -541,8 +538,8 @@ mod tests {
         let assert_fails = AssertFails::new(
             |err| matches!(err.kind(), ErrorKind::NativeCall(msg) if msg == "oops"),
         );
-        let mut ctx =
-            CallContext::<f32>::mock(&WildcardId, MaybeSpanned::from_str("", ..), &StdArithmetic);
+        let env = Environment::new();
+        let mut ctx = CallContext::<f32>::mock(&WildcardId, MaybeSpanned::from_str("", ..), &env);
 
         let wrong_fn = Value::wrapped_fn(f32::abs);
         let err = assert_fails

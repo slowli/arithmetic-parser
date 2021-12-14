@@ -11,11 +11,11 @@ use core::fmt;
 use crate::{
     alloc::{Rc, String, ToOwned, Vec},
     arith::OrdArithmetic,
-    error::{Backtrace, CodeInModule},
-    exec::{ExecutableFn, ModuleId},
+    error::{Backtrace, CodeInModule, Error, ErrorKind},
+    exec::{ExecutableFn, ModuleId, Operations},
     fns::ValueCell,
     values::StandardPrototypes,
-    Error, ErrorKind, EvalResult, Prototype, SpannedValue, Value,
+    Environment, EvalResult, Prototype, SpannedValue, Value,
 };
 use arithmetic_parser::{LvalueLen, MaybeSpanned, StripCode};
 
@@ -24,36 +24,34 @@ use arithmetic_parser::{LvalueLen, MaybeSpanned, StripCode};
 pub struct CallContext<'r, 'a, T> {
     call_span: CodeInModule<'a>,
     backtrace: Option<&'r mut Backtrace<'a>>,
-    arithmetic: &'r dyn OrdArithmetic<T>,
-    prototypes: Option<&'r StandardPrototypes<T>>,
+    operations: Operations<'r, T>,
 }
 
 impl<'r, 'a, T> CallContext<'r, 'a, T> {
     /// Creates a mock call context with the specified module ID and call span.
+    /// The provided [`Environment`] is used to extract an [`OrdArithmetic`] implementation
+    /// and [`Prototype`]s for standard types.
     pub fn mock(
         module_id: &dyn ModuleId,
         call_span: MaybeSpanned<'a>,
-        arithmetic: &'r dyn OrdArithmetic<T>,
+        env: &'r Environment<'a, T>,
     ) -> Self {
         Self {
             call_span: CodeInModule::new(module_id, call_span),
             backtrace: None,
-            arithmetic,
-            prototypes: None,
+            operations: env.operations(),
         }
     }
 
     pub(crate) fn new(
         call_span: CodeInModule<'a>,
         backtrace: Option<&'r mut Backtrace<'a>>,
-        arithmetic: &'r dyn OrdArithmetic<T>,
-        prototypes: Option<&'r StandardPrototypes<T>>,
+        operations: Operations<'r, T>,
     ) -> Self {
         Self {
             call_span,
             backtrace,
-            arithmetic,
-            prototypes,
+            operations,
         }
     }
 
@@ -63,11 +61,11 @@ impl<'r, 'a, T> CallContext<'r, 'a, T> {
     }
 
     pub(crate) fn arithmetic(&self) -> &'r dyn OrdArithmetic<T> {
-        self.arithmetic
+        self.operations.arithmetic
     }
 
     pub(crate) fn prototypes(&self) -> Option<&'r StandardPrototypes<T>> {
-        self.prototypes
+        self.operations.prototypes
     }
 
     /// Retrieves value prototype using standard prototypes if necessary.
@@ -78,7 +76,8 @@ impl<'r, 'a, T> CallContext<'r, 'a, T> {
             _ => None,
         };
         prototype.cloned().unwrap_or_else(|| {
-            self.prototypes
+            self.operations
+                .prototypes
                 .and_then(|prototypes| prototypes.get(value.value_type()).cloned())
                 .unwrap_or_default()
         })

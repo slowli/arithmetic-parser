@@ -15,7 +15,6 @@ use typed_arena::Arena;
 use std::cmp::Ordering;
 
 use arithmetic_eval::{
-    arith::StdArithmetic,
     env::Prelude,
     exec::{ExecutableModule, WildcardId},
     fns, CallContext, Environment, NativeFn, Value,
@@ -107,7 +106,8 @@ fn bench_mul_fold(bencher: &mut Bencher<'_>) {
 }
 
 fn bench_fold_fn(bencher: &mut Bencher<'_>) {
-    let mut ctx = CallContext::mock(&WildcardId, MaybeSpanned::from_str("", ..), &StdArithmetic);
+    let env = Environment::new();
+    let mut ctx = CallContext::mock(&WildcardId, MaybeSpanned::from_str("", ..), &env);
     let acc = ctx.apply_call_span(Value::Prim(1.0));
     let fold_fn = fns::Binary::new(|x: f32, y| x * y);
     let fold_fn = ctx.apply_call_span(Value::native_fn(fold_fn));
@@ -141,7 +141,8 @@ fn bench_interpreted_fn(bencher: &mut Bencher<'_>) {
     };
 
     let mut rng = StdRng::seed_from_u64(SEED);
-    let mut ctx = CallContext::mock(&WildcardId, MaybeSpanned::from_str("", ..), &StdArithmetic);
+    let env = Environment::new();
+    let mut ctx = CallContext::mock(&WildcardId, MaybeSpanned::from_str("", ..), &env);
 
     bencher.iter_batched(
         || {
@@ -188,7 +189,7 @@ fn bench_reverse_native(bencher: &mut Bencher<'_>) {
 fn bench_reverse(bencher: &mut Bencher<'_>) {
     let mut rng = StdRng::seed_from_u64(SEED);
 
-    let rev_fn = "|xs| xs.fold((), |acc, x| (x,).merge(acc))";
+    let rev_fn = "|xs| fold(xs, (), |acc, x| merge((x,), acc))";
     let rev_fn = Untyped::<F32Grammar>::parse_statements(rev_fn).unwrap();
     let rev_fn = ExecutableModule::new("rev_fn", &rev_fn).unwrap();
     let rev_fn = {
@@ -199,7 +200,7 @@ fn bench_reverse(bencher: &mut Bencher<'_>) {
     };
     assert!(rev_fn.is_function());
 
-    let program = "xs.reverse()";
+    let program = "reverse(xs)";
     let program = Untyped::<F32Grammar>::parse_statements(program).unwrap();
     let program = ExecutableModule::new("rev_fn", &program).unwrap();
     let mut env = Environment::new();
@@ -290,18 +291,19 @@ fn bench_quick_sort_interpreted(bencher: &mut Bencher<'_>) {
         quick_sort = |xs, quick_sort| {
             if(xs == (), || (), || {
                 (pivot, ...rest) = xs;
-                lesser_part = rest.filter(|x| x < pivot).quick_sort(quick_sort);
-                greater_part = rest.filter(|x| x >= pivot).quick_sort(quick_sort);
+                lesser_part = quick_sort(rest.filter(|x| x < pivot), quick_sort);
+                greater_part = quick_sort(rest.filter(|x| x >= pivot), quick_sort);
                 lesser_part.push(pivot).merge(greater_part)
             })()
         };
-        |xs| xs.quick_sort(quick_sort)
+        |xs| quick_sort(xs, quick_sort)
     "#;
     let program = Untyped::<F32Grammar>::parse_statements(program).unwrap();
     let sort_module = ExecutableModule::new("sort", &program).unwrap();
 
     let mut env = Environment::new();
     env.extend(Prelude::vars());
+    env.extend(Prelude::prototypes());
     let sort_fn = sort_module.with_env(&env).unwrap().run().unwrap();
     let sort_fn = match sort_fn {
         Value::Function(function) => function,
@@ -318,8 +320,7 @@ fn bench_quick_sort_interpreted(bencher: &mut Bencher<'_>) {
             )
         },
         |items| {
-            let mut ctx =
-                CallContext::mock(&"test", MaybeSpanned::from_str("", ..), &StdArithmetic);
+            let mut ctx = CallContext::mock(&"test", MaybeSpanned::from_str("", ..), &env);
             let items = MaybeSpanned::from_str("", ..).copy_with_extra(items);
             sort_fn.evaluate(vec![items], &mut ctx).unwrap()
         },

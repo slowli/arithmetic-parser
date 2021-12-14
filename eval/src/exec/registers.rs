@@ -159,8 +159,8 @@ impl<T: 'static + Clone> StripCode for ExecutableFn<'_, T> {
 /// arithmetic ops and prototypes for standard types.
 #[derive(Debug)]
 pub(crate) struct Operations<'r, T> {
-    arithmetic: &'r dyn OrdArithmetic<T>,
-    prototypes: Option<&'r StandardPrototypes<T>>,
+    pub arithmetic: &'r dyn OrdArithmetic<T>,
+    pub prototypes: Option<&'r StandardPrototypes<T>>,
 }
 
 impl<T> Clone for Operations<'_, T> {
@@ -640,12 +640,7 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
         if let Some(backtrace) = &mut backtrace {
             backtrace.push_call(fn_name, function.def_span(), full_call_span.clone());
         }
-        let mut context = CallContext::new(
-            full_call_span,
-            backtrace.as_deref_mut(),
-            operations.arithmetic,
-            operations.prototypes,
-        );
+        let mut context = CallContext::new(full_call_span, backtrace.as_deref_mut(), operations);
 
         function.evaluate(arg_values, &mut context).map(|value| {
             if let Some(backtrace) = backtrace {

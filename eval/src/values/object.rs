@@ -78,6 +78,15 @@ impl<T: fmt::Display> fmt::Display for Object<'_, T> {
 }
 
 impl<'a, T> Object<'a, T> {
+    /// Creates an object with a single field.
+    pub fn just(field_name: impl Into<String>, value: Value<'a, T>) -> Self {
+        let fields = iter::once((field_name.into(), value)).collect();
+        Self {
+            fields,
+            prototype: None,
+        }
+    }
+
     /// Returns the number of fields in this object.
     pub fn len(&self) -> usize {
         self.fields.len()
@@ -425,8 +434,8 @@ impl<T: Clone> StandardPrototypes<T> {
                 .fields
                 .insert(field.name.into(), value);
         } else {
-            let proto = value.into_object(field.name);
-            self.inner.insert(field.ty, Prototype::from(proto));
+            let proto = Object::just(field.name, value);
+            self.inner.insert(field.ty, proto.into());
         }
     }
 
@@ -513,6 +522,8 @@ mod tests {
     use super::*;
     use crate::fns;
 
+    use core::array;
+
     #[test]
     fn object_to_string() {
         let mut obj = Object::<f32>::default();
@@ -535,13 +546,14 @@ mod tests {
     #[test]
     fn merging_prototypes() {
         let mut prototypes = StandardPrototypes::<f32>::new();
-        let fields = vec![(PrototypeField::array("fold"), Value::native_fn(fns::Fold))];
+        let fields =
+            array::IntoIter::new([(PrototypeField::array("fold"), Value::native_fn(fns::Fold))]);
         prototypes.extend(fields.into_iter());
-        let new_fields = vec![
+        let new_fields = array::IntoIter::new([
             (PrototypeField::array("len"), Value::native_fn(fns::Len)),
             (PrototypeField::object("len"), Value::native_fn(fns::Len)),
-        ];
-        prototypes.extend(new_fields.into_iter());
+        ]);
+        prototypes.extend(new_fields);
 
         let object_proto = prototypes.inner[&ValueType::Object].as_object();
         assert!(object_proto["len"].is_function());

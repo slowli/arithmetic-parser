@@ -431,20 +431,23 @@ mod tests {
     use super::*;
     use crate::{arith::Linearity, UnknownLen};
 
+    use core::iter;
+
     #[test]
     fn constraints_display() {
         let type_constraints = ConstraintSet::<Num>::just(Linearity);
         let type_constraints = CompleteConstraints::from(type_constraints);
 
+        let type_params = (0, type_constraints);
         let constraints = ParamConstraints {
-            type_params: vec![(0, type_constraints.clone())].into_iter().collect(),
+            type_params: iter::once(type_params.clone()).collect(),
             static_lengths: HashSet::new(),
         };
         assert_eq!(constraints.to_string(), "'T: Lin");
 
         let constraints: ParamConstraints<Num> = ParamConstraints {
-            type_params: vec![(0, type_constraints)].into_iter().collect(),
-            static_lengths: vec![0].into_iter().collect(),
+            type_params: iter::once(type_params).collect(),
+            static_lengths: iter::once(0).collect(),
         };
         assert_eq!(constraints.to_string(), "len! N; 'T: Lin");
     }

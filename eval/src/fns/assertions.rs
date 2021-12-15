@@ -382,10 +382,11 @@ impl<T: 'static + Clone> NativeFn<T> for AssertFails {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{arith::CheckedArithmetic, exec::WildcardId, Environment};
+    use crate::{arith::CheckedArithmetic, exec::WildcardId, Environment, Object};
 
     use arithmetic_parser::{LvalueLen, MaybeSpanned};
     use assert_matches::assert_matches;
+    use core::array;
 
     fn span_value<T>(value: Value<'_, T>) -> SpannedValue<'_, T> {
         MaybeSpanned::from_str("", ..).copy_with_extra(value)
@@ -453,12 +454,12 @@ mod tests {
         assert_matches!(err.kind(), ErrorKind::ArgsLenMismatch { .. });
 
         let one_arg = span_value(Value::Prim(1.0));
-        let invalid_args = vec![
+        let invalid_args = [
             Value::Bool(true),
-            Value::from(vec![Value::Prim(1.0)]),
-            Value::Object(vec![("test", Value::Prim(1.0))].into_iter().collect()),
+            vec![Value::Prim(1.0)].into(),
+            Object::just("test", Value::Prim(1.0)).into(),
         ];
-        for invalid_arg in invalid_args {
+        for invalid_arg in array::IntoIter::new(invalid_args) {
             let err = assert_close
                 .evaluate(vec![one_arg.clone(), span_value(invalid_arg)], &mut ctx)
                 .unwrap_err();

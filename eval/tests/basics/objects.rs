@@ -2,6 +2,8 @@
 
 use assert_matches::assert_matches;
 
+use core::array;
+
 use arithmetic_eval::{
     env::{Assertions, Environment, Prelude},
     error::{AuxErrorInfo, ErrorKind},
@@ -151,17 +153,11 @@ fn accessing_fields_within_object() {
         _ => panic!("Unexpected return value: {:?}", return_value),
     };
 
+    let expected_fields = [("x", Value::Prim(3.0)), ("y", Value::Prim(4.0))];
     assert_eq!(fields.len(), 2);
     assert_eq!(
         fields["pt"],
-        Value::Object(
-            vec![
-                ("x".to_owned(), Value::Prim(3.0)),
-                ("y".to_owned(), Value::Prim(4.0))
-            ]
-            .into_iter()
-            .collect()
-        )
+        Value::Object(array::IntoIter::new(expected_fields).collect())
     );
     assert_eq!(fields["len_sq"], Value::Prim(25.0));
 }

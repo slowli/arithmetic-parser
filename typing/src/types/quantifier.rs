@@ -258,6 +258,8 @@ mod tests {
         Object,
     };
 
+    use core::iter;
+
     #[test]
     fn analyzing_map_fn() {
         let map_arg = Function::builder()
@@ -291,9 +293,9 @@ mod tests {
         assert_eq!(analyzer.len_params[&0].mentioning_fns, root_fn_index);
 
         let mut placement = analyzer.place_params(constraints);
-        let expected_type_params: HashMap<_, _> = vec![(0, vec![0, 1])].into_iter().collect();
+        let expected_type_params: HashMap<_, _> = iter::once((0, vec![0, 1])).collect();
         assert_eq!(placement.type_params, expected_type_params);
-        let expected_len_params: HashMap<_, _> = vec![(0, vec![0])].into_iter().collect();
+        let expected_len_params: HashMap<_, _> = iter::once((0, vec![0])).collect();
         assert_eq!(placement.len_params, expected_len_params);
 
         placement.visit_function_mut(&mut map_fn);
@@ -302,13 +304,13 @@ mod tests {
 
     #[test]
     fn params_are_added_from_object_constraints() {
-        let obj: Object<Num> = vec![("x", Type::param(1))].into_iter().collect();
+        let obj: Object<Num> = Object::just("x", Type::param(1));
         let constraints = CompleteConstraints {
             object: Some(obj),
             ..CompleteConstraints::default()
         };
         let constraints = ParamConstraints {
-            type_params: vec![(0, constraints)].into_iter().collect(),
+            type_params: iter::once((0, constraints)).collect(),
             static_lengths: HashSet::new(),
         };
 
@@ -322,7 +324,7 @@ mod tests {
 
         assert_eq!(analyzer.functions.len(), 1);
         assert_eq!(analyzer.type_params.len(), 2);
-        let expected_fns: HashSet<_> = vec![0].into_iter().collect();
+        let expected_fns: HashSet<_> = iter::once(0).collect();
         assert_eq!(analyzer.type_params[&0].mentioning_fns, expected_fns);
         assert_eq!(analyzer.type_params[&1].mentioning_fns, expected_fns);
     }

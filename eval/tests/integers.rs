@@ -3,6 +3,8 @@
 use assert_matches::assert_matches;
 use num_traits::Bounded;
 
+use core::array;
+
 use arithmetic_eval::{
     arith::{
         ArithmeticExt, Checked, CheckedArithmetic, ModularArithmetic, OrdArithmetic,
@@ -50,8 +52,7 @@ where
         &mut Environment::with_arithmetic(arithmetic),
         program_with_tuples,
     );
-    let expected_numbers = vec![2_u8, 5, 8]
-        .into_iter()
+    let expected_numbers = array::IntoIter::new([2_u8, 5, 8])
         .map(|num| Value::Prim(num.into()))
         .collect();
     assert_eq!(value, Value::Tuple(expected_numbers));

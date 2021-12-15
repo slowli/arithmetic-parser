@@ -5,6 +5,8 @@ use arithmetic_eval::{
     Prototype, SpannedValue, Value,
 };
 
+use core::array;
+
 use crate::evaluate;
 
 fn as_primitive(value: &Value<'_, f32>) -> Option<f32> {
@@ -46,11 +48,10 @@ impl NativeFn<f32> for PointLen {
 
 #[test]
 fn prototype_basics() {
-    let proto = Value::native_fn(PointLen).into_object("len");
+    let proto = Object::just("len", Value::native_fn(PointLen));
     let proto = Prototype::from(proto);
-    let mut point: Object<f32> = vec![("x", Value::Prim(3.0)), ("y", Value::Prim(4.0))]
-        .into_iter()
-        .collect();
+    let point = [("x", Value::Prim(3.0)), ("y", Value::Prim(4.0))];
+    let mut point: Object<f32> = array::IntoIter::new(point).into_iter().collect();
     point.set_prototype(proto.clone());
 
     let mut env = Environment::new();
@@ -93,15 +94,15 @@ fn prototype_equality() {
     assert_prototype_equality(empty_prototype, Prototype::default());
 
     let native_fn = Value::native_fn(fns::Len);
-    let mut prototype = native_fn.clone().into_object("len");
+    let mut prototype = Object::just("len", native_fn.clone());
     assert_prototype_equality(prototype.clone().into(), prototype.clone().into());
     assert_prototype_equality(
         prototype.clone().into(),
-        native_fn.clone().into_object("len").into(),
+        Object::just("len", native_fn.clone()).into(),
     );
     assert_ne!(
         Prototype::from(prototype.clone()),
-        Prototype::from(native_fn.into_object("length"))
+        Prototype::from(Object::just("length", native_fn))
     );
 
     let other_fn = Value::native_fn(fns::Map);
@@ -109,7 +110,7 @@ fn prototype_equality() {
     assert_prototype_equality(prototype.clone().into(), prototype.clone().into());
     assert_ne!(
         Prototype::from(prototype.clone()),
-        Prototype::from(other_fn.into_object("map"))
+        Prototype::from(Object::just("map", other_fn))
     );
 
     prototype.insert("ZERO", Value::Prim(0.0));

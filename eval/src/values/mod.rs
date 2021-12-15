@@ -8,7 +8,7 @@ use core::{
 };
 
 use crate::{
-    alloc::{Rc, String, Vec},
+    alloc::{Rc, Vec},
     fns,
 };
 use arithmetic_parser::{MaybeSpanned, StripCode};
@@ -226,14 +226,6 @@ impl<'a, T> Value<'a, T> {
     /// Creates a reference to a native variable.
     pub fn opaque_ref(value: impl Any + fmt::Debug + PartialEq) -> Self {
         Self::Ref(OpaqueRef::new(value))
-    }
-
-    /// Wraps this value into an object with a single field.
-    // FIXME: inconsistency with typing crate - `Object::just()`
-    pub fn into_object(self, field_name: impl Into<String>) -> Object<'a, T> {
-        let mut object = Object::default();
-        object.insert(field_name, self);
-        object
     }
 
     /// Returns the type of this value.

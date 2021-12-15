@@ -1,8 +1,8 @@
 //! Standard collections of variables.
 
-use core::{cmp::Ordering, fmt};
+use core::{array, cmp::Ordering, fmt};
 
-use crate::{alloc::vec, fns, PrototypeField, Value};
+use crate::{fns, PrototypeField, Value};
 
 /// Commonly used constants and functions from the [`fns` module](fns).
 ///
@@ -21,7 +21,7 @@ impl Prelude {
     where
         T: 'static + Clone,
     {
-        let variables = vec![
+        array::IntoIter::new([
             ("false", Value::Bool(false)),
             ("true", Value::Bool(true)),
             ("impl", Value::native_fn(fns::CreatePrototype)),
@@ -34,8 +34,7 @@ impl Prelude {
             ("fold", Value::native_fn(fns::Fold)),
             ("push", Value::native_fn(fns::Push)),
             ("merge", Value::native_fn(fns::Merge)),
-        ];
-        variables.into_iter()
+        ])
     }
 
     /// Returns standard prototypes corresponding to the contained functions.
@@ -46,15 +45,14 @@ impl Prelude {
     where
         T: 'static + Clone,
     {
-        let array = PrototypeField::array;
-        let fields = vec![
-            (array("map"), Value::native_fn(fns::Map)),
-            (array("filter"), Value::native_fn(fns::Filter)),
-            (array("fold"), Value::native_fn(fns::Fold)),
-            (array("push"), Value::native_fn(fns::Push)),
-            (array("merge"), Value::native_fn(fns::Merge)),
-        ];
-        fields.into_iter()
+        let array_proto = PrototypeField::array;
+        array::IntoIter::new([
+            (array_proto("map"), Value::native_fn(fns::Map)),
+            (array_proto("filter"), Value::native_fn(fns::Filter)),
+            (array_proto("fold"), Value::native_fn(fns::Fold)),
+            (array_proto("push"), Value::native_fn(fns::Push)),
+            (array_proto("merge"), Value::native_fn(fns::Merge)),
+        ])
     }
 }
 
@@ -68,15 +66,14 @@ impl Assertions {
     where
         T: 'static + Clone + fmt::Display,
     {
-        let variables = vec![
+        array::IntoIter::new([
             ("assert", Value::native_fn(fns::Assert)),
             ("assert_eq", Value::native_fn(fns::AssertEq)),
             (
                 "assert_fails",
                 Value::native_fn(fns::AssertFails::default()),
             ),
-        ];
-        variables.into_iter()
+        ])
     }
 }
 
@@ -87,14 +84,13 @@ pub struct Comparisons;
 impl Comparisons {
     /// Creates an iterator over contained values and the corresponding names.
     pub fn vars<T>() -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
-        let variables = vec![
+        array::IntoIter::new([
             ("LESS", Value::opaque_ref(Ordering::Less)),
             ("EQUAL", Value::opaque_ref(Ordering::Equal)),
             ("GREATER", Value::opaque_ref(Ordering::Greater)),
             ("cmp", Value::native_fn(fns::Compare::Raw)),
             ("min", Value::native_fn(fns::Compare::Min)),
             ("max", Value::native_fn(fns::Compare::Max)),
-        ];
-        variables.into_iter()
+        ])
     }
 }

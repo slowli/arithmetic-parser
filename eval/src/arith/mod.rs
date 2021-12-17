@@ -31,10 +31,6 @@
 //!
 //! [`ExecutableModule`]: crate::ExecutableModule
 
-#![allow(renamed_and_removed_lints, clippy::unknown_clippy_lints)]
-// ^ `map_err_ignore` is newer than MSRV, and `clippy::unknown_clippy_lints` is removed
-// since Rust 1.51.
-
 use core::{cmp::Ordering, fmt};
 
 use crate::{alloc::Box, error::ArithmeticError};

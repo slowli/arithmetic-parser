@@ -80,9 +80,6 @@ pub struct OpaqueRef {
     dyn_fmt: fn(&dyn Any, &mut fmt::Formatter<'_>) -> fmt::Result,
 }
 
-#[allow(renamed_and_removed_lints, clippy::unknown_clippy_lints)]
-// ^ `missing_panics_doc` is newer than MSRV, and `clippy::unknown_clippy_lints` is removed
-// since Rust 1.51.
 impl OpaqueRef {
     /// Creates a reference to `value` that implements equality comparison.
     ///

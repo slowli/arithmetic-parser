@@ -1,9 +1,5 @@
 //! `Registers` for executing commands and closely related types.
 
-#![allow(renamed_and_removed_lints, clippy::unknown_clippy_lints)]
-// ^ `needless_option_as_deref` is newer than MSRV, and `clippy::unknown_clippy_lints` is removed
-// since Rust 1.51.
-
 use hashbrown::HashMap;
 
 use core::iter;

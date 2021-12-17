@@ -2,6 +2,8 @@
 
 use assert_matches::assert_matches;
 
+use core::iter;
+
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
     arith::{Num, NumArithmetic},
@@ -17,7 +19,7 @@ fn statements_with_a_block() {
     let code = "y = { x = 3; 2 * x }; x ^ y == 6 * x;";
     let block = F32Grammar::parse_statements(code).unwrap();
 
-    let mut type_env: TypeEnvironment<Num> = vec![("x", Type::NUM)].into_iter().collect();
+    let mut type_env: TypeEnvironment<Num> = iter::once(("x", Type::NUM)).collect();
     type_env.process_statements(&block).unwrap();
     assert_eq!(*type_env.get("y").unwrap(), Type::NUM);
 }
@@ -27,7 +29,7 @@ fn boolean_statements() {
     let code = "y = x == x ^ 2; y = y || { x = 3; x != 7 };";
     let block = F32Grammar::parse_statements(code).unwrap();
 
-    let mut type_env: TypeEnvironment<Num> = vec![("x", Type::NUM)].into_iter().collect();
+    let mut type_env: TypeEnvironment<Num> = iter::once(("x", Type::NUM)).collect();
     type_env.process_statements(&block).unwrap();
     assert_eq!(type_env["y"], Type::BOOL);
 }

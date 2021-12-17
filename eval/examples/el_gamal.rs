@@ -13,7 +13,8 @@ use std::cell::RefCell;
 
 use arithmetic_eval::{
     arith::{ArithmeticExt, ModularArithmetic},
-    fns, Assertions, ExecutableModule, Prelude, Value,
+    env::{Assertions, Prelude},
+    fns, Environment, ExecutableModule, Value,
 };
 use arithmetic_parser::grammars::{NumGrammar, Parse, Untyped};
 
@@ -34,11 +35,7 @@ const EL_GAMAL_ENCRYPTION: &str = include_str!("elgamal.script");
 fn main() -> anyhow::Result<()> {
     let el_gamal_encryption =
         Untyped::<NumGrammar<BigUint>>::parse_statements(EL_GAMAL_ENCRYPTION)?;
-    let mut el_gamal_encryption = ExecutableModule::builder("el_gamal", &el_gamal_encryption)?
-        .with_imports_from(&Prelude)
-        .with_imports_from(&Assertions)
-        .with_import("dbg", Value::native_fn(fns::Dbg))
-        .set_imports(|_| Value::void());
+    let el_gamal_encryption = ExecutableModule::new("el_gamal", &el_gamal_encryption)?;
 
     // Run the compiled module with different groups.
     for i in 0..5 {
@@ -48,25 +45,26 @@ fn main() -> anyhow::Result<()> {
         println!("Generated safe prime: {}", modulus);
 
         let prime_subgroup_order: BigUint = &modulus >> 1;
+        let order_value = Value::Prim(prime_subgroup_order.clone());
         let generator = find_generator(&modulus);
         let arithmetic = ModularArithmetic::new(modulus).without_comparisons();
 
         let rng = RefCell::new(thread_rng());
         let two = BigUint::from(2_u32);
+        let rand_scalar = Value::wrapped_fn(move || {
+            rng.borrow_mut()
+                .gen_biguint_range(&two, &prime_subgroup_order)
+        });
 
-        el_gamal_encryption
-            .set_import("GEN", Value::Prim(generator))
-            .set_import("ORDER", Value::Prim(prime_subgroup_order.clone()))
-            .set_import(
-                "rand_scalar",
-                Value::wrapped_fn(move || {
-                    rng.borrow_mut()
-                        .gen_biguint_range(&two, &prime_subgroup_order)
-                }),
-            )
-            .with_arithmetic(&arithmetic)
-            .run()?;
+        let mut env = Environment::with_arithmetic(arithmetic);
+        env.extend(Prelude::vars().chain(Assertions::vars()));
+        env.extend(Prelude::prototypes());
+        env.insert_native_fn("dbg", fns::Dbg)
+            .insert("GEN", Value::Prim(generator))
+            .insert("ORDER", order_value)
+            .insert("rand_scalar", rand_scalar);
+
+        el_gamal_encryption.with_env(&env)?.run()?;
     }
-
     Ok(())
 }

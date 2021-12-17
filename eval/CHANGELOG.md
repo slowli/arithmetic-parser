@@ -7,7 +7,46 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ### Added
 
-- Make crate no-std-compatible and check compatibility in CI.
+- Make crate no-std-compatible and check compatibility in CI. (#101)
+
+- Allow adding prototypes for objects and tuples, which act similarly to
+  prototypes in JavaScript (but immutable). Prototypes can be created
+  from the host code using the `Prototype` type and from scripts
+  using the `CreatePrototype` function. (#103)
+
+- Add the `Defer` function for deferred / recursive variable initialization. (#103)
+
+- Add `AssertClose` and `AssertFails` assertions for approximate equality comparisons
+  and failure testing, respectively. (#103)
+
+### Changed
+
+- Introduce new structs (`Tuple` and `Object`) to represent tuple and object values,
+  respectively. These objects are tied to the corresponding `Value` variants. (#103)
+
+- Add `T: 'static + Clone` restriction for the type argument in `ExecutableModule`, `Function`
+  and most native functions. (#103)
+
+- Restructure the crate by extracting types related to `Environment` and to `ExecutableModule`
+  to separate modules. (#103)
+
+- Change `ExecutableModule` interface for clarity. Now, `ExecutableModule`
+  is only responsible for code; imports are always provided by an `Environment`. (#103)
+
+- Make values contained in standard collections, such as `Prelude` and `Assertions`,
+  available using static methods instead of instance ones. (#103)
+
+### Removed
+
+- Remove `ExecutableModelBuilder::set_imports()` as error-prone. Instead, deferred imports
+  can be set from a `Filler`. (#103)
+
+- Remove `ModuleImports`, its iterator types and `VariableMap` as obsolete.
+  Related to the changes in the `ExecutableModule` interface. (#103)
+
+### Fixed
+
+- Remove bogus `T: Debug` bound in `ExecutableModule<T>` and related types. (#103)
 
 ## 0.3.0 - 2021-05-24
 

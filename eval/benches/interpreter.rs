@@ -15,7 +15,9 @@ use typed_arena::Arena;
 use std::cmp::Ordering;
 
 use arithmetic_eval::{
-    arith::StdArithmetic, fns, CallContext, ExecutableModule, NativeFn, Prelude, Value, WildcardId,
+    env::Prelude,
+    exec::{ExecutableModule, WildcardId},
+    fns, CallContext, Environment, NativeFn, Value,
 };
 use arithmetic_parser::{
     grammars::{F32Grammar, Parse, Untyped},
@@ -73,12 +75,9 @@ fn bench_mul(bencher: &mut Bencher<'_>) {
                 .collect();
             let program = arena.alloc(values.join(" * "));
             let program = Untyped::<F32Grammar>::parse_statements(program.as_str()).unwrap();
-
-            ExecutableModule::builder(WildcardId, &program)
-                .unwrap()
-                .build()
+            ExecutableModule::new(WildcardId, &program).unwrap()
         },
-        |module| module.run().unwrap(),
+        |module| module.with_env(&Environment::new()).unwrap().run().unwrap(),
         BatchSize::SmallInput,
     );
 }
@@ -90,26 +89,25 @@ fn bench_mul_fold(bencher: &mut Bencher<'_>) {
 
     bencher.iter_batched(
         || {
-            let mut module = ExecutableModule::builder(WildcardId, &program)
-                .unwrap()
-                .with_import("fold", Value::native_fn(fns::Fold))
-                .with_import("xs", Value::void())
-                .build();
-
+            let module = ExecutableModule::new(WildcardId, &program).unwrap();
             let values: Vec<_> = (0..ELEMENTS)
                 .map(|_| rng.gen_range(0.5_f32..1.5))
                 .map(Value::Prim)
                 .collect();
-            module.set_import("xs", Value::Tuple(values));
-            module
+
+            let mut env = Environment::new();
+            env.insert_native_fn("fold", fns::Fold);
+            env.insert("xs", Value::from(values));
+            (module, env)
         },
-        |module| module.run(),
+        |(module, env)| module.with_env(&env).unwrap().run(),
         BatchSize::SmallInput,
     );
 }
 
 fn bench_fold_fn(bencher: &mut Bencher<'_>) {
-    let mut ctx = CallContext::mock(&WildcardId, MaybeSpanned::from_str("", ..), &StdArithmetic);
+    let env = Environment::new();
+    let mut ctx = CallContext::mock(&WildcardId, MaybeSpanned::from_str("", ..), &env);
     let acc = ctx.apply_call_span(Value::Prim(1.0));
     let fold_fn = fns::Binary::new(|x: f32, y| x * y);
     let fold_fn = ctx.apply_call_span(Value::native_fn(fold_fn));
@@ -124,7 +122,7 @@ fn bench_fold_fn(bencher: &mut Bencher<'_>) {
                 .collect::<Vec<_>>()
         },
         |array| {
-            let array = ctx.apply_call_span(Value::Tuple(array));
+            let array = ctx.apply_call_span(Value::from(array));
             fns::Fold
                 .evaluate(vec![array, acc.clone(), fold_fn.clone()], &mut ctx)
                 .unwrap()
@@ -134,19 +132,17 @@ fn bench_fold_fn(bencher: &mut Bencher<'_>) {
 }
 
 fn bench_interpreted_fn(bencher: &mut Bencher<'_>) {
-    let mut ctx = CallContext::mock(&WildcardId, MaybeSpanned::from_str("", ..), &StdArithmetic);
     let interpreted_fn = Untyped::<F32Grammar>::parse_statements("|x, y| x * y").unwrap();
-    let interpreted_fn = ExecutableModule::builder(WildcardId, &interpreted_fn)
-        .unwrap()
-        .build()
-        .run()
-        .unwrap();
+    let interpreted_fn = ExecutableModule::new(WildcardId, &interpreted_fn).unwrap();
+    let interpreted_fn = interpreted_fn.with_env(&Environment::new()).unwrap().run();
     let interpreted_fn = match interpreted_fn {
-        Value::Function(function) => function,
-        _ => unreachable!("Wrong function type"),
+        Ok(Value::Function(function)) => function,
+        _ => unreachable!("Unexpected function type"),
     };
 
     let mut rng = StdRng::seed_from_u64(SEED);
+    let env = Environment::new();
+    let mut ctx = CallContext::mock(&WildcardId, MaybeSpanned::from_str("", ..), &env);
 
     bencher.iter_batched(
         || {
@@ -193,22 +189,22 @@ fn bench_reverse_native(bencher: &mut Bencher<'_>) {
 fn bench_reverse(bencher: &mut Bencher<'_>) {
     let mut rng = StdRng::seed_from_u64(SEED);
 
-    let rev_fn = "|xs| xs.fold((), |acc, x| (x,).merge(acc))";
+    let rev_fn = "|xs| fold(xs, (), |acc, x| merge((x,), acc))";
     let rev_fn = Untyped::<F32Grammar>::parse_statements(rev_fn).unwrap();
-    let rev_fn = ExecutableModule::builder("rev_fn", &rev_fn)
-        .unwrap()
-        .with_import("fold", Value::native_fn(fns::Fold))
-        .with_import("merge", Value::native_fn(fns::Merge))
-        .build();
-    let rev_fn = rev_fn.run().unwrap();
+    let rev_fn = ExecutableModule::new("rev_fn", &rev_fn).unwrap();
+    let rev_fn = {
+        let mut env = Environment::new();
+        env.insert_native_fn("fold", fns::Fold)
+            .insert_native_fn("merge", fns::Merge);
+        rev_fn.with_env(&env).unwrap().run().unwrap()
+    };
     assert!(rev_fn.is_function());
 
-    let program = "xs.reverse()";
+    let program = "reverse(xs)";
     let program = Untyped::<F32Grammar>::parse_statements(program).unwrap();
-    let mut program = ExecutableModule::builder("rev_fn", &program)
-        .unwrap()
-        .with_import("reverse", rev_fn)
-        .set_imports(|_| Value::void());
+    let program = ExecutableModule::new("rev_fn", &program).unwrap();
+    let mut env = Environment::new();
+    env.insert("reverse", rev_fn);
 
     bencher.iter_batched(
         || {
@@ -217,9 +213,9 @@ fn bench_reverse(bencher: &mut Bencher<'_>) {
                 .map(Value::Prim)
                 .collect::<Vec<_>>()
         },
-        |values| {
-            program.set_import("xs", Value::Tuple(values));
-            program.run().unwrap()
+        move |values| {
+            env.insert("xs", Value::from(values));
+            program.with_env(&env).unwrap().run().unwrap()
         },
         BatchSize::SmallInput,
     );
@@ -295,19 +291,21 @@ fn bench_quick_sort_interpreted(bencher: &mut Bencher<'_>) {
         quick_sort = |xs, quick_sort| {
             if(xs == (), || (), || {
                 (pivot, ...rest) = xs;
-                lesser_part = rest.filter(|x| x < pivot).quick_sort(quick_sort);
-                greater_part = rest.filter(|x| x >= pivot).quick_sort(quick_sort);
+                lesser_part = quick_sort(rest.filter(|x| x < pivot), quick_sort);
+                greater_part = quick_sort(rest.filter(|x| x >= pivot), quick_sort);
                 lesser_part.push(pivot).merge(greater_part)
             })()
         };
-        |xs| xs.quick_sort(quick_sort)
+        |xs| quick_sort(xs, quick_sort)
     "#;
     let program = Untyped::<F32Grammar>::parse_statements(program).unwrap();
-    let sort_module = ExecutableModule::builder("sort", &program)
-        .unwrap()
-        .with_imports_from(&Prelude)
-        .build();
-    let sort = match sort_module.run().unwrap() {
+    let sort_module = ExecutableModule::new("sort", &program).unwrap();
+
+    let mut env = Environment::new();
+    env.extend(Prelude::vars());
+    env.extend(Prelude::prototypes());
+    let sort_fn = sort_module.with_env(&env).unwrap().run().unwrap();
+    let sort_fn = match sort_fn {
         Value::Function(function) => function,
         other => panic!("Unexpected module export: {:?}", other),
     };
@@ -322,10 +320,9 @@ fn bench_quick_sort_interpreted(bencher: &mut Bencher<'_>) {
             )
         },
         |items| {
-            let mut ctx =
-                CallContext::mock(&"test", MaybeSpanned::from_str("", ..), &StdArithmetic);
+            let mut ctx = CallContext::mock(&"test", MaybeSpanned::from_str("", ..), &env);
             let items = MaybeSpanned::from_str("", ..).copy_with_extra(items);
-            sort.evaluate(vec![items], &mut ctx).unwrap()
+            sort_fn.evaluate(vec![items], &mut ctx).unwrap()
         },
         BatchSize::SmallInput,
     );

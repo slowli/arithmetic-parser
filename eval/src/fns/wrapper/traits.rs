@@ -4,7 +4,7 @@ use core::{cmp, fmt};
 
 use crate::{
     alloc::{vec, String, Vec},
-    CallContext, Error, ErrorKind, Function, Number, Value, ValueType,
+    CallContext, Error, ErrorKind, Function, Number, Object, Tuple, Value, ValueType,
 };
 
 /// Error raised when a value cannot be converted to the expected type when using
@@ -163,6 +163,24 @@ impl<'a, T> TryFromValue<'a, T> for Function<'a, T> {
         match value {
             Value::Function(function) => Ok(function),
             _ => Err(FromValueError::invalid_type(ValueType::Function, &value)),
+        }
+    }
+}
+
+impl<'a, T> TryFromValue<'a, T> for Tuple<'a, T> {
+    fn try_from_value(value: Value<'a, T>) -> Result<Self, FromValueError> {
+        match value {
+            Value::Tuple(tuple) => Ok(tuple),
+            _ => Err(FromValueError::invalid_type(ValueType::Array, &value)),
+        }
+    }
+}
+
+impl<'a, T> TryFromValue<'a, T> for Object<'a, T> {
+    fn try_from_value(value: Value<'a, T>) -> Result<Self, FromValueError> {
+        match value {
+            Value::Object(object) => Ok(object),
+            _ => Err(FromValueError::invalid_type(ValueType::Object, &value)),
         }
     }
 }
@@ -329,6 +347,18 @@ impl<'a, T> IntoEvalResult<'a, T> for Function<'a, T> {
     }
 }
 
+impl<'a, T> IntoEvalResult<'a, T> for Tuple<'a, T> {
+    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
+        Ok(Value::Tuple(self))
+    }
+}
+
+impl<'a, T> IntoEvalResult<'a, T> for Object<'a, T> {
+    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
+        Ok(Value::Object(self))
+    }
+}
+
 impl<'a, U, T> IntoEvalResult<'a, T> for Vec<U>
 where
     U: IntoEvalResult<'a, T>,
@@ -337,7 +367,7 @@ where
         let values = self
             .into_iter()
             .map(U::into_eval_result)
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Tuple<_>, _>>()?;
         Ok(Value::Tuple(values))
     }
 }
@@ -349,7 +379,7 @@ macro_rules! into_value_for_tuple {
             $($ty: IntoEvalResult<'a, Num>,)+
         {
             fn into_eval_result(self) -> Result<Value<'a, Num>, ErrorOutput<'a>> {
-                Ok(Value::Tuple(vec![$(self.$i.into_eval_result()?,)+]))
+                Ok(Value::from(vec![$(self.$i.into_eval_result()?,)+]))
             }
         }
     };

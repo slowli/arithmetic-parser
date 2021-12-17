@@ -10,7 +10,7 @@ use crate::alloc::Box;
 /// Identifier of an [`ExecutableModule`](crate::ExecutableModule). This is usually a "small" type,
 /// such as an integer or a string.
 ///
-/// The ID is provided when [creating](crate::ExecutableModule::builder()) a module. It is displayed
+/// The ID is provided when [creating](crate::ExecutableModule::new()) a module. It is displayed
 /// in error messages (using `Display::fmt`). `ModuleId` is also associated with some types
 /// (e.g., [`InterpretedFn`] and [`CodeInModule`]), which allows to obtain module info.
 /// This can be particularly useful for outputting rich error information.
@@ -94,7 +94,7 @@ impl fmt::Display for WildcardId {
 /// The ID is `Display`ed as `{prefix} #{index + 1}`:
 ///
 /// ```
-/// # use arithmetic_eval::IndexedId;
+/// # use arithmetic_eval::exec::IndexedId;
 /// let module_id = IndexedId::new("snippet", 4);
 /// assert_eq!(module_id.to_string(), "snippet #5");
 /// ```

@@ -1,17 +1,17 @@
 //! `Registers` for executing commands and closely related types.
 
-#![allow(renamed_and_removed_lints, clippy::unknown_clippy_lints)]
-// ^ `needless_option_as_deref` is newer than MSRV, and `clippy::unknown_clippy_lints` is removed
-// since Rust 1.51.
-
 use hashbrown::HashMap;
+
+use core::iter;
 
 use crate::{
     alloc::{vec, Box, Rc, String, ToOwned, Vec},
     arith::OrdArithmetic,
     error::{Backtrace, CodeInModule, EvalResult, TupleLenMismatchContext},
-    executable::command::{Atom, Command, CompiledExpr, FieldName, SpannedAtom, SpannedCommand},
-    CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, ModuleId, SpannedValue,
+    exec::command::{Atom, Command, CompiledExpr, FieldName, SpannedAtom, SpannedCommand},
+    exec::ModuleId,
+    values::StandardPrototypes,
+    CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, Prototype, SpannedValue,
     Value,
 };
 use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
@@ -103,7 +103,7 @@ impl<'a, T> Executable<'a, T> {
     }
 }
 
-impl<'a, T: Clone> Executable<'a, T> {
+impl<'a, T: 'static + Clone> Executable<'a, T> {
     pub fn call_function(
         &self,
         captures: Vec<Value<'a, T>>,
@@ -111,12 +111,13 @@ impl<'a, T: Clone> Executable<'a, T> {
         ctx: &mut CallContext<'_, 'a, T>,
     ) -> EvalResult<'a, T> {
         let mut registers = captures;
-        registers.push(Value::Tuple(args));
+        registers.push(Value::Tuple(args.into()));
         let mut env = Registers {
             registers,
             ..Registers::new()
         };
-        env.execute(self, ctx.arithmetic(), ctx.backtrace())
+        let operations = Operations::new(ctx.arithmetic(), ctx.prototypes());
+        env.execute(self, operations, ctx.backtrace())
     }
 }
 
@@ -146,6 +147,46 @@ impl<T: 'static + Clone> StripCode for ExecutableFn<'_, T> {
             inner: self.inner.strip_code(),
             def_span: self.def_span.strip_code(),
             arg_count: self.arg_count,
+        }
+    }
+}
+
+/// Encompasses all irreducible operations defined externally for `Value`s; for now, these are
+/// arithmetic ops and prototypes for standard types.
+#[derive(Debug)]
+pub(crate) struct Operations<'r, T> {
+    pub arithmetic: &'r dyn OrdArithmetic<T>,
+    pub prototypes: Option<&'r StandardPrototypes<T>>,
+}
+
+impl<T> Clone for Operations<'_, T> {
+    fn clone(&self) -> Self {
+        Self {
+            arithmetic: self.arithmetic,
+            prototypes: self.prototypes,
+        }
+    }
+}
+
+impl<T> Copy for Operations<'_, T> {}
+
+impl<'r, T: 'static> From<&'r dyn OrdArithmetic<T>> for Operations<'r, T> {
+    fn from(arithmetic: &'r dyn OrdArithmetic<T>) -> Self {
+        Self {
+            arithmetic,
+            prototypes: None,
+        }
+    }
+}
+
+impl<'r, T> Operations<'r, T> {
+    pub fn new(
+        arithmetic: &'r dyn OrdArithmetic<T>,
+        prototypes: Option<&'r StandardPrototypes<T>>,
+    ) -> Self {
+        Self {
+            arithmetic,
+            prototypes,
         }
     }
 }
@@ -198,11 +239,6 @@ impl<'a, T> Registers<'a, T> {
         }
     }
 
-    pub fn get_var(&self, name: &str) -> Option<&Value<'a, T>> {
-        let register = *self.vars.get(name)?;
-        Some(&self.registers[register])
-    }
-
     pub fn variables(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
         self.vars
             .iter()
@@ -215,13 +251,6 @@ impl<'a, T> Registers<'a, T> {
 
     pub fn register_count(&self) -> usize {
         self.registers.len()
-    }
-
-    pub fn set_var(&mut self, name: &str, value: Value<'a, T>) {
-        let register = *self.vars.get(name).unwrap_or_else(|| {
-            panic!("Variable `{}` is not defined", name);
-        });
-        self.registers[register] = value;
     }
 
     /// Allocates a new register with the specified name if the name was not allocated previously.
@@ -258,24 +287,16 @@ impl<'a, T: Clone> Registers<'a, T> {
             env.insert(var_name, value);
         }
     }
-
-    pub fn into_variables(self) -> impl Iterator<Item = (String, Value<'a, T>)> {
-        let registers = self.registers;
-        // Moving out of `registers` is not sound because of possible aliasing.
-        self.vars
-            .into_iter()
-            .map(move |(name, register)| (name, registers[register].clone()))
-    }
 }
 
-impl<'a, T: Clone> Registers<'a, T> {
+impl<'a, T: 'static + Clone> Registers<'a, T> {
     pub fn execute(
         &mut self,
         executable: &Executable<'a, T>,
-        arithmetic: &dyn OrdArithmetic<T>,
+        operations: Operations<'_, T>,
         backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
-        self.execute_inner(executable, arithmetic, backtrace)
+        self.execute_inner(executable, operations, backtrace)
             .map_err(|err| {
                 if let Some(scope_start) = self.inner_scope_start.take() {
                     self.registers.truncate(scope_start);
@@ -288,7 +309,7 @@ impl<'a, T: Clone> Registers<'a, T> {
     fn execute_inner(
         &mut self,
         executable: &Executable<'a, T>,
-        arithmetic: &dyn OrdArithmetic<T>,
+        operations: Operations<'_, T>,
         mut backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
         if let Some(additional_capacity) = executable
@@ -306,7 +327,7 @@ impl<'a, T: Clone> Registers<'a, T> {
                         expr_span,
                         expr,
                         executable,
-                        arithmetic,
+                        operations,
                         backtrace.as_deref_mut(),
                     )?;
                     self.registers.push(expr_value);
@@ -331,7 +352,7 @@ impl<'a, T: Clone> Registers<'a, T> {
                     unchecked,
                 } => {
                     let source = self.registers[*source].clone();
-                    if let Value::Tuple(mut elements) = source {
+                    if let Value::Tuple(elements) = source {
                         if !*unchecked && !lvalue_len.matches(elements.len()) {
                             let err = ErrorKind::TupleLenMismatch {
                                 lhs: *lvalue_len,
@@ -341,10 +362,11 @@ impl<'a, T: Clone> Registers<'a, T> {
                             return Err(executable.create_error(command, err));
                         }
 
+                        let mut elements = Vec::from(elements);
                         let mut tail = elements.split_off(*start_len);
                         self.registers.extend(elements);
                         let end = tail.split_off(tail.len() - *end_len);
-                        self.registers.push(Value::Tuple(tail));
+                        self.registers.push(Value::Tuple(tail.into()));
                         self.registers.extend(end);
                     } else {
                         let err = ErrorKind::CannotDestructure;
@@ -375,7 +397,7 @@ impl<'a, T: Clone> Registers<'a, T> {
         span: MaybeSpanned<'a>,
         expr: &CompiledExpr<'a, T>,
         executable: &Executable<'a, T>,
-        arithmetic: &dyn OrdArithmetic<T>,
+        operations: Operations<'_, T>,
         backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
         match expr {
@@ -395,7 +417,7 @@ impl<'a, T: Clone> Registers<'a, T> {
             CompiledExpr::Unary { op, inner } => {
                 let inner_value = self.resolve_atom(&inner.extra);
                 match op {
-                    UnaryOp::Neg => inner_value.try_neg(arithmetic),
+                    UnaryOp::Neg => inner_value.try_neg(operations.arithmetic),
                     UnaryOp::Not => inner_value.try_not(),
                     _ => unreachable!("Checked during compilation"),
                 }
@@ -403,46 +425,25 @@ impl<'a, T: Clone> Registers<'a, T> {
             }
 
             CompiledExpr::Binary { op, lhs, rhs } => {
-                self.execute_binary_expr(executable.id(), span, *op, lhs, rhs, arithmetic)
+                let arith = operations.arithmetic;
+                self.execute_binary_expr(executable.id(), span, *op, lhs, rhs, arith)
             }
 
             CompiledExpr::FieldAccess {
                 receiver,
                 field: FieldName::Index(index),
-            } => {
-                if let Value::Tuple(mut tuple) = self.resolve_atom(&receiver.extra) {
-                    let len = tuple.len();
-                    if *index >= len {
-                        Err(executable.create_error(
-                            &span,
-                            ErrorKind::IndexOutOfBounds { index: *index, len },
-                        ))
-                    } else {
-                        Ok(tuple.swap_remove(*index))
-                    }
-                } else {
-                    Err(executable.create_error(&span, ErrorKind::CannotIndex))
-                }
-            }
+            } => self
+                .access_index_field(&receiver.extra, *index)
+                .map_err(|err| executable.create_error(&span, err)),
 
             CompiledExpr::FieldAccess {
                 receiver,
                 field: FieldName::Name(name),
-            } => {
-                if let Value::Object(mut obj) = self.resolve_atom(&receiver.extra) {
-                    obj.remove(name).ok_or_else(|| {
-                        let err = ErrorKind::NoField {
-                            field: name.clone(),
-                            available_fields: obj.keys().cloned().collect(),
-                        };
-                        executable.create_error(&span, err)
-                    })
-                } else {
-                    Err(executable.create_error(&span, ErrorKind::CannotAccessFields))
-                }
-            }
+            } => self
+                .access_named_field(&receiver.extra, name)
+                .map_err(|err| executable.create_error(&span, err)),
 
-            CompiledExpr::Function {
+            CompiledExpr::FunctionCall {
                 name,
                 original_name,
                 args,
@@ -459,12 +460,37 @@ impl<'a, T: Clone> Registers<'a, T> {
                         executable.id.as_ref(),
                         span,
                         arg_values,
-                        arithmetic,
+                        operations,
                         backtrace,
                     )
                 } else {
                     Err(executable.create_error(&span, ErrorKind::CannotCall))
                 }
+            }
+
+            CompiledExpr::MethodCall {
+                name,
+                receiver,
+                args,
+            } => {
+                let receiver = receiver.copy_with_extra(self.resolve_atom(&receiver.extra));
+                let method =
+                    Self::resolve_method(&receiver.extra, &name.extra, operations.prototypes)
+                        .map_err(|err| executable.create_error(name, err))?;
+                let arg_values = args
+                    .iter()
+                    .map(|arg| arg.copy_with_extra(self.resolve_atom(&arg.extra)));
+                let arg_values = iter::once(receiver).chain(arg_values).collect();
+
+                Self::eval_function(
+                    &method,
+                    &name.extra,
+                    executable.id.as_ref(),
+                    span,
+                    arg_values,
+                    operations,
+                    backtrace,
+                )
             }
 
             CompiledExpr::DefineFunction {
@@ -520,6 +546,82 @@ impl<'a, T: Clone> Registers<'a, T> {
         }
     }
 
+    fn access_index_field(
+        &self,
+        receiver: &Atom<T>,
+        index: usize,
+    ) -> Result<Value<'a, T>, ErrorKind> {
+        let receiver = match receiver {
+            Atom::Register(idx) => &self.registers[*idx],
+            Atom::Constant(_) => {
+                return Err(ErrorKind::CannotIndex);
+            }
+            Atom::Void => {
+                return Err(ErrorKind::IndexOutOfBounds { index, len: 0 });
+            }
+        };
+
+        if let Value::Tuple(tuple) = receiver {
+            let len = tuple.len();
+            if index >= len {
+                Err(ErrorKind::IndexOutOfBounds { index, len })
+            } else {
+                Ok(tuple[index].clone())
+            }
+        } else {
+            Err(ErrorKind::CannotIndex)
+        }
+    }
+
+    fn access_named_field(
+        &self,
+        receiver: &Atom<T>,
+        name: &str,
+    ) -> Result<Value<'a, T>, ErrorKind> {
+        let receiver = if let Atom::Register(idx) = receiver {
+            &self.registers[*idx]
+        } else {
+            return Err(ErrorKind::CannotAccessFields);
+        };
+        let object = receiver.as_object().ok_or(ErrorKind::CannotAccessFields)?;
+        object.get(name).cloned().ok_or_else(|| ErrorKind::NoField {
+            field: name.to_owned(),
+            available_fields: object.field_names().map(String::from).collect(),
+        })
+    }
+
+    fn resolve_method(
+        receiver: &Value<'a, T>,
+        method_name: &str,
+        standard_prototypes: Option<&StandardPrototypes<T>>,
+    ) -> Result<Function<'a, T>, ErrorKind> {
+        let proto = if let Some(object) = receiver.as_object() {
+            object.prototype()
+        } else if let Value::Tuple(tuple) = receiver {
+            tuple.prototype()
+        } else {
+            None
+        };
+
+        let proto = proto
+            .or_else(|| {
+                let ty = receiver.value_type();
+                standard_prototypes.and_then(|prototypes| prototypes.get(ty))
+            })
+            .map(Prototype::as_object)
+            .ok_or_else(|| ErrorKind::NoPrototype(receiver.value_type()))?;
+
+        let field = proto.get(method_name).ok_or_else(|| ErrorKind::NoField {
+            field: method_name.to_owned(),
+            available_fields: proto.field_names().map(String::from).collect(),
+        })?;
+        if let Value::Function(function) = field {
+            Ok(function.clone())
+        } else {
+            Err(ErrorKind::CannotCall)
+        }
+    }
+
     #[allow(clippy::needless_option_as_deref)] // false positive
     fn eval_function(
         function: &Function<'a, T>,
@@ -527,14 +629,14 @@ impl<'a, T: Clone> Registers<'a, T> {
         module_id: &dyn ModuleId,
         call_span: MaybeSpanned<'a>,
         arg_values: Vec<SpannedValue<'a, T>>,
-        arithmetic: &dyn OrdArithmetic<T>,
+        operations: Operations<'_, T>,
         mut backtrace: Option<&mut Backtrace<'a>>,
     ) -> EvalResult<'a, T> {
         let full_call_span = CodeInModule::new(module_id, call_span);
         if let Some(backtrace) = &mut backtrace {
             backtrace.push_call(fn_name, function.def_span(), full_call_span.clone());
         }
-        let mut context = CallContext::new(full_call_span, backtrace.as_deref_mut(), arithmetic);
+        let mut context = CallContext::new(full_call_span, backtrace.as_deref_mut(), operations);
 
         function.evaluate(arg_values, &mut context).map(|value| {
             if let Some(backtrace) = backtrace {
@@ -557,20 +659,19 @@ impl<'a, T: Clone> Registers<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{compiler::Compiler, executable::ModuleImports, WildcardId};
+    use crate::{compiler::Compiler, exec::WildcardId};
     use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 
     #[test]
     fn iterative_evaluation() {
         let block = Untyped::<F32Grammar>::parse_statements("x").unwrap();
-        let (mut module, _) = Compiler::compile_module(WildcardId, &block).unwrap();
+        let module = Compiler::compile_module(WildcardId, &block).unwrap();
         assert_eq!(module.inner.register_capacity, 2);
         assert_eq!(module.inner.commands.len(), 1); // push `x` from r0 to r1
 
-        let mut env = Registers::new();
-        env.insert_var("x", Value::Prim(5.0));
-        module.imports = ModuleImports { inner: env };
-        let value = module.run().unwrap();
+        let mut env = Environment::new();
+        env.insert("x", Value::Prim(5.0));
+        let value = module.with_env(&env).unwrap().run().unwrap();
         assert_eq!(value, Value::Prim(5.0));
     }
 }

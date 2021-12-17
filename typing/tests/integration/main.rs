@@ -13,7 +13,8 @@ use arithmetic_typing::{
 mod annotations;
 mod basics;
 mod errors;
-mod examples;
+// FIXME: restore once prototypes are supported by the typing crate
+//mod examples;
 mod length_eqs;
 mod object;
 

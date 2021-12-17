@@ -31,13 +31,9 @@
 //!
 //! [`ExecutableModule`]: crate::ExecutableModule
 
-#![allow(renamed_and_removed_lints, clippy::unknown_clippy_lints)]
-// ^ `map_err_ignore` is newer than MSRV, and `clippy::unknown_clippy_lints` is removed
-// since Rust 1.51.
-
 use core::{cmp::Ordering, fmt};
 
-use crate::error::ArithmeticError;
+use crate::{alloc::Box, error::ArithmeticError};
 
 #[cfg(feature = "bigint")]
 mod bigint;
@@ -116,6 +112,50 @@ pub trait OrdArithmetic<T>: Arithmetic<T> {
 impl<T> fmt::Debug for dyn OrdArithmetic<T> + '_ {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.debug_tuple("OrdArithmetic").finish()
+    }
+}
+
+impl<T> Arithmetic<T> for Box<dyn OrdArithmetic<T>> {
+    #[inline]
+    fn add(&self, x: T, y: T) -> Result<T, ArithmeticError> {
+        (**self).add(x, y)
+    }
+
+    #[inline]
+    fn sub(&self, x: T, y: T) -> Result<T, ArithmeticError> {
+        (**self).sub(x, y)
+    }
+
+    #[inline]
+    fn mul(&self, x: T, y: T) -> Result<T, ArithmeticError> {
+        (**self).mul(x, y)
+    }
+
+    #[inline]
+    fn div(&self, x: T, y: T) -> Result<T, ArithmeticError> {
+        (**self).div(x, y)
+    }
+
+    #[inline]
+    fn pow(&self, x: T, y: T) -> Result<T, ArithmeticError> {
+        (**self).pow(x, y)
+    }
+
+    #[inline]
+    fn neg(&self, x: T) -> Result<T, ArithmeticError> {
+        (**self).neg(x)
+    }
+
+    #[inline]
+    fn eq(&self, x: &T, y: &T) -> bool {
+        (**self).eq(x, y)
+    }
+}
+
+impl<T> OrdArithmetic<T> for Box<dyn OrdArithmetic<T>> {
+    #[inline]
+    fn partial_cmp(&self, x: &T, y: &T) -> Option<Ordering> {
+        (**self).partial_cmp(x, y)
     }
 }
 
@@ -205,7 +245,7 @@ where
 ///
 /// ```
 /// use arithmetic_eval::arith::{ArithmeticExt, ModularArithmetic};
-/// # use arithmetic_eval::{ExecutableModule, Value};
+/// # use arithmetic_eval::{Environment, ExecutableModule, Value};
 /// # use arithmetic_parser::grammars::{NumGrammar, Untyped, Parse};
 ///
 /// # fn main() -> anyhow::Result<()> {
@@ -214,11 +254,9 @@ where
 /// // `ModularArithmetic` requires to define how numbers will be compared -
 /// // and the simplest solution is to not compare them at all.
 /// let program = Untyped::<NumGrammar<u32>>::parse_statements("1 < 3 || 1 >= 3")?;
-/// let module = ExecutableModule::builder("test", &program)?.build();
-/// assert_eq!(
-///     module.with_arithmetic(&base.without_comparisons()).run()?,
-///     Value::Bool(false)
-/// );
+/// let module = ExecutableModule::new("test", &program)?;
+/// let env = Environment::with_arithmetic(base.without_comparisons());
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(false));
 ///
 /// // We can compare numbers by their integer value. This can lead
 /// // to pretty confusing results, though.
@@ -227,21 +265,17 @@ where
 ///     (x, y, z) = (1, 12, 5);
 ///     x == y && x < z && y > z
 /// "#)?;
-/// let module = ExecutableModule::builder("test", &program)?.build();
-/// assert_eq!(
-///     module.with_arithmetic(&bogus_arithmetic).run()?,
-///     Value::Bool(true)
-/// );
+/// let module = ExecutableModule::new("test", &program)?;
+/// let env = Environment::with_arithmetic(bogus_arithmetic);
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
 ///
 /// // It's possible to fix the situation using a custom comparison function,
 /// // which will compare numbers by their residual class.
 /// let less_bogus_arithmetic = base.with_comparison(|&x: &u32, &y: &u32| {
 ///     (x % 11).partial_cmp(&(y % 11))
 /// });
-/// assert_eq!(
-///     module.with_arithmetic(&less_bogus_arithmetic).run()?,
-///     Value::Bool(false)
-/// );
+/// let env = Environment::with_arithmetic(less_bogus_arithmetic);
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(false));
 /// # Ok(())
 /// # }
 /// ```

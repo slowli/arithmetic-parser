@@ -21,15 +21,15 @@ use crate::{
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = "x = 3; if(x == 2, -1, x + 1)";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_if", &program)?;
 ///
-/// let module = Environment::new()
-///     .insert_native_fn("if", fns::If)
-///     .compile_module("if_test", &program)?;
-/// assert_eq!(module.run()?, Value::Prim(4.0));
+/// let mut env = Environment::new();
+/// env.insert_native_fn("if", fns::If);
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Prim(4.0));
 /// # Ok(())
 /// # }
 /// ```
@@ -39,15 +39,15 @@ use crate::{
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = "x = 3; if(x == 2, || -1, || x + 1)()";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_if", &program)?;
 ///
-/// let module = Environment::new()
-///     .insert_native_fn("if", fns::If)
-///     .compile_module("if_test", &program)?;
-/// assert_eq!(module.run()?, Value::Prim(4.0));
+/// let mut env = Environment::new();
+/// env.insert_native_fn("if", fns::If);
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Prim(4.0));
 /// # Ok(())
 /// # }
 /// ```
@@ -90,7 +90,7 @@ impl<T> NativeFn<T> for If {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     factorial = |x| {
@@ -102,12 +102,12 @@ impl<T> NativeFn<T> for If {
 ///     factorial(5) == 120 && factorial(10) == 3628800
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_loop", &program)?;
 ///
-/// let module = Environment::new()
-///     .insert_native_fn("if", fns::If)
-///     .insert_native_fn("loop", fns::Loop)
-///     .compile_module("test_loop", &program)?;
-/// assert_eq!(module.run()?, Value::Bool(true));
+/// let mut env = Environment::new();
+/// env.insert_native_fn("if", fns::If)
+///     .insert_native_fn("loop", fns::Loop);
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
 /// # Ok(())
 /// # }
 /// ```
@@ -119,7 +119,7 @@ impl Loop {
         "iteration function should return a 2-element tuple with first bool value";
 }
 
-impl<T: Clone> NativeFn<T> for Loop {
+impl<T: 'static + Clone> NativeFn<T> for Loop {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -138,8 +138,9 @@ impl<T: Clone> NativeFn<T> for Loop {
 
         let mut arg = args.pop().unwrap();
         loop {
-            if let Value::Tuple(mut tuple) = iter.evaluate(vec![arg], ctx)? {
+            if let Value::Tuple(tuple) = iter.evaluate(vec![arg], ctx)? {
                 let (ret_or_next_arg, flag) = if tuple.len() == 2 {
+                    let mut tuple = Vec::from(tuple);
                     (tuple.pop().unwrap(), tuple.pop().unwrap())
                 } else {
                     let err = ErrorKind::native(Self::ITER_ERROR);
@@ -179,11 +180,12 @@ impl<T: Clone> NativeFn<T> for Loop {
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     factorial = |x| {
-///         (_, acc) = (x, 1).while(
+///         (_, acc) = while(
+///             (x, 1),
 ///             |(i, _)| i >= 1,
 ///             |(i, acc)| (i - 1, acc * i),
 ///         );
@@ -192,18 +194,18 @@ impl<T: Clone> NativeFn<T> for Loop {
 ///     factorial(5) == 120 && factorial(10) == 3628800
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_while", &program)?;
 ///
-/// let module = Environment::new()
-///     .insert_native_fn("while", fns::While)
-///     .compile_module("test_while", &program)?;
-/// assert_eq!(module.run()?, Value::Bool(true));
+/// let mut env = Environment::new();
+/// env.insert_native_fn("while", fns::While);
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
 /// # Ok(())
 /// # }
 /// ```
 #[derive(Debug, Clone, Copy, Default)]
 pub struct While;
 
-impl<T: Clone> NativeFn<T> for While {
+impl<T: 'static + Clone> NativeFn<T> for While {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,

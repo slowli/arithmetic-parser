@@ -8,7 +8,7 @@ on:
 
 env:
   # Minimum supported Rust version.
-  msrv: 1.46.0
+  msrv: 1.51.0
   # Minimum supported Rust version for CLI.
   msrv_cli: 1.52.0
   # Nightly Rust toolchain for building docs and checking nostd support.
@@ -54,17 +54,17 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: run
-          args: --manifest-path eval/Cargo.toml --example owned_module --features arithmetic-parser/std
+          args: --manifest-path eval/Cargo.toml --example owned_module
       - name: Run ElGamal encryption example
         uses: actions-rs/cargo@v1
         with:
           command: run
-          args: --manifest-path eval/Cargo.toml --example el_gamal --features bigint,num-bigint/rand,arithmetic-parser/std
+          args: --manifest-path eval/Cargo.toml --example el_gamal --features bigint,num-bigint/rand
       - name: Run cyclic group example
         uses: actions-rs/cargo@v1
         with:
           command: run
-          args: --manifest-path eval/Cargo.toml --example cyclic_group --features bigint,num-bigint/rand,arithmetic-parser/std
+          args: --manifest-path eval/Cargo.toml --example cyclic_group --features bigint,num-bigint/rand
       - name: Run typing example (strings)
         uses: actions-rs/cargo@v1
         with:
@@ -173,17 +173,17 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: run
-          args: --manifest-path eval/Cargo.toml --example owned_module --features arithmetic-parser/std
+          args: --manifest-path eval/Cargo.toml --example owned_module
       - name: Run ElGamal encryption example
         uses: actions-rs/cargo@v1
         with:
           command: run
-          args: --manifest-path eval/Cargo.toml --example el_gamal --features bigint,num-bigint/rand,arithmetic-parser/std
+          args: --manifest-path eval/Cargo.toml --example el_gamal --features bigint,num-bigint/rand
       - name: Run cyclic group example
         uses: actions-rs/cargo@v1
         with:
           command: run
-          args: --manifest-path eval/Cargo.toml --example cyclic_group --features bigint,num-bigint/rand,arithmetic-parser/std
+          args: --manifest-path eval/Cargo.toml --example cyclic_group --features bigint,num-bigint/rand
       - name: Run typing example (strings)
         uses: actions-rs/cargo@v1
         with:

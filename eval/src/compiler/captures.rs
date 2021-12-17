@@ -6,8 +6,8 @@ use core::iter;
 
 use crate::{
     alloc::{vec, Box, Vec},
-    error::{AuxErrorInfo, RepeatedAssignmentContext},
-    Error, ErrorKind, ModuleId, WildcardId,
+    error::{AuxErrorInfo, Error, ErrorKind, RepeatedAssignmentContext},
+    exec::{ModuleId, WildcardId},
 };
 use arithmetic_parser::{
     grammars::Grammar, Block, Destructure, Expr, FnDefinition, Lvalue, Spanned, SpannedExpr,
@@ -97,17 +97,11 @@ impl<'a> CapturesExtractor<'a> {
                 self.eval(receiver)?;
             }
 
-            Expr::Method {
-                args,
-                receiver,
-                name,
-            } => {
+            Expr::Method { args, receiver, .. } => {
                 self.eval(receiver)?;
                 for arg in args {
                     self.eval(arg)?;
                 }
-
-                self.eval_local_var(name);
             }
 
             Expr::Block(block) => {

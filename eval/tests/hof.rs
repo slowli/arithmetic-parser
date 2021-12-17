@@ -1,8 +1,8 @@
 //! Demonstrates how to define high-order native functions.
 
 use arithmetic_eval::{
-    fns, wrap_fn, wrap_fn_with_context, CallContext, ErrorKind, EvalResult, ExecutableModule,
-    Function, NativeFn, SpannedValue, Value,
+    fns, wrap_fn, wrap_fn_with_context, CallContext, Environment, ErrorKind, EvalResult,
+    ExecutableModule, Function, NativeFn, SpannedValue, Value,
 };
 use arithmetic_parser::{
     grammars::{F32Grammar, Parse, Untyped},
@@ -17,7 +17,7 @@ struct Repeated<T> {
     times: usize,
 }
 
-impl<T: Clone> NativeFn<T> for Repeated<T> {
+impl<T: 'static + Clone> NativeFn<T> for Repeated<T> {
     fn evaluate<'a>(
         &self,
         mut args: Vec<SpannedValue<'a, T>>,
@@ -65,43 +65,40 @@ fn eager_repeat<'a>(
 }
 
 #[test]
-fn repeated_function() {
+fn repeated_function() -> anyhow::Result<()> {
     let program = r#"
         fn = |x| 2 * x + 1;
-        repeated = fn.repeat(3);
+        repeated = repeat(fn, 3);
         // 2 * 1 + 1 = 3 -> 2 * 3 + 1 = 7 -> 2 * 7 + 1 = 15
         assert_eq(repeated(1), 15);
         // -1 is the immovable point of the transform
         assert_eq(repeated(-1), -1);
     "#;
-    let program = Untyped::<F32Grammar>::parse_statements(program).unwrap();
+    let program = Untyped::<F32Grammar>::parse_statements(program)?;
+    let program = ExecutableModule::new("repeat", &program)?;
 
-    let program = ExecutableModule::builder("repeat", &program)
-        .unwrap()
-        .with_import("repeat", Value::native_fn(wrap_fn!(2, repeat)))
-        .with_import("assert_eq", Value::native_fn(fns::AssertEq))
-        .build();
-    program.run().unwrap();
+    let mut env = Environment::new();
+    env.insert_native_fn("repeat", wrap_fn!(2, repeat))
+        .insert_native_fn("assert_eq", fns::AssertEq);
+    program.with_env(&env)?.run()?;
+    Ok(())
 }
 
 #[test]
-fn eager_repeated_function() {
+fn eager_repeated_function() -> anyhow::Result<()> {
     let program = r#"
         fn = |x| 2 * x + 1;
         // 2 * 1 + 1 = 3 -> 2 * 3 + 1 = 7 -> 2 * 7 + 1 = 15
-        assert_eq(fn.repeat(3, 1), 15);
+        assert_eq(repeat(fn, 3, 1), 15);
         // -1 is the immovable point of the transform
-        assert_eq(fn.repeat(3, -1), -1);
+        assert_eq(repeat(fn, 3, -1), -1);
     "#;
-    let program = Untyped::<F32Grammar>::parse_statements(program).unwrap();
+    let program = Untyped::<F32Grammar>::parse_statements(program)?;
+    let program = ExecutableModule::new("repeat", &program)?;
 
-    let program = ExecutableModule::builder("repeat", &program)
-        .unwrap()
-        .with_import(
-            "repeat",
-            Value::native_fn(wrap_fn_with_context!(3, eager_repeat)),
-        )
-        .with_import("assert_eq", Value::native_fn(fns::AssertEq))
-        .build();
-    program.run().unwrap();
+    let mut env = Environment::new();
+    env.insert_native_fn("repeat", wrap_fn_with_context!(3, eager_repeat))
+        .insert_native_fn("assert_eq", fns::AssertEq);
+    program.with_env(&env)?.run()?;
+    Ok(())
 }

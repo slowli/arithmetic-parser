@@ -1,6 +1,6 @@
 //! Values used by the interpreter.
 
-use hashbrown::HashMap;
+// TODO: consider removing lifetimes from `Value` (i.e., strip code spans immediately)
 
 use core::{
     any::{type_name, Any},
@@ -8,24 +8,25 @@ use core::{
 };
 
 use crate::{
-    alloc::{vec, Rc, String, Vec},
+    alloc::{Rc, Vec},
     fns,
 };
 use arithmetic_parser::{MaybeSpanned, StripCode};
 
-mod env;
 mod function;
+mod object;
 mod ops;
-mod variable_map;
+mod tuple;
 
+pub(crate) use self::object::StandardPrototypes;
 pub use self::{
-    env::Environment,
     function::{CallContext, Function, InterpretedFn, NativeFn},
-    variable_map::{Assertions, Comparisons, Prelude, VariableMap},
+    object::{Object, Prototype, PrototypeField},
+    tuple::Tuple,
 };
 
 /// Possible high-level types of [`Value`]s.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum ValueType {
     /// Primitive type other than `Bool`ean.
@@ -79,9 +80,6 @@ pub struct OpaqueRef {
     dyn_fmt: fn(&dyn Any, &mut fmt::Formatter<'_>) -> fmt::Result,
 }
 
-#[allow(renamed_and_removed_lints, clippy::unknown_clippy_lints)]
-// ^ `missing_panics_doc` is newer than MSRV, and `clippy::unknown_clippy_lints` is removed
-// since Rust 1.51.
 impl OpaqueRef {
     /// Creates a reference to `value` that implements equality comparison.
     ///
@@ -113,10 +111,7 @@ impl OpaqueRef {
     ///
     /// Prefer [`Self::new()`] when possible.
     #[allow(clippy::missing_panics_doc)] // false positive; `unwrap()`s never panic
-    pub fn with_identity_eq<T>(value: T) -> Self
-    where
-        T: Any + fmt::Debug,
-    {
+    pub fn with_identity_eq<T: Any>(value: T) -> Self {
         Self {
             value: Rc::new(value),
             type_name: type_name::<T>(),
@@ -126,10 +121,7 @@ impl OpaqueRef {
                 let other_data = (other as *const dyn Any).cast::<()>();
                 this_data == other_data
             },
-            dyn_fmt: |this, formatter| {
-                let this_cast = this.downcast_ref::<T>().unwrap();
-                fmt::Debug::fmt(this_cast, formatter)
-            },
+            dyn_fmt: |this, formatter| fmt::Debug::fmt(&this.type_id(), formatter),
         }
     }
 
@@ -173,7 +165,7 @@ impl fmt::Display for OpaqueRef {
 }
 
 /// Values produced by expressions during their interpretation.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum Value<'a, T> {
     /// Primitive value, such as a number. This does not include Boolean values,
@@ -187,9 +179,9 @@ pub enum Value<'a, T> {
     /// Function.
     Function(Function<'a, T>),
     /// Tuple of zero or more values.
-    Tuple(Vec<Value<'a, T>>),
+    Tuple(Tuple<'a, T>),
     /// Object with zero or more named fields.
-    Object(HashMap<String, Value<'a, T>>),
+    Object(Object<'a, T>),
     /// Opaque reference to a native value.
     Ref(OpaqueRef),
 }
@@ -224,8 +216,8 @@ impl<'a, T> Value<'a, T> {
     }
 
     /// Creates a void value (an empty tuple).
-    pub fn void() -> Self {
-        Self::Tuple(vec![])
+    pub const fn void() -> Self {
+        Self::Tuple(Tuple::void())
     }
 
     /// Creates a reference to a native variable.
@@ -254,18 +246,19 @@ impl<'a, T> Value<'a, T> {
     pub fn is_function(&self) -> bool {
         matches!(self, Self::Function(_))
     }
+
+    pub(crate) fn as_object(&self) -> Option<&Object<'a, T>> {
+        match self {
+            Self::Object(object) => Some(object),
+            Self::Function(Function::Prototype(proto)) => Some(proto.as_object()),
+            _ => None,
+        }
+    }
 }
 
-impl<T: Clone> Clone for Value<'_, T> {
-    fn clone(&self) -> Self {
-        match self {
-            Self::Prim(lit) => Self::Prim(lit.clone()),
-            Self::Bool(bool) => Self::Bool(*bool),
-            Self::Function(function) => Self::Function(function.clone()),
-            Self::Tuple(tuple) => Self::Tuple(tuple.clone()),
-            Self::Object(fields) => Self::Object(fields.clone()),
-            Self::Ref(reference) => Self::Ref(reference.clone()),
-        }
+impl<'a, T> From<Vec<Self>> for Value<'a, T> {
+    fn from(elements: Vec<Self>) -> Self {
+        Self::Tuple(Tuple::from(elements))
     }
 }
 
@@ -304,7 +297,7 @@ impl<T: PartialEq> PartialEq for Value<'_, T> {
             (Self::Bool(this), Self::Bool(other)) => this == other,
             (Self::Tuple(this), Self::Tuple(other)) => this == other,
             (Self::Object(this), Self::Object(other)) => this == other,
-            (Self::Function(this), Self::Function(other)) => this.is_same_function(other),
+            (Self::Function(this), Self::Function(other)) => this == other,
             (Self::Ref(this), Self::Ref(other)) => this == other,
             _ => false,
         }
@@ -318,24 +311,9 @@ impl<T: fmt::Display> fmt::Display for Value<'_, T> {
             Self::Bool(true) => formatter.write_str("true"),
             Self::Bool(false) => formatter.write_str("false"),
             Self::Ref(opaque_ref) => fmt::Display::fmt(opaque_ref, formatter),
-            Self::Function(_) => formatter.write_str("[function]"),
-            Self::Object(fields) => {
-                formatter.write_str("#{ ")?;
-                for (name, value) in fields.iter() {
-                    write!(formatter, "{} = {}; ", name, value)?;
-                }
-                formatter.write_str("}")
-            }
-            Self::Tuple(elements) => {
-                formatter.write_str("(")?;
-                for (i, element) in elements.iter().enumerate() {
-                    fmt::Display::fmt(element, formatter)?;
-                    if i + 1 < elements.len() {
-                        formatter.write_str(", ")?;
-                    }
-                }
-                formatter.write_str(")")
-            }
+            Self::Function(function) => fmt::Display::fmt(function, formatter),
+            Self::Object(object) => fmt::Display::fmt(object, formatter),
+            Self::Tuple(tuple) => fmt::Display::fmt(tuple, formatter),
         }
     }
 }

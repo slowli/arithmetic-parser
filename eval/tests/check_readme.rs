@@ -5,7 +5,10 @@ use rand::{thread_rng, Rng};
 
 use std::fs;
 
-use arithmetic_eval::{fns, Assertions, Environment, Prelude, Value, VariableMap};
+use arithmetic_eval::{
+    env::{Assertions, Environment, Prelude},
+    fns, ExecutableModule, Value,
+};
 use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 
 fn read_file(path: &str) -> String {
@@ -14,15 +17,20 @@ fn read_file(path: &str) -> String {
 
 fn check_sample(code_sample: &str) {
     let program = Untyped::<F32Grammar>::parse_statements(code_sample).unwrap();
+    let module = ExecutableModule::new("test", &program).unwrap();
 
-    let mut env: Environment<'_, f32> = Prelude.iter().chain(Assertions.iter()).collect();
-    env.insert("INF", Value::Prim(f32::INFINITY));
-    env.insert("array", Value::native_fn(fns::Array)).insert(
-        "rand_num",
-        Value::wrapped_fn(|min: f32, max: f32| thread_rng().gen_range(min..max)),
-    );
-    let module = env.compile_module("test", &program).unwrap();
-    module.run().unwrap();
+    let mut env = Environment::<f32>::new();
+    env.extend(Prelude::vars().chain(Assertions::vars()));
+    env.extend(Prelude::prototypes());
+    env.insert("INF", Value::Prim(f32::INFINITY))
+        .insert_native_fn("array", fns::Array)
+        .insert_native_fn("assert_close", fns::AssertClose::new(1e-4))
+        .insert_wrapped_fn("sqrt", f32::sqrt)
+        .insert_wrapped_fn("rand_num", |min: f32, max: f32| {
+            thread_rng().gen_range(min..max)
+        });
+
+    module.with_env(&env).unwrap().run().unwrap();
 }
 
 #[test]

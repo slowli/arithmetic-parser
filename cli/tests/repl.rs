@@ -62,9 +62,9 @@ fn repl_basics() {
             repl("1 + 2*3"),
             repl("all = |array, pred| array.fold(true, |acc, x| acc && pred(x));"),
             repl("all"),
-            repl("(1, 2, 5).all(|x| 0 < x)"),
-            repl("(1, -2, 5).all(|x| 0 < x)"),
-            repl("(1, 2, 5, map).all(|x| 0 < x)"),
+            repl("all((1, 2, 5), |x| 0 < x)"),
+            repl("all((1, -2, 5), |x| 0 < x)"),
+            repl("all((1, 2, 5, map), |x| 0 < x)"),
         ],
     );
 }
@@ -98,7 +98,6 @@ fn getting_help() {
     test_config(false).test("tests/snapshots/repl/help.svg", vec![repl(".help")]);
 }
 
-// TODO: more complex input doesn't work because of non-deterministic var order
 #[test]
 fn dumping_vars() {
     test_config(false).test(

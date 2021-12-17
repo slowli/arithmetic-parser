@@ -1,7 +1,8 @@
 //! Module defining a right-fold function.
 
 rfold = |xs, acc, fn| {
-    (_, acc) = (xs, acc).while(
+    (_, acc) = while(
+        (xs, acc),
         |(xs, _)| xs as [_] != (),
         |(xs, acc)| {
             (...head: Num, tail: Num) = xs as any;
@@ -12,12 +13,12 @@ rfold = |xs, acc, fn| {
 };
 
 // Check that `rfold` works with different accumulator types.
-folded = (1, 2, 3).rfold(() as [_], push);
+folded = rfold((1, 2, 3), () as [_], push);
 assert_eq(folded, (3, 2, 1));
 
-(4, 5, 6).rfold(true, |acc, x| acc && x > 0);
+rfold((4, 5, 6), true, |acc, x| acc && x > 0);
 
-(min, max) = (1, 2, 3, 4).rfold((INF, -INF), |(min, max), x| {
+(min, max) = rfold((1, 2, 3, 4), (INF, -INF), |(min, max), x| {
      min = if(x < min, x, min);
      max = if(x > max, x, max);
      (min, max)

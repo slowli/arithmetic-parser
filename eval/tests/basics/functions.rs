@@ -6,7 +6,8 @@ use hashbrown::HashMap;
 use core::iter::FromIterator;
 
 use arithmetic_eval::{
-    fns::FromValueErrorKind, Environment, ErrorKind, Function, NativeFn, Value, ValueType,
+    fns::FromValueErrorKind, Environment, ErrorKind, Function, NativeFn, PrototypeField, Value,
+    ValueType,
 };
 use arithmetic_parser::LvalueLen;
 
@@ -28,10 +29,10 @@ fn destructuring_in_fn_args() {
         swap(1, (2, 3))
     "#;
     let return_value = evaluate(&mut Environment::new(), program);
-    let inner_tuple = Value::Tuple(vec![Value::Prim(1.0), Value::Prim(2.0)]);
+    let inner_tuple = Value::from(vec![Value::Prim(1.0), Value::Prim(2.0)]);
     assert_eq!(
         return_value,
-        Value::Tuple(vec![inner_tuple, Value::Prim(3.0)])
+        Value::from(vec![inner_tuple, Value::Prim(3.0)])
     );
 }
 
@@ -94,7 +95,7 @@ fn captured_function() {
     let return_value = evaluate(&mut env, program);
     assert_eq!(
         return_value,
-        Value::Tuple(vec![Value::Prim(0.0), Value::Prim(0.0)])
+        Value::from(vec![Value::Prim(0.0), Value::Prim(0.0)])
     );
 
     {
@@ -125,9 +126,9 @@ fn variadic_function() {
     let mut env = Environment::new();
     let return_value = evaluate(&mut env, program);
 
-    let first = Value::Tuple(vec![Value::Prim(-1.0), Value::Prim(-2.0), Value::Prim(3.5)]);
-    let second = Value::Tuple(vec![Value::Prim(0.25), Value::Prim(-8.0)]);
-    assert_eq!(return_value, Value::Tuple(vec![first, second]));
+    let first = Value::from(vec![Value::Prim(-1.0), Value::Prim(-2.0), Value::Prim(3.5)]);
+    let second = Value::from(vec![Value::Prim(0.25), Value::Prim(-8.0)]);
+    assert_eq!(return_value, Value::from(vec![first, second]));
 }
 
 #[test]
@@ -218,7 +219,7 @@ fn first_class_functions_apply() {
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(
         return_value,
-        Value::Tuple(vec![Value::Prim(4.0), Value::Prim(1.0)])
+        Value::from(vec![Value::Prim(4.0), Value::Prim(1.0)])
     );
 }
 
@@ -239,7 +240,7 @@ fn first_class_functions_repeat() {
 
     assert_eq!(
         return_value,
-        Value::Tuple(vec![Value::Prim(8.0), Value::Prim(-1.5)])
+        Value::from(vec![Value::Prim(8.0), Value::Prim(-1.5)])
     );
     assert!(env.get("lambda").is_none());
 }
@@ -305,16 +306,21 @@ fn function_aliasing() {
 
 #[test]
 fn method_call() {
-    let program = "add = |x, y| x + y; 1.0.add(2)";
-    let return_value = evaluate(&mut Environment::new(), program);
+    let program = "1.0.add(2)";
+    let mut env = Environment::new();
+    env.insert_prototype(
+        PrototypeField::prim("add"),
+        Value::wrapped_fn(|x: f32, y: f32| x + y),
+    );
+    let return_value = evaluate(&mut env, program);
     assert_eq!(return_value, Value::Prim(3.0));
 }
 
 #[test]
-fn method_call_on_returned_fn() {
+fn function_call_on_returned_fn() {
     let program = r#"
         gen = |x| { |y| x + y };
-        (1, -2).gen()(3) == (4, 1)
+        gen((1, -2))(3) == (4, 1)
     "#;
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(return_value, Value::Bool(true));

@@ -242,6 +242,7 @@ mod tests {
     use crate::arith::Num;
 
     use assert_matches::assert_matches;
+    use core::array;
 
     fn get_err(errors: OpErrors<'_, Num>) -> ErrorKind<Num> {
         let mut errors = errors.into_vec();
@@ -251,28 +252,27 @@ mod tests {
 
     #[test]
     fn placing_obj_constraint() {
-        let lhs: Object<Num> = vec![("x", Type::NUM)].into_iter().collect();
+        let lhs: Object<Num> = Object::just("x", Type::NUM);
         let mut substitutions = Substitutions::default();
         let mut errors = OpErrors::new();
         lhs.constraint_object(&lhs, &mut substitutions, errors.by_ref());
         assert!(errors.into_vec().is_empty());
 
-        let var_rhs = vec![("x", Type::free_var(0))].into_iter().collect();
+        let var_rhs = Object::just("x", Type::free_var(0));
         let mut errors = OpErrors::new();
         lhs.constraint_object(&var_rhs, &mut substitutions, errors.by_ref());
         assert!(errors.into_vec().is_empty());
         assert_eq!(*substitutions.fast_resolve(&Type::free_var(0)), Type::NUM);
 
         // Extra fields in RHS are fine.
-        let extra_rhs = vec![("x", Type::free_var(1)), ("y", Type::BOOL)]
-            .into_iter()
-            .collect();
+        let extra_rhs =
+            array::IntoIter::new([("x", Type::free_var(1)), ("y", Type::BOOL)]).collect();
         let mut errors = OpErrors::new();
         lhs.constraint_object(&extra_rhs, &mut substitutions, errors.by_ref());
         assert!(errors.into_vec().is_empty());
         assert_eq!(*substitutions.fast_resolve(&Type::free_var(1)), Type::NUM);
 
-        let missing_field_rhs = vec![("y", Type::free_var(2))].into_iter().collect();
+        let missing_field_rhs = Object::just("y", Type::free_var(2));
         let mut errors = OpErrors::new();
         lhs.constraint_object(&missing_field_rhs, &mut substitutions, errors.by_ref());
         assert_matches!(
@@ -282,7 +282,7 @@ mod tests {
                 available_fields.len() == 1 && available_fields.contains("y")
         );
 
-        let incompatible_field_rhs = vec![("x", Type::BOOL)].into_iter().collect();
+        let incompatible_field_rhs = Object::just("x", Type::BOOL);
         let mut errors = OpErrors::new();
         lhs.constraint_object(&incompatible_field_rhs, &mut substitutions, errors.by_ref());
         assert_matches!(

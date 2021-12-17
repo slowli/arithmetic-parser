@@ -75,7 +75,7 @@
   <span class="fg2">1</span>,
   <span class="fg2">2</span>,
   fn(0 args)[
-    PI = <span class="fg2">3.1415927</span>
+    PI = <span class="fg2">3.141592653589793</span>
   ]
 )</pre></div>
       </div>

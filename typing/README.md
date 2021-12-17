@@ -2,9 +2,12 @@
 
 [![Build Status](https://github.com/slowli/arithmetic-parser/workflows/Rust/badge.svg?branch=master)](https://github.com/slowli/arithmetic-parser/actions)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue)](https://github.com/slowli/arithmetic-parser#license)
-![rust 1.46+ required](https://img.shields.io/badge/rust-1.46+-blue.svg)
+![rust 1.51+ required](https://img.shields.io/badge/rust-1.51+-blue.svg)
 
 **Links:** [![crate docs (master)](https://img.shields.io/badge/master-yellow.svg?label=docs)](https://slowli.github.io/arithmetic-parser/arithmetic_typing/)
+
+> 🚧 The crate is not yet aware of changes in handling methods in the eval crate.
+> Thus, it works incorrectly if methods are involved. This will be fixed shortly (hopefully). 
 
 Hindley–Milner type inference for arithmetic expressions parsed
 by the [`arithmetic-parser`] crate.

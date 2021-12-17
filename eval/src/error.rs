@@ -9,8 +9,9 @@ use core::fmt;
 
 use crate::{
     alloc::{format, vec, Box, String, ToOwned, ToString, Vec},
+    exec::ModuleId,
     fns::FromValueError,
-    ModuleId, Value,
+    Value, ValueType,
 };
 use arithmetic_parser::{
     BinaryOp, CodeFragment, LocatedSpan, LvalueLen, MaybeSpanned, Op, StripCode, UnaryOp,
@@ -176,6 +177,9 @@ pub enum ErrorKind {
     /// Variable with the enclosed name is not defined.
     #[display(fmt = "Variable `{}` is not defined", _0)]
     Undefined(String),
+    /// Variable is not initialized.
+    #[display(fmt = "Variable `{}` is not initialized", _0)]
+    Uninitialized(String),
 
     /// Field name is invalid.
     #[display(fmt = "`{}` is not a valid field name", _0)]
@@ -190,6 +194,10 @@ pub enum ErrorKind {
     /// A field cannot be accessed for the value (i.e., it is not an object).
     #[display(fmt = "Fields cannot be accessed for the object")]
     CannotAccessFields,
+
+    /// Cannot use a value of the specified type as a method receiver.
+    #[display(fmt = "Method cannot be called on {} since it has no prototype", _0)]
+    NoPrototype(ValueType),
 
     /// Index is out of bounds for the indexed tuple.
     #[display(
@@ -274,6 +282,7 @@ impl ErrorKind {
             }
             Self::RepeatedField => "Repeated object field".to_owned(),
             Self::Undefined(name) => format!("Variable `{}` is not defined", name),
+            Self::Uninitialized(name) => format!("Variable `{}` is not initialized", name),
             Self::InvalidFieldName(name) => format!("`{}` is not a valid field name", name),
             Self::CannotCall => "Value is not callable".to_owned(),
             Self::CannotIndex => "Value cannot be indexed".to_owned(),
@@ -282,6 +291,7 @@ impl ErrorKind {
                 format!("Index out of bounds for tuple with length {}", len)
             }
             Self::NoField { field, .. } => format!("Object does not have field {}", field),
+            Self::NoPrototype(ty) => format!("No prototype set for {}", ty),
             Self::NativeCall(message) => message.clone(),
             Self::Wrapper(err) => err.to_string(),
             Self::UnexpectedOperand { op } => format!("Unexpected operand type for {}", op),
@@ -305,9 +315,11 @@ impl ErrorKind {
             Self::RepeatedAssignment { .. } => "Re-assigned variable".to_owned(),
             Self::RepeatedField => "Repeated object field".to_owned(),
             Self::Undefined(_) => "Undefined variable occurrence".to_owned(),
+            Self::Uninitialized(_) => "Uninitialized value".to_owned(),
             Self::InvalidFieldName(_) => "Invalid field".to_owned(),
             Self::CannotIndex | Self::IndexOutOfBounds { .. } => "Indexing operation".to_owned(),
             Self::CannotAccessFields | Self::NoField { .. } => "Field access".to_owned(),
+            Self::NoPrototype(_) => "Method access".to_owned(),
             Self::CannotCall | Self::NativeCall(_) | Self::Wrapper(_) => "Failed call".to_owned(),
             Self::UnexpectedOperand { .. } => "Operand of wrong type".to_owned(),
             Self::CannotCompare => "Cannot be compared".to_owned(),
@@ -442,14 +454,14 @@ impl fmt::Display for AuxErrorInfo {
 ///
 /// ```
 /// # use arithmetic_parser::{grammars::{F64Grammar, Parse, Untyped}, StripResultExt};
-/// # use arithmetic_eval::{Environment, Error, ExecutableModule, VariableMap, WildcardId};
+/// # use arithmetic_eval::{Error, ExecutableModule};
 /// fn compile_code(code: &str) -> anyhow::Result<ExecutableModule<'_, f64>> {
 ///     let block = Untyped::<F64Grammar>::parse_statements(code).strip_err()?;
 ///
 ///     // Without `strip_err()` call, the code below won't compile:
 ///     // `Error<'_>` in general cannot be boxed into `anyhow::Error`,
 ///     // only `Error<'static>` can.
-///     Ok(Environment::new().compile_module(WildcardId, &block).strip_err()?)
+///     Ok(ExecutableModule::new("module", &block).strip_err()?)
 /// }
 /// ```
 #[derive(Debug)]
@@ -582,7 +594,7 @@ impl<'a, T> CodeInModule<'a, T> {
         &self.code
     }
 
-    fn fmt_location(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    pub(crate) fn fmt_location(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
             "{}:{}:{}",

@@ -16,9 +16,10 @@ use std::{cell::RefCell, fmt};
 
 use arithmetic_eval::{
     arith::{Arithmetic, ArithmeticExt, ModularArithmetic},
-    error::{ArithmeticError, AuxErrorInfo},
-    fns, Assertions, CallContext, ErrorKind, EvalResult, ExecutableModule, NativeFn, Number,
-    Prelude, SpannedValue, Value,
+    env::{Assertions, Prelude},
+    error::{ArithmeticError, AuxErrorInfo, ErrorKind},
+    fns, CallContext, Environment, EvalResult, ExecutableModule, NativeFn, Number, SpannedValue,
+    Value,
 };
 use arithmetic_parser::{
     grammars::{Features, NumGrammar, NumLiteral, Parse, Untyped},
@@ -61,7 +62,7 @@ impl NumLiteral for GroupLiteral {
 impl Number for GroupLiteral {}
 
 /// Arithmetic for our cyclic group.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct CyclicGroupArithmetic {
     /// Z/(2q + 1)Z modular arithmetic.
     for_group: ModularArithmetic<BigUint>,
@@ -127,14 +128,13 @@ impl CyclicGroupArithmetic {
     }
 
     /// Sets generic imports for the provided `module`.
-    fn set_imports(&self, module: &mut ExecutableModule<'_, GroupLiteral>) {
+    fn define_imports(&self, env: &mut Environment<'_, GroupLiteral>) {
         let generator = GroupLiteral::GroupElement(self.generator.clone());
         let prime_subgroup_order = GroupLiteral::Scalar(self.for_group.modulus().to_owned());
-        module
-            .set_import("GEN", Value::Prim(generator))
-            .set_import("ORDER", Value::Prim(prime_subgroup_order))
-            .set_import("rand_scalar", Value::wrapped_fn(self.rand_scalar()))
-            .set_import("hash_to_scalar", Value::native_fn(self.hash_to_scalar()));
+        env.insert("GEN", Value::Prim(generator))
+            .insert("ORDER", Value::Prim(prime_subgroup_order))
+            .insert_wrapped_fn("rand_scalar", self.rand_scalar())
+            .insert_native_fn("hash_to_scalar", self.hash_to_scalar());
     }
 }
 
@@ -300,30 +300,23 @@ fn main() -> anyhow::Result<()> {
     const BIT_LENGTH: usize = 256;
 
     let schnorr_signatures = GroupGrammar::parse_statements(SCHNORR_SIGNATURES)?;
-    let mut schnorr_signatures = ExecutableModule::builder("schnorr", &schnorr_signatures)?
-        .with_imports_from(&Prelude)
-        .with_imports_from(&Assertions)
-        .with_import("dbg", Value::native_fn(fns::Dbg))
-        .set_imports(|_| Value::void());
+    let schnorr_signatures = ExecutableModule::new("schnorr", &schnorr_signatures)?;
 
     let dsa_signatures = GroupGrammar::parse_statements(DSA_SIGNATURES)?;
-    let mut dsa_signatures = ExecutableModule::builder("dsa", &dsa_signatures)?
-        .with_imports_from(&Prelude)
-        .with_imports_from(&Assertions)
-        .with_import("dbg", Value::native_fn(fns::Dbg))
-        .set_imports(|_| Value::void());
+    let dsa_signatures = ExecutableModule::new("dsa", &dsa_signatures)?;
 
     for i in 0..5 {
         println!("\nRunning sample #{}", i);
 
         let arithmetic = CyclicGroupArithmetic::new(BIT_LENGTH);
-        arithmetic.set_imports(&mut schnorr_signatures);
-        arithmetic.set_imports(&mut dsa_signatures);
-        dsa_signatures.set_import("to_scalar", Value::wrapped_fn(arithmetic.to_scalar()));
+        let mut env = Environment::with_arithmetic(arithmetic.clone().without_comparisons());
+        env.extend(Prelude::vars().chain(Assertions::vars()));
+        env.insert_native_fn("dbg", fns::Dbg)
+            .insert_wrapped_fn("to_scalar", arithmetic.to_scalar());
+        arithmetic.define_imports(&mut env);
 
-        let arithmetic = arithmetic.without_comparisons();
-        schnorr_signatures.with_arithmetic(&arithmetic).run()?;
-        dsa_signatures.with_arithmetic(&arithmetic).run()?;
+        schnorr_signatures.with_env(&env)?.run()?;
+        dsa_signatures.with_env(&env)?.run()?;
     }
 
     Ok(())

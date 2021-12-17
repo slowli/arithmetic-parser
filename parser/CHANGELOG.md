@@ -7,7 +7,7 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ### Added
 
-- Make crate no-std-compatible and check compatibility in CI.
+- Make crate no-std-compatible and check compatibility in CI. (#101)
 
 ### Changed
 

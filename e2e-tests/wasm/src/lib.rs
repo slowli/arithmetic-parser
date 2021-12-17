@@ -5,7 +5,11 @@ extern crate alloc;
 use alloc::string::ToString;
 use core::f64;
 
-use arithmetic_eval::{fns, Assertions, Environment, Prelude, Value, VariableMap, WildcardId};
+use arithmetic_eval::{
+    env::{Assertions, Environment, Prelude},
+    exec::WildcardId,
+    fns, ExecutableModule, Value,
+};
 use arithmetic_parser::grammars::{F64Grammar, Parse, Untyped};
 use wasm_bindgen::prelude::*;
 
@@ -65,20 +69,24 @@ fn initialize_env(env: &mut Environment<'_, f64>) {
     }
 }
 
+fn into_js_error(err: impl ToString) -> JsValue {
+    Error::new(&err.to_string()).into()
+}
+
 #[wasm_bindgen]
 pub fn evaluate(program: &str) -> Result<JsValue, JsValue> {
-    let block = Untyped::<F64Grammar>::parse_statements(program)
-        .map_err(|err| Error::new(&err.to_string()))?;
+    let block = Untyped::<F64Grammar>::parse_statements(program).map_err(into_js_error)?;
+    let module = ExecutableModule::new(WildcardId, &block).map_err(into_js_error)?;
 
-    let mut env = Prelude.iter().chain(Assertions.iter()).collect();
+    let mut env = Environment::new();
+    env.extend(Prelude::vars().chain(Assertions::vars()));
     initialize_env(&mut env);
 
-    let value = env
-        .compile_module(WildcardId, &block)
-        .map_err(|err| Error::new(&err.to_string()))?
+    let value = module
+        .with_env(&env)
+        .map_err(into_js_error)?
         .run()
-        .map_err(|err| Error::new(&err.to_string()))?;
-
+        .map_err(into_js_error)?;
     match value {
         Value::Prim(number) => Ok(JsValue::from(number)),
         Value::Bool(flag) => Ok(JsValue::from(flag)),

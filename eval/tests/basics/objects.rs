@@ -2,7 +2,13 @@
 
 use assert_matches::assert_matches;
 
-use arithmetic_eval::{error::AuxErrorInfo, Assertions, Environment, ErrorKind, Prelude, Value};
+use core::array;
+
+use arithmetic_eval::{
+    env::{Assertions, Environment, Prelude},
+    error::{AuxErrorInfo, ErrorKind},
+    Value,
+};
 use arithmetic_parser::BinaryOp;
 
 use crate::{evaluate, expect_compilation_error, try_evaluate};
@@ -20,7 +26,7 @@ fn object_basics() {
     assert_eq!(fields["x"], Value::Prim(1.0));
     assert_eq!(
         fields["y"],
-        Value::Tuple(vec![Value::Prim(2.0), Value::Prim(3.0)])
+        Value::from(vec![Value::Prim(2.0), Value::Prim(3.0)])
     );
 }
 
@@ -90,7 +96,7 @@ fn object_expr_does_not_capture_inner_scopes() {
     assert_eq!(fields["y"], Value::Prim(6.0));
     assert_eq!(
         fields["vec"],
-        Value::Tuple(vec![Value::Prim(1.0), Value::Prim(6.0)])
+        Value::from(vec![Value::Prim(1.0), Value::Prim(6.0)])
     );
 }
 
@@ -147,17 +153,11 @@ fn accessing_fields_within_object() {
         _ => panic!("Unexpected return value: {:?}", return_value),
     };
 
+    let expected_fields = [("x", Value::Prim(3.0)), ("y", Value::Prim(4.0))];
     assert_eq!(fields.len(), 2);
     assert_eq!(
         fields["pt"],
-        Value::Object(
-            vec![
-                ("x".to_owned(), Value::Prim(3.0)),
-                ("y".to_owned(), Value::Prim(4.0))
-            ]
-            .into_iter()
-            .collect()
-        )
+        Value::Object(array::IntoIter::new(expected_fields).collect())
     );
     assert_eq!(fields["len_sq"], Value::Prim(25.0));
 }
@@ -256,16 +256,16 @@ fn object_destructuring_in_fn_args() {
 #[test]
 fn object_destructuring_in_pipeline() {
     let program = r#"
-        minmax = |xs| xs.fold(#{ min: INF, max: -INF }, |{ min, max }, x| #{
+        minmax = |...xs| xs.fold(#{ min: INF, max: -INF }, |{ min, max }, x| #{
             min: if(x < min, x, min),
             max: if(x > max, x, max),
         });
-        assert_eq((5, -4, 6, 9, 1).minmax(), #{ min: -4, max: 9 });
+        assert_eq(minmax(5, -4, 6, 9, 1), #{ min: -4, max: 9 });
     "#;
     let mut env = Environment::new();
     env.insert("INF", Value::Prim(f32::INFINITY));
-    env.extend(Prelude.iter());
-    env.extend(Assertions.iter());
+    env.extend(Prelude::prototypes());
+    env.extend(Prelude::vars().chain(Assertions::vars()));
     evaluate(&mut env, program);
 }
 
@@ -308,7 +308,7 @@ fn embedded_destructuring_error() {
 #[test]
 fn object_initialization_repeated_fields() {
     let program = "#{ x: 1, x: 2 }";
-    let err = expect_compilation_error(&mut Environment::new(), program);
+    let err = expect_compilation_error(program);
     let err_span = err.main_span().code();
 
     assert_eq!(*err_span.fragment(), "x");
@@ -325,7 +325,7 @@ fn object_initialization_repeated_fields() {
 #[test]
 fn object_initialization_repeated_fields_with_shorthand() {
     let program = "x = 2; #{ x: 5 + x, x }";
-    let err = expect_compilation_error(&mut Environment::new(), program);
+    let err = expect_compilation_error(program);
     let err_span = err.main_span().code();
 
     assert_eq!(*err_span.fragment(), "x");
@@ -336,7 +336,7 @@ fn object_initialization_repeated_fields_with_shorthand() {
 #[test]
 fn object_destructuring_repeated_fields() {
     let program = "{ x, x: y } = #{ x: 1, y: 2 };";
-    let err = expect_compilation_error(&mut Environment::new(), program);
+    let err = expect_compilation_error(program);
     let err_span = err.main_span().code();
 
     assert_eq!(*err_span.fragment(), "x");
@@ -353,7 +353,7 @@ fn object_destructuring_repeated_fields() {
 #[test]
 fn object_destructuring_repeated_assignment() {
     let program = "{ x, y: x } = #{ x: 1, y: 2 };";
-    let err = expect_compilation_error(&mut Environment::new(), program);
+    let err = expect_compilation_error(program);
     let err_span = err.main_span().code();
 
     assert_eq!(*err_span.fragment(), "x");
@@ -370,7 +370,7 @@ fn object_destructuring_repeated_assignment() {
 #[test]
 fn object_destructuring_repeated_assignment_complex() {
     let program = "{ x, ys: (x, ...) } = #{ x: 1, ys: (2, 3) };";
-    let err = expect_compilation_error(&mut Environment::new(), program);
+    let err = expect_compilation_error(program);
     let err_span = err.main_span().code();
 
     assert_eq!(*err_span.fragment(), "x");
@@ -382,6 +382,16 @@ fn object_destructuring_repeated_assignment_complex() {
     assert_eq!(*aux_span.fragment(), "x");
     assert_eq!(aux_span.location_offset(), 2);
     assert_matches!(aux_span.extra, AuxErrorInfo::PrevAssignment);
+}
+
+#[test]
+fn negation_on_object() {
+    let program = r#"
+        pt = -#{ x: -3, y: 4 };
+        pt == #{ x: 3, y: -4 }
+    "#;
+    let return_value = evaluate(&mut Environment::new(), program);
+    assert_eq!(return_value, Value::Bool(true));
 }
 
 #[test]
@@ -405,6 +415,23 @@ fn binary_ops_on_objects_with_number_operand() {
     "#;
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(return_value, Value::Bool(true));
+}
+
+#[test]
+fn error_in_binary_op_on_object_and_invalid_operand() {
+    let lhs_program = "#{ x: 3, y: 4 } + || 5";
+    {
+        let err = try_evaluate(&mut Environment::new(), lhs_program).unwrap_err();
+        let main_span = err.source().main_span().code().fragment();
+        assert_eq!(*main_span, "|| 5");
+    }
+
+    let rhs_program = "true + #{ x: 3, y: 4 }";
+    let mut env = Environment::new();
+    env.insert("true", Value::Bool(true));
+    let err = try_evaluate(&mut env, rhs_program).unwrap_err();
+    let main_span = err.source().main_span().code().fragment();
+    assert_eq!(*main_span, "true");
 }
 
 #[test]

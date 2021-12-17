@@ -5,7 +5,7 @@
 //! 1. A `Block` of statements is *compiled* into an [`ExecutableModule`]. Internally,
 //!   compilation processes the AST of the block and transforms it into a non-recusrive form.
 //!   An [`ExecutableModule`] may require *imports* (such as [`NativeFn`]s or constant [`Value`]s),
-//!   which can be taken from a [`VariableMap`] (e.g., an [`Environment`]).
+//!   which can be taken from an [`Environment`].
 //! 2. [`ExecutableModule`] can then be executed, for the return value and/or for the
 //!   changes at the top-level variable scope. There are two major variables influencing
 //!   the execution outcome. An [arithmetic](crate::arith) is used to define arithmetic ops
@@ -39,9 +39,11 @@
 //!   or a tuple / object and a primitive value.
 //!   As an example, `(1, 2) + 3` and `#{ x: 2, y: 3 } / #{ x: 4, y: 5 }` are valid,
 //!   but `(1, 2) * (3, 4, 5)` isn't.
-//! - Methods are considered syntactic sugar for functions, with the method receiver considered
-//!   the first function argument. For example, `(1, 2).map(sin)` is equivalent to
-//!   `map((1, 2), sin)`.
+//! - Methods are resolved using [`Prototype`]s, quite similar to JavaScript. A prototype is
+//!   an [`Object`], the fields of which are looked up whenever a method is called on a `Value`
+//!   for which this prototype was set. Besides providing object interface, prototypes are
+//!   callable; the call associated the target value with the prototype.
+//!   See `Prototype` docs for more details.
 //! - No type checks are performed before evaluation.
 //! - Type annotations and type casts are completely ignored.
 //!   This means that the interpreter may execute  code that is incorrect with annotations
@@ -118,7 +120,7 @@
 //! ```
 //! use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 //! use arithmetic_eval::{
-//!     Assertions, Comparisons, Environment, Prelude, Value, VariableMap,
+//!     env::{Assertions, Comparisons, Environment, Prelude}, ExecutableModule, Value,
 //! };
 //!
 //! # fn main() -> anyhow::Result<()> {
@@ -131,17 +133,18 @@
 //!     M
 //! "#;
 //! let program = Untyped::<F32Grammar>::parse_statements(program)?;
+//! // To execute statements, we first compile them into a module.
+//! let module = ExecutableModule::new("test", &program)?;
 //!
+//! // Then, we construct an environment to run the module.
 //! let mut env = Environment::new();
 //! // Add some native functions to the environment.
-//! env.extend(Prelude.iter());
-//! env.extend(Assertions.iter());
-//! env.extend(Comparisons.iter());
+//! env.extend(Prelude::vars());
+//! env.extend(Assertions::vars());
+//! env.extend(Comparisons::vars());
 //!
-//! // To execute statements, we first compile them into a module.
-//! let module = env.compile_module("test", &program)?;
 //! // Then, the module can be run.
-//! assert_eq!(module.run()?, Value::Prim(9.0));
+//! assert_eq!(module.with_env(&env)?.run()?, Value::Prim(9.0));
 //! # Ok(())
 //! # }
 //! ```
@@ -150,24 +153,24 @@
 //!
 //! ```
 //! # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-//! # use arithmetic_eval::{Assertions, Environment, Prelude, Value, VariableMap};
+//! # use arithmetic_eval::{env::{Assertions, Environment, Prelude}, ExecutableModule, Value};
 //! # fn main() -> anyhow::Result<()> {
 //! let program = r#"
-//!     minmax = |xs| xs.fold(#{ min: INF, max: -INF }, |acc, x| #{
+//!     minmax = |...xs| xs.fold(#{ min: INF, max: -INF }, |acc, x| #{
 //!          min: if(x < acc.min, x, acc.min),
 //!          max: if(x > acc.max, x, acc.max),
 //!     });
-//!     assert_eq((3, 7, 2, 4).minmax().min, 2);
-//!     assert_eq((5, -4, 6, 9, 1).minmax(), #{ min: -4, max: 9 });
+//!     assert_eq(minmax(3, 7, 2, 4).min, 2);
+//!     assert_eq(minmax(5, -4, 6, 9, 1), #{ min: -4, max: 9 });
 //! "#;
 //! let program = Untyped::<F32Grammar>::parse_statements(program)?;
+//! let module = ExecutableModule::new("minmax", &program)?;
 //!
 //! let mut env = Environment::new();
+//! env.extend(Prelude::vars().chain(Assertions::vars()));
+//! env.extend(Prelude::prototypes());
 //! env.insert("INF", Value::Prim(f32::INFINITY));
-//! env.extend(Prelude.iter());
-//! env.extend(Assertions.iter());
-//! let module = env.compile_module("minmax", &program)?;
-//! module.run()?;
+//! module.with_env(&env)?.run()?;
 //! # Ok(())
 //! # }
 //! ```
@@ -214,22 +217,20 @@ mod alloc {
 }
 
 pub use self::{
-    compiler::CompilerExt,
+    env::Environment,
     error::{Error, ErrorKind, EvalResult},
-    executable::{
-        ExecutableModule, ExecutableModuleBuilder, IndexedId, ModuleId, ModuleImports, WildcardId,
-        WithArithmetic,
-    },
+    exec::ExecutableModule,
     values::{
-        Assertions, CallContext, Comparisons, Environment, Function, InterpretedFn, NativeFn,
-        OpaqueRef, Prelude, SpannedValue, Value, ValueType, VariableMap,
+        CallContext, Function, InterpretedFn, NativeFn, Object, OpaqueRef, Prototype,
+        PrototypeField, SpannedValue, Tuple, Value, ValueType,
     },
 };
 
 pub mod arith;
 mod compiler;
+pub mod env;
 pub mod error;
-mod executable;
+pub mod exec;
 pub mod fns;
 mod values;
 

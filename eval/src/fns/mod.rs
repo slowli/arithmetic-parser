@@ -25,12 +25,17 @@
 //! [`Number`]: crate::Number
 //! [GAT]: https://github.com/rust-lang/rust/issues/44265
 
-use core::cmp::Ordering;
+use once_cell::unsync::OnceCell;
+
+use core::{cmp::Ordering, fmt};
 
 use crate::{
-    alloc::Vec, error::AuxErrorInfo, CallContext, Error, ErrorKind, EvalResult, Function, NativeFn,
+    alloc::{vec, Vec},
+    error::AuxErrorInfo,
+    CallContext, Error, ErrorKind, EvalResult, Function, NativeFn, Object, OpaqueRef, Prototype,
     SpannedValue, Value,
 };
+use arithmetic_parser::StripCode;
 
 mod array;
 mod assertions;
@@ -43,7 +48,7 @@ mod wrapper;
 pub use self::std::Dbg;
 pub use self::{
     array::{Array, Filter, Fold, Len, Map, Merge, Push},
-    assertions::{Assert, AssertEq},
+    assertions::{Assert, AssertClose, AssertEq, AssertFails},
     flow::{If, Loop, While},
     wrapper::{
         enforce_closure_type, wrap, Binary, ErrorOutput, FnWrapper, FromValueError,
@@ -71,7 +76,22 @@ fn extract_array<'a, T, A>(
     error_msg: &str,
 ) -> Result<Vec<Value<'a, T>>, Error<'a>> {
     if let Value::Tuple(array) = value.extra {
-        Ok(array)
+        Ok(array.into())
+    } else {
+        let err = ErrorKind::native(error_msg);
+        Err(ctx
+            .call_site_error(err)
+            .with_span(&value, AuxErrorInfo::InvalidArg))
+    }
+}
+
+fn extract_object<'a, T, A>(
+    ctx: &CallContext<'_, 'a, A>,
+    value: SpannedValue<'a, T>,
+    error_msg: &str,
+) -> Result<Object<'a, T>, Error<'a>> {
+    if let Value::Object(object) = value.extra {
+        Ok(object)
     } else {
         let err = ErrorKind::native(error_msg);
         Err(ctx
@@ -113,41 +133,42 @@ fn extract_fn<'a, T, A>(
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     // Finds a minimum number in an array.
-///     extended_min = |...xs| xs.fold(INFINITY, min);
+///     extended_min = |...xs| fold(xs, INFINITY, min);
 ///     extended_min(2, -3, 7, 1, 3) == -3
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_min", &program)?;
 ///
-/// let module = Environment::new()
-///     .insert("INFINITY", Value::Prim(f32::INFINITY))
+/// let mut env = Environment::new();
+/// env.insert("INFINITY", Value::Prim(f32::INFINITY))
 ///     .insert_native_fn("fold", fns::Fold)
-///     .insert_native_fn("min", fns::Compare::Min)
-///     .compile_module("test_min", &program)?;
-/// assert_eq!(module.run()?, Value::Bool(true));
+///     .insert_native_fn("min", fns::Compare::Min);
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
 /// # Ok(())
 /// # }
 /// ```
 ///
-/// Using `cmp` function with [`Comparisons`](crate::Comparisons).
+/// Using `cmp` function with [`Comparisons`](crate::env::Comparisons).
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Comparisons, Environment, Value, VariableMap};
+/// # use arithmetic_eval::{fns, env::Comparisons, Environment, ExecutableModule, Value};
 /// # use core::iter::FromIterator;
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
-///     (1, -7, 0, 2).map(|x| cmp(x, 0)) == (GREATER, LESS, EQUAL, GREATER)
+///     map((1, -7, 0, 2), |x| cmp(x, 0)) == (GREATER, LESS, EQUAL, GREATER)
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_cmp", &program)?;
 ///
-/// let module = Environment::from_iter(Comparisons.iter())
-///     .insert_native_fn("map", fns::Map)
-///     .compile_module("test_cmp", &program)?;
-/// assert_eq!(module.run()?, Value::Bool(true));
+/// let mut env = Environment::new();
+/// env.extend(Comparisons::vars());
+/// env.insert_native_fn("map", fns::Map);
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
 /// # Ok(())
 /// # }
 /// ```
@@ -204,65 +225,290 @@ impl<T> NativeFn<T> for Compare {
     }
 }
 
+/// Creates a new [`Prototype`] from the provided [`Object`].
+///
+/// The functions in the provided `Object` will ber used in method resolution when applying
+/// methods to [`Value`]s having this prototype. All object fields can be accessed
+/// from the prototype using generic field access notation. The prototype itself is a function
+/// which will wrap provided tuples or objects so that they have this prototype.
+///
+/// See [`Prototype`] docs for more details on prototype mechanics.
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
+/// # fn main() -> anyhow::Result<()> {
+/// let program = r#"
+///     Point = impl(#{
+///         len: |{x, y}| sqrt(x * x + y * y),
+///     });
+///     pt = Point(#{ x: 3, y: 4 });
+///     assert_close(pt.len(), 5);
+/// "#;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_impl", &program)?;
+///
+/// let mut env = Environment::new();
+/// env.insert_wrapped_fn("sqrt", f32::sqrt)
+///     .insert_native_fn("impl", fns::CreatePrototype)
+///     .insert_native_fn("assert_close", fns::AssertClose::new(1e-4));
+/// module.with_env(&env)?.run()?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// It is possible to define prototype hierarchies as well:
+///
+/// ```
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
+/// # fn main() -> anyhow::Result<()> {
+/// let program = r#"
+///     PointStatics = impl(#{
+///         new: |Self, x, y| Self(#{ x, y }),
+///         zero: |Self| Self(#{ x: 0, y: 0 }),
+///     });
+///     Point = impl(PointStatics(#{
+///         len: |{x, y}| sqrt(x * x + y * y),
+///     }));
+///     pt = Point.new(3, 4);
+///     assert_close(pt.len(), 5);
+///     assert_eq(Point.zero().len(), 0);
+/// "#;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// // Testing snipped (virtually identical to the previous case)
+/// # let module = ExecutableModule::new("test_impl", &program)?;
+/// # let mut env = Environment::new();
+/// # env.insert_wrapped_fn("sqrt", f32::sqrt)
+/// #     .insert_native_fn("impl", fns::CreatePrototype)
+/// #     .insert_native_fn("assert_eq", fns::AssertEq)
+/// #     .insert_native_fn("assert_close", fns::AssertClose::new(1e-4));
+/// # module.with_env(&env)?.run()?;
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CreatePrototype;
+
+impl<T> NativeFn<T> for CreatePrototype {
+    fn evaluate<'a>(
+        &self,
+        mut args: Vec<SpannedValue<'a, T>>,
+        ctx: &mut CallContext<'_, 'a, T>,
+    ) -> EvalResult<'a, T> {
+        ctx.check_args_count(&args, 1)?;
+        let object = extract_object(
+            ctx,
+            args.pop().unwrap(),
+            "Function argument must be an object",
+        )?;
+        Ok(Prototype::from(object).into())
+    }
+}
+
+/// Returns the [`Prototype`] of a value.
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value, env::Assertions};
+/// # fn main() -> anyhow::Result<()> {
+/// let program = r#"
+///     Type = impl(#{ print: dbg });
+///     value = Type(#{ test: 42 });
+///     assert_eq(prototype(value), Type);
+///     assert(prototype(value) != prototype(#{ test: 42 }));
+///     assert_eq(prototype(7), prototype(42));
+/// "#;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_prototype", &program)?;
+///
+/// let mut env = Environment::new();
+/// env.extend(Assertions::vars());
+/// env.insert_native_fn("dbg", fns::Dbg)
+///     .insert_native_fn("impl", fns::CreatePrototype)
+///     .insert_native_fn("prototype", fns::GetPrototype);
+/// module.with_env(&env)?.run()?;
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GetPrototype;
+
+impl<T> NativeFn<T> for GetPrototype {
+    fn evaluate<'a>(
+        &self,
+        args: Vec<SpannedValue<'a, T>>,
+        ctx: &mut CallContext<'_, 'a, T>,
+    ) -> EvalResult<'a, T> {
+        ctx.check_args_count(&args, 1)?;
+        Ok(ctx.get_prototype(&args[0].extra).into())
+    }
+}
+
+/// Allows to define a value recursively, by referencing a value being created. This is particularly
+/// useful when defining [`Prototype`]s.
+///
+/// It works like this:
+///
+/// - Provide a function as the only argument. The (only) argument of this function is the value
+///   being created.
+/// - Do not use the uninitialized value synchronously; only use it in inner function definitions.
+/// - Return the created value from a function.
+///
+/// # Examples
+///
+/// Defining a recursive prototype:
+///
+/// ```
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
+/// # fn main() -> anyhow::Result<()> {
+/// let program = r#"
+///     Stack = defer(|Self| impl(#{
+///         push: |self, item| Self(push(self, item)),
+///         // ^ since `Self` is used in function definition, this is OK
+///     }));
+///     stack = Stack((1, 2)).push(3).push(4);
+///     assert_eq(stack, Stack((1, 2, 3, 4)));
+/// "#;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_defer", &program)?;
+///
+/// let mut env = Environment::new();
+/// env.insert_native_fn("defer", fns::Defer)
+///     .insert_native_fn("impl", fns::CreatePrototype)
+///     .insert_native_fn("push", fns::Push)
+///     .insert_native_fn("assert_eq", fns::AssertEq);
+/// module.with_env(&env)?.run()?;
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Defer;
+
+impl<T: Clone + 'static> NativeFn<T> for Defer {
+    fn evaluate<'a>(
+        &self,
+        mut args: Vec<SpannedValue<'a, T>>,
+        ctx: &mut CallContext<'_, 'a, T>,
+    ) -> EvalResult<'a, T> {
+        const ARG_ERROR: &str = "Argument must be a function";
+
+        ctx.check_args_count(&args, 1)?;
+        let function = extract_fn(ctx, args.pop().unwrap(), ARG_ERROR)?;
+        let cell = OpaqueRef::with_identity_eq(ValueCell::<T>::default());
+        let spanned_cell = ctx.apply_call_span(Value::Ref(cell.clone()));
+        let return_value = function.evaluate(vec![spanned_cell], ctx)?;
+
+        let cell = cell.downcast_ref::<ValueCell<T>>().unwrap();
+        // ^ `unwrap()` is safe by construction
+        cell.set(return_value.clone().strip_code());
+        Ok(return_value)
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct ValueCell<T> {
+    inner: OnceCell<Value<'static, T>>,
+}
+
+impl<T> Default for ValueCell<T> {
+    fn default() -> Self {
+        Self {
+            inner: OnceCell::new(),
+        }
+    }
+}
+
+impl<'a, T: 'static + fmt::Debug> From<ValueCell<T>> for Value<'a, T> {
+    fn from(cell: ValueCell<T>) -> Self {
+        Self::Ref(OpaqueRef::with_identity_eq(cell))
+    }
+}
+
+impl<T> ValueCell<T> {
+    /// Gets the internally stored value, or `None` if the cell was not initialized yet.
+    pub fn get(&self) -> Option<&Value<'static, T>> {
+        self.inner.get()
+    }
+
+    fn set(&self, value: Value<'static, T>) {
+        self.inner
+            .set(value)
+            .map_err(drop)
+            .expect("Repeated `ValueCell` assignment");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Environment, ExecutableModule, WildcardId};
+    use crate::{
+        env::Environment,
+        exec::{ExecutableModule, WildcardId},
+    };
 
     use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
     use assert_matches::assert_matches;
 
     #[test]
-    fn if_basic() {
+    fn if_basics() -> anyhow::Result<()> {
         let block = r#"
             x = 1.0;
             if(x < 2, x + 5, 3 - x)
         "#;
-        let block = Untyped::<F32Grammar>::parse_statements(block).unwrap();
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_import("if", Value::native_fn(If))
-            .build();
-        assert_eq!(module.run().unwrap(), Value::Prim(6.0));
+        let block = Untyped::<F32Grammar>::parse_statements(block)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
+        let mut env = Environment::new();
+        env.insert_native_fn("if", If);
+        assert_eq!(module.with_env(&env)?.run()?, Value::Prim(6.0));
+        Ok(())
     }
 
     #[test]
-    fn if_with_closures() {
+    fn if_with_closures() -> anyhow::Result<()> {
         let block = r#"
             x = 4.5;
             if(x < 2, || x + 5, || 3 - x)()
         "#;
-        let block = Untyped::<F32Grammar>::parse_statements(block).unwrap();
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_import("if", Value::native_fn(If))
-            .build();
-        assert_eq!(module.run().unwrap(), Value::Prim(-1.5));
+        let block = Untyped::<F32Grammar>::parse_statements(block)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
+        let mut env = Environment::new();
+        env.insert_native_fn("if", If);
+        assert_eq!(module.with_env(&env)?.run()?, Value::Prim(-1.5));
+        Ok(())
     }
 
     #[test]
-    fn cmp_sugar() {
+    fn cmp_sugar() -> anyhow::Result<()> {
         let program = "x = 1.0; x > 0 && x <= 3";
-        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .build();
-        assert_eq!(module.run().unwrap(), Value::Bool(true));
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
+        assert_eq!(
+            module.with_env(&Environment::new())?.run()?,
+            Value::Bool(true)
+        );
 
         let bogus_program = "x = 1.0; x > (1, 2)";
-        let bogus_block = Untyped::<F32Grammar>::parse_statements(bogus_program).unwrap();
-        let bogus_module = ExecutableModule::builder(WildcardId, &bogus_block)
-            .unwrap()
-            .build();
+        let bogus_block = Untyped::<F32Grammar>::parse_statements(bogus_program)?;
+        let bogus_module = ExecutableModule::new(WildcardId, &bogus_block)?;
 
-        let err = bogus_module.run().unwrap_err();
+        let err = bogus_module
+            .with_env(&Environment::new())?
+            .run()
+            .unwrap_err();
         let err = err.source();
         assert_matches!(err.kind(), ErrorKind::CannotCompare);
         assert_eq!(*err.main_span().code().fragment(), "(1, 2)");
+        Ok(())
     }
 
     #[test]
-    fn loop_basic() {
+    fn loop_basic() -> anyhow::Result<()> {
         let program = r#"
             // Finds the greatest power of 2 lesser or equal to the value.
             discrete_log2 = |x| {
@@ -275,17 +521,16 @@ mod tests {
             (discrete_log2(1), discrete_log2(2),
                 discrete_log2(4), discrete_log2(6.5), discrete_log2(1000))
         "#;
-        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
 
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_import("loop", Value::native_fn(Loop))
-            .with_import("if", Value::native_fn(If))
-            .build();
+        let module = ExecutableModule::new(WildcardId, &block)?;
+        let mut env = Environment::new();
+        env.insert_native_fn("loop", Loop)
+            .insert_native_fn("if", If);
 
         assert_eq!(
-            module.run().unwrap(),
-            Value::Tuple(vec![
+            module.with_env(&env)?.run()?,
+            Value::from(vec![
                 Value::Prim(0.0),
                 Value::Prim(1.0),
                 Value::Prim(2.0),
@@ -293,30 +538,31 @@ mod tests {
                 Value::Prim(9.0),
             ])
         );
+        Ok(())
     }
 
     #[test]
-    fn max_value_with_fold() {
+    fn max_value_with_fold() -> anyhow::Result<()> {
         let program = r#"
             max_value = |...xs| {
                 fold(xs, -Inf, |acc, x| if(x > acc, x, acc))
             };
             max_value(1, -2, 7, 2, 5) == 7 && max_value(3, -5, 9) == 9
         "#;
-        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
 
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_import("Inf", Value::Prim(f32::INFINITY))
-            .with_import("fold", Value::native_fn(Fold))
-            .with_import("if", Value::native_fn(If))
-            .build();
+        let module = ExecutableModule::new(WildcardId, &block)?;
+        let mut env = Environment::new();
+        env.insert("Inf", Value::Prim(f32::INFINITY))
+            .insert_native_fn("fold", Fold)
+            .insert_native_fn("if", If);
 
-        assert_eq!(module.run().unwrap(), Value::Bool(true));
+        assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
+        Ok(())
     }
 
     #[test]
-    fn reverse_list_with_fold() {
+    fn reverse_list_with_fold() -> anyhow::Result<()> {
         const SAMPLES: &[(&[f32], &[f32])] = &[
             (&[1.0, 2.0, 3.0], &[3.0, 2.0, 1.0]),
             (&[], &[]),
@@ -328,64 +574,60 @@ mod tests {
                 fold(xs, (), |acc, x| merge((x,), acc))
             };
             xs = (-4, 3, 0, 1);
-            xs.reverse() == (1, 0, 3, -4)
+            reverse(xs) == (1, 0, 3, -4)
         "#;
-        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
 
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_import("merge", Value::native_fn(Merge))
-            .with_import("fold", Value::native_fn(Fold))
-            .build();
+        let mut env = Environment::new();
+        env.insert_native_fn("merge", Merge)
+            .insert_native_fn("fold", Fold);
 
-        let mut env = module.imports().into_iter().collect::<Environment<'_, _>>();
-        assert_eq!(module.run_in_env(&mut env).unwrap(), Value::Bool(true));
+        assert_eq!(module.with_mutable_env(&mut env)?.run()?, Value::Bool(true));
 
-        let test_block = Untyped::<F32Grammar>::parse_statements("xs.reverse()").unwrap();
-        let mut test_module = ExecutableModule::builder("test", &test_block)
-            .unwrap()
-            .with_import("reverse", env["reverse"].clone())
-            .set_imports(|_| Value::void());
+        let test_block = Untyped::<F32Grammar>::parse_statements("reverse(xs)")?;
+        let test_module = ExecutableModule::new("test", &test_block)?;
 
         for &(input, expected) in SAMPLES {
             let input = input.iter().copied().map(Value::Prim).collect();
             let expected = expected.iter().copied().map(Value::Prim).collect();
-            test_module.set_import("xs", Value::Tuple(input));
-            assert_eq!(test_module.run().unwrap(), Value::Tuple(expected));
+            env.insert("xs", Value::Tuple(input));
+            assert_eq!(test_module.with_env(&env)?.run()?, Value::Tuple(expected));
         }
+        Ok(())
     }
 
     #[test]
-    fn error_with_min_function_args() {
+    fn error_with_min_function_args() -> anyhow::Result<()> {
         let program = "5 - min(1, (2, 3))";
-        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_import("min", Value::native_fn(Compare::Min))
-            .build();
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
+        let mut env = Environment::new();
+        env.insert_native_fn("min", Compare::Min);
 
-        let err = module.run().unwrap_err();
+        let err = module.with_env(&env)?.run().unwrap_err();
         let err = err.source();
         assert_eq!(*err.main_span().code().fragment(), "min(1, (2, 3))");
         assert_matches!(
             err.kind(),
             ErrorKind::NativeCall(ref msg) if msg.contains("requires 2 primitive arguments")
         );
+        Ok(())
     }
 
     #[test]
-    fn error_with_min_function_incomparable_args() {
+    fn error_with_min_function_incomparable_args() -> anyhow::Result<()> {
         let program = "5 - min(1, NAN)";
-        let block = Untyped::<F32Grammar>::parse_statements(program).unwrap();
-        let module = ExecutableModule::builder(WildcardId, &block)
-            .unwrap()
-            .with_import("NAN", Value::Prim(f32::NAN))
-            .with_import("min", Value::native_fn(Compare::Min))
-            .build();
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
+        let mut env = Environment::new();
+        env.insert("NAN", Value::Prim(f32::NAN))
+            .insert_native_fn("min", Compare::Min);
 
-        let err = module.run().unwrap_err();
+        let err = module.with_env(&env)?.run().unwrap_err();
         let err = err.source();
         assert_eq!(*err.main_span().code().fragment(), "min(1, NAN)");
         assert_matches!(err.kind(), ErrorKind::CannotCompare);
+        Ok(())
     }
 }

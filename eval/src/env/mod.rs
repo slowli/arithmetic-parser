@@ -1,34 +1,37 @@
-//! Environment containing named `Value`s.
+//! [`Environment`] and other types related to [`Value`] collections.
 
 use hashbrown::{hash_map, HashMap};
 
-use core::{
-    iter::{self, FromIterator},
-    ops,
-};
+use core::{iter, ops};
+
+mod variable_map;
+pub use self::variable_map::{Assertions, Comparisons, Prelude};
 
 use crate::{
-    alloc::{String, ToOwned},
-    fns, NativeFn, Value,
+    alloc::{Rc, String, ToOwned},
+    arith::{OrdArithmetic, StdArithmetic},
+    exec::Operations,
+    fns,
+    values::StandardPrototypes,
+    NativeFn, PrototypeField, Value,
 };
 
 /// Environment containing named `Value`s.
 ///
 /// Note that the environment implements the [`Index`](ops::Index) trait, which allows to eloquently
-/// access or modify environment. Similarly, [`IntoIterator`] / [`FromIterator`] / [`Extend`] traits
+/// access or modify environment. Similarly, [`IntoIterator`] / [`Extend`] traits
 /// allow to construct environments.
 ///
 /// # Examples
 ///
 /// ```
-/// use arithmetic_eval::{Environment, Comparisons, Prelude, Value};
+/// use arithmetic_eval::{env::{Comparisons, Prelude}, Environment, Value};
 ///
 /// // Load environment from the standard containers.
-/// let mut env: Environment<'_, f64> = Prelude.iter()
-///     .chain(Comparisons.iter())
-///     // Add a custom variable for a good measure.
-///     .chain(vec![("x", Value::Prim(1.0))])
-///     .collect();
+/// let mut env = Environment::<f64>::new();
+/// env.extend(Prelude::vars().chain(Comparisons::vars()));
+/// // Add a custom variable for a good measure.
+/// env.insert("x", Value::Prim(1.0));
 ///
 /// assert_eq!(env["true"], Value::Bool(true));
 /// assert_eq!(env["x"], Value::Prim(1.0));
@@ -37,17 +40,51 @@ use crate::{
 /// }
 ///
 /// // It's possible to base an environment on other env, as well.
-/// let other_env: Environment<'_, _> = env.into_iter()
-///     .filter(|(_, val)| val.is_function())
-///     .collect();
+/// let mut other_env = Environment::new();
+/// other_env.extend(
+///     env.into_iter().filter(|(_, val)| val.is_function()),
+/// );
 /// assert!(other_env.get("x").is_none());
+/// ```
+///
+/// Extending [`Prototype`](crate::Prototype)s for standard types:
+///
+/// ```
+/// # use arithmetic_eval::{
+/// #     fns, Environment, ExecutableModule, PrototypeField, Value, env::Prelude,
+/// # };
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # fn main() -> anyhow::Result<()> {
+/// let prototypes = vec![
+///     (PrototypeField::prim("abs"), Value::wrapped_fn(f32::abs)),
+///     (PrototypeField::prim("sin"), Value::wrapped_fn(f32::sin)),
+///     (PrototypeField::array("len"), Value::native_fn(fns::Len)),
+/// ];
+/// let mut env = Environment::new();
+/// env.extend(Prelude::prototypes().chain(prototypes));
+/// // ^ also insert "standard" prototypes
+///
+/// let program = r#"
+///     array = (1, -2, 3).map(|x| x.abs());
+///     array.len() == 3 && array.1 > 0
+/// "#;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_proto", &program)?;
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct Environment<'a, T> {
     variables: HashMap<String, Value<'a, T>>,
+    arithmetic: Rc<dyn OrdArithmetic<T>>,
+    prototypes: StandardPrototypes<T>,
 }
 
-impl<T> Default for Environment<'_, T> {
+impl<T> Default for Environment<'_, T>
+where
+    StdArithmetic: OrdArithmetic<T>,
+{
     fn default() -> Self {
         Self::new()
     }
@@ -57,27 +94,58 @@ impl<T: Clone> Clone for Environment<'_, T> {
     fn clone(&self) -> Self {
         Self {
             variables: self.variables.clone(),
+            arithmetic: Rc::clone(&self.arithmetic),
+            prototypes: self.prototypes.clone(),
         }
     }
 }
 
+/// Compares environments by variables and prototypes; arithmetics are ignored.
 impl<T: PartialEq> PartialEq for Environment<'_, T> {
     fn eq(&self, other: &Self) -> bool {
-        self.variables == other.variables
+        self.variables == other.variables && self.prototypes == other.prototypes
     }
 }
 
-impl<'a, T> Environment<'a, T> {
+impl<'a, T> Environment<'a, T>
+where
+    StdArithmetic: OrdArithmetic<T>,
+{
     /// Creates a new environment.
     pub fn new() -> Self {
         Self {
             variables: HashMap::new(),
+            arithmetic: Rc::new(StdArithmetic),
+            prototypes: StandardPrototypes::new(),
         }
+    }
+}
+
+impl<'a, T> Environment<'a, T> {
+    /// Creates an environment with the specified arithmetic.
+    pub fn with_arithmetic<A>(arithmetic: A) -> Self
+    where
+        A: OrdArithmetic<T> + 'static,
+    {
+        Self {
+            variables: HashMap::new(),
+            arithmetic: Rc::new(arithmetic),
+            prototypes: StandardPrototypes::new(),
+        }
+    }
+
+    pub(crate) fn operations(&self) -> Operations<'_, T> {
+        Operations::new(&*self.arithmetic, Some(&self.prototypes))
     }
 
     /// Gets a variable by name.
     pub fn get(&self, name: &str) -> Option<&Value<'a, T>> {
         self.variables.get(name)
+    }
+
+    /// Checks if this environment contains a variable with the specified name.
+    pub fn contains(&self, name: &str) -> bool {
+        self.variables.contains_key(name)
     }
 
     /// Iterates over variables.
@@ -115,6 +183,21 @@ impl<'a, T> Environment<'a, T> {
     {
         let wrapped = fns::wrap::<Args, _>(fn_to_wrap);
         self.insert(name, Value::native_fn(wrapped))
+    }
+}
+
+impl<T: Clone> Environment<'_, T> {
+    /// Inserts a field into one of standard [`Prototype`]s.
+    ///
+    /// Use the [`Extend`] implementation to modify prototypes more efficiently in case of batch
+    /// changes.
+    pub fn insert_prototype(
+        &mut self,
+        field: PrototypeField,
+        value: Value<'static, T>,
+    ) -> &mut Self {
+        self.prototypes.insert(field, value);
+        self
     }
 }
 
@@ -202,21 +285,6 @@ impl<T> ExactSizeIterator for Iter<'_, '_, T> {
     }
 }
 
-impl<'a, T, S, V> FromIterator<(S, V)> for Environment<'a, T>
-where
-    S: Into<String>,
-    V: Into<Value<'a, T>>,
-{
-    fn from_iter<I: IntoIterator<Item = (S, V)>>(iter: I) -> Self {
-        let variables = iter
-            .into_iter()
-            .map(|(var_name, value)| (var_name.into(), value.into()));
-        Self {
-            variables: variables.collect(),
-        }
-    }
-}
-
 impl<'a, T, S, V> Extend<(S, V)> for Environment<'a, T>
 where
     S: Into<String>,
@@ -227,5 +295,15 @@ where
             .into_iter()
             .map(|(var_name, value)| (var_name.into(), value.into()));
         self.variables.extend(variables);
+    }
+}
+
+impl<T: Clone, V> Extend<(PrototypeField, V)> for Environment<'_, T>
+where
+    V: Into<Value<'static, T>>,
+{
+    fn extend<I: IntoIterator<Item = (PrototypeField, V)>>(&mut self, iter: I) {
+        let prototype_fields = iter.into_iter().map(|(field, value)| (field, value.into()));
+        self.prototypes.extend(prototype_fields);
     }
 }

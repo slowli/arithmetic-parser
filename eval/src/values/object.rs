@@ -224,7 +224,7 @@ where
     }
 }
 
-/// Prototype of an [`Object`] or a [`Tuple`](crate::Tuple).
+/// Prototype of an [`Value`].
 ///
 /// A prototype is quite similar to an [`Object`]; it is a collection of named [`Value`]s.
 /// Prototype fields are used for method lookup similar to JavaScript; if an value has a prototype,
@@ -241,9 +241,9 @@ where
 /// to object fields.
 ///
 /// A prototype can be converted to a [`Function`], and prototypes defined in the script code
-/// *are* callable. Such a function associates the prototype with the provided value
+/// are callable. Such a function associates the prototype with the provided value
 /// (an object or a tuple). For values without an associated prototype, method resolution
-/// is performed using [`StandardPrototypes`], which can be set for an [`Environment`].
+/// is performed using prototypes for standard types, which can be set in an [`Environment`].
 ///
 /// Prototypes can be defined both in the host code, and in scripts via [`CreatePrototype`].
 ///
@@ -458,7 +458,7 @@ impl<T: Clone> StandardPrototypes<T> {
 ///
 /// # Examples
 ///
-/// See [`Environment`] docs for an example of usage.
+/// See [`Environment`](crate::Environment) docs for an example of usage.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PrototypeField {
     ty: ValueType,

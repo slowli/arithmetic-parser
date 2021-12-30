@@ -187,7 +187,7 @@ impl<'a, T> Environment<'a, T> {
 }
 
 impl<T: Clone> Environment<'_, T> {
-    /// Inserts a field into one of standard [`Prototype`]s.
+    /// Inserts a field into a [`Prototype`](crate::Prototype) for one of the standard value types.
     ///
     /// Use the [`Extend`] implementation to modify prototypes more efficiently in case of batch
     /// changes.

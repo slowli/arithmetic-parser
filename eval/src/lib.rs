@@ -21,7 +21,8 @@
 //! - **Functions,** which are further subdivided into native functions (defined in the Rust code)
 //!   and interpreted ones (defined within a module)
 //! - [**Tuples / arrays**](#tuples).
-//! - [**Objects**](#objects).
+//! - [**Objects**](#objects), with a [`Prototype`] being a subtype with some
+//!   function characteristics.
 //!
 //! Besides these types, there is an auxiliary one: [`OpaqueRef`], which represents a
 //! reference-counted native value, which can be returned from native functions or provided to

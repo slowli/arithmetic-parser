@@ -9,8 +9,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Make crate no-std-compatible and check compatibility in CI. (#101)
 
-- Allow adding prototypes for objects and tuples, which act similarly to
-  prototypes in JavaScript (but immutable). Prototypes can be created
+- Allow adding prototypes for objects, which act similarly to
+  prototypes in JavaScript, but immutable. Prototypes can be created
   from the host code using the `Prototype` type and from scripts
   using the `CreatePrototype` function. (#103)
 
@@ -18,6 +18,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Add `AssertClose` and `AssertFails` assertions for approximate equality comparisons
   and failure testing, respectively. (#103)
+
+- Add `all` and `any` functions for arrays / tuples.
 
 ### Changed
 

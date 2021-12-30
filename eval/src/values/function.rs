@@ -11,7 +11,7 @@ use crate::{
     exec::{ExecutableFn, ModuleId, Operations},
     fns::ValueCell,
     values::StandardPrototypes,
-    Environment, EvalResult, Prototype, SpannedValue, Value, Object,
+    Environment, EvalResult, Object, Prototype, SpannedValue, Value,
 };
 use arithmetic_parser::{LvalueLen, MaybeSpanned, StripCode};
 

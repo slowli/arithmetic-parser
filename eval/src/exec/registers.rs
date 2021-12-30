@@ -11,8 +11,8 @@ use crate::{
     exec::command::{Atom, Command, CompiledExpr, FieldName, SpannedAtom, SpannedCommand},
     exec::ModuleId,
     values::StandardPrototypes,
-    CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, Prototype, SpannedValue,
-    Value, Object,
+    CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, Object, Prototype,
+    SpannedValue, Value,
 };
 use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
 

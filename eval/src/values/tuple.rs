@@ -48,9 +48,7 @@ impl<'a, T> From<Tuple<'a, T>> for Value<'a, T> {
 
 impl<'a, T> From<Vec<Value<'a, T>>> for Tuple<'a, T> {
     fn from(elements: Vec<Value<'a, T>>) -> Self {
-        Self {
-            elements,
-        }
+        Self { elements }
     }
 }
 

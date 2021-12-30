@@ -21,6 +21,7 @@ impl Prelude {
     where
         T: 'static + Clone,
     {
+        // TODO: only expose array functions within `Array` prototype?
         array::IntoIter::new([
             ("false", Value::Bool(false)),
             ("true", Value::Bool(true)),
@@ -34,13 +35,15 @@ impl Prelude {
             ("fold", Value::native_fn(fns::Fold)),
             ("push", Value::native_fn(fns::Push)),
             ("merge", Value::native_fn(fns::Merge)),
+            ("all", Value::native_fn(fns::All)),
+            ("any", Value::native_fn(fns::Any)),
         ])
     }
 
     /// Returns standard prototypes corresponding to the contained functions.
     ///
     /// Currently, this only sets a prototype for tuples / arrays containing
-    /// `map`, `filter`, `fold`, `push` and `merge` functions.
+    /// `map`, `filter`, `fold`, `all`, `any`, `push` and `merge` functions.
     pub fn prototypes<T>() -> impl Iterator<Item = (PrototypeField, Value<'static, T>)>
     where
         T: 'static + Clone,
@@ -52,6 +55,8 @@ impl Prelude {
             (array_proto("fold"), Value::native_fn(fns::Fold)),
             (array_proto("push"), Value::native_fn(fns::Push)),
             (array_proto("merge"), Value::native_fn(fns::Merge)),
+            (array_proto("all"), Value::native_fn(fns::All)),
+            (array_proto("any"), Value::native_fn(fns::Any)),
         ])
     }
 }

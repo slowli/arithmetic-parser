@@ -230,7 +230,7 @@ impl<T> NativeFn<T> for Compare {
 /// The functions in the provided `Object` will ber used in method resolution when applying
 /// methods to [`Value`]s having this prototype. All object fields can be accessed
 /// from the prototype using generic field access notation. The prototype itself is a function
-/// which will wrap provided tuples or objects so that they have this prototype.
+/// which will wrap a provided object so that it will have this prototype.
 ///
 /// See [`Prototype`] docs for more details on prototype mechanics.
 ///
@@ -369,11 +369,11 @@ impl<T> NativeFn<T> for GetPrototype {
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     Stack = defer(|Self| impl(#{
-///         push: |self, item| Self(push(self, item)),
+///         push: |{ items }, item| Self(#{ items: push(items, item) }),
 ///         // ^ since `Self` is used in function definition, this is OK
 ///     }));
-///     stack = Stack((1, 2)).push(3).push(4);
-///     assert_eq(stack, Stack((1, 2, 3, 4)));
+///     stack = Stack(#{ items: (1, 2) }).push(3).push(4);
+///     assert_eq(stack.items, (1, 2, 3, 4));
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = ExecutableModule::new("test_defer", &program)?;

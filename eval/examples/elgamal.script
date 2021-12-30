@@ -5,21 +5,21 @@ dbg(GEN, ORDER);
 PublicKey = impl(#{
     encrypt: |self, message| {
         r = rand_scalar();
-        shared_secret = self.0 ^ r;
+        shared_secret = self.pk ^ r;
         #{ R: GEN ^ r, B: message * shared_secret }
     },
 });
 
 SecretKey = impl(#{
     decrypt: |self, { R, B }| {
-        shared_secret = R ^ self.0;
+        shared_secret = R ^ self.sk;
         B / shared_secret
     },
-    public_key: |self| PublicKey((GEN ^ self.0,)),
+    public_key: |self| PublicKey(#{ pk: GEN ^ self.sk }),
 });
 
 gen = || {
-    sk = SecretKey((rand_scalar(),));
+    sk = SecretKey(#{ sk: rand_scalar() });
     #{ sk, pk: sk.public_key() }
 };
 

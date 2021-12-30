@@ -241,8 +241,8 @@ where
 /// to object fields.
 ///
 /// A prototype can be converted to a [`Function`], and prototypes defined in the script code
-/// are callable. Such a function associates the prototype with the provided value
-/// (an object or a tuple). For values without an associated prototype, method resolution
+/// are callable. Such a function associates the prototype with the provided value,
+/// which must be an object. For values without an associated prototype, method resolution
 /// is performed using prototypes for standard types, which can be set in an [`Environment`].
 ///
 /// Prototypes can be defined both in the host code, and in scripts via [`CreatePrototype`].
@@ -347,19 +347,13 @@ impl<'a, T> Prototype<'a, T> {
         ctx.check_args_count(&args, 1)?;
         let mut arg = args.pop().unwrap();
 
-        match &mut arg.extra {
-            Value::Object(object) => {
-                object.set_prototype(self.clone());
-            }
-            Value::Tuple(tuple) => {
-                tuple.set_prototype(self.clone());
-            }
-            _ => {
-                let err = ErrorKind::native("Function argument must be an object or tuple");
-                return Err(ctx
-                    .call_site_error(err)
-                    .with_span(&arg, AuxErrorInfo::InvalidArg));
-            }
+        if let Value::Object(object) = &mut arg.extra {
+            object.set_prototype(self.clone());
+        } else {
+            let err = ErrorKind::native("Function argument must be an object");
+            return Err(ctx
+                .call_site_error(err)
+                .with_span(&arg, AuxErrorInfo::InvalidArg));
         }
         Ok(arg.extra)
     }

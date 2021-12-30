@@ -378,7 +378,7 @@ impl<T> NativeFn<T> for Push {
         let mut array = extract_array(
             ctx,
             args.pop().unwrap(),
-            "`fold` requires first arg to be a tuple",
+            "`push` requires first arg to be a tuple",
         )?;
 
         array.push(elem);

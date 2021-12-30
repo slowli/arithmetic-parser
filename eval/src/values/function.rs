@@ -11,7 +11,7 @@ use crate::{
     exec::{ExecutableFn, ModuleId, Operations},
     fns::ValueCell,
     values::StandardPrototypes,
-    Environment, EvalResult, Prototype, SpannedValue, Value,
+    Environment, EvalResult, Prototype, SpannedValue, Value, Object,
 };
 use arithmetic_parser::{LvalueLen, MaybeSpanned, StripCode};
 
@@ -66,12 +66,8 @@ impl<'r, 'a, T> CallContext<'r, 'a, T> {
 
     /// Retrieves value prototype using standard prototypes if necessary.
     pub(crate) fn get_prototype(&self, value: &Value<'a, T>) -> Prototype<'a, T> {
-        let prototype = match value {
-            Value::Object(object) => object.prototype(),
-            Value::Tuple(tuple) => tuple.prototype(),
-            _ => None,
-        };
-        prototype.cloned().unwrap_or_else(|| {
+        let prototype = value.as_object().and_then(Object::prototype).cloned();
+        prototype.unwrap_or_else(|| {
             self.operations
                 .prototypes
                 .and_then(|prototypes| prototypes.get(value.value_type()).cloned())

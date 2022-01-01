@@ -358,7 +358,10 @@ where
 {
     let var_name_or_digits = alt((var_name, take_while1(|c: char| c.is_ascii_digit())));
     let method_or_field_access_parser = map_res(
-        separated_pair(var_name_or_digits, ws::<Ty>, opt(fn_args::<T, Ty>)),
+        tuple((
+            var_name_or_digits,
+            opt(preceded(ws::<Ty>, fn_args::<T, Ty>)),
+        )),
         |(fn_name, maybe_args)| {
             if maybe_args.is_some() && !is_valid_variable_name(fn_name.fragment()) {
                 Err(ErrorKind::LiteralName)

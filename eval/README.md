@@ -14,7 +14,7 @@ recognized by [`arithmetic-parser`], e.g., integer-, real-, complex-valued and m
 (Both built-in integer types and big integers from [`num-bigint`] are supported.)
 The interpreter provides support for native functions,
 which allows to overcome some syntax limitations (e.g., the lack of control flow
-can be solved with native `if` / `loop` functions). Native functions and opaque reference types
+can be solved with native `if` / `while` functions). Native functions and opaque reference types
 allow effectively embedding the interpreter into larger Rust applications.
 
 The interpreter is somewhat opinionated on how to interpret language features

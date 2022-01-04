@@ -49,7 +49,7 @@ pub use self::std::Dbg;
 pub use self::{
     array::{All, Any, Array, Filter, Fold, Len, Map, Merge, Push},
     assertions::{Assert, AssertClose, AssertEq, AssertFails},
-    flow::{If, Loop, While},
+    flow::{If, While},
     wrapper::{
         enforce_closure_type, wrap, Binary, ErrorOutput, FnWrapper, FromValueError,
         FromValueErrorKind, FromValueErrorLocation, IntoEvalResult, Quaternary, Ternary,
@@ -508,14 +508,11 @@ mod tests {
     }
 
     #[test]
-    fn loop_basic() -> anyhow::Result<()> {
+    fn while_basic() -> anyhow::Result<()> {
         let program = r#"
             // Finds the greatest power of 2 lesser or equal to the value.
             discrete_log2 = |x| {
-                loop(0, |i| {
-                    continue = 2^i <= x;
-                    (continue, if(continue, i + 1, i - 1))
-                })
+                while(0, |i| 2^i <= x, |i| i + 1) - 1
             };
 
             (discrete_log2(1), discrete_log2(2),
@@ -525,7 +522,7 @@ mod tests {
 
         let module = ExecutableModule::new(WildcardId, &block)?;
         let mut env = Environment::new();
-        env.insert_native_fn("loop", Loop)
+        env.insert_native_fn("while", While)
             .insert_native_fn("if", If);
 
         assert_eq!(

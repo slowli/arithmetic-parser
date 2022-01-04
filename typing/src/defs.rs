@@ -6,8 +6,7 @@ use std::iter;
 
 use crate::{arith::WithBoolean, Function, Object, PrimitiveType, Type, UnknownLen};
 
-/// Map containing type definitions for all variables from `Prelude` in the eval crate,
-/// except for `loop` function.
+/// Map containing type definitions for all variables from `Prelude` in the eval crate.
 ///
 /// # Contents
 ///

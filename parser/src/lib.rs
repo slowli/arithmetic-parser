@@ -41,8 +41,8 @@
 //!   *object expressions*, which look similar to struct initialization in Rust or object
 //!   initialization in JavaScript; for example, `#{ x: 1, y }`. (Note the `#` char at the start
 //!   of the block; it is used to distinguish object expressions from blocks.)
-//! - **Methods.** Method call is a function call separated from the receiver with a `.` char;
-//!   for example, `foo.bar(2, x)`.
+//! - **Methods.** Method call is a function call separated from the receiver with a `.` char
+//!   (e.g., `foo.bar(2, x)`) or a `::` char sequence (e.g., `Array::len((1, 2))`).
 //! - **Type annotations.** A type annotation in the form `var: Type` can be present
 //!   in the lvalues or in the function argument definitions. The parser for type annotations
 //!   is user-defined.

@@ -106,7 +106,7 @@ pub use crate::compiler::CompilerExt;
 ///
 /// ## Behavior on errors
 ///
-/// `run_in_env` modifies the environment even if an error occurs during execution:
+/// [`Self::with_mutable_env()`] modifies the environment even if an error occurs during execution:
 ///
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};

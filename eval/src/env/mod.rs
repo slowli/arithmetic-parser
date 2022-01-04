@@ -216,7 +216,9 @@ impl<T: Clone> Environment<'_, T> {
     /// - `Function`: [`Function`](crate::Function) prototype
     /// - `Bool`: Boolean value prototype
     ///
-    /// Other prototypes (notably, the prototype for primitive values) are not exposed.
+    /// Other prototypes (notably, the prototype for primitive values) are not exposed
+    /// by this method. If necessary, they can be added by using a combination of
+    /// [`Self::prototype()`] and [`Self::insert()`].
     pub fn insert_prototypes_as_vars(&mut self) -> &mut Self {
         const TYPES_WITH_NAMES: &[(ValueType, &str)] = &[
             (ValueType::Array, "Array"),

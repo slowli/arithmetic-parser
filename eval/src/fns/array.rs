@@ -5,7 +5,7 @@ use core::cmp::Ordering;
 use num_traits::{FromPrimitive, One, Zero};
 
 use crate::{
-    alloc::{vec, Vec},
+    alloc::{format, vec, Vec},
     error::AuxErrorInfo,
     fns::{extract_array, extract_fn, extract_primitive},
     CallContext, ErrorKind, EvalResult, NativeFn, SpannedValue, Tuple, Value,

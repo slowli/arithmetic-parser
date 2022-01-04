@@ -85,7 +85,7 @@ Defining a type:
 Vector = defer(|Self| impl(#{
     len: |{ x, y }| sqrt(x * x + y * y),
     add: |self, other| Self(self + other),
-    to_unit: |self| if(self.x == 0 && self.y == 0,
+    to_unit_scale: |self| if(self.x == 0 && self.y == 0,
         || self,
         || Self(self / self.len()),
     )(),
@@ -95,7 +95,7 @@ assert_eq(
     Vector(#{ x: 3, y: 4 }).add(Vector(#{ x: -1, y: 1 })),
     Vector(#{ x: 2, y: 5 }),
 );
-scaled = Vector(#{ x: 3, y: -4 }).to_unit();
+scaled = Vector(#{ x: 3, y: -4 }).to_unit_scale();
 assert_close(scaled.len(), 1);
 assert_close(scaled.x, 0.6);
 assert_close(scaled.y, -0.8);

@@ -95,6 +95,7 @@ fn main_inner() {
     env.extend(prelude);
     env.insert_native_fn("dbg", Dbg)
         .insert_native_fn("array", fns::Array)
+        .insert_native_fn("fold", fns::Fold)
         .insert("rand_num", rand_num)
         .insert("MIN_VALUE", Value::Prim(i32::MIN))
         .insert("MAX_VALUE", Value::Prim(i32::MAX));

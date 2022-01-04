@@ -92,7 +92,9 @@
 //!   or does not have the specified fields. Destructuring is not exhaustive; i.e.,
 //!   the destructured object may have extra fields.
 //! - Functional fields are permitted. Similar to Rust, to call a function field, it must
-//!   be enclosed in parentheses: `(obj.run)(arg0, arg1)`.
+//!   be enclosed in parentheses: `(obj.run)(arg0, arg1)`. Alternatively, a `::`-separated call
+//!   can be used: `obj::run(arg0, arg1)`. Use of `::` is just syntactic sugar and has no
+//!   alternative semantics.
 //!
 //! # Crate features
 //!

@@ -17,7 +17,7 @@ use arithmetic_parser::StripCode;
 
 /// Object with zero or more named fields.
 ///
-/// An object functions similarly to a [`HashMap`] with [`String`] keys and [`Value`]
+/// An object functions similarly to a `HashMap` with [`String`] keys and [`Value`]
 /// values. It allows iteration over name-value pairs, random access by field name,
 /// inserting / removing fields etc.
 ///
@@ -273,7 +273,7 @@ where
 /// let program = r#"
 ///     pt.len() == 2 &&
 ///     Object(#{ foo: 1 }).len() == 1 &&
-///     (Object.len)(Object.EMPTY) == 0
+///     Object::len(Object.EMPTY) == 0
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = ExecutableModule::new("test_proto", &program)?;

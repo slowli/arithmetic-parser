@@ -227,7 +227,7 @@ impl<T> NativeFn<T> for Compare {
 
 /// Creates a new [`Prototype`] from the provided [`Object`].
 ///
-/// The functions in the provided `Object` will ber used in method resolution when applying
+/// The functions in the provided `Object` will be used in method resolution when applying
 /// methods to [`Value`]s having this prototype. All object fields can be accessed
 /// from the prototype using generic field access notation. The prototype itself is a function
 /// which will wrap a provided object so that it will have this prototype.

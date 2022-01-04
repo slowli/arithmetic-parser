@@ -6,7 +6,7 @@ use core::iter;
 
 use super::{captures::extract_vars_iter, CapturesExtractor, Compiler};
 use crate::{
-    alloc::{ToOwned, Vec},
+    alloc::{String, ToOwned, Vec},
     error::RepeatedAssignmentContext,
     exec::{Atom, Command, CompiledExpr, Executable, ExecutableFn, FieldName, SpannedAtom},
     Error, ErrorKind,

@@ -108,6 +108,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         }
     }
 
+    // TODO: If recursion is manifested via constraints, the returned type is not informative.
     fn handle_recursive_type(
         &self,
         ty: Type<Prim>,
@@ -588,7 +589,8 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         let mut instantiated_fn_type = fn_type.clone();
         MonoTypeTransformer::transform(&mapping, &mut instantiated_fn_type);
 
-        // Copy constraints on the newly generated const and type vars from the function definition.
+        // Copy constraints on the newly generated length and type vars
+        // from the function definition.
         for (original_idx, is_static) in &fn_params.len_params {
             if *is_static {
                 let new_idx = mapping.lengths[original_idx];
@@ -637,17 +639,21 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         if let Some(var) = checker.recursive_var {
             self.handle_recursive_type(ty.clone(), var, &mut errors);
         } else {
-            if let Some(constraints) = self.constraints.get(&var_idx).cloned() {
-                constraints.apply_all(ty, self, errors);
-            }
-
             let mut ty = ty.clone();
             if !is_lhs {
                 // We need to swap `any` types / lengths with new vars so that this type
                 // can be specified further.
                 TypeSpecifier::new(self).visit_type_mut(&mut ty);
             }
-            self.eqs.insert(var_idx, ty);
+            self.eqs.insert(var_idx, ty.clone());
+
+            // Constraints need to be applied *after* adding a type equation in order to
+            // account for recursive constraints (e.g., object ones) - otherwise,
+            // constraints on some type vars may be lost.
+            // TODO: is is possible (or necessary?) to detect recursion in order to avoid cloning?
+            if let Some(constraints) = self.constraints.get(&var_idx).cloned() {
+                constraints.apply_all(&ty, self, errors);
+            }
         }
     }
 }
@@ -695,6 +701,7 @@ impl<Prim: PrimitiveType> Visit<Prim> for OccurrenceChecker<'_, Prim> {
         } else if let Some(ty) = self.substitutions.eqs.get(&var_idx) {
             self.visit_type(ty);
         }
+        // TODO: we don't check object constraints since they are fine (probably).
     }
 }
 

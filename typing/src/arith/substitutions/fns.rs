@@ -1,6 +1,9 @@
 //! Functional type substitutions.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    sync::Arc,
+};
 
 use crate::{
     arith::{CompleteConstraints, Substitutions},
@@ -52,7 +55,7 @@ impl<Prim: PrimitiveType> Function<Prim> {
             .collect();
 
         // 3. Set constraints for the function.
-        ParamQuantifier::set_params(
+        ParamQuantifier::fill_params(
             self,
             ParamConstraints {
                 type_params,
@@ -97,16 +100,22 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for PolyTypeTransformer<'_, Prim> {
             Type::Var(var) if var.is_free() => {
                 let type_count = self.mapping.types.len();
                 let var_idx = var.index();
-                let param_idx = *self.mapping.types.entry(var_idx).or_insert(type_count);
+                let entry = self.mapping.types.entry(var_idx);
+                let is_new_var = matches!(entry, Entry::Vacant(_));
+                let param_idx = *entry.or_insert(type_count);
                 *ty = Type::param(param_idx);
 
-                if let Some(object) = self.object_constraint(var_idx) {
-                    let mut resolved_object = object.clone();
-                    self.substitutions
-                        .resolver()
-                        .visit_object_mut(&mut resolved_object);
-                    self.visit_object_mut(&mut resolved_object);
-                    self.resolved_objects.insert(var_idx, resolved_object);
+                if is_new_var {
+                    // Resolve object constraints only when we're visiting the variable the
+                    // first time.
+                    if let Some(object) = self.object_constraint(var_idx) {
+                        let mut resolved_object = object.clone();
+                        self.substitutions
+                            .resolver()
+                            .visit_object_mut(&mut resolved_object);
+                        self.visit_object_mut(&mut resolved_object);
+                        self.resolved_objects.insert(var_idx, resolved_object);
+                    }
                 }
             }
             _ => visit::visit_type_mut(self, ty),

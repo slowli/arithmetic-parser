@@ -85,7 +85,7 @@ impl<Prim: PrimitiveType> TypeEnvironment<Prim> {
 
         if let Type::Function(function) = &mut ty {
             if function.params.is_none() {
-                ParamQuantifier::set_params(function, ParamConstraints::default());
+                ParamQuantifier::fill_params(function, ParamConstraints::default());
             }
         }
         ty

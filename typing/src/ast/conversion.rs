@@ -282,7 +282,7 @@ impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
             let mut converted_fn = function.convert(self);
             let constraints =
                 constraints.map_or_else(ParamConstraints::default, |c| c.extra.convert(self));
-            ParamQuantifier::set_params(&mut converted_fn, constraints);
+            ParamQuantifier::fill_params(&mut converted_fn, constraints);
 
             self.is_in_function = false;
             self.type_params.clear();

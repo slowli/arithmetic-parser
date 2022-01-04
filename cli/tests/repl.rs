@@ -64,7 +64,7 @@ fn repl_basics() {
             repl("all"),
             repl("all((1, 2, 5), |x| 0 < x)"),
             repl("all((1, -2, 5), |x| 0 < x)"),
-            repl("all((1, 2, 5, map), |x| 0 < x)"),
+            repl("all((1, 2, 5, Array.map), |x| 0 < x)"),
         ],
     );
 }

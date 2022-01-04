@@ -86,15 +86,15 @@
         <div class="term-output"><pre><span class="fg6">true</span></pre></div>
         <div class="user-input"><pre><span class="prompt">&gt;&gt;&gt;</span> all((1, -2, 5), |x| 0 &lt; x)</pre></div>
         <div class="term-output"><pre><span class="fg6">false</span></pre></div>
-        <div class="user-input"><pre><span class="prompt">&gt;&gt;&gt;</span> all((1, 2, 5, map), |x| 0 &lt; x)</pre></div>
+        <div class="user-input"><pre><span class="prompt">&gt;&gt;&gt;</span> all((1, 2, 5, Array.map), |x| 0 &lt; x)</pre></div>
         <div class="term-output"><pre><span class="bold fg9">error[EVAL]</span><span class="bold">: Value is not comparable</span>
-  <span class="fg4">┌─</span> Snippet #6:1:29
+  <span class="fg4">┌─</span> Snippet #6:1:35
   <span class="fg4">│</span>
-<span class="fg4">1</span> <span class="fg4">│</span> all((1, 2, 5, map), |x| 0 &lt; <span class="fg1">x</span>)
-  <span class="fg4">│</span> <span class="fg4">----------------------------</span><span class="fg1">^</span><span class="fg4">-</span>
-  <span class="fg4">│</span> <span class="fg4">│</span>                   <span class="fg4">│</span>       <span class="fg1">│</span>
-  <span class="fg4">│</span> <span class="fg4">│</span>                   <span class="fg4">│</span>       <span class="fg1">Cannot be compared</span>
-  <span class="fg4">│</span> <span class="fg4">│</span>                   <span class="fg4">The error occurred in function `pred`</span>
+<span class="fg4">1</span> <span class="fg4">│</span> all((1, 2, 5, Array.map), |x| 0 &lt; <span class="fg1">x</span>)
+  <span class="fg4">│</span> <span class="fg4">----------------------------------</span><span class="fg1">^</span><span class="fg4">-</span>
+  <span class="fg4">│</span> <span class="fg4">│</span>                         <span class="fg4">│</span>       <span class="fg1">│</span>
+  <span class="fg4">│</span> <span class="fg4">│</span>                         <span class="fg4">│</span>       <span class="fg1">Cannot be compared</span>
+  <span class="fg4">│</span> <span class="fg4">│</span>                         <span class="fg4">The error occurred in function `pred`</span>
   <span class="fg4">│</span> <span class="fg4">Call at depth 3</span>
   <span class="fg4">│</span>
   <span class="fg4">┌─</span> Snippet #2:1:21

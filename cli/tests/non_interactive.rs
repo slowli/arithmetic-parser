@@ -60,6 +60,30 @@ fn evaluating_functions() {
 }
 
 #[test]
+fn using_prototypes() {
+    test_config().test(
+        "tests/snapshots/prototypes.svg",
+        &[
+            "arithmetic-parser eval 'Array::map((1, 2, 3), Num.sin)'",
+            "arithmetic-parser eval -a u64 '(33, 6, 15).fold(0, Num.xor)'",
+            "arithmetic-parser eval '{ map } = Array; map((1, -2), |x| x + 1)'",
+        ],
+    );
+}
+
+#[test]
+fn using_prototypes_with_typing() {
+    test_config().test(
+        "tests/snapshots/prototypes-with-types.svg",
+        &[
+            "arithmetic-parser eval --types 'Array::map((1, 2, 3), Num.sin)'",
+            "arithmetic-parser eval --types -a u64 \\\n  '(33, 6, 15).fold(0, Num.xor)'",
+            "arithmetic-parser eval --types \\\n  '{ map } = Array; map((1, -2), |x| x + 1)'",
+        ],
+    );
+}
+
+#[test]
 fn syntax_errors() {
     test_config().with_template(scroll_template()).test(
         "tests/snapshots/errors-ast.svg",
@@ -123,7 +147,7 @@ fn error_with_call_complex_call_trace_and_native_fns() {
         "tests/snapshots/errors-native-call-trace.svg",
         &["arithmetic-parser eval '\n  \
              all = |array, pred| array.fold(true, |acc, x| acc && pred(x));\n  \
-             all((1, 2, map), |x| 0 < x)'"],
+             all((1, 2, Array.map), |x| 0 < x)'"],
     );
 }
 
@@ -135,7 +159,7 @@ fn typing_errors_simple() {
             "arithmetic-parser eval --types '(1, 2, 3).map(|x| x, 1)'",
             "arithmetic-parser eval --types '\n  \
              all = |array, pred| array.fold(true, |acc, x| acc && pred(x));\n  \
-             all((1, 2, map), |x| 0 < x)'",
+             all((1, 2, Array.map), |x| 0 < x)'",
         ],
     );
 }

@@ -10,7 +10,8 @@ use crate::{
     ast::TypeAst,
     error::Errors,
     types::{ParamConstraints, ParamQuantifier},
-    PrimitiveType, Type,
+    visit::VisitMut,
+    Function, PrimitiveType, Type,
 };
 use arithmetic_parser::{grammars::Grammar, Block};
 
@@ -82,12 +83,7 @@ impl<Prim: PrimitiveType> TypeEnvironment<Prim> {
     fn prepare_type(ty: impl Into<Type<Prim>>) -> Type<Prim> {
         let mut ty = ty.into();
         assert!(ty.is_concrete(), "Type {} is not concrete", ty);
-
-        if let Type::Function(function) = &mut ty {
-            if function.params.is_none() {
-                ParamQuantifier::fill_params(function, ParamConstraints::default());
-            }
-        }
+        TypePreparer.visit_type_mut(&mut ty);
         ty
     }
 
@@ -169,6 +165,19 @@ impl<Prim: PrimitiveType> ops::Index<&str> for TypeEnvironment<Prim> {
     fn index(&self, name: &str) -> &Self::Output {
         self.get(name)
             .unwrap_or_else(|| panic!("Variable `{}` is not defined", name))
+    }
+}
+
+/// Fills in parameters in all encountered top-level functions within a type.
+#[derive(Debug)]
+struct TypePreparer;
+
+impl<Prim: PrimitiveType> VisitMut<Prim> for TypePreparer {
+    fn visit_function_mut(&mut self, function: &mut Function<Prim>) {
+        if function.params.is_none() {
+            ParamQuantifier::fill_params(function, ParamConstraints::default());
+        }
+        // We intentionally do not recurse into functions; this is done within `ParamQuantifier`.
     }
 }
 

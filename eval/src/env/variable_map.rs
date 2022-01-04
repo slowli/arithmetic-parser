@@ -21,7 +21,6 @@ impl Prelude {
     where
         T: 'static + Clone,
     {
-        // TODO: only expose array functions within `Array` prototype?
         array::IntoIter::new([
             ("false", Value::Bool(false)),
             ("true", Value::Bool(true)),
@@ -30,13 +29,6 @@ impl Prelude {
             ("if", Value::native_fn(fns::If)),
             ("loop", Value::native_fn(fns::Loop)),
             ("while", Value::native_fn(fns::While)),
-            ("map", Value::native_fn(fns::Map)),
-            ("filter", Value::native_fn(fns::Filter)),
-            ("fold", Value::native_fn(fns::Fold)),
-            ("push", Value::native_fn(fns::Push)),
-            ("merge", Value::native_fn(fns::Merge)),
-            ("all", Value::native_fn(fns::All)),
-            ("any", Value::native_fn(fns::Any)),
         ])
     }
 

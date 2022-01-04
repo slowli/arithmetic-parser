@@ -13,8 +13,8 @@ use crate::{
 };
 use arithmetic_parser::{
     grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Destructure, DestructureRest, Expr,
-    FnDefinition, Lvalue, ObjectDestructure, ObjectExpr, Spanned, SpannedExpr, SpannedLvalue,
-    SpannedStatement, Statement, UnaryOp,
+    FnDefinition, Lvalue, MethodCallSeparator, ObjectDestructure, ObjectExpr, Spanned, SpannedExpr,
+    SpannedLvalue, SpannedStatement, Statement, UnaryOp,
 };
 
 /// Processor for deriving type information.
@@ -118,11 +118,19 @@ where
                 name,
                 receiver,
                 args,
-            } => {
-                let fn_type = self.process_var(name);
-                let all_args = iter::once(receiver.as_ref()).chain(args);
-                self.process_fn_call(expr, fn_type, all_args)
-            }
+                separator,
+            } => match separator.extra {
+                MethodCallSeparator::Dot => {
+                    let fn_type = self.process_var(name);
+                    let all_args = iter::once(receiver.as_ref()).chain(args);
+                    self.process_fn_call(expr, fn_type, all_args)
+                }
+                MethodCallSeparator::Colon2 => {
+                    let receiver = self.process_expr_inner(receiver);
+                    let fn_field = self.process_field_access(expr, &receiver, name);
+                    self.process_fn_call(expr, fn_field, args.iter())
+                }
+            },
 
             Expr::Block(block) => {
                 self.scopes.push(HashMap::new());

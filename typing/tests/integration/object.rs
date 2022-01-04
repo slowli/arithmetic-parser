@@ -659,3 +659,14 @@ fn object_destructure_in_fold_pipeline() {
         "([Num; N]) -> { max: Num, min: Num }"
     );
 }
+
+#[test]
+fn accessing_std_function_via_object() {
+    let code = "Array::map((1, 2, 3), |x| x + 1)";
+    let block = F32Grammar::parse_statements(code).unwrap();
+
+    let mut type_env = TypeEnvironment::new();
+    type_env.extend(Prelude::iter());
+    let output = type_env.process_statements(&block).unwrap();
+    assert_eq!(output.to_string(), "(Num, Num, Num)");
+}

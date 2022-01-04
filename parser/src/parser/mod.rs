@@ -805,11 +805,14 @@ where
     T: Parse<'a>,
     Ty: GrammarType,
 {
+    // Do not consider `::` as a type delimiter; otherwise, parsing will be inappropriately cut
+    // when `$var_name::...` is encountered.
+    let type_delimiter = terminated(tag_char(':'), peek(not(tag_char(':'))));
     map(
         tuple((
             var_name,
             opt(preceded(
-                delimited(ws::<Ty>, tag_char(':'), ws::<Ty>),
+                delimited(ws::<Ty>, type_delimiter, ws::<Ty>),
                 cut(with_span(<T::Base>::parse_type)),
             )),
         )),

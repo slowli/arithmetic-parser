@@ -5,7 +5,7 @@ use nom::Err as NomErr;
 
 use super::{args, lsp, lvalue_tuple, sp, span, FieldGrammar, Literal, LiteralType, ValueType};
 use crate::{
-    parser::{expr, fn_def, simple_expr, Complete},
+    parser::{expr, fn_def, separated_statements, simple_expr, Complete},
     BinaryOp, Block, ErrorKind, Expr, FnDefinition, InputSpan, Lvalue, MethodCallSeparator,
     Spanned,
 };
@@ -234,10 +234,31 @@ fn method_call_with_colon2_separator() {
 }
 
 #[test]
-fn errors_parsing_colon2_method_call() {
+fn error_parsing_colon2_method_call() {
     let input = InputSpan::new("Num::sin + 1");
     let err = simple_expr::<FieldGrammar, Complete>(input).unwrap_err();
     assert_matches!(err, NomErr::Failure(e) if e.span().location_offset() == 9);
+}
+
+#[test]
+fn colon2_method_call_is_parsed_within_larger_statement() {
+    let input = InputSpan::new("Num::sin()");
+    let (rest, block) = separated_statements::<FieldGrammar, Complete>(input).unwrap();
+
+    assert!(rest.fragment().is_empty());
+    match block.return_value.unwrap().extra {
+        Expr::Method {
+            name,
+            receiver,
+            separator,
+            ..
+        } => {
+            assert_eq!(*name.fragment(), "sin");
+            assert_eq!(*receiver.fragment(), "Num");
+            assert_matches!(separator.extra, MethodCallSeparator::Colon2);
+        }
+        other => panic!("Unexpected return statement: {:?}", other),
+    }
 }
 
 #[test]

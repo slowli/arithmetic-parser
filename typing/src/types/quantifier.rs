@@ -1,7 +1,7 @@
 //! Quantification of type / length parameters.
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{hash_map::Entry, HashMap, HashSet},
     mem,
 };
 
@@ -120,7 +120,7 @@ impl<'a, Prim: PrimitiveType> ParamQuantifier<'a, Prim> {
         constraints.object.as_ref()
     }
 
-    pub fn set_params(function: &mut Function<Prim>, constraints: ParamConstraints<Prim>) {
+    pub fn fill_params(function: &mut Function<Prim>, constraints: ParamConstraints<Prim>) {
         let mut analyzer = ParamQuantifier::new(&constraints);
         analyzer.visit_function(function);
         let mut placement = analyzer.output.place_params(constraints);
@@ -132,11 +132,17 @@ impl<Prim: PrimitiveType> Visit<Prim> for ParamQuantifier<'_, Prim> {
     fn visit_type(&mut self, ty: &Type<Prim>) {
         match ty {
             Type::Var(var) if !var.is_free() => {
-                let stats = self.output.type_params.entry(var.index()).or_default();
+                let entry = self.output.type_params.entry(var.index());
+                let is_new_var = matches!(entry, Entry::Vacant(_));
+                let stats = entry.or_default();
                 stats.mentioning_fns.insert(self.current_function_idx);
 
-                if let Some(object) = self.object_constraint(var.index()) {
-                    self.visit_object(object);
+                if is_new_var {
+                    // Visit object constraints only on the first var encounter, both to save time
+                    // and to prevent infinite recursion for recursive constraints.
+                    if let Some(object) = self.object_constraint(var.index()) {
+                        self.visit_object(object);
+                    }
                 }
             }
             _ => visit::visit_type(self, ty),

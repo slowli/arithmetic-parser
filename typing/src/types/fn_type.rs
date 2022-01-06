@@ -332,7 +332,7 @@ impl<Prim: PrimitiveType> FnWithConstraints<Prim> {
 impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for Function<Prim> {
     fn from(value: FnWithConstraints<Prim>) -> Self {
         let mut function = value.function;
-        ParamQuantifier::set_params(&mut function, value.constraints);
+        ParamQuantifier::fill_params(&mut function, value.constraints);
         function
     }
 }

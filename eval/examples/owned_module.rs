@@ -4,7 +4,7 @@ use assert_matches::assert_matches;
 
 use arithmetic_eval::{
     env::{Assertions, Environment, Prelude},
-    ErrorKind, ExecutableModule, Value,
+    fns, ErrorKind, ExecutableModule, Value,
 };
 use arithmetic_parser::{
     grammars::{F64Grammar, MockTypes, Parse, WithMockedTypes},
@@ -42,7 +42,9 @@ fn create_static_module(
 fn main() -> anyhow::Result<()> {
     let mut env = Environment::new();
     env.extend(Prelude::vars().chain(Assertions::vars()));
-    env.insert("INF", Value::Prim(f64::INFINITY));
+    env.insert_native_fn("fold", fns::Fold)
+        .insert_native_fn("push", fns::Push)
+        .insert("INF", Value::Prim(f64::INFINITY));
 
     let sum_module = {
         let dynamic_program = String::from("|...vars| fold(vars, 0, |acc, x| acc + x)");

@@ -14,7 +14,7 @@ recognized by [`arithmetic-parser`], e.g., integer-, real-, complex-valued and m
 (Both built-in integer types and big integers from [`num-bigint`] are supported.)
 The interpreter provides support for native functions,
 which allows to overcome some syntax limitations (e.g., the lack of control flow
-can be solved with native `if` / `loop` functions). Native functions and opaque reference types
+can be solved with native `if` / `while` functions). Native functions and opaque reference types
 allow effectively embedding the interpreter into larger Rust applications.
 
 The interpreter is somewhat opinionated on how to interpret language features
@@ -85,7 +85,7 @@ Defining a type:
 Vector = defer(|Self| impl(#{
     len: |{ x, y }| sqrt(x * x + y * y),
     add: |self, other| Self(self + other),
-    to_unit: |self| if(self.x == 0 && self.y == 0,
+    to_unit_scale: |self| if(self.x == 0 && self.y == 0,
         || self,
         || Self(self / self.len()),
     )(),
@@ -95,7 +95,7 @@ assert_eq(
     Vector(#{ x: 3, y: 4 }).add(Vector(#{ x: -1, y: 1 })),
     Vector(#{ x: 2, y: 5 }),
 );
-scaled = Vector(#{ x: 3, y: -4 }).to_unit();
+scaled = Vector(#{ x: 3, y: -4 }).to_unit_scale();
 assert_close(scaled.len(), 1);
 assert_close(scaled.x, 0.6);
 assert_close(scaled.y, -0.8);

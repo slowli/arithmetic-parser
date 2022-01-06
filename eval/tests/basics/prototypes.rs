@@ -187,3 +187,22 @@ fn defining_prototype_in_script() {
         proto_string
     );
 }
+
+#[test]
+fn static_functions_in_prototype() {
+    let mut env = Environment::<f32>::new();
+    env.insert_native_fn("defer", fns::Defer)
+        .insert_native_fn("impl", fns::CreatePrototype)
+        .insert_native_fn("assert_eq", fns::AssertEq)
+        .insert_wrapped_fn("abs", f32::abs);
+
+    let program = r#"
+        Point = defer(|Self| impl(#{
+            new: |x, y| Self(#{ x, y }),
+            len: |{x, y}| abs(x) + abs(y),
+        }));
+        pt = Point::new(3, 4);
+        assert_eq(pt.len(), 7);
+    "#;
+    evaluate(&mut env, program);
+}

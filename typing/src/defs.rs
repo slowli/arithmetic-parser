@@ -2,10 +2,11 @@
 //!
 //! [`arithmetic-eval`]: https://docs.rs/arithmetic-eval/
 
-use crate::{arith::WithBoolean, Function, PrimitiveType, Type, UnknownLen};
+use std::iter;
 
-/// Map containing type definitions for all variables from `Prelude` in the eval crate,
-/// except for `loop` function.
+use crate::{arith::WithBoolean, Function, Object, PrimitiveType, Type, UnknownLen};
+
+/// Map containing type definitions for all variables from `Prelude` in the eval crate.
 ///
 /// # Contents
 ///
@@ -47,7 +48,7 @@ use crate::{arith::WithBoolean, Function, PrimitiveType, Type, UnknownLen};
 ///     len = |xs| xs.fold(0, |acc, _| acc + 1);
 ///     slice = (1, 2).merge((3, 4));
 ///     slice.len(); // methods working on slices are applicable
-///     (_, _, _, z) = slice; // but destructring is not
+///     (_, _, _, z) = slice; // but destructuring is not
 /// "#;
 /// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 ///
@@ -62,6 +63,7 @@ use crate::{arith::WithBoolean, Function, PrimitiveType, Type, UnknownLen};
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
+// TODO: remove array functions once prototypes are supported
 pub enum Prelude {
     /// `false` type (Boolean).
     False,
@@ -81,6 +83,10 @@ pub enum Prelude {
     Push,
     /// Type of the `merge` function.
     Merge,
+    /// Type of the `all` function.
+    All,
+    /// Type of the `any` function.
+    Any,
 }
 
 impl<Prim: WithBoolean> From<Prelude> for Type<Prim> {
@@ -161,21 +167,33 @@ impl<Prim: WithBoolean> From<Prelude> for Type<Prim> {
                 .with_arg(Type::param(0).repeat(UnknownLen::Dynamic))
                 .returning(Type::param(0).repeat(UnknownLen::Dynamic))
                 .into(),
+
+            Prelude::All | Prelude::Any => {
+                let predicate_arg = Function::builder()
+                    .with_arg(Type::param(0))
+                    .returning(Type::BOOL);
+
+                Function::builder()
+                    .with_arg(Type::param(0).repeat(UnknownLen::Dynamic))
+                    .with_arg(predicate_arg)
+                    .returning(Type::BOOL)
+                    .into()
+            }
         }
     }
 }
 
 impl Prelude {
-    const VALUES: &'static [Self] = &[
-        Self::True,
-        Self::False,
-        Self::If,
-        Self::While,
+    const VALUES: &'static [Self] = &[Self::True, Self::False, Self::If, Self::While];
+
+    const ARRAY_FUNCTIONS: &'static [Self] = &[
         Self::Map,
         Self::Filter,
         Self::Fold,
         Self::Push,
         Self::Merge,
+        Self::All,
+        Self::Any,
     ];
 
     fn as_str(self) -> &'static str {
@@ -189,6 +207,8 @@ impl Prelude {
             Self::Fold => "fold",
             Self::Push => "push",
             Self::Merge => "merge",
+            Self::All => "all",
+            Self::Any => "any",
         }
     }
 
@@ -207,11 +227,20 @@ impl Prelude {
             .returning(Type::param(0).repeat(UnknownLen::Dynamic))
     }
 
+    fn array_prototype<Prim: WithBoolean>() -> Object<Prim> {
+        Self::ARRAY_FUNCTIONS
+            .iter()
+            .map(|&value| (value.as_str(), Type::from(value)))
+            .collect()
+    }
+
     /// Returns an iterator over all type definitions in the `Prelude`.
     pub fn iter<Prim: WithBoolean>() -> impl Iterator<Item = (&'static str, Type<Prim>)> {
         Self::VALUES
             .iter()
+            .chain(Self::ARRAY_FUNCTIONS)
             .map(|&value| (value.as_str(), value.into()))
+            .chain(iter::once(("Array", Self::array_prototype().into())))
     }
 }
 
@@ -274,6 +303,8 @@ mod tests {
         ("fold", "(['T], 'U, ('U, 'T) -> 'U) -> 'U"),
         ("push", "(['T; N], 'T) -> ['T; N + 1]"),
         ("merge", "(['T], ['T]) -> ['T]"),
+        ("all", "(['T], ('T) -> Bool) -> Bool"),
+        ("any", "(['T], ('T) -> Bool) -> Bool"),
     ];
 
     #[test]
@@ -281,12 +312,14 @@ mod tests {
         let expected_types: HashMap<_, _> = EXPECTED_PRELUDE_TYPES.iter().copied().collect();
 
         for (name, ty) in Prelude::iter::<Num>() {
-            assert_eq!(ty.to_string(), expected_types[name]);
+            if name != "Array" {
+                assert_eq!(ty.to_string(), expected_types[name]);
+            }
         }
 
         assert_eq!(
             Prelude::iter::<Num>()
-                .map(|(name, _)| name)
+                .filter_map(|(name, _)| if name == "Array" { None } else { Some(name) })
                 .collect::<HashSet<_>>(),
             expected_types.keys().copied().collect::<HashSet<_>>()
         );

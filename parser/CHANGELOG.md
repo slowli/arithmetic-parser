@@ -9,6 +9,9 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Make crate no-std-compatible and check compatibility in CI. (#101)
 
+- Parse the double colon (`::`) separator for method calls, for example,
+  `Object::len(#{ x: 3, y: 4 })`. (#105)
+
 ### Changed
 
 - Update `nom` parser dependency to v7 and `nom_locate` to v4. (#99, #100)

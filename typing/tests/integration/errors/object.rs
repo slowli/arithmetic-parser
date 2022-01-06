@@ -50,6 +50,35 @@ fn tuple_as_object() {
 }
 
 #[test]
+fn calling_non_function_field() {
+    let code = "pt = #{ x: 3 }; pt::x();";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.main_span().fragment(), "pt::x()");
+    assert_matches!(
+        err.kind(),
+        ErrorKind::TypeMismatch(Type::Function(_), Type::Prim(_))
+    );
+}
+
+#[test]
+fn calling_field_on_non_object() {
+    let code = "array = (1, 2, 3); array::len()";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let err = TypeEnvironment::new()
+        .process_statements(&block)
+        .unwrap_err()
+        .single();
+
+    assert_eq!(*err.main_span().fragment(), "array::len()");
+    assert_matches!(err.kind(), ErrorKind::CannotAccessFields);
+}
+
+#[test]
 fn object_and_tuple_constraints() {
     let code = "|obj| { obj.x; (x, ...) = obj; }";
     let block = F32Grammar::parse_statements(code).unwrap();

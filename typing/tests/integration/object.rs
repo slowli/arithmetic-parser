@@ -6,7 +6,7 @@ use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
     arith::NumArithmetic,
     defs::{Assertions, Prelude},
-    error::ErrorKind,
+    error::{ErrorKind, TupleContext},
     TupleLen, Type, TypeEnvironment,
 };
 
@@ -50,6 +50,158 @@ fn object_field_access() {
     let block = F32Grammar::parse_statements(code).unwrap();
     let output = TypeEnvironment::new().process_statements(&block).unwrap();
     assert_eq!(output.to_string(), "for<'T: { x: Num, y: Num }> ('T) -> 'T");
+}
+
+#[test]
+fn object_colon2_field_access() {
+    let code = "|obj| obj::len() == 1";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let output = TypeEnvironment::new().process_statements(&block).unwrap();
+    assert_eq!(
+        output.to_string(),
+        "for<'T: { len: () -> Num }> ('T) -> Bool"
+    );
+
+    let usage_code = r#"
+        test = |obj| obj::len() == 1;
+        test(#{ len: || 3 }) && test(#{ x: 3, y: 4, len: || 5 })
+    "#;
+    let usage_block = F32Grammar::parse_statements(usage_code).unwrap();
+    TypeEnvironment::new()
+        .process_statements(&usage_block)
+        .unwrap();
+}
+
+#[test]
+fn object_colon2_access_for_intermediate_expressions() {
+    let code_samples = &[
+        r#"
+            new_point = |x, y| #{ x, y, len2: || x * x + y * y };
+            new_point(3, 4)::len2() == 25
+        "#,
+        "#{ x: 3, y: 4, len: || 5 }::len() == 5",
+        "(#{ x: 3, y: 4, len: || 5 })::len() == 5",
+        "{ x = 3; y = 4; #{ x, y, len: || 5 } }::len() == 5",
+    ];
+    for &code in code_samples {
+        let block = F32Grammar::parse_statements(code).unwrap();
+        let output = TypeEnvironment::new().process_statements(&block).unwrap();
+        assert_eq!(output, Type::BOOL);
+    }
+}
+
+#[test]
+fn recursive_object_type_via_function_field() {
+    let code = r#"
+        call_len = |obj| obj::len(obj);
+        pt = #{ x: 3, y: 4, len: |{ x, y }| x + y };
+        // direct call should work
+        pt::len(pt) == 7 && (pt.len)(#{ x: 1, y: 2 }) == 3;
+        // call via a function should work as well
+        call_len(pt) == 7;
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut env = TypeEnvironment::new();
+    env.process_statements(&block).unwrap();
+
+    assert_eq!(
+        env["call_len"].to_string(),
+        "for<'T: { len: ('T) -> 'U }> ('T) -> 'U"
+    );
+
+    let bogus_code = r#"
+        pt = #{ x: 3, len: |{ x, y }| x as Num + y };
+        call_len(pt)
+    "#;
+    let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
+    let err = env.process_statements(&bogus_block).unwrap_err().single();
+
+    assert_matches!(err.kind(), ErrorKind::MissingFields { fields, .. } if fields.contains("y"));
+}
+
+#[test]
+fn object_function_defs() {
+    let code = r#"
+        call_fn = |obj| (obj.fn)(#{ x: 1 }) as Num;
+        obj = #{ fn: |{ x, y }| x as Num + y };
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut env = TypeEnvironment::new();
+    env.process_statements(&block).unwrap();
+
+    assert_eq!(
+        env["call_fn"].to_string(),
+        "for<'T: { fn: ({ x: Num }) -> Num }> ('T) -> Num"
+    );
+    assert_eq!(
+        env["obj"].to_string(),
+        "{ fn: for<'T: { x: Num, y: Num }> ('T) -> Num }"
+    );
+
+    let bogus_call = "call_fn(obj)";
+    let bogus_block = F32Grammar::parse_statements(bogus_call).unwrap();
+    let err = env.process_statements(&bogus_block).unwrap_err().single();
+
+    assert_matches!(err.kind(), ErrorKind::MissingFields { fields, .. } if fields.contains("y"));
+}
+
+#[test]
+fn recursive_object_definitions() {
+    let code = r#"
+        normalize_pt = |pt| #{ x: pt.x, y: pt.y } / (pt::len(pt) as Num);
+        len = |{ x, y }| x + y;
+        normalize_pt(#{ x: 3, y: 4, len }) == #{ x: 0.6, y: 0.8 };
+        normalize_pt(#{ x: 3, y: 4, z: 0, len }) == #{ x: 0.6, y: 0.8 };
+        normalize_pt(#{
+            x: 3, y: 4,
+            len: |pt| pt.x + 3,
+        })
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut env = TypeEnvironment::new();
+    let output = env.process_statements(&block).unwrap();
+
+    assert_eq!(output.to_string(), "{ x: Num, y: Num }");
+
+    let bogus_code = r#"
+        normalize_pt(#{
+            x: (3, 1), y: 4,
+            len: |pt| pt.x + 3,
+        })
+    "#;
+    let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
+    let err = env.process_statements(&bogus_block).unwrap_err().single();
+
+    assert_matches!(err.kind(), ErrorKind::TypeMismatch(lhs, _) if *lhs == Type::NUM);
+
+    let bogus_code = r#"
+        normalize_pt(#{
+            x: 3, y: 4,
+            len: |x, y| x + y,
+        })
+    "#;
+    let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
+    let errors = env.process_statements(&bogus_block).unwrap_err();
+
+    assert!(errors.iter().any(|err| matches!(
+        err.kind(),
+        ErrorKind::TupleLenMismatch {
+            lhs,
+            rhs,
+            context: TupleContext::FnArgs,
+        } if *lhs == TupleLen::from(2) && *rhs == TupleLen::from(1)
+    )));
+
+    let bogus_code = r#"
+        normalize_pt(#{
+            x: 3, y: 4,
+            len: |pt| pt.z + 3,
+        })
+    "#;
+    let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
+    let err = env.process_statements(&bogus_block).unwrap_err().single();
+
+    assert_matches!(err.kind(), ErrorKind::MissingFields { fields, .. } if fields.contains("z"));
 }
 
 #[test]
@@ -506,4 +658,15 @@ fn object_destructure_in_fold_pipeline() {
         type_env["minmax"].to_string(),
         "([Num; N]) -> { max: Num, min: Num }"
     );
+}
+
+#[test]
+fn accessing_std_function_via_object() {
+    let code = "Array::map((1, 2, 3), |x| x + 1)";
+    let block = F32Grammar::parse_statements(code).unwrap();
+
+    let mut type_env = TypeEnvironment::new();
+    type_env.extend(Prelude::iter());
+    let output = type_env.process_statements(&block).unwrap();
+    assert_eq!(output.to_string(), "(Num, Num, Num)");
 }

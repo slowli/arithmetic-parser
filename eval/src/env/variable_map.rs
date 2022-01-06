@@ -8,10 +8,10 @@ use crate::{fns, PrototypeField, Value};
 ///
 /// # Contents
 ///
-/// - All functions from the `fns` module, except for [`Compare`](fns::Compare)
-///   (contained in [`Comparisons`]) and assertion functions (contained in [`Assertions`]).
-///   All functions are named in lowercase, e.g., `if`, `map`.
 /// - `true` and `false` Boolean constants.
+/// - Prototype-related functions: [`impl`](fns::CreatePrototype), [`proto`](fns::GetPrototype).
+/// - Deferred initialization: [`defer`](fns::Defer).
+/// - Control flow functions: [`if`](fns::If), [`while`](fns::While).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Prelude;
 
@@ -25,22 +25,17 @@ impl Prelude {
             ("false", Value::Bool(false)),
             ("true", Value::Bool(true)),
             ("impl", Value::native_fn(fns::CreatePrototype)),
+            ("proto", Value::native_fn(fns::GetPrototype)),
             ("defer", Value::native_fn(fns::Defer)),
             ("if", Value::native_fn(fns::If)),
-            ("loop", Value::native_fn(fns::Loop)),
             ("while", Value::native_fn(fns::While)),
-            ("map", Value::native_fn(fns::Map)),
-            ("filter", Value::native_fn(fns::Filter)),
-            ("fold", Value::native_fn(fns::Fold)),
-            ("push", Value::native_fn(fns::Push)),
-            ("merge", Value::native_fn(fns::Merge)),
         ])
     }
 
     /// Returns standard prototypes corresponding to the contained functions.
     ///
     /// Currently, this only sets a prototype for tuples / arrays containing
-    /// `map`, `filter`, `fold`, `push` and `merge` functions.
+    /// `map`, `filter`, `fold`, `all`, `any`, `push` and `merge` functions.
     pub fn prototypes<T>() -> impl Iterator<Item = (PrototypeField, Value<'static, T>)>
     where
         T: 'static + Clone,
@@ -50,13 +45,15 @@ impl Prelude {
             (array_proto("map"), Value::native_fn(fns::Map)),
             (array_proto("filter"), Value::native_fn(fns::Filter)),
             (array_proto("fold"), Value::native_fn(fns::Fold)),
+            (array_proto("all"), Value::native_fn(fns::All)),
+            (array_proto("any"), Value::native_fn(fns::Any)),
             (array_proto("push"), Value::native_fn(fns::Push)),
             (array_proto("merge"), Value::native_fn(fns::Merge)),
         ])
     }
 }
 
-/// Container for assertion functions: `assert` and `assert_eq`.
+/// Container for assertion functions: `assert`, `assert_eq` and `assert_fails`.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Assertions;
 

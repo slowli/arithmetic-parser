@@ -167,7 +167,7 @@ fn callable_object_field() {
     let program = r#"
         (x, y) = (3, 4);
         obj = #{ x, y, len_sq: || x * x + y * y };
-        obj.x == 3 && obj.y == 4 && (obj.len_sq)() == 25
+        obj.x == 3 && obj.y == 4 && (obj.len_sq)() == 25 && obj::len_sq() == 25
     "#;
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(return_value, Value::Bool(true));
@@ -175,10 +175,60 @@ fn callable_object_field() {
     let program = r#"
         obj = { POW = 2; #{ sq: |x| x ^ POW } };
         sq = obj.sq;
-        (obj.sq)(3) == 9 && sq(4) == 16
+        (obj.sq)(3) == 9 && obj::sq(3) == 9 && sq(4) == 16
     "#;
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(return_value, Value::Bool(true));
+}
+
+#[test]
+fn returning_object_with_callable_field() {
+    let program = r#"
+        new_point = |x, y| #{ x, y, len2: || x * x + y * y };
+        new_point(3, 4)::len2() == 25
+    "#;
+    let return_value = evaluate(&mut Environment::new(), program);
+    assert_eq!(return_value, Value::Bool(true));
+
+    let immediate_program = "#{ x: 3, y: 4, len: || 5 }::len() == 5";
+    let return_value = evaluate(&mut Environment::new(), immediate_program);
+    assert_eq!(return_value, Value::Bool(true));
+
+    let program_with_parentheses = "(#{ x: 3, y: 4, len: || 5 })::len() == 5";
+    let return_value = evaluate(&mut Environment::new(), program_with_parentheses);
+    assert_eq!(return_value, Value::Bool(true));
+
+    let program_with_scope = "{ x = 3; y = 4; #{ x, y, len: || 5 } }::len() == 5";
+    let return_value = evaluate(&mut Environment::new(), program_with_scope);
+    assert_eq!(return_value, Value::Bool(true));
+}
+
+#[test]
+fn calling_non_callable_field() {
+    let program = "1 + #{ x: 3, y: 4 }::x()";
+    let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
+    assert_matches!(err.source().kind(), ErrorKind::CannotCall);
+    assert_eq!(
+        *err.source().main_span().code().fragment(),
+        "#{ x: 3, y: 4 }::x()"
+    );
+
+    let other_programs = &[
+        "{ pt = #{ x: 3, y: 4 }; pt::x() }",
+        "{ pt = #{ x: 3, y: 4 }; (pt.x)() }",
+    ];
+    for &other_program in other_programs {
+        let err = try_evaluate(&mut Environment::new(), other_program).unwrap_err();
+        assert_matches!(err.source().kind(), ErrorKind::CannotCall);
+    }
+}
+
+#[test]
+fn calling_callable_field_on_non_object() {
+    let program = "xs = (1, 2, 3); xs::len()";
+    let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
+    assert_matches!(err.source().kind(), ErrorKind::CannotAccessFields);
+    assert_eq!(*err.source().main_span().code().fragment(), "xs::len()");
 }
 
 #[test]

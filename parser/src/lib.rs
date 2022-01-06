@@ -41,8 +41,8 @@
 //!   *object expressions*, which look similar to struct initialization in Rust or object
 //!   initialization in JavaScript; for example, `#{ x: 1, y }`. (Note the `#` char at the start
 //!   of the block; it is used to distinguish object expressions from blocks.)
-//! - **Methods.** Method call is a function call separated from the receiver with a `.` char;
-//!   for example, `foo.bar(2, x)`.
+//! - **Methods.** Method call is a function call separated from the receiver with a `.` char
+//!   (e.g., `foo.bar(2, x)`) or a `::` char sequence (e.g., `Array::len((1, 2))`).
 //! - **Type annotations.** A type annotation in the form `var: Type` can be present
 //!   in the lvalues or in the function argument definitions. The parser for type annotations
 //!   is user-defined.
@@ -185,6 +185,15 @@ impl<'a, T: Grammar<'a>> PartialEq for ObjectExpr<'a, T> {
     }
 }
 
+/// Separators between the method call receiver and the method name.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MethodCallSeparator {
+    /// Dot separator, e.g., in `foo.bar(1, 3)`.
+    Dot,
+    /// Double colon separator, e.g., in `foo::bar(4)`.
+    Colon2,
+}
+
 /// Arithmetic expression with an abstract types for type annotations and literals.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -223,12 +232,14 @@ pub enum Expr<'a, T: Grammar<'a>> {
         receiver: Box<SpannedExpr<'a, T>>,
     },
 
-    /// Method call, e.g., `foo.bar(x, 5)`.
+    /// Method call, e.g., `foo.bar(x, 5)` or `foo::bar(x, 5)`.
     Method {
         /// Name of the called method, e.g. `bar` in `foo.bar(x, 5)`.
         name: Spanned<'a>,
         /// Receiver of the call, e.g., `foo` in `foo.bar(x, 5)`.
         receiver: Box<SpannedExpr<'a, T>>,
+        /// Separator between the receiver and the called method, e.g., `.` in `foo.bar(x, 5)`.
+        separator: Spanned<'a, MethodCallSeparator>,
         /// Arguments; e.g., `x, 5` in `foo.bar(x, 5)`.
         args: Vec<SpannedExpr<'a, T>>,
     },
@@ -321,10 +332,12 @@ impl<'a, T: Grammar<'a>> Clone for Expr<'a, T> {
             Self::Method {
                 name,
                 receiver,
+                separator,
                 args,
             } => Self::Method {
                 name: *name,
                 receiver: receiver.clone(),
+                separator: *separator,
                 args: args.clone(),
             },
             Self::Unary { op, inner } => Self::Unary {
@@ -384,14 +397,21 @@ where
                 Self::Method {
                     name,
                     receiver,
+                    separator,
                     args,
                 },
                 Self::Method {
                     name: that_name,
                     receiver: that_receiver,
+                    separator: that_separator,
                     args: that_args,
                 },
-            ) => name == that_name && receiver == that_receiver && args == that_args,
+            ) => {
+                name == that_name
+                    && receiver == that_receiver
+                    && args == that_args
+                    && separator == that_separator
+            }
 
             (
                 Self::Unary { op, inner },

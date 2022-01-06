@@ -3,7 +3,7 @@
 extern crate alloc;
 
 use alloc::string::ToString;
-use core::f64;
+use core::f64::consts as f64_consts;
 
 use arithmetic_eval::{
     env::{Assertions, Environment, Prelude},
@@ -24,8 +24,8 @@ extern "C" {
 #[allow(clippy::type_complexity)]
 fn initialize_env(env: &mut Environment<'_, f64>) {
     const CONSTANTS: &[(&str, f64)] = &[
-        ("E", f64::consts::E),
-        ("PI", f64::consts::PI),
+        ("E", f64_consts::E),
+        ("PI", f64_consts::PI),
         ("Inf", f64::INFINITY),
     ];
 
@@ -80,6 +80,7 @@ pub fn evaluate(program: &str) -> Result<JsValue, JsValue> {
 
     let mut env = Environment::new();
     env.extend(Prelude::vars().chain(Assertions::vars()));
+    env.extend(Prelude::prototypes());
     initialize_env(&mut env);
 
     let value = module

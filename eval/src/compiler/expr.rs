@@ -6,14 +6,14 @@ use core::iter;
 
 use super::{captures::extract_vars_iter, CapturesExtractor, Compiler};
 use crate::{
-    alloc::{ToOwned, Vec},
+    alloc::{String, ToOwned, Vec},
     error::RepeatedAssignmentContext,
     exec::{Atom, Command, CompiledExpr, Executable, ExecutableFn, FieldName, SpannedAtom},
     Error, ErrorKind,
 };
 use arithmetic_parser::{
     grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Expr, FnDefinition, MaybeSpanned,
-    ObjectExpr, Spanned, SpannedExpr, SpannedStatement, Statement,
+    MethodCallSeparator, ObjectExpr, Spanned, SpannedExpr, SpannedStatement, Statement,
 };
 
 impl Compiler {
@@ -71,7 +71,24 @@ impl Compiler {
                 name,
                 receiver,
                 args,
-            } => self.compile_method_call(executable, expr, name, receiver, args)?,
+                separator,
+            } => match separator.extra {
+                MethodCallSeparator::Dot => {
+                    self.compile_method_call(executable, expr, name, receiver, args)?
+                }
+                MethodCallSeparator::Colon2 => {
+                    let field = self.compile_field_access(executable, expr, name, receiver)?;
+                    let field = expr.copy_with_extra(field).into();
+                    let original_name = (*name.fragment()).to_owned();
+                    self.compile_fn_call_with_precompiled_name(
+                        executable,
+                        expr,
+                        field,
+                        Some(original_name),
+                        args,
+                    )?
+                }
+            },
 
             Expr::Block(block) => self.compile_block(executable, expr, block)?,
             Expr::FnDefinition(def) => self.compile_fn_definition(executable, expr, def)?,
@@ -134,7 +151,17 @@ impl Compiler {
         };
 
         let name = self.compile_expr(executable, name)?;
+        self.compile_fn_call_with_precompiled_name(executable, call_expr, name, original_name, args)
+    }
 
+    fn compile_fn_call_with_precompiled_name<'a, T: Grammar<'a>>(
+        &mut self,
+        executable: &mut Executable<'a, T::Lit>,
+        call_expr: &SpannedExpr<'a, T>,
+        name: SpannedAtom<'a, T::Lit>,
+        original_name: Option<String>,
+        args: &[SpannedExpr<'a, T>],
+    ) -> Result<Atom<T::Lit>, Error<'a>> {
         let args = args
             .iter()
             .map(|arg| self.compile_expr(executable, arg))

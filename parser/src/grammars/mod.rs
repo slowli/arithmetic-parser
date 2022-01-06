@@ -237,7 +237,6 @@ mod bigint {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Expr;
 
     use assert_matches::assert_matches;
     use nom::Err as NomErr;
@@ -287,7 +286,7 @@ mod tests {
     #[cfg(feature = "num-complex")]
     #[test]
     fn parsing_i() {
-        use crate::UnaryOp;
+        use crate::{Expr, UnaryOp};
         use num_complex::Complex32;
 
         type C32Grammar = Untyped<NumGrammar<Complex32>>;

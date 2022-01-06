@@ -13,7 +13,7 @@ use crate::{
     exec::Operations,
     fns,
     values::StandardPrototypes,
-    NativeFn, PrototypeField, Value,
+    NativeFn, Prototype, PrototypeField, Value, ValueType,
 };
 
 /// Environment containing named `Value`s.
@@ -155,6 +155,11 @@ impl<'a, T> Environment<'a, T> {
             .map(|(name, value)| (name.as_str(), value))
     }
 
+    /// Returns a [`Prototype`] for a standard type, or `None` if it is undefined.
+    pub fn prototype(&self, ty: ValueType) -> Option<&Prototype<'static, T>> {
+        self.prototypes.get(ty)
+    }
+
     /// Inserts a variable with the specified name.
     pub fn insert(&mut self, name: &str, value: Value<'a, T>) -> &mut Self {
         self.variables.insert(name.to_owned(), value);
@@ -187,7 +192,7 @@ impl<'a, T> Environment<'a, T> {
 }
 
 impl<T: Clone> Environment<'_, T> {
-    /// Inserts a field into one of standard [`Prototype`]s.
+    /// Inserts a field into a [`Prototype`](crate::Prototype) for one of the standard value types.
     ///
     /// Use the [`Extend`] implementation to modify prototypes more efficiently in case of batch
     /// changes.
@@ -197,6 +202,36 @@ impl<T: Clone> Environment<'_, T> {
         value: Value<'static, T>,
     ) -> &mut Self {
         self.prototypes.insert(field, value);
+        self
+    }
+
+    /// Inserts or updates prototypes for all standard types (if they are defined)
+    /// as conventionally named variables. If any of such variables is already defined,
+    /// it is replaced.
+    ///
+    /// The naming convention is as follows:
+    ///
+    /// - `Array`: array / [`Tuple`](crate::Tuple) prototype
+    /// - `Object`: [`Object`](crate::Object) prototype
+    /// - `Function`: [`Function`](crate::Function) prototype
+    /// - `Bool`: Boolean value prototype
+    ///
+    /// Other prototypes (notably, the prototype for primitive values) are not exposed
+    /// by this method. If necessary, they can be added by using a combination of
+    /// [`Self::prototype()`] and [`Self::insert()`].
+    pub fn insert_prototypes_as_vars(&mut self) -> &mut Self {
+        const TYPES_WITH_NAMES: &[(ValueType, &str)] = &[
+            (ValueType::Array, "Array"),
+            (ValueType::Object, "Object"),
+            (ValueType::Function, "Function"),
+            (ValueType::Bool, "Bool"),
+        ];
+
+        for &(ty, name) in TYPES_WITH_NAMES {
+            if let Some(proto) = self.prototype(ty).cloned() {
+                self.insert(name, proto.into());
+            }
+        }
         self
     }
 }

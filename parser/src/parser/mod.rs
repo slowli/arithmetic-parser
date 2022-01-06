@@ -10,7 +10,7 @@ use nom::{
     combinator::{cut, map, map_res, not, opt, peek, recognize},
     error::context,
     multi::{many0, separated_list0, separated_list1},
-    sequence::{delimited, preceded, terminated, tuple},
+    sequence::{delimited, preceded, separated_pair, terminated, tuple},
     Err as NomErr, Slice,
 };
 
@@ -21,8 +21,8 @@ use crate::{
     grammars::{Features, Grammar, Parse, ParseLiteral},
     spans::{unite_spans, with_span},
     BinaryOp, Block, Context, Destructure, DestructureRest, Error, ErrorKind, Expr, FnDefinition,
-    InputSpan, Lvalue, NomResult, ObjectDestructure, ObjectDestructureField, ObjectExpr, Spanned,
-    SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
+    InputSpan, Lvalue, MethodCallSeparator, NomResult, ObjectDestructure, ObjectDestructureField,
+    ObjectExpr, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
 };
 
 #[cfg(test)]
@@ -326,6 +326,7 @@ where
 
 #[derive(Debug)]
 struct MethodOrFnCall<'a, T: Grammar<'a>> {
+    separator: Option<Spanned<'a, MethodCallSeparator>>,
     fn_name: Option<InputSpan<'a>>,
     args: Option<Vec<SpannedExpr<'a, T>>>,
 }
@@ -344,6 +345,7 @@ where
     Ty: GrammarType,
 {
     map(fn_args::<T, Ty>, |(args, _)| MethodOrFnCall {
+        separator: None,
         fn_name: None,
         args: Some(args),
     })(input)
@@ -355,22 +357,56 @@ where
     Ty: GrammarType,
 {
     let var_name_or_digits = alt((var_name, take_while1(|c: char| c.is_ascii_digit())));
-    let method_parser = map_res(
-        tuple((var_name_or_digits, opt(fn_args::<T, Ty>))),
+    let method_or_field_access_parser = map_res(
+        tuple((
+            var_name_or_digits,
+            opt(preceded(ws::<Ty>, fn_args::<T, Ty>)),
+        )),
         |(fn_name, maybe_args)| {
             if maybe_args.is_some() && !is_valid_variable_name(fn_name.fragment()) {
                 Err(ErrorKind::LiteralName)
             } else {
                 Ok(MethodOrFnCall {
+                    separator: None,
                     fn_name: Some(fn_name),
                     args: maybe_args.map(|(args, _)| args),
                 })
             }
         },
     );
+    let method_or_field_access_parser = map(
+        tuple((
+            terminated(with_span(tag_char('.')), ws::<Ty>),
+            cut(method_or_field_access_parser),
+        )),
+        |(separator, mut call)| {
+            call.separator = Some(separator.copy_with_extra(MethodCallSeparator::Dot));
+            call
+        },
+    );
+
+    let static_method_parser = map(
+        separated_pair(var_name, ws::<Ty>, fn_args::<T, Ty>),
+        |(fn_name, (args, _))| MethodOrFnCall {
+            separator: None,
+            fn_name: Some(fn_name),
+            args: Some(args),
+        },
+    );
+    let static_method_parser = map(
+        tuple((
+            terminated(with_span(tag("::")), ws::<Ty>),
+            cut(static_method_parser),
+        )),
+        |(separator, mut call)| {
+            call.separator = Some(separator.copy_with_extra(MethodCallSeparator::Colon2));
+            call
+        },
+    );
 
     alt((
-        preceded(tuple((tag_char('.'), ws::<Ty>)), cut(method_parser)),
+        method_or_field_access_parser,
+        static_method_parser,
         fn_call::<T, Ty>,
     ))(input)
 }
@@ -477,6 +513,7 @@ fn fold_args<'a, T: Grammar<'a>>(
                 Expr::Method {
                     name: fn_name.into(),
                     receiver: Box::new(name),
+                    separator: call.extra.separator.unwrap(), // safe by construction
                     args,
                 }
             } else {
@@ -768,11 +805,14 @@ where
     T: Parse<'a>,
     Ty: GrammarType,
 {
+    // Do not consider `::` as a type delimiter; otherwise, parsing will be inappropriately cut
+    // when `$var_name::...` is encountered.
+    let type_delimiter = terminated(tag_char(':'), peek(not(tag_char(':'))));
     map(
         tuple((
             var_name,
             opt(preceded(
-                delimited(ws::<Ty>, tag_char(':'), ws::<Ty>),
+                delimited(ws::<Ty>, type_delimiter, ws::<Ty>),
                 cut(with_span(<T::Base>::parse_type)),
             )),
         )),

@@ -38,12 +38,8 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --workspace --all-features --all-targets
-      - name: Run doc tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --all --all-features --doc
+          # Avoid building the WASM E2E test crate since it requires Rust 1.54+
+          args: -p arithmetic-parser -p arithmetic-eval -p arithmetic-typing --all-features --all-targets
 
       - name: Run parser example
         uses: actions-rs/cargo@v1

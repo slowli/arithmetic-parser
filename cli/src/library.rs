@@ -3,7 +3,7 @@
 use num_complex::{Complex, Complex32, Complex64};
 use num_traits::{CheckedRem, Num, WrappingNeg};
 
-use std::{fmt, ops};
+use std::{fmt, iter, ops};
 
 use arithmetic_eval::{
     arith::{
@@ -11,10 +11,10 @@ use arithmetic_eval::{
         StdArithmetic, WrappingArithmetic,
     },
     env::{Assertions, Comparisons, Prelude},
-    fns, Environment, Number, PrototypeField, Value,
+    fns, Environment, Number, PrototypeField, Value, ValueType,
 };
 use arithmetic_parser::grammars::NumLiteral;
-use arithmetic_typing::{arith::Num as NumType, defs, Function, Type, TypeEnvironment};
+use arithmetic_typing::{arith::Num as NumType, defs, Function, Object, Type, TypeEnvironment};
 
 fn binary_fn() -> Type {
     Function::builder()
@@ -85,7 +85,11 @@ impl<T: ReplLiteral> StdLibrary<T> {
             .map(move |(name, _)| (*name, unary_fn.clone()));
         let binary_fns = self.binary.iter().map(|(name, _)| (*name, binary_fn()));
 
-        constants.chain(unary_fns).chain(binary_fns)
+        let num_proto: Object<NumType> = unary_fns.clone().chain(binary_fns.clone()).collect();
+        constants
+            .chain(unary_fns)
+            .chain(binary_fns)
+            .chain(iter::once(("Num", num_proto.into())))
     }
 }
 
@@ -167,6 +171,9 @@ where
     env.insert_native_fn("array", fns::Array)
         .insert("rem", rem)
         .extend(Prelude::prototypes().chain(T::STD_LIB.prototypes()));
+    let num_proto = env.prototype(ValueType::Prim).cloned().unwrap_or_default();
+    env.insert_prototypes_as_vars()
+        .insert("Num", num_proto.into());
 
     let type_env = defs::Prelude::iter()
         .chain(defs::Assertions::iter())
@@ -187,6 +194,7 @@ pub fn create_modular_env(modulus: u64) -> (Environment<'static, u64>, TypeEnvir
     env.extend(Prelude::vars().chain(Assertions::vars()));
     env.insert("MAX_VALUE", Value::Prim(modulus - 1))
         .extend(Prelude::prototypes());
+    env.insert_prototypes_as_vars();
 
     let type_env = defs::Prelude::iter()
         .chain(defs::Assertions::iter())
@@ -257,6 +265,9 @@ where
     env.insert_native_fn("array", fns::Array)
         .insert_native_fn("assert_close", fns::AssertClose::new(tolerance))
         .extend(Prelude::prototypes().chain(T::STD_LIB.prototypes()));
+    let num_proto = env.prototype(ValueType::Prim).cloned().unwrap_or_default();
+    env.insert_prototypes_as_vars()
+        .insert("Num", num_proto.into());
 
     let type_env = defs::Prelude::iter()
         .chain(defs::Assertions::iter())

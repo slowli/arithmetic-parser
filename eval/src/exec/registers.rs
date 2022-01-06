@@ -11,8 +11,8 @@ use crate::{
     exec::command::{Atom, Command, CompiledExpr, FieldName, SpannedAtom, SpannedCommand},
     exec::ModuleId,
     values::StandardPrototypes,
-    CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, Prototype, SpannedValue,
-    Value,
+    CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, Object, Prototype,
+    SpannedValue, Value,
 };
 use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
 
@@ -595,13 +595,7 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
         method_name: &str,
         standard_prototypes: Option<&StandardPrototypes<T>>,
     ) -> Result<Function<'a, T>, ErrorKind> {
-        let proto = if let Some(object) = receiver.as_object() {
-            object.prototype()
-        } else if let Value::Tuple(tuple) = receiver {
-            tuple.prototype()
-        } else {
-            None
-        };
+        let proto = receiver.as_object().and_then(Object::prototype);
 
         let proto = proto
             .or_else(|| {

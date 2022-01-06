@@ -28,6 +28,14 @@ Expressions / blocks can be evaluated with the `eval` command.
 Functions are first-class! Beside being called, functions can be used as values
 themselves.
 
+### Standard prototypes
+
+![Standard prototypes](prototypes.svg)
+
+Standard prototypes can be accessed via `Array` and `Num` variables. Functions
+in these prototypes can be called as using `::` call syntax for brevity,
+e.g., `Array::map(..)`.
+
 ## AST errors
 
 ![AST errors](errors-ast.svg)

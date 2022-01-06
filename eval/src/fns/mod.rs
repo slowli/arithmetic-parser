@@ -47,9 +47,9 @@ mod wrapper;
 #[cfg(feature = "std")]
 pub use self::std::Dbg;
 pub use self::{
-    array::{Array, Filter, Fold, Len, Map, Merge, Push},
+    array::{All, Any, Array, Filter, Fold, Len, Map, Merge, Push},
     assertions::{Assert, AssertClose, AssertEq, AssertFails},
-    flow::{If, Loop, While},
+    flow::{If, While},
     wrapper::{
         enforce_closure_type, wrap, Binary, ErrorOutput, FnWrapper, FromValueError,
         FromValueErrorKind, FromValueErrorLocation, IntoEvalResult, Quaternary, Ternary,
@@ -227,10 +227,10 @@ impl<T> NativeFn<T> for Compare {
 
 /// Creates a new [`Prototype`] from the provided [`Object`].
 ///
-/// The functions in the provided `Object` will ber used in method resolution when applying
+/// The functions in the provided `Object` will be used in method resolution when applying
 /// methods to [`Value`]s having this prototype. All object fields can be accessed
 /// from the prototype using generic field access notation. The prototype itself is a function
-/// which will wrap provided tuples or objects so that they have this prototype.
+/// which will wrap a provided object so that it will have this prototype.
 ///
 /// See [`Prototype`] docs for more details on prototype mechanics.
 ///
@@ -369,11 +369,11 @@ impl<T> NativeFn<T> for GetPrototype {
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     Stack = defer(|Self| impl(#{
-///         push: |self, item| Self(push(self, item)),
+///         push: |{ items }, item| Self(#{ items: push(items, item) }),
 ///         // ^ since `Self` is used in function definition, this is OK
 ///     }));
-///     stack = Stack((1, 2)).push(3).push(4);
-///     assert_eq(stack, Stack((1, 2, 3, 4)));
+///     stack = Stack(#{ items: (1, 2) }).push(3).push(4);
+///     assert_eq(stack.items, (1, 2, 3, 4));
 /// "#;
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = ExecutableModule::new("test_defer", &program)?;
@@ -508,14 +508,11 @@ mod tests {
     }
 
     #[test]
-    fn loop_basic() -> anyhow::Result<()> {
+    fn while_basic() -> anyhow::Result<()> {
         let program = r#"
             // Finds the greatest power of 2 lesser or equal to the value.
             discrete_log2 = |x| {
-                loop(0, |i| {
-                    continue = 2^i <= x;
-                    (continue, if(continue, i + 1, i - 1))
-                })
+                while(0, |i| 2^i <= x, |i| i + 1) - 1
             };
 
             (discrete_log2(1), discrete_log2(2),
@@ -525,7 +522,7 @@ mod tests {
 
         let module = ExecutableModule::new(WildcardId, &block)?;
         let mut env = Environment::new();
-        env.insert_native_fn("loop", Loop)
+        env.insert_native_fn("while", While)
             .insert_native_fn("if", If);
 
         assert_eq!(

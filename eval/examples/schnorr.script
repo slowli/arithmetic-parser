@@ -4,7 +4,7 @@ dbg(GEN, ORDER);
 
 PublicKey = impl(#{
     verify: |self, message, { e, s }| {
-        R = GEN ^ s * self.0 ^ e;
+        R = GEN ^ s * self.pk ^ e;
         e == hash_to_scalar(R, message)
     },
 });
@@ -14,13 +14,13 @@ SecretKey = impl(#{
         r = rand_scalar();
         R = GEN ^ r;
         e = hash_to_scalar(R, message);
-        #{ e, s: r - self.0 * e }
+        #{ e, s: r - self.sk * e }
     },
-    public_key: |self| PublicKey((GEN ^ self.0,)),
+    public_key: |self| PublicKey(#{ pk: GEN ^ self.sk }),
 });
 
 gen = || {
-    sk = SecretKey((rand_scalar(),));
+    sk = SecretKey(#{ sk: rand_scalar() });
     #{ sk, pk: sk.public_key() }
 };
 

@@ -5,7 +5,7 @@ use core::cmp::Ordering;
 use num_traits::{FromPrimitive, One, Zero};
 
 use crate::{
-    alloc::{vec, Vec},
+    alloc::{format, vec, Vec},
     error::AuxErrorInfo,
     fns::{extract_array, extract_fn, extract_primitive},
     CallContext, ErrorKind, EvalResult, NativeFn, SpannedValue, Tuple, Value,
@@ -378,7 +378,7 @@ impl<T> NativeFn<T> for Push {
         let mut array = extract_array(
             ctx,
             args.pop().unwrap(),
-            "`fold` requires first arg to be a tuple",
+            "`push` requires first arg to be a tuple",
         )?;
 
         array.push(elem);
@@ -443,6 +443,146 @@ impl<T: Clone> NativeFn<T> for Merge {
     }
 }
 
+/// Function that checks whether any of array items satisfy the provided predicate.
+///
+/// # Type
+///
+/// (using [`arithmetic-typing`](https://docs.rs/arithmetic-typing/) notation)
+///
+/// ```text
+/// (['T], ('T) -> Bool) -> Bool
+/// ```
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
+/// # fn main() -> anyhow::Result<()> {
+/// let program = r#"
+///     assert(any((1, 3, -1), |x| x < 0));
+///     assert(!any((1, 2, 3), |x| x < 0));
+/// "#;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_any", &program)?;
+///
+/// let mut env = Environment::new();
+/// env.insert_native_fn("any", fns::Any)
+///     .insert_native_fn("assert", fns::Assert);
+/// module.with_env(&env)?.run()?;
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Any;
+
+impl<T: Clone + 'static> NativeFn<T> for Any {
+    fn evaluate<'a>(
+        &self,
+        mut args: Vec<SpannedValue<'a, T>>,
+        ctx: &mut CallContext<'_, 'a, T>,
+    ) -> EvalResult<'a, T> {
+        ctx.check_args_count(&args, 2)?;
+        let predicate = extract_fn(
+            ctx,
+            args.pop().unwrap(),
+            "`any` requires second arg to be a predicate function",
+        )?;
+        let array = extract_array(
+            ctx,
+            args.pop().unwrap(),
+            "`any` requires first arg to be a tuple",
+        )?;
+
+        for value in array {
+            let spanned = ctx.apply_call_span(value);
+            let result = predicate.evaluate(vec![spanned], ctx)?;
+            match result {
+                Value::Bool(false) => { /* continue */ }
+                Value::Bool(true) => return Ok(Value::Bool(true)),
+                _ => {
+                    let err = ErrorKind::native(format!(
+                        "Incorrect return type of a predicate: expected Boolean, got {}",
+                        result.value_type()
+                    ));
+                    ctx.call_site_error(err);
+                }
+            }
+        }
+        Ok(Value::Bool(false))
+    }
+}
+
+/// Function that checks whether all of array items satisfy the provided predicate.
+///
+/// # Type
+///
+/// (using [`arithmetic-typing`](https://docs.rs/arithmetic-typing/) notation)
+///
+/// ```text
+/// (['T], ('T) -> Bool) -> Bool
+/// ```
+///
+/// # Examples
+///
+/// ```
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
+/// # fn main() -> anyhow::Result<()> {
+/// let program = r#"
+///     assert(all((1, 2, 3, 5), |x| x > 0));
+///     assert(!all((1, -2, 3), |x| x > 0));
+/// "#;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_all", &program)?;
+///
+/// let mut env = Environment::new();
+/// env.insert_native_fn("all", fns::All)
+///     .insert_native_fn("assert", fns::Assert);
+/// module.with_env(&env)?.run()?;
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug, Clone, Copy, Default)]
+pub struct All;
+
+impl<T: Clone + 'static> NativeFn<T> for All {
+    fn evaluate<'a>(
+        &self,
+        mut args: Vec<SpannedValue<'a, T>>,
+        ctx: &mut CallContext<'_, 'a, T>,
+    ) -> EvalResult<'a, T> {
+        ctx.check_args_count(&args, 2)?;
+        let predicate = extract_fn(
+            ctx,
+            args.pop().unwrap(),
+            "`all` requires second arg to be a predicate function",
+        )?;
+        let array = extract_array(
+            ctx,
+            args.pop().unwrap(),
+            "`all` requires first arg to be a tuple",
+        )?;
+
+        for value in array {
+            let spanned = ctx.apply_call_span(value);
+            let result = predicate.evaluate(vec![spanned], ctx)?;
+            match result {
+                Value::Bool(false) => return Ok(Value::Bool(false)),
+                Value::Bool(true) => { /* continue */ }
+                _ => {
+                    let err = ErrorKind::native(format!(
+                        "Incorrect return type of a predicate: expected Boolean, got {}",
+                        result.value_type()
+                    ));
+                    ctx.call_site_error(err);
+                }
+            }
+        }
+        Ok(Value::Bool(true))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -451,7 +591,7 @@ mod tests {
         Environment, ExecutableModule,
     };
 
-    use arithmetic_parser::grammars::{NumGrammar, NumLiteral, Parse, Untyped};
+    use arithmetic_parser::grammars::{F32Grammar, NumGrammar, NumLiteral, Parse, Untyped};
     use assert_matches::assert_matches;
 
     fn test_len_function<T: NumLiteral, A>(arithmetic: A)
@@ -533,6 +673,23 @@ mod tests {
 
         let mut env = Environment::with_arithmetic(WrappingArithmetic);
         env.insert_native_fn("array", Array);
+
+        let output = module.with_env(&env)?.run()?;
+        assert_matches!(output, Value::Bool(true));
+        Ok(())
+    }
+
+    #[test]
+    fn all_and_any_are_short_circuit() -> anyhow::Result<()> {
+        let code = r#"
+            !all((1, 5 == 5), |x| x < 0) && any((-1, 1, 5 == 4), |x| x > 0)
+        "#;
+        let block = Untyped::<F32Grammar>::parse_statements(code)?;
+        let module = ExecutableModule::new("array", &block)?;
+
+        let mut env = Environment::new();
+        env.insert_native_fn("all", All)
+            .insert_native_fn("any", Any);
 
         let output = module.with_env(&env)?.run()?;
         assert_matches!(output, Value::Bool(true));

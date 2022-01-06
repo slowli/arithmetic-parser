@@ -21,7 +21,8 @@
 //! - **Functions,** which are further subdivided into native functions (defined in the Rust code)
 //!   and interpreted ones (defined within a module)
 //! - [**Tuples / arrays**](#tuples).
-//! - [**Objects**](#objects).
+//! - [**Objects**](#objects), with a [`Prototype`] being a subtype with some
+//!   function characteristics.
 //!
 //! Besides these types, there is an auxiliary one: [`OpaqueRef`], which represents a
 //! reference-counted native value, which can be returned from native functions or provided to
@@ -91,7 +92,9 @@
 //!   or does not have the specified fields. Destructuring is not exhaustive; i.e.,
 //!   the destructured object may have extra fields.
 //! - Functional fields are permitted. Similar to Rust, to call a function field, it must
-//!   be enclosed in parentheses: `(obj.run)(arg0, arg1)`.
+//!   be enclosed in parentheses: `(obj.run)(arg0, arg1)`. Alternatively, a `::`-separated call
+//!   can be used: `obj::run(arg0, arg1)`. Use of `::` is just syntactic sugar and has no
+//!   alternative semantics.
 //!
 //! # Crate features
 //!

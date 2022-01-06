@@ -19,7 +19,7 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 - Add `AssertClose` and `AssertFails` assertions for approximate equality comparisons
   and failure testing, respectively. (#103)
 
-- Add `all` and `any` functions for arrays / tuples.
+- Add `all` and `any` functions for arrays / tuples. (#105)
 
 ### Changed
 
@@ -45,6 +45,9 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Remove `ModuleImports`, its iterator types and `VariableMap` as obsolete.
   Related to the changes in the `ExecutableModule` interface. (#103)
+
+- Remove `loop` native function since it has overly convoluted interface.
+  `while` can be used instead. (#105)
 
 ### Fixed
 

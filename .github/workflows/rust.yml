@@ -34,12 +34,18 @@ jobs:
           toolchain: ${{ env.msrv }}
           override: true
 
-      - name: Run tests
+      - name: Run tests (parser, typing)
         uses: actions-rs/cargo@v1
         with:
           command: test
           # Avoid building the WASM E2E test crate since it requires Rust 1.54+
-          args: -p arithmetic-parser -p arithmetic-eval -p arithmetic-typing --all-features --all-targets
+          args: -p arithmetic-parser -p arithmetic-typing --all-features --all-targets
+      - name: Run tests (eval)
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          # `hashbrown` dependency requires Rust 1.56+, so we don't enable it
+          args: -p arithmetic-eval --features complex,bigint --all-targets
 
       - name: Run parser example
         uses: actions-rs/cargo@v1

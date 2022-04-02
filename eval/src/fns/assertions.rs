@@ -233,7 +233,7 @@ impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
 
         let arith = ctx.arithmetic();
         let diff = match arith.partial_cmp(lhs, rhs) {
-            Some(Ordering::Less) | Some(Ordering::Equal) => arith.sub(rhs.clone(), lhs.clone()),
+            Some(Ordering::Less | Ordering::Equal) => arith.sub(rhs.clone(), lhs.clone()),
             Some(Ordering::Greater) => arith.sub(lhs.clone(), rhs.clone()),
             None => {
                 let err = ErrorKind::native("Values are not comparable");
@@ -243,7 +243,7 @@ impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
         let diff = diff.map_err(|err| ctx.call_site_error(ErrorKind::Arithmetic(err)))?;
 
         match arith.partial_cmp(&diff, &self.tolerance) {
-            Some(Ordering::Less) | Some(Ordering::Equal) => Ok(Value::void()),
+            Some(Ordering::Less | Ordering::Equal) => Ok(Value::void()),
             Some(Ordering::Greater) => {
                 let err = ErrorKind::native("Values are not close");
                 Err(create_error_with_values(err, &args, ctx))

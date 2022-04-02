@@ -360,10 +360,7 @@ impl ErrorKind {
                 "Operands of comparison ops must be primitive values".to_owned()
             }
             Self::UnexpectedOperand {
-                op: Op::Binary(BinaryOp::And),
-            }
-            | Self::UnexpectedOperand {
-                op: Op::Binary(BinaryOp::Or),
+                op: Op::Binary(BinaryOp::And | BinaryOp::Or),
             } => "Operands of binary boolean ops must be boolean".to_owned(),
             Self::UnexpectedOperand {
                 op: Op::Unary(UnaryOp::Neg),

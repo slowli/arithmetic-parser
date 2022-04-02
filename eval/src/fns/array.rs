@@ -70,7 +70,7 @@ where
                 .map_err(|err| ctx.call_site_error(ErrorKind::Arithmetic(err)))?;
 
             let cmp = ctx.arithmetic().partial_cmp(&next_index, &len);
-            if matches!(cmp, Some(Ordering::Less) | Some(Ordering::Equal)) {
+            if matches!(cmp, Some(Ordering::Less | Ordering::Equal)) {
                 let spanned = ctx.apply_call_span(Value::Prim(index));
                 array.push(generation_fn.evaluate(vec![spanned], ctx)?);
                 index = next_index;

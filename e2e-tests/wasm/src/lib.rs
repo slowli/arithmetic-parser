@@ -1,4 +1,5 @@
 #![no_std]
+#![allow(clippy::unused_unit)] // produced by `wasm_bindgen` macro
 
 extern crate alloc;
 

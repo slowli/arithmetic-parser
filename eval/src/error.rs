@@ -3,12 +3,11 @@
 pub use arithmetic_parser::UnsupportedType;
 
 use derive_more::Display;
-use hashbrown::HashSet;
 
 use core::fmt;
 
 use crate::{
-    alloc::{format, vec, Box, String, ToOwned, ToString, Vec},
+    alloc::{format, vec, Box, HashSet, String, ToOwned, ToString, Vec},
     exec::ModuleId,
     fns::FromValueError,
     Value, ValueType,

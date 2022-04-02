@@ -1,11 +1,9 @@
 //! `Registers` for executing commands and closely related types.
 
-use hashbrown::HashMap;
-
 use core::iter;
 
 use crate::{
-    alloc::{vec, Box, Rc, String, ToOwned, Vec},
+    alloc::{vec, Box, HashMap, Rc, String, ToOwned, Vec},
     arith::OrdArithmetic,
     error::{Backtrace, CodeInModule, EvalResult, TupleLenMismatchContext},
     exec::command::{Atom, Command, CompiledExpr, FieldName, SpannedAtom, SpannedCommand},

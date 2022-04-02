@@ -48,7 +48,7 @@ pub use crate::compiler::CompilerExt;
 /// use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// use arithmetic_eval::{env, fns, Environment, ExecutableModule, Value};
 /// # use core::iter::FromIterator;
-/// # use hashbrown::HashSet;
+/// # use std::collections::HashSet;
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let module = Untyped::<F32Grammar>::parse_statements(

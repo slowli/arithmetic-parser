@@ -100,12 +100,17 @@
 //!
 //! - `std`. Enables support of types from `std`, such as the `Error` trait, and propagates
 //!   to dependencies. Importantly, `std` is necessary for floating-point arithmetics.
+//! - `hashbrown`. Imports hash maps and sets from the [eponymous crate][`hashbrown`]
+//!   instead of using ones from the Rust std library. This feature is necessary
+//!   if the `std` feature is disabled.
 //! - `complex`. Implements [`Number`] for floating-point complex numbers from
 //!   the [`num-complex`] crate (i.e., `Complex32` and `Complex64`). Enables complex number parsing
 //!   in `arithmetic-parser`.
 //! - `bigint`. Implements `Number` and a couple of other helpers for big integers
 //!   from the [`num-bigint`] crate (i.e., `BigInt` and `BigUint`). Enables big integer parsing
 //!   in `arithmetic-parser`.
+//!
+//! The `std` feature is enabled by default; other features are disabled by default.
 //!
 //! [`Arithmetic`]: crate::arith::Arithmetic
 //! [`OrdArithmetic`]: crate::arith::OrdArithmetic
@@ -117,6 +122,7 @@
 //! [`ObjectDestructure`]: arithmetic_parser::ObjectDestructure
 //! [`FieldAccess`]: arithmetic_parser::Expr::FieldAccess
 //! [object expressions]: arithmetic_parser::Expr::Object
+//! [`hashbrown`]: https://crates.io/crates/hashbrown
 //!
 //! # Examples
 //!
@@ -217,6 +223,17 @@ mod alloc {
         vec,
         vec::Vec,
     };
+
+    #[cfg(all(not(feature = "std"), not(feature = "hashbrown")))]
+    compile_error!(
+        "One of `std` or `hashbrown` features must be enabled in order \
+         to get a hash map implementation"
+    );
+
+    #[cfg(feature = "hashbrown")]
+    pub use hashbrown::{hash_map, HashMap, HashSet};
+    #[cfg(not(feature = "hashbrown"))]
+    pub use std::collections::{hash_map, HashMap, HashSet};
 }
 
 pub use self::{

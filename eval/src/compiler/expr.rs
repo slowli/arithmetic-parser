@@ -1,12 +1,10 @@
 //! Compilation logic for `Expr`essions.
 
-use hashbrown::HashMap;
-
 use core::iter;
 
 use super::{captures::extract_vars_iter, CapturesExtractor, Compiler};
 use crate::{
-    alloc::{String, ToOwned, Vec},
+    alloc::{HashMap, String, ToOwned, Vec},
     error::RepeatedAssignmentContext,
     exec::{Atom, Command, CompiledExpr, Executable, ExecutableFn, FieldName, SpannedAtom},
     Error, ErrorKind,

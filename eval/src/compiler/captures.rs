@@ -1,11 +1,9 @@
 //! Captures extractor.
 
-use hashbrown::HashMap;
-
 use core::iter;
 
 use crate::{
-    alloc::{vec, Box, Vec},
+    alloc::{vec, Box, HashMap, Vec},
     error::{AuxErrorInfo, Error, ErrorKind, RepeatedAssignmentContext},
     exec::{ModuleId, WildcardId},
 };

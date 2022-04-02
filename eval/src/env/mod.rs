@@ -1,14 +1,12 @@
 //! [`Environment`] and other types related to [`Value`] collections.
 
-use hashbrown::{hash_map, HashMap};
-
 use core::{iter, ops};
 
 mod variable_map;
 pub use self::variable_map::{Assertions, Comparisons, Prelude};
 
 use crate::{
-    alloc::{Rc, String, ToOwned},
+    alloc::{hash_map, HashMap, Rc, String, ToOwned},
     arith::{OrdArithmetic, StdArithmetic},
     exec::Operations,
     fns,

@@ -89,7 +89,7 @@ mod bigint_tests {
         let bits = usize::try_from(bits).expect("Capacity overflow");
         let (div, rem) = (bits / 8, bits % 8);
 
-        let mut buffer = vec![0_u8; div + (rem != 0) as usize];
+        let mut buffer = vec![0_u8; div + usize::from(rem != 0)];
         rng.fill_bytes(&mut buffer);
         if rem > 0 {
             // Zero out most significant bits in the first byte.

@@ -516,8 +516,6 @@ mod tests {
     use super::*;
     use crate::fns;
 
-    use core::array;
-
     #[test]
     fn object_to_string() {
         let mut obj = Object::<f32>::default();
@@ -541,9 +539,9 @@ mod tests {
     fn merging_prototypes() {
         let mut prototypes = StandardPrototypes::<f32>::new();
         let fields =
-            array::IntoIter::new([(PrototypeField::array("fold"), Value::native_fn(fns::Fold))]);
+            IntoIterator::into_iter([(PrototypeField::array("fold"), Value::native_fn(fns::Fold))]);
         prototypes.extend(fields.into_iter());
-        let new_fields = array::IntoIter::new([
+        let new_fields = IntoIterator::into_iter([
             (PrototypeField::array("len"), Value::native_fn(fns::Len)),
             (PrototypeField::object("len"), Value::native_fn(fns::Len)),
         ]);

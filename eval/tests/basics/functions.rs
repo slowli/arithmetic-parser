@@ -1,9 +1,6 @@
 //! Tests targeting functions / methods.
 
 use assert_matches::assert_matches;
-use hashbrown::HashMap;
-
-use core::iter::FromIterator;
 
 use arithmetic_eval::{
     fns::FromValueErrorKind, Environment, ErrorKind, Function, NativeFn, PrototypeField, Value,
@@ -205,8 +202,8 @@ fn embedded_function() {
     };
     let captures = function.captures();
     assert_eq!(
-        captures,
-        HashMap::from_iter(vec![("x", &Value::Prim(-3.0))])
+        captures.into_iter().collect::<Vec<_>>(),
+        [("x", &Value::Prim(-3.0))]
     );
 }
 

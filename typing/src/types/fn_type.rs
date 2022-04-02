@@ -310,6 +310,7 @@ impl<Prim: PrimitiveType> fmt::Display for FnWithConstraints<Prim> {
 impl<Prim: PrimitiveType> FnWithConstraints<Prim> {
     /// Marks type params with the specified `indexes` to have `constraints`. If some constraints
     /// are already present for some of the types, they are overwritten.
+    #[must_use]
     pub fn with_constraint<C>(mut self, indexes: &[usize], constraint: &C) -> Self
     where
         C: Constraint<Prim> + Clone,
@@ -322,7 +323,8 @@ impl<Prim: PrimitiveType> FnWithConstraints<Prim> {
     }
 
     /// Marks lengths with the specified `indexes` as static.
-    pub fn with_static_lengths(mut self, indexes: &[usize]) -> FnWithConstraints<Prim> {
+    #[must_use]
+    pub fn with_static_lengths(mut self, indexes: &[usize]) -> Self {
         let indexes = indexes.iter().copied();
         self.constraints.static_lengths.extend(indexes);
         self
@@ -391,6 +393,7 @@ impl<Prim: PrimitiveType> From<FnWithConstraints<Prim>> for Type<Prim> {
 /// assert_eq!(fn_type.to_string(), "(...['T; N], Bool) -> 'T");
 /// ```
 #[derive(Debug, Clone)]
+#[must_use]
 pub struct FunctionBuilder<Prim: PrimitiveType = Num> {
     args: Tuple<Prim>,
 }

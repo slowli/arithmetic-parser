@@ -386,7 +386,6 @@ mod tests {
 
     use arithmetic_parser::{LvalueLen, MaybeSpanned};
     use assert_matches::assert_matches;
-    use core::array;
 
     fn span_value<T>(value: Value<'_, T>) -> SpannedValue<'_, T> {
         MaybeSpanned::from_str("", ..).copy_with_extra(value)
@@ -459,7 +458,7 @@ mod tests {
             vec![Value::Prim(1.0)].into(),
             Object::just("test", Value::Prim(1.0)).into(),
         ];
-        for invalid_arg in array::IntoIter::new(invalid_args) {
+        for invalid_arg in IntoIterator::into_iter(invalid_args) {
             let err = assert_close
                 .evaluate(vec![one_arg.clone(), span_value(invalid_arg)], &mut ctx)
                 .unwrap_err();

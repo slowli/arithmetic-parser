@@ -500,6 +500,7 @@ impl<'a> Error<'a> {
 
     /// Adds an auxiliary span to this error. The `span` must be in the same module
     /// as the main span.
+    #[must_use]
     pub fn with_span<T>(mut self, span: &MaybeSpanned<'a, T>, info: AuxErrorInfo) -> Self {
         self.aux_spans.push(CodeInModule {
             module_id: self.main_span.module_id.clone_boxed(),

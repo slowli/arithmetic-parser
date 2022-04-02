@@ -37,6 +37,7 @@ bitflags! {
 
 impl Features {
     /// Creates a copy of these `Features` without any of the flags in `other`.
+    #[must_use]
     pub const fn without(self, other: Self) -> Self {
         Self::from_bits_truncate(self.bits & !other.bits)
     }

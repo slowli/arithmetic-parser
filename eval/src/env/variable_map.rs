@@ -1,6 +1,6 @@
 //! Standard collections of variables.
 
-use core::{array, cmp::Ordering, fmt};
+use core::{cmp::Ordering, fmt};
 
 use crate::{fns, PrototypeField, Value};
 
@@ -21,7 +21,7 @@ impl Prelude {
     where
         T: 'static + Clone,
     {
-        array::IntoIter::new([
+        IntoIterator::into_iter([
             ("false", Value::Bool(false)),
             ("true", Value::Bool(true)),
             ("impl", Value::native_fn(fns::CreatePrototype)),
@@ -41,7 +41,7 @@ impl Prelude {
         T: 'static + Clone,
     {
         let array_proto = PrototypeField::array;
-        array::IntoIter::new([
+        IntoIterator::into_iter([
             (array_proto("map"), Value::native_fn(fns::Map)),
             (array_proto("filter"), Value::native_fn(fns::Filter)),
             (array_proto("fold"), Value::native_fn(fns::Fold)),
@@ -63,7 +63,7 @@ impl Assertions {
     where
         T: 'static + Clone + fmt::Display,
     {
-        array::IntoIter::new([
+        IntoIterator::into_iter([
             ("assert", Value::native_fn(fns::Assert)),
             ("assert_eq", Value::native_fn(fns::AssertEq)),
             (
@@ -81,7 +81,7 @@ pub struct Comparisons;
 impl Comparisons {
     /// Creates an iterator over contained values and the corresponding names.
     pub fn vars<T>() -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
-        array::IntoIter::new([
+        IntoIterator::into_iter([
             ("LESS", Value::opaque_ref(Ordering::Less)),
             ("EQUAL", Value::opaque_ref(Ordering::Equal)),
             ("GREATER", Value::opaque_ref(Ordering::Greater)),

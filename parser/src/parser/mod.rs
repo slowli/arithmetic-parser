@@ -629,7 +629,7 @@ fn fold_binary_expr<'a, T: Grammar<'a>>(
         let insert_pos = right_contour
             .iter()
             .position(|past_op| past_op.priority() >= new_op.extra.priority())
-            .unwrap_or_else(|| right_contour.len());
+            .unwrap_or(right_contour.len());
 
         // We determine the error span later.
         let chained_comparison = right_contour.get(insert_pos).map_or(false, |past_op| {

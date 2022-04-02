@@ -8,9 +8,7 @@ on:
 
 env:
   # Minimum supported Rust version.
-  msrv: 1.51.0
-  # Minimum supported Rust version for CLI.
-  msrv_cli: 1.52.0
+  msrv: 1.53.0
   # Nightly Rust toolchain for building docs and checking nostd support.
   nightly: nightly-2021-12-03
 
@@ -34,12 +32,24 @@ jobs:
           toolchain: ${{ env.msrv }}
           override: true
 
-      - name: Run tests
+      - name: Run tests (parser, typing)
         uses: actions-rs/cargo@v1
         with:
           command: test
           # Avoid building the WASM E2E test crate since it requires Rust 1.54+
-          args: -p arithmetic-parser -p arithmetic-eval -p arithmetic-typing --all-features --all-targets
+          args: -p arithmetic-parser -p arithmetic-typing --all-features --all-targets
+      - name: Run tests (eval)
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          # `hashbrown` dependency requires Rust 1.56+, so we don't enable it
+          args: -p arithmetic-eval --features complex,bigint --all-targets
+
+      - name: Build CLI
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --manifest-path=cli/Cargo.toml --all-features --all-targets
 
       - name: Run parser example
         uses: actions-rs/cargo@v1
@@ -71,32 +81,6 @@ jobs:
         with:
           command: run
           args: -p arithmetic-typing --example num_or_bytes
-
-  build-msrv-cli:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: Cache cargo build
-        uses: actions/cache@v2
-        with:
-          path: |
-            target/
-            cli/target/
-          key: ${{ runner.os }}-msrv-cli-cargo-build-target
-
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ env.msrv_cli }}
-          override: true
-
-      - name: Build CLI
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --manifest-path=cli/Cargo.toml --all-features --all-targets
 
   build:
     runs-on: ubuntu-latest
@@ -243,7 +227,6 @@ jobs:
     needs:
       - build
       - build-msrv
-      - build-msrv-cli
       - build-nostd
     runs-on: ubuntu-latest
 

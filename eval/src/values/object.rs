@@ -1,7 +1,5 @@
 //! `Object` and tightly related types.
 
-use hashbrown::HashMap;
-
 use core::{
     fmt,
     iter::{self, FromIterator},
@@ -9,7 +7,7 @@ use core::{
 };
 
 use crate::{
-    alloc::{Rc, String, Vec},
+    alloc::{hash_map, HashMap, Rc, String, Vec},
     error::AuxErrorInfo,
     CallContext, ErrorKind, EvalResult, Function, SpannedValue, Value, ValueType,
 };
@@ -171,7 +169,7 @@ impl<'a, T> ops::Index<&str> for Object<'a, T> {
 impl<'a, T> IntoIterator for Object<'a, T> {
     type Item = (String, Value<'a, T>);
     /// Iterator type should be considered an implementation detail.
-    type IntoIter = hashbrown::hash_map::IntoIter<String, Value<'a, T>>;
+    type IntoIter = hash_map::IntoIter<String, Value<'a, T>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.fields.into_iter()
@@ -191,7 +189,7 @@ impl<'r, 'a, T> IntoIterator for &'r Object<'a, T> {
 }
 
 pub type Iter<'r, 'a, T> = iter::Map<
-    hashbrown::hash_map::Iter<'r, String, Value<'a, T>>,
+    hash_map::Iter<'r, String, Value<'a, T>>,
     fn((&'r String, &'r Value<'a, T>)) -> (&'r str, &'r Value<'a, T>),
 >;
 
@@ -516,8 +514,6 @@ mod tests {
     use super::*;
     use crate::fns;
 
-    use core::array;
-
     #[test]
     fn object_to_string() {
         let mut obj = Object::<f32>::default();
@@ -541,9 +537,9 @@ mod tests {
     fn merging_prototypes() {
         let mut prototypes = StandardPrototypes::<f32>::new();
         let fields =
-            array::IntoIter::new([(PrototypeField::array("fold"), Value::native_fn(fns::Fold))]);
+            IntoIterator::into_iter([(PrototypeField::array("fold"), Value::native_fn(fns::Fold))]);
         prototypes.extend(fields.into_iter());
-        let new_fields = array::IntoIter::new([
+        let new_fields = IntoIterator::into_iter([
             (PrototypeField::array("len"), Value::native_fn(fns::Len)),
             (PrototypeField::object("len"), Value::native_fn(fns::Len)),
         ]);

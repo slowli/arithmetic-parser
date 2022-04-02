@@ -182,7 +182,7 @@ impl<'a, T: Clone> Value<'a, T> {
                 }
             }
 
-            (Self::Prim(_), _) | (Self::Tuple(_), _) | (Self::Object(_), _) => {
+            (Self::Prim(_) | Self::Tuple(_) | Self::Object(_), _) => {
                 Err(BinaryOpError::new(op).with_side(OpSide::Rhs))
             }
             _ => Err(BinaryOpError::new(op).with_side(OpSide::Lhs)),

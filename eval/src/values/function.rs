@@ -1,11 +1,9 @@
 //! `Function` and closely related types.
 
-use hashbrown::HashMap;
-
 use core::fmt;
 
 use crate::{
-    alloc::{Rc, String, ToOwned, Vec},
+    alloc::{HashMap, Rc, String, ToOwned, Vec},
     arith::OrdArithmetic,
     error::{Backtrace, CodeInModule, Error, ErrorKind},
     exec::{ExecutableFn, ModuleId, Operations},

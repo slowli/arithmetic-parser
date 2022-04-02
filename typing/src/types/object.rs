@@ -242,7 +242,6 @@ mod tests {
     use crate::arith::Num;
 
     use assert_matches::assert_matches;
-    use core::array;
 
     fn get_err(errors: OpErrors<'_, Num>) -> ErrorKind<Num> {
         let mut errors = errors.into_vec();
@@ -266,7 +265,7 @@ mod tests {
 
         // Extra fields in RHS are fine.
         let extra_rhs =
-            array::IntoIter::new([("x", Type::free_var(1)), ("y", Type::BOOL)]).collect();
+            IntoIterator::into_iter([("x", Type::free_var(1)), ("y", Type::BOOL)]).collect();
         let mut errors = OpErrors::new();
         lhs.constraint_object(&extra_rhs, &mut substitutions, errors.by_ref());
         assert!(errors.into_vec().is_empty());

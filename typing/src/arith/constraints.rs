@@ -156,6 +156,7 @@ where
     }
 
     /// Marks that dynamically sized slices should fail the constraint check.
+    #[must_use]
     pub fn deny_dyn_slices(mut self) -> Self {
         self.deny_dyn_slices = true;
         self

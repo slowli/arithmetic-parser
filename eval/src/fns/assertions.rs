@@ -233,7 +233,7 @@ impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
 
         let arith = ctx.arithmetic();
         let diff = match arith.partial_cmp(lhs, rhs) {
-            Some(Ordering::Less) | Some(Ordering::Equal) => arith.sub(rhs.clone(), lhs.clone()),
+            Some(Ordering::Less | Ordering::Equal) => arith.sub(rhs.clone(), lhs.clone()),
             Some(Ordering::Greater) => arith.sub(lhs.clone(), rhs.clone()),
             None => {
                 let err = ErrorKind::native("Values are not comparable");
@@ -243,7 +243,7 @@ impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
         let diff = diff.map_err(|err| ctx.call_site_error(ErrorKind::Arithmetic(err)))?;
 
         match arith.partial_cmp(&diff, &self.tolerance) {
-            Some(Ordering::Less) | Some(Ordering::Equal) => Ok(Value::void()),
+            Some(Ordering::Less | Ordering::Equal) => Ok(Value::void()),
             Some(Ordering::Greater) => {
                 let err = ErrorKind::native("Values are not close");
                 Err(create_error_with_values(err, &args, ctx))
@@ -386,7 +386,6 @@ mod tests {
 
     use arithmetic_parser::{LvalueLen, MaybeSpanned};
     use assert_matches::assert_matches;
-    use core::array;
 
     fn span_value<T>(value: Value<'_, T>) -> SpannedValue<'_, T> {
         MaybeSpanned::from_str("", ..).copy_with_extra(value)
@@ -459,7 +458,7 @@ mod tests {
             vec![Value::Prim(1.0)].into(),
             Object::just("test", Value::Prim(1.0)).into(),
         ];
-        for invalid_arg in array::IntoIter::new(invalid_args) {
+        for invalid_arg in IntoIterator::into_iter(invalid_args) {
             let err = assert_close
                 .evaluate(vec![one_arg.clone(), span_value(invalid_arg)], &mut ctx)
                 .unwrap_err();

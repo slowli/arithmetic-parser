@@ -19,7 +19,7 @@ rand_chacha = { version = "0.3.1", default-features = false }
 
 # Arithmetic dependencies
 arithmetic-parser = { path = "../../parser", default-features = false }
-arithmetic-eval = { path = "../../eval", default-features = false }
+arithmetic-eval = { path = "../../eval", default-features = false, features = ["hashbrown"] }
 
 [profile.release]
 opt-level = "z" # Optimize for size, rather than speed

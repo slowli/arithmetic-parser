@@ -38,6 +38,9 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 - Make values contained in standard collections, such as `Prelude` and `Assertions`,
   available using static methods instead of instance ones. (#103)
 
+- Make `hashbrown` an optional dependency, which is only necessary if the std library
+  is not available. (#106)
+
 ### Removed
 
 - Remove `ExecutableModelBuilder::set_imports()` as error-prone. Instead, deferred imports

@@ -5,8 +5,6 @@ use arithmetic_eval::{
     Prototype, SpannedValue, Value,
 };
 
-use core::array;
-
 use crate::evaluate;
 
 fn as_primitive(value: &Value<'_, f32>) -> Option<f32> {
@@ -51,7 +49,7 @@ fn prototype_basics() {
     let proto = Object::just("len", Value::native_fn(PointLen));
     let proto = Prototype::from(proto);
     let point = [("x", Value::Prim(3.0)), ("y", Value::Prim(4.0))];
-    let mut point: Object<f32> = array::IntoIter::new(point).into_iter().collect();
+    let mut point: Object<f32> = IntoIterator::into_iter(point).collect();
     point.set_prototype(proto.clone());
 
     let mut env = Environment::new();

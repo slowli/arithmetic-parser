@@ -1,9 +1,7 @@
 //! Transformation of AST output by the parser into non-recursive format.
 
-use hashbrown::HashMap;
-
 use crate::{
-    alloc::{Box, String, ToOwned, Vec},
+    alloc::{Box, HashMap, String, ToOwned, Vec},
     exec::{
         Atom, Command, CompiledExpr, Executable, ExecutableModule, FieldName, ModuleId, Registers,
     },
@@ -279,8 +277,7 @@ impl Compiler {
 /// ```
 /// use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// use arithmetic_eval::exec::CompilerExt;
-/// # use hashbrown::HashSet;
-/// # use core::iter::FromIterator;
+/// # use std::{collections::HashSet, iter::FromIterator};
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let block = "x = sin(0.5) / PI; y = x * E; (x, y)";

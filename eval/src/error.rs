@@ -3,12 +3,11 @@
 pub use arithmetic_parser::UnsupportedType;
 
 use derive_more::Display;
-use hashbrown::HashSet;
 
 use core::fmt;
 
 use crate::{
-    alloc::{format, vec, Box, String, ToOwned, ToString, Vec},
+    alloc::{format, vec, Box, HashSet, String, ToOwned, ToString, Vec},
     exec::ModuleId,
     fns::FromValueError,
     Value, ValueType,
@@ -361,10 +360,7 @@ impl ErrorKind {
                 "Operands of comparison ops must be primitive values".to_owned()
             }
             Self::UnexpectedOperand {
-                op: Op::Binary(BinaryOp::And),
-            }
-            | Self::UnexpectedOperand {
-                op: Op::Binary(BinaryOp::Or),
+                op: Op::Binary(BinaryOp::And | BinaryOp::Or),
             } => "Operands of binary boolean ops must be boolean".to_owned(),
             Self::UnexpectedOperand {
                 op: Op::Unary(UnaryOp::Neg),
@@ -500,6 +496,7 @@ impl<'a> Error<'a> {
 
     /// Adds an auxiliary span to this error. The `span` must be in the same module
     /// as the main span.
+    #[must_use]
     pub fn with_span<T>(mut self, span: &MaybeSpanned<'a, T>, info: AuxErrorInfo) -> Self {
         self.aux_spans.push(CodeInModule {
             module_id: self.main_span.module_id.clone_boxed(),

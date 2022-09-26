@@ -14,7 +14,7 @@ use crate::{
 
 /// Parsing context.
 // TODO: Add more fine-grained contexts.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Context {
     /// Variable name.

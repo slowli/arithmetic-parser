@@ -165,7 +165,7 @@ pub struct OpConstraintSettings<'a, Prim: PrimitiveType> {
 impl<Prim: PrimitiveType> Copy for OpConstraintSettings<'_, Prim> {}
 
 /// Primitive types for the numeric arithmetic: `Num`eric type and `Bool`ean.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Num {
     /// Numeric type (e.g., 1).
     Num,

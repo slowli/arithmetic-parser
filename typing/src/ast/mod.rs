@@ -156,7 +156,7 @@ impl<'a> FunctionAst<'a> {
 }
 
 /// Parsed tuple length.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum TupleLenAst {
     /// Length placeholder (`_`). Corresponds to any single length.

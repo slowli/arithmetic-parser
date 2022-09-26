@@ -119,9 +119,10 @@ pub trait NativeFn<T> {
     ) -> EvalResult<'a, T>;
 }
 
-impl<T, F: 'static> NativeFn<T> for F
+impl<T, F> NativeFn<T> for F
 where
-    F: for<'a> Fn(Vec<SpannedValue<'a, T>>, &mut CallContext<'_, 'a, T>) -> EvalResult<'a, T>,
+    F: 'static
+        + for<'a> Fn(Vec<SpannedValue<'a, T>>, &mut CallContext<'_, 'a, T>) -> EvalResult<'a, T>,
 {
     fn evaluate<'a>(
         &self,

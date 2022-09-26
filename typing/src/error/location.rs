@@ -43,7 +43,7 @@ impl TupleIndex {
 }
 
 /// Fragment of an error location.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ErrorLocation {
     /// Function argument with the specified index (0-based; can be `None` if the error cannot

@@ -76,7 +76,7 @@ impl fmt::Display for FromValueError {
 impl std::error::Error for FromValueError {}
 
 /// Error kinds for [`FromValueError`].
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum FromValueErrorKind {
     /// Mismatch between expected and actual value type.
@@ -106,7 +106,7 @@ impl fmt::Display for FromValueErrorKind {
 /// an [`Array`](FromValueErrorLocation::Array) will be added.
 ///
 /// [`FnWrapper`]: crate::fns::FnWrapper
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum FromValueErrorLocation {
     /// Location within a tuple.

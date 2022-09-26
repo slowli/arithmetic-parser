@@ -5,6 +5,10 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ## [Unreleased]
 
+### Changed
+
+- Bump minimum supported Rust version to 1.57 and switch to 2021 Rust edition. (#107)
+
 ### Fixed
 
 - Fix false positive during recursive type check for native parameterized functions.

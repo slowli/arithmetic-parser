@@ -8,9 +8,9 @@ on:
 
 env:
   # Minimum supported Rust version.
-  msrv: 1.53.0
+  msrv: 1.57.0
   # Nightly Rust toolchain for building docs and checking nostd support.
-  nightly: nightly-2021-12-03
+  nightly: nightly-2022-05-21
 
 jobs:
   # Checks minimum supported Rust version.

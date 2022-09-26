@@ -27,7 +27,7 @@ fn scroll_template() -> Template {
 fn successful_execution_for_ast() {
     test_config().with_template(scroll_template()).test(
         "tests/snapshots/ast.svg",
-        &["arithmetic-parser ast -a u64 '1 + 2 * 3'"],
+        ["arithmetic-parser ast -a u64 '1 + 2 * 3'"],
     );
 }
 
@@ -35,7 +35,7 @@ fn successful_execution_for_ast() {
 fn successful_execution_for_arithmetics() {
     test_config().test(
         "tests/snapshots/simple.svg",
-        &[
+        [
             "arithmetic-parser eval -a u64 '1 + 2 * 3'",
             "arithmetic-parser eval -a i64 '1 - 2 * 3'",
             "arithmetic-parser eval -a u128 '2 ^ 71 - 1'",
@@ -51,7 +51,7 @@ fn successful_execution_for_arithmetics() {
 fn evaluating_functions() {
     test_config().test(
         "tests/snapshots/functions.svg",
-        &[
+        [
             "arithmetic-parser eval 'if(5 > 3, 1, -1)'",
             "arithmetic-parser eval 'if'",
             "arithmetic-parser eval 'is_positive = |x| x > 0; is_positive'",
@@ -63,7 +63,7 @@ fn evaluating_functions() {
 fn using_prototypes() {
     test_config().test(
         "tests/snapshots/prototypes.svg",
-        &[
+        [
             "arithmetic-parser eval 'Array::map((1, 2, 3), Num.sin)'",
             "arithmetic-parser eval -a u64 '(33, 6, 15).fold(0, Num.xor)'",
             "arithmetic-parser eval '{ map } = Array; map((1, -2), |x| x + 1)'",
@@ -75,7 +75,7 @@ fn using_prototypes() {
 fn using_prototypes_with_typing() {
     test_config().test(
         "tests/snapshots/prototypes-with-types.svg",
-        &[
+        [
             "arithmetic-parser eval --types 'Array::map((1, 2, 3), Num.sin)'",
             "arithmetic-parser eval --types -a u64 \\\n  '(33, 6, 15).fold(0, Num.xor)'",
             "arithmetic-parser eval --types \\\n  '{ map } = Array; map((1, -2), |x| x + 1)'",
@@ -87,7 +87,7 @@ fn using_prototypes_with_typing() {
 fn syntax_errors() {
     test_config().with_template(scroll_template()).test(
         "tests/snapshots/errors-ast.svg",
-        &[
+        [
             "arithmetic-parser ast 'let x = 5'",
             "arithmetic-parser eval 'let x = 5'",
             "arithmetic-parser ast 'x = {'",
@@ -100,7 +100,7 @@ fn syntax_errors() {
 fn eval_integer_errors() {
     test_config().test(
         "tests/snapshots/errors-int.svg",
-        &[
+        [
             "arithmetic-parser eval -a u64 '1 - 3 + 5'",
             "arithmetic-parser eval -a i64 '20 ^ 20'",
             "arithmetic-parser eval -a i128 '10 ^ -3'",
@@ -112,7 +112,7 @@ fn eval_integer_errors() {
 fn eval_basic_errors() {
     test_config().test(
         "tests/snapshots/errors-basic.svg",
-        &[
+        [
             "arithmetic-parser eval '1 + 2 * x'",
             "arithmetic-parser eval 'if(2 > 1, 3)'",
             "arithmetic-parser eval 'assert_eq(1 + 2, 3 / 2)'",
@@ -124,7 +124,7 @@ fn eval_basic_errors() {
 fn error_with_call_trace() {
     test_config().test(
         "tests/snapshots/errors-call-trace.svg",
-        &["arithmetic-parser eval '\n  \
+        ["arithmetic-parser eval '\n  \
              is_positive = |x| x > 0;\n  \
              is_positive(3) && !is_positive((1, 2))'"],
     );
@@ -134,7 +134,7 @@ fn error_with_call_trace() {
 fn error_with_complex_call_trace() {
     test_config().test(
         "tests/snapshots/errors-complex-call-trace.svg",
-        &["arithmetic-parser eval '\n  \
+        ["arithmetic-parser eval '\n  \
              double = |x| x * 2;\n  \
              quadruple = |x| double(double(x));\n  \
              quadruple(true)'"],
@@ -145,7 +145,7 @@ fn error_with_complex_call_trace() {
 fn error_with_call_complex_call_trace_and_native_fns() {
     test_config().test(
         "tests/snapshots/errors-native-call-trace.svg",
-        &["arithmetic-parser eval '\n  \
+        ["arithmetic-parser eval '\n  \
              all = |array, pred| array.fold(true, |acc, x| acc && pred(x));\n  \
              all((1, 2, Array.map), |x| 0 < x)'"],
     );
@@ -155,7 +155,7 @@ fn error_with_call_complex_call_trace_and_native_fns() {
 fn typing_errors_simple() {
     test_config().test(
         "tests/snapshots/errors-typing.svg",
-        &[
+        [
             "arithmetic-parser eval --types '(1, 2, 3).map(|x| x, 1)'",
             "arithmetic-parser eval --types '\n  \
              all = |array, pred| array.fold(true, |acc, x| acc && pred(x));\n  \
@@ -168,6 +168,6 @@ fn typing_errors_simple() {
 fn multiple_typing_errors() {
     test_config().test(
         "tests/snapshots/errors-typing-multiple.svg",
-        &["arithmetic-parser eval --types '(1, (2, 3)).filter(|x| x + 1)'"],
+        ["arithmetic-parser eval --types '(1, (2, 3)).filter(|x| x + 1)'"],
     );
 }

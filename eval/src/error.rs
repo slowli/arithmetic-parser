@@ -392,7 +392,7 @@ impl std::error::Error for ErrorKind {
 }
 
 /// Auxiliary information about an evaluation error.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum AuxErrorInfo {
     /// Function arguments declaration for [`ErrorKind::ArgsLenMismatch`].

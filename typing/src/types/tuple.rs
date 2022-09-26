@@ -65,7 +65,7 @@ impl LengthVar {
 }
 
 /// Unknown / variable length, e.g., of a tuple.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum UnknownLen {
     /// Length that can vary at runtime, similar to lengths of slices in Rust.
@@ -131,7 +131,7 @@ impl UnknownLen {
 /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
 /// [`Ops`]: crate::arith::Ops
 /// [`ErrorKind::DynamicLen`]: crate::error::ErrorKind::DynamicLen
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TupleLen {
     var: Option<UnknownLen>,
     exact: usize,
@@ -196,7 +196,7 @@ impl TupleLen {
 }
 
 /// Index of an element within a tuple.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum TupleIndex {
     /// 0-based index from the start of the tuple.

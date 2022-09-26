@@ -43,7 +43,7 @@ impl NumLiteral for NumOrBytes {
 }
 
 /// Primitive types for `NumOrBytes`.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NumOrBytesType {
     Num,
     Bytes,
@@ -79,7 +79,7 @@ impl WithBoolean for NumOrBytesType {
 
 /// Constraints imposed on `Type<NumOrBytesType>`. Besides linearity,
 /// we consider its weaker variant: ability to add values of type `T`.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Constraints {
     /// Type is summable (can be used as an argument for binary `+`).
     Summable,

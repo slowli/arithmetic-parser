@@ -2,7 +2,8 @@
 name = "arithmetic-parser-cli"
 version = "0.3.0"
 authors = ["Alex Ostrovski <ostrovski.alex@gmail.com>"]
-edition = "2018"
+edition = "2021"
+rust-version = "1.57"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 description = "CLI / REPL for arithmetic expressions."
@@ -37,11 +38,8 @@ features = ["complex"]
 version = "0.3.0"
 path = "../typing"
 
-# TODO: use published version
-[dev-dependencies.term-transcript]
-version = "0.1.0"
-git = "https://github.com/slowli/term-transcript.git"
-rev = "685eabc356cd86a826d1bdf11bbcf7548f170c62"
+[dev-dependencies]
+term-transcript = "0.2.0"
 
 [workspace]
 # Separate workspace since we need a lockfile

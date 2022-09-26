@@ -112,6 +112,7 @@ impl<Span: Copy, T> LocatedSpan<Span, T> {
     }
 }
 
+#[allow(clippy::mismatching_type_param_order)] // weird false positive
 impl<'a, T> From<nom_locate::LocatedSpan<&'a str, T>> for LocatedSpan<&'a str, T> {
     fn from(value: nom_locate::LocatedSpan<&'a str, T>) -> Self {
         Self {
@@ -155,7 +156,7 @@ impl<'a> Spanned<'a> {
 ///
 /// The stripped version allows to retain information about code location within [`LocatedSpan`]
 /// without a restriction by the code lifetime.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CodeFragment<'a> {
     /// Original code fragment: a string reference.
     Str(&'a str),

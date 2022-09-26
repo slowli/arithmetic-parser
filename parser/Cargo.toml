@@ -2,7 +2,8 @@
 name = "arithmetic-parser"
 version = "0.3.0"
 authors = ["Alex Ostrovski <ostrovski.alex@gmail.com>"]
-edition = "2018"
+edition = "2021"
+rust-version = "1.57"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 description = "Parser for arithmetic expressions with flexible literals and type annotations."

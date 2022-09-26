@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/slowli/arithmetic-parser/workflows/Rust/badge.svg?branch=master)](https://github.com/slowli/arithmetic-parser/actions)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue)](https://github.com/slowli/arithmetic-parser#license)
-![rust 1.53+ required](https://img.shields.io/badge/rust-1.53+-blue.svg)
+![rust 1.57+ required](https://img.shields.io/badge/rust-1.57+-blue.svg)
 
 **Links:** [![crate docs (master)](https://img.shields.io/badge/master-yellow.svg?label=docs)](https://slowli.github.io/arithmetic-parser/arithmetic_typing/)
 

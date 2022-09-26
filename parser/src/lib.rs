@@ -186,7 +186,7 @@ impl<'a, T: Grammar<'a>> PartialEq for ObjectExpr<'a, T> {
 }
 
 /// Separators between the method call receiver and the method name.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MethodCallSeparator {
     /// Dot separator, e.g., in `foo.bar(1, 3)`.
     Dot,
@@ -488,7 +488,7 @@ impl fmt::Display for ExprType {
 }
 
 /// Length of an assigned lvalue.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum LvalueLen {
     /// Exact length.

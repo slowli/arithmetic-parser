@@ -7,7 +7,7 @@ use num_complex::Complex32;
 
 use std::{
     collections::{HashMap, HashSet},
-    fmt,
+    fmt::{self, Write as _},
     iter::FromIterator,
     ops,
 };
@@ -249,7 +249,8 @@ impl<'a> Context<'a> {
             .return_value
             .as_ref()
             .expect("Function does not have return value");
-        evaluated += &format!("    return {};\n", context.eval_expr(return_value));
+        writeln!(evaluated, "    return {};", context.eval_expr(return_value)).unwrap();
+        // ^ `unwrap()` is safe: writing to a `String` cannot fail
         evaluated += "}";
         evaluated
     }

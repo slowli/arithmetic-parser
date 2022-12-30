@@ -18,7 +18,10 @@ pub fn repl<T: ReplLiteral>(
     type_env: Option<TypeEnvironment>,
     color_choice: ColorChoice,
 ) -> io::Result<()> {
-    let mut rl = Editor::<()>::new();
+    let mut rl = Editor::<()>::new().map_err(|err| match err {
+        ReadlineError::Io(err) => err,
+        other => io::Error::new(io::ErrorKind::Other, other),
+    })?;
     let mut env = Env::new(env, type_env, color_choice);
     env.print_greeting()?;
 

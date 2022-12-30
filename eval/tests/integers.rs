@@ -73,7 +73,10 @@ where
     let err =
         try_evaluate::<T>(&mut Environment::with_arithmetic(arithmetic), "1 - 2 + 5").unwrap_err();
     let err_kind = err.source().kind();
-    assert_matches!(err_kind, ErrorKind::Arithmetic(ref e) if e.to_string().contains("Integer overflow"));
+    assert_matches!(
+        err_kind,
+        ErrorKind::Arithmetic(err) if err.to_string().contains("integer overflow")
+    );
     let err_span = err.source().main_span().code();
     assert_eq!(*err_span.fragment(), "1 - 2");
 }
@@ -126,14 +129,20 @@ where
     let err =
         try_evaluate::<T>(&mut Environment::with_arithmetic(arithmetic), "-2 / 0 + 1").unwrap_err();
     let err_kind = err.source().kind();
-    assert_matches!(err_kind, ErrorKind::Arithmetic(ref e) if e.to_string().contains("division by zero"));
+    assert_matches!(
+        err_kind,
+        ErrorKind::Arithmetic(err) if err.to_string().contains("division by zero")
+    );
     let err_span = err.source().main_span().code();
     assert_eq!(*err_span.fragment(), "-2 / 0");
 
     let err =
         try_evaluate::<T>(&mut Environment::with_arithmetic(arithmetic), "2 ^ -3 + 1").unwrap_err();
     let err_kind = err.source().kind();
-    assert_matches!(err_kind, ErrorKind::Arithmetic(ref e) if e.to_string().contains("Exponent is too large or negative"));
+    assert_matches!(
+        err_kind,
+        ErrorKind::Arithmetic(err) if err.to_string().contains("exponent is too large or negative")
+    );
     let err_span = err.source().main_span().code();
     assert_eq!(*err_span.fragment(), "2 ^ -3");
 }

@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/slowli/arithmetic-parser/workflows/CI/badge.svg?branch=master)](https://github.com/slowli/arithmetic-parser/actions)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue)](https://github.com/slowli/arithmetic-parser#license)
-![rust 1.57+ required](https://img.shields.io/badge/rust-1.57+-blue.svg)
+![rust 1.60+ required](https://img.shields.io/badge/rust-1.60+-blue.svg)
 ![no_std supported](https://img.shields.io/badge/no__std-tested-green.svg)
 
 **Links:** [![Docs on docs.rs](https://img.shields.io/docsrs/arithmetic-eval)](https://docs.rs/arithmetic-eval/)

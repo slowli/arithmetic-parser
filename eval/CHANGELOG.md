@@ -41,7 +41,7 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 - Make `hashbrown` an optional dependency, which is only necessary if the std library
   is not available. (#106)
 
-- Bump minimum supported Rust version to 1.57 and switch to 2021 Rust edition. (#107)
+- Bump minimum supported Rust version to 1.60 and switch to 2021 Rust edition. (#107, #108)
 
 ### Removed
 

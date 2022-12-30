@@ -7,7 +7,7 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ### Changed
 
-- Bump minimum supported Rust version to 1.57 and switch to 2021 Rust edition. (#107)
+- Bump minimum supported Rust version to 1.60 and switch to 2021 Rust edition. (#107, #108)
 
 ### Fixed
 

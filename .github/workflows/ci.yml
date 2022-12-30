@@ -1,4 +1,4 @@
-name: Rust
+name: CI
 
 on:
   push:
@@ -8,9 +8,9 @@ on:
 
 env:
   # Minimum supported Rust version.
-  msrv: 1.57.0
+  msrv: 1.59.0
   # Nightly Rust toolchain for building docs and checking nostd support.
-  nightly: nightly-2022-05-21
+  nightly: nightly-2022-11-24
 
 jobs:
   # Checks minimum supported Rust version.

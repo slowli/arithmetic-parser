@@ -271,14 +271,12 @@ mod tests {
             let (rest, number) = <f32 as NumLiteral>::parse(InputSpan::new(sample.input)).unwrap();
             assert!(
                 (number - sample.value).abs() < f32::EPSILON,
-                "Failed sample: {:?}",
-                sample
+                "Failed sample: {sample:?}"
             );
             assert_eq!(
                 rest.location_offset(),
                 sample.consumed,
-                "Failed sample: {:?}",
-                sample
+                "Failed sample: {sample:?}"
             );
         }
     }
@@ -316,7 +314,7 @@ mod tests {
         let negation_expr = &ret.binary_lhs().unwrap().extra;
         let inner_lhs = match negation_expr {
             Expr::Unary { inner, op } if op.extra == UnaryOp::Neg => &inner.extra,
-            _ => panic!("Unexpected LHS: {:?}", negation_expr),
+            _ => panic!("Unexpected LHS: {negation_expr:?}"),
         };
         assert_matches!(inner_lhs, Expr::Literal(lit) if *lit == Complex32::i());
 
@@ -325,7 +323,7 @@ mod tests {
         let var_negation = &ret.binary_lhs().unwrap().extra;
         let negated_var = match var_negation {
             Expr::Unary { inner, op } if op.extra == UnaryOp::Neg => &inner.extra,
-            _ => panic!("Unexpected LHS: {:?}", var_negation),
+            _ => panic!("Unexpected LHS: {var_negation:?}"),
         };
         assert_matches!(negated_var, Expr::Variable);
     }
@@ -356,7 +354,7 @@ mod tests {
         let err = <i8 as NumLiteral>::parse(InputSpan::new("128")).unwrap_err();
         let err_kind = match &err {
             NomErr::Error(err) => err.kind(),
-            _ => panic!("Unexpected error type: {:?}", err),
+            _ => panic!("Unexpected error type: {err:?}"),
         };
         assert_matches!(err_kind, ErrorKind::Literal(_));
     }
@@ -375,7 +373,7 @@ mod tests {
             let expected_value = BigInt::parse_bytes(input.as_bytes(), 10).unwrap();
             assert_eq!(value, expected_value);
             let (_, value) =
-                <BigInt as NumLiteral>::parse(InputSpan::new(&format!("-{}", input))).unwrap();
+                <BigInt as NumLiteral>::parse(InputSpan::new(&format!("-{input}"))).unwrap();
             assert_eq!(value, -expected_value);
         }
     }

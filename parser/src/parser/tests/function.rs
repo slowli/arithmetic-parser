@@ -109,7 +109,7 @@ fn fun_works_with_complex_called_values() {
     let (_, function) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
     let function_value = match function.extra {
         Expr::Function { name, .. } => name.extra,
-        other => panic!("unexpected expr: {:?}", other),
+        other => panic!("unexpected expr: {other:?}"),
     };
     assert_matches!(function_value, Expr::FnDefinition(_));
 
@@ -117,7 +117,7 @@ fn fun_works_with_complex_called_values() {
     let (_, function) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
     let function_value = match function.extra {
         Expr::Function { name, .. } => name.extra,
-        other => panic!("unexpected expr: {:?}", other),
+        other => panic!("unexpected expr: {other:?}"),
     };
     assert_matches!(function_value, Expr::FnDefinition(_));
 }
@@ -257,7 +257,7 @@ fn colon2_method_call_is_parsed_within_larger_statement() {
             assert_eq!(*receiver.fragment(), "Num");
             assert_matches!(separator.extra, MethodCallSeparator::Colon2);
         }
-        other => panic!("Unexpected return statement: {:?}", other),
+        other => panic!("Unexpected return statement: {other:?}"),
     }
 }
 
@@ -361,7 +361,7 @@ fn function_call_with_literal_as_fn_name() {
     let err = expr::<FieldGrammar, Complete>(input).unwrap_err();
     let spanned_err = match err {
         NomErr::Failure(spanned) => spanned,
-        _ => panic!("Unexpected error: {}", err),
+        _ => panic!("Unexpected error: {err}"),
     };
     assert_matches!(spanned_err.kind(), ErrorKind::LiteralName);
 }

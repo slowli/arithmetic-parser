@@ -25,8 +25,7 @@ fn is_valid_variable_name_works() {
     ] {
         assert!(
             is_valid_variable_name(valid_name),
-            "failed at valid name: {}",
-            valid_name
+            "failed at valid name: {valid_name}"
         );
     }
 
@@ -97,7 +96,7 @@ fn multiline_comments() {
     let err = ws::<Complete>(input).unwrap_err();
     let err = match &err {
         NomErr::Failure(err) => err.kind(),
-        _ => panic!("Unexpected error: {:?}", err),
+        _ => panic!("Unexpected error: {err:?}"),
     };
     assert_matches!(err, ErrorKind::UnfinishedComment);
 }

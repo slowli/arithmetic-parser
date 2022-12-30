@@ -56,7 +56,7 @@ fn prototype_basics() {
     env.insert("point", point.into());
     let return_value = evaluate(&mut env, "point.len()");
     let return_value = as_primitive(&return_value).unwrap();
-    assert!((return_value - 5.0).abs() < 1e-4, "{}", return_value);
+    assert!((return_value - 5.0).abs() < 1e-4, "{return_value}");
 
     env.extend(Assertions::vars());
     env.insert("Point", proto.into())

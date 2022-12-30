@@ -12,7 +12,7 @@ use arithmetic_eval::{
 use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 
 fn read_file(path: &str) -> String {
-    fs::read_to_string(path).unwrap_or_else(|err| panic!("Cannot read file {}: {}", path, err))
+    fs::read_to_string(path).unwrap_or_else(|err| panic!("Cannot read file {path}: {err}"))
 }
 
 fn check_sample(code_sample: &str) {

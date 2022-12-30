@@ -34,7 +34,7 @@ use crate::{
 /// assert_eq!(env["true"], Value::Bool(true));
 /// assert_eq!(env["x"], Value::Prim(1.0));
 /// for (name, value) in &env {
-///     println!("{} -> {:?}", name, value);
+///     println!("{name} -> {value:?}");
 /// }
 ///
 /// // It's possible to base an environment on other env, as well.
@@ -239,7 +239,7 @@ impl<'a, T> ops::Index<&str> for Environment<'a, T> {
 
     fn index(&self, index: &str) -> &Self::Output {
         self.get(index)
-            .unwrap_or_else(|| panic!("Variable `{}` is not defined", index))
+            .unwrap_or_else(|| panic!("Variable `{index}` is not defined"))
     }
 }
 

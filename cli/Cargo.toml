@@ -3,7 +3,7 @@ name = "arithmetic-parser-cli"
 version = "0.3.0"
 authors = ["Alex Ostrovski <ostrovski.alex@gmail.com>"]
 edition = "2021"
-rust-version = "1.57"
+rust-version = "1.60"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 description = "CLI / REPL for arithmetic expressions."
@@ -12,13 +12,13 @@ repository = "https://github.com/slowli/arithmetic-parser"
 [dependencies]
 anyhow = "1.0.27"
 atty = "0.2.14"
+clap = { version = "4.0.32", features = ["derive", "env", "wrap_help"] }
 codespan = "0.11.1"
 codespan-reporting = "0.11.1"
 num-complex = "0.4.0"
 num-traits = "0.2.14"
-rustyline = "9.0.0"
-structopt = "0.3.13"
-textwrap = "0.11.0"
+rustyline = "10.0.0"
+textwrap = "0.16.0"
 unindent = "0.1.6"
 
 [[bin]]

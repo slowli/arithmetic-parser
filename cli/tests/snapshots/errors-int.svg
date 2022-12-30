@@ -73,21 +73,21 @@
   <span class="fg4">┌─</span> Snippet #1:1:1
   <span class="fg4">│</span>
 <span class="fg4">1</span> <span class="fg4">│</span> <span class="fg1">1 - 3</span> + 5
-  <span class="fg4">│</span> <span class="fg1">^^^^^</span> <span class="fg1">Integer overflow or underflow</span>
+  <span class="fg4">│</span> <span class="fg1">^^^^^</span> <span class="fg1">integer overflow or underflow</span>
 </pre></div>
         <div class="user-input"><pre><span class="prompt">$</span> arithmetic-parser eval -a i64 &#x27;20 ^ 20&#x27;</pre></div>
         <div class="term-output"><pre><span class="bold fg9">error[EVAL]</span><span class="bold">: Arithmetic error</span>
   <span class="fg4">┌─</span> Snippet #1:1:1
   <span class="fg4">│</span>
 <span class="fg4">1</span> <span class="fg4">│</span> <span class="fg1">20 ^ 20</span>
-  <span class="fg4">│</span> <span class="fg1">^^^^^^^</span> <span class="fg1">Integer overflow or underflow</span>
+  <span class="fg4">│</span> <span class="fg1">^^^^^^^</span> <span class="fg1">integer overflow or underflow</span>
 </pre></div>
         <div class="user-input"><pre><span class="prompt">$</span> arithmetic-parser eval -a i128 &#x27;10 ^ -3&#x27;</pre></div>
         <div class="term-output"><pre><span class="bold fg9">error[EVAL]</span><span class="bold">: Arithmetic error</span>
   <span class="fg4">┌─</span> Snippet #1:1:1
   <span class="fg4">│</span>
 <span class="fg4">1</span> <span class="fg4">│</span> <span class="fg1">10 ^ -3</span>
-  <span class="fg4">│</span> <span class="fg1">^^^^^^^</span> <span class="fg1">Exponent is too large or negative</span>
+  <span class="fg4">│</span> <span class="fg1">^^^^^^^</span> <span class="fg1">exponent is too large or negative</span>
 </pre></div>
       </div>
     </foreignObject>

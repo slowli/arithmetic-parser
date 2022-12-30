@@ -56,7 +56,7 @@ impl fmt::Display for ValueType {
             Self::Function => formatter.write_str("function"),
             Self::Tuple(1) => formatter.write_str("tuple with 1 element"),
             Self::Object => formatter.write_str("object"),
-            Self::Tuple(size) => write!(formatter, "tuple with {} elements", size),
+            Self::Tuple(size) => write!(formatter, "tuple with {size} elements"),
             Self::Array => formatter.write_str("array"),
             Self::Ref => formatter.write_str("reference"),
         }

@@ -212,7 +212,7 @@ impl<Prim: PrimitiveType> fmt::Display for Type<Prim> {
                 if constraints.inner.is_empty() {
                     formatter.write_str("dyn")
                 } else {
-                    write!(formatter, "dyn {}", constraints)
+                    write!(formatter, "dyn {constraints}")
                 }
             }
             Self::Var(var) => fmt::Display::fmt(var, formatter),
@@ -498,7 +498,7 @@ mod tests {
 
         for &sample_type in SAMPLE_TYPES {
             let ty = <Type>::try_from(&TypeAst::try_from(sample_type)?)?;
-            assert!(ty.eq(&ty), "Type is not equal to self: {}", ty);
+            assert!(ty.eq(&ty), "Type is not equal to self: {ty}");
         }
         Ok(())
     }
@@ -555,7 +555,7 @@ mod tests {
         ];
 
         for ty in sample_types {
-            assert!(ty.is_concrete(), "{:?}", ty);
+            assert!(ty.is_concrete(), "{ty:?}");
         }
     }
 
@@ -571,7 +571,7 @@ mod tests {
         ];
 
         for ty in sample_types {
-            assert!(!ty.is_concrete(), "{:?}", ty);
+            assert!(!ty.is_concrete(), "{ty:?}");
         }
     }
 }

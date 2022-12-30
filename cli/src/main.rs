@@ -1,9 +1,9 @@
 //! Simple CLI / REPL for evaluating arithmetic expressions.
 
 use anyhow::format_err;
+use clap::{Args, Parser, Subcommand};
 use codespan_reporting::term::{termcolor::ColorChoice, ColorArg};
 use num_complex::{Complex32, Complex64};
-use structopt::StructOpt;
 
 use std::{
     io::{self, Read},
@@ -75,65 +75,60 @@ impl FromStr for ArithmeticType {
     }
 }
 
-#[derive(Debug, StructOpt)]
-#[structopt(about = ABOUT, after_help = AFTER_HELP)]
-enum Args {
+/// CLI for capturing and snapshot-testing terminal output.
+#[derive(Debug, Parser)]
+#[command(author, version, about = ABOUT, long_about = None, after_help = AFTER_HELP)]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Debug, Subcommand)]
+enum Command {
     /// Parse the input and output the AST.
     Ast {
         /// Type of numbers to use. Available values are `u64`, `i64`, `u128`, `i128`,
         /// `f32`, `f64`, `complex32`, `complex64`, and `u64/$mod`, where `$mod` is the modulus
         /// for modular arithmetic.
-        #[structopt(name = "arithmetic", long, short = "a", default_value = "f32")]
+        #[arg(name = "arithmetic", long, short = 'a', default_value = "f32")]
         arithmetic: ArithmeticType,
         /// Command to interpret. If omitted, the command will be read from stdin.
-        #[structopt(name = "command")]
+        #[arg(name = "command")]
         command: Option<String>,
         /// Controls coloring of the output.
-        #[structopt(
-            long,
-            default_value = "auto",
-            possible_values = ColorArg::VARIANTS,
-            case_insensitive = true,
-            env
-        )]
+        #[arg(long, default_value = "auto", value_enum, ignore_case = true, env)]
         color: ColorArg,
     },
     /// Evaluate the input, optionally checking types beforehand.
     Eval(EvalArgs),
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Args)]
 struct EvalArgs {
     /// Launch the REPL for arithmetic expressions.
-    #[structopt(name = "interactive", long, short = "i")]
+    #[arg(name = "interactive", long, short = 'i')]
     interactive: bool,
     /// Type of numbers to use. Available values are `u64`, `i64`, `u128`, `i128`,
     /// `f32`, `f64`, `complex32`, `complex64`, and `u64/$mod`, where `$mod` is the modulus
     /// for modular arithmetic.
-    #[structopt(name = "arithmetic", long, short = "a", default_value = "f32")]
+    #[arg(name = "arithmetic", long, short = 'a', default_value = "f32")]
     arithmetic: ArithmeticType,
     /// Use wrapping semantics for integer arithmetic instead of the default checked semantics.
     /// Ignored if a non-integer number type is selected.
-    #[structopt(name = "wrapping", long, short = "w")]
+    #[arg(name = "wrapping", long, short = 'w')]
     wrapping: bool,
     /// Check / infer types before evaluation.
-    #[structopt(name = "types", long)]
+    #[arg(name = "types", long)]
     types: bool,
     /// Command to interpret. If omitted, the command will be read from stdin.
-    #[structopt(name = "command", conflicts_with = "interactive")]
+    #[arg(name = "command", conflicts_with = "interactive")]
     command: Option<String>,
     /// Controls coloring of the output.
-    #[structopt(
-        long,
-        default_value = "auto",
-        possible_values = ColorArg::VARIANTS,
-        case_insensitive = true,
-        env
-    )]
+    #[arg(long, default_value = "auto", value_enum, ignore_case = true, env)]
     color: ColorArg,
 }
 
-impl Args {
+impl Command {
     fn run(self) -> io::Result<()> {
         match self {
             Self::Ast {
@@ -228,7 +223,7 @@ impl EvalArgs {
     ) -> io::Result<()> {
         let type_env = if self.types { Some(type_env) } else { None };
         if self.interactive {
-            repl(env, type_env, Args::color_choice(self.color))
+            repl(env, type_env, Command::color_choice(self.color))
         } else {
             self.run_command(env, type_env)
         }
@@ -247,7 +242,7 @@ impl EvalArgs {
                 buffer
             }
         };
-        let mut env = Env::new(env, type_env, Args::color_choice(self.color));
+        let mut env = Env::new(env, type_env, Command::color_choice(self.color));
 
         match env.parse_and_eval(&command, false)? {
             ParseAndEvalResult::Ok(()) => Ok(()),
@@ -259,6 +254,5 @@ impl EvalArgs {
 }
 
 fn main() -> io::Result<()> {
-    let args = Args::from_args();
-    args.run()
+    Cli::parse().command.run()
 }

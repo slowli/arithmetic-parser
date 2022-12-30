@@ -64,8 +64,8 @@ impl fmt::Display for FromValueError {
         )?;
         for location_element in &self.location {
             match location_element {
-                FromValueErrorLocation::Tuple { index, .. } => write!(formatter, ".{}", index)?,
-                FromValueErrorLocation::Array { index, .. } => write!(formatter, "[{}]", index)?,
+                FromValueErrorLocation::Tuple { index, .. } => write!(formatter, ".{index}")?,
+                FromValueErrorLocation::Array { index, .. } => write!(formatter, "[{index}]")?,
             }
         }
         Ok(())
@@ -92,7 +92,7 @@ impl fmt::Display for FromValueErrorKind {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidType { expected, actual } => {
-                write!(formatter, "Cannot convert {} to {}", actual, expected)
+                write!(formatter, "Cannot convert {actual} to {expected}")
             }
         }
     }

@@ -1,6 +1,6 @@
 # Flexible Arithmetic Parser and Interpreter
 
-[![Build Status](https://github.com/slowli/arithmetic-parser/workflows/Rust/badge.svg?branch=master)](https://github.com/slowli/arithmetic-parser/actions)
+[![Build Status](https://github.com/slowli/arithmetic-parser/workflows/CI/badge.svg?branch=master)](https://github.com/slowli/arithmetic-parser/actions)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue)](https://github.com/slowli/arithmetic-parser#license)
 
 This repository contains a versatile parser for arithmetic expressions

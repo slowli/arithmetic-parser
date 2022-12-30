@@ -510,8 +510,8 @@ impl LvalueLen {
 impl fmt::Display for LvalueLen {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Exact(len) => write!(formatter, "{}", len),
-            Self::AtLeast(len) => write!(formatter, "at least {}", len),
+            Self::Exact(len) => write!(formatter, "{len}"),
+            Self::AtLeast(len) => write!(formatter, "at least {len}"),
         }
     }
 }

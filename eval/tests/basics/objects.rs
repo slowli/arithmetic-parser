@@ -17,7 +17,7 @@ fn object_basics() {
     let return_value = evaluate(&mut Environment::new(), program);
     let fields = match return_value {
         Value::Object(fields) => fields,
-        _ => panic!("Unexpected return value: {:?}", return_value),
+        _ => panic!("Unexpected return value: {return_value:?}"),
     };
 
     assert_eq!(fields.len(), 2);
@@ -47,7 +47,7 @@ fn capturing_vars_in_object() {
     let return_value = evaluate(&mut Environment::new(), program);
     let fields = match return_value {
         Value::Object(fields) => fields,
-        _ => panic!("Unexpected return value: {:?}", return_value),
+        _ => panic!("Unexpected return value: {return_value:?}"),
     };
 
     assert_eq!(fields.len(), 2);
@@ -66,7 +66,7 @@ fn object_expr_does_not_capture_surroundings() {
     let return_value = evaluate(&mut Environment::new(), program);
     let fields = match return_value {
         Value::Object(fields) => fields,
-        _ => panic!("Unexpected return value: {:?}", return_value),
+        _ => panic!("Unexpected return value: {return_value:?}"),
     };
 
     assert_eq!(fields.len(), 2);
@@ -86,7 +86,7 @@ fn object_expr_does_not_capture_inner_scopes() {
     let return_value = evaluate(&mut Environment::new(), program);
     let fields = match return_value {
         Value::Object(fields) => fields,
-        _ => panic!("Unexpected return value: {:?}", return_value),
+        _ => panic!("Unexpected return value: {return_value:?}"),
     };
 
     assert_eq!(fields.len(), 3);
@@ -110,7 +110,7 @@ fn object_in_object() {
     let return_value = evaluate(&mut Environment::new(), program);
     let fields = match return_value {
         Value::Object(fields) => fields,
-        _ => panic!("Unexpected return value: {:?}", return_value),
+        _ => panic!("Unexpected return value: {return_value:?}"),
     };
 
     assert_eq!(fields.len(), 2);
@@ -118,7 +118,7 @@ fn object_in_object() {
 
     let inner_fields = match &fields["pt"] {
         Value::Object(fields) => fields,
-        other => panic!("Unexpected inner object: {:?}", other),
+        other => panic!("Unexpected inner object: {other:?}"),
     };
     assert_eq!(inner_fields.len(), 2);
     assert_eq!(inner_fields["x"], Value::Prim(1.0));
@@ -148,7 +148,7 @@ fn accessing_fields_within_object() {
     let return_value = evaluate(&mut Environment::new(), program);
     let fields = match return_value {
         Value::Object(fields) => fields,
-        _ => panic!("Unexpected return value: {:?}", return_value),
+        _ => panic!("Unexpected return value: {return_value:?}"),
     };
 
     let expected_fields = [("x", Value::Prim(3.0)), ("y", Value::Prim(4.0))];

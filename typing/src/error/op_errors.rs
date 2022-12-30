@@ -151,7 +151,7 @@ impl<T> ops::DerefMut for Goat<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
             Self::Owned(value) => value,
-            Self::Borrowed(mut_ref) => *mut_ref,
+            Self::Borrowed(mut_ref) => mut_ref,
         }
     }
 }

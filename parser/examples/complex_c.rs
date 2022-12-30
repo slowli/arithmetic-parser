@@ -48,7 +48,7 @@ impl Evaluated {
         match self {
             Evaluated::Symbolic { content, priority } => {
                 if priority < caller_priority {
-                    format!("({})", content)
+                    format!("({content})")
                 } else {
                     content
                 }
@@ -240,7 +240,7 @@ impl<'a> Context<'a> {
                         evaluated += "\n";
                     }
                 }
-                _ => panic!("Unsupported statement type: {:?}", statement),
+                _ => panic!("Unsupported statement type: {statement:?}"),
             }
         }
 
@@ -263,11 +263,11 @@ impl<'a> Context<'a> {
         let variable_name = match lhs.extra {
             Lvalue::Variable { .. } => *lhs.fragment(),
             Lvalue::Tuple(_) => unreachable!("Tuples are disabled in parser"),
-            _ => panic!("Unsupported lvalue type: {:?}", lhs),
+            _ => panic!("Unsupported lvalue type: {lhs:?}"),
         };
 
         if self.variables.contains_key(variable_name) {
-            panic!("Cannot redefine variable `{}`", variable_name);
+            panic!("Cannot redefine variable `{variable_name}`");
         }
 
         // Evaluate the RHS.

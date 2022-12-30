@@ -162,7 +162,7 @@ where
     let err = statement::<T, Complete>(input).map(drop).unwrap_err();
     let spanned_err = match err {
         NomErr::Failure(spanned) => spanned,
-        _ => panic!("Unexpected error: {}", err),
+        _ => panic!("Unexpected error: {err}"),
     };
     assert_eq!(spanned_err.span().location_offset(), 2);
     assert_eq!(*spanned_err.span().fragment(), op.as_str());

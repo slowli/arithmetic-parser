@@ -64,7 +64,7 @@ impl<T: fmt::Display> fmt::Display for Object<'_, T> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("#{ ")?;
         for (i, (name, value)) in self.iter().enumerate() {
-            write!(formatter, "{}: {}", name, value)?;
+            write!(formatter, "{name}: {value}")?;
             if i + 1 < self.len() {
                 write!(formatter, ", ")?;
             } else {
@@ -528,8 +528,7 @@ mod tests {
         let obj_string = obj.to_string();
         assert!(
             obj_string == "#{ x: 3, y: 4 }" || obj_string == "#{ y: 4, x: 3 }",
-            "Unexpected obj_string: {}",
-            obj_string
+            "Unexpected obj_string: {obj_string}"
         );
     }
 

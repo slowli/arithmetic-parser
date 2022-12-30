@@ -52,11 +52,11 @@ impl ArithmeticError {
 impl fmt::Display for ArithmeticError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::IntegerOverflow => formatter.write_str("Integer overflow or underflow"),
-            Self::DivisionByZero => formatter.write_str("Integer division by zero"),
-            Self::InvalidExponent => formatter.write_str("Exponent is too large or negative"),
-            Self::NoInverse => formatter.write_str("Integer has no multiplicative inverse"),
-            Self::InvalidOp(e) => write!(formatter, "Invalid operation: {}", e),
+            Self::IntegerOverflow => formatter.write_str("integer overflow or underflow"),
+            Self::DivisionByZero => formatter.write_str("integer division by zero"),
+            Self::InvalidExponent => formatter.write_str("exponent is too large or negative"),
+            Self::NoInverse => formatter.write_str("integer has no multiplicative inverse"),
+            Self::InvalidOp(err) => write!(formatter, "invalid operation: {err}"),
         }
     }
 }
@@ -83,7 +83,7 @@ pub enum TupleLenMismatchContext {
 impl fmt::Display for TupleLenMismatchContext {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::BinaryOp(op) => write!(formatter, "{}", op),
+            Self::BinaryOp(op) => write!(formatter, "{op}"),
             Self::Assignment => formatter.write_str("assignment"),
         }
     }
@@ -113,10 +113,7 @@ impl fmt::Display for RepeatedAssignmentContext {
 pub enum ErrorKind {
     /// Mismatch between length of tuples in a binary operation or assignment.
     #[display(
-        fmt = "Mismatch between length of tuples in {}: LHS has {} element(s), whereas RHS has {}",
-        context,
-        lhs,
-        rhs
+        fmt = "Mismatch between length of tuples in {context}: LHS has {lhs} element(s), whereas RHS has {rhs}"
     )]
     TupleLenMismatch {
         /// Length of a tuple on the left-hand side.
@@ -129,10 +126,7 @@ pub enum ErrorKind {
 
     /// Field set differs between LHS and RHS, which are both objects.
     #[display(
-        fmt = "Cannot perform {} on objects: LHS has fields {:?}, whereas RHS has fields {:?}",
-        op,
-        lhs_fields,
-        rhs_fields
+        fmt = "Cannot perform {op} on objects: LHS has fields {lhs_fields:?}, whereas RHS has fields {rhs_fields:?}"
     )]
     FieldsMismatch {
         /// Fields in LHS.
@@ -146,9 +140,7 @@ pub enum ErrorKind {
     /// Mismatch between the number of arguments in the function definition and its call.
     #[display(
         fmt = "Mismatch between the number of arguments in the function definition and its call: \
-            definition requires {} arg(s), call has {}",
-        def,
-        call
+            definition requires {def} arg(s), call has {call}"
     )]
     ArgsLenMismatch {
         /// Number of args at the function definition.
@@ -162,7 +154,7 @@ pub enum ErrorKind {
     CannotDestructure,
 
     /// Repeated assignment to the same variable in function args or tuple destructuring.
-    #[display(fmt = "Repeated assignment to the same variable in {}", context)]
+    #[display(fmt = "Repeated assignment to the same variable in {context}")]
     RepeatedAssignment {
         /// Context in which the error has occurred.
         context: RepeatedAssignmentContext,
@@ -174,14 +166,14 @@ pub enum ErrorKind {
     RepeatedField,
 
     /// Variable with the enclosed name is not defined.
-    #[display(fmt = "Variable `{}` is not defined", _0)]
+    #[display(fmt = "Variable `{_0}` is not defined")]
     Undefined(String),
     /// Variable is not initialized.
-    #[display(fmt = "Variable `{}` is not initialized", _0)]
+    #[display(fmt = "Variable `{_0}` is not initialized")]
     Uninitialized(String),
 
     /// Field name is invalid.
-    #[display(fmt = "`{}` is not a valid field name", _0)]
+    #[display(fmt = "`{_0}` is not a valid field name")]
     InvalidFieldName(String),
 
     /// Value is not callable (i.e., it is not a function).
@@ -195,15 +187,11 @@ pub enum ErrorKind {
     CannotAccessFields,
 
     /// Cannot use a value of the specified type as a method receiver.
-    #[display(fmt = "Method cannot be called on {} since it has no prototype", _0)]
+    #[display(fmt = "Method cannot be called on {_0} since it has no prototype")]
     NoPrototype(ValueType),
 
     /// Index is out of bounds for the indexed tuple.
-    #[display(
-        fmt = "Attempting to get element {} from tuple with length {}",
-        index,
-        len
-    )]
+    #[display(fmt = "Attempting to get element {index} from tuple with length {len}")]
     IndexOutOfBounds {
         /// Index.
         index: usize,
@@ -211,7 +199,7 @@ pub enum ErrorKind {
         len: usize,
     },
     /// Object does not have a required field.
-    #[display(fmt = "Object does not have field {}", field)]
+    #[display(fmt = "Object does not have field {field}")]
     NoField {
         /// Missing field.
         field: String,
@@ -220,18 +208,15 @@ pub enum ErrorKind {
     },
 
     /// Generic error during execution of a native function.
-    #[display(fmt = "Failed executing native function: {}", _0)]
+    #[display(fmt = "Failed executing native function: {_0}")]
     NativeCall(String),
 
     /// Error while converting arguments for [`FnWrapper`](crate::fns::FnWrapper).
-    #[display(
-        fmt = "Failed converting arguments for native function wrapper: {}",
-        _0
-    )]
+    #[display(fmt = "Failed converting arguments for native function wrapper: {_0}")]
     Wrapper(FromValueError),
 
     /// Unexpected operand type for the specified operation.
-    #[display(fmt = "Unexpected operand type for {}", op)]
+    #[display(fmt = "Unexpected operand type for {op}")]
     UnexpectedOperand {
         /// Operation which failed.
         op: Op,
@@ -243,11 +228,11 @@ pub enum ErrorKind {
     CannotCompare,
 
     /// Construct not supported by the interpreter.
-    #[display(fmt = "Unsupported {}", _0)]
+    #[display(fmt = "Unsupported {_0}")]
     Unsupported(UnsupportedType),
 
     /// [`Arithmetic`](crate::arith::Arithmetic) error, such as division by zero.
-    #[display(fmt = "Arithmetic error: {}", _0)]
+    #[display(fmt = "Arithmetic error: {_0}")]
     Arithmetic(ArithmeticError),
 }
 
@@ -266,10 +251,10 @@ impl ErrorKind {
     pub fn to_short_string(&self) -> String {
         match self {
             Self::TupleLenMismatch { context, .. } => {
-                format!("Mismatch between length of tuples in {}", context)
+                format!("Mismatch between length of tuples in {context}")
             }
             Self::FieldsMismatch { op, .. } => {
-                format!("Mismatch between object shapes during {}", op)
+                format!("Mismatch between object shapes during {op}")
             }
             Self::ArgsLenMismatch { .. } => {
                 "Mismatch between the number of arguments in the function definition and its call"
@@ -277,23 +262,23 @@ impl ErrorKind {
             }
             Self::CannotDestructure => "Cannot destructure a non-tuple variable".to_owned(),
             Self::RepeatedAssignment { context } => {
-                format!("Repeated assignment to the same variable in {}", context)
+                format!("Repeated assignment to the same variable in {context}")
             }
             Self::RepeatedField => "Repeated object field".to_owned(),
-            Self::Undefined(name) => format!("Variable `{}` is not defined", name),
-            Self::Uninitialized(name) => format!("Variable `{}` is not initialized", name),
-            Self::InvalidFieldName(name) => format!("`{}` is not a valid field name", name),
+            Self::Undefined(name) => format!("Variable `{name}` is not defined"),
+            Self::Uninitialized(name) => format!("Variable `{name}` is not initialized"),
+            Self::InvalidFieldName(name) => format!("`{name}` is not a valid field name"),
             Self::CannotCall => "Value is not callable".to_owned(),
             Self::CannotIndex => "Value cannot be indexed".to_owned(),
             Self::CannotAccessFields => "Value has no fields".to_owned(),
             Self::IndexOutOfBounds { len, .. } => {
-                format!("Index out of bounds for tuple with length {}", len)
+                format!("Index out of bounds for tuple with length {len}")
             }
-            Self::NoField { field, .. } => format!("Object does not have field {}", field),
-            Self::NoPrototype(ty) => format!("No prototype set for {}", ty),
+            Self::NoField { field, .. } => format!("Object does not have field {field}"),
+            Self::NoPrototype(ty) => format!("No prototype set for {ty}"),
             Self::NativeCall(message) => message.clone(),
             Self::Wrapper(err) => err.to_string(),
-            Self::UnexpectedOperand { op } => format!("Unexpected operand type for {}", op),
+            Self::UnexpectedOperand { op } => format!("Unexpected operand type for {op}"),
             Self::CannotCompare => "Value is not comparable".to_owned(),
             Self::Unsupported(_) => "Grammar construct not supported".to_owned(),
             Self::Arithmetic(_) => "Arithmetic error".to_owned(),
@@ -304,12 +289,12 @@ impl ErrorKind {
     pub fn main_span_info(&self) -> String {
         match self {
             Self::TupleLenMismatch { context, lhs, .. } => {
-                format!("LHS of {} with {} element(s)", context, lhs)
+                format!("LHS of {context} with {lhs} element(s)")
             }
             Self::FieldsMismatch { lhs_fields, .. } => {
-                format!("LHS with fields {:?}", lhs_fields)
+                format!("LHS with fields {lhs_fields:?}")
             }
-            Self::ArgsLenMismatch { call, .. } => format!("Called with {} arg(s) here", call),
+            Self::ArgsLenMismatch { call, .. } => format!("Called with {call} arg(s) here"),
             Self::CannotDestructure => "Failed destructuring".to_owned(),
             Self::RepeatedAssignment { .. } => "Re-assigned variable".to_owned(),
             Self::RepeatedField => "Repeated object field".to_owned(),
@@ -322,7 +307,7 @@ impl ErrorKind {
             Self::CannotCall | Self::NativeCall(_) | Self::Wrapper(_) => "Failed call".to_owned(),
             Self::UnexpectedOperand { .. } => "Operand of wrong type".to_owned(),
             Self::CannotCompare => "Cannot be compared".to_owned(),
-            Self::Unsupported(ty) => format!("Unsupported {}", ty),
+            Self::Unsupported(ty) => format!("Unsupported {ty}"),
             Self::Arithmetic(e) => e.to_string(),
         }
     }
@@ -331,18 +316,15 @@ impl ErrorKind {
     pub fn help(&self) -> Option<String> {
         Some(match self {
             Self::TupleLenMismatch { context, .. } => format!(
-                "If both args of {} are tuples, the number of elements in them must agree",
-                context
+                "If both args of {context} are tuples, the number of elements in them must agree"
             ),
-            Self::FieldsMismatch { op, .. } => format!(
-                "If both args of {} are objects, their field names must be the same",
-                op
-            ),
+            Self::FieldsMismatch { op, .. } => {
+                format!("If both args of {op} are objects, their field names must be the same")
+            }
             Self::CannotDestructure => "Only tuples can be destructured".to_owned(),
-            Self::RepeatedAssignment { context } => format!(
-                "In {}, all assigned variables must have different names",
-                context
-            ),
+            Self::RepeatedAssignment { context } => {
+                format!("In {context}, all assigned variables must have different names")
+            }
             Self::RepeatedField => "Field names in objects must be unique".to_owned(),
             Self::InvalidFieldName(_) => "Field names must be `usize`s or identifiers".to_owned(),
             Self::CannotCall => "Only functions are callable, i.e., can be used as `fn_name` \
@@ -430,13 +412,13 @@ impl fmt::Display for AuxErrorInfo {
             Self::PrevAssignment => formatter.write_str("Previous declaration"),
             Self::Rvalue => formatter.write_str("RHS containing the invalid assignment"),
             Self::UnbalancedRhsTuple(size) => {
-                write!(formatter, "RHS with the {}-element tuple", size)
+                write!(formatter, "RHS with the {size}-element tuple")
             }
             Self::UnbalancedRhsObject(fields) => {
-                write!(formatter, "RHS object with fields {:?}", fields)
+                write!(formatter, "RHS object with fields {fields:?}")
             }
             Self::InvalidArg => formatter.write_str("Invalid argument"),
-            Self::ArgValue(val) => write!(formatter, "Has value: {}", val),
+            Self::ArgValue(val) => write!(formatter, "Has value: {val}"),
         }
     }
 }
@@ -790,7 +772,7 @@ mod tests {
         let err_string = err.to_string();
         assert_eq!(err_string, "test:1:5: Variable `test` is not defined");
 
-        let expanded_err_string = format!("{:#}", err);
+        let expanded_err_string = format!("{err:#}");
         assert!(expanded_err_string.starts_with("test:1:5: Variable `test` is not defined"));
         assert!(expanded_err_string.contains("\nBacktrace"));
         assert!(expanded_err_string.contains("\n   1: test_fn (native) called at test:1:1"));

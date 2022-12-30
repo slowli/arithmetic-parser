@@ -141,7 +141,7 @@ impl fmt::Display for TupleLen {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match (&self.var, self.exact) {
             (Some(var), 0) => fmt::Display::fmt(var, formatter),
-            (Some(var), exact) => write!(formatter, "{} + {}", var, exact),
+            (Some(var), exact) => write!(formatter, "{var} + {exact}"),
             (None, exact) => fmt::Display::fmt(&exact, formatter),
         }
     }

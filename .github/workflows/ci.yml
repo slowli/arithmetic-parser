@@ -1,4 +1,4 @@
-name: Rust
+name: CI
 
 on:
   push:
@@ -8,9 +8,9 @@ on:
 
 env:
   # Minimum supported Rust version.
-  msrv: 1.57.0
+  msrv: 1.60.0
   # Nightly Rust toolchain for building docs and checking nostd support.
-  nightly: nightly-2022-05-21
+  nightly: nightly-2022-11-24
 
 jobs:
   # Checks minimum supported Rust version.
@@ -18,19 +18,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
-
-      - name: Cache cargo build
-        uses: actions/cache@v2
-        with:
-          path: target
-          key: ${{ runner.os }}-msrv-cargo-build-target
+      - uses: actions/checkout@v3
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
           toolchain: ${{ env.msrv }}
           override: true
+      - name: Generate lockfile
+        uses: actions-rs/cargo@v1
+        with:
+          command: generate-lockfile
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-msrv-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-msrv-cargo
 
       - name: Run tests (parser, typing)
         uses: actions-rs/cargo@v1
@@ -86,15 +91,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
-
-      - name: Cache cargo build
-        uses: actions/cache@v2
-        with:
-          path: |
-            target/
-            cli/target/
-          key: ${{ runner.os }}-cargo-build-target
+      - uses: actions/checkout@v3
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -105,11 +102,24 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v1
         with:
-          node-version: '14'
+          node-version: '18'
       - name: Install wasm-pack
         uses: jetli/wasm-pack-action@v0.3.0
         with:
           version: 'latest'
+      - name: Generate lockfile
+        uses: actions-rs/cargo@v1
+        with:
+          command: generate-lockfile
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: |
+            target/
+            cli/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo
 
       - name: Format
         uses: actions-rs/cargo@v1
@@ -191,18 +201,12 @@ jobs:
         working-directory: e2e-tests/no-std
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Install qemu
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-suggests --no-install-recommends qemu-system-arm
-
-      - name: Cache cargo build
-        uses: actions/cache@v1
-        with:
-          path: e2e-tests/no-std/target
-          key: ${{ runner.os }}-nostd-cargo-build-target
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -211,6 +215,18 @@ jobs:
           override: true
           components: rustfmt, clippy
           target: thumbv7m-none-eabi
+      - name: Generate lockfile
+        uses: actions-rs/cargo@v1
+        with:
+          command: generate-lockfile
+          args: --manifest-path=e2e-tests/no-std/Cargo.toml
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: e2e-tests/no-std/target
+          key: ${{ runner.os }}-nostd-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-nostd-cargo
 
       # Since it's impossible to include the `nostd` crate into the common workspace,
       # we need to perform fmt / clippy checks for it separately.
@@ -231,15 +247,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           persist-credentials: false
-
-      - name: Cache cargo build
-        uses: actions/cache@v2
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-document-target
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -247,6 +257,17 @@ jobs:
           toolchain: ${{ env.nightly }}
           profile: minimal
           override: true
+      - name: Generate lockfile
+        uses: actions-rs/cargo@v1
+        with:
+          command: generate-lockfile
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-document-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-document-cargo
 
       - name: Build docs
         run: |
@@ -259,9 +280,8 @@ jobs:
           cargo rustdoc -p arithmetic-typing --all-features -- --cfg docsrs
 
       - name: Deploy
-        uses: JamesIves/github-pages-deploy-action@releases/v3
+        uses: JamesIves/github-pages-deploy-action@v4
         with:
-          ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
-          BRANCH: gh-pages
-          FOLDER: target/doc
-          SINGLE_COMMIT: true
+          branch: gh-pages
+          folder: target/doc
+          single-commit: true

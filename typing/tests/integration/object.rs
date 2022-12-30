@@ -420,7 +420,7 @@ fn creating_object_in_closure() {
 
     let tuple = match output {
         Type::Tuple(tuple) if tuple.len() == TupleLen::from(3) => tuple,
-        _ => panic!("Unexpected output: {:?}", output),
+        _ => panic!("Unexpected output: {output:?}"),
     };
     let (_, element) = tuple.element_types().next().unwrap();
     assert_eq!(element.to_string(), "{ x: Num, y: Num }");

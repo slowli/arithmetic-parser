@@ -44,7 +44,7 @@ impl fmt::Display for GroupLiteral {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Scalar(sc) => fmt::Display::fmt(sc, formatter),
-            Self::GroupElement(ge) => write!(formatter, "Ge({})", ge),
+            Self::GroupElement(ge) => write!(formatter, "Ge({ge})"),
         }
     }
 }
@@ -148,7 +148,7 @@ struct HashToScalar {
 
 impl HashToScalar {
     fn hash_scalar(&self, hasher: &mut Sha256, sc: &BigUint) {
-        hasher.update(&[0]); // "scalar" marker
+        hasher.update([0]); // "scalar" marker
 
         let mut sc_bytes = sc.to_bytes_le();
         assert!(sc_bytes.len() <= self.max_byte_len);
@@ -157,7 +157,7 @@ impl HashToScalar {
     }
 
     fn hash_group_element(&self, hasher: &mut Sha256, ge: &BigUint) {
-        hasher.update(&[1]); // "group element" marker
+        hasher.update([1]); // "group element" marker
 
         let mut ge_bytes = ge.to_bytes_le();
         assert!(ge_bytes.len() <= self.max_byte_len);
@@ -306,7 +306,7 @@ fn main() -> anyhow::Result<()> {
     let dsa_signatures = ExecutableModule::new("dsa", &dsa_signatures)?;
 
     for i in 0..5 {
-        println!("\nRunning sample #{}", i);
+        println!("\nRunning sample #{i}");
 
         let arithmetic = CyclicGroupArithmetic::new(BIT_LENGTH);
         let mut env = Environment::with_arithmetic(arithmetic.clone().without_comparisons());

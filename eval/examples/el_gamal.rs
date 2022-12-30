@@ -39,10 +39,10 @@ fn main() -> anyhow::Result<()> {
 
     // Run the compiled module with different groups.
     for i in 0..5 {
-        println!("\nRunning sample #{}", i);
+        println!("\nRunning sample #{i}");
 
         let modulus = safe_prime::new(BIT_LENGTH)?;
-        println!("Generated safe prime: {}", modulus);
+        println!("Generated safe prime: {modulus}");
 
         let prime_subgroup_order: BigUint = &modulus >> 1;
         let order_value = Value::Prim(prime_subgroup_order.clone());

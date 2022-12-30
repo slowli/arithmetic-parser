@@ -29,7 +29,7 @@ impl<'a, Prim: PrimitiveType> ErrorsExt<'a, Prim> for Errors<'a, Prim> {
         if self.len() == 1 {
             self.into_iter().next().unwrap()
         } else {
-            panic!("Expected 1 error, got {:?}", self);
+            panic!("Expected 1 error, got {self:?}");
         }
     }
 }
@@ -69,7 +69,7 @@ fn assert_incompatible_types<Prim: PrimitiveType>(
 ) {
     let (x, y) = match err {
         ErrorKind::TypeMismatch(x, y) => (x, y),
-        _ => panic!("Unexpected error type: {:?}", err),
+        _ => panic!("Unexpected error type: {err:?}"),
     };
     assert!(
         (x == first && y == second) || (x == second && y == first),

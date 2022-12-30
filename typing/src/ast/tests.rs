@@ -144,7 +144,7 @@ fn embedded_complex_tuple() {
 
     let embedded_tuple = match &tuple.end[0].extra {
         TypeAst::Tuple(tuple) => tuple,
-        other => panic!("Unexpected tuple end: {:?}", other),
+        other => panic!("Unexpected tuple end: {other:?}"),
     };
     assert!(embedded_tuple.start.is_empty());
     assert_eq!(
@@ -269,7 +269,7 @@ fn fn_type_accepting_fn_arg() {
 
     let inner_fn = match &fn_type.args.extra.start[1].extra {
         TypeAst::Function(function) => function.as_ref(),
-        ty => panic!("Unexpected arg type: {:?}", ty),
+        ty => panic!("Unexpected arg type: {ty:?}"),
     };
     assert_eq!(
         inner_fn.args.extra.start,
@@ -291,7 +291,7 @@ fn fn_type_returning_fn_arg() {
 
     let returned_fn = match fn_type.return_type.extra {
         TypeAst::Function(function) => *function,
-        ty => panic!("Unexpected return type: {:?}", ty),
+        ty => panic!("Unexpected return type: {ty:?}"),
     };
     assert_eq!(
         returned_fn.args.extra.start,
@@ -322,7 +322,7 @@ fn fn_type_with_constraints() {
             constraints,
             function,
         } => (constraints.extra, function.extra),
-        _ => panic!("Unexpected type: {:?}", ty),
+        _ => panic!("Unexpected type: {ty:?}"),
     };
 
     assert!(rest.fragment().is_empty());
@@ -346,18 +346,18 @@ fn multiple_fns_with_constraints() {
         TypeAst::Tuple(TupleAst { mut start, .. }) if start.len() == 2 => {
             (start.pop().unwrap().extra, start.pop().unwrap().extra)
         }
-        _ => panic!("Unexpected type: {:?}", ty),
+        _ => panic!("Unexpected type: {ty:?}"),
     };
 
     let first_fn = match first_fn {
         TypeAst::FunctionWithConstraints { function, .. } => function.extra,
-        _ => panic!("Unexpected 1st function: {:?}", first_fn),
+        _ => panic!("Unexpected 1st function: {first_fn:?}"),
     };
     assert_eq!(first_fn.return_type, sp(input, 22..24, TypeAst::Param));
 
     let second_fn = match second_fn {
         TypeAst::FunctionWithConstraints { function, .. } => function.extra,
-        _ => panic!("Unexpected 2nd function: {:?}", second_fn),
+        _ => panic!("Unexpected 2nd function: {second_fn:?}"),
     };
     assert!(second_fn.args.extra.start.is_empty());
     assert_eq!(
@@ -402,7 +402,7 @@ fn dyn_type_with_object_bound() {
             assert_eq!(constraints.terms.len(), 1);
             constraints.object.unwrap()
         }
-        _ => panic!("Unexpected type: {:?}", ty),
+        _ => panic!("Unexpected type: {ty:?}"),
     };
     assert_eq!(object.fields.len(), 1);
     let (field_name, field_ty) = &object.fields[0];

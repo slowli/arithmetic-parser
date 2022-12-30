@@ -61,7 +61,7 @@ impl<T> NativeFn<T> for Assert {
 
             Value::Bool(false) => {
                 let err = if let CodeFragment::Str(code) = args[0].fragment() {
-                    ErrorKind::native(format!("Assertion failed: {}", code))
+                    ErrorKind::native(format!("Assertion failed: {code}"))
                 } else {
                     ErrorKind::native("Assertion failed")
                 };
@@ -145,7 +145,7 @@ impl<T: fmt::Display> NativeFn<T> for AssertEq {
             let err = if let (CodeFragment::Str(lhs), CodeFragment::Str(rhs)) =
                 (args[0].fragment(), args[1].fragment())
             {
-                ErrorKind::native(format!("Assertion failed: {} == {}", lhs, rhs))
+                ErrorKind::native(format!("Assertion failed: {lhs} == {rhs}"))
             } else {
                 ErrorKind::native("Equality assertion failed")
             };
@@ -415,7 +415,7 @@ mod tests {
 
         let true_arg = span_value(Value::Bool(true));
         let return_value = Assert.evaluate(vec![true_arg.clone()], &mut ctx).unwrap();
-        assert!(return_value.is_void(), "{:?}", return_value);
+        assert!(return_value.is_void(), "{return_value:?}");
 
         let err = Assert
             .evaluate(vec![true_arg.clone(), true_arg], &mut ctx)
@@ -440,7 +440,7 @@ mod tests {
         );
 
         let return_value = AssertEq.evaluate(vec![x.clone(), x], &mut ctx).unwrap();
-        assert!(return_value.is_void(), "{:?}", return_value);
+        assert!(return_value.is_void(), "{return_value:?}");
     }
 
     #[test]
@@ -495,7 +495,7 @@ mod tests {
             let x = span_value(Value::Prim(x));
             let y = span_value(Value::Prim(y));
             let return_value = assert_close.evaluate(vec![x, y], &mut ctx).unwrap();
-            assert!(return_value.is_void(), "{:?}", return_value);
+            assert!(return_value.is_void(), "{return_value:?}");
         }
     }
 
@@ -530,7 +530,7 @@ mod tests {
         let return_value = assert_fails
             .evaluate(vec![span_value(failing_fn)], &mut ctx)
             .unwrap();
-        assert!(return_value.is_void(), "{:?}", return_value);
+        assert!(return_value.is_void(), "{return_value:?}");
     }
 
     #[test]
@@ -554,6 +554,6 @@ mod tests {
         let return_value = assert_fails
             .evaluate(vec![span_value(failing_fn)], &mut ctx)
             .unwrap();
-        assert!(return_value.is_void(), "{:?}", return_value);
+        assert!(return_value.is_void(), "{return_value:?}");
     }
 }

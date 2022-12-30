@@ -222,7 +222,7 @@ impl<T> MaybeSpanned<'_, T> {
         match self.fragment {
             CodeFragment::Str(code) => code.to_owned(),
             CodeFragment::Stripped(_) => {
-                format!("{} at {}:{}", default_name, self.line, self.column)
+                format!("{default_name} at {}:{}", self.line, self.column)
             }
         }
     }

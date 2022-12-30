@@ -99,7 +99,7 @@ fn captured_function() {
         let add = &env["add"];
         let add = match add {
             Value::Function(Function::Interpreted(function)) => function,
-            other => panic!("Unexpected `add` value: {:?}", other),
+            other => panic!("Unexpected `add` value: {other:?}"),
         };
         let captures = add.captures();
         assert_eq!(captures.len(), 1);
@@ -158,7 +158,7 @@ fn indirectly_captured_function() {
     for &function in &functions {
         let function = match function {
             Value::Function(Function::Interpreted(function)) => function,
-            other => panic!("Unexpected `fn` value: {:?}", other),
+            other => panic!("Unexpected `fn` value: {other:?}"),
         };
         assert!(function.captures()["div"].is_function());
     }
@@ -198,7 +198,7 @@ fn embedded_function() {
 
     let function = match &env["add"] {
         Value::Function(Function::Interpreted(function)) => function,
-        other => panic!("Unexpected `add` value: {:?}", other),
+        other => panic!("Unexpected `add` value: {other:?}"),
     };
     let captures = function.captures();
     assert_eq!(
@@ -285,12 +285,12 @@ fn function_aliasing() {
     let sin = &env["sin"];
     let sin = match sin {
         Value::Function(Function::Native(function)) => function,
-        _ => panic!("Unexpected `sin` value: {:?}", sin),
+        _ => panic!("Unexpected `sin` value: {sin:?}"),
     };
     let alias = &env["alias"];
     let alias = match alias {
         Value::Function(Function::Native(function)) => function,
-        _ => panic!("Unexpected `alias` value: {:?}", alias),
+        _ => panic!("Unexpected `alias` value: {alias:?}"),
     };
 
     // Compare pointers to data instead of pointers to `dyn NativeFn<_>` (which is unsound,

@@ -263,7 +263,7 @@ impl<'a, Prim: PrimitiveType> Errors<'a, Prim> {
 impl<Prim: PrimitiveType> fmt::Display for Errors<'_, Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (i, error) in self.inner.iter().enumerate() {
-            write!(formatter, "{}", error)?;
+            write!(formatter, "{error}")?;
             if i + 1 < self.inner.len() {
                 formatter.write_str("\n")?;
             }

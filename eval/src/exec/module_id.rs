@@ -60,7 +60,7 @@ impl dyn ModuleId {
 
 impl fmt::Debug for dyn ModuleId {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "ModuleId({})", self)
+        write!(formatter, "ModuleId({self})")
     }
 }
 

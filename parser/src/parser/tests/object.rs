@@ -47,7 +47,7 @@ fn field_access_basics() {
     let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
     let inner_expr = match expr.extra {
         Expr::FieldAccess { receiver, name } if *name.fragment() == "foo" => *receiver,
-        other => panic!("Unexpected expr: {:?}", other),
+        other => panic!("Unexpected expr: {other:?}"),
     };
     assert_matches!(inner_expr.extra, Expr::Block(_));
 }
@@ -59,7 +59,7 @@ fn chained_field_access() {
 
     let inner_expr = match expr.extra {
         Expr::Method { receiver, .. } => *receiver,
-        other => panic!("Unexpected expr: {:?}", other),
+        other => panic!("Unexpected expr: {other:?}"),
     };
     assert_eq!(
         inner_expr.extra,
@@ -74,7 +74,7 @@ fn chained_field_access() {
 
     let inner_expr = match expr.extra {
         Expr::FieldAccess { receiver, name } if *name.fragment() == "x" => *receiver,
-        other => panic!("Unexpected expr: {:?}", other),
+        other => panic!("Unexpected expr: {other:?}"),
     };
     assert_eq!(
         inner_expr.extra,
@@ -92,7 +92,7 @@ fn chained_field_access() {
 
     let inner_expr = match expr.extra {
         Expr::FieldAccess { receiver, name } if *name.fragment() == "sin" => *receiver,
-        other => panic!("Unexpected expr: {:?}", other),
+        other => panic!("Unexpected expr: {other:?}"),
     };
     assert_matches!(inner_expr.extra, Expr::FieldAccess { name, .. } if *name.fragment() == "x");
 }
@@ -107,7 +107,7 @@ fn callable_field_access() {
             assert_eq!(args.len(), 2);
             *name
         }
-        other => panic!("Unexpected expr: {:?}", other),
+        other => panic!("Unexpected expr: {other:?}"),
     };
     assert_eq!(*inner_expr.fragment(), "(obj.fun)");
     assert_eq!(
@@ -130,7 +130,7 @@ fn field_access_in_larger_context() {
             assert_matches!(rhs.extra, Expr::Tuple(items) if items.len() == 2);
             *lhs
         }
-        other => panic!("Unexpected expr: {:?}", other),
+        other => panic!("Unexpected expr: {other:?}"),
     };
     assert_matches!(lhs.extra, Expr::FieldAccess { name, .. } if *name.fragment() == "sin");
 
@@ -139,7 +139,7 @@ fn field_access_in_larger_context() {
 
     let inner_expr = match parsed.extra {
         Expr::FieldAccess { name, receiver } if *name.fragment() == "y" => *receiver,
-        other => panic!("Unexpected expr: {:?}", other),
+        other => panic!("Unexpected expr: {other:?}"),
     };
     let inner_field_access = match inner_expr.extra {
         Expr::Function { name, mut args } => {
@@ -147,7 +147,7 @@ fn field_access_in_larger_context() {
             assert_eq!(args.len(), 1);
             args.pop().unwrap()
         }
-        other => panic!("Unexpected expr: {:?}", other),
+        other => panic!("Unexpected expr: {other:?}"),
     };
     assert_matches!(
         inner_field_access.extra,
@@ -187,7 +187,7 @@ fn object_errors() {
     let err = object_expr::<FieldGrammar, Complete>(input).unwrap_err();
     let err = match err {
         NomErr::Failure(err) => err,
-        other => panic!("Unexpected error: {:?}", other),
+        other => panic!("Unexpected error: {other:?}"),
     };
     assert_eq!(err.span(), sp(5, "=", ()));
 }
@@ -201,7 +201,7 @@ fn objects_within_larger_context() {
             assert_eq!(name, sp(16, "x", ()));
             *receiver
         }
-        other => panic!("Unexpected expr: {:?}", other),
+        other => panic!("Unexpected expr: {other:?}"),
     };
     assert_matches!(inner_expr.extra, Expr::Object(ObjectExpr { fields }) if fields.len() == 2);
 
@@ -214,7 +214,7 @@ fn objects_within_larger_context() {
             assert_eq!(args[0], sp(5, "x", Expr::Variable));
             args.pop().unwrap()
         }
-        other => panic!("Unexpected expr: {:?}", other),
+        other => panic!("Unexpected expr: {other:?}"),
     };
     assert_matches!(inner_expr.extra, Expr::Object(ObjectExpr { fields }) if fields.len() == 2);
 
@@ -226,7 +226,7 @@ fn objects_within_larger_context() {
             assert_eq!(*block.statements[0].fragment(), "x = gen()");
             *block.return_value.unwrap()
         }
-        other => panic!("Unexpected expr: {:?}", other),
+        other => panic!("Unexpected expr: {other:?}"),
     };
     assert_matches!(inner_expr.extra, Expr::Object(ObjectExpr { fields }) if fields.len() == 2);
 
@@ -314,12 +314,12 @@ fn object_destructuring_in_tuple() {
     assert!(rest.fragment().is_empty());
     let lvalue = match lvalue.extra {
         Lvalue::Tuple(tuple) => tuple,
-        _ => panic!("Unexpected lvalue: {:?}", lvalue),
+        _ => panic!("Unexpected lvalue: {lvalue:?}"),
     };
     assert_eq!(lvalue.start.len(), 1);
     let inner_lvalue = match &lvalue.start[0].extra {
         Lvalue::Object(obj) => obj,
-        _ => panic!("Unexpected lvalue: {:?}", lvalue),
+        _ => panic!("Unexpected lvalue: {lvalue:?}"),
     };
     assert_eq!(inner_lvalue.fields.len(), 2);
     assert_eq!(inner_lvalue.fields[0].field_name, sp(3, "x", ()));
@@ -369,7 +369,7 @@ fn object_destructuring_in_statement() {
 
         let lhs = match stmt.extra {
             Statement::Assignment { lhs, .. } => lhs.extra,
-            _ => panic!("Unexpected statement: {:?}", stmt),
+            _ => panic!("Unexpected statement: {stmt:?}"),
         };
         assert_matches!(lhs, Lvalue::Object(_));
     }

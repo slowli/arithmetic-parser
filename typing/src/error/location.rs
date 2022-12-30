@@ -270,7 +270,7 @@ mod tests {
             .extra;
         match statement {
             Statement::Assignment { lhs, .. } => lhs,
-            _ => panic!("Unexpected statement type: {:?}", statement),
+            _ => panic!("Unexpected statement type: {statement:?}"),
         }
     }
 

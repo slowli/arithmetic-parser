@@ -385,8 +385,7 @@ mod tests {
         for (i, (_, expected_placement)) in type_param_mentions.iter().copied().enumerate() {
             assert!(
                 placements[&expected_placement].contains(&i),
-                "Unexpected placements: {:?}",
-                placements
+                "Unexpected placements: {placements:?}"
             );
         }
     }

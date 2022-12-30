@@ -112,7 +112,7 @@ impl<Prim: PrimitiveType> fmt::Display for Object<Prim> {
 
         formatter.write_str("{")?;
         for (i, (name, ty)) in sorted_fields.into_iter().enumerate() {
-            write!(formatter, " {}: {}", name, ty)?;
+            write!(formatter, " {name}: {ty}")?;
             if i + 1 < self.fields.len() {
                 formatter.write_str(",")?;
             }
@@ -245,7 +245,7 @@ mod tests {
 
     fn get_err(errors: OpErrors<'_, Num>) -> ErrorKind<Num> {
         let mut errors = errors.into_vec();
-        assert_eq!(errors.len(), 1, "{:?}", errors);
+        assert_eq!(errors.len(), 1, "{errors:?}");
         errors.pop().unwrap()
     }
 

@@ -82,7 +82,7 @@ impl<Prim: PrimitiveType> TypeEnvironment<Prim> {
 
     fn prepare_type(ty: impl Into<Type<Prim>>) -> Type<Prim> {
         let mut ty = ty.into();
-        assert!(ty.is_concrete(), "Type {} is not concrete", ty);
+        assert!(ty.is_concrete(), "Type {ty} is not concrete");
         TypePreparer.visit_type_mut(&mut ty);
         ty
     }
@@ -164,7 +164,7 @@ impl<Prim: PrimitiveType> ops::Index<&str> for TypeEnvironment<Prim> {
 
     fn index(&self, name: &str) -> &Self::Output {
         self.get(name)
-            .unwrap_or_else(|| panic!("Variable `{}` is not defined", name))
+            .unwrap_or_else(|| panic!("Variable `{name}` is not defined"))
     }
 }
 

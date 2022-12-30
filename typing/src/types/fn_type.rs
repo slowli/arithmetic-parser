@@ -45,7 +45,7 @@ impl<Prim: PrimitiveType> fmt::Display for ParamConstraints<Prim> {
 
         let type_param_count = self.type_params.len();
         for (i, (idx, constraints)) in self.type_params().enumerate() {
-            write!(formatter, "'{}: {}", TypeVar::param_str(idx), constraints)?;
+            write!(formatter, "'{}: {constraints}", TypeVar::param_str(idx))?;
             if i + 1 < type_param_count {
                 formatter.write_str(", ")?;
             }
@@ -182,7 +182,7 @@ impl<Prim: PrimitiveType> fmt::Display for Function<Prim> {
             .and_then(|params| params.constraints.as_ref());
         if let Some(constraints) = constraints {
             if !constraints.is_empty() {
-                write!(formatter, "for<{}> ", constraints)?;
+                write!(formatter, "for<{constraints}> ")?;
             }
         }
 

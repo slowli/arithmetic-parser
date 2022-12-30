@@ -730,7 +730,7 @@ fn no_unary_op_if_literal_without_it_not_parsed() {
             assert_eq!(*name.fragment(), "bar");
             assert_matches!(receiver.extra, Expr::Literal(s) if s == "foo");
         }
-        _ => panic!("Unexpected expr: {:?}", expr),
+        _ => panic!("Unexpected expr: {expr:?}"),
     };
 }
 
@@ -753,7 +753,7 @@ fn field_access_with_indexed_field() {
 
     let inner_expr = match expr.extra {
         Expr::Method { receiver, .. } => *receiver,
-        other => panic!("Unexpected expr: {:?}", other),
+        other => panic!("Unexpected expr: {other:?}"),
     };
     assert_eq!(
         inner_expr.extra,

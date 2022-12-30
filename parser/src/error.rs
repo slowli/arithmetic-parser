@@ -107,23 +107,22 @@ impl fmt::Display for ErrorKind {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NonAsciiInput => formatter.write_str("Non-ASCII inputs are not supported"),
-            Self::Literal(e) => write!(formatter, "Invalid literal: {}", e),
+            Self::Literal(err) => write!(formatter, "Invalid literal: {err}"),
             Self::LiteralName => formatter.write_str("Literal used in place of an identifier"),
 
-            Self::Type(e) => write!(formatter, "Invalid type annotation: {}", e),
+            Self::Type(err) => write!(formatter, "Invalid type annotation: {err}"),
 
             Self::UnsupportedOp(op) => write!(
                 formatter,
-                "Encountered operation switched off in the parser features: {}",
-                op
+                "Encountered operation switched off in the parser features: {op}"
             ),
 
             Self::UnexpectedChar { context: Some(ctx) } => {
-                write!(formatter, "Unexpected character in {}", ctx)
+                write!(formatter, "Unexpected character in {ctx}")
             }
             Self::UnexpectedChar { .. } => formatter.write_str("Unexpected character"),
 
-            Self::UnexpectedTerm { context: Some(ctx) } => write!(formatter, "Unfinished {}", ctx),
+            Self::UnexpectedTerm { context: Some(ctx) } => write!(formatter, "Unfinished {ctx}"),
             Self::UnexpectedTerm { .. } => formatter.write_str("Unfinished expression"),
 
             Self::Leftovers => formatter.write_str("Uninterpreted characters after parsing"),
@@ -316,11 +315,11 @@ pub enum UnsupportedType {
 impl fmt::Display for UnsupportedType {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::UnaryOp(op) => write!(formatter, "unary op: {}", op),
-            Self::BinaryOp(op) => write!(formatter, "binary op: {}", op),
-            Self::Expr(expr) => write!(formatter, "expression: {}", expr),
-            Self::Statement(statement) => write!(formatter, "statement: {}", statement),
-            Self::Lvalue(lvalue) => write!(formatter, "lvalue: {}", lvalue),
+            Self::UnaryOp(op) => write!(formatter, "unary op: {op}"),
+            Self::BinaryOp(op) => write!(formatter, "binary op: {op}"),
+            Self::Expr(expr) => write!(formatter, "expression: {expr}"),
+            Self::Statement(statement) => write!(formatter, "statement: {statement}"),
+            Self::Lvalue(lvalue) => write!(formatter, "lvalue: {lvalue}"),
         }
     }
 }

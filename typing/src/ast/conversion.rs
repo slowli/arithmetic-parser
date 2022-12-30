@@ -95,29 +95,27 @@ impl fmt::Display for AstConversionError {
             Self::FreeLengthVar(name) => {
                 write!(
                     formatter,
-                    "Length param `{}` is not scoped by function definition",
-                    name
+                    "Length param `{name}` is not scoped by function definition"
                 )
             }
             Self::FreeTypeVar(name) => {
                 write!(
                     formatter,
-                    "Type param `{}` is not scoped by function definition",
-                    name
+                    "Type param `{name}` is not scoped by function definition"
                 )
             }
 
             Self::UnusedLength(name) => {
-                write!(formatter, "Unused length param `{}`", name)
+                write!(formatter, "Unused length param `{name}`")
             }
             Self::UnusedTypeParam(name) => {
-                write!(formatter, "Unused type param `{}`", name)
+                write!(formatter, "Unused type param `{name}`")
             }
             Self::UnknownType(name) => {
-                write!(formatter, "Unknown type `{}`", name)
+                write!(formatter, "Unknown type `{name}`")
             }
             Self::UnknownConstraint(name) => {
-                write!(formatter, "Unknown constraint `{}`", name)
+                write!(formatter, "Unknown constraint `{name}`")
             }
 
             Self::InvalidSomeType => {
@@ -128,11 +126,11 @@ impl fmt::Display for AstConversionError {
             }
 
             Self::DuplicateField(name) => {
-                write!(formatter, "Duplicate field `{}` in object type", name)
+                write!(formatter, "Duplicate field `{name}` in object type")
             }
 
             Self::NotObjectSafe(name) => {
-                write!(formatter, "Constraint `{}` is not object-safe", name)
+                write!(formatter, "Constraint `{name}` is not object-safe")
             }
         }
     }
@@ -567,7 +565,7 @@ mod tests {
         let slice_type = <Type>::try_from(&TypeAst::try_from("[(Num, Bool)]")?)?;
         let slice_type = match &slice_type {
             Type::Tuple(tuple) => tuple.as_slice().unwrap(),
-            _ => panic!("Unexpected type: {:?}", slice_type),
+            _ => panic!("Unexpected type: {slice_type:?}"),
         };
 
         assert_eq!(*slice_type.element(), Type::from((Type::NUM, Type::BOOL)));
@@ -583,7 +581,7 @@ mod tests {
         let ty = <Type>::try_from(&TypeAst::try_from("(['T; N], ('T) -> 'U) -> 'U")?)?;
         let ty = match ty {
             Type::Function(fn_type) => *fn_type,
-            _ => panic!("Unexpected type: {:?}", ty),
+            _ => panic!("Unexpected type: {ty:?}"),
         };
 
         assert_eq!(ty.params.as_ref().unwrap().len_params.len(), 1);
@@ -597,7 +595,7 @@ mod tests {
         let ty = <Type>::try_from(&TypeAst::try_from("(...[Num; N]) -> Num")?)?;
         let ty = match ty {
             Type::Function(fn_type) => *fn_type,
-            _ => panic!("Unexpected type: {:?}", ty),
+            _ => panic!("Unexpected type: {ty:?}"),
         };
 
         assert_eq!(ty.params.as_ref().unwrap().len_params.len(), 1);
@@ -632,7 +630,7 @@ mod tests {
         let ty = <Type>::try_from(&ty)?;
         let ty = match ty {
             Type::Function(fn_type) => *fn_type,
-            _ => panic!("Unexpected type: {:?}", ty),
+            _ => panic!("Unexpected type: {ty:?}"),
         };
 
         let type_params = &ty.params.as_ref().unwrap().type_params;

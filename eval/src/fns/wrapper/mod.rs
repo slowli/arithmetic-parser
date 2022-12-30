@@ -505,8 +505,7 @@ mod tests {
                 Ok(())
             } else {
                 Err(format!(
-                    "Assertion failed: expected {}, got {}",
-                    expected, actual
+                    "Assertion failed: expected {expected}, got {actual}"
                 ))
             }
         });

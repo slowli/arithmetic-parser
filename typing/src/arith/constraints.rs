@@ -481,7 +481,7 @@ impl<Prim: PrimitiveType> From<Object<Prim>> for CompleteConstraints<Prim> {
 impl<Prim: PrimitiveType> fmt::Display for CompleteConstraints<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match (&self.object, self.simple.is_empty()) {
-            (Some(object), false) => write!(formatter, "{} + {}", object, self.simple),
+            (Some(object), false) => write!(formatter, "{object} + {}", self.simple),
             (Some(object), true) => fmt::Display::fmt(object, formatter),
             (None, _) => fmt::Display::fmt(&self.simple, formatter),
         }

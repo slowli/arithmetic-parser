@@ -58,7 +58,7 @@ pub fn repl<T: ReplLiteral>(
                 break Ok(());
             }
 
-            Err(e) => panic!("Error reading command: {}", e),
+            Err(err) => panic!("Error reading command: {err}"),
         }
     }
 }

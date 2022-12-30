@@ -664,7 +664,7 @@ fn comparisons_when_switched_on() {
         .unwrap();
     let slice = match &output {
         Type::Tuple(tuple) => tuple.as_slice().unwrap(),
-        _ => panic!("Unexpected output: {:?}", output),
+        _ => panic!("Unexpected output: {output:?}"),
     };
 
     assert_eq!(*slice.element(), Type::NUM);
@@ -725,7 +725,7 @@ fn any_can_be_unified_with_anything() {
         ErrorKind::TypeMismatch(Type::Tuple(tuple), bool) if *bool == Type::BOOL => {
             tuple.as_slice().unwrap()
         }
-        _ => panic!("Unexpected error: {:?}", err),
+        _ => panic!("Unexpected error: {err:?}"),
     };
     assert_eq!(*lhs_slice.element(), Type::NUM);
 }

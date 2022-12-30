@@ -307,7 +307,7 @@ fn bench_quick_sort_interpreted(bencher: &mut Bencher<'_>) {
     let sort_fn = sort_module.with_env(&env).unwrap().run().unwrap();
     let sort_fn = match sort_fn {
         Value::Function(function) => function,
-        other => panic!("Unexpected module export: {:?}", other),
+        other => panic!("Unexpected module export: {other:?}"),
     };
 
     let mut rng = StdRng::seed_from_u64(SEED);

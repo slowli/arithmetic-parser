@@ -19,7 +19,7 @@ fn extract_errors<Prim: PrimitiveType>(
     match errors.len() {
         0 => Ok(()),
         1 => Err(errors.pop().unwrap()),
-        _ => panic!("Unexpected multiple errors: {:?}", errors),
+        _ => panic!("Unexpected multiple errors: {errors:?}"),
     }
 }
 

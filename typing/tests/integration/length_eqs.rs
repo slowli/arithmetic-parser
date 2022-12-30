@@ -21,7 +21,7 @@ impl<'a> SingleError<'a> for Errors<'a, Num> {
         if self.len() == 1 {
             self.into_iter().next().unwrap()
         } else {
-            panic!("Expected one error, got {:?}", self);
+            panic!("Expected one error, got {self:?}");
         }
     }
 }

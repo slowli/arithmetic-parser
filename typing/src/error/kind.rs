@@ -147,8 +147,7 @@ impl<Prim: PrimitiveType> fmt::Display for ErrorKind<Prim> {
         match self {
             Self::TypeMismatch(lhs, rhs) => write!(
                 formatter,
-                "Type `{}` is not assignable to type `{}`",
-                rhs, lhs
+                "Type `{rhs}` is not assignable to type `{lhs}`"
             ),
             Self::TupleLenMismatch {
                 lhs,
@@ -156,60 +155,52 @@ impl<Prim: PrimitiveType> fmt::Display for ErrorKind<Prim> {
                 context: TupleContext::FnArgs,
             } => write!(
                 formatter,
-                "Function expects {} args, but is called with {} args",
-                lhs, rhs
+                "Function expects {lhs} args, but is called with {rhs} args"
             ),
             Self::TupleLenMismatch { lhs, rhs, .. } => write!(
                 formatter,
-                "Expected a tuple with {} elements, got one with {} elements",
-                lhs, rhs
+                "Expected a tuple with {lhs} elements, got one with {rhs} elements"
             ),
 
-            Self::UndefinedVar(name) => write!(formatter, "Variable `{}` is not defined", name),
+            Self::UndefinedVar(name) => write!(formatter, "Variable `{name}` is not defined"),
 
             Self::RecursiveType(ty) => write!(
                 formatter,
-                "Cannot unify type 'T with a type containing it: {}",
-                ty
+                "Cannot unify type 'T with a type containing it: {ty}"
             ),
 
             Self::RepeatedAssignment(name) => {
                 write!(
                     formatter,
-                    "Repeated assignment to the same variable `{}`",
-                    name
+                    "Repeated assignment to the same variable `{name}`"
                 )
             }
 
             Self::InvalidFieldName(name) => {
-                write!(formatter, "`{}` is not a valid field name", name)
+                write!(formatter, "`{name}` is not a valid field name")
             }
             Self::CannotIndex => formatter.write_str("Value cannot be indexed"),
             Self::UnsupportedIndex => formatter.write_str("Unsupported indexing operation"),
             Self::IndexOutOfBounds { index, len } => write!(
                 formatter,
-                "Attempting to get element {} from tuple with length {}",
-                index, len
+                "Attempting to get element {index} from tuple with length {len}"
             ),
 
-            Self::RepeatedField(name) => write!(formatter, "Repeated object field `{}`", name),
+            Self::RepeatedField(name) => write!(formatter, "Repeated object field `{name}`"),
             Self::CannotAccessFields => formatter.write_str("Value is not an object"),
             Self::FieldsMismatch {
                 lhs_fields,
                 rhs_fields,
             } => write!(
                 formatter,
-                "Cannot assign object with fields {rhs:?} to object with fields {lhs:?}",
-                lhs = lhs_fields,
-                rhs = rhs_fields
+                "Cannot assign object with fields {rhs_fields:?} to object with fields {lhs_fields:?}"
             ),
             Self::MissingFields {
                 fields,
                 available_fields,
             } => write!(
                 formatter,
-                "Missing field(s) {:?} from object (available fields: {:?})",
-                fields, available_fields
+                "Missing field(s) {fields:?} from object (available fields: {available_fields:?})"
             ),
 
             Self::UnresolvedParam => {
@@ -217,22 +208,21 @@ impl<Prim: PrimitiveType> fmt::Display for ErrorKind<Prim> {
             }
 
             Self::FailedConstraint { ty, constraint } => {
-                write!(formatter, "Type `{}` fails constraint `{}`", ty, constraint)
+                write!(formatter, "Type `{ty}` fails constraint `{constraint}`")
             }
             Self::DynamicLen(len) => {
-                write!(formatter, "Length `{}` is required to be static", len)
+                write!(formatter, "Length `{len}` is required to be static")
             }
 
-            Self::UnsupportedFeature(ty) => write!(formatter, "Unsupported {}", ty),
-            Self::UnsupportedType(ty) => write!(formatter, "Unsupported type: {}", ty),
+            Self::UnsupportedFeature(ty) => write!(formatter, "Unsupported {ty}"),
+            Self::UnsupportedType(ty) => write!(formatter, "Unsupported type: {ty}"),
             Self::UnsupportedParam => {
                 formatter.write_str("Params in declared function types are not supported yet")
             }
 
             Self::AstConversion(err) => write!(
                 formatter,
-                "Error instantiating type from annotation: {}",
-                err
+                "Error instantiating type from annotation: {err}"
             ),
         }
     }

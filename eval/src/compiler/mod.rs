@@ -362,7 +362,7 @@ mod tests {
             .unwrap();
         let def = match def.extra {
             Expr::FnDefinition(def) => def,
-            other => panic!("Unexpected function parsing result: {:?}", other),
+            other => panic!("Unexpected function parsing result: {other:?}"),
         };
 
         let captures = def.undefined_variables().unwrap();
@@ -379,7 +379,7 @@ mod tests {
             .unwrap();
         let def = match def.extra {
             Expr::FnDefinition(def) => def,
-            other => panic!("Unexpected function parsing result: {:?}", other),
+            other => panic!("Unexpected function parsing result: {other:?}"),
         };
 
         let captures = def.undefined_variables().unwrap();

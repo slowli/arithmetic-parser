@@ -133,20 +133,20 @@ impl MapPrimitiveType<NumOrBytes> for NumOrBytesArithmetic {
 }
 
 impl TypeArithmetic<NumOrBytesType> for NumOrBytesArithmetic {
-    fn process_unary_op<'a>(
+    fn process_unary_op(
         &self,
         substitutions: &mut Substitutions<NumOrBytesType>,
         context: &UnaryOpContext<NumOrBytesType>,
-        errors: OpErrors<'a, NumOrBytesType>,
+        errors: OpErrors<'_, NumOrBytesType>,
     ) -> Type<NumOrBytesType> {
         NumArithmetic::process_unary_op(substitutions, context, errors, &Constraints::Lin)
     }
 
-    fn process_binary_op<'a>(
+    fn process_binary_op(
         &self,
         substitutions: &mut Substitutions<NumOrBytesType>,
         context: &BinaryOpContext<NumOrBytesType>,
-        errors: OpErrors<'a, NumOrBytesType>,
+        errors: OpErrors<'_, NumOrBytesType>,
     ) -> Type<NumOrBytesType> {
         let op_constraints = if let BinaryOp::Add = context.op {
             Constraints::Summable

@@ -97,9 +97,8 @@ fn captured_function() {
 
     {
         let add = &env["add"];
-        let add = match add {
-            Value::Function(Function::Interpreted(function)) => function,
-            other => panic!("Unexpected `add` value: {other:?}"),
+        let Value::Function(Function::Interpreted(add)) = add else {
+            panic!("Unexpected `add` value: {add:?}");
         };
         let captures = add.captures();
         assert_eq!(captures.len(), 1);
@@ -156,9 +155,8 @@ fn indirectly_captured_function() {
     // Check that `div` is captured both by the external and internal functions.
     let functions = [&env["fn"], &env["gen"]];
     for &function in &functions {
-        let function = match function {
-            Value::Function(Function::Interpreted(function)) => function,
-            other => panic!("Unexpected `fn` value: {other:?}"),
+        let Value::Function(Function::Interpreted(function)) = function else {
+            panic!("Unexpected `fn` value: {function:?}");
         };
         assert!(function.captures()["div"].is_function());
     }
@@ -196,9 +194,8 @@ fn embedded_function() {
     let return_value = evaluate(&mut env, other_program);
     assert_eq!(return_value, Value::Prim(-4.0));
 
-    let function = match &env["add"] {
-        Value::Function(Function::Interpreted(function)) => function,
-        other => panic!("Unexpected `add` value: {other:?}"),
+    let Value::Function(Function::Interpreted(function)) = &env["add"] else {
+        panic!("Unexpected `add` value: {env:?}");
     };
     let captures = function.captures();
     assert_eq!(
@@ -283,14 +280,12 @@ fn function_aliasing() {
     assert_eq!(return_value, Value::Prim(1.0_f32.sin()));
 
     let sin = &env["sin"];
-    let sin = match sin {
-        Value::Function(Function::Native(function)) => function,
-        _ => panic!("Unexpected `sin` value: {sin:?}"),
+    let Value::Function(Function::Native(sin)) = sin else {
+        panic!("Unexpected `sin` value: {sin:?}");
     };
     let alias = &env["alias"];
-    let alias = match alias {
-        Value::Function(Function::Native(function)) => function,
-        _ => panic!("Unexpected `alias` value: {alias:?}"),
+    let Value::Function(Function::Native(alias)) = alias else {
+        panic!("Unexpected `alias` value: {alias:?}");
     };
 
     // Compare pointers to data instead of pointers to `dyn NativeFn<_>` (which is unsound,

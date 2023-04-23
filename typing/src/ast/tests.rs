@@ -141,10 +141,10 @@ fn embedded_complex_tuple() {
     let middle = tuple.middle.unwrap();
     assert_eq!(*middle.extra.element, sp(input, 10..13, TypeAst::Ident));
     assert_eq!(tuple.end.len(), 1);
+    let end = &tuple.end[0];
 
-    let embedded_tuple = match &tuple.end[0].extra {
-        TypeAst::Tuple(tuple) => tuple,
-        other => panic!("Unexpected tuple end: {other:?}"),
+    let TypeAst::Tuple(embedded_tuple) = &end.extra else {
+        panic!("Unexpected tuple end: {end:?}");
     };
     assert!(embedded_tuple.start.is_empty());
     assert_eq!(
@@ -267,9 +267,8 @@ fn fn_type_accepting_fn_arg() {
     assert_eq!(fn_type.args.extra.start.len(), 2);
     assert_eq!(fn_type.return_type, sp(input, 27..31, TypeAst::Ident));
 
-    let inner_fn = match &fn_type.args.extra.start[1].extra {
-        TypeAst::Function(function) => function.as_ref(),
-        ty => panic!("Unexpected arg type: {ty:?}"),
+    let TypeAst::Function(inner_fn) = &fn_type.args.extra.start[1].extra else {
+        panic!("Unexpected arg type: {fn_type:?}");
     };
     assert_eq!(
         inner_fn.args.extra.start,
@@ -289,9 +288,8 @@ fn fn_type_returning_fn_arg() {
         vec![sp(input, 1..4, TypeAst::Ident)]
     );
 
-    let returned_fn = match fn_type.return_type.extra {
-        TypeAst::Function(function) => *function,
-        ty => panic!("Unexpected return type: {ty:?}"),
+    let TypeAst::Function(returned_fn) = fn_type.return_type.extra else {
+        panic!("Unexpected return type: {fn_type:?}");
     };
     assert_eq!(
         returned_fn.args.extra.start,
@@ -317,13 +315,14 @@ fn fn_type_with_rest_params() {
 fn fn_type_with_constraints() {
     let input = InputSpan::new("for<'T: Lin> ('T) -> 'T");
     let (rest, ty) = fn_definition_with_constraints(input).unwrap();
-    let (constraints, fn_type) = match ty {
-        TypeAst::FunctionWithConstraints {
-            constraints,
-            function,
-        } => (constraints.extra, function.extra),
-        _ => panic!("Unexpected type: {ty:?}"),
+    let TypeAst::FunctionWithConstraints {
+        constraints,
+        function,
+    } = ty else {
+        panic!("Unexpected type: {ty:?}");
     };
+    let constraints = constraints.extra;
+    let fn_type = function.extra;
 
     assert!(rest.fragment().is_empty());
     assert!(constraints.static_lengths.is_empty());
@@ -349,22 +348,24 @@ fn multiple_fns_with_constraints() {
         _ => panic!("Unexpected type: {ty:?}"),
     };
 
-    let first_fn = match first_fn {
-        TypeAst::FunctionWithConstraints { function, .. } => function.extra,
-        _ => panic!("Unexpected 1st function: {first_fn:?}"),
+    let TypeAst::FunctionWithConstraints { function: first_fn, .. } = first_fn else {
+        panic!("Unexpected 1st function: {first_fn:?}");
     };
-    assert_eq!(first_fn.return_type, sp(input, 22..24, TypeAst::Param));
-
-    let second_fn = match second_fn {
-        TypeAst::FunctionWithConstraints { function, .. } => function.extra,
-        _ => panic!("Unexpected 2nd function: {second_fn:?}"),
-    };
-    assert!(second_fn.args.extra.start.is_empty());
     assert_eq!(
-        *second_fn.args.extra.middle.unwrap().extra.element,
+        first_fn.extra.return_type,
+        sp(input, 22..24, TypeAst::Param)
+    );
+
+    let TypeAst::FunctionWithConstraints { function: second_fn, .. } = second_fn else {
+        panic!("Unexpected 2nd function: {second_fn:?}");
+    };
+    let FunctionAst { args, return_type } = second_fn.extra;
+    assert!(args.extra.start.is_empty());
+    assert_eq!(
+        *args.extra.middle.unwrap().extra.element,
         sp(input, 44..46, TypeAst::Param)
     );
-    assert_matches!(second_fn.return_type.extra, TypeAst::Tuple(t) if t.start.is_empty());
+    assert_matches!(return_type.extra, TypeAst::Tuple(t) if t.start.is_empty());
 }
 
 #[test]
@@ -397,13 +398,11 @@ fn dyn_type_with_object_bound() {
     let (rest, ty) = type_definition(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    let object = match ty {
-        TypeAst::Dyn(constraints) => {
-            assert_eq!(constraints.terms.len(), 1);
-            constraints.object.unwrap()
-        }
-        _ => panic!("Unexpected type: {ty:?}"),
+    let TypeAst::Dyn(constraints) = ty else {
+        panic!("Unexpected type: {ty:?}");
     };
+    assert_eq!(constraints.terms.len(), 1);
+    let object = constraints.object.unwrap();
     assert_eq!(object.fields.len(), 1);
     let (field_name, field_ty) = &object.fields[0];
     assert_eq!(*field_name.fragment(), "x");

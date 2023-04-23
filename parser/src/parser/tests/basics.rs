@@ -93,11 +93,10 @@ fn multiline_comments() {
 
     let input = InputSpan::new("/* Foo");
     let err = ws::<Complete>(input).unwrap_err();
-    let err = match &err {
-        NomErr::Failure(err) => err.kind(),
-        _ => panic!("Unexpected error: {err:?}"),
+    let NomErr::Failure(err) = &err else {
+        panic!("Unexpected error: {err:?}");
     };
-    assert_matches!(err, ErrorKind::UnfinishedComment);
+    assert_matches!(err.kind(), ErrorKind::UnfinishedComment);
 }
 
 #[test]

@@ -360,9 +360,8 @@ mod tests {
             .unwrap()
             .return_value
             .unwrap();
-        let def = match def.extra {
-            Expr::FnDefinition(def) => def,
-            other => panic!("Unexpected function parsing result: {other:?}"),
+        let Expr::FnDefinition(def) = def.extra else {
+            panic!("Unexpected function parsing result: {def:?}");
         };
 
         let captures = def.undefined_variables().unwrap();
@@ -377,9 +376,8 @@ mod tests {
             .unwrap()
             .return_value
             .unwrap();
-        let def = match def.extra {
-            Expr::FnDefinition(def) => def,
-            other => panic!("Unexpected function parsing result: {other:?}"),
+        let Expr::FnDefinition(def) = def.extra else {
+            panic!("Unexpected function parsing result: {def:?}");
         };
 
         let captures = def.undefined_variables().unwrap();

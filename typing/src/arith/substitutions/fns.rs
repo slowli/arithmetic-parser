@@ -123,10 +123,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for PolyTypeTransformer<'_, Prim> {
     }
 
     fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
-        let target_len = match len.components_mut() {
-            (Some(var), _) => var,
-            _ => return,
-        };
+        let (Some(target_len), _) = len.components_mut() else { return };
         if let UnknownLen::Var(var) = target_len {
             debug_assert!(var.is_free());
             let len_count = self.mapping.lengths.len();
@@ -174,11 +171,7 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for MonoTypeTransformer<'_> {
     }
 
     fn visit_middle_len_mut(&mut self, len: &mut TupleLen) {
-        let target_len = match len.components_mut() {
-            (Some(var), _) => var,
-            _ => return,
-        };
-
+        let (Some(target_len), _) = len.components_mut() else { return };
         if let UnknownLen::Var(var) = target_len {
             if !var.is_free() {
                 if let Some(mapped_len) = self.mapping.lengths.get(&var.index()) {

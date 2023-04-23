@@ -652,14 +652,14 @@ fn fold_binary_expr<'a, T: Grammar<'a>>(
         } else {
             let mut parent = &mut acc;
             for _ in 1..insert_pos {
-                parent = match parent.extra {
-                    Expr::Binary { ref mut rhs, .. } => rhs,
+                parent = match &mut parent.extra {
+                    Expr::Binary { rhs, .. } => rhs,
                     _ => unreachable!(),
                 };
             }
 
             *parent = unite_spans(input, parent, &expr).copy_with_extra(parent.extra.clone());
-            if let Expr::Binary { ref mut rhs, .. } = parent.extra {
+            if let Expr::Binary { rhs, .. } = &mut parent.extra {
                 let rhs_span = unite_spans(input, rhs, &expr);
                 if chained_comparison {
                     return Err(ErrorKind::ChainedComparison.with_span(&rhs_span));

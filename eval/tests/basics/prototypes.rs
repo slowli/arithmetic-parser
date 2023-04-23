@@ -24,9 +24,7 @@ impl NativeFn<f32> for PointLen {
         context: &mut CallContext<'_, 'a, f32>,
     ) -> EvalResult<'a, f32> {
         context.check_args_count(&args, 1)?;
-        let point = if let Value::Object(obj) = args.pop().unwrap().extra {
-            obj
-        } else {
+        let Value::Object(point) = args.pop().unwrap().extra else {
             let err = ErrorKind::native("Function argument must be an object");
             return Err(context.call_site_error(err));
         };

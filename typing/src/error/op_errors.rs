@@ -67,9 +67,8 @@ impl<Prim: PrimitiveType> OpErrors<'_, Prim> {
 
     #[cfg(test)]
     pub(crate) fn into_vec(self) -> Vec<ErrorKind<Prim>> {
-        let errors = match self.errors {
-            Goat::Owned(errors) => errors,
-            Goat::Borrowed(_) => panic!("Attempt to call `into_vec` for borrowed errors"),
+        let Goat::Owned(errors) = self.errors else {
+            panic!("Attempt to call `into_vec` for borrowed errors");
         };
         errors.into_iter().map(|err| err.kind).collect()
     }
@@ -96,10 +95,7 @@ impl<Prim: PrimitiveType> OpErrors<'static, Prim> {
         self,
         map_fn: impl Fn(ErrorPrecursor<Prim>) -> Error<'a, Prim>,
     ) -> Vec<Error<'a, Prim>> {
-        let errors = match self.errors {
-            Goat::Owned(errors) => errors,
-            Goat::Borrowed(_) => unreachable!(),
-        };
+        let Goat::Owned(errors) = self.errors else { unreachable!() };
         errors.into_iter().map(map_fn).collect()
     }
 

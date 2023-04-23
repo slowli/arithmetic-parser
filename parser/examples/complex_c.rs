@@ -273,7 +273,7 @@ impl<'a> Context<'a> {
         // Evaluate the RHS.
         let value = self.eval_expr(rhs);
         let return_value = if let Evaluated::Symbolic { .. } = value {
-            Some(format!("float2 {} = {};", variable_name, value))
+            Some(format!("float2 {variable_name} = {value};"))
         } else {
             None
         };

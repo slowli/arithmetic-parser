@@ -32,8 +32,7 @@ fn is_valid_variable_name_works() {
     for &invalid_name in &["", "1abc", "\u{43d}\u{435}\u{442}", "xy+", "a-b"] {
         assert!(
             !is_valid_variable_name(invalid_name),
-            "failed at invalid name: {}",
-            invalid_name
+            "failed at invalid name: {invalid_name}"
         );
     }
 }

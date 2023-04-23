@@ -385,7 +385,7 @@ impl Reporter {
 
             Value::Prim(num) => {
                 writer.set_color(&num_color)?;
-                write!(writer, "{}", num)?;
+                write!(writer, "{num}")?;
                 writer.reset()
             }
 
@@ -407,7 +407,7 @@ impl Reporter {
 
             Value::Ref(opaque_ref) => {
                 writer.set_color(&opaque_ref_color)?;
-                write!(writer, "{}", opaque_ref)?;
+                write!(writer, "{opaque_ref}")?;
                 writer.reset()
             }
 
@@ -485,7 +485,7 @@ impl<T: ReplLiteral> Env<T> {
                 }
             }
 
-            write!(self.reporter.writer, "{} = ", name)?;
+            write!(self.reporter.writer, "{name} = ")?;
             self.reporter.report_value(var)?;
         }
         Ok(())
@@ -542,12 +542,12 @@ impl<T: ReplLiteral> Env<T> {
                 let ident = line[6..].trim_start();
                 let ty = self.type_env.as_ref().unwrap().get(ident);
                 if let Some(ty) = ty {
-                    writeln!(self.reporter.writer, "{}", ty)?;
+                    writeln!(self.reporter.writer, "{ty}")?;
                 } else {
                     let label =
                         Label::primary(file_id, 6..line.len()).with_message("Undefined variable");
                     let diagnostic = Diagnostic::error()
-                        .with_message(format!("Variable `{}` is not defined", ident))
+                        .with_message(format!("Variable `{ident}` is not defined"))
                         .with_code("CMD")
                         .with_labels(vec![label]);
                     self.reporter.report_error(&diagnostic)?;

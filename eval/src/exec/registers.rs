@@ -576,11 +576,10 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
         receiver: &Atom<T>,
         name: &str,
     ) -> Result<Value<'a, T>, ErrorKind> {
-        let receiver = if let Atom::Register(idx) = receiver {
-            &self.registers[*idx]
-        } else {
+        let Atom::Register(idx) = receiver else {
             return Err(ErrorKind::CannotAccessFields);
         };
+        let receiver = &self.registers[*idx];
         let object = receiver.as_object().ok_or(ErrorKind::CannotAccessFields)?;
         object.get(name).cloned().ok_or_else(|| ErrorKind::NoField {
             field: name.to_owned(),

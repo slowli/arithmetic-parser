@@ -107,19 +107,17 @@ fn fun_works_with_complex_called_values() {
 
     let input = InputSpan::new("(|x| x + 1)(0xs_123456) + 5");
     let (_, function) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
-    let function_value = match function.extra {
-        Expr::Function { name, .. } => name.extra,
-        other => panic!("unexpected expr: {other:?}"),
+    let Expr::Function { name: fn_name, .. } = function.extra else {
+        panic!("unexpected expr: {function:?}");
     };
-    assert_matches!(function_value, Expr::FnDefinition(_));
+    assert_matches!(fn_name.extra, Expr::FnDefinition(_));
 
     let input = InputSpan::new("|x| { x + 1 }(0xs_123456) + 5");
     let (_, function) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
-    let function_value = match function.extra {
-        Expr::Function { name, .. } => name.extra,
-        other => panic!("unexpected expr: {other:?}"),
+    let Expr::Function { name: fn_name, .. } = function.extra else {
+        panic!("unexpected expr: {function:?}");
     };
-    assert_matches!(function_value, Expr::FnDefinition(_));
+    assert_matches!(fn_name.extra, Expr::FnDefinition(_));
 }
 
 #[test]
@@ -359,9 +357,8 @@ fn fn_definition_parsing() {
 fn function_call_with_literal_as_fn_name() {
     let input = InputSpan::new("1(2, 3);");
     let err = expr::<FieldGrammar, Complete>(input).unwrap_err();
-    let spanned_err = match err {
-        NomErr::Failure(spanned) => spanned,
-        _ => panic!("Unexpected error: {err}"),
+    let NomErr::Failure(spanned_err) = err else {
+        panic!("Unexpected error: {err}");
     };
     assert_matches!(spanned_err.kind(), ErrorKind::LiteralName);
 }

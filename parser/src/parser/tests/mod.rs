@@ -751,12 +751,11 @@ fn field_access_with_indexed_field() {
     let input = InputSpan::new("point.122.sin(1)");
     let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
 
-    let inner_expr = match expr.extra {
-        Expr::Method { receiver, .. } => *receiver,
-        other => panic!("Unexpected expr: {other:?}"),
+    let Expr::Method { receiver, .. } = expr.extra else {
+        panic!("Unexpected expr: {expr:?}");
     };
     assert_eq!(
-        inner_expr.extra,
+        receiver.extra,
         Expr::FieldAccess {
             name: sp(6, "122", ()),
             receiver: Box::new(sp(0, "point", Expr::Variable)),

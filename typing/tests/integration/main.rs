@@ -67,9 +67,8 @@ fn assert_incompatible_types<Prim: PrimitiveType>(
     first: &Type<Prim>,
     second: &Type<Prim>,
 ) {
-    let (x, y) = match err {
-        ErrorKind::TypeMismatch(x, y) => (x, y),
-        _ => panic!("Unexpected error type: {err:?}"),
+    let ErrorKind::TypeMismatch(x, y) = err else {
+        panic!("Unexpected error type: {err:?}");
     };
     assert!(
         (x == first && y == second) || (x == second && y == first),

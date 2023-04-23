@@ -41,9 +41,8 @@ pub(crate) use self::conversion::AstConversionState;
 /// # fn main() -> anyhow::Result<()> {
 /// let input = InputSpan::new("(Num, ('T) -> ('T, 'T))");
 /// let (_, ty) = TypeAst::parse(input)?;
-/// let elements = match ty.extra {
-///     TypeAst::Tuple(elements) => elements,
-///     _ => unreachable!(),
+/// let TypeAst::Tuple(elements) = ty.extra else {
+///     unreachable!();
 /// };
 /// assert_eq!(elements.start[0].extra, TypeAst::Ident);
 /// assert_matches!(

@@ -99,20 +99,20 @@ impl MapPrimitiveType<String> for StrArithmetic {
 }
 
 impl TypeArithmetic<StrType> for StrArithmetic {
-    fn process_unary_op<'a>(
+    fn process_unary_op(
         &self,
         substitutions: &mut Substitutions<StrType>,
         context: &UnaryOpContext<StrType>,
-        errors: OpErrors<'a, StrType>,
+        errors: OpErrors<'_, StrType>,
     ) -> Type<StrType> {
         BoolArithmetic.process_unary_op(substitutions, context, errors)
     }
 
-    fn process_binary_op<'a>(
+    fn process_binary_op(
         &self,
         substitutions: &mut Substitutions<StrType>,
         context: &BinaryOpContext<StrType>,
-        mut errors: OpErrors<'a, StrType>,
+        mut errors: OpErrors<'_, StrType>,
     ) -> Type<StrType> {
         const OP_SETTINGS: OpConstraintSettings<'static, StrType> = OpConstraintSettings {
             lin: &Linearity,

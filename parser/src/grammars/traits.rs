@@ -11,6 +11,7 @@ use crate::{
 
 bitflags! {
     /// Parsing features used to configure [`Parse`] implementations.
+    #[derive(Debug, Clone, Copy)]
     pub struct Features: u64 {
         /// Enables parsing tuples.
         const TUPLES = 1;
@@ -31,7 +32,7 @@ bitflags! {
         const OBJECTS = 128;
 
         /// Enables all Boolean operations.
-        const BOOLEAN_OPS = Self::BOOLEAN_OPS_BASIC.bits | Self::ORDER_COMPARISONS.bits;
+        const BOOLEAN_OPS = Self::BOOLEAN_OPS_BASIC.bits() | Self::ORDER_COMPARISONS.bits();
     }
 }
 
@@ -39,7 +40,7 @@ impl Features {
     /// Creates a copy of these `Features` without any of the flags in `other`.
     #[must_use]
     pub const fn without(self, other: Self) -> Self {
-        Self::from_bits_truncate(self.bits & !other.bits)
+        Self::from_bits_truncate(self.bits() & !other.bits())
     }
 }
 

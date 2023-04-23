@@ -118,7 +118,7 @@ impl ops::Mul for Evaluated {
         match (self, rhs) {
             (Value(lhs), Value(rhs)) => Value(lhs * rhs),
             (lhs, rhs) => Symbolic {
-                content: format!("complex_mul({}, {})", lhs, rhs),
+                content: format!("complex_mul({lhs}, {rhs})"),
                 priority: OpPriority::max_priority(),
             },
         }
@@ -134,7 +134,7 @@ impl ops::Div for Evaluated {
         match (self, rhs) {
             (Value(lhs), Value(rhs)) => Value(lhs / rhs),
             (lhs, rhs) => Symbolic {
-                content: format!("complex_div({}, {})", lhs, rhs),
+                content: format!("complex_div({lhs}, {rhs})"),
                 priority: OpPriority::max_priority(),
             },
         }
@@ -150,7 +150,7 @@ impl ops::BitXor for Evaluated {
         match (self, rhs) {
             (Value(lhs), Value(rhs)) => Value(lhs.powc(rhs)),
             (lhs, rhs) => Symbolic {
-                content: format!("complex_pow({}, {})", lhs, rhs),
+                content: format!("complex_pow({lhs}, {rhs})"),
                 priority: OpPriority::max_priority(),
             },
         }
@@ -211,7 +211,7 @@ impl<'a> Context<'a> {
 
     fn eval_function(fn_def: &FnDefinition<'a, ComplexGrammar>, name: &str) -> String {
         let mut context = Self::new();
-        let mut evaluated = format!("float2 {}(", name);
+        let mut evaluated = format!("float2 {name}(");
         let args = &fn_def.args.extra.start;
 
         for (i, arg) in args.iter().enumerate() {
@@ -273,7 +273,7 @@ impl<'a> Context<'a> {
         // Evaluate the RHS.
         let value = self.eval_expr(rhs);
         let return_value = if let Evaluated::Symbolic { .. } = value {
-            Some(format!("float2 {} = {};", variable_name, value))
+            Some(format!("float2 {variable_name} = {value};"))
         } else {
             None
         };
@@ -319,10 +319,10 @@ impl<'a> Context<'a> {
             Expr::Function { name, args } => {
                 let fn_name = name.fragment();
                 if !self.functions.contains(fn_name) {
-                    panic!("Undefined function `{}`", fn_name);
+                    panic!("Undefined function `{fn_name}`");
                 }
 
-                let mut fn_call = format!("complex_{}(", fn_name);
+                let mut fn_call = format!("complex_{fn_name}(");
                 let arg_values = args.iter().map(|arg| self.eval_expr(arg));
                 for (i, arg) in arg_values.enumerate() {
                     fn_call += &arg.to_string();
@@ -364,5 +364,5 @@ fn main() {
     let statements = ComplexGrammar::parse_statements(span).unwrap();
 
     let code = Context::generate_code(&statements);
-    println!("Generated code:\n\n{}", code);
+    println!("Generated code:\n\n{code}");
 }

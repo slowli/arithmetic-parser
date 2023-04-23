@@ -152,9 +152,7 @@ impl<Prim: PrimitiveType> Visit<Prim> for ParamQuantifier<'_, Prim> {
     fn visit_tuple(&mut self, tuple: &Tuple<Prim>) {
         let (_, middle, _) = tuple.parts();
         let middle_len = middle.and_then(|middle| middle.len().components().0);
-        let middle_len = if let Some(len) = middle_len {
-            len
-        } else {
+        let Some(middle_len) = middle_len else {
             visit::visit_tuple(self, tuple);
             return;
         };

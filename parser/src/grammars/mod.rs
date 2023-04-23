@@ -352,11 +352,10 @@ mod tests {
         assert_eq!(max_val, 127);
 
         let err = <i8 as NumLiteral>::parse(InputSpan::new("128")).unwrap_err();
-        let err_kind = match &err {
-            NomErr::Error(err) => err.kind(),
-            _ => panic!("Unexpected error type: {err:?}"),
+        let NomErr::Error(err) = &err else {
+            panic!("Unexpected error type: {err:?}");
         };
-        assert_matches!(err_kind, ErrorKind::Literal(_));
+        assert_matches!(err.kind(), ErrorKind::Literal(_));
     }
 
     #[cfg(feature = "num-bigint")]

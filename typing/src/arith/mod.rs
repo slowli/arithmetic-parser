@@ -96,7 +96,7 @@ impl<Prim: WithBoolean> TypeArithmetic<Prim> for BoolArithmetic {
     ///
     /// - `!` requires a Boolean input and outputs a Boolean.
     /// - Other operations fail with [`ErrorKind::UnsupportedFeature`].
-    fn process_unary_op<'a>(
+    fn process_unary_op(
         &self,
         substitutions: &mut Substitutions<Prim>,
         context: &UnaryOpContext<Prim>,
@@ -417,7 +417,7 @@ where
 }
 
 impl TypeArithmetic<Num> for NumArithmetic {
-    fn process_unary_op<'a>(
+    fn process_unary_op(
         &self,
         substitutions: &mut Substitutions<Num>,
         context: &UnaryOpContext<Num>,
@@ -426,7 +426,7 @@ impl TypeArithmetic<Num> for NumArithmetic {
         Self::process_unary_op(substitutions, context, errors, &Linearity)
     }
 
-    fn process_binary_op<'a>(
+    fn process_binary_op(
         &self,
         substitutions: &mut Substitutions<Num>,
         context: &BinaryOpContext<Num>,

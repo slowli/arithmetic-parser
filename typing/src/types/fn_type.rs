@@ -246,8 +246,7 @@ impl<Prim: PrimitiveType> Function<Prim> {
     ) -> FnWithConstraints<Prim> {
         assert!(
             self.params.is_none(),
-            "Cannot attach constraints to a function with computed params: `{}`",
-            self
+            "Cannot attach constraints to a function with computed params: `{self}`"
         );
 
         let constraints = CompleteConstraints::from(ConstraintSet::just(constraint));
@@ -273,8 +272,7 @@ impl<Prim: PrimitiveType> Function<Prim> {
     pub fn with_static_lengths(self, indexes: &[usize]) -> FnWithConstraints<Prim> {
         assert!(
             self.params.is_none(),
-            "Cannot attach constraints to a function with computed params: `{}`",
-            self
+            "Cannot attach constraints to a function with computed params: `{self}`"
         );
 
         FnWithConstraints {

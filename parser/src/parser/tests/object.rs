@@ -57,12 +57,11 @@ fn chained_field_access() {
     let input = InputSpan::new("point.x.sin()");
     let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
 
-    let inner_expr = match expr.extra {
-        Expr::Method { receiver, .. } => *receiver,
-        other => panic!("Unexpected expr: {other:?}"),
+    let Expr::Method { receiver, .. } = expr.extra else {
+        panic!("Unexpected expr: {expr:?}");
     };
     assert_eq!(
-        inner_expr.extra,
+        receiver.extra,
         Expr::FieldAccess {
             name: sp(6, "x", ()),
             receiver: Box::new(sp(0, "point", Expr::Variable)),
@@ -102,16 +101,13 @@ fn callable_field_access() {
     let input = InputSpan::new("(obj.fun)(1, 2)");
     let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
 
-    let inner_expr = match expr.extra {
-        Expr::Function { name, args } => {
-            assert_eq!(args.len(), 2);
-            *name
-        }
-        other => panic!("Unexpected expr: {other:?}"),
+    let Expr::Function { name, args } = expr.extra else {
+        panic!("Unexpected expr: {expr:?}");
     };
-    assert_eq!(*inner_expr.fragment(), "(obj.fun)");
+    assert_eq!(args.len(), 2);
+    assert_eq!(*name.fragment(), "(obj.fun)");
     assert_eq!(
-        inner_expr.extra,
+        name.extra,
         Expr::FieldAccess {
             name: sp(5, "fun", ()),
             receiver: Box::new(sp(1, "obj", Expr::Variable)),
@@ -124,14 +120,11 @@ fn field_access_in_larger_context() {
     let input = InputSpan::new("point.x.sin + (1, 2)");
     let (_, parsed) = expr::<FieldGrammar, Complete>(input).unwrap();
 
-    let lhs = match parsed.extra {
-        Expr::Binary { lhs, rhs, op } => {
-            assert_eq!(op, sp(12, "+", BinaryOp::Add));
-            assert_matches!(rhs.extra, Expr::Tuple(items) if items.len() == 2);
-            *lhs
-        }
-        other => panic!("Unexpected expr: {other:?}"),
+    let Expr::Binary { lhs, rhs, op } = parsed.extra else {
+        panic!("Unexpected expr: {parsed:?}");
     };
+    assert_eq!(op, sp(12, "+", BinaryOp::Add));
+    assert_matches!(rhs.extra, Expr::Tuple(items) if items.len() == 2);
     assert_matches!(lhs.extra, Expr::FieldAccess { name, .. } if *name.fragment() == "sin");
 
     let input = InputSpan::new("foo(point.sin().x).y");
@@ -141,14 +134,13 @@ fn field_access_in_larger_context() {
         Expr::FieldAccess { name, receiver } if *name.fragment() == "y" => *receiver,
         other => panic!("Unexpected expr: {other:?}"),
     };
-    let inner_field_access = match inner_expr.extra {
-        Expr::Function { name, mut args } => {
-            assert_eq!(*name, sp(0, "foo", Expr::Variable));
-            assert_eq!(args.len(), 1);
-            args.pop().unwrap()
-        }
-        other => panic!("Unexpected expr: {other:?}"),
+    let Expr::Function { name, mut args } = inner_expr.extra else {
+        panic!("Unexpected expr: {inner_expr:?}");
     };
+
+    assert_eq!(*name, sp(0, "foo", Expr::Variable));
+    assert_eq!(args.len(), 1);
+    let inner_field_access = args.pop().unwrap();
     assert_matches!(
         inner_field_access.extra,
         Expr::FieldAccess { name, .. } if *name.fragment() == "x"
@@ -185,9 +177,8 @@ fn object_basics() {
 fn object_errors() {
     let input = InputSpan::new("#{ x = 1 }");
     let err = object_expr::<FieldGrammar, Complete>(input).unwrap_err();
-    let err = match err {
-        NomErr::Failure(err) => err,
-        other => panic!("Unexpected error: {other:?}"),
+    let NomErr::Failure(err) = err else {
+        panic!("Unexpected error: {err:?}");
     };
     assert_eq!(err.span(), sp(5, "=", ()));
 }
@@ -196,38 +187,31 @@ fn object_errors() {
 fn objects_within_larger_context() {
     let input = InputSpan::new("#{ x: 1, y: 5 }.x");
     let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
-    let inner_expr = match expr.extra {
-        Expr::FieldAccess { receiver, name } => {
-            assert_eq!(name, sp(16, "x", ()));
-            *receiver
-        }
-        other => panic!("Unexpected expr: {other:?}"),
+    let Expr::FieldAccess { receiver, name } = expr.extra else {
+        panic!("Unexpected expr: {expr:?}");
     };
-    assert_matches!(inner_expr.extra, Expr::Object(ObjectExpr { fields }) if fields.len() == 2);
+    assert_eq!(name, sp(16, "x", ()));
+    assert_matches!(receiver.extra, Expr::Object(ObjectExpr { fields }) if fields.len() == 2);
 
     let input = InputSpan::new("test(x, #{ y, z: 2 * y })");
     let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
-    let inner_expr = match expr.extra {
-        Expr::Function { name, mut args } => {
-            assert_eq!(*name, sp(0, "test", Expr::Variable));
-            assert_eq!(args.len(), 2);
-            assert_eq!(args[0], sp(5, "x", Expr::Variable));
-            args.pop().unwrap()
-        }
-        other => panic!("Unexpected expr: {other:?}"),
+    let Expr::Function { name, mut args } = expr.extra else {
+        panic!("Unexpected expr: {expr:?}");
     };
+    assert_eq!(*name, sp(0, "test", Expr::Variable));
+    assert_eq!(args.len(), 2);
+    assert_eq!(args[0], sp(5, "x", Expr::Variable));
+    let inner_expr = args.pop().unwrap();
     assert_matches!(inner_expr.extra, Expr::Object(ObjectExpr { fields }) if fields.len() == 2);
 
     let input = InputSpan::new("{ x = gen(); #{ x, y: x * GEN } }");
     let (_, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
-    let inner_expr = match expr.extra {
-        Expr::Block(block) => {
-            assert_eq!(block.statements.len(), 1);
-            assert_eq!(*block.statements[0].fragment(), "x = gen()");
-            *block.return_value.unwrap()
-        }
-        other => panic!("Unexpected expr: {other:?}"),
+    let Expr::Block(block) = expr.extra else {
+        panic!("Unexpected expr: {expr:?}");
     };
+    assert_eq!(block.statements.len(), 1);
+    assert_eq!(*block.statements[0].fragment(), "x = gen()");
+    let inner_expr = *block.return_value.unwrap();
     assert_matches!(inner_expr.extra, Expr::Object(ObjectExpr { fields }) if fields.len() == 2);
 
     let input = InputSpan::new("|xs| #{ x: xs.0 }");
@@ -312,14 +296,12 @@ fn object_destructuring_in_tuple() {
     let (rest, lvalue) = lvalue::<FieldGrammar, Complete>(input).unwrap();
 
     assert!(rest.fragment().is_empty());
-    let lvalue = match lvalue.extra {
-        Lvalue::Tuple(tuple) => tuple,
-        _ => panic!("Unexpected lvalue: {lvalue:?}"),
+    let Lvalue::Tuple(lvalue) = lvalue.extra else {
+        panic!("Unexpected lvalue: {lvalue:?}");
     };
     assert_eq!(lvalue.start.len(), 1);
-    let inner_lvalue = match &lvalue.start[0].extra {
-        Lvalue::Object(obj) => obj,
-        _ => panic!("Unexpected lvalue: {lvalue:?}"),
+    let Lvalue::Object(inner_lvalue) = &lvalue.start[0].extra else {
+        panic!("Unexpected lvalue: {lvalue:?}");
     };
     assert_eq!(inner_lvalue.fields.len(), 2);
     assert_eq!(inner_lvalue.fields[0].field_name, sp(3, "x", ()));
@@ -367,10 +349,9 @@ fn object_destructuring_in_statement() {
         let (rest, stmt) = statement::<FieldGrammar, Complete>(input).unwrap();
         assert!(rest.fragment().is_empty());
 
-        let lhs = match stmt.extra {
-            Statement::Assignment { lhs, .. } => lhs.extra,
-            _ => panic!("Unexpected statement: {stmt:?}"),
+        let Statement::Assignment { lhs, .. } = stmt.extra else {
+            panic!("Unexpected statement: {stmt:?}");
         };
-        assert_matches!(lhs, Lvalue::Object(_));
+        assert_matches!(lhs.extra, Lvalue::Object(_));
     }
 }

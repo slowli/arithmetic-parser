@@ -160,9 +160,8 @@ where
     let input = format!("x {} 1;", op.as_str());
     let input = InputSpan::new(&input);
     let err = statement::<T, Complete>(input).map(drop).unwrap_err();
-    let spanned_err = match err {
-        NomErr::Failure(spanned) => spanned,
-        _ => panic!("Unexpected error: {err}"),
+    let NomErr::Failure(spanned_err) = err else {
+        panic!("Unexpected error: {err}");
     };
     assert_eq!(spanned_err.span().location_offset(), 2);
     assert_eq!(*spanned_err.span().fragment(), op.as_str());

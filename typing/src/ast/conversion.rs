@@ -579,9 +579,8 @@ mod tests {
     #[test]
     fn parsing_functional_type() -> anyhow::Result<()> {
         let ty = <Type>::try_from(&TypeAst::try_from("(['T; N], ('T) -> 'U) -> 'U")?)?;
-        let ty = match ty {
-            Type::Function(fn_type) => *fn_type,
-            _ => panic!("Unexpected type: {ty:?}"),
+        let Type::Function(ty) = ty else {
+            panic!("Unexpected type: {ty:?}");
         };
 
         assert_eq!(ty.params.as_ref().unwrap().len_params.len(), 1);
@@ -593,9 +592,8 @@ mod tests {
     #[test]
     fn parsing_functional_type_with_varargs() -> anyhow::Result<()> {
         let ty = <Type>::try_from(&TypeAst::try_from("(...[Num; N]) -> Num")?)?;
-        let ty = match ty {
-            Type::Function(fn_type) => *fn_type,
-            _ => panic!("Unexpected type: {ty:?}"),
+        let Type::Function(ty) = ty else {
+            panic!("Unexpected type: {ty:?}");
         };
 
         assert_eq!(ty.params.as_ref().unwrap().len_params.len(), 1);
@@ -628,9 +626,8 @@ mod tests {
         let type_def = "for<'T: { x: Num } + Lin> ('T) -> Bool";
         let ty = TypeAst::try_from(type_def)?;
         let ty = <Type>::try_from(&ty)?;
-        let ty = match ty {
-            Type::Function(fn_type) => *fn_type,
-            _ => panic!("Unexpected type: {ty:?}"),
+        let Type::Function(ty) = ty else {
+            panic!("Unexpected type: {ty:?}");
         };
 
         let type_params = &ty.params.as_ref().unwrap().type_params;

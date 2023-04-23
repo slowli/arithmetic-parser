@@ -70,15 +70,12 @@ fn multiple_type_casts() {
     let input = InputSpan::new("abs(x) as Sc as bool");
     let expr = simple_expr::<FieldGrammar, Complete>(input).unwrap().1;
 
-    let inner_expr = match expr.extra {
-        Expr::TypeCast { value, ty } => {
-            assert_eq!(ty, sp(16, "bool", ValueType::Bool));
-            value.extra
-        }
-        _ => panic!("Unexpected expr: {:?}", expr.extra),
+    let Expr::TypeCast { value, ty } = expr.extra else {
+        panic!("Unexpected expr: {expr:?}");
     };
+    assert_eq!(ty, sp(16, "bool", ValueType::Bool));
     assert_eq!(
-        inner_expr,
+        value.extra,
         Expr::TypeCast {
             value: Box::new(sp(
                 0,

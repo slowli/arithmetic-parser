@@ -285,13 +285,11 @@ impl<'a, T> Value<'a, T> {
         arithmetic: &dyn OrdArithmetic<T>,
     ) -> Result<Self, Error<'a>> {
         // We only know how to compare primitive values.
-        let lhs_value = match &lhs.extra {
-            Value::Prim(value) => value,
-            _ => return Err(Error::new(module_id, lhs, ErrorKind::CannotCompare)),
+        let Value::Prim(lhs_value) = &lhs.extra else {
+            return Err(Error::new(module_id, lhs, ErrorKind::CannotCompare));
         };
-        let rhs_value = match &rhs.extra {
-            Value::Prim(value) => value,
-            _ => return Err(Error::new(module_id, rhs, ErrorKind::CannotCompare)),
+        let Value::Prim(rhs_value) = &rhs.extra else {
+            return Err(Error::new(module_id, rhs, ErrorKind::CannotCompare));
         };
 
         let maybe_ordering = arithmetic.partial_cmp(lhs_value, rhs_value);
@@ -354,9 +352,8 @@ impl<T> Object<'_, T> {
     fn eq_by_arithmetic(&self, other: &Self, arithmetic: &dyn OrdArithmetic<T>) -> bool {
         if self.len() == other.len() {
             for (field_name, this_elem) in self {
-                let that_elem = match other.get(field_name) {
-                    Some(elem) => elem,
-                    None => return false,
+                let Some(that_elem) = other.get(field_name) else {
+                    return false;
                 };
                 if !this_elem.eq_by_arithmetic(that_elem, arithmetic) {
                     return false;

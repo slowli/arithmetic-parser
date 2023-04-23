@@ -97,12 +97,11 @@ fn methods_and_multiple_unary_ops() {
     let input = InputSpan::new("--1.abs();");
     let expr = expr::<Untyped<F32Grammar>, Complete>(input).unwrap().1;
     assert_eq!(*expr.fragment(), "--1.abs()");
-    let inner_expr = match expr.extra {
-        Expr::Unary { inner, .. } => inner,
-        _ => panic!("Unexpected expr: {expr:?}"),
+    let Expr::Unary { inner, .. } = expr.extra else {
+        panic!("Unexpected expr: {expr:?}");
     };
-    assert_eq!(*inner_expr.fragment(), "-1.abs()");
-    assert_matches!(inner_expr.extra, Expr::Unary { .. });
+    assert_eq!(*inner.fragment(), "-1.abs()");
+    assert_matches!(inner.extra, Expr::Unary { .. });
 }
 
 #[test]
@@ -140,9 +139,8 @@ fn chained_comparisons() {
 
     for &input in INPUTS {
         let err = binary_expr::<FieldGrammar, Complete>(InputSpan::new(input)).unwrap_err();
-        let err = match err {
-            NomErr::Failure(err) => err,
-            _ => panic!("Unexpected error: {err:?}"),
+        let NomErr::Failure(err) = err else {
+            panic!("Unexpected error: {err:?}");
         };
         assert_matches!(err.kind(), ErrorKind::ChainedComparison);
         assert_eq!(*err.span().fragment(), input);
@@ -153,9 +151,8 @@ fn chained_comparisons() {
 fn chained_comparisons_with_larger_context() {
     let input = "x == 3 && 1 + 2 > x.abs() == 3 && T";
     let err = binary_expr::<FieldGrammar, Complete>(InputSpan::new(input)).unwrap_err();
-    let err = match err {
-        NomErr::Failure(err) => err,
-        _ => panic!("Unexpected error: {err:?}"),
+    let NomErr::Failure(err) = err else {
+        panic!("Unexpected error: {err:?}");
     };
     assert_matches!(err.kind(), ErrorKind::ChainedComparison);
     assert_eq!(*err.span().fragment(), "1 + 2 > x.abs() == 3");

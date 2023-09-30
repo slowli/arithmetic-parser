@@ -3,6 +3,7 @@
 use anyhow::format_err;
 use clap::{Args, Parser, Subcommand};
 use codespan_reporting::term::{termcolor::ColorChoice, ColorArg};
+use is_terminal::IsTerminal;
 use num_complex::{Complex32, Complex64};
 
 use std::{
@@ -144,7 +145,7 @@ impl Command {
     fn color_choice(color_arg: ColorArg) -> ColorChoice {
         match color_arg.into() {
             ColorChoice::Auto => {
-                if atty::is(atty::Stream::Stdout) {
+                if io::stdout().is_terminal() {
                     ColorChoice::Auto
                 } else {
                     ColorChoice::Never

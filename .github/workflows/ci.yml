@@ -74,10 +74,12 @@ jobs:
       - name: Lint dependencies
         run: cargo deny --workspace --all-features check
 
-      - name: Run tests
-        run: cargo test --workspace --all-features --all-targets
+      - name: Run tests for libraries
+        run: cargo test -p arithmetic-parser -p arithmetic-eval -p arithmetic-typing --all-features --all-targets
+      - name: Run CLI tests
+        run: cargo test -p arithmetic-parser-cli --all-features --all-targets
       - name: Run doc tests
-        run: cargo test --workspace --features=nom/std --doc
+        run: cargo test -p arithmetic-parser -p arithmetic-eval -p arithmetic-typing --features=nom/std --doc
 
       - name: Run parser example
         run: cargo run -p arithmetic-parser --all-features --example complex_c

@@ -1,44 +1,34 @@
 [package]
 name = "arithmetic-parser-cli"
-version = "0.3.0"
-authors = ["Alex Ostrovski <ostrovski.alex@gmail.com>"]
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
 readme = "README.md"
-license = "MIT OR Apache-2.0"
 description = "CLI / REPL for arithmetic expressions."
-repository = "https://github.com/slowli/arithmetic-parser"
-
-[dependencies]
-anyhow = "1.0.27"
-atty = "0.2.14"
-clap = { version = "4.0.32", features = ["derive", "env", "wrap_help"] }
-codespan = "0.11.1"
-codespan-reporting = "0.11.1"
-num-complex = "0.4.0"
-num-traits = "0.2.14"
-rustyline = "10.0.0"
-textwrap = "0.16.0"
-unindent = "0.1.6"
 
 [[bin]]
 name = "arithmetic-parser"
 path = "src/main.rs"
 
-[dependencies.arithmetic-parser]
+[dependencies]
+anyhow.workspace = true
+clap = { version = "4.0.32", features = ["derive", "env", "wrap_help"] }
+codespan = "0.11.1"
+codespan-reporting = "0.11.1"
+is-terminal = "0.4.9"
+num-complex.workspace = true
+num-traits.workspace = true
+rustyline = "12.0.0"
+textwrap = "0.16.0"
+unindent = "0.2.3"
+
+arithmetic-parser = { version = "0.3.0", path = "../parser" }
+arithmetic-eval = { version = "0.3.0", path = "../eval", features = ["complex"] }
+arithmetic-typing = { version = "0.3.0", path = "../typing" }
+
+[dev-dependencies.term-transcript]
 version = "0.3.0"
-path = "../parser"
-
-[dependencies.arithmetic-eval]
-version = "0.3.0"
-path = "../eval"
-features = ["complex"]
-
-[dependencies.arithmetic-typing]
-version = "0.3.0"
-path = "../typing"
-
-[dev-dependencies]
-term-transcript = "0.2.0"
-
-[workspace]
-# Separate workspace since we need a lockfile
+git = "https://github.com/slowli/term-transcript.git"
+rev = "982d74b9808ca1d975008a1256793a5d6b47b6b0"

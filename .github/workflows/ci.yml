@@ -21,14 +21,9 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.msrv }}
-          override: true
-      - name: Generate lockfile
-        uses: actions-rs/cargo@v1
-        with:
-          command: generate-lockfile
 
       - name: Cache cargo build
         uses: actions/cache@v3
@@ -38,17 +33,7 @@ jobs:
           restore-keys: ${{ runner.os }}-msrv-cargo
 
       - name: Build parser and typing libraries
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          # Avoid building the WASM E2E test crate since it requires Rust 1.54+
-          args: -p arithmetic-parser -p arithmetic-typing --lib
-      - name: Build eval library
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          # `hashbrown` dependency requires Rust 1.56+, so we don't enable it
-          args: -p arithmetic-eval --features complex,bigint --lib
+        run: cargo build -p arithmetic-parser -p arithmetic-typing -p arithmetic-eval --lib
 
   build:
     runs-on: ubuntu-latest
@@ -57,96 +42,57 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-          override: true
           components: rustfmt, clippy
       - name: Install Node.js
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v3
         with:
           node-version: '18'
       - name: Install wasm-pack
-        uses: jetli/wasm-pack-action@v0.3.0
+        uses: jetli/wasm-pack-action@v0.4.0
         with:
           version: 'latest'
-      - name: Generate lockfile
-        uses: actions-rs/cargo@v1
+      - name: Install cargo-deny
+        uses: baptiste0928/cargo-install@v2
         with:
-          command: generate-lockfile
+          crate: cargo-deny
+          version: "^0.14"
 
       - name: Cache cargo build
         uses: actions/cache@v3
         with:
-          path: |
-            target/
-            cli/target/
+          path: target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo
 
       - name: Format
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+        run: cargo fmt --all -- --check
       - name: Clippy
-        uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --workspace --all-features --all-targets -- -D warnings
-      - name: Clippy CLI
-        uses: actions-rs/clippy-check@v1
-        with:
-          name: "clippy (CLI)"
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --manifest-path=cli/Cargo.toml --all-features --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-features --all-targets -- -D warnings
+      - name: Lint dependencies
+        run: cargo deny --workspace --all-features check
 
-      - name: Run tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --workspace --all-features --all-targets
+      - name: Run tests for libraries
+        run: cargo test -p arithmetic-parser -p arithmetic-eval -p arithmetic-typing --all-features --all-targets
       - name: Run CLI tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --manifest-path=cli/Cargo.toml --all-features --all-targets
+        run: cargo test -p arithmetic-parser-cli --all-features --all-targets
       - name: Run doc tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --workspace --features=nom/std --doc
+        run: cargo test -p arithmetic-parser -p arithmetic-eval -p arithmetic-typing --features=nom/std --doc
 
       - name: Run parser example
-        uses: actions-rs/cargo@v1
-        with:
-          command: run
-          args: -p arithmetic-parser --all-features --example complex_c
+        run: cargo run -p arithmetic-parser --all-features --example complex_c
       - name: Run eval example
-        uses: actions-rs/cargo@v1
-        with:
-          command: run
-          args: --manifest-path eval/Cargo.toml --example owned_module
+        run: cargo run --manifest-path=eval/Cargo.toml --example owned_module
       - name: Run ElGamal encryption example
-        uses: actions-rs/cargo@v1
-        with:
-          command: run
-          args: --manifest-path eval/Cargo.toml --example el_gamal --features bigint,num-bigint/rand
+        run: cargo run --manifest-path=eval/Cargo.toml --example el_gamal --features bigint,num-bigint/rand
       - name: Run cyclic group example
-        uses: actions-rs/cargo@v1
-        with:
-          command: run
-          args: --manifest-path eval/Cargo.toml --example cyclic_group --features bigint,num-bigint/rand
+        run: cargo run --manifest-path=eval/Cargo.toml --example cyclic_group --features bigint,num-bigint/rand
       - name: Run typing example (strings)
-        uses: actions-rs/cargo@v1
-        with:
-          command: run
-          args: -p arithmetic-typing --example strings
+        run: cargo run -p arithmetic-typing --example strings
       - name: Run typing example (num_or_bytes)
-        uses: actions-rs/cargo@v1
-        with:
-          command: run
-          args: -p arithmetic-typing --example num_or_bytes
+        run: cargo run -p arithmetic-typing --example num_or_bytes
 
       - name: Compile WASM
         run: (cd e2e-tests/wasm; wasm-pack build --target nodejs)
@@ -172,34 +118,21 @@ jobs:
           sudo apt-get install -y --no-install-suggests --no-install-recommends qemu-system-arm
 
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.nightly }}
-          override: true
           components: rustfmt, clippy
-          target: thumbv7m-none-eabi
-      - name: Generate lockfile
-        uses: actions-rs/cargo@v1
-        with:
-          command: generate-lockfile
-          args: --manifest-path=e2e-tests/no-std/Cargo.toml
+          targets: thumbv7m-none-eabi
 
       - name: Cache cargo build
         uses: actions/cache@v3
         with:
-          path: e2e-tests/no-std/target
+          path: target
           key: ${{ runner.os }}-nostd-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-nostd-cargo
 
-      # Since it's impossible to include the `nostd` crate into the common workspace,
-      # we need to perform fmt / clippy checks for it separately.
-      - name: Format
-        run: cargo fmt -- --check
-      - name: Clippy
-        run: cargo clippy --bin arithmetic-parser-nostd --all-features -- -D warnings
-
       - name: Run binary
-        run: cargo run --release
+        run: cargo run -p arithmetic-parser-nostd --release
 
   document:
     if: github.event_name == 'push'
@@ -215,15 +148,9 @@ jobs:
           persist-credentials: false
 
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.nightly }}
-          profile: minimal
-          override: true
-      - name: Generate lockfile
-        uses: actions-rs/cargo@v1
-        with:
-          command: generate-lockfile
 
       - name: Cache cargo build
         uses: actions/cache@v3

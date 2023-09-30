@@ -5,10 +5,11 @@
 
 extern crate alloc;
 
-use alloc_cortex_m::CortexMHeap;
 use cortex_m_rt::entry;
 use cortex_m_semihosting::{debug, hprintln, syscall};
-//use panic_halt as _; FIXME
+use embedded_alloc::Heap;
+#[cfg(target_arch = "arm")]
+use panic_halt as _;
 use rand_chacha::{
     rand_core::{RngCore, SeedableRng},
     ChaChaRng,
@@ -28,7 +29,7 @@ use arithmetic_parser::{
 };
 
 #[global_allocator]
-static ALLOCATOR: CortexMHeap = CortexMHeap::empty();
+static ALLOCATOR: Heap = Heap::empty();
 
 const HEAP_SIZE: usize = 49_152;
 
@@ -69,7 +70,6 @@ impl NativeFn<i32> for Dbg {
                 val = arg.extra
             ),
         }
-        .unwrap();
         Ok(arg.extra)
     }
 }

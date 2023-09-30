@@ -100,7 +100,7 @@ pub struct CheckedArithmetic<Kind = Checked>(PhantomData<Kind>);
 
 impl<Kind> Clone for CheckedArithmetic<Kind> {
     fn clone(&self) -> Self {
-        Self(self.0)
+        *self
     }
 }
 

@@ -159,10 +159,7 @@ pub(crate) struct Operations<'r, T> {
 
 impl<T> Clone for Operations<'_, T> {
     fn clone(&self) -> Self {
-        Self {
-            arithmetic: self.arithmetic,
-            prototypes: self.prototypes,
-        }
+        *self
     }
 }
 

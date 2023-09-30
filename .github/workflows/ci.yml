@@ -10,7 +10,7 @@ env:
   # Minimum supported Rust version.
   msrv: 1.65.0
   # Nightly Rust toolchain for building docs and checking nostd support.
-  nightly: nightly-2022-11-24
+  nightly: nightly-2023-09-09
 
 jobs:
   # Checks minimum supported Rust version.
@@ -37,55 +37,18 @@ jobs:
           key: ${{ runner.os }}-msrv-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-msrv-cargo
 
-      - name: Run tests (parser, typing)
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          # Avoid building the WASM E2E test crate since it requires Rust 1.54+
-          args: -p arithmetic-parser -p arithmetic-typing --all-features --all-targets
-      - name: Run tests (eval)
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          # `hashbrown` dependency requires Rust 1.56+, so we don't enable it
-          args: -p arithmetic-eval --features complex,bigint --all-targets
-
-      - name: Build CLI
+      - name: Build parser and typing libraries
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --manifest-path=cli/Cargo.toml --all-features --all-targets
-
-      - name: Run parser example
+          # Avoid building the WASM E2E test crate since it requires Rust 1.54+
+          args: -p arithmetic-parser -p arithmetic-typing --lib
+      - name: Build eval library
         uses: actions-rs/cargo@v1
         with:
-          command: run
-          args: -p arithmetic-parser --all-features --example complex_c
-      - name: Run eval example
-        uses: actions-rs/cargo@v1
-        with:
-          command: run
-          args: --manifest-path eval/Cargo.toml --example owned_module
-      - name: Run ElGamal encryption example
-        uses: actions-rs/cargo@v1
-        with:
-          command: run
-          args: --manifest-path eval/Cargo.toml --example el_gamal --features bigint,num-bigint/rand
-      - name: Run cyclic group example
-        uses: actions-rs/cargo@v1
-        with:
-          command: run
-          args: --manifest-path eval/Cargo.toml --example cyclic_group --features bigint,num-bigint/rand
-      - name: Run typing example (strings)
-        uses: actions-rs/cargo@v1
-        with:
-          command: run
-          args: -p arithmetic-typing --example strings
-      - name: Run typing example (num_or_bytes)
-        uses: actions-rs/cargo@v1
-        with:
-          command: run
-          args: -p arithmetic-typing --example num_or_bytes
+          command: build
+          # `hashbrown` dependency requires Rust 1.56+, so we don't enable it
+          args: -p arithmetic-eval --features complex,bigint --lib
 
   build:
     runs-on: ubuntu-latest

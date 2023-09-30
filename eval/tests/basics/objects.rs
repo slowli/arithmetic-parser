@@ -44,7 +44,7 @@ fn capturing_vars_in_object() {
         #{ x, y: y + 1 }
     "#;
     let return_value = evaluate(&mut Environment::new(), program);
-    let  Value::Object(fields) = return_value else {
+    let Value::Object(fields) = return_value else {
         panic!("Unexpected return value: {return_value:?}");
     };
 

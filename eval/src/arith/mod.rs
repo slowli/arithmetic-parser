@@ -186,7 +186,7 @@ impl<T, A: fmt::Debug> fmt::Debug for FullArithmetic<T, A> {
         formatter
             .debug_struct("FullArithmetic")
             .field("base", &self.base)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 

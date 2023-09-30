@@ -95,7 +95,9 @@ impl<Prim: PrimitiveType> OpErrors<'static, Prim> {
         self,
         map_fn: impl Fn(ErrorPrecursor<Prim>) -> Error<'a, Prim>,
     ) -> Vec<Error<'a, Prim>> {
-        let Goat::Owned(errors) = self.errors else { unreachable!() };
+        let Goat::Owned(errors) = self.errors else {
+            unreachable!()
+        };
         errors.into_iter().map(map_fn).collect()
     }
 

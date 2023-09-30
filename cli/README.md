@@ -31,6 +31,11 @@ the provided expression in the selected arithmetic.
 With the `--interactive` / `-i` flag, the command works as REPL, allowing
 to iteratively evaluate expressions.
 
+### Minimum supported Rust version
+
+The crate supports the latest stable Rust version. It may support previous stable Rust versions,
+but this is not guaranteed.
+
 ## License
 
 Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE)

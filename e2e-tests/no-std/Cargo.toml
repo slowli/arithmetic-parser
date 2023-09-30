@@ -1,11 +1,11 @@
 [package]
 name = "arithmetic-parser-nostd"
-version = "0.0.0"
-authors = ["Alex Ostrovski <ostrovski.alex@gmail.com>"]
-edition = "2018"
-license = "MIT OR Apache-2.0"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "Testing usability of `arithmetic-parser` in no-std env"
-repository = "https://github.com/slowli/arithmetic-parser"
 publish = false
 
 [dependencies]

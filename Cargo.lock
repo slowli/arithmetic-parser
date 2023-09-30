@@ -151,7 +151,7 @@ dependencies = [
 
 [[package]]
 name = "arithmetic-parser-nostd"
-version = "0.0.0"
+version = "0.3.0"
 dependencies = [
  "arithmetic-eval",
  "arithmetic-parser",
@@ -165,7 +165,7 @@ dependencies = [
 
 [[package]]
 name = "arithmetic-parser-wasm"
-version = "0.0.0"
+version = "0.3.0"
 dependencies = [
  "arithmetic-eval",
  "arithmetic-parser",

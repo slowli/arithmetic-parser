@@ -1,13 +1,13 @@
 [package]
 name = "arithmetic-eval"
-version = "0.3.0"
-authors = ["Alex Ostrovski <ostrovski.alex@gmail.com>"]
-edition = "2021"
-rust-version = "1.65"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
 readme = "README.md"
-license = "MIT OR Apache-2.0"
 description = "Simple interpreter for arithmetic expressions."
-repository = "https://github.com/slowli/arithmetic-parser"
 categories = ["mathematics", "compilers", "no-std"]
 keywords = ["interpreter", "arithmetic", "scripting", "language"]
 

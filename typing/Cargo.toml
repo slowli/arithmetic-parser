@@ -1,13 +1,13 @@
 [package]
 name = "arithmetic-typing"
-version = "0.3.0"
-authors = ["Alex Ostrovski <ostrovski.alex@gmail.com>"]
-edition = "2021"
-rust-version = "1.65"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
 readme = "README.md"
-license = "MIT OR Apache-2.0"
 description = "Hindley-Milner type inference for arithmetic expressions."
-repository = "https://github.com/slowli/arithmetic-parser"
 categories = ["mathematics"]
 keywords = ["typing", "type-system", "arithmetic", "scripting", "language"]
 

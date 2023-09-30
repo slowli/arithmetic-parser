@@ -10,3 +10,8 @@ rustflags = [
 
 [build]
 target = "thumbv7m-none-eabi"
+
+[profile.release]
+opt-level = "z" # Optimize for size, rather than speed
+lto = true
+codegen-units = 1

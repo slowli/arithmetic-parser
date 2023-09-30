@@ -39,6 +39,3 @@ path = "../typing"
 
 [dev-dependencies]
 term-transcript = "0.2.0"
-
-[workspace]
-# Separate workspace since we need a lockfile

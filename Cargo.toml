@@ -1,6 +1,15 @@
 [workspace]
-members = ["parser", "eval", "e2e-tests/wasm", "typing"]
-exclude = ["cli", "e2e-tests/no-std"]
+members = [
+  # Libraries
+  "parser",
+  "eval",
+  "typing",
+  # CLI app
+  "cli",
+  # E2E tests
+  "e2e-tests/wasm",
+  "e2e-tests/no-std",
+]
 resolver = "2"
 
 # Speed up big integer crates.

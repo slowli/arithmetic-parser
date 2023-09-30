@@ -8,7 +8,7 @@ extern crate alloc;
 use alloc_cortex_m::CortexMHeap;
 use cortex_m_rt::entry;
 use cortex_m_semihosting::{debug, hprintln, syscall};
-use panic_halt as _;
+//use panic_halt as _; FIXME
 use rand_chacha::{
     rand_core::{RngCore, SeedableRng},
     ChaChaRng,

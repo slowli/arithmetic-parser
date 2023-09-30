@@ -50,12 +50,6 @@ jobs:
           # `hashbrown` dependency requires Rust 1.56+, so we don't enable it
           args: -p arithmetic-eval --features complex,bigint --lib
 
-      - name: Build CLI
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --manifest-path=cli/Cargo.toml --bins
-
   build:
     runs-on: ubuntu-latest
 

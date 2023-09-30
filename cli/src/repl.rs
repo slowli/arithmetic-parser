@@ -13,15 +13,19 @@ use crate::{
     library::ReplLiteral,
 };
 
+fn into_io_error(err: ReadlineError) -> io::Error {
+    match err {
+        ReadlineError::Io(err) => err,
+        other => io::Error::new(io::ErrorKind::Other, other),
+    }
+}
+
 pub fn repl<T: ReplLiteral>(
     env: Environment<'static, T>,
     type_env: Option<TypeEnvironment>,
     color_choice: ColorChoice,
 ) -> io::Result<()> {
-    let mut rl = Editor::<()>::new().map_err(|err| match err {
-        ReadlineError::Io(err) => err,
-        other => io::Error::new(io::ErrorKind::Other, other),
-    })?;
+    let mut rl = Editor::<(), _>::new().map_err(into_io_error)?;
     let mut env = Env::new(env, type_env, color_choice);
     env.print_greeting()?;
 
@@ -38,12 +42,12 @@ pub fn repl<T: ReplLiteral>(
                     ParseAndEvalResult::Ok(_) => {
                         prompt = ">>> ";
                         snippet.clear();
-                        rl.add_history_entry(line);
+                        rl.add_history_entry(line).map_err(into_io_error)?;
                     }
                     ParseAndEvalResult::Incomplete => {
                         prompt = "... ";
                         snippet.push('\n');
-                        rl.add_history_entry(line);
+                        rl.add_history_entry(line).map_err(into_io_error)?;
                     }
                     ParseAndEvalResult::Errored => {
                         prompt = ">>> ";

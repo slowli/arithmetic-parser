@@ -318,7 +318,8 @@ fn fn_type_with_constraints() {
     let TypeAst::FunctionWithConstraints {
         constraints,
         function,
-    } = ty else {
+    } = ty
+    else {
         panic!("Unexpected type: {ty:?}");
     };
     let constraints = constraints.extra;
@@ -348,7 +349,10 @@ fn multiple_fns_with_constraints() {
         _ => panic!("Unexpected type: {ty:?}"),
     };
 
-    let TypeAst::FunctionWithConstraints { function: first_fn, .. } = first_fn else {
+    let TypeAst::FunctionWithConstraints {
+        function: first_fn, ..
+    } = first_fn
+    else {
         panic!("Unexpected 1st function: {first_fn:?}");
     };
     assert_eq!(
@@ -356,7 +360,11 @@ fn multiple_fns_with_constraints() {
         sp(input, 22..24, TypeAst::Param)
     );
 
-    let TypeAst::FunctionWithConstraints { function: second_fn, .. } = second_fn else {
+    let TypeAst::FunctionWithConstraints {
+        function: second_fn,
+        ..
+    } = second_fn
+    else {
         panic!("Unexpected 2nd function: {second_fn:?}");
     };
     let FunctionAst { args, return_type } = second_fn.extra;

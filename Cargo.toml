@@ -1,6 +1,7 @@
 [workspace]
 members = ["parser", "eval", "e2e-tests/wasm", "typing"]
 exclude = ["cli", "e2e-tests/no-std"]
+resolver = "2"
 
 # Speed up big integer crates.
 [profile.dev.package.num-bigint]

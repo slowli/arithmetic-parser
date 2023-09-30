@@ -222,7 +222,7 @@ impl<'a, Prim: PrimitiveType> Errors<'a, Prim> {
     }
 
     pub(crate) fn extend(&mut self, errors: Vec<Error<'a, Prim>>) {
-        self.inner.extend(errors.into_iter());
+        self.inner.extend(errors);
     }
 
     /// Returns the number of errors in this list.

@@ -63,7 +63,6 @@ use crate::{arith::WithBoolean, Function, Object, PrimitiveType, Type, UnknownLe
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-// TODO: remove array functions once prototypes are supported
 pub enum Prelude {
     /// `false` type (Boolean).
     False,

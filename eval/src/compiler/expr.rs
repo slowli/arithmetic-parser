@@ -10,8 +10,8 @@ use crate::{
     Error, ErrorKind,
 };
 use arithmetic_parser::{
-    grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Expr, FnDefinition,
-    MethodCallSeparator, ObjectExpr, Spanned, SpannedExpr, SpannedStatement, Statement,
+    grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Expr, FnDefinition, ObjectExpr,
+    Spanned, SpannedExpr, SpannedStatement, Statement,
 };
 
 impl Compiler {
@@ -69,24 +69,8 @@ impl Compiler {
                 name,
                 receiver,
                 args,
-                separator,
-            } => match separator.extra {
-                MethodCallSeparator::Dot => {
-                    self.compile_method_call(executable, expr, name, receiver, args)?
-                }
-                MethodCallSeparator::Colon2 => {
-                    let field = self.compile_field_access(executable, expr, name, receiver)?;
-                    let field = expr.copy_with_extra(field).into();
-                    let original_name = (*name.fragment()).to_owned();
-                    self.compile_fn_call_with_precompiled_name(
-                        executable,
-                        expr,
-                        field,
-                        Some(original_name),
-                        args,
-                    )?
-                }
-            },
+                ..
+            } => self.compile_method_call(executable, expr, name, receiver, args)?,
 
             Expr::Block(block) => self.compile_block(executable, expr, block)?,
             Expr::FnDefinition(def) => self.compile_fn_definition(executable, expr, def)?,

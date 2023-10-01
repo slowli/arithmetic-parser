@@ -5,9 +5,8 @@ use nom::Err as NomErr;
 
 use super::{args, lsp, lvalue_tuple, sp, span, FieldGrammar, Literal, LiteralType, ValueType};
 use crate::{
-    parser::{expr, fn_def, separated_statements, simple_expr, Complete},
-    BinaryOp, Block, ErrorKind, Expr, FnDefinition, InputSpan, Lvalue, MethodCallSeparator,
-    Spanned,
+    parser::{expr, fn_def, simple_expr, Complete},
+    BinaryOp, Block, ErrorKind, Expr, FnDefinition, InputSpan, Lvalue, Spanned,
 };
 
 #[test]
@@ -132,7 +131,7 @@ fn method_expr_works() {
             Expr::Method {
                 name: span(2, "sin").into(),
                 receiver: Box::new(sp(0, "x", Expr::Variable)),
-                separator: sp(1, ".", MethodCallSeparator::Dot),
+                separator: sp(1, ".", ()),
                 args: vec![],
             }
         )
@@ -154,7 +153,7 @@ fn method_expr_works() {
                     sp(7, "2", Expr::Literal(Literal::Number)),
                 ]),
             )),
-            separator: sp(9, ".", MethodCallSeparator::Dot),
+            separator: sp(9, ".", ()),
             args: vec![sp(14, "y", Expr::Variable)],
         },
     );
@@ -175,88 +174,13 @@ fn method_expr_works() {
                     Expr::Method {
                         name: span(19, "bar").into(),
                         receiver: Box::new(sp(17, "7", Expr::Literal(Literal::Number))),
-                        separator: sp(18, ".", MethodCallSeparator::Dot),
+                        separator: sp(18, ".", ()),
                         args: vec![],
                     }
                 )],
             }
         )
     );
-}
-
-#[test]
-fn method_call_with_colon2_separator() {
-    let input = InputSpan::new("Num::sin(x)");
-    let (_, call) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
-    let expected_call = Expr::Method {
-        name: span(5, "sin").into(),
-        receiver: Box::new(sp(0, "Num", Expr::Variable)),
-        separator: sp(3, "::", MethodCallSeparator::Colon2),
-        args: vec![sp(9, "x", Expr::Variable)],
-    };
-    assert_eq!(call.extra, expected_call);
-
-    let ws_input = InputSpan::new("Num   :: sin (  x  )");
-    let (_, ws_call) = simple_expr::<FieldGrammar, Complete>(ws_input).unwrap();
-    assert_matches!(ws_call.extra, Expr::Method { .. });
-
-    let chained_input = InputSpan::new("Num::sin(x).cos()");
-    let (_, chained_call) = expr::<FieldGrammar, Complete>(chained_input).unwrap();
-    assert_eq!(
-        chained_call.extra,
-        Expr::Method {
-            name: span(12, "cos").into(),
-            receiver: Box::new(sp(0, "Num::sin(x)", expected_call)),
-            separator: sp(11, ".", MethodCallSeparator::Dot),
-            args: vec![],
-        }
-    );
-
-    let chained_input = InputSpan::new("x.sin()::cos()");
-    let (_, chained_call) = expr::<FieldGrammar, Complete>(chained_input).unwrap();
-    let inner_call = Expr::Method {
-        name: span(2, "sin").into(),
-        receiver: Box::new(sp(0, "x", Expr::Variable)),
-        separator: sp(1, ".", MethodCallSeparator::Dot),
-        args: vec![],
-    };
-    assert_eq!(
-        chained_call.extra,
-        Expr::Method {
-            name: span(9, "cos").into(),
-            receiver: Box::new(sp(0, "x.sin()", inner_call)),
-            separator: sp(7, "::", MethodCallSeparator::Colon2),
-            args: vec![],
-        }
-    );
-}
-
-#[test]
-fn error_parsing_colon2_method_call() {
-    let input = InputSpan::new("Num::sin + 1");
-    let err = simple_expr::<FieldGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(e) if e.span().location_offset() == 9);
-}
-
-#[test]
-fn colon2_method_call_is_parsed_within_larger_statement() {
-    let input = InputSpan::new("Num::sin()");
-    let (rest, block) = separated_statements::<FieldGrammar, Complete>(input).unwrap();
-
-    assert!(rest.fragment().is_empty());
-    match block.return_value.unwrap().extra {
-        Expr::Method {
-            name,
-            receiver,
-            separator,
-            ..
-        } => {
-            assert_eq!(*name.fragment(), "sin");
-            assert_eq!(*receiver.fragment(), "Num");
-            assert_matches!(separator.extra, MethodCallSeparator::Colon2);
-        }
-        other => panic!("Unexpected return statement: {other:?}"),
-    }
 }
 
 #[test]

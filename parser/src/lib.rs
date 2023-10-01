@@ -185,15 +185,6 @@ impl<'a, T: Grammar<'a>> PartialEq for ObjectExpr<'a, T> {
     }
 }
 
-/// Separators between the method call receiver and the method name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MethodCallSeparator {
-    /// Dot separator, e.g., in `foo.bar(1, 3)`.
-    Dot,
-    /// Double colon separator, e.g., in `foo::bar(4)`.
-    Colon2,
-}
-
 /// Arithmetic expression with an abstract types for type annotations and literals.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -239,7 +230,7 @@ pub enum Expr<'a, T: Grammar<'a>> {
         /// Receiver of the call, e.g., `foo` in `foo.bar(x, 5)`.
         receiver: Box<SpannedExpr<'a, T>>,
         /// Separator between the receiver and the called method, e.g., `.` in `foo.bar(x, 5)`.
-        separator: Spanned<'a, MethodCallSeparator>,
+        separator: Spanned<'a>,
         /// Arguments; e.g., `x, 5` in `foo.bar(x, 5)`.
         args: Vec<SpannedExpr<'a, T>>,
     },

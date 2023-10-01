@@ -515,8 +515,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
         if lhs_fields == rhs_fields {
             for (field_name, ty) in lhs.iter() {
-                let rhs_ty = rhs.field(field_name).unwrap();
-                self.unify(ty, rhs_ty, errors.with_location(field_name));
+                self.unify(ty, &rhs[field_name], errors.with_location(field_name));
             }
         } else {
             errors.push(ErrorKind::FieldsMismatch {

@@ -2,8 +2,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    fmt,
-    iter::{self, FromIterator},
+    fmt, ops,
 };
 
 use crate::{
@@ -77,7 +76,6 @@ use crate::{
 ///
 /// [`Constraint`]: crate::arith::Constraint
 #[derive(Debug, Clone, PartialEq)]
-// FIXME: `From<[(_); N]>`; index (also for typing)
 pub struct Object<Prim: PrimitiveType> {
     fields: HashMap<String, Type<Prim>>,
 }
@@ -99,6 +97,22 @@ where
     fn from_iter<T: IntoIterator<Item = (S, V)>>(iter: T) -> Self {
         Self {
             fields: iter
+                .into_iter()
+                .map(|(name, ty)| (name.into(), ty.into()))
+                .collect(),
+        }
+    }
+}
+
+impl<Prim, S, V, const N: usize> From<[(S, V); N]> for Object<Prim>
+where
+    Prim: PrimitiveType,
+    S: Into<String>,
+    V: Into<Type<Prim>>,
+{
+    fn from(entries: [(S, V); N]) -> Self {
+        Self {
+            fields: entries
                 .into_iter()
                 .map(|(name, ty)| (name.into(), ty.into()))
                 .collect(),
@@ -128,19 +142,12 @@ impl<Prim: PrimitiveType> Object<Prim> {
         Self::default()
     }
 
-    /// Creates an object with a single field.
-    pub fn just(field: impl Into<String>, ty: impl Into<Type<Prim>>) -> Self {
-        Self {
-            fields: iter::once((field.into(), ty.into())).collect(),
-        }
-    }
-
     pub(crate) fn from_map(fields: HashMap<String, Type<Prim>>) -> Self {
         Self { fields }
     }
 
     /// Returns type of a field with the specified `name`.
-    pub fn field(&self, name: &str) -> Option<&Type<Prim>> {
+    pub fn get(&self, name: &str) -> Option<&Type<Prim>> {
         self.fields.get(name)
     }
 
@@ -221,7 +228,7 @@ impl<Prim: PrimitiveType> Object<Prim> {
     ) {
         let mut missing_fields = HashSet::new();
         for (field_name, lhs_ty) in self.iter() {
-            if let Some(rhs_ty) = rhs.field(field_name) {
+            if let Some(rhs_ty) = rhs.get(field_name) {
                 substitutions.unify(lhs_ty, rhs_ty, errors.with_location(field_name));
             } else {
                 missing_fields.insert(field_name.to_owned());
@@ -234,6 +241,16 @@ impl<Prim: PrimitiveType> Object<Prim> {
                 available_fields: rhs.field_names().map(String::from).collect(),
             });
         }
+    }
+}
+
+impl<Prim: PrimitiveType> ops::Index<&str> for Object<Prim> {
+    type Output = Type<Prim>;
+
+    fn index(&self, field_name: &str) -> &Self::Output {
+        self.get(field_name).unwrap_or_else(|| {
+            panic!("Object type does not contain field `{field_name}`");
+        })
     }
 }
 
@@ -252,28 +269,26 @@ mod tests {
 
     #[test]
     fn placing_obj_constraint() {
-        let lhs: Object<Num> = Object::just("x", Type::NUM);
+        let lhs: Object<Num> = Object::from([("x", Type::NUM)]);
         let mut substitutions = Substitutions::default();
         let mut errors = OpErrors::new();
         lhs.constraint_object(&lhs, &mut substitutions, errors.by_ref());
         assert!(errors.into_vec().is_empty());
 
-        let var_rhs = Object::just("x", Type::free_var(0));
+        let var_rhs = Object::from([("x", Type::free_var(0))]);
         let mut errors = OpErrors::new();
         lhs.constraint_object(&var_rhs, &mut substitutions, errors.by_ref());
         assert!(errors.into_vec().is_empty());
         assert_eq!(*substitutions.fast_resolve(&Type::free_var(0)), Type::NUM);
 
         // Extra fields in RHS are fine.
-        let extra_rhs = [("x", Type::free_var(1)), ("y", Type::BOOL)]
-            .into_iter()
-            .collect();
+        let extra_rhs = Object::from([("x", Type::free_var(1)), ("y", Type::BOOL)]);
         let mut errors = OpErrors::new();
         lhs.constraint_object(&extra_rhs, &mut substitutions, errors.by_ref());
         assert!(errors.into_vec().is_empty());
         assert_eq!(*substitutions.fast_resolve(&Type::free_var(1)), Type::NUM);
 
-        let missing_field_rhs = Object::just("y", Type::free_var(2));
+        let missing_field_rhs = Object::from([("y", Type::free_var(2))]);
         let mut errors = OpErrors::new();
         lhs.constraint_object(&missing_field_rhs, &mut substitutions, errors.by_ref());
         assert_matches!(
@@ -283,7 +298,7 @@ mod tests {
                 available_fields.len() == 1 && available_fields.contains("y")
         );
 
-        let incompatible_field_rhs = Object::just("x", Type::BOOL);
+        let incompatible_field_rhs = Object::from([("x", Type::BOOL)]);
         let mut errors = OpErrors::new();
         lhs.constraint_object(&incompatible_field_rhs, &mut substitutions, errors.by_ref());
         assert_matches!(

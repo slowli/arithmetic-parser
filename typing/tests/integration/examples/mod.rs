@@ -66,14 +66,14 @@ fn schnorr_signatures_imprecise() {
         unreachable!();
     };
     assert_eq!(
-        secret_key.field("sign").unwrap().to_string(),
+        secret_key["sign"].to_string(),
         "for<'T: Hash> (Num, 'T) -> { e: Num, s: Num }"
     );
     let Type::Object(public_key) = &env["PublicKey"] else {
         unreachable!();
     };
     assert_eq!(
-        public_key.field("verify").unwrap().to_string(),
+        public_key["verify"].to_string(),
         "for<'T: Hash, 'U: { e: Num, s: Num }> (Num, 'T, 'U) -> Bool"
     );
 }
@@ -279,14 +279,14 @@ fn schnorr_signatures() {
         unreachable!();
     };
     assert_eq!(
-        secret_key.field("sign").unwrap().to_string(),
+        secret_key["sign"].to_string(),
         "for<'T: Hash> (Sc, 'T) -> { e: Sc, s: Sc }"
     );
     let Type::Object(public_key) = &env["PublicKey"] else {
         unreachable!();
     };
     assert_eq!(
-        public_key.field("verify").unwrap().to_string(),
+        public_key["verify"].to_string(),
         "for<'T: Hash, 'U: { e: Sc, s: Sc }> (Ge, 'T, 'U) -> Bool"
     );
 }
@@ -362,14 +362,14 @@ fn dsa_signatures_imprecise() {
         unreachable!();
     };
     assert_eq!(
-        secret_key.field("sign").unwrap().to_string(),
+        secret_key["sign"].to_string(),
         "for<'T: Hash> (Num, 'T) -> { r: Num, s: Num }"
     );
     let Type::Object(public_key) = &env["PublicKey"] else {
         unreachable!();
     };
     assert_eq!(
-        public_key.field("verify").unwrap().to_string(),
+        public_key["verify"].to_string(),
         "for<'T: Hash, 'U: { r: Num, s: Num }> (Num, 'T, 'U) -> Bool"
     );
 }
@@ -386,14 +386,14 @@ fn dsa_signatures() {
         unreachable!();
     };
     assert_eq!(
-        secret_key.field("sign").unwrap().to_string(),
+        secret_key["sign"].to_string(),
         "for<'T: Hash> (Sc, 'T) -> { r: Sc, s: Sc }"
     );
     let Type::Object(public_key) = &env["PublicKey"] else {
         unreachable!();
     };
     assert_eq!(
-        public_key.field("verify").unwrap().to_string(),
+        public_key["verify"].to_string(),
         "for<'T: Hash, 'U: { r: Sc, s: Sc }> (Ge, 'T, 'U) -> Bool"
     );
 }
@@ -440,14 +440,14 @@ fn el_gamal_encryption_imprecise() {
         unreachable!();
     };
     assert_eq!(
-        public_key.field("encrypt").unwrap().to_string(),
+        public_key["encrypt"].to_string(),
         "(Num, Num) -> { B: Num, R: Num }"
     );
     let Type::Object(secret_key) = &env["SecretKey"] else {
         unreachable!();
     };
     assert_eq!(
-        secret_key.field("decrypt").unwrap().to_string(),
+        secret_key["decrypt"].to_string(),
         "for<'T: Ops, 'U: { B: 'T, R: 'T }> ('T, 'U) -> 'T"
     );
 }
@@ -464,14 +464,14 @@ fn el_gamal_encryption() {
         unreachable!();
     };
     assert_eq!(
-        public_key.field("encrypt").unwrap().to_string(),
+        public_key["encrypt"].to_string(),
         "(Ge, Ge) -> { B: Ge, R: Ge }"
     );
     let Type::Object(secret_key) = &env["SecretKey"] else {
         unreachable!();
     };
     assert_eq!(
-        secret_key.field("decrypt").unwrap().to_string(),
+        secret_key["decrypt"].to_string(),
         "for<'T: { B: Ge, R: Ge }> (Sc, 'T) -> Ge"
     );
     assert_eq!(

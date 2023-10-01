@@ -440,7 +440,7 @@ where
     {
         let mut errors = OpErrors::new();
         let return_type = self.new_type();
-        Object::just(field_name, return_type.clone()).apply_as_constraint(
+        Object::from([(field_name, return_type.clone())]).apply_as_constraint(
             receiver,
             &mut self.env.substitutions,
             errors.by_ref(),

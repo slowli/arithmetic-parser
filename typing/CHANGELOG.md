@@ -9,6 +9,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Bump minimum supported Rust version to 1.60 and switch to 2021 Rust edition. (#107, #108)
 
+- Remove `Object::just()` constructor in favor of more general `From<[_; N]>` implementation.
+
 ### Fixed
 
 - Fix false positive during recursive type check for native parameterized functions.

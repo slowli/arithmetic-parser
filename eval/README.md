@@ -81,7 +81,7 @@ assert(sorted);
 
 Defining a type:
 
-```text,FIXME
+```text
 Vector = {
     len = |{ x, y }| sqrt(x * x + y * y);
     scale = |self| if(self.x == 0 && self.y == 0,
@@ -91,10 +91,9 @@ Vector = {
     #{ len, scale }
 };
 
-assert_eq(
-    #{ x: 3, y: 4 }.{Vector.add}(#{ x: -1, y: 1 }),
-    #{ x: 2, y: 5 },
-);
+assert_close(#{ x: 3, y: 4 }.{Vector.len}(), 5);
+// ...is same as
+assert_close({Vector.len}(#{ x: 3, y: 4 }), 5);
 scaled = #{ x: 3, y: -4 }.{Vector.scale}();
 assert_close(scaled.x, 0.6);
 assert_close(scaled.y, -0.8);

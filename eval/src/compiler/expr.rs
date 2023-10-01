@@ -62,7 +62,13 @@ impl Compiler {
             Expr::Function { name, args } => self.compile_fn_call(executable, expr, name, args)?,
 
             Expr::FieldAccess { name, receiver } => {
-                self.compile_field_access(executable, expr, name, receiver)?
+                let name = if let Expr::Variable = name.extra {
+                    name.with_no_extra()
+                } else {
+                    let err = ErrorKind::unsupported(expr.extra.ty());
+                    return Err(self.create_error(expr, err));
+                };
+                self.compile_field_access(executable, expr, &name, receiver)?
             }
 
             Expr::Method {
@@ -187,19 +193,23 @@ impl Compiler {
         &mut self,
         executable: &mut Executable<'a, T::Lit>,
         call_expr: &SpannedExpr<'a, T>,
-        name: &Spanned<'a>,
+        name: &SpannedExpr<'a, T>,
         receiver: &SpannedExpr<'a, T>,
         args: &[SpannedExpr<'a, T>],
     ) -> Result<Atom<T::Lit>, Error<'a>> {
-        let original_name = Some((*name.fragment()).to_owned());
-        let name = name.copy_with_extra(self.compile_var_access(name)?);
+        let original_name = if matches!(name.extra, Expr::Variable) {
+            Some((*name.fragment()).to_owned())
+        } else {
+            None
+        };
+        let name = self.compile_expr(executable, name)?;
         let args = iter::once(receiver)
             .chain(args)
             .map(|arg| self.compile_expr(executable, arg))
             .collect::<Result<Vec<_>, _>>()?;
 
         let function = CompiledExpr::FunctionCall {
-            name: name.into(),
+            name,
             original_name,
             args,
         };

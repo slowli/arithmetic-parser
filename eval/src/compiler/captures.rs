@@ -101,11 +101,11 @@ impl<'a> CapturesExtractor<'a> {
                 name,
                 ..
             } => {
+                self.eval(name)?;
                 self.eval(receiver)?;
                 for arg in args {
                     self.eval(arg)?;
                 }
-                self.eval_local_var(name);
             }
 
             Expr::Block(block) => {

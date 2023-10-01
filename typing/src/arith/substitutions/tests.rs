@@ -479,10 +479,7 @@ fn static_length_restrictions() {
     for &sample in positive_samples {
         substitutions.apply_static_len(sample).unwrap();
     }
-    assert_eq!(
-        substitutions.static_lengths,
-        IntoIterator::into_iter([0, 1]).collect::<HashSet<_>>()
-    );
+    assert_eq!(substitutions.static_lengths, HashSet::from([0, 1]));
 
     let negative_samples = &[UnknownLen::Dynamic.into(), UnknownLen::Dynamic + 2];
     for &sample in negative_samples {
@@ -545,22 +542,24 @@ fn marking_length_as_static_and_then_propagating() {
 
 #[test]
 fn unifying_objects() {
-    let x: Object<Num> = IntoIterator::into_iter([("x", Type::NUM), ("y", Type::NUM)]).collect();
-    let y: Object<Num> =
-        IntoIterator::into_iter([("x", Type::NUM), ("y", Type::free_var(0))]).collect();
+    let x: Object<Num> = [("x", Type::NUM), ("y", Type::NUM)].into_iter().collect();
+    let y: Object<Num> = [("x", Type::NUM), ("y", Type::free_var(0))]
+        .into_iter()
+        .collect();
 
     let mut substitutions = Substitutions::<Num>::default();
     unify_objects(&mut substitutions, &x, &y).unwrap();
     assert_eq!(substitutions.eqs.len(), 1);
     assert_eq!(substitutions.eqs[&0], Type::NUM);
 
-    let truncated_y = IntoIterator::into_iter([("x", Type::NUM)]).collect();
+    let truncated_y = [("x", Type::NUM)].into_iter().collect();
     let mut substitutions = Substitutions::<Num>::default();
     let err = unify_objects(&mut substitutions, &x, &truncated_y).unwrap_err();
     assert_matches!(err, ErrorKind::FieldsMismatch { .. });
 
-    let extended_y =
-        IntoIterator::into_iter([("x", Type::NUM), ("y", Type::NUM), ("z", Type::BOOL)]).collect();
+    let extended_y = [("x", Type::NUM), ("y", Type::NUM), ("z", Type::BOOL)]
+        .into_iter()
+        .collect();
     let mut substitutions = Substitutions::<Num>::default();
     let err = unify_objects(&mut substitutions, &x, &extended_y).unwrap_err();
     assert_matches!(err, ErrorKind::FieldsMismatch { .. });

@@ -50,7 +50,8 @@ where
         &mut Environment::with_arithmetic(arithmetic),
         program_with_tuples,
     );
-    let expected_numbers = IntoIterator::into_iter([2_u8, 5, 8])
+    let expected_numbers = [2_u8, 5, 8]
+        .into_iter()
         .map(|num| Value::Prim(num.into()))
         .collect();
     assert_eq!(value, Value::Tuple(expected_numbers));

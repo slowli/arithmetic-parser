@@ -77,6 +77,7 @@ use crate::{
 ///
 /// [`Constraint`]: crate::arith::Constraint
 #[derive(Debug, Clone, PartialEq)]
+// FIXME: `From<[(_); N]>`; index (also for typing)
 pub struct Object<Prim: PrimitiveType> {
     fields: HashMap<String, Type<Prim>>,
 }
@@ -264,8 +265,9 @@ mod tests {
         assert_eq!(*substitutions.fast_resolve(&Type::free_var(0)), Type::NUM);
 
         // Extra fields in RHS are fine.
-        let extra_rhs =
-            IntoIterator::into_iter([("x", Type::free_var(1)), ("y", Type::BOOL)]).collect();
+        let extra_rhs = [("x", Type::free_var(1)), ("y", Type::BOOL)]
+            .into_iter()
+            .collect();
         let mut errors = OpErrors::new();
         lhs.constraint_object(&extra_rhs, &mut substitutions, errors.by_ref());
         assert!(errors.into_vec().is_empty());

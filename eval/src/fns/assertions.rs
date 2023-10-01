@@ -458,7 +458,7 @@ mod tests {
             vec![Value::Prim(1.0)].into(),
             Object::just("test", Value::Prim(1.0)).into(),
         ];
-        for invalid_arg in IntoIterator::into_iter(invalid_args) {
+        for invalid_arg in invalid_args {
             let err = assert_close
                 .evaluate(vec![one_arg.clone(), span_value(invalid_arg)], &mut ctx)
                 .unwrap_err();

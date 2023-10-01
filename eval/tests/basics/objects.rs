@@ -148,7 +148,7 @@ fn accessing_fields_within_object() {
     assert_eq!(fields.len(), 2);
     assert_eq!(
         fields["pt"],
-        Value::Object(IntoIterator::into_iter(expected_fields).collect())
+        Value::Object(expected_fields.into_iter().collect())
     );
     assert_eq!(fields["len_sq"], Value::Prim(25.0));
 }

@@ -21,7 +21,7 @@ impl Prelude {
     where
         T: 'static + Clone,
     {
-        IntoIterator::into_iter([
+        [
             ("false", Value::Bool(false)),
             ("true", Value::Bool(true)),
             ("defer", Value::native_fn(fns::Defer)),
@@ -35,7 +35,9 @@ impl Prelude {
             ("map", Value::native_fn(fns::Map)),
             ("merge", Value::native_fn(fns::Merge)),
             ("push", Value::native_fn(fns::Push)),
-        ])
+            // FIXME: add `Array` object!
+        ]
+        .into_iter()
     }
 }
 
@@ -49,14 +51,15 @@ impl Assertions {
     where
         T: 'static + Clone + fmt::Display,
     {
-        IntoIterator::into_iter([
+        [
             ("assert", Value::native_fn(fns::Assert)),
             ("assert_eq", Value::native_fn(fns::AssertEq)),
             (
                 "assert_fails",
                 Value::native_fn(fns::AssertFails::default()),
             ),
-        ])
+        ]
+        .into_iter()
     }
 }
 
@@ -67,13 +70,14 @@ pub struct Comparisons;
 impl Comparisons {
     /// Creates an iterator over contained values and the corresponding names.
     pub fn vars<T>() -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
-        IntoIterator::into_iter([
+        [
             ("LESS", Value::opaque_ref(Ordering::Less)),
             ("EQUAL", Value::opaque_ref(Ordering::Equal)),
             ("GREATER", Value::opaque_ref(Ordering::Greater)),
             ("cmp", Value::native_fn(fns::Compare::Raw)),
             ("min", Value::native_fn(fns::Compare::Min)),
             ("max", Value::native_fn(fns::Compare::Max)),
-        ])
+        ]
+        .into_iter()
     }
 }

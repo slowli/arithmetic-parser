@@ -9,9 +9,11 @@ use crate::{fns, Object, Value};
 /// # Contents
 ///
 /// - `true` and `false` Boolean constants.
-/// - Prototype-related functions: [`impl`](fns::CreatePrototype), [`proto`](fns::GetPrototype).
 /// - Deferred initialization: [`defer`](fns::Defer).
 /// - Control flow functions: [`if`](fns::If), [`while`](fns::While).
+/// - Array functions: [`all`](fns::All), [`any`](fns::Any), [`filter`](fns::Filter), [`fold`](fns::Fold),
+///   [`map`](fns::Map), [`merge`](fns::Merge), [`push`](fns::Push). Available both as free functions
+///   and as fields in an `Array` object.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Prelude;
 

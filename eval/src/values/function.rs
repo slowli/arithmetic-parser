@@ -3,7 +3,7 @@
 use core::fmt;
 
 use crate::{
-    alloc::{HashMap, Rc, String, Vec},
+    alloc::{HashMap, Rc, String, ToOwned, Vec},
     arith::OrdArithmetic,
     error::{Backtrace, CodeInModule, Error, ErrorKind},
     exec::{ExecutableFn, ModuleId, Operations},
@@ -22,8 +22,7 @@ pub struct CallContext<'r, 'a, T> {
 
 impl<'r, 'a, T> CallContext<'r, 'a, T> {
     /// Creates a mock call context with the specified module ID and call span.
-    /// The provided [`Environment`] is used to extract an [`OrdArithmetic`] implementation
-    /// and [`Prototype`]s for standard types.
+    /// The provided [`Environment`] is used to extract an [`OrdArithmetic`] implementation.
     pub fn mock(
         module_id: &dyn ModuleId,
         call_span: MaybeSpanned<'a>,

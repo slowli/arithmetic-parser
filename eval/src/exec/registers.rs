@@ -145,8 +145,8 @@ impl<T: 'static + Clone> StripCode for ExecutableFn<'_, T> {
     }
 }
 
-/// Encompasses all irreducible operations defined externally for `Value`s; for now, these are
-/// arithmetic ops and prototypes for standard types.
+/// Encompasses all irreducible operations defined externally for `Value`s; for now, these are just
+/// arithmetic ops.
 #[derive(Debug)]
 pub(crate) struct Operations<'r, T> {
     pub arithmetic: &'r dyn OrdArithmetic<T>,

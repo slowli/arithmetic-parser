@@ -42,34 +42,6 @@ use crate::{
 /// );
 /// assert!(other_env.get("x").is_none());
 /// ```
-///
-/// Extending [`Prototype`](crate::Prototype)s for standard types:
-///
-/// ```
-/// # use arithmetic_eval::{
-/// #     fns, Environment, ExecutableModule, PrototypeField, Value, env::Prelude,
-/// # };
-/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # fn main() -> anyhow::Result<()> {
-/// let prototypes = vec![
-///     (PrototypeField::prim("abs"), Value::wrapped_fn(f32::abs)),
-///     (PrototypeField::prim("sin"), Value::wrapped_fn(f32::sin)),
-///     (PrototypeField::array("len"), Value::native_fn(fns::Len)),
-/// ];
-/// let mut env = Environment::new();
-/// env.extend(Prelude::prototypes().chain(prototypes));
-/// // ^ also insert "standard" prototypes
-///
-/// let program = r#"
-///     array = (1, -2, 3).map(|x| x.abs());
-///     array.len() == 3 && array.1 > 0
-/// "#;
-/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = ExecutableModule::new("test_proto", &program)?;
-/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
-/// # Ok(())
-/// # }
-/// ```
 #[derive(Debug)]
 pub struct Environment<'a, T> {
     variables: HashMap<String, Value<'a, T>>,
@@ -94,7 +66,7 @@ impl<T: Clone> Clone for Environment<'_, T> {
     }
 }
 
-/// Compares environments by variables and prototypes; arithmetics are ignored.
+/// Compares environments by variables; arithmetics are ignored.
 impl<T: PartialEq> PartialEq for Environment<'_, T> {
     fn eq(&self, other: &Self) -> bool {
         self.variables == other.variables

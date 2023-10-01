@@ -10,7 +10,7 @@ use crate::{
     alloc::{format, vec, Box, HashSet, String, ToOwned, ToString, Vec},
     exec::ModuleId,
     fns::FromValueError,
-    Value, ValueType,
+    Value,
 };
 use arithmetic_parser::{
     BinaryOp, CodeFragment, LocatedSpan, LvalueLen, MaybeSpanned, Op, StripCode, UnaryOp,
@@ -186,10 +186,6 @@ pub enum ErrorKind {
     #[display(fmt = "Fields cannot be accessed for the object")]
     CannotAccessFields,
 
-    /// Cannot use a value of the specified type as a method receiver.
-    #[display(fmt = "Method cannot be called on {_0} since it has no prototype")]
-    NoPrototype(ValueType),
-
     /// Index is out of bounds for the indexed tuple.
     #[display(fmt = "Attempting to get element {index} from tuple with length {len}")]
     IndexOutOfBounds {
@@ -275,7 +271,6 @@ impl ErrorKind {
                 format!("Index out of bounds for tuple with length {len}")
             }
             Self::NoField { field, .. } => format!("Object does not have field {field}"),
-            Self::NoPrototype(ty) => format!("No prototype set for {ty}"),
             Self::NativeCall(message) => message.clone(),
             Self::Wrapper(err) => err.to_string(),
             Self::UnexpectedOperand { op } => format!("Unexpected operand type for {op}"),
@@ -303,7 +298,6 @@ impl ErrorKind {
             Self::InvalidFieldName(_) => "Invalid field".to_owned(),
             Self::CannotIndex | Self::IndexOutOfBounds { .. } => "Indexing operation".to_owned(),
             Self::CannotAccessFields | Self::NoField { .. } => "Field access".to_owned(),
-            Self::NoPrototype(_) => "Method access".to_owned(),
             Self::CannotCall | Self::NativeCall(_) | Self::Wrapper(_) => "Failed call".to_owned(),
             Self::UnexpectedOperand { .. } => "Operand of wrong type".to_owned(),
             Self::CannotCompare => "Cannot be compared".to_owned(),

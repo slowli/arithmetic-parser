@@ -33,7 +33,6 @@ use crate::library::ReplLiteral;
 
 /// Exit code on parse or evaluation error.
 pub const ERROR_EXIT_CODE: i32 = 2;
-
 /// Width of help notes in chars.
 const HELP_WIDTH: usize = 72;
 
@@ -330,7 +329,6 @@ impl Reporter {
     ) -> io::Result<()> {
         let bool_color = ColorSpec::new().set_fg(Some(Color::Cyan)).clone();
         let num_color = ColorSpec::new().set_fg(Some(Color::Green)).clone();
-        let proto_color = ColorSpec::new().set_fg(Some(Color::Yellow)).clone();
         let opaque_ref_color = ColorSpec::new()
             .set_fg(Some(Color::Black))
             .set_bg(Some(Color::White))
@@ -344,16 +342,6 @@ impl Reporter {
             }
 
             Value::Function(Function::Native(_)) => write!(writer, "(native fn)"),
-
-            Value::Function(Function::Prototype(proto)) => {
-                writer.set_color(&proto_color)?;
-                write!(writer, "impl(")?;
-                writer.reset()?;
-                Self::dump_object(writer, proto.as_object(), indent)?;
-                writer.set_color(&proto_color)?;
-                write!(writer, ")")?;
-                writer.reset()
-            }
 
             Value::Function(Function::Interpreted(function)) => {
                 let plurality = if function.arg_count() == LvalueLen::Exact(1) {

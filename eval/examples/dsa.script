@@ -2,26 +2,26 @@
 
 dbg(GEN, ORDER);
 
-PublicKey = impl(#{
+PublicKey = #{
     verify: |self, message, { r, s }| {
         (u1, u2) = (hash_to_scalar(message) / s, r / s);
-        to_scalar(GEN ^ u1 * self.pk ^ u2) == r
+        to_scalar(GEN ^ u1 * self ^ u2) == r
     },
-});
+};
 
-SecretKey = impl(#{
+SecretKey = #{
     sign: |self, message| {
         k = rand_scalar();
         r = to_scalar(GEN ^ k);
-        s = (hash_to_scalar(message) + self.sk * r) / k;
+        s = (hash_to_scalar(message) + self * r) / k;
         #{ r, s }
     },
-    public_key: |self| PublicKey(#{ pk: GEN ^ self.sk }),
-});
+    public_key: |self| GEN ^ self,
+};
 
 gen = || {
-    sk = SecretKey(#{ sk: rand_scalar() });
-    #{ sk, pk: sk.public_key() }
+    sk = rand_scalar();
+    #{ sk, pk: {SecretKey.public_key}(sk) }
 };
 
 // Test!
@@ -31,12 +31,12 @@ gen = || {
 while(5, |i| i != 0, |i| {
     message = rand_scalar();
     dbg(message);
-    signature = sk.sign(message);
+    signature = sk.{SecretKey.sign}(message);
     dbg(signature);
 
-    assert(pk.verify(message, signature));
-    assert(!other_pk.verify(message, signature));
-    assert(!pk.verify(rand_scalar(), signature));
+    assert(pk.{PublicKey.verify}(message, signature));
+    assert(!other_pk.{PublicKey.verify}(message, signature));
+    assert(!pk.{PublicKey.verify}(rand_scalar(), signature));
 
     i - 1
 });

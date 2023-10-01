@@ -148,9 +148,9 @@
 //! // Then, we construct an environment to run the module.
 //! let mut env = Environment::new();
 //! // Add some native functions to the environment.
-//! env.extend(Prelude::vars());
-//! env.extend(Assertions::vars());
-//! env.extend(Comparisons::vars());
+//! env.extend(Prelude::iter());
+//! env.extend(Assertions::iter());
+//! env.extend(Comparisons::iter());
 //!
 //! // Then, the module can be run.
 //! assert_eq!(module.with_env(&env)?.run()?, Value::Prim(9.0));
@@ -176,7 +176,7 @@
 //! let module = ExecutableModule::new("minmax", &program)?;
 //!
 //! let mut env = Environment::new();
-//! env.extend(Prelude::vars().chain(Assertions::vars()));
+//! env.extend(Prelude::iter().chain(Assertions::iter()));
 //! env.extend(Prelude::prototypes());
 //! env.insert("INF", Value::Prim(f32::INFINITY));
 //! module.with_env(&env)?.run()?;

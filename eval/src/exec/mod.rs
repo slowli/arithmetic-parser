@@ -57,7 +57,7 @@ pub use crate::compiler::CompilerExt;
 /// let module = ExecutableModule::new("test", &module)?;
 ///
 /// let mut env = Environment::new();
-/// env.extend(env::Comparisons::vars());
+/// env.extend(env::Comparisons::iter());
 /// env.extend(env::Prelude::prototypes());
 /// env.insert_prototypes_as_vars();
 /// env.insert("INFINITY", Value::Prim(f32::INFINITY)).insert("xs", Value::void());
@@ -117,7 +117,7 @@ pub use crate::compiler::CompilerExt;
 /// let module = ExecutableModule::new("test", &module)?;
 ///
 /// let mut env = Environment::new();
-/// env.extend(Assertions::vars());
+/// env.extend(Assertions::iter());
 /// assert!(module.with_mutable_env(&mut env)?.run().is_err());
 /// assert_eq!(env["x"], Value::Prim(5.0));
 /// # Ok(())

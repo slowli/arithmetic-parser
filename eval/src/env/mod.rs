@@ -25,7 +25,7 @@ use crate::{
 ///
 /// // Load environment from the standard containers.
 /// let mut env = Environment::<f64>::new();
-/// env.extend(Prelude::vars().chain(Comparisons::vars()));
+/// env.extend(Prelude::iter().chain(Comparisons::iter()));
 /// // Add a custom variable for a good measure.
 /// env.insert("x", Value::Prim(1.0));
 ///

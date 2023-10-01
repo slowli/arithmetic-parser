@@ -41,7 +41,7 @@ fn create_static_module(
 
 fn main() -> anyhow::Result<()> {
     let mut env = Environment::new();
-    env.extend(Prelude::vars().chain(Assertions::vars()));
+    env.extend(Prelude::iter().chain(Assertions::iter()));
     env.insert_native_fn("fold", fns::Fold)
         .insert_native_fn("push", fns::Push)
         .insert("INF", Value::Prim(f64::INFINITY));

@@ -149,7 +149,7 @@ fn extract_fn<'a, T, A>(
 /// let module = ExecutableModule::new("test_cmp", &program)?;
 ///
 /// let mut env = Environment::new();
-/// env.extend(Comparisons::vars());
+/// env.extend(Comparisons::iter());
 /// env.insert_native_fn("map", fns::Map);
 /// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
 /// # Ok(())

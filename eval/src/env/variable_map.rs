@@ -2,7 +2,7 @@
 
 use core::{cmp::Ordering, fmt};
 
-use crate::{fns, Value};
+use crate::{fns, Object, Value};
 
 /// Commonly used constants and functions from the [`fns` module](fns).
 ///
@@ -17,17 +17,28 @@ pub struct Prelude;
 
 impl Prelude {
     /// Creates an iterator over contained values and the corresponding names.
-    pub fn vars<T>() -> impl Iterator<Item = (&'static str, Value<'static, T>)>
+    pub fn iter<T>() -> impl Iterator<Item = (&'static str, Value<'static, T>)>
     where
         T: 'static + Clone,
     {
+        let array_object: Object<T> = Self::array_functions::<T>().collect();
         [
             ("false", Value::Bool(false)),
             ("true", Value::Bool(true)),
             ("defer", Value::native_fn(fns::Defer)),
             ("if", Value::native_fn(fns::If)),
             ("while", Value::native_fn(fns::While)),
-            // Array functions (other than `array` and `len`)
+        ]
+        .into_iter()
+        .chain(Self::array_functions::<T>())
+        .chain([("Array", array_object.into())])
+    }
+
+    fn array_functions<T>() -> impl Iterator<Item = (&'static str, Value<'static, T>)>
+    where
+        T: 'static + Clone,
+    {
+        [
             ("all", Value::native_fn(fns::All)),
             ("any", Value::native_fn(fns::Any)),
             ("filter", Value::native_fn(fns::Filter)),
@@ -35,7 +46,6 @@ impl Prelude {
             ("map", Value::native_fn(fns::Map)),
             ("merge", Value::native_fn(fns::Merge)),
             ("push", Value::native_fn(fns::Push)),
-            // FIXME: add `Array` object!
         ]
         .into_iter()
     }
@@ -47,7 +57,7 @@ pub struct Assertions;
 
 impl Assertions {
     /// Creates an iterator over contained values and the corresponding names.
-    pub fn vars<T>() -> impl Iterator<Item = (&'static str, Value<'static, T>)>
+    pub fn iter<T>() -> impl Iterator<Item = (&'static str, Value<'static, T>)>
     where
         T: 'static + Clone + fmt::Display,
     {
@@ -69,7 +79,7 @@ pub struct Comparisons;
 
 impl Comparisons {
     /// Creates an iterator over contained values and the corresponding names.
-    pub fn vars<T>() -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
+    pub fn iter<T>() -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
         [
             ("LESS", Value::opaque_ref(Ordering::Less)),
             ("EQUAL", Value::opaque_ref(Ordering::Equal)),

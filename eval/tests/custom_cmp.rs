@@ -26,7 +26,7 @@ fn no_comparisons() {
     let module = compile_module(PROGRAM);
 
     let mut env = Environment::with_arithmetic(StdArithmetic.without_comparisons());
-    env.extend(Prelude::vars().chain(Assertions::vars()));
+    env.extend(Prelude::iter().chain(Assertions::iter()));
     module.with_env(&env).unwrap().run().unwrap();
 }
 
@@ -50,7 +50,7 @@ fn custom_cmp_function() {
     let arithmetic =
         StdArithmetic.with_comparison(|x: &Complex64, y: &Complex64| x.re.partial_cmp(&y.re));
     let mut env = Environment::with_arithmetic(arithmetic);
-    env.extend(Prelude::vars().chain(Assertions::vars()));
+    env.extend(Prelude::iter().chain(Assertions::iter()));
     module.with_env(&env).unwrap().run().unwrap();
 }
 
@@ -75,6 +75,6 @@ fn partial_cmp_function() {
         }
     });
     let mut env = Environment::with_arithmetic(arithmetic);
-    env.extend(Prelude::vars().chain(Assertions::vars()));
+    env.extend(Prelude::iter().chain(Assertions::iter()));
     module.with_env(&env).unwrap().run().unwrap();
 }

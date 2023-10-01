@@ -60,11 +60,11 @@ fn evaluating_functions() {
 }
 
 #[test]
-fn using_prototypes() {
+fn using_std_objects() {
     test_config().test(
-        "tests/snapshots/prototypes.svg",
+        "tests/snapshots/std-objects.svg",
         [
-            "arithmetic-parser eval 'Array::map((1, 2, 3), Num.sin)'",
+            "arithmetic-parser eval '{Array.map}((1, 2, 3), Num.sin)'",
             "arithmetic-parser eval -a u64 '(33, 6, 15).fold(0, Num.xor)'",
             "arithmetic-parser eval '{ map } = Array; map((1, -2), |x| x + 1)'",
         ],
@@ -72,11 +72,11 @@ fn using_prototypes() {
 }
 
 #[test]
-fn using_prototypes_with_typing() {
+fn using_std_objects_with_typing() {
     test_config().test(
-        "tests/snapshots/prototypes-with-types.svg",
+        "tests/snapshots/std-objects-with-types.svg",
         [
-            "arithmetic-parser eval --types 'Array::map((1, 2, 3), Num.sin)'",
+            "arithmetic-parser eval --types '{Array.map}((1, 2, 3), Num.sin)'",
             "arithmetic-parser eval --types -a u64 \\\n  '(33, 6, 15).fold(0, Num.xor)'",
             "arithmetic-parser eval --types \\\n  '{ map } = Array; map((1, -2), |x| x + 1)'",
         ],

@@ -5,14 +5,14 @@ dbg(GEN, ORDER);
 PublicKey = #{
     verify: |self, message, { r, s }| {
         (u1, u2) = (hash_to_scalar(message) / s, r / s);
-        to_scalar(GEN ^ u1 * self ^ u2) == r
+        (GEN ^ u1 * self ^ u2).to_scalar() == r
     },
 };
 
 SecretKey = #{
     sign: |self, message| {
         k = rand_scalar();
-        r = to_scalar(GEN ^ k);
+        r = (GEN ^ k).to_scalar();
         s = (hash_to_scalar(message) + self * r) / k;
         #{ r, s }
     },

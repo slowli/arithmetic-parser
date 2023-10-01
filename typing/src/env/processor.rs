@@ -110,8 +110,15 @@ where
             }
 
             Expr::FieldAccess { name, receiver } => {
+                let name = if let Expr::Variable = name.extra {
+                    name.with_no_extra()
+                } else {
+                    self.errors.push(Error::unsupported(expr.extra.ty(), expr));
+                    // No better choice than to generate a new type var
+                    return self.new_type();
+                };
                 let receiver = self.process_expr_inner(receiver);
-                self.process_field_access(expr, &receiver, name)
+                self.process_field_access(expr, &receiver, &name)
             }
 
             Expr::Method {
@@ -120,7 +127,7 @@ where
                 args,
                 ..
             } => {
-                let fn_type = self.process_var(name);
+                let fn_type = self.process_expr_inner(name);
                 let all_args = iter::once(receiver.as_ref()).chain(args);
                 self.process_fn_call(expr, fn_type, all_args)
             }

@@ -53,6 +53,38 @@ fn object_field_access() {
 }
 
 #[test]
+fn object_functional_field_access() {
+    let code = "|obj| ({obj.len}() == 1)";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let output = TypeEnvironment::new().process_statements(&block).unwrap();
+    assert_eq!(
+        output.to_string(),
+        "for<'T: { len: () -> Num }> ('T) -> Bool"
+    );
+
+    let usage_code = r#"
+        test = |obj| ({obj.len}() == 1);
+        test(#{ len: || 3 }) && test(#{ x: 3, y: 4, len: || 5 })
+    "#;
+    let usage_block = F32Grammar::parse_statements(usage_code).unwrap();
+    TypeEnvironment::new()
+        .process_statements(&usage_block)
+        .unwrap();
+}
+
+#[test]
+fn object_access_for_intermediate_expressions() {
+    let code = r#"
+        Point = #{ len2: |{x, y}| x * x + y * y };
+        #{ x: 3, y: 4 }.{Point.len2}() == 25 &&
+            {Point.len2}(#{ x: 1, y: 2, z: 3 }) == 5
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let output = TypeEnvironment::new().process_statements(&block).unwrap();
+    assert_eq!(output, Type::BOOL);
+}
+
+#[test]
 fn recursive_object_type_via_function_field() {
     let code = r#"
         call_len = |obj| (obj.len)(obj);

@@ -62,13 +62,19 @@ fn schnorr_signatures_imprecise() {
     env.process_statements(&code).unwrap();
 
     assert_eq!(env["gen"].to_string(), "() -> { pk: Num, sk: Num }");
+    let Type::Object(secret_key) = &env["SecretKey"] else {
+        unreachable!();
+    };
     assert_eq!(
-        env["sign"].to_string(),
-        "for<'T: Hash> ('T, Num) -> { e: Num, s: Num }"
+        secret_key.field("sign").unwrap().to_string(),
+        "for<'T: Hash> (Num, 'T) -> { e: Num, s: Num }"
     );
+    let Type::Object(public_key) = &env["PublicKey"] else {
+        unreachable!();
+    };
     assert_eq!(
-        env["verify"].to_string(),
-        "for<'T: { e: Num, s: Num }, 'U: Hash> ('T, 'U, Num) -> Bool"
+        public_key.field("verify").unwrap().to_string(),
+        "for<'T: Hash, 'U: { e: Num, s: Num }> (Num, 'T, 'U) -> Bool"
     );
 }
 
@@ -269,19 +275,25 @@ fn schnorr_signatures() {
         .unwrap();
 
     assert_eq!(env["gen"].to_string(), "() -> { pk: Ge, sk: Sc }");
+    let Type::Object(secret_key) = &env["SecretKey"] else {
+        unreachable!();
+    };
     assert_eq!(
-        env["sign"].to_string(),
-        "for<'T: Hash> ('T, Sc) -> { e: Sc, s: Sc }"
+        secret_key.field("sign").unwrap().to_string(),
+        "for<'T: Hash> (Sc, 'T) -> { e: Sc, s: Sc }"
     );
+    let Type::Object(public_key) = &env["PublicKey"] else {
+        unreachable!();
+    };
     assert_eq!(
-        env["verify"].to_string(),
-        "for<'T: { e: Sc, s: Sc }, 'U: Hash> ('T, 'U, Ge) -> Bool"
+        public_key.field("verify").unwrap().to_string(),
+        "for<'T: Hash, 'U: { e: Sc, s: Sc }> (Ge, 'T, 'U) -> Bool"
     );
 }
 
 #[test]
 fn schnorr_signatures_error() {
-    let bogus_code = SCHNORR_CODE.replace("s: r - sk * e", "s: R - sk * e");
+    let bogus_code = SCHNORR_CODE.replace("s: r - self * e", "s: R - self * e");
     let code = U64Grammar::parse_statements(bogus_code.as_str()).unwrap();
     let errors = prepare_env()
         .process_with_arithmetic(&GroupArithmetic, &code)
@@ -307,24 +319,24 @@ struct Mutation {
 fn schnorr_signatures_mutations() {
     const MUTATIONS: &[Mutation] = &[
         Mutation {
-            from: "R = GEN ^ s * pk ^ e;",
-            to: "R = GEN ^ s * e ^ pk;",
-            expected_msg: "19:5: Type `Sc` is not assignable to type `Ge`",
+            from: "R = GEN ^ s * self ^ e;",
+            to: "R = GEN ^ s * e ^ self;",
+            expected_msg: "8:9: Type `Sc` is not assignable to type `Ge`",
         },
         Mutation {
-            from: "R = GEN ^ s * pk ^ e;",
-            to: "R = GEN ^ s + pk ^ e;",
-            expected_msg: "18:9: Type `Ge` is not assignable to type `Sc`",
+            from: "R = GEN ^ s * self ^ e;",
+            to: "R = GEN ^ s + self ^ e;",
+            expected_msg: "7:13: Type `Ge` is not assignable to type `Sc`",
         },
         Mutation {
-            from: "R = GEN ^ s * pk ^ e;",
-            to: "R = GEN ^ s * pk * e;",
-            expected_msg: "19:5: Type `Sc` is not assignable to type `Ge`",
+            from: "R = GEN ^ s * self ^ e;",
+            to: "R = GEN ^ s * self * e;",
+            expected_msg: "8:9: Type `Sc` is not assignable to type `Ge`",
         },
         Mutation {
-            from: "R = GEN ^ s * pk ^ e;",
-            to: "R = (GEN, pk) ^ (s, e);",
-            expected_msg: "18:9: Type `(Ge, _)` is not assignable to type `Ge`",
+            from: "R = GEN ^ s * self ^ e;",
+            to: "R = (GEN, self) ^ (s, e);",
+            expected_msg: "7:13: Type `(Ge, _)` is not assignable to type `Ge`",
         },
     ];
 
@@ -346,13 +358,19 @@ fn dsa_signatures_imprecise() {
     env.process_statements(&code).unwrap();
 
     assert_eq!(env["gen"].to_string(), "() -> { pk: Num, sk: Num }");
+    let Type::Object(secret_key) = &env["SecretKey"] else {
+        unreachable!();
+    };
     assert_eq!(
-        env["sign"].to_string(),
-        "for<'T: Hash> ('T, Num) -> { r: Num, s: Num }"
+        secret_key.field("sign").unwrap().to_string(),
+        "for<'T: Hash> (Num, 'T) -> { r: Num, s: Num }"
     );
+    let Type::Object(public_key) = &env["PublicKey"] else {
+        unreachable!();
+    };
     assert_eq!(
-        env["verify"].to_string(),
-        "for<'T: { r: Num, s: Num }, 'U: Hash> ('T, 'U, Num) -> Bool"
+        public_key.field("verify").unwrap().to_string(),
+        "for<'T: Hash, 'U: { r: Num, s: Num }> (Num, 'T, 'U) -> Bool"
     );
 }
 
@@ -364,13 +382,19 @@ fn dsa_signatures() {
         .unwrap();
 
     assert_eq!(env["gen"].to_string(), "() -> { pk: Ge, sk: Sc }");
+    let Type::Object(secret_key) = &env["SecretKey"] else {
+        unreachable!();
+    };
     assert_eq!(
-        env["sign"].to_string(),
-        "for<'T: Hash> ('T, Sc) -> { r: Sc, s: Sc }"
+        secret_key.field("sign").unwrap().to_string(),
+        "for<'T: Hash> (Sc, 'T) -> { r: Sc, s: Sc }"
     );
+    let Type::Object(public_key) = &env["PublicKey"] else {
+        unreachable!();
+    };
     assert_eq!(
-        env["verify"].to_string(),
-        "for<'T: { r: Sc, s: Sc }, 'U: Hash> ('T, 'U, Ge) -> Bool"
+        public_key.field("verify").unwrap().to_string(),
+        "for<'T: Hash, 'U: { r: Sc, s: Sc }> (Ge, 'T, 'U) -> Bool"
     );
 }
 
@@ -380,17 +404,17 @@ fn dsa_signatures_mutations() {
         Mutation {
             from: "r = (GEN ^ k).to_scalar();",
             to: "r = GEN ^ k;",
-            expected_msg: "13:36: Type `Ge` is not assignable to type `Sc`",
+            expected_msg: "16:40: Type `Ge` is not assignable to type `Sc`",
         },
         Mutation {
-            from: "(GEN ^ u1 * pk ^ u2).to_scalar() == r",
-            to: "GEN ^ u1 * pk ^ u2 == r",
-            expected_msg: "19:5: Type `Sc` is not assignable to type `Ge`",
+            from: "(GEN ^ u1 * self ^ u2).to_scalar() == r",
+            to: "GEN ^ u1 * self ^ u2 == r",
+            expected_msg: "8:9: Type `Sc` is not assignable to type `Ge`",
         },
         Mutation {
-            from: "assert(signature.verify(message, pk));",
-            to: "assert(signature.verify(pk, message));",
-            expected_msg: "32:33: Type `Sc` is not assignable to type `Ge`",
+            from: "assert(pk.{PublicKey.verify}(message, signature));",
+            to: "assert(message.{PublicKey.verify}(pk, signature));",
+            expected_msg: "37:12: Type `Sc` is not assignable to type `Ge`",
         },
     ];
 
@@ -412,13 +436,19 @@ fn el_gamal_encryption_imprecise() {
     env.process_statements(&code).unwrap();
 
     assert_eq!(env["gen"].to_string(), "() -> { pk: Num, sk: Num }");
+    let Type::Object(public_key) = &env["PublicKey"] else {
+        unreachable!();
+    };
     assert_eq!(
-        env["encrypt"].to_string(),
+        public_key.field("encrypt").unwrap().to_string(),
         "(Num, Num) -> { B: Num, R: Num }"
     );
+    let Type::Object(secret_key) = &env["SecretKey"] else {
+        unreachable!();
+    };
     assert_eq!(
-        env["decrypt"].to_string(),
-        "for<'T: { B: 'U, R: 'U }, 'U: Ops> ('T, 'U) -> 'U"
+        secret_key.field("decrypt").unwrap().to_string(),
+        "for<'T: Ops, 'U: { B: 'T, R: 'T }> ('T, 'U) -> 'T"
     );
 }
 
@@ -430,14 +460,23 @@ fn el_gamal_encryption() {
         .unwrap();
 
     assert_eq!(env["gen"].to_string(), "() -> { pk: Ge, sk: Sc }");
-    assert_eq!(env["encrypt"].to_string(), "(Ge, Ge) -> { B: Ge, R: Ge }");
+    let Type::Object(public_key) = &env["PublicKey"] else {
+        unreachable!();
+    };
     assert_eq!(
-        env["decrypt"].to_string(),
-        "for<'T: { B: Ge, R: Ge }> ('T, Sc) -> Ge"
+        public_key.field("encrypt").unwrap().to_string(),
+        "(Ge, Ge) -> { B: Ge, R: Ge }"
+    );
+    let Type::Object(secret_key) = &env["SecretKey"] else {
+        unreachable!();
+    };
+    assert_eq!(
+        secret_key.field("decrypt").unwrap().to_string(),
+        "for<'T: { B: Ge, R: Ge }> (Sc, 'T) -> Ge"
     );
     assert_eq!(
         env["encrypt_and_combine"].to_string(),
-        "([Ge; N], Ge) -> { B: Ge, R: Ge }"
+        "(Ge, [Ge; N]) -> { B: Ge, R: Ge }"
     );
 }
 

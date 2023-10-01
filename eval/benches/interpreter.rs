@@ -303,7 +303,6 @@ fn bench_quick_sort_interpreted(bencher: &mut Bencher<'_>) {
 
     let mut env = Environment::new();
     env.extend(Prelude::vars());
-    env.extend(Prelude::prototypes());
     let sort_fn = sort_module.with_env(&env).unwrap().run().unwrap();
     let sort_fn = match sort_fn {
         Value::Function(function) => function,

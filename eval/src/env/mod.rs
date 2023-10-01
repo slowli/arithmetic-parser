@@ -9,9 +9,7 @@ use crate::{
     alloc::{hash_map, HashMap, Rc, String, ToOwned},
     arith::{OrdArithmetic, StdArithmetic},
     exec::Operations,
-    fns,
-    values::StandardPrototypes,
-    NativeFn, Prototype, PrototypeField, Value, ValueType,
+    fns, NativeFn, Value,
 };
 
 /// Environment containing named `Value`s.
@@ -76,7 +74,6 @@ use crate::{
 pub struct Environment<'a, T> {
     variables: HashMap<String, Value<'a, T>>,
     arithmetic: Rc<dyn OrdArithmetic<T>>,
-    prototypes: StandardPrototypes<T>,
 }
 
 impl<T> Default for Environment<'_, T>
@@ -93,7 +90,6 @@ impl<T: Clone> Clone for Environment<'_, T> {
         Self {
             variables: self.variables.clone(),
             arithmetic: Rc::clone(&self.arithmetic),
-            prototypes: self.prototypes.clone(),
         }
     }
 }
@@ -101,7 +97,7 @@ impl<T: Clone> Clone for Environment<'_, T> {
 /// Compares environments by variables and prototypes; arithmetics are ignored.
 impl<T: PartialEq> PartialEq for Environment<'_, T> {
     fn eq(&self, other: &Self) -> bool {
-        self.variables == other.variables && self.prototypes == other.prototypes
+        self.variables == other.variables
     }
 }
 
@@ -114,7 +110,6 @@ where
         Self {
             variables: HashMap::new(),
             arithmetic: Rc::new(StdArithmetic),
-            prototypes: StandardPrototypes::new(),
         }
     }
 }
@@ -128,12 +123,11 @@ impl<'a, T> Environment<'a, T> {
         Self {
             variables: HashMap::new(),
             arithmetic: Rc::new(arithmetic),
-            prototypes: StandardPrototypes::new(),
         }
     }
 
     pub(crate) fn operations(&self) -> Operations<'_, T> {
-        Operations::new(&*self.arithmetic, Some(&self.prototypes))
+        Operations::from(&*self.arithmetic)
     }
 
     /// Gets a variable by name.
@@ -151,11 +145,6 @@ impl<'a, T> Environment<'a, T> {
         self.variables
             .iter()
             .map(|(name, value)| (name.as_str(), value))
-    }
-
-    /// Returns a [`Prototype`] for a standard type, or `None` if it is undefined.
-    pub fn prototype(&self, ty: ValueType) -> Option<&Prototype<'static, T>> {
-        self.prototypes.get(ty)
     }
 
     /// Inserts a variable with the specified name.
@@ -186,51 +175,6 @@ impl<'a, T> Environment<'a, T> {
     {
         let wrapped = fns::wrap::<Args, _>(fn_to_wrap);
         self.insert(name, Value::native_fn(wrapped))
-    }
-}
-
-impl<T: Clone> Environment<'_, T> {
-    /// Inserts a field into a [`Prototype`](crate::Prototype) for one of the standard value types.
-    ///
-    /// Use the [`Extend`] implementation to modify prototypes more efficiently in case of batch
-    /// changes.
-    pub fn insert_prototype(
-        &mut self,
-        field: PrototypeField,
-        value: Value<'static, T>,
-    ) -> &mut Self {
-        self.prototypes.insert(field, value);
-        self
-    }
-
-    /// Inserts or updates prototypes for all standard types (if they are defined)
-    /// as conventionally named variables. If any of such variables is already defined,
-    /// it is replaced.
-    ///
-    /// The naming convention is as follows:
-    ///
-    /// - `Array`: array / [`Tuple`](crate::Tuple) prototype
-    /// - `Object`: [`Object`](crate::Object) prototype
-    /// - `Function`: [`Function`](crate::Function) prototype
-    /// - `Bool`: Boolean value prototype
-    ///
-    /// Other prototypes (notably, the prototype for primitive values) are not exposed
-    /// by this method. If necessary, they can be added by using a combination of
-    /// [`Self::prototype()`] and [`Self::insert()`].
-    pub fn insert_prototypes_as_vars(&mut self) -> &mut Self {
-        const TYPES_WITH_NAMES: &[(ValueType, &str)] = &[
-            (ValueType::Array, "Array"),
-            (ValueType::Object, "Object"),
-            (ValueType::Function, "Function"),
-            (ValueType::Bool, "Bool"),
-        ];
-
-        for &(ty, name) in TYPES_WITH_NAMES {
-            if let Some(proto) = self.prototype(ty).cloned() {
-                self.insert(name, proto.into());
-            }
-        }
-        self
     }
 }
 
@@ -328,15 +272,5 @@ where
             .into_iter()
             .map(|(var_name, value)| (var_name.into(), value.into()));
         self.variables.extend(variables);
-    }
-}
-
-impl<T: Clone, V> Extend<(PrototypeField, V)> for Environment<'_, T>
-where
-    V: Into<Value<'static, T>>,
-{
-    fn extend<I: IntoIterator<Item = (PrototypeField, V)>>(&mut self, iter: I) {
-        let prototype_fields = iter.into_iter().map(|(field, value)| (field, value.into()));
-        self.prototypes.extend(prototype_fields);
     }
 }

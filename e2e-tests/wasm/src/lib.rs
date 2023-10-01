@@ -81,7 +81,6 @@ pub fn evaluate(program: &str) -> Result<JsValue, JsValue> {
 
     let mut env = Environment::new();
     env.extend(Prelude::vars().chain(Assertions::vars()));
-    env.extend(Prelude::prototypes());
     initialize_env(&mut env);
 
     let value = module

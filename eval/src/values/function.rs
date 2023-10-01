@@ -3,13 +3,12 @@
 use core::fmt;
 
 use crate::{
-    alloc::{HashMap, Rc, String, ToOwned, Vec},
+    alloc::{HashMap, Rc, String, Vec},
     arith::OrdArithmetic,
     error::{Backtrace, CodeInModule, Error, ErrorKind},
     exec::{ExecutableFn, ModuleId, Operations},
     fns::ValueCell,
-    values::StandardPrototypes,
-    Environment, EvalResult, Object, Prototype, SpannedValue, Value,
+    Environment, EvalResult, SpannedValue, Value,
 };
 use arithmetic_parser::{LvalueLen, MaybeSpanned, StripCode};
 
@@ -56,21 +55,6 @@ impl<'r, 'a, T> CallContext<'r, 'a, T> {
 
     pub(crate) fn arithmetic(&self) -> &'r dyn OrdArithmetic<T> {
         self.operations.arithmetic
-    }
-
-    pub(crate) fn prototypes(&self) -> Option<&'r StandardPrototypes<T>> {
-        self.operations.prototypes
-    }
-
-    /// Retrieves value prototype using standard prototypes if necessary.
-    pub(crate) fn get_prototype(&self, value: &Value<'a, T>) -> Prototype<'a, T> {
-        let prototype = value.as_object().and_then(Object::prototype).cloned();
-        prototype.unwrap_or_else(|| {
-            self.operations
-                .prototypes
-                .and_then(|prototypes| prototypes.get(value.value_type()).cloned())
-                .unwrap_or_default()
-        })
     }
 
     /// Returns the call span of the currently executing function.
@@ -274,8 +258,6 @@ pub enum Function<'a, T> {
     Native(Rc<dyn NativeFn<T>>),
     /// Interpreted function.
     Interpreted(Rc<InterpretedFn<'a, T>>),
-    /// Value prototype.
-    Prototype(Prototype<'a, T>),
 }
 
 impl<T> Clone for Function<'_, T> {
@@ -283,7 +265,6 @@ impl<T> Clone for Function<'_, T> {
         match self {
             Self::Native(function) => Self::Native(Rc::clone(function)),
             Self::Interpreted(function) => Self::Interpreted(Rc::clone(function)),
-            Self::Prototype(proto) => Self::Prototype(proto.clone()),
         }
     }
 }
@@ -299,20 +280,13 @@ impl<T: fmt::Display> fmt::Display for Function<'_, T> {
                 location.fmt_location(formatter)?;
                 formatter.write_str(")")
             }
-            Self::Prototype(proto) => {
-                write!(formatter, "(prototype {})", proto.as_object())
-            }
         }
     }
 }
 
 impl<T: PartialEq> PartialEq for Function<'_, T> {
     fn eq(&self, other: &Self) -> bool {
-        if let (Self::Prototype(this_proto), Self::Prototype(other_proto)) = (self, other) {
-            *this_proto == *other_proto
-        } else {
-            self.is_same_function(other)
-        }
+        self.is_same_function(other)
     }
 }
 
@@ -325,7 +299,6 @@ impl<T: 'static + Clone> StripCode for Function<'_, T> {
             Self::Interpreted(function) => {
                 Function::Interpreted(Rc::new(function.to_stripped_code()))
             }
-            Self::Prototype(proto) => Function::Prototype(proto.strip_code()),
         }
     }
 }
@@ -341,14 +314,13 @@ impl<'a, T> Function<'a, T> {
         match (self, other) {
             (Self::Native(this), Self::Native(other)) => this.data_ptr() == other.data_ptr(),
             (Self::Interpreted(this), Self::Interpreted(other)) => Rc::ptr_eq(this, other),
-            (Self::Prototype(this), Self::Prototype(other)) => this.is_same(other),
             _ => false,
         }
     }
 
     pub(crate) fn def_span(&self) -> Option<CodeInModule<'a>> {
         match self {
-            Self::Native(_) | Self::Prototype(_) => None,
+            Self::Native(_) => None,
             Self::Interpreted(function) => Some(CodeInModule::new(
                 function.module_id(),
                 function.definition.def_span,
@@ -367,7 +339,6 @@ impl<'a, T: 'static + Clone> Function<'a, T> {
         match self {
             Self::Native(function) => function.evaluate(args, ctx),
             Self::Interpreted(function) => function.evaluate(args, ctx),
-            Self::Prototype(proto) => proto.evaluate(args, ctx),
         }
     }
 }

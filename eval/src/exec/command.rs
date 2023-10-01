@@ -54,11 +54,6 @@ pub(crate) enum CompiledExpr<'a, T> {
         original_name: Option<String>,
         args: Vec<SpannedAtom<'a, T>>,
     },
-    MethodCall {
-        name: MaybeSpanned<'a, String>,
-        receiver: SpannedAtom<'a, T>,
-        args: Vec<SpannedAtom<'a, T>>,
-    },
     DefineFunction {
         ptr: usize,
         captures: Vec<SpannedAtom<'a, T>>,
@@ -100,15 +95,6 @@ impl<T: Clone> Clone for CompiledExpr<'_, T> {
             } => Self::FunctionCall {
                 name: name.clone(),
                 original_name: original_name.clone(),
-                args: args.clone(),
-            },
-            Self::MethodCall {
-                name,
-                receiver,
-                args,
-            } => Self::MethodCall {
-                name: name.clone(),
-                receiver: receiver.clone(),
                 args: args.clone(),
             },
 
@@ -160,15 +146,6 @@ impl<T: 'static + Clone> StripCode for CompiledExpr<'_, T> {
             } => CompiledExpr::FunctionCall {
                 name: name.strip_code(),
                 original_name,
-                args: args.into_iter().map(StripCode::strip_code).collect(),
-            },
-            Self::MethodCall {
-                name,
-                receiver,
-                args,
-            } => CompiledExpr::MethodCall {
-                name: name.strip_code(),
-                receiver: receiver.strip_code(),
                 args: args.into_iter().map(StripCode::strip_code).collect(),
             },
 

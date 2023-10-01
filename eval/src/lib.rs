@@ -241,8 +241,8 @@ pub use self::{
     error::{Error, ErrorKind, EvalResult},
     exec::ExecutableModule,
     values::{
-        CallContext, Function, InterpretedFn, NativeFn, Object, OpaqueRef, Prototype,
-        PrototypeField, SpannedValue, Tuple, Value, ValueType,
+        CallContext, Function, InterpretedFn, NativeFn, Object, OpaqueRef, SpannedValue, Tuple,
+        Value, ValueType,
     },
 };
 

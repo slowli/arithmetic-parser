@@ -3,8 +3,7 @@
 use assert_matches::assert_matches;
 
 use arithmetic_eval::{
-    fns::FromValueErrorKind, Environment, ErrorKind, Function, NativeFn, PrototypeField, Value,
-    ValueType,
+    fns::FromValueErrorKind, Environment, ErrorKind, Function, NativeFn, Value, ValueType,
 };
 use arithmetic_parser::LvalueLen;
 
@@ -300,10 +299,7 @@ fn function_aliasing() {
 fn method_call() {
     let program = "1.0.add(2)";
     let mut env = Environment::new();
-    env.insert_prototype(
-        PrototypeField::prim("add"),
-        Value::wrapped_fn(|x: f32, y: f32| x + y),
-    );
+    env.insert_wrapped_fn("add", |x: f32, y: f32| x + y);
     let return_value = evaluate(&mut env, program);
     assert_eq!(return_value, Value::Prim(3.0));
 }

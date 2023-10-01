@@ -1,16 +1,12 @@
 //! `Registers` for executing commands and closely related types.
 
-use core::iter;
-
 use crate::{
     alloc::{vec, Box, HashMap, Rc, String, ToOwned, Vec},
     arith::OrdArithmetic,
     error::{Backtrace, CodeInModule, EvalResult, TupleLenMismatchContext},
     exec::command::{Atom, Command, CompiledExpr, FieldName, SpannedAtom, SpannedCommand},
     exec::ModuleId,
-    values::StandardPrototypes,
-    CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, Object, Prototype,
-    SpannedValue, Value,
+    CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, SpannedValue, Value,
 };
 use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
 
@@ -114,7 +110,7 @@ impl<'a, T: 'static + Clone> Executable<'a, T> {
             registers,
             ..Registers::new()
         };
-        let operations = Operations::new(ctx.arithmetic(), ctx.prototypes());
+        let operations = Operations::from(ctx.arithmetic());
         env.execute(self, operations, ctx.backtrace())
     }
 }
@@ -154,7 +150,6 @@ impl<T: 'static + Clone> StripCode for ExecutableFn<'_, T> {
 #[derive(Debug)]
 pub(crate) struct Operations<'r, T> {
     pub arithmetic: &'r dyn OrdArithmetic<T>,
-    pub prototypes: Option<&'r StandardPrototypes<T>>,
 }
 
 impl<T> Clone for Operations<'_, T> {
@@ -165,24 +160,9 @@ impl<T> Clone for Operations<'_, T> {
 
 impl<T> Copy for Operations<'_, T> {}
 
-impl<'r, T: 'static> From<&'r dyn OrdArithmetic<T>> for Operations<'r, T> {
+impl<'r, T> From<&'r dyn OrdArithmetic<T>> for Operations<'r, T> {
     fn from(arithmetic: &'r dyn OrdArithmetic<T>) -> Self {
-        Self {
-            arithmetic,
-            prototypes: None,
-        }
-    }
-}
-
-impl<'r, T> Operations<'r, T> {
-    pub fn new(
-        arithmetic: &'r dyn OrdArithmetic<T>,
-        prototypes: Option<&'r StandardPrototypes<T>>,
-    ) -> Self {
-        Self {
-            arithmetic,
-            prototypes,
-        }
+        Self { arithmetic }
     }
 }
 
@@ -463,31 +443,6 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
                 }
             }
 
-            CompiledExpr::MethodCall {
-                name,
-                receiver,
-                args,
-            } => {
-                let receiver = receiver.copy_with_extra(self.resolve_atom(&receiver.extra));
-                let method =
-                    Self::resolve_method(&receiver.extra, &name.extra, operations.prototypes)
-                        .map_err(|err| executable.create_error(name, err))?;
-                let arg_values = args
-                    .iter()
-                    .map(|arg| arg.copy_with_extra(self.resolve_atom(&arg.extra)));
-                let arg_values = iter::once(receiver).chain(arg_values).collect();
-
-                Self::eval_function(
-                    &method,
-                    &name.extra,
-                    executable.id.as_ref(),
-                    span,
-                    arg_values,
-                    operations,
-                    backtrace,
-                )
-            }
-
             CompiledExpr::DefineFunction {
                 ptr,
                 captures,
@@ -582,32 +537,6 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
             field: name.to_owned(),
             available_fields: object.field_names().map(String::from).collect(),
         })
-    }
-
-    fn resolve_method(
-        receiver: &Value<'a, T>,
-        method_name: &str,
-        standard_prototypes: Option<&StandardPrototypes<T>>,
-    ) -> Result<Function<'a, T>, ErrorKind> {
-        let proto = receiver.as_object().and_then(Object::prototype);
-
-        let proto = proto
-            .or_else(|| {
-                let ty = receiver.value_type();
-                standard_prototypes.and_then(|prototypes| prototypes.get(ty))
-            })
-            .map(Prototype::as_object)
-            .ok_or_else(|| ErrorKind::NoPrototype(receiver.value_type()))?;
-
-        let field = proto.get(method_name).ok_or_else(|| ErrorKind::NoField {
-            field: method_name.to_owned(),
-            available_fields: proto.field_names().map(String::from).collect(),
-        })?;
-        if let Value::Function(function) = field {
-            Ok(function.clone())
-        } else {
-            Err(ErrorKind::CannotCall)
-        }
     }
 
     #[allow(clippy::needless_option_as_deref)] // false positive

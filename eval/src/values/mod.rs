@@ -18,10 +18,9 @@ mod object;
 mod ops;
 mod tuple;
 
-pub(crate) use self::object::StandardPrototypes;
 pub use self::{
     function::{CallContext, Function, InterpretedFn, NativeFn},
-    object::{Object, Prototype, PrototypeField},
+    object::Object,
     tuple::Tuple,
 };
 
@@ -250,7 +249,6 @@ impl<'a, T> Value<'a, T> {
     pub(crate) fn as_object(&self) -> Option<&Object<'a, T>> {
         match self {
             Self::Object(object) => Some(object),
-            Self::Function(Function::Prototype(proto)) => Some(proto.as_object()),
             _ => None,
         }
     }

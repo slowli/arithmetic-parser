@@ -21,7 +21,6 @@ fn check_sample(code_sample: &str) {
 
     let mut env = Environment::<f32>::new();
     env.extend(Prelude::vars().chain(Assertions::vars()));
-    env.extend(Prelude::prototypes());
     env.insert("INF", Value::Prim(f32::INFINITY))
         .insert_native_fn("array", fns::Array)
         .insert_native_fn("assert_close", fns::AssertClose::new(1e-4))

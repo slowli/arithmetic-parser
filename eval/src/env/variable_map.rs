@@ -2,7 +2,7 @@
 
 use core::{cmp::Ordering, fmt};
 
-use crate::{fns, PrototypeField, Value};
+use crate::{fns, Value};
 
 /// Commonly used constants and functions from the [`fns` module](fns).
 ///
@@ -24,31 +24,17 @@ impl Prelude {
         IntoIterator::into_iter([
             ("false", Value::Bool(false)),
             ("true", Value::Bool(true)),
-            ("impl", Value::native_fn(fns::CreatePrototype)),
-            ("proto", Value::native_fn(fns::GetPrototype)),
             ("defer", Value::native_fn(fns::Defer)),
             ("if", Value::native_fn(fns::If)),
             ("while", Value::native_fn(fns::While)),
-        ])
-    }
-
-    /// Returns standard prototypes corresponding to the contained functions.
-    ///
-    /// Currently, this only sets a prototype for tuples / arrays containing
-    /// `map`, `filter`, `fold`, `all`, `any`, `push` and `merge` functions.
-    pub fn prototypes<T>() -> impl Iterator<Item = (PrototypeField, Value<'static, T>)>
-    where
-        T: 'static + Clone,
-    {
-        let array_proto = PrototypeField::array;
-        IntoIterator::into_iter([
-            (array_proto("map"), Value::native_fn(fns::Map)),
-            (array_proto("filter"), Value::native_fn(fns::Filter)),
-            (array_proto("fold"), Value::native_fn(fns::Fold)),
-            (array_proto("all"), Value::native_fn(fns::All)),
-            (array_proto("any"), Value::native_fn(fns::Any)),
-            (array_proto("push"), Value::native_fn(fns::Push)),
-            (array_proto("merge"), Value::native_fn(fns::Merge)),
+            // Array functions (other than `array` and `len`)
+            ("all", Value::native_fn(fns::All)),
+            ("any", Value::native_fn(fns::Any)),
+            ("filter", Value::native_fn(fns::Filter)),
+            ("fold", Value::native_fn(fns::Fold)),
+            ("map", Value::native_fn(fns::Map)),
+            ("merge", Value::native_fn(fns::Merge)),
+            ("push", Value::native_fn(fns::Push)),
         ])
     }
 }

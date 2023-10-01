@@ -10,7 +10,7 @@ use crate::{
     Error, ErrorKind,
 };
 use arithmetic_parser::{
-    grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Expr, FnDefinition, MaybeSpanned,
+    grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Expr, FnDefinition,
     MethodCallSeparator, ObjectExpr, Spanned, SpannedExpr, SpannedStatement, Statement,
 };
 
@@ -207,17 +207,16 @@ impl Compiler {
         receiver: &SpannedExpr<'a, T>,
         args: &[SpannedExpr<'a, T>],
     ) -> Result<Atom<T::Lit>, Error<'a>> {
-        let name_string = (*name.fragment()).to_owned();
-        let name: MaybeSpanned<'_, _> = name.copy_with_extra(name_string).into();
-        let receiver = self.compile_expr(executable, receiver)?;
-        let args = args
-            .iter()
+        let original_name = Some((*name.fragment()).to_owned());
+        let name = name.copy_with_extra(self.compile_var_access(name)?);
+        let args = iter::once(receiver)
+            .chain(args)
             .map(|arg| self.compile_expr(executable, arg))
             .collect::<Result<Vec<_>, _>>()?;
 
-        let function = CompiledExpr::MethodCall {
-            name,
-            receiver,
+        let function = CompiledExpr::FunctionCall {
+            name: name.into(),
+            original_name,
             args,
         };
         let register = self.push_assignment(executable, function, call_expr);

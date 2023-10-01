@@ -6,7 +6,7 @@ use crate::{
     arith::OrdArithmetic,
     error::{AuxErrorInfo, Error, ErrorKind, TupleLenMismatchContext},
     exec::ModuleId,
-    Function, Object, Tuple, Value,
+    Object, Tuple, Value,
 };
 use arithmetic_parser::{BinaryOp, MaybeSpanned, Op, UnaryOp};
 
@@ -265,12 +265,6 @@ impl<'a, T> Value<'a, T> {
                 }
             }
             (Self::Object(this), Self::Object(other)) => this.eq_by_arithmetic(other, arithmetic),
-            (
-                Self::Function(Function::Prototype(this)),
-                Self::Function(Function::Prototype(other)),
-            ) => this
-                .as_object()
-                .eq_by_arithmetic(other.as_object(), arithmetic),
             (Self::Function(this), Self::Function(other)) => this.is_same_function(other),
             (Self::Ref(this), Self::Ref(other)) => this == other,
             _ => false,

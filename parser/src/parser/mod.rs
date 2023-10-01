@@ -327,7 +327,7 @@ where
 #[derive(Debug)]
 struct MethodOrFnCall<'a, T: Grammar<'a>> {
     separator: Option<Spanned<'a>>,
-    fn_name: Option<InputSpan<'a>>,
+    fn_name: Option<SpannedExpr<'a, T>>,
     args: Option<Vec<SpannedExpr<'a, T>>>,
 }
 
@@ -357,21 +357,30 @@ where
     Ty: GrammarType,
 {
     let var_name_or_digits = alt((var_name, take_while1(|c: char| c.is_ascii_digit())));
+    let method_or_field_expr = alt((
+        map(with_span(var_name_or_digits), |span| {
+            span.copy_with_extra(Expr::Variable)
+        }),
+        block_expr::<T, Ty>,
+    ));
     let method_or_field_access_parser = map_res(
         tuple((
-            var_name_or_digits,
+            method_or_field_expr,
             opt(preceded(ws::<Ty>, fn_args::<T, Ty>)),
         )),
         |(fn_name, maybe_args)| {
-            if maybe_args.is_some() && !is_valid_variable_name(fn_name.fragment()) {
-                Err(ErrorKind::LiteralName)
-            } else {
-                Ok(MethodOrFnCall {
-                    separator: None,
-                    fn_name: Some(fn_name),
-                    args: maybe_args.map(|(args, _)| args),
-                })
+            if maybe_args.is_some() {
+                let is_bogus_name = matches!(fn_name.extra, Expr::Variable)
+                    && !is_valid_variable_name(fn_name.fragment());
+                if is_bogus_name {
+                    return Err(ErrorKind::LiteralName);
+                }
             }
+            Ok(MethodOrFnCall {
+                separator: None,
+                fn_name: Some(fn_name),
+                args: maybe_args.map(|(args, _)| args),
+            })
         },
     );
     let method_or_field_access_parser = map(

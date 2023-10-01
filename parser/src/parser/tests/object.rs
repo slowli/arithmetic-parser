@@ -21,7 +21,7 @@ fn field_access_basics() {
     assert_eq!(
         expr.extra,
         Expr::FieldAccess {
-            name: sp(6, "x", ()),
+            name: Box::new(sp(6, "x", Expr::Variable)),
             receiver: Box::new(sp(0, "point", Expr::Variable)),
         }
     );
@@ -31,7 +31,7 @@ fn field_access_basics() {
     assert_eq!(
         expr.extra,
         Expr::FieldAccess {
-            name: sp(8, "s0", ()),
+            name: Box::new(sp(8, "s0", Expr::Variable)),
             receiver: Box::new(sp(
                 0,
                 "(5, 2)",
@@ -63,7 +63,7 @@ fn chained_field_access() {
     assert_eq!(
         receiver.extra,
         Expr::FieldAccess {
-            name: sp(6, "x", ()),
+            name: Box::new(sp(6, "x", Expr::Variable)),
             receiver: Box::new(sp(0, "point", Expr::Variable)),
         }
     );
@@ -109,7 +109,7 @@ fn callable_field_access() {
     assert_eq!(
         name.extra,
         Expr::FieldAccess {
-            name: sp(5, "fun", ()),
+            name: Box::new(sp(5, "fun", Expr::Variable)),
             receiver: Box::new(sp(1, "obj", Expr::Variable)),
         }
     );
@@ -190,7 +190,7 @@ fn objects_within_larger_context() {
     let Expr::FieldAccess { receiver, name } = expr.extra else {
         panic!("Unexpected expr: {expr:?}");
     };
-    assert_eq!(name, sp(16, "x", ()));
+    assert_eq!(*name, sp(16, "x", Expr::Variable));
     assert_matches!(receiver.extra, Expr::Object(ObjectExpr { fields }) if fields.len() == 2);
 
     let input = InputSpan::new("test(x, #{ y, z: 2 * y })");

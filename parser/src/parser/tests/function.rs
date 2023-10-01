@@ -129,9 +129,9 @@ fn method_expr_works() {
             0,
             "x.sin()",
             Expr::Method {
-                name: span(2, "sin").into(),
+                name: Box::new(sp(2, "sin", Expr::Variable)),
                 receiver: Box::new(sp(0, "x", Expr::Variable)),
-                separator: sp(1, ".", ()),
+                separator: span(1, ".").into(),
                 args: vec![],
             }
         )
@@ -143,7 +143,7 @@ fn method_expr_works() {
         0,
         "(1, x, 2).foo(y)",
         Expr::Method {
-            name: span(10, "foo").into(),
+            name: Box::new(sp(10, "foo", Expr::Variable)),
             receiver: Box::new(sp(
                 0,
                 "(1, x, 2)",
@@ -153,7 +153,7 @@ fn method_expr_works() {
                     sp(7, "2", Expr::Literal(Literal::Number)),
                 ]),
             )),
-            separator: sp(9, ".", ()),
+            separator: span(9, ".").into(),
             args: vec![sp(14, "y", Expr::Variable)],
         },
     );
@@ -172,15 +172,100 @@ fn method_expr_works() {
                     17,
                     "7.bar()",
                     Expr::Method {
-                        name: span(19, "bar").into(),
+                        name: Box::new(sp(19, "bar", Expr::Variable)),
                         receiver: Box::new(sp(17, "7", Expr::Literal(Literal::Number))),
-                        separator: sp(18, ".", ()),
+                        separator: span(18, ".").into(),
                         args: vec![],
                     }
                 )],
             }
         )
     );
+}
+
+#[test]
+fn method_expr_with_complex_name() {
+    let input = InputSpan::new("x.{Num.cmp}(y);");
+    let (_, call) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+    assert_eq!(*call.fragment(), "x.{Num.cmp}(y)");
+
+    let Expr::Method {
+        name,
+        receiver,
+        separator,
+        args,
+    } = &call.extra
+    else {
+        panic!("Unexpected expr: {:#?}", call.extra);
+    };
+    assert_eq!(*receiver.as_ref(), sp(0, "x", Expr::Variable));
+    assert_eq!(*separator, sp(1, ".", ()));
+    assert_eq!(args.as_slice(), [sp(12, "y", Expr::Variable)]);
+    let Expr::Block(name) = &name.extra else {
+        panic!("Unexpected name expr: {:#?}", name.extra);
+    };
+    assert!(name.statements.is_empty());
+    assert_matches!(
+        name.return_value.as_deref().unwrap().extra,
+        Expr::FieldAccess { .. }
+    );
+
+    let input = InputSpan::new("x.{method(x)}(y);");
+    let (_, call) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+    assert_eq!(*call.fragment(), "x.{method(x)}(y)");
+
+    let Expr::Method { name, .. } = call.extra else {
+        panic!("Unexpected expr: {:#?}", call.extra);
+    };
+    let Expr::Block(Block {
+        statements,
+        return_value,
+    }) = name.extra
+    else {
+        panic!("Unexpected name expr: {:#?}", name.extra);
+    };
+    assert!(statements.is_empty());
+    assert_eq!(
+        *return_value.unwrap(),
+        sp(
+            3,
+            "method(x)",
+            Expr::Function {
+                name: Box::new(sp(3, "method", Expr::Variable)),
+                args: vec![sp(10, "x", Expr::Variable)],
+            }
+        )
+    );
+
+    let ridiculous_inputs = [
+        "x.{ a = 5; method(a) }(5, 123);",
+        "x.{ #{ x: 3, y: 4 }.x }(#{ x }, y);",
+        "x.{(1, |x| x + 3).1}();",
+    ];
+    for input in ridiculous_inputs {
+        let input = InputSpan::new(input);
+        let (_, call) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+        assert_eq!(*call.fragment(), input.strip_suffix(';').unwrap());
+        assert_matches!(call.extra, Expr::Method { .. });
+    }
+}
+
+#[test]
+fn method_expr_with_complex_name_in_chain() {
+    let inputs = [
+        "(1 + 2).{Num.cmp}(y);",
+        "#{ x: 3, y: 4}.{Point.normalize}();",
+        "test.field.{access}();",
+        "test.field.{method.access}();",
+        "test.field.{method.access}(and).{other.access}();",
+    ];
+
+    for input in inputs {
+        let input = InputSpan::new(input);
+        let (_, call) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+        assert_eq!(*call.fragment(), input.strip_suffix(';').unwrap());
+        assert_matches!(call.extra, Expr::Method { .. });
+    }
 }
 
 #[test]

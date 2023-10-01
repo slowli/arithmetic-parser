@@ -743,7 +743,7 @@ fn field_access_with_indexed_field() {
     assert_eq!(
         expr.extra,
         Expr::FieldAccess {
-            name: sp(6, "0", ()),
+            name: Box::new(sp(6, "0", Expr::Variable)),
             receiver: Box::new(sp(0, "point", Expr::Variable)),
         }
     );
@@ -757,7 +757,7 @@ fn field_access_with_indexed_field() {
     assert_eq!(
         receiver.extra,
         Expr::FieldAccess {
-            name: sp(6, "122", ()),
+            name: Box::new(sp(6, "122", Expr::Variable)),
             receiver: Box::new(sp(0, "point", Expr::Variable)),
         }
     );

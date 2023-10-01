@@ -9,11 +9,6 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Make crate no-std-compatible and check compatibility in CI. (#101)
 
-- Allow adding prototypes for objects, which act similarly to
-  prototypes in JavaScript, but immutable. Prototypes can be created
-  from the host code using the `Prototype` type and from scripts
-  using the `CreatePrototype` function. (#103)
-
 - Add the `Defer` function for deferred / recursive variable initialization. (#103)
 
 - Add `AssertClose` and `AssertFails` assertions for approximate equality comparisons

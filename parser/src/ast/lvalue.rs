@@ -2,7 +2,7 @@
 
 use core::fmt;
 
-use crate::spans::Spanned;
+use crate::{alloc::Vec, spans::Spanned};
 
 /// Length of an assigned lvalue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

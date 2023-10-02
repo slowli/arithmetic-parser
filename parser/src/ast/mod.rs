@@ -12,7 +12,11 @@ pub use self::{
         ObjectDestructureField, SpannedLvalue,
     },
 };
-use crate::{grammars::Grammar, spans::Spanned};
+use crate::{
+    alloc::{vec, Box, Vec},
+    grammars::Grammar,
+    spans::Spanned,
+};
 
 /// Object expression, such as `#{ x, y: x + 2 }`.
 #[derive(Debug)]

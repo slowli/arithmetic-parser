@@ -4,6 +4,7 @@ use core::fmt;
 
 use super::{Block, FnDefinition, ObjectExpr};
 use crate::{
+    alloc::{Box, Vec},
     grammars::Grammar,
     ops::{BinaryOp, UnaryOp},
     spans::Spanned,

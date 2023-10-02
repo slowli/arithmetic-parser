@@ -141,7 +141,6 @@ fn extract_fn<'a, T, A>(
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, env::Comparisons, Environment, ExecutableModule, Value};
-/// # use core::iter::FromIterator;
 /// # fn main() -> anyhow::Result<()> {
 /// let program = r#"
 ///     map((1, -7, 0, 2), |x| cmp(x, 0)) == (GREATER, LESS, EQUAL, GREATER)
@@ -220,7 +219,26 @@ impl<T> NativeFn<T> for Compare {
 ///
 /// # Examples
 ///
-/// FIXME
+/// ```
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # use arithmetic_eval::{fns, env::Comparisons, Environment, ExecutableModule, Value};
+/// # fn main() -> anyhow::Result<()> {
+/// let program = r#"
+///     recursive_fib = defer(|fib| {
+///         |n| if(n >= 0 && n <= 1, || n, || fib(n - 1) + fib(n - 2))()
+///     });
+///     recursive_fib(10)
+/// "#;
+/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_defer", &program)?;
+///
+/// let mut env = Environment::new();
+/// env.extend(Comparisons::iter());
+/// env.insert_native_fn("if", fns::If).insert_native_fn("defer", fns::Defer);
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Prim(55.0));
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Defer;
 

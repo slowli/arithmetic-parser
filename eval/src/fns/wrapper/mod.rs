@@ -235,7 +235,6 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 /// # use arithmetic_eval::{
 /// #     wrap_fn, CallContext, Function, Environment, ExecutableModule, Value, env::Prelude,
 /// # };
-/// # use core::iter::FromIterator;
 /// // Note that both `Value`s have the same lifetime due to elision.
 /// fn take_if<T>(value: Value<'_, T>, condition: bool) -> Value<'_, T> {
 ///     if condition { value } else { Value::void() }

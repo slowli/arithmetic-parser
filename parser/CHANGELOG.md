@@ -9,11 +9,14 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Make crate no-std-compatible and check compatibility in CI. (#101)
 
+- Enable parsing block expressions in the name position for field access / method calls;
+  e.g., `xs.{Array.len}` or `xs.{Array.map}(|x| x > 0)`. (#117)
+
 ### Changed
 
 - Update `nom` parser dependency to v7 and `nom_locate` to v4. (#99, #100)
 
-- Bump minimum supported Rust version to 1.60 and switch to 2021 Rust edition. (#107, #108)
+- Bump minimum supported Rust version to 1.65 and switch to 2021 Rust edition. (#107, #108, #112)
 
 ## 0.3.0 - 2021-05-24
 

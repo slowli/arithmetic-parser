@@ -74,8 +74,6 @@ struct CyclicGroupArithmetic {
 
 impl CyclicGroupArithmetic {
     fn new(bits: usize) -> Self {
-        // `BigUint::new` is required because `glass_pumpkin` produces `BigUint`s
-        // with an incompatible package version (0.3 vs 0.4).
         let safe_prime = safe_prime::new(bits).unwrap();
         let prime_subgroup_order = &safe_prime >> 1;
         let two = BigUint::from(2_u32);

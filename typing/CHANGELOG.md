@@ -5,11 +5,15 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ## [Unreleased]
 
+### Added
+
+- Support block expressions in the name position for method calls, e.g., `xs.{Array.map}(|x| x > 0)`. (#117)
+
 ### Changed
 
-- Bump minimum supported Rust version to 1.60 and switch to 2021 Rust edition. (#107, #108)
+- Bump minimum supported Rust version to 1.65 and switch to 2021 Rust edition. (#107, #108, #112)
 
-- Remove `Object::just()` constructor in favor of more general `From<[_; N]>` implementation.
+- Remove `Object::just()` constructor in favor of more general `From<[_; N]>` implementation. (#117)
 
 ### Fixed
 

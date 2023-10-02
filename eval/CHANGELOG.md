@@ -16,6 +16,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Add `all` and `any` functions for arrays / tuples. (#105)
 
+- Support block expressions in the name position for method calls such as `xs.{Array.map}(|x| x > 0)`. (#117)
+
 ### Changed
 
 - Introduce new structs (`Tuple` and `Object`) to represent tuple and object values,
@@ -36,7 +38,7 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 - Make `hashbrown` an optional dependency, which is only necessary if the std library
   is not available. (#106)
 
-- Bump minimum supported Rust version to 1.60 and switch to 2021 Rust edition. (#107, #108)
+- Bump minimum supported Rust version to 1.65 and switch to 2021 Rust edition. (#107, #108, #112)
 
 ### Removed
 

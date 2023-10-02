@@ -6,7 +6,10 @@ use nom::Err as NomErr;
 use super::{sp, span, FieldGrammar};
 use crate::{
     grammars::{F32Grammar, Untyped},
-    parser::{binary_expr, expr, Complete},
+    parser::{
+        expr::{binary_expr, expr},
+        Complete,
+    },
     BinaryOp, ErrorKind, Expr, InputSpan, UnaryOp,
 };
 

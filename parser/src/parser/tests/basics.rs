@@ -6,7 +6,9 @@ use nom::{Err as NomErr, Slice};
 use super::{sp, FieldGrammar, Literal, LiteralType};
 use crate::{
     parser::{
-        expr, is_valid_variable_name, mandatory_ws, statements, var_name, ws, Complete, Streaming,
+        expr,
+        helpers::{is_valid_variable_name, mandatory_ws, var_name, ws},
+        statements, Complete, Streaming,
     },
     ErrorKind, Expr, InputSpan,
 };

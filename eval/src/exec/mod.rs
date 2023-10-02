@@ -47,7 +47,6 @@ pub use crate::compiler::CompilerExt;
 /// ```
 /// use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// use arithmetic_eval::{env, fns, Environment, ExecutableModule, Value};
-/// # use core::iter::FromIterator;
 /// # use std::collections::HashSet;
 ///
 /// # fn main() -> anyhow::Result<()> {
@@ -88,7 +87,6 @@ pub use crate::compiler::CompilerExt;
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{Environment, ExecutableModule, Value};
-/// # use core::iter::FromIterator;
 /// # fn main() -> anyhow::Result<()> {
 /// let block = Untyped::<F32Grammar>::parse_statements("x + y")?;
 /// let module = ExecutableModule::new("test", &block)?;
@@ -110,7 +108,6 @@ pub use crate::compiler::CompilerExt;
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{env::Assertions, Environment, ExecutableModule, Value};
-/// # use core::iter::FromIterator;
 /// # fn main() -> anyhow::Result<()> {
 /// let module = Untyped::<F32Grammar>::parse_statements("x = 5; assert_eq(x, 4);")?;
 /// let module = ExecutableModule::new("test", &module)?;

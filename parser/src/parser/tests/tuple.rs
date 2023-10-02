@@ -2,7 +2,11 @@
 
 use super::{lsp, lvalue_tuple, sp, span, FieldGrammar, Literal, ValueType};
 use crate::{
-    parser::{destructure, expr, lvalue, paren_expr, Complete},
+    parser::{
+        destructure,
+        expr::{expr, paren_expr},
+        lvalue, Complete,
+    },
     BinaryOp, Destructure, DestructureRest, Expr, InputSpan, Lvalue, Spanned,
 };
 

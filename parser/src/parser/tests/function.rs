@@ -5,7 +5,10 @@ use nom::Err as NomErr;
 
 use super::{args, lsp, lvalue_tuple, sp, span, FieldGrammar, Literal, LiteralType, ValueType};
 use crate::{
-    parser::{expr, fn_def, simple_expr, Complete},
+    parser::{
+        expr::{expr, simple_expr},
+        fn_def, Complete,
+    },
     BinaryOp, Block, ErrorKind, Expr, FnDefinition, InputSpan, Lvalue, Spanned,
 };
 

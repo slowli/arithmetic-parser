@@ -5,7 +5,10 @@ use nom::Err as NomErr;
 
 use super::{sp, FieldGrammar, Literal, ValueType};
 use crate::{
-    parser::{expr, simple_expr, Complete},
+    parser::{
+        expr::{expr, simple_expr},
+        Complete,
+    },
     BinaryOp, Expr, InputSpan, UnaryOp,
 };
 

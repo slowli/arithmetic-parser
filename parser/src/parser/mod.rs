@@ -10,7 +10,7 @@ use nom::{
     combinator::{cut, map, map_res, not, opt, peek, recognize},
     error::context,
     multi::{many0, separated_list0, separated_list1},
-    sequence::{delimited, preceded, separated_pair, terminated, tuple},
+    sequence::{delimited, preceded, terminated, tuple},
     Err as NomErr, Slice,
 };
 
@@ -21,8 +21,8 @@ use crate::{
     grammars::{Features, Grammar, Parse, ParseLiteral},
     spans::{unite_spans, with_span},
     BinaryOp, Block, Context, Destructure, DestructureRest, Error, ErrorKind, Expr, FnDefinition,
-    InputSpan, Lvalue, MethodCallSeparator, NomResult, ObjectDestructure, ObjectDestructureField,
-    ObjectExpr, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
+    InputSpan, Lvalue, NomResult, ObjectDestructure, ObjectDestructureField, ObjectExpr, Spanned,
+    SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
 };
 
 #[cfg(test)]
@@ -326,8 +326,8 @@ where
 
 #[derive(Debug)]
 struct MethodOrFnCall<'a, T: Grammar<'a>> {
-    separator: Option<Spanned<'a, MethodCallSeparator>>,
-    fn_name: Option<InputSpan<'a>>,
+    separator: Option<Spanned<'a>>,
+    fn_name: Option<SpannedExpr<'a, T>>,
     args: Option<Vec<SpannedExpr<'a, T>>>,
 }
 
@@ -357,21 +357,30 @@ where
     Ty: GrammarType,
 {
     let var_name_or_digits = alt((var_name, take_while1(|c: char| c.is_ascii_digit())));
+    let method_or_field_expr = alt((
+        map(with_span(var_name_or_digits), |span| {
+            span.copy_with_extra(Expr::Variable)
+        }),
+        block_expr::<T, Ty>,
+    ));
     let method_or_field_access_parser = map_res(
         tuple((
-            var_name_or_digits,
+            method_or_field_expr,
             opt(preceded(ws::<Ty>, fn_args::<T, Ty>)),
         )),
         |(fn_name, maybe_args)| {
-            if maybe_args.is_some() && !is_valid_variable_name(fn_name.fragment()) {
-                Err(ErrorKind::LiteralName)
-            } else {
-                Ok(MethodOrFnCall {
-                    separator: None,
-                    fn_name: Some(fn_name),
-                    args: maybe_args.map(|(args, _)| args),
-                })
+            if maybe_args.is_some() {
+                let is_bogus_name = matches!(fn_name.extra, Expr::Variable)
+                    && !is_valid_variable_name(fn_name.fragment());
+                if is_bogus_name {
+                    return Err(ErrorKind::LiteralName);
+                }
             }
+            Ok(MethodOrFnCall {
+                separator: None,
+                fn_name: Some(fn_name),
+                args: maybe_args.map(|(args, _)| args),
+            })
         },
     );
     let method_or_field_access_parser = map(
@@ -380,35 +389,12 @@ where
             cut(method_or_field_access_parser),
         )),
         |(separator, mut call)| {
-            call.separator = Some(separator.copy_with_extra(MethodCallSeparator::Dot));
+            call.separator = Some(separator.with_no_extra());
             call
         },
     );
 
-    let static_method_parser = map(
-        separated_pair(var_name, ws::<Ty>, fn_args::<T, Ty>),
-        |(fn_name, (args, _))| MethodOrFnCall {
-            separator: None,
-            fn_name: Some(fn_name),
-            args: Some(args),
-        },
-    );
-    let static_method_parser = map(
-        tuple((
-            terminated(with_span(tag("::")), ws::<Ty>),
-            cut(static_method_parser),
-        )),
-        |(separator, mut call)| {
-            call.separator = Some(separator.copy_with_extra(MethodCallSeparator::Colon2));
-            call
-        },
-    );
-
-    alt((
-        method_or_field_access_parser,
-        static_method_parser,
-        fn_call::<T, Ty>,
-    ))(input)
+    alt((method_or_field_access_parser, fn_call::<T, Ty>))(input)
 }
 
 /// Expression, which includes, besides `simplest_expr`s, function calls.

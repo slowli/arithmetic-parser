@@ -372,7 +372,7 @@ fn unifying_dyn_type_as_lhs() {
 
 #[test]
 fn unifying_dyn_object_as_lhs() {
-    let constraints = DynConstraints::from(Object::just("x", Type::NUM));
+    let constraints = DynConstraints::from(Object::from([("x", Type::NUM)]));
     let lhs = Type::Dyn(constraints.clone());
 
     {
@@ -391,7 +391,7 @@ fn unifying_dyn_object_as_lhs() {
 
     // Object RHS.
     {
-        let rhs = Object::just("x", Type::BOOL);
+        let rhs = Object::from([("x", Type::BOOL)]);
         let mut substitutions = Substitutions::<Num>::default();
         let err = unify(&mut substitutions, &lhs, &rhs.into()).unwrap_err();
         assert_matches!(
@@ -400,7 +400,7 @@ fn unifying_dyn_object_as_lhs() {
         );
     }
     {
-        let rhs = Object::just("y", Type::NUM);
+        let rhs = Object::from([("y", Type::NUM)]);
         let mut substitutions = Substitutions::<Num>::default();
         let err = unify(&mut substitutions, &lhs, &rhs.into()).unwrap_err();
         assert_matches!(
@@ -409,7 +409,7 @@ fn unifying_dyn_object_as_lhs() {
         );
     }
     {
-        let rhs = Object::just("x", Type::free_var(0));
+        let rhs = Object::from([("x", Type::free_var(0))]);
         let mut substitutions = Substitutions::<Num>::default();
         unify(&mut substitutions, &lhs, &rhs.into()).unwrap();
         assert_eq!(substitutions.eqs[&0], Type::NUM);
@@ -423,13 +423,13 @@ fn unifying_dyn_object_as_lhs() {
         assert!(substitutions.constraints.is_empty());
     }
     {
-        let rhs = Object::just("y", Type::NUM).into_dyn();
+        let rhs = Object::from([("y", Type::NUM)]).into_dyn();
         let mut substitutions = Substitutions::<Num>::default();
         let err = unify(&mut substitutions, &lhs, &rhs).unwrap_err();
         assert_matches!(err, ErrorKind::MissingFields { fields, .. } if fields.contains("x"));
     }
     {
-        let rhs = Object::just("x", Type::BOOL).into_dyn();
+        let rhs = Object::from([("x", Type::BOOL)]).into_dyn();
         let mut substitutions = Substitutions::<Num>::default();
         let err = unify(&mut substitutions, &lhs, &rhs).unwrap_err();
         assert_matches!(
@@ -439,7 +439,7 @@ fn unifying_dyn_object_as_lhs() {
         );
     }
     {
-        let rhs = Object::just("x", Type::free_var(0)).into_dyn();
+        let rhs = Object::from([("x", Type::free_var(0))]).into_dyn();
         let mut substitutions = Substitutions::<Num>::default();
         unify(&mut substitutions, &lhs, &rhs).unwrap();
         assert_eq!(substitutions.eqs[&0], Type::NUM);
@@ -479,10 +479,7 @@ fn static_length_restrictions() {
     for &sample in positive_samples {
         substitutions.apply_static_len(sample).unwrap();
     }
-    assert_eq!(
-        substitutions.static_lengths,
-        IntoIterator::into_iter([0, 1]).collect::<HashSet<_>>()
-    );
+    assert_eq!(substitutions.static_lengths, HashSet::from([0, 1]));
 
     let negative_samples = &[UnknownLen::Dynamic.into(), UnknownLen::Dynamic + 2];
     for &sample in negative_samples {
@@ -545,22 +542,20 @@ fn marking_length_as_static_and_then_propagating() {
 
 #[test]
 fn unifying_objects() {
-    let x: Object<Num> = IntoIterator::into_iter([("x", Type::NUM), ("y", Type::NUM)]).collect();
-    let y: Object<Num> =
-        IntoIterator::into_iter([("x", Type::NUM), ("y", Type::free_var(0))]).collect();
+    let x = Object::<Num>::from([("x", Type::NUM), ("y", Type::NUM)]);
+    let y = Object::<Num>::from([("x", Type::NUM), ("y", Type::free_var(0))]);
 
     let mut substitutions = Substitutions::<Num>::default();
     unify_objects(&mut substitutions, &x, &y).unwrap();
     assert_eq!(substitutions.eqs.len(), 1);
     assert_eq!(substitutions.eqs[&0], Type::NUM);
 
-    let truncated_y = IntoIterator::into_iter([("x", Type::NUM)]).collect();
+    let truncated_y = Object::from([("x", Type::NUM)]);
     let mut substitutions = Substitutions::<Num>::default();
     let err = unify_objects(&mut substitutions, &x, &truncated_y).unwrap_err();
     assert_matches!(err, ErrorKind::FieldsMismatch { .. });
 
-    let extended_y =
-        IntoIterator::into_iter([("x", Type::NUM), ("y", Type::NUM), ("z", Type::BOOL)]).collect();
+    let extended_y = Object::from([("x", Type::NUM), ("y", Type::NUM), ("z", Type::BOOL)]);
     let mut substitutions = Substitutions::<Num>::default();
     let err = unify_objects(&mut substitutions, &x, &extended_y).unwrap_err();
     assert_matches!(err, ErrorKind::FieldsMismatch { .. });

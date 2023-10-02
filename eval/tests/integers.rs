@@ -50,15 +50,22 @@ where
         &mut Environment::with_arithmetic(arithmetic),
         program_with_tuples,
     );
-    let expected_numbers = IntoIterator::into_iter([2_u8, 5, 8])
+    let expected_numbers = [2_u8, 5, 8]
+        .into_iter()
         .map(|num| Value::Prim(num.into()))
         .collect();
     assert_eq!(value, Value::Tuple(expected_numbers));
 
     let program_with_comparisons = "1 < 2 && 1 + 1 == 2 && 2 ^ 3 > 7";
     let mut env = Environment::with_arithmetic(arithmetic);
-    env.extend(Comparisons::vars());
+    env.extend(Comparisons::iter());
     let value = evaluate::<T>(&mut env, program_with_comparisons);
+    assert_eq!(value, Value::Bool(true));
+
+    let program_using_std = "(1, 2, 3).all(|x| x > 0) && (2, 3, 4).{Array.any}(|x| x == 3)";
+    let mut env = Environment::with_arithmetic(arithmetic);
+    env.extend(Prelude::iter().chain(Comparisons::iter()));
+    let value = evaluate::<T>(&mut env, program_using_std);
     assert_eq!(value, Value::Bool(true));
 }
 
@@ -231,6 +238,6 @@ fn modular_arithmetic() {
 
     let fermat_theorem_check = "while(1, |i| i != 0, |i| { assert_eq(i^60, 1); i + 1 })";
     let mut env = Environment::with_arithmetic(arithmetic);
-    env.extend(Prelude::vars().chain(Assertions::vars()));
+    env.extend(Prelude::iter().chain(Assertions::iter()));
     evaluate(&mut env, fermat_theorem_check);
 }

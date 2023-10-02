@@ -82,21 +82,19 @@ assert(sorted);
 Defining a type:
 
 ```text
-Vector = defer(|Self| impl(#{
-    len: |{ x, y }| sqrt(x * x + y * y),
-    add: |self, other| Self(self + other),
-    to_unit_scale: |self| if(self.x == 0 && self.y == 0,
+Vector = {
+    len = |{ x, y }| sqrt(x * x + y * y);
+    scale = |self| if(self.x == 0 && self.y == 0,
         || self,
-        || Self(self / self.len()),
-    )(),
-}));
+        || self / self.len(),
+    )();
+    #{ len, scale }
+};
 
-assert_eq(
-    Vector(#{ x: 3, y: 4 }).add(Vector(#{ x: -1, y: 1 })),
-    Vector(#{ x: 2, y: 5 }),
-);
-scaled = Vector(#{ x: 3, y: -4 }).to_unit_scale();
-assert_close(scaled.len(), 1);
+assert_close(#{ x: 3, y: 4 }.{Vector.len}(), 5);
+// ...is same as
+assert_close({Vector.len}(#{ x: 3, y: 4 }), 5);
+scaled = #{ x: 3, y: -4 }.{Vector.scale}();
 assert_close(scaled.x, 0.6);
 assert_close(scaled.y, -0.8);
 ```

@@ -2,25 +2,25 @@
 
 dbg(GEN, ORDER);
 
-PublicKey = impl(#{
+PublicKey = #{
     encrypt: |self, message| {
         r = rand_scalar();
-        shared_secret = self.pk ^ r;
+        shared_secret = self ^ r;
         #{ R: GEN ^ r, B: message * shared_secret }
     },
-});
+};
 
-SecretKey = impl(#{
+SecretKey = #{
     decrypt: |self, { R, B }| {
-        shared_secret = R ^ self.sk;
+        shared_secret = R ^ self;
         B / shared_secret
     },
-    public_key: |self| PublicKey(#{ pk: GEN ^ self.sk }),
-});
+    public_key: |self| GEN ^ self,
+};
 
 gen = || {
-    sk = SecretKey(#{ sk: rand_scalar() });
-    #{ sk, pk: sk.public_key() }
+    sk = rand_scalar();
+    #{ sk, pk: {SecretKey.public_key}(sk) }
 };
 
 // Test!
@@ -29,9 +29,9 @@ gen = || {
 while(5, |i| i != 0, |i| {
     message = GEN ^ rand_scalar();
     dbg(message);
-    encrypted = pk.encrypt(message);
+    encrypted = pk.{PublicKey.encrypt}(message);
     dbg(encrypted);
-    assert_eq(sk.decrypt(encrypted), message);
+    assert_eq(sk.{SecretKey.decrypt}(encrypted), message);
 
     i - 1
 });
@@ -39,7 +39,7 @@ while(5, |i| i != 0, |i| {
 // Advanced testing making use of partial homomorphicity of encryption.
 ONE = GEN ^ 0;
 encrypt_and_combine = |pk, messages| {
-    messages.map(|msg| pk.encrypt(msg)).fold(
+    messages.map(|msg| pk.{PublicKey.encrypt}(msg)).fold(
         #{ R: ONE, B: ONE },
         |enc_x, enc_y| enc_x * enc_y,
     )
@@ -47,6 +47,6 @@ encrypt_and_combine = |pk, messages| {
 
 messages = (1, 2, 3, 4, 5).map(|_| GEN ^ rand_scalar());
 assert_eq(
-    sk.decrypt(encrypt_and_combine(pk, messages)),
+    sk.{SecretKey.decrypt}(encrypt_and_combine(pk, messages)),
     messages.fold(ONE, |acc, msg| acc * msg)
 );

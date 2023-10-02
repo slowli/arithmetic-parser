@@ -80,8 +80,7 @@ pub fn evaluate(program: &str) -> Result<JsValue, JsValue> {
     let module = ExecutableModule::new(WildcardId, &block).map_err(into_js_error)?;
 
     let mut env = Environment::new();
-    env.extend(Prelude::vars().chain(Assertions::vars()));
-    env.extend(Prelude::prototypes());
+    env.extend(Prelude::iter().chain(Assertions::iter()));
     initialize_env(&mut env);
 
     let value = module

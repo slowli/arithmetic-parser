@@ -3,8 +3,7 @@
 use assert_matches::assert_matches;
 
 use arithmetic_eval::{
-    fns::FromValueErrorKind, Environment, ErrorKind, Function, NativeFn, PrototypeField, Value,
-    ValueType,
+    fns::FromValueErrorKind, Environment, ErrorKind, Function, NativeFn, Tuple, Value, ValueType,
 };
 use arithmetic_parser::LvalueLen;
 
@@ -300,12 +299,49 @@ fn function_aliasing() {
 fn method_call() {
     let program = "1.0.add(2)";
     let mut env = Environment::new();
-    env.insert_prototype(
-        PrototypeField::prim("add"),
-        Value::wrapped_fn(|x: f32, y: f32| x + y),
-    );
+    env.insert_wrapped_fn("add", |x: f32, y: f32| x + y);
     let return_value = evaluate(&mut env, program);
     assert_eq!(return_value, Value::Prim(3.0));
+}
+
+#[test]
+fn complex_method_call_name() {
+    let program = r#"
+        (Num, x) = (#{ add }, 1);
+        (x.{Num.add}(2), 2.0.{Num.add}(5))
+    "#;
+    let mut env = Environment::new();
+    env.insert_wrapped_fn("add", |x: f32, y: f32| x + y);
+    let return_value = evaluate(&mut env, program);
+    assert_eq!(
+        return_value,
+        Tuple::from(vec![Value::Prim(3.0), Value::Prim(7.0)]).into()
+    );
+}
+
+#[test]
+fn non_trivial_block_in_method_call_name() {
+    let program = r#"
+        slope = |k| { |x, y| x * k + y };
+        x = 5; x.{slope(3)}(4)
+    "#;
+    let mut env = Environment::new();
+    let return_value = evaluate(&mut env, program);
+    assert_eq!(return_value, Value::Prim(19.0));
+}
+
+#[test]
+fn chained_method_call_name() {
+    let program = r#"
+        Point = #{
+            new: |x, y| #{ x, y },
+            len2: |{x, y}| x * x + y * y,
+        };
+        3.0.{Point.new}(4).{Point.len2}()
+    "#;
+    let mut env = Environment::new();
+    let return_value = evaluate(&mut env, program);
+    assert_eq!(return_value, Value::Prim(25.0));
 }
 
 #[test]

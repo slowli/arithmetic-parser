@@ -185,15 +185,6 @@ impl<'a, T: Grammar<'a>> PartialEq for ObjectExpr<'a, T> {
     }
 }
 
-/// Separators between the method call receiver and the method name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MethodCallSeparator {
-    /// Dot separator, e.g., in `foo.bar(1, 3)`.
-    Dot,
-    /// Double colon separator, e.g., in `foo::bar(4)`.
-    Colon2,
-}
-
 /// Arithmetic expression with an abstract types for type annotations and literals.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -227,19 +218,19 @@ pub enum Expr<'a, T: Grammar<'a>> {
     /// Field access, e.g., `foo.bar`.
     FieldAccess {
         /// Name of the called method, e.g. `bar` in `foo.bar`.
-        name: Spanned<'a>,
+        name: Box<SpannedExpr<'a, T>>,
         /// Receiver of the call, e.g., `foo` in `foo.bar(x, 5)`.
         receiver: Box<SpannedExpr<'a, T>>,
     },
 
-    /// Method call, e.g., `foo.bar(x, 5)` or `foo::bar(x, 5)`.
+    /// Method call, e.g., `foo.bar(x, 5)`.
     Method {
         /// Name of the called method, e.g. `bar` in `foo.bar(x, 5)`.
-        name: Spanned<'a>,
+        name: Box<SpannedExpr<'a, T>>,
         /// Receiver of the call, e.g., `foo` in `foo.bar(x, 5)`.
         receiver: Box<SpannedExpr<'a, T>>,
         /// Separator between the receiver and the called method, e.g., `.` in `foo.bar(x, 5)`.
-        separator: Spanned<'a, MethodCallSeparator>,
+        separator: Spanned<'a>,
         /// Arguments; e.g., `x, 5` in `foo.bar(x, 5)`.
         args: Vec<SpannedExpr<'a, T>>,
     },
@@ -326,7 +317,7 @@ impl<'a, T: Grammar<'a>> Clone for Expr<'a, T> {
                 args: args.clone(),
             },
             Self::FieldAccess { name, receiver } => Self::FieldAccess {
-                name: *name,
+                name: name.clone(),
                 receiver: receiver.clone(),
             },
             Self::Method {
@@ -335,7 +326,7 @@ impl<'a, T: Grammar<'a>> Clone for Expr<'a, T> {
                 separator,
                 args,
             } => Self::Method {
-                name: *name,
+                name: name.clone(),
                 receiver: receiver.clone(),
                 separator: *separator,
                 args: args.clone(),

@@ -5,9 +5,8 @@ use nom::Err as NomErr;
 
 use super::{args, lsp, lvalue_tuple, sp, span, FieldGrammar, Literal, LiteralType, ValueType};
 use crate::{
-    parser::{expr, fn_def, separated_statements, simple_expr, Complete},
-    BinaryOp, Block, ErrorKind, Expr, FnDefinition, InputSpan, Lvalue, MethodCallSeparator,
-    Spanned,
+    parser::{expr, fn_def, simple_expr, Complete},
+    BinaryOp, Block, ErrorKind, Expr, FnDefinition, InputSpan, Lvalue, Spanned,
 };
 
 #[test]
@@ -130,9 +129,9 @@ fn method_expr_works() {
             0,
             "x.sin()",
             Expr::Method {
-                name: span(2, "sin").into(),
+                name: Box::new(sp(2, "sin", Expr::Variable)),
                 receiver: Box::new(sp(0, "x", Expr::Variable)),
-                separator: sp(1, ".", MethodCallSeparator::Dot),
+                separator: span(1, ".").into(),
                 args: vec![],
             }
         )
@@ -144,7 +143,7 @@ fn method_expr_works() {
         0,
         "(1, x, 2).foo(y)",
         Expr::Method {
-            name: span(10, "foo").into(),
+            name: Box::new(sp(10, "foo", Expr::Variable)),
             receiver: Box::new(sp(
                 0,
                 "(1, x, 2)",
@@ -154,7 +153,7 @@ fn method_expr_works() {
                     sp(7, "2", Expr::Literal(Literal::Number)),
                 ]),
             )),
-            separator: sp(9, ".", MethodCallSeparator::Dot),
+            separator: span(9, ".").into(),
             args: vec![sp(14, "y", Expr::Variable)],
         },
     );
@@ -173,9 +172,9 @@ fn method_expr_works() {
                     17,
                     "7.bar()",
                     Expr::Method {
-                        name: span(19, "bar").into(),
+                        name: Box::new(sp(19, "bar", Expr::Variable)),
                         receiver: Box::new(sp(17, "7", Expr::Literal(Literal::Number))),
-                        separator: sp(18, ".", MethodCallSeparator::Dot),
+                        separator: span(18, ".").into(),
                         args: vec![],
                     }
                 )],
@@ -185,77 +184,87 @@ fn method_expr_works() {
 }
 
 #[test]
-fn method_call_with_colon2_separator() {
-    let input = InputSpan::new("Num::sin(x)");
+fn method_expr_with_complex_name() {
+    let input = InputSpan::new("x.{Num.cmp}(y);");
     let (_, call) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
-    let expected_call = Expr::Method {
-        name: span(5, "sin").into(),
-        receiver: Box::new(sp(0, "Num", Expr::Variable)),
-        separator: sp(3, "::", MethodCallSeparator::Colon2),
-        args: vec![sp(9, "x", Expr::Variable)],
+    assert_eq!(*call.fragment(), "x.{Num.cmp}(y)");
+
+    let Expr::Method {
+        name,
+        receiver,
+        separator,
+        args,
+    } = &call.extra
+    else {
+        panic!("Unexpected expr: {:#?}", call.extra);
     };
-    assert_eq!(call.extra, expected_call);
-
-    let ws_input = InputSpan::new("Num   :: sin (  x  )");
-    let (_, ws_call) = simple_expr::<FieldGrammar, Complete>(ws_input).unwrap();
-    assert_matches!(ws_call.extra, Expr::Method { .. });
-
-    let chained_input = InputSpan::new("Num::sin(x).cos()");
-    let (_, chained_call) = expr::<FieldGrammar, Complete>(chained_input).unwrap();
-    assert_eq!(
-        chained_call.extra,
-        Expr::Method {
-            name: span(12, "cos").into(),
-            receiver: Box::new(sp(0, "Num::sin(x)", expected_call)),
-            separator: sp(11, ".", MethodCallSeparator::Dot),
-            args: vec![],
-        }
+    assert_eq!(*receiver.as_ref(), sp(0, "x", Expr::Variable));
+    assert_eq!(*separator, sp(1, ".", ()));
+    assert_eq!(args.as_slice(), [sp(12, "y", Expr::Variable)]);
+    let Expr::Block(name) = &name.extra else {
+        panic!("Unexpected name expr: {:#?}", name.extra);
+    };
+    assert!(name.statements.is_empty());
+    assert_matches!(
+        name.return_value.as_deref().unwrap().extra,
+        Expr::FieldAccess { .. }
     );
 
-    let chained_input = InputSpan::new("x.sin()::cos()");
-    let (_, chained_call) = expr::<FieldGrammar, Complete>(chained_input).unwrap();
-    let inner_call = Expr::Method {
-        name: span(2, "sin").into(),
-        receiver: Box::new(sp(0, "x", Expr::Variable)),
-        separator: sp(1, ".", MethodCallSeparator::Dot),
-        args: vec![],
+    let input = InputSpan::new("x.{method(x)}(y);");
+    let (_, call) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+    assert_eq!(*call.fragment(), "x.{method(x)}(y)");
+
+    let Expr::Method { name, .. } = call.extra else {
+        panic!("Unexpected expr: {:#?}", call.extra);
     };
+    let Expr::Block(Block {
+        statements,
+        return_value,
+    }) = name.extra
+    else {
+        panic!("Unexpected name expr: {:#?}", name.extra);
+    };
+    assert!(statements.is_empty());
     assert_eq!(
-        chained_call.extra,
-        Expr::Method {
-            name: span(9, "cos").into(),
-            receiver: Box::new(sp(0, "x.sin()", inner_call)),
-            separator: sp(7, "::", MethodCallSeparator::Colon2),
-            args: vec![],
-        }
+        *return_value.unwrap(),
+        sp(
+            3,
+            "method(x)",
+            Expr::Function {
+                name: Box::new(sp(3, "method", Expr::Variable)),
+                args: vec![sp(10, "x", Expr::Variable)],
+            }
+        )
     );
+
+    let ridiculous_inputs = [
+        "x.{ a = 5; method(a) }(5, 123);",
+        "x.{ #{ x: 3, y: 4 }.x }(#{ x }, y);",
+        "x.{(1, |x| x + 3).1}();",
+    ];
+    for input in ridiculous_inputs {
+        let input = InputSpan::new(input);
+        let (_, call) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+        assert_eq!(*call.fragment(), input.strip_suffix(';').unwrap());
+        assert_matches!(call.extra, Expr::Method { .. });
+    }
 }
 
 #[test]
-fn error_parsing_colon2_method_call() {
-    let input = InputSpan::new("Num::sin + 1");
-    let err = simple_expr::<FieldGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(e) if e.span().location_offset() == 9);
-}
+fn method_expr_with_complex_name_in_chain() {
+    let inputs = [
+        "(1 + 2).{Num.cmp}(y);",
+        "#{ x: 3, y: 4}.{Point.normalize}();",
+        "test.field.{access}();",
+        "test.field.{method.access}();",
+        "test.field.{method.access}(and).{other.access}();",
+    ];
 
-#[test]
-fn colon2_method_call_is_parsed_within_larger_statement() {
-    let input = InputSpan::new("Num::sin()");
-    let (rest, block) = separated_statements::<FieldGrammar, Complete>(input).unwrap();
-
-    assert!(rest.fragment().is_empty());
-    match block.return_value.unwrap().extra {
-        Expr::Method {
-            name,
-            receiver,
-            separator,
-            ..
-        } => {
-            assert_eq!(*name.fragment(), "sin");
-            assert_eq!(*receiver.fragment(), "Num");
-            assert_matches!(separator.extra, MethodCallSeparator::Colon2);
-        }
-        other => panic!("Unexpected return statement: {other:?}"),
+    for input in inputs {
+        let input = InputSpan::new(input);
+        let (_, call) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
+        assert_eq!(*call.fragment(), input.strip_suffix(';').unwrap());
+        assert_matches!(call.extra, Expr::Method { .. });
     }
 }
 

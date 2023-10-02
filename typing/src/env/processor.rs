@@ -13,8 +13,8 @@ use crate::{
 };
 use arithmetic_parser::{
     grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Destructure, DestructureRest, Expr,
-    FnDefinition, Lvalue, MethodCallSeparator, ObjectDestructure, ObjectExpr, Spanned, SpannedExpr,
-    SpannedLvalue, SpannedStatement, Statement, UnaryOp,
+    FnDefinition, Lvalue, ObjectDestructure, ObjectExpr, Spanned, SpannedExpr, SpannedLvalue,
+    SpannedStatement, Statement, UnaryOp,
 };
 
 /// Processor for deriving type information.
@@ -110,27 +110,27 @@ where
             }
 
             Expr::FieldAccess { name, receiver } => {
+                let name = if let Expr::Variable = name.extra {
+                    name.with_no_extra()
+                } else {
+                    self.errors.push(Error::unsupported(expr.extra.ty(), expr));
+                    // No better choice than to generate a new type var
+                    return self.new_type();
+                };
                 let receiver = self.process_expr_inner(receiver);
-                self.process_field_access(expr, &receiver, name)
+                self.process_field_access(expr, &receiver, &name)
             }
 
             Expr::Method {
                 name,
                 receiver,
                 args,
-                separator,
-            } => match separator.extra {
-                MethodCallSeparator::Dot => {
-                    let fn_type = self.process_var(name);
-                    let all_args = iter::once(receiver.as_ref()).chain(args);
-                    self.process_fn_call(expr, fn_type, all_args)
-                }
-                MethodCallSeparator::Colon2 => {
-                    let receiver = self.process_expr_inner(receiver);
-                    let fn_field = self.process_field_access(expr, &receiver, name);
-                    self.process_fn_call(expr, fn_field, args.iter())
-                }
-            },
+                ..
+            } => {
+                let fn_type = self.process_expr_inner(name);
+                let all_args = iter::once(receiver.as_ref()).chain(args);
+                self.process_fn_call(expr, fn_type, all_args)
+            }
 
             Expr::Block(block) => {
                 self.scopes.push(HashMap::new());
@@ -440,7 +440,7 @@ where
     {
         let mut errors = OpErrors::new();
         let return_type = self.new_type();
-        Object::just(field_name, return_type.clone()).apply_as_constraint(
+        Object::from([(field_name, return_type.clone())]).apply_as_constraint(
             receiver,
             &mut self.env.substitutions,
             errors.by_ref(),

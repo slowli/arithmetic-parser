@@ -10,8 +10,8 @@ use crate::{
     Error, ErrorKind,
 };
 use arithmetic_parser::{
-    grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Expr, FnDefinition, MaybeSpanned,
-    MethodCallSeparator, ObjectExpr, Spanned, SpannedExpr, SpannedStatement, Statement,
+    grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Expr, FnDefinition, ObjectExpr,
+    Spanned, SpannedExpr, SpannedStatement, Statement,
 };
 
 impl Compiler {
@@ -62,31 +62,21 @@ impl Compiler {
             Expr::Function { name, args } => self.compile_fn_call(executable, expr, name, args)?,
 
             Expr::FieldAccess { name, receiver } => {
-                self.compile_field_access(executable, expr, name, receiver)?
+                let name = if let Expr::Variable = name.extra {
+                    name.with_no_extra()
+                } else {
+                    let err = ErrorKind::unsupported(expr.extra.ty());
+                    return Err(self.create_error(expr, err));
+                };
+                self.compile_field_access(executable, expr, &name, receiver)?
             }
 
             Expr::Method {
                 name,
                 receiver,
                 args,
-                separator,
-            } => match separator.extra {
-                MethodCallSeparator::Dot => {
-                    self.compile_method_call(executable, expr, name, receiver, args)?
-                }
-                MethodCallSeparator::Colon2 => {
-                    let field = self.compile_field_access(executable, expr, name, receiver)?;
-                    let field = expr.copy_with_extra(field).into();
-                    let original_name = (*name.fragment()).to_owned();
-                    self.compile_fn_call_with_precompiled_name(
-                        executable,
-                        expr,
-                        field,
-                        Some(original_name),
-                        args,
-                    )?
-                }
-            },
+                ..
+            } => self.compile_method_call(executable, expr, name, receiver, args)?,
 
             Expr::Block(block) => self.compile_block(executable, expr, block)?,
             Expr::FnDefinition(def) => self.compile_fn_definition(executable, expr, def)?,
@@ -203,21 +193,24 @@ impl Compiler {
         &mut self,
         executable: &mut Executable<'a, T::Lit>,
         call_expr: &SpannedExpr<'a, T>,
-        name: &Spanned<'a>,
+        name: &SpannedExpr<'a, T>,
         receiver: &SpannedExpr<'a, T>,
         args: &[SpannedExpr<'a, T>],
     ) -> Result<Atom<T::Lit>, Error<'a>> {
-        let name_string = (*name.fragment()).to_owned();
-        let name: MaybeSpanned<'_, _> = name.copy_with_extra(name_string).into();
-        let receiver = self.compile_expr(executable, receiver)?;
-        let args = args
-            .iter()
+        let original_name = if matches!(name.extra, Expr::Variable) {
+            Some((*name.fragment()).to_owned())
+        } else {
+            None
+        };
+        let name = self.compile_expr(executable, name)?;
+        let args = iter::once(receiver)
+            .chain(args)
             .map(|arg| self.compile_expr(executable, arg))
             .collect::<Result<Vec<_>, _>>()?;
 
-        let function = CompiledExpr::MethodCall {
+        let function = CompiledExpr::FunctionCall {
             name,
-            receiver,
+            original_name,
             args,
         };
         let register = self.push_assignment(executable, function, call_expr);

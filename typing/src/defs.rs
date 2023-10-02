@@ -63,7 +63,6 @@ use crate::{arith::WithBoolean, Function, Object, PrimitiveType, Type, UnknownLe
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-// TODO: remove array functions once prototypes are supported
 pub enum Prelude {
     /// `false` type (Boolean).
     False,
@@ -227,7 +226,7 @@ impl Prelude {
             .returning(Type::param(0).repeat(UnknownLen::Dynamic))
     }
 
-    fn array_prototype<Prim: WithBoolean>() -> Object<Prim> {
+    fn array_namespace<Prim: WithBoolean>() -> Object<Prim> {
         Self::ARRAY_FUNCTIONS
             .iter()
             .map(|&value| (value.as_str(), Type::from(value)))
@@ -240,7 +239,7 @@ impl Prelude {
             .iter()
             .chain(Self::ARRAY_FUNCTIONS)
             .map(|&value| (value.as_str(), value.into()))
-            .chain(iter::once(("Array", Self::array_prototype().into())))
+            .chain(iter::once(("Array", Self::array_namespace().into())))
     }
 }
 

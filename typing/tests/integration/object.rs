@@ -53,8 +53,8 @@ fn object_field_access() {
 }
 
 #[test]
-fn object_colon2_field_access() {
-    let code = "|obj| obj::len() == 1";
+fn object_functional_field_access() {
+    let code = "|obj| ({obj.len}() == 1)";
     let block = F32Grammar::parse_statements(code).unwrap();
     let output = TypeEnvironment::new().process_statements(&block).unwrap();
     assert_eq!(
@@ -63,7 +63,7 @@ fn object_colon2_field_access() {
     );
 
     let usage_code = r#"
-        test = |obj| obj::len() == 1;
+        test = |obj| ({obj.len}() == 1);
         test(#{ len: || 3 }) && test(#{ x: 3, y: 4, len: || 5 })
     "#;
     let usage_block = F32Grammar::parse_statements(usage_code).unwrap();
@@ -73,30 +73,24 @@ fn object_colon2_field_access() {
 }
 
 #[test]
-fn object_colon2_access_for_intermediate_expressions() {
-    let code_samples = &[
-        r#"
-            new_point = |x, y| #{ x, y, len2: || x * x + y * y };
-            new_point(3, 4)::len2() == 25
-        "#,
-        "#{ x: 3, y: 4, len: || 5 }::len() == 5",
-        "(#{ x: 3, y: 4, len: || 5 })::len() == 5",
-        "{ x = 3; y = 4; #{ x, y, len: || 5 } }::len() == 5",
-    ];
-    for &code in code_samples {
-        let block = F32Grammar::parse_statements(code).unwrap();
-        let output = TypeEnvironment::new().process_statements(&block).unwrap();
-        assert_eq!(output, Type::BOOL);
-    }
+fn object_access_for_intermediate_expressions() {
+    let code = r#"
+        Point = #{ len2: |{x, y}| x * x + y * y };
+        #{ x: 3, y: 4 }.{Point.len2}() == 25 &&
+            {Point.len2}(#{ x: 1, y: 2, z: 3 }) == 5
+    "#;
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let output = TypeEnvironment::new().process_statements(&block).unwrap();
+    assert_eq!(output, Type::BOOL);
 }
 
 #[test]
 fn recursive_object_type_via_function_field() {
     let code = r#"
-        call_len = |obj| obj::len(obj);
+        call_len = |obj| (obj.len)(obj);
         pt = #{ x: 3, y: 4, len: |{ x, y }| x + y };
         // direct call should work
-        pt::len(pt) == 7 && (pt.len)(#{ x: 1, y: 2 }) == 3;
+        {pt.len}(pt) == 7 && (pt.len)(#{ x: 1, y: 2 }) == 3;
         // call via a function should work as well
         call_len(pt) == 7;
     "#;
@@ -148,7 +142,7 @@ fn object_function_defs() {
 #[test]
 fn recursive_object_definitions() {
     let code = r#"
-        normalize_pt = |pt| #{ x: pt.x, y: pt.y } / (pt::len(pt) as Num);
+        normalize_pt = |pt| #{ x: pt.x, y: pt.y } / ({pt.len}(pt) as Num);
         len = |{ x, y }| x + y;
         normalize_pt(#{ x: 3, y: 4, len }) == #{ x: 0.6, y: 0.8 };
         normalize_pt(#{ x: 3, y: 4, z: 0, len }) == #{ x: 0.6, y: 0.8 };
@@ -662,7 +656,7 @@ fn object_destructure_in_fold_pipeline() {
 
 #[test]
 fn accessing_std_function_via_object() {
-    let code = "Array::map((1, 2, 3), |x| x + 1)";
+    let code = "{Array.map}((1, 2, 3), |x| x + 1)";
     let block = F32Grammar::parse_statements(code).unwrap();
 
     let mut type_env = TypeEnvironment::new();

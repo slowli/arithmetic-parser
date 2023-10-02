@@ -95,7 +95,13 @@ impl<'a> CapturesExtractor<'a> {
                 self.eval(receiver)?;
             }
 
-            Expr::Method { args, receiver, .. } => {
+            Expr::Method {
+                args,
+                receiver,
+                name,
+                ..
+            } => {
+                self.eval(name)?;
                 self.eval(receiver)?;
                 for arg in args {
                     self.eval(arg)?;

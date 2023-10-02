@@ -21,8 +21,7 @@
 //! - **Functions,** which are further subdivided into native functions (defined in the Rust code)
 //!   and interpreted ones (defined within a module)
 //! - [**Tuples / arrays**](#tuples).
-//! - [**Objects**](#objects), with a [`Prototype`] being a subtype with some
-//!   function characteristics.
+//! - [**Objects**](#objects).
 //!
 //! Besides these types, there is an auxiliary one: [`OpaqueRef`], which represents a
 //! reference-counted native value, which can be returned from native functions or provided to
@@ -40,11 +39,12 @@
 //!   or a tuple / object and a primitive value.
 //!   As an example, `(1, 2) + 3` and `#{ x: 2, y: 3 } / #{ x: 4, y: 5 }` are valid,
 //!   but `(1, 2) * (3, 4, 5)` isn't.
-//! - Methods are resolved using [`Prototype`]s, quite similar to JavaScript. A prototype is
-//!   an [`Object`], the fields of which are looked up whenever a method is called on a `Value`
-//!   for which this prototype was set. Besides providing object interface, prototypes are
-//!   callable; the call associated the target value with the prototype.
-//!   See `Prototype` docs for more details.
+//! - Similar to [ReScript], methods are considered syntactic sugar for functions,
+//!   with the method receiver considered the first function argument. For example, `(1, 2).map(sin)`
+//!   is equivalent to `map((1, 2), sin)`. To specify namespaced functions, you can specify
+//!   a method name in a `{}` block: `(1, 2).{Array.map}(sin)`. There's no magic here; the method name
+//!   expression is *just* another expression. Thus, something like `x.{curried(2)}(y, z)` is a valid
+//!   method call equivalent to `curried(2)(x, y, z)`.
 //! - No type checks are performed before evaluation.
 //! - Type annotations and type casts are completely ignored.
 //!   This means that the interpreter may execute  code that is incorrect with annotations
@@ -112,8 +112,8 @@
 //!
 //! The `std` feature is enabled by default; other features are disabled by default.
 //!
-//! [`Arithmetic`]: crate::arith::Arithmetic
-//! [`OrdArithmetic`]: crate::arith::OrdArithmetic
+//! [`Arithmetic`]: arith::Arithmetic
+//! [`OrdArithmetic`]: arith::OrdArithmetic
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
 //! [`num-complex`]: https://crates.io/crates/num-complex
 //! [`num-bigint`]: https://crates.io/crates/num-bigint
@@ -123,6 +123,7 @@
 //! [`FieldAccess`]: arithmetic_parser::Expr::FieldAccess
 //! [object expressions]: arithmetic_parser::Expr::Object
 //! [`hashbrown`]: https://crates.io/crates/hashbrown
+//! [ReScript]: https://rescript-lang.org/
 //!
 //! # Examples
 //!
@@ -148,9 +149,9 @@
 //! // Then, we construct an environment to run the module.
 //! let mut env = Environment::new();
 //! // Add some native functions to the environment.
-//! env.extend(Prelude::vars());
-//! env.extend(Assertions::vars());
-//! env.extend(Comparisons::vars());
+//! env.extend(Prelude::iter());
+//! env.extend(Assertions::iter());
+//! env.extend(Comparisons::iter());
 //!
 //! // Then, the module can be run.
 //! assert_eq!(module.with_env(&env)?.run()?, Value::Prim(9.0));
@@ -176,8 +177,7 @@
 //! let module = ExecutableModule::new("minmax", &program)?;
 //!
 //! let mut env = Environment::new();
-//! env.extend(Prelude::vars().chain(Assertions::vars()));
-//! env.extend(Prelude::prototypes());
+//! env.extend(Prelude::iter().chain(Assertions::iter()));
 //! env.insert("INF", Value::Prim(f32::INFINITY));
 //! module.with_env(&env)?.run()?;
 //! # Ok(())
@@ -200,20 +200,8 @@
 // Polyfill for `alloc` types.
 mod alloc {
     #[cfg(not(feature = "std"))]
-    extern crate alloc;
+    extern crate alloc as std;
 
-    #[cfg(not(feature = "std"))]
-    pub use alloc::{
-        borrow::ToOwned,
-        boxed::Box,
-        format,
-        rc::Rc,
-        string::{String, ToString},
-        vec,
-        vec::Vec,
-    };
-
-    #[cfg(feature = "std")]
     pub use std::{
         borrow::ToOwned,
         boxed::Box,
@@ -241,8 +229,8 @@ pub use self::{
     error::{Error, ErrorKind, EvalResult},
     exec::ExecutableModule,
     values::{
-        CallContext, Function, InterpretedFn, NativeFn, Object, OpaqueRef, Prototype,
-        PrototypeField, SpannedValue, Tuple, Value, ValueType,
+        CallContext, Function, InterpretedFn, NativeFn, Object, OpaqueRef, SpannedValue, Tuple,
+        Value, ValueType,
     },
 };
 

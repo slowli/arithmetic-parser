@@ -11,10 +11,12 @@ use arithmetic_eval::{
         StdArithmetic, WrappingArithmetic,
     },
     env::{Assertions, Comparisons, Prelude},
-    fns, Environment, Number, PrototypeField, Value, ValueType,
+    fns, Environment, Number, Object, Value,
 };
 use arithmetic_parser::grammars::NumLiteral;
-use arithmetic_typing::{arith::Num as NumType, defs, Function, Object, Type, TypeEnvironment};
+use arithmetic_typing::{
+    arith::Num as NumType, defs, Function, Object as ObjectType, Type, TypeEnvironment,
+};
 
 fn binary_fn() -> Type {
     Function::builder()
@@ -64,14 +66,15 @@ impl<T: ReplLiteral> StdLibrary<T> {
         constants.chain(unary_fns).chain(binary_fns)
     }
 
-    fn prototypes(&self) -> impl Iterator<Item = (PrototypeField, Value<'static, T>)> {
-        self.variables().filter_map(|(name, value)| {
+    fn num_object(&self) -> Object<'static, T> {
+        let num_object_entries = self.variables().filter_map(|(name, value)| {
             if value.is_function() {
-                Some((PrototypeField::prim(name), value))
+                Some((name, value))
             } else {
                 None
             }
-        })
+        });
+        num_object_entries.collect()
     }
 
     fn type_defs(&self) -> impl Iterator<Item = (&'static str, Type)> {
@@ -85,7 +88,7 @@ impl<T: ReplLiteral> StdLibrary<T> {
             .map(move |(name, _)| (*name, unary_fn.clone()));
         let binary_fns = self.binary.iter().map(|(name, _)| (*name, binary_fn()));
 
-        let num_proto: Object<NumType> = unary_fns.clone().chain(binary_fns.clone()).collect();
+        let num_proto: ObjectType<NumType> = unary_fns.clone().chain(binary_fns.clone()).collect();
         constants
             .chain(unary_fns)
             .chain(binary_fns)
@@ -147,9 +150,9 @@ where
     const REM_ERROR_MSG: &str = "Cannot calculate remainder for a divisor of zero";
 
     let mut env = Environment::<T>::with_arithmetic(int_arithmetic(wrapping));
-    let vars = Prelude::vars()
-        .chain(Assertions::vars())
-        .chain(Comparisons::vars())
+    let vars = Prelude::iter()
+        .chain(Assertions::iter())
+        .chain(Comparisons::iter())
         .chain(T::STD_LIB.variables());
     env.extend(vars);
 
@@ -170,10 +173,7 @@ where
 
     env.insert_native_fn("array", fns::Array)
         .insert("rem", rem)
-        .extend(Prelude::prototypes().chain(T::STD_LIB.prototypes()));
-    let num_proto = env.prototype(ValueType::Prim).cloned().unwrap_or_default();
-    env.insert_prototypes_as_vars()
-        .insert("Num", num_proto.into());
+        .insert("Num", T::STD_LIB.num_object().into());
 
     let type_env = defs::Prelude::iter()
         .chain(defs::Assertions::iter())
@@ -191,10 +191,8 @@ where
 pub fn create_modular_env(modulus: u64) -> (Environment<'static, u64>, TypeEnvironment) {
     let arith = ModularArithmetic::new(modulus).without_comparisons();
     let mut env = Environment::<u64>::with_arithmetic(arith);
-    env.extend(Prelude::vars().chain(Assertions::vars()));
-    env.insert("MAX_VALUE", Value::Prim(modulus - 1))
-        .extend(Prelude::prototypes());
-    env.insert_prototypes_as_vars();
+    env.extend(Prelude::iter().chain(Assertions::iter()));
+    env.insert("MAX_VALUE", Value::Prim(modulus - 1));
 
     let type_env = defs::Prelude::iter()
         .chain(defs::Assertions::iter())
@@ -256,18 +254,15 @@ where
     StdArithmetic: OrdArithmetic<T>,
 {
     let mut env = Environment::<T>::new();
-    let vars = Prelude::vars()
-        .chain(Assertions::vars())
-        .chain(Comparisons::vars())
+    let vars = Prelude::iter()
+        .chain(Assertions::iter())
+        .chain(Comparisons::iter())
         .chain(T::STD_LIB.variables());
     env.extend(vars);
 
     env.insert_native_fn("array", fns::Array)
         .insert_native_fn("assert_close", fns::AssertClose::new(tolerance))
-        .extend(Prelude::prototypes().chain(T::STD_LIB.prototypes()));
-    let num_proto = env.prototype(ValueType::Prim).cloned().unwrap_or_default();
-    env.insert_prototypes_as_vars()
-        .insert("Num", num_proto.into());
+        .insert("Num", T::STD_LIB.num_object().into());
 
     let type_env = defs::Prelude::iter()
         .chain(defs::Assertions::iter())
@@ -326,11 +321,11 @@ where
 {
     let arith = StdArithmetic.without_comparisons();
     let mut env = Environment::<T>::with_arithmetic(arith);
-    let vars = Prelude::vars()
-        .chain(Assertions::vars())
-        .chain(T::STD_LIB.variables());
+    let vars = Prelude::iter()
+        .chain(Assertions::iter())
+        .chain(T::STD_LIB.variables())
+        .chain([("Num", T::STD_LIB.num_object().into())]);
     env.extend(vars);
-    env.extend(Prelude::prototypes().chain(T::STD_LIB.prototypes()));
 
     let type_env = defs::Prelude::iter()
         .chain(defs::Assertions::iter())

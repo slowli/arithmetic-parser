@@ -52,15 +52,14 @@ pub use crate::compiler::CompilerExt;
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let module = Untyped::<F32Grammar>::parse_statements(
-///     "Array::fold(xs, -INFINITY, max)",
+///     "xs.fold(-INFINITY, max)",
 /// )?;
 /// let module = ExecutableModule::new("test", &module)?;
 ///
 /// let mut env = Environment::new();
-/// env.extend(env::Comparisons::vars());
-/// env.extend(env::Prelude::prototypes());
-/// env.insert_prototypes_as_vars();
-/// env.insert("INFINITY", Value::Prim(f32::INFINITY)).insert("xs", Value::void());
+/// env.insert("INFINITY", Value::Prim(f32::INFINITY))
+///     .insert("xs", Value::void())
+///     .extend(env::Prelude::iter().chain(env::Comparisons::iter()));
 ///
 /// // With the original imports, the returned value is `-INFINITY`.
 /// assert_eq!(module.with_env(&env)?.run()?, Value::Prim(f32::NEG_INFINITY));
@@ -69,7 +68,7 @@ pub use crate::compiler::CompilerExt;
 /// assert!(module.is_import("xs"));
 /// // It's possible to iterate over imports, too.
 /// let imports = module.import_names().collect::<HashSet<_>>();
-/// assert!(imports.is_superset(&HashSet::from_iter(vec!["max", "Array"])));
+/// assert!(imports.is_superset(&HashSet::from_iter(vec!["max", "fold"])));
 /// # drop(imports); // necessary to please the borrow checker
 ///
 /// // Change the `xs` import and run the module again.
@@ -117,7 +116,7 @@ pub use crate::compiler::CompilerExt;
 /// let module = ExecutableModule::new("test", &module)?;
 ///
 /// let mut env = Environment::new();
-/// env.extend(Assertions::vars());
+/// env.extend(Assertions::iter());
 /// assert!(module.with_mutable_env(&mut env)?.run().is_err());
 /// assert_eq!(env["x"], Value::Prim(5.0));
 /// # Ok(())

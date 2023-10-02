@@ -6,17 +6,15 @@ use arithmetic_eval::{
     env::{Comparisons, Environment},
     error::{Error, ErrorKind, ErrorWithBacktrace, RepeatedAssignmentContext},
     exec::WildcardId,
-    fns, ExecutableModule, PrototypeField, Value,
+    fns, ExecutableModule, Value,
 };
 use arithmetic_parser::{
     grammars::{F32Grammar, Parse, Untyped},
     BinaryOp, LvalueLen, UnaryOp,
 };
 
-mod defer;
 mod functions;
 mod objects;
-mod prototypes;
 
 const SIN: fns::Unary<f32> = fns::Unary::new(f32::sin);
 
@@ -357,7 +355,7 @@ fn comparison_of_invalid_values() {
 fn comparison_return_value() {
     let program = "cmp(5, 3) == GREATER && cmp(3, 5) == LESS && cmp(4, 4) == EQUAL";
     let mut env = Environment::new();
-    env.extend(Comparisons::vars());
+    env.extend(Comparisons::iter());
     let return_value = evaluate(&mut env, program);
     assert_eq!(return_value, Value::Bool(true));
 }
@@ -369,7 +367,7 @@ fn comparison_constants_are_comparable() {
             EQUAL != 0 && LESS != -1
     "#;
     let mut env = Environment::new();
-    env.extend(Comparisons::vars());
+    env.extend(Comparisons::iter());
     let return_value = evaluate(&mut env, program);
     assert_eq!(return_value, Value::Bool(true));
 }
@@ -393,7 +391,7 @@ fn comparison_error_within_capture() {
 fn priority_of_unary_ops_and_methods() {
     let program = "-1.abs() == -1 && -1.0.abs() == -1 && --1.abs() == 1 && (-1).abs() == 1";
     let mut env = Environment::new();
-    env.insert_prototype(PrototypeField::prim("abs"), Value::wrapped_fn(f32::abs));
+    env.insert_wrapped_fn("abs", f32::abs);
     let return_value = evaluate(&mut env, program);
     assert_eq!(return_value, Value::Bool(true));
 }

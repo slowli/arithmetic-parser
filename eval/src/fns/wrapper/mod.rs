@@ -247,7 +247,7 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 /// let module = ExecutableModule::new("test", &program)?;
 ///
 /// let mut env = Environment::new();
-/// env.extend(Prelude::vars());
+/// env.extend(Prelude::iter());
 /// env.insert_native_fn("take_if", wrap_fn!(2, take_if));
 /// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
 /// # Ok(())
@@ -533,7 +533,7 @@ mod tests {
         let module = ExecutableModule::new(WildcardId, &block)?;
 
         let mut env = Environment::new();
-        env.extend(Prelude::vars());
+        env.extend(Prelude::iter());
         env.insert_wrapped_fn(
             "flip_sign",
             |val: f32, flag: bool| if flag { -val } else { val },
@@ -562,7 +562,7 @@ mod tests {
 
         let test_function = Value::native_fn(wrap_fn!(1, test_function));
         let mut env = Environment::new();
-        env.insert("test", test_function).extend(Prelude::vars());
+        env.insert("test", test_function).extend(Prelude::iter());
 
         assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
         Ok(())
@@ -575,7 +575,7 @@ mod tests {
         let module = ExecutableModule::new(WildcardId, &block)?;
 
         let mut env = Environment::new();
-        env.extend(Prelude::vars());
+        env.extend(Prelude::iter());
         env.insert_wrapped_fn("destructure", |values: Vec<(bool, f32)>| {
             values
                 .into_iter()

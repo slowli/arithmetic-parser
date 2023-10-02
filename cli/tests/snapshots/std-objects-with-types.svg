@@ -1,5 +1,5 @@
 <!-- Created with term-transcript v0.1.0 (https://github.com/slowli/term-transcript) -->
-<svg viewBox="0 0 720 296" width="720" height="296" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 720 332" width="720" height="332" xmlns="http://www.w3.org/2000/svg">
   <style>
     :root {
       --black: #1c1c1c; --i-black: #666666;
@@ -65,18 +65,20 @@
     .fg15 { color: var(--i-white); } .bg15 { background: var(--i-white); }
   </style>
   <rect width="100%" height="100%" y="0" rx="4.5" style="fill: var(--black);" />
-  <svg x="0" y="10" width="720" height="276" viewBox="0 0 720 276">
-    <foreignObject width="720" height="276">
+  <svg x="0" y="10" width="720" height="312" viewBox="0 0 720 312">
+    <foreignObject width="720" height="312">
       <div xmlns="http://www.w3.org/1999/xhtml" class="container">
-        <div class="user-input"><pre><span class="prompt">$</span> arithmetic-parser eval &#x27;Array::map((1, 2, 3), Num.sin)&#x27;</pre></div>
+        <div class="user-input"><pre><span class="prompt">$</span> arithmetic-parser eval --types &#x27;{Array.map}((1, 2, 3), Num.sin)&#x27;</pre></div>
         <div class="term-output"><pre>(
   <span class="fg2">0.84147096</span>,
   <span class="fg2">0.9092974</span>,
   <span class="fg2">0.14112</span>
 )</pre></div>
-        <div class="user-input"><pre><span class="prompt">$</span> arithmetic-parser eval -a u64 &#x27;(33, 6, 15).fold(0, Num.xor)&#x27;</pre></div>
+        <div class="user-input"><pre><span class="prompt">$</span> arithmetic-parser eval --types -a u64 \
+  &#x27;(33, 6, 15).fold(0, Num.xor)&#x27;</pre></div>
         <div class="term-output"><pre><span class="fg2">40</span></pre></div>
-        <div class="user-input"><pre><span class="prompt">$</span> arithmetic-parser eval &#x27;{ map } &#x3D; Array; map((1, -2), |x| x + 1)&#x27;</pre></div>
+        <div class="user-input"><pre><span class="prompt">$</span> arithmetic-parser eval --types \
+  &#x27;{ map } &#x3D; Array; map((1, -2), |x| x + 1)&#x27;</pre></div>
         <div class="term-output"><pre>(
   <span class="fg2">2</span>,
   <span class="fg2">-1</span>

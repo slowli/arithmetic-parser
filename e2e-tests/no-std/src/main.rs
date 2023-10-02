@@ -88,8 +88,8 @@ fn main_inner() {
     let rand_num = Value::wrapped_fn(move || rng.borrow_mut().next_u32() as i32);
 
     let mut env = Environment::with_arithmetic(<CheckedArithmetic>::new());
-    let prelude = Prelude::vars()
-        .chain(Assertions::vars())
+    let prelude = Prelude::iter()
+        .chain(Assertions::iter())
         .filter(|(name, _)| module.is_import(name));
     env.extend(prelude);
     env.insert_native_fn("dbg", Dbg)

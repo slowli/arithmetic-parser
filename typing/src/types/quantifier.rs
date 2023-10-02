@@ -308,7 +308,7 @@ mod tests {
 
     #[test]
     fn params_are_added_from_object_constraints() {
-        let obj: Object<Num> = Object::just("x", Type::param(1));
+        let obj: Object<Num> = Object::from([("x", Type::param(1))]);
         let constraints = CompleteConstraints {
             object: Some(obj),
             ..CompleteConstraints::default()

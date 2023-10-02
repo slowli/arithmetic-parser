@@ -32,8 +32,7 @@ use core::{cmp::Ordering, fmt};
 use crate::{
     alloc::{vec, Vec},
     error::AuxErrorInfo,
-    CallContext, Error, ErrorKind, EvalResult, Function, NativeFn, Object, OpaqueRef, Prototype,
-    SpannedValue, Value,
+    CallContext, Error, ErrorKind, EvalResult, Function, NativeFn, OpaqueRef, SpannedValue, Value,
 };
 use arithmetic_parser::StripCode;
 
@@ -77,21 +76,6 @@ fn extract_array<'a, T, A>(
 ) -> Result<Vec<Value<'a, T>>, Error<'a>> {
     if let Value::Tuple(array) = value.extra {
         Ok(array.into())
-    } else {
-        let err = ErrorKind::native(error_msg);
-        Err(ctx
-            .call_site_error(err)
-            .with_span(&value, AuxErrorInfo::InvalidArg))
-    }
-}
-
-fn extract_object<'a, T, A>(
-    ctx: &CallContext<'_, 'a, A>,
-    value: SpannedValue<'a, T>,
-    error_msg: &str,
-) -> Result<Object<'a, T>, Error<'a>> {
-    if let Value::Object(object) = value.extra {
-        Ok(object)
     } else {
         let err = ErrorKind::native(error_msg);
         Err(ctx
@@ -166,7 +150,7 @@ fn extract_fn<'a, T, A>(
 /// let module = ExecutableModule::new("test_cmp", &program)?;
 ///
 /// let mut env = Environment::new();
-/// env.extend(Comparisons::vars());
+/// env.extend(Comparisons::iter());
 /// env.insert_native_fn("map", fns::Map);
 /// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
 /// # Ok(())
@@ -225,132 +209,7 @@ impl<T> NativeFn<T> for Compare {
     }
 }
 
-/// Creates a new [`Prototype`] from the provided [`Object`].
-///
-/// The functions in the provided `Object` will be used in method resolution when applying
-/// methods to [`Value`]s having this prototype. All object fields can be accessed
-/// from the prototype using generic field access notation. The prototype itself is a function
-/// which will wrap a provided object so that it will have this prototype.
-///
-/// See [`Prototype`] docs for more details on prototype mechanics.
-///
-/// # Examples
-///
-/// ```
-/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
-/// # fn main() -> anyhow::Result<()> {
-/// let program = r#"
-///     Point = impl(#{
-///         len: |{x, y}| sqrt(x * x + y * y),
-///     });
-///     pt = Point(#{ x: 3, y: 4 });
-///     assert_close(pt.len(), 5);
-/// "#;
-/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = ExecutableModule::new("test_impl", &program)?;
-///
-/// let mut env = Environment::new();
-/// env.insert_wrapped_fn("sqrt", f32::sqrt)
-///     .insert_native_fn("impl", fns::CreatePrototype)
-///     .insert_native_fn("assert_close", fns::AssertClose::new(1e-4));
-/// module.with_env(&env)?.run()?;
-/// # Ok(())
-/// # }
-/// ```
-///
-/// It is possible to define prototype hierarchies as well:
-///
-/// ```
-/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
-/// # fn main() -> anyhow::Result<()> {
-/// let program = r#"
-///     PointStatics = impl(#{
-///         new: |Self, x, y| Self(#{ x, y }),
-///         zero: |Self| Self(#{ x: 0, y: 0 }),
-///     });
-///     Point = impl(PointStatics(#{
-///         len: |{x, y}| sqrt(x * x + y * y),
-///     }));
-///     pt = Point.new(3, 4);
-///     assert_close(pt.len(), 5);
-///     assert_eq(Point.zero().len(), 0);
-/// "#;
-/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// // Testing snipped (virtually identical to the previous case)
-/// # let module = ExecutableModule::new("test_impl", &program)?;
-/// # let mut env = Environment::new();
-/// # env.insert_wrapped_fn("sqrt", f32::sqrt)
-/// #     .insert_native_fn("impl", fns::CreatePrototype)
-/// #     .insert_native_fn("assert_eq", fns::AssertEq)
-/// #     .insert_native_fn("assert_close", fns::AssertClose::new(1e-4));
-/// # module.with_env(&env)?.run()?;
-/// # Ok(())
-/// # }
-/// ```
-#[derive(Debug, Clone, Copy, Default)]
-pub struct CreatePrototype;
-
-impl<T> NativeFn<T> for CreatePrototype {
-    fn evaluate<'a>(
-        &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
-        ctx.check_args_count(&args, 1)?;
-        let object = extract_object(
-            ctx,
-            args.pop().unwrap(),
-            "Function argument must be an object",
-        )?;
-        Ok(Prototype::from(object).into())
-    }
-}
-
-/// Returns the [`Prototype`] of a value.
-///
-/// # Examples
-///
-/// ```
-/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value, env::Assertions};
-/// # fn main() -> anyhow::Result<()> {
-/// let program = r#"
-///     Type = impl(#{ print: dbg });
-///     value = Type(#{ test: 42 });
-///     assert_eq(prototype(value), Type);
-///     assert(prototype(value) != prototype(#{ test: 42 }));
-///     assert_eq(prototype(7), prototype(42));
-/// "#;
-/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = ExecutableModule::new("test_prototype", &program)?;
-///
-/// let mut env = Environment::new();
-/// env.extend(Assertions::vars());
-/// env.insert_native_fn("dbg", fns::Dbg)
-///     .insert_native_fn("impl", fns::CreatePrototype)
-///     .insert_native_fn("prototype", fns::GetPrototype);
-/// module.with_env(&env)?.run()?;
-/// # Ok(())
-/// # }
-/// ```
-#[derive(Debug, Clone, Copy, Default)]
-pub struct GetPrototype;
-
-impl<T> NativeFn<T> for GetPrototype {
-    fn evaluate<'a>(
-        &self,
-        args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
-        ctx.check_args_count(&args, 1)?;
-        Ok(ctx.get_prototype(&args[0].extra).into())
-    }
-}
-
-/// Allows to define a value recursively, by referencing a value being created. This is particularly
-/// useful when defining [`Prototype`]s.
+/// Allows to define a value recursively, by referencing a value being created.
 ///
 /// It works like this:
 ///
@@ -361,32 +220,7 @@ impl<T> NativeFn<T> for GetPrototype {
 ///
 /// # Examples
 ///
-/// Defining a recursive prototype:
-///
-/// ```
-/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
-/// # fn main() -> anyhow::Result<()> {
-/// let program = r#"
-///     Stack = defer(|Self| impl(#{
-///         push: |{ items }, item| Self(#{ items: push(items, item) }),
-///         // ^ since `Self` is used in function definition, this is OK
-///     }));
-///     stack = Stack(#{ items: (1, 2) }).push(3).push(4);
-///     assert_eq(stack.items, (1, 2, 3, 4));
-/// "#;
-/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = ExecutableModule::new("test_defer", &program)?;
-///
-/// let mut env = Environment::new();
-/// env.insert_native_fn("defer", fns::Defer)
-///     .insert_native_fn("impl", fns::CreatePrototype)
-///     .insert_native_fn("push", fns::Push)
-///     .insert_native_fn("assert_eq", fns::AssertEq);
-/// module.with_env(&env)?.run()?;
-/// # Ok(())
-/// # }
-/// ```
+/// FIXME
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Defer;
 

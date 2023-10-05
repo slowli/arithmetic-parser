@@ -43,6 +43,11 @@ As an example, method resolution is a mess (methods are just syntax sugar for fu
   Rhai also does not have parser / interpreter separation or type inference support,
   and Gluon's syntax is a bit academic at times.
 
+## Contributing
+
+All contributions are welcome! See [the contributing guide](CONTRIBUTING.md) to help
+you get involved.
+
 ## License
 
 All code in this repository is licensed under either of [Apache License, Version 2.0](LICENSE-APACHE)

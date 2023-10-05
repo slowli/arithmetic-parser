@@ -179,7 +179,7 @@ where
         .chain(defs::Assertions::iter())
         .chain(comparison_type_defs())
         .chain(T::STD_LIB.type_defs())
-        .chain(vec![
+        .chain([
             ("rem", binary_fn()),
             ("array", defs::Prelude::array(NumType::Num).into()),
         ])
@@ -196,7 +196,7 @@ pub fn create_modular_env(modulus: u64) -> (Environment<'static, u64>, TypeEnvir
 
     let type_env = defs::Prelude::iter()
         .chain(defs::Assertions::iter())
-        .chain(vec![("MAX_VALUE", Type::NUM)])
+        .chain([("MAX_VALUE", Type::NUM)])
         .collect();
 
     (env, type_env)
@@ -268,9 +268,14 @@ where
         .chain(defs::Assertions::iter())
         .chain(comparison_type_defs())
         .chain(T::STD_LIB.type_defs())
-        .chain(vec![("array", defs::Prelude::array(NumType::Num).into())])
+        .chain([
+            ("array", defs::Prelude::array(NumType::Num).into()),
+            (
+                "assert_close",
+                defs::Assertions::assert_close(NumType::Num).into(),
+            ),
+        ])
         .collect();
-
     (env, type_env)
 }
 
@@ -334,3 +339,5 @@ where
 
     (env, type_env)
 }
+
+// FIXME: test that returned envs have same variables defined

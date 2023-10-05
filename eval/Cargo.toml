@@ -56,11 +56,6 @@ name = "interpreter"
 harness = false
 path = "benches/interpreter.rs"
 
-[[test]]
-name = "custom_cmp"
-path = "tests/custom_cmp.rs"
-required-features = ["complex"]
-
 [[example]]
 name = "owned_module"
 path = "examples/owned_module.rs"

@@ -6,8 +6,7 @@
 ![no_std supported](https://img.shields.io/badge/no__std-tested-green.svg)
 
 **Links:** [![Docs.rs](https://img.shields.io/docsrs/arithmetic-parser)](https://docs.rs/arithmetic-parser/)
-[![crate docs (master)](https://img.shields.io/badge/master-yellow.svg?label=docs)](https://slowli.github.io/arithmetic-parser/arithmetic_parser/) 
-[![changelog](https://img.shields.io/badge/-changelog-orange)](CHANGELOG.md)
+[![crate docs (master)](https://img.shields.io/badge/master-yellow.svg?label=docs)](https://slowli.github.io/arithmetic-parser/arithmetic_parser/)
 
 A versatile parser for arithmetic expressions which allows customizing literal definitions,
 type annotations and several other aspects of parsing.

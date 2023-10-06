@@ -649,7 +649,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
             // Constraints need to be applied *after* adding a type equation in order to
             // account for recursive constraints (e.g., object ones) - otherwise,
             // constraints on some type vars may be lost.
-            // TODO: is is possible (or necessary?) to detect recursion in order to avoid cloning?
+            // TODO: is it possible (or necessary?) to detect recursion in order to avoid cloning?
             if let Some(constraints) = self.constraints.get(&var_idx).cloned() {
                 constraints.apply_all(&ty, self, errors);
             }

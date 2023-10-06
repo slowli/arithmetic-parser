@@ -13,7 +13,11 @@ use arithmetic_parser::{
     BinaryOp, LvalueLen, UnaryOp,
 };
 
+#[cfg(feature = "complex")]
+mod custom_cmp;
 mod functions;
+mod hof;
+mod integers;
 mod objects;
 
 const SIN: fns::Unary<f32> = fns::Unary::new(f32::sin);

@@ -24,7 +24,7 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// Wrapper of a function containing information about its arguments.
 ///
 /// Using `FnWrapper` allows to define [native functions](NativeFn) with minimum boilerplate
-/// and with increased type safety. `FnWrapper`s can be constructed explcitly or indirectly
+/// and with increased type safety. `FnWrapper`s can be constructed explicitly or indirectly
 /// via [`Environment::insert_wrapped_fn()`], [`Value::wrapped_fn()`], or [`wrap()`].
 ///
 /// Arguments of a wrapped function must implement [`TryFromValue`] trait for the applicable
@@ -120,8 +120,6 @@ impl<T, F> FnWrapper<T, F> {
     /// to be the case, `function` needs to be a function or an [`Fn`] closure,
     /// and the `T` type argument needs to be a tuple with the function return type
     /// and the argument types (in this order).
-    ///
-    /// [`NativeFn`]: crate::NativeFn
     pub const fn new(function: F) -> Self {
         Self {
             function,

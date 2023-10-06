@@ -6,8 +6,7 @@
 ![no_std supported](https://img.shields.io/badge/no__std-tested-green.svg)
 
 **Links:** [![Docs on docs.rs](https://img.shields.io/docsrs/arithmetic-eval)](https://docs.rs/arithmetic-eval/)
-[![crate docs (master)](https://img.shields.io/badge/master-yellow.svg?label=docs)](https://slowli.github.io/arithmetic-parser/arithmetic_eval/) 
-[![changelog](https://img.shields.io/badge/-changelog-orange)](CHANGELOG.md)
+[![crate docs (master)](https://img.shields.io/badge/master-yellow.svg?label=docs)](https://slowli.github.io/arithmetic-parser/arithmetic_eval/)
 
 This library provides a simple interpreter, which can be used for some grammars
 recognized by [`arithmetic-parser`], e.g., integer-, real-, complex-valued and modular arithmetic.

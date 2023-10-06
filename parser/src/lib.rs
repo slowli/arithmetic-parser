@@ -42,7 +42,7 @@
 //!   initialization in JavaScript; for example, `#{ x: 1, y }`. (Note the `#` char at the start
 //!   of the block; it is used to distinguish object expressions from blocks.)
 //! - **Methods.** Method call is a function call separated from the receiver with a `.` char
-//!   (e.g., `foo.bar(2, x)`) or a `::` char sequence (e.g., `Array::len((1, 2))`).
+//!   (e.g., `foo.bar(2, x)`).
 //! - **Type annotations.** A type annotation in the form `var: Type` can be present
 //!   in the lvalues or in the function argument definitions. The parser for type annotations
 //!   is user-defined.
@@ -59,15 +59,30 @@
 //! - There is "rest" destructuting for tuples and function arguments.
 //! - Type annotations are placed within tuple elements, for example, `(x: Num, _) = y`.
 //! - Object expressions are enclosed in `#{ ... }`, similarly to [Rhai](https://rhai.rs/).
+//! - Object field access and method calls accept arbitrary block-enclosed "names" in addition to
+//!   simple names. E.g., `xs.{Array.len}()` is a valid method call with `xs` receiver, `Array.len`
+//!   method name and an empty args list.
 //!
 //! # Crate features
 //!
-//! - `std`. Enables support of types from `std`, such as the `Error` trait, and propagates
-//!   to dependencies.
-//! - `num-complex`. Implements [`NumLiteral`](crate::grammars::NumLiteral) for floating-point
-//!   complex numbers (`Complex32` and `Complex64`).
-//! - `num-bigint`. Implements [`NumLiteral`](crate::grammars::NumLiteral) for `BigInt` and
-//!   `BigUint` from the `num-bigint` crate.
+//! ## `std`
+//!
+//! *(On by default)*
+//!
+//! Enables support of types from `std`, such as the `Error` trait, and propagates to dependencies.
+//!
+//! ## `num-complex`
+//!
+//! *(Off by default)*
+//!
+//! Implements [`NumLiteral`](grammars::NumLiteral) for floating-point complex numbers
+//! (`Complex32` and `Complex64`).
+//!
+//! ## `num-bigint`
+//!
+//! *(Off by default)*
+//!
+//! Implements [`NumLiteral`](grammars::NumLiteral) for `BigInt` and `BigUint` from the `num-bigint` crate.
 //!
 //! # Examples
 //!
@@ -131,11 +146,8 @@
 // Polyfill for `alloc` types.
 mod alloc {
     #[cfg(not(feature = "std"))]
-    extern crate alloc;
+    extern crate alloc as std;
 
-    #[cfg(not(feature = "std"))]
-    pub use alloc::{borrow::ToOwned, boxed::Box, format, string::String, vec, vec::Vec};
-    #[cfg(feature = "std")]
     pub use std::{borrow::ToOwned, boxed::Box, format, string::String, vec, vec::Vec};
 }
 

@@ -39,6 +39,8 @@ fn create_static_module(
     create_module(module_name, program).map(StripCode::strip_code)
 }
 
+#[allow(unknown_lints, clippy::redundant_locals)]
+// ^ False positive (explained in the comment near the reassignment)
 fn main() -> anyhow::Result<()> {
     let mut env = Environment::new();
     env.extend(Prelude::iter().chain(Assertions::iter()));

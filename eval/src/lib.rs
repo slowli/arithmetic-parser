@@ -92,25 +92,37 @@
 //!   or does not have the specified fields. Destructuring is not exhaustive; i.e.,
 //!   the destructured object may have extra fields.
 //! - Functional fields are permitted. Similar to Rust, to call a function field, it must
-//!   be enclosed in parentheses: `(obj.run)(arg0, arg1)`. Alternatively, a `::`-separated call
-//!   can be used: `obj::run(arg0, arg1)`. Use of `::` is just syntactic sugar and has no
-//!   alternative semantics.
+//!   be enclosed in parentheses: `(obj.run)(arg0, arg1)` or braces: `{obj.run}(arg0, arg1)`.
 //!
 //! # Crate features
 //!
-//! - `std`. Enables support of types from `std`, such as the `Error` trait, and propagates
-//!   to dependencies. Importantly, `std` is necessary for floating-point arithmetics.
-//! - `hashbrown`. Imports hash maps and sets from the [eponymous crate][`hashbrown`]
-//!   instead of using ones from the Rust std library. This feature is necessary
-//!   if the `std` feature is disabled.
-//! - `complex`. Implements [`Number`] for floating-point complex numbers from
-//!   the [`num-complex`] crate (i.e., `Complex32` and `Complex64`). Enables complex number parsing
-//!   in `arithmetic-parser`.
-//! - `bigint`. Implements `Number` and a couple of other helpers for big integers
-//!   from the [`num-bigint`] crate (i.e., `BigInt` and `BigUint`). Enables big integer parsing
-//!   in `arithmetic-parser`.
+//! ## `std`
 //!
-//! The `std` feature is enabled by default; other features are disabled by default.
+//! *(On by default)*
+//!
+//! Enables support of types from `std`, such as the `Error` trait, and propagates to dependencies.
+//! Importantly, `std` is necessary for floating-point arithmetics.
+//!
+//! ## `hashbrown`
+//!
+//! *(Off by default)*
+//!
+//! Imports hash maps and sets from the [eponymous crate][`hashbrown`] instead of using ones
+//! from the Rust std library. This feature is necessary if the `std` feature is disabled.
+//!
+//! ## `complex`
+//!
+//! *(Off by default)*
+//!
+//! Implements [`Number`] for floating-point complex numbers from the [`num-complex`] crate
+//! (i.e., `Complex32` and `Complex64`). Enables complex number parsing in `arithmetic-parser`.
+//!
+//! ## `bigint`
+//!
+//! *(Off by default)*
+//!
+//! Implements `Number` and a couple of other helpers for big integers from the [`num-bigint`] crate
+//! (i.e., `BigInt` and `BigUint`). Enables big integer parsing in `arithmetic-parser`.
 //!
 //! [`Arithmetic`]: arith::Arithmetic
 //! [`OrdArithmetic`]: arith::OrdArithmetic

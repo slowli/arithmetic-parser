@@ -17,13 +17,12 @@
 //! ## Why multiple ways to do the same thing?
 //!
 //! In the ideal world, `FnWrapper` would be used for all cases, since it does not involve
-//! macro magic. Unfortunately, stable Rust currently does not provide means to describe
-//! lifetime restrictions on args / return type of wrapped functions in the general case
-//! (this requires [generic associated types][GAT]). As such, the (implicit) `'static` requirement
-//! is a temporary measure, and macros fill the gaps in their usual clunky manner.
+//! macro magic. Unfortunately, Rust currently does not provide means to describe
+//! lifetime restrictions on args / return type of wrapped functions in the general case.
+//! As such, the implicit `'static` requirement is a temporary measure, and macros fill the gaps
+//! in their usual clunky manner.
 //!
 //! [`Number`]: crate::Number
-//! [GAT]: https://github.com/rust-lang/rust/issues/44265
 
 use once_cell::unsync::OnceCell;
 

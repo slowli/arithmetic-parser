@@ -14,10 +14,10 @@
 //!
 //! The type system corresponds to types of `Value`s in `arithmetic-eval`:
 //!
-//! - Primitive types are customizeable via [`PrimitiveType`] impl. In the simplest case,
+//! - Primitive types are customizable via [`PrimitiveType`] impl. In the simplest case,
 //!   there can be 2 primitive types: Booleans (`Bool`) and numbers (`Num`),
-//!   as ecapsulated in [`Num`].
-//! - There are two container types - [tuples](Tuple) and [objects](Object).
+//!   as encapsulated in [`Num`].
+//! - There are two container types – [tuples](Tuple) and [objects](Object).
 //! - Tuple types can be represented either
 //!   in the tuple form, such as `(Num, Bool)`, or as a slice, such as `[Num; 3]`.
 //!   As in Rust, all slice elements must have the same type. Unlike Rust, tuple and slice
@@ -29,9 +29,9 @@
 //! - Type params can be constrained. Constraints are expressed via [`Constraint`]s.
 //!   As an example, [`Num`] has a few known constraints, such as type [`Linearity`].
 //!
-//! [`Constraint`]: crate::arith::Constraint
-//! [`Num`]: crate::arith::Num
-//! [`Linearity`]: crate::arith::Linearity
+//! [`Constraint`]: arith::Constraint
+//! [`Num`]: arith::Num
+//! [`Linearity`]: arith::Linearity
 //!
 //! # Inference rules
 //!
@@ -48,8 +48,8 @@
 //! See the example below for more details.
 //!
 //! [Hindley–Milner typing rules]: https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system#Typing_rules
-//! [`Substitutions`]: crate::arith::Substitutions
-//! [`TypeArithmetic`]: crate::arith::TypeArithmetic
+//! [`Substitutions`]: arith::Substitutions
+//! [`TypeArithmetic`]: arith::TypeArithmetic
 //!
 //! # Operations
 //!
@@ -57,6 +57,11 @@
 //!
 //! See [`Tuple` docs](Tuple#indexing) for discussion of indexing expressions, such as `xs.0`,
 //! and [`Object` docs](Object) for discussion of field access, such as `point.x`.
+//!
+//! ## Method calls
+//!
+//! In agreement with the [`arithmetic-eval`] crate, methods are treated as syntactic sugar for functions.
+//! For example, `xs.map(sin)` is equivalent to `map(xs, sin)`.
 //!
 //! ## Type casts
 //!
@@ -121,7 +126,6 @@
 //! ```
 //!
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
-//! [`Grammar`]: arithmetic_parser::grammars::Grammar
 //! [`arithmetic-eval`]: https://crates.io/crates/arithmetic-eval
 
 #![doc(html_root_url = "https://docs.rs/arithmetic-typing/0.3.0")]

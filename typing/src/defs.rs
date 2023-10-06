@@ -72,6 +72,8 @@ pub enum Prelude {
     If,
     /// Type of the `while` function.
     While,
+    /// Type of the `defer` function.
+    Defer,
     /// Type of the `map` function.
     Map,
     /// Type of the `filter` function.
@@ -112,6 +114,16 @@ impl<Prim: WithBoolean> From<Prelude> for Type<Prim> {
                     .with_arg(Type::param(0)) // state
                     .with_arg(condition_fn)
                     .with_arg(iter_fn)
+                    .returning(Type::param(0))
+                    .into()
+            }
+
+            Prelude::Defer => {
+                let fn_arg = Function::builder()
+                    .with_arg(Type::param(0))
+                    .returning(Type::param(0));
+                Function::builder()
+                    .with_arg(fn_arg)
                     .returning(Type::param(0))
                     .into()
             }
@@ -183,7 +195,7 @@ impl<Prim: WithBoolean> From<Prelude> for Type<Prim> {
 }
 
 impl Prelude {
-    const VALUES: &'static [Self] = &[Self::True, Self::False, Self::If, Self::While];
+    const VALUES: &'static [Self] = &[Self::True, Self::False, Self::If, Self::While, Self::Defer];
 
     const ARRAY_FUNCTIONS: &'static [Self] = &[
         Self::Map,
@@ -201,6 +213,7 @@ impl Prelude {
             Self::False => "false",
             Self::If => "if",
             Self::While => "while",
+            Self::Defer => "defer",
             Self::Map => "map",
             Self::Filter => "filter",
             Self::Fold => "fold",
@@ -318,6 +331,7 @@ mod tests {
         ("true", "Bool"),
         ("if", "(Bool, 'T, 'T) -> 'T"),
         ("while", "('T, ('T) -> Bool, ('T) -> 'T) -> 'T"),
+        ("defer", "(('T) -> 'T) -> 'T"),
         ("map", "(['T; N], ('T) -> 'U) -> ['U; N]"),
         ("filter", "(['T], ('T) -> Bool) -> ['T]"),
         ("fold", "(['T], 'U, ('U, 'T) -> 'U) -> 'U"),

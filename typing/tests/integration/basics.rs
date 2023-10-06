@@ -869,3 +869,27 @@ fn multiple_wildcard_vars_in_fn_def_are_fine() {
         "for<'T: { x: Num, y: Num }> (Num, 'T) -> Bool"
     );
 }
+
+#[test]
+fn defer_function_basics() {
+    let code = "defer(|x| x + 1)";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let mut type_env = TypeEnvironment::new();
+    type_env
+        .insert("defer", Prelude::Defer)
+        .insert("if", Prelude::If);
+    let output = type_env.process_statements(&block).unwrap();
+    assert_eq!(output, Type::NUM);
+
+    let code = "defer(|fib| { |x| fib(x - 1) as Num + fib(x - 2) })";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let output = type_env.process_statements(&block).unwrap();
+    assert_eq!(output.to_string(), "(Num) -> Num");
+
+    let code = "defer(|fib| { |x| if(x < 2, || x, || fib(x - 1) + fib(x - 2))() })";
+    let block = F32Grammar::parse_statements(code).unwrap();
+    let output = type_env
+        .process_with_arithmetic(&NumArithmetic::with_comparisons(), &block)
+        .unwrap();
+    assert_eq!(output.to_string(), "(Num) -> Num");
+}

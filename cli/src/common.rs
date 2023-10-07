@@ -575,9 +575,9 @@ impl<T: ReplLiteral> Env<T> {
         Ok(res.map(drop))
     }
 
-    fn compile_and_execute<'a, G>(&mut self, block: &Block<'a, G>) -> io::Result<ParseAndEvalResult>
+    fn compile_and_execute<G>(&mut self, block: &Block<'_, G>) -> io::Result<ParseAndEvalResult>
     where
-        G: Grammar<'a, Lit = T>,
+        G: Grammar<Lit = T>,
     {
         let module_id = self.reporter.code_map.latest_module_id();
         let module = ExecutableModule::new(module_id, block);

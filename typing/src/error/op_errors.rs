@@ -82,7 +82,7 @@ impl<Prim: PrimitiveType> OpErrors<'static, Prim> {
         }
     }
 
-    pub(crate) fn contextualize<'a, T: Grammar<'a>>(
+    pub(crate) fn contextualize<'a, T: Grammar>(
         self,
         span: &SpannedExpr<'a, T>,
         context: impl Into<ErrorContext<Prim>>,
@@ -161,7 +161,7 @@ struct ErrorPrecursor<Prim: PrimitiveType> {
 }
 
 impl<Prim: PrimitiveType> ErrorPrecursor<Prim> {
-    fn into_expr_error<'a, T: Grammar<'a>>(
+    fn into_expr_error<'a, T: Grammar>(
         self,
         context: ErrorContext<Prim>,
         root_expr: &SpannedExpr<'a, T>,

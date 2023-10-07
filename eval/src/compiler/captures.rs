@@ -61,7 +61,7 @@ impl<'a> CapturesExtractor<'a> {
     }
 
     /// Collects variables captured by the function into a single `Scope`.
-    pub fn eval_function<T: Grammar<'a>>(
+    pub fn eval_function<T: Grammar>(
         &mut self,
         definition: &FnDefinition<'a, T>,
     ) -> Result<(), Error> {
@@ -93,7 +93,7 @@ impl<'a> CapturesExtractor<'a> {
 
     /// Evaluates an expression with the function validation semantics, i.e., to determine
     /// function captures.
-    fn eval<T: Grammar<'a>>(&mut self, expr: &SpannedExpr<'a, T>) -> Result<(), Error> {
+    fn eval<T: Grammar>(&mut self, expr: &SpannedExpr<'a, T>) -> Result<(), Error> {
         match &expr.extra {
             Expr::Variable => {
                 self.eval_local_var(expr);
@@ -179,7 +179,7 @@ impl<'a> CapturesExtractor<'a> {
     }
 
     /// Evaluates a statement using the provided context.
-    fn eval_statement<T: Grammar<'a>>(
+    fn eval_statement<T: Grammar>(
         &mut self,
         statement: &SpannedStatement<'a, T>,
     ) -> Result<(), Error> {
@@ -206,7 +206,7 @@ impl<'a> CapturesExtractor<'a> {
         }
     }
 
-    fn eval_block_inner<T: Grammar<'a>>(
+    fn eval_block_inner<T: Grammar>(
         &mut self,
         block: &Block<'a, T>,
         local_vars: HashMap<&'a str, Spanned<'a>>,
@@ -222,7 +222,7 @@ impl<'a> CapturesExtractor<'a> {
         Ok(())
     }
 
-    pub fn eval_block<T: Grammar<'a>>(&mut self, block: &Block<'a, T>) -> Result<(), Error> {
+    pub fn eval_block<T: Grammar>(&mut self, block: &Block<'a, T>) -> Result<(), Error> {
         self.eval_block_inner(block, HashMap::new())
     }
 
@@ -317,12 +317,12 @@ pub(super) fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
 
 /// Helper enum for `CompilerExt` implementations that allows to reduce code duplication.
 #[derive(Debug)]
-pub(super) enum CompilerExtTarget<'r, 'a, T: Grammar<'a>> {
+pub(super) enum CompilerExtTarget<'r, 'a, T: Grammar> {
     Block(&'r Block<'a, T>),
     FnDefinition(&'r FnDefinition<'a, T>),
 }
 
-impl<'a, T: Grammar<'a>> CompilerExtTarget<'_, 'a, T> {
+impl<'a, T: Grammar> CompilerExtTarget<'_, 'a, T> {
     pub fn get_undefined_variables(self) -> Result<HashMap<&'a str, Spanned<'a>>, Error> {
         let mut extractor = CapturesExtractor::new(Arc::new(WildcardId));
         match self {

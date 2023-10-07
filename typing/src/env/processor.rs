@@ -89,7 +89,7 @@ where
 
     fn process_expr_inner<T>(&mut self, expr: &SpannedExpr<'a, T>) -> Type<Prim>
     where
-        T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
+        T: Grammar<Lit = Val, Type<'a> = TypeAst<'a>>,
     {
         match &expr.extra {
             Expr::Variable => self.process_var(expr),
@@ -185,7 +185,7 @@ where
 
     fn process_block<T>(&mut self, block: &Block<'a, T>) -> Type<Prim>
     where
-        T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
+        T: Grammar<Lit = Val, Type<'a> = TypeAst<'a>>,
     {
         let top_level = self.scopes.len() == 1;
         for (i, statement) in block.statements.iter().enumerate() {
@@ -341,7 +341,7 @@ where
         field_name: &Spanned<'a>,
     ) -> Type<Prim>
     where
-        T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
+        T: Grammar<Lit = Val, Type<'a> = TypeAst<'a>>,
     {
         let field_str = *field_name.fragment();
         if let Ok(index) = field_str.parse::<usize>() {
@@ -361,7 +361,7 @@ where
         index: usize,
     ) -> Type<Prim>
     where
-        T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
+        T: Grammar<Lit = Val, Type<'a> = TypeAst<'a>>,
     {
         let receiver = self.env.substitutions.fast_resolve(receiver);
         match receiver {
@@ -407,7 +407,7 @@ where
 
     fn process_object<T>(&mut self, object: &ObjectExpr<'a, T>) -> Object<Prim>
     where
-        T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
+        T: Grammar<Lit = Val, Type<'a> = TypeAst<'a>>,
     {
         // Check that all field names are unique.
         let mut object_fields = HashMap::new();
@@ -436,7 +436,7 @@ where
         field_name: &str,
     ) -> Type<Prim>
     where
-        T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
+        T: Grammar<Lit = Val, Type<'a> = TypeAst<'a>>,
     {
         let mut errors = OpErrors::new();
         let return_type = self.new_type();
@@ -462,7 +462,7 @@ where
     ) -> Type<Prim>
     where
         'a: 'it,
-        T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
+        T: Grammar<Lit = Val, Type<'a> = TypeAst<'a>>,
     {
         let arg_types: Vec<_> = args.map(|arg| self.process_expr_inner(arg)).collect();
         let return_type = self.new_type();
@@ -488,7 +488,7 @@ where
         inner: &SpannedExpr<'a, T>,
     ) -> Type<Prim>
     where
-        T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
+        T: Grammar<Lit = Val, Type<'a> = TypeAst<'a>>,
     {
         let inner_ty = self.process_expr_inner(inner);
         let context = UnaryOpContext { op, arg: inner_ty };
@@ -513,7 +513,7 @@ where
         rhs: &SpannedExpr<'a, T>,
     ) -> Type<Prim>
     where
-        T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
+        T: Grammar<Lit = Val, Type<'a> = TypeAst<'a>>,
     {
         let lhs_ty = self.process_expr_inner(lhs);
         let rhs_ty = self.process_expr_inner(rhs);
@@ -536,7 +536,7 @@ where
 
     fn process_fn_def<T>(&mut self, def: &FnDefinition<'a, T>) -> Function<Prim>
     where
-        T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
+        T: Grammar<Lit = Val, Type<'a> = TypeAst<'a>>,
     {
         self.scopes.push(HashMap::new());
         let was_in_function = mem::replace(&mut self.is_in_function, true);
@@ -567,7 +567,7 @@ where
 
     fn process_statement<T>(&mut self, statement: &SpannedStatement<'a, T>) -> Type<Prim>
     where
-        T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
+        T: Grammar<Lit = Val, Type<'a> = TypeAst<'a>>,
     {
         match &statement.extra {
             Statement::Expr(expr) => self.process_expr_inner(expr),
@@ -606,7 +606,7 @@ where
         block: &Block<'a, T>,
     ) -> Result<Type<Prim>, Errors<'a, Prim>>
     where
-        T: Grammar<'a, Lit = Val, Type = TypeAst<'a>>,
+        T: Grammar<Lit = Val, Type<'a> = TypeAst<'a>>,
     {
         let mut return_value = self.process_block(block);
 

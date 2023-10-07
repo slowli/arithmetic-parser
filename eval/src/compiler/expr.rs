@@ -15,10 +15,10 @@ use arithmetic_parser::{
 };
 
 impl Compiler {
-    fn compile_expr<'a, T: Grammar<'a>>(
+    fn compile_expr<T: Grammar>(
         &mut self,
         executable: &mut Executable<T::Lit>,
-        expr: &SpannedExpr<'a, T>,
+        expr: &SpannedExpr<'_, T>,
     ) -> Result<LocatedAtom<T::Lit>, Error> {
         let atom = match &expr.extra {
             Expr::Literal(lit) => Atom::Constant(lit.clone()),
@@ -100,7 +100,7 @@ impl Compiler {
         Ok(Atom::Register(*register))
     }
 
-    fn compile_binary_expr<'a, T: Grammar<'a>>(
+    fn compile_binary_expr<'a, T: Grammar>(
         &mut self,
         executable: &mut Executable<T::Lit>,
         binary_expr: &SpannedExpr<'a, T>,
@@ -121,7 +121,7 @@ impl Compiler {
         Ok(Atom::Register(register))
     }
 
-    fn compile_fn_call<'a, T: Grammar<'a>>(
+    fn compile_fn_call<'a, T: Grammar>(
         &mut self,
         executable: &mut Executable<T::Lit>,
         call_expr: &SpannedExpr<'a, T>,
@@ -139,7 +139,7 @@ impl Compiler {
         self.compile_fn_call_with_precompiled_name(executable, call_expr, name, original_name, args)
     }
 
-    fn compile_fn_call_with_precompiled_name<'a, T: Grammar<'a>>(
+    fn compile_fn_call_with_precompiled_name<'a, T: Grammar>(
         &mut self,
         executable: &mut Executable<T::Lit>,
         call_expr: &SpannedExpr<'a, T>,
@@ -160,7 +160,7 @@ impl Compiler {
         Ok(Atom::Register(register))
     }
 
-    fn compile_field_access<'a, T: Grammar<'a>>(
+    fn compile_field_access<'a, T: Grammar>(
         &mut self,
         executable: &mut Executable<T::Lit>,
         call_expr: &SpannedExpr<'a, T>,
@@ -186,7 +186,7 @@ impl Compiler {
         Ok(Atom::Register(register))
     }
 
-    fn compile_method_call<'a, T: Grammar<'a>>(
+    fn compile_method_call<'a, T: Grammar>(
         &mut self,
         executable: &mut Executable<T::Lit>,
         call_expr: &SpannedExpr<'a, T>,
@@ -214,7 +214,7 @@ impl Compiler {
         Ok(Atom::Register(register))
     }
 
-    fn compile_block<'r, 'a: 'r, T: Grammar<'a>>(
+    fn compile_block<'r, 'a: 'r, T: Grammar>(
         &mut self,
         executable: &mut Executable<T::Lit>,
         block_expr: &SpannedExpr<'a, T>,
@@ -264,10 +264,10 @@ impl Compiler {
         })
     }
 
-    pub(super) fn compile_block_inner<'a, T: Grammar<'a>>(
+    pub(super) fn compile_block_inner<T: Grammar>(
         &mut self,
         executable: &mut Executable<T::Lit>,
-        block: &Block<'a, T>,
+        block: &Block<'_, T>,
     ) -> Result<Option<LocatedAtom<T::Lit>>, Error> {
         for statement in &block.statements {
             self.compile_statement(executable, statement)?;
@@ -281,7 +281,7 @@ impl Compiler {
     }
 
     #[allow(clippy::option_if_let_else)] // false positive
-    fn compile_object<'a, T: Grammar<'a>>(
+    fn compile_object<'a, T: Grammar>(
         &mut self,
         executable: &mut Executable<T::Lit>,
         object_expr: &SpannedExpr<'a, T>,
@@ -302,7 +302,7 @@ impl Compiler {
         Ok(Atom::Register(register))
     }
 
-    fn compile_fn_definition<'a, T: Grammar<'a>>(
+    fn compile_fn_definition<'a, T: Grammar>(
         &mut self,
         executable: &mut Executable<T::Lit>,
         def_expr: &SpannedExpr<'a, T>,
@@ -351,7 +351,7 @@ impl Compiler {
             .collect()
     }
 
-    fn compile_function<'a, T: Grammar<'a>>(
+    fn compile_function<'a, T: Grammar>(
         &self,
         def: &FnDefinition<'a, T>,
         captures: &HashMap<&'a str, LocatedAtom<T::Lit>>,
@@ -383,10 +383,10 @@ impl Compiler {
         Ok(executable)
     }
 
-    fn compile_statement<'a, T: Grammar<'a>>(
+    fn compile_statement<T: Grammar>(
         &mut self,
         executable: &mut Executable<T::Lit>,
-        statement: &SpannedStatement<'a, T>,
+        statement: &SpannedStatement<'_, T>,
     ) -> Result<Option<LocatedAtom<T::Lit>>, Error> {
         Ok(match &statement.extra {
             Statement::Expr(expr) => Some(self.compile_expr(executable, expr)?),

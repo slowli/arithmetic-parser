@@ -41,7 +41,7 @@ impl BinaryOpError {
         }
     }
 
-    fn object<T>(op: BinaryOp, lhs: Object<'_, T>, rhs: Object<'_, T>) -> Self {
+    fn object<T>(op: BinaryOp, lhs: Object<T>, rhs: Object<T>) -> Self {
         Self {
             inner: ErrorKind::FieldsMismatch {
                 lhs_fields: lhs.into_iter().map(|(name, _)| name).collect(),
@@ -62,13 +62,13 @@ impl BinaryOpError {
         self
     }
 
-    fn span<'a>(
+    fn span(
         self,
         module_id: &dyn ModuleId,
-        total_span: MaybeSpanned<'a>,
-        lhs_span: MaybeSpanned<'a>,
-        rhs_span: MaybeSpanned<'a>,
-    ) -> Error<'a> {
+        total_span: MaybeSpanned,
+        lhs_span: MaybeSpanned,
+        rhs_span: MaybeSpanned,
+    ) -> Error {
         let main_span = match self.side {
             Some(OpSide::Lhs) => lhs_span,
             Some(OpSide::Rhs) => rhs_span,
@@ -91,7 +91,7 @@ impl BinaryOpError {
     }
 }
 
-impl<'a, T: Clone> Value<'a, T> {
+impl<T: Clone> Value<T> {
     fn try_binary_op_inner(
         self,
         rhs: Self,
@@ -192,12 +192,12 @@ impl<'a, T: Clone> Value<'a, T> {
     #[inline]
     pub(crate) fn try_binary_op(
         module_id: &dyn ModuleId,
-        total_span: MaybeSpanned<'a>,
-        lhs: MaybeSpanned<'a, Self>,
-        rhs: MaybeSpanned<'a, Self>,
+        total_span: MaybeSpanned,
+        lhs: MaybeSpanned<Self>,
+        rhs: MaybeSpanned<Self>,
         op: BinaryOp,
         arithmetic: &dyn OrdArithmetic<T>,
-    ) -> Result<Self, Error<'a>> {
+    ) -> Result<Self, Error> {
         let lhs_span = lhs.with_no_extra();
         let rhs_span = rhs.with_no_extra();
         lhs.extra
@@ -206,7 +206,7 @@ impl<'a, T: Clone> Value<'a, T> {
     }
 }
 
-impl<'a, T> Value<'a, T> {
+impl<T> Value<T> {
     pub(crate) fn try_neg(self, arithmetic: &dyn OrdArithmetic<T>) -> Result<Self, ErrorKind> {
         match self {
             Self::Prim(val) => arithmetic
@@ -273,11 +273,11 @@ impl<'a, T> Value<'a, T> {
 
     pub(crate) fn compare(
         module_id: &dyn ModuleId,
-        lhs: &MaybeSpanned<'a, Self>,
-        rhs: &MaybeSpanned<'a, Self>,
+        lhs: &MaybeSpanned<Self>,
+        rhs: &MaybeSpanned<Self>,
         op: BinaryOp,
         arithmetic: &dyn OrdArithmetic<T>,
-    ) -> Result<Self, Error<'a>> {
+    ) -> Result<Self, Error> {
         // We only know how to compare primitive values.
         let Value::Prim(lhs_value) = &lhs.extra else {
             return Err(Error::new(module_id, lhs, ErrorKind::CannotCompare));
@@ -299,9 +299,9 @@ impl<'a, T> Value<'a, T> {
 
     pub(crate) fn try_and(
         module_id: &dyn ModuleId,
-        lhs: &MaybeSpanned<'a, Self>,
-        rhs: &MaybeSpanned<'a, Self>,
-    ) -> Result<Self, Error<'a>> {
+        lhs: &MaybeSpanned<Self>,
+        rhs: &MaybeSpanned<Self>,
+    ) -> Result<Self, Error> {
         match (&lhs.extra, &rhs.extra) {
             (Value::Bool(this), Value::Bool(other)) => Ok(Value::Bool(*this && *other)),
             (Value::Bool(_), _) => {
@@ -321,9 +321,9 @@ impl<'a, T> Value<'a, T> {
 
     pub(crate) fn try_or(
         module_id: &dyn ModuleId,
-        lhs: &MaybeSpanned<'a, Self>,
-        rhs: &MaybeSpanned<'a, Self>,
-    ) -> Result<Self, Error<'a>> {
+        lhs: &MaybeSpanned<Self>,
+        rhs: &MaybeSpanned<Self>,
+    ) -> Result<Self, Error> {
         match (&lhs.extra, &rhs.extra) {
             (Value::Bool(this), Value::Bool(other)) => Ok(Value::Bool(*this || *other)),
             (Value::Bool(_), _) => {
@@ -342,7 +342,7 @@ impl<'a, T> Value<'a, T> {
     }
 }
 
-impl<T> Object<'_, T> {
+impl<T> Object<T> {
     fn eq_by_arithmetic(&self, other: &Self, arithmetic: &dyn OrdArithmetic<T>) -> bool {
         if self.len() == other.len() {
             for (field_name, this_elem) in self {

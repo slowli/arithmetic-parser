@@ -362,7 +362,7 @@ fn native_fn_error() {
     let program = "1 + sin(-5.0, 2.0)";
     let err = try_evaluate(&mut env, program).unwrap_err();
     let err = err.source();
-    assert_eq!(*err.main_span().code().fragment(), "sin(-5.0, 2.0)");
+    assert_eq!(err.main_span().code().span_code(program), "sin(-5.0, 2.0)");
     assert_matches!(
         err.kind(),
         ErrorKind::ArgsLenMismatch {
@@ -374,7 +374,10 @@ fn native_fn_error() {
     let other_program = "1 + sin((-5, 2))";
     let err = try_evaluate(&mut env, other_program).unwrap_err();
     let err = err.source();
-    assert_eq!(*err.main_span().code().fragment(), "sin((-5, 2))");
+    assert_eq!(
+        err.main_span().code().span_code(other_program),
+        "sin((-5, 2))"
+    );
 
     let expected_err_kind = FromValueErrorKind::InvalidType {
         expected: ValueType::Prim,

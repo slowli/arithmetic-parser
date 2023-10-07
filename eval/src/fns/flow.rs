@@ -55,11 +55,11 @@ use crate::{
 pub struct If;
 
 impl<T> NativeFn<T> for If {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         ctx.check_args_count(&args, 3)?;
         let else_val = args.pop().unwrap().extra;
         let then_val = args.pop().unwrap().extra;
@@ -116,11 +116,11 @@ impl<T> NativeFn<T> for If {
 pub struct While;
 
 impl<T: 'static + Clone> NativeFn<T> for While {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         ctx.check_args_count(&args, 3)?;
 
         let step_fn = extract_fn(

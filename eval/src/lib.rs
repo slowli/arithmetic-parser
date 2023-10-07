@@ -259,7 +259,7 @@ mod values;
 /// This trait is somewhat of a crutch, necessary to ensure that [function wrappers] can accept
 /// number arguments and distinguish them from other types (booleans, vectors, tuples, etc.).
 ///
-/// [function wrappers]: crate::fns::FnWrapper
+/// [function wrappers]: fns::FnWrapper
 pub trait Number: Clone + 'static {}
 
 impl Number for i8 {}

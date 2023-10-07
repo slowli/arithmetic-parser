@@ -46,9 +46,9 @@ where
 {
     fn evaluate<'a>(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         ctx.check_args_count(&args, 2)?;
         let generation_fn = extract_fn(
             ctx,
@@ -112,11 +112,11 @@ where
 pub struct Len;
 
 impl<T: FromPrimitive> NativeFn<T> for Len {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         ctx.check_args_count(&args, 1)?;
         let arg = args.pop().unwrap();
 
@@ -171,11 +171,11 @@ impl<T: FromPrimitive> NativeFn<T> for Len {
 pub struct Map;
 
 impl<T: 'static + Clone> NativeFn<T> for Map {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         ctx.check_args_count(&args, 2)?;
         let map_fn = extract_fn(
             ctx,
@@ -233,11 +233,11 @@ impl<T: 'static + Clone> NativeFn<T> for Map {
 pub struct Filter;
 
 impl<T: 'static + Clone> NativeFn<T> for Filter {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         ctx.check_args_count(&args, 2)?;
         let filter_fn = extract_fn(
             ctx,
@@ -301,11 +301,11 @@ impl<T: 'static + Clone> NativeFn<T> for Filter {
 pub struct Fold;
 
 impl<T: 'static + Clone> NativeFn<T> for Fold {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         ctx.check_args_count(&args, 3)?;
         let fold_fn = extract_fn(
             ctx,
@@ -368,11 +368,11 @@ impl<T: 'static + Clone> NativeFn<T> for Fold {
 pub struct Push;
 
 impl<T> NativeFn<T> for Push {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         ctx.check_args_count(&args, 2)?;
         let elem = args.pop().unwrap().extra;
         let mut array = extract_array(
@@ -421,11 +421,11 @@ impl<T> NativeFn<T> for Push {
 pub struct Merge;
 
 impl<T: Clone> NativeFn<T> for Merge {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         ctx.check_args_count(&args, 2)?;
         let second = extract_array(
             ctx,
@@ -477,11 +477,11 @@ impl<T: Clone> NativeFn<T> for Merge {
 pub struct Any;
 
 impl<T: Clone + 'static> NativeFn<T> for Any {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         ctx.check_args_count(&args, 2)?;
         let predicate = extract_fn(
             ctx,
@@ -547,11 +547,11 @@ impl<T: Clone + 'static> NativeFn<T> for Any {
 pub struct All;
 
 impl<T: Clone + 'static> NativeFn<T> for All {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         ctx.check_args_count(&args, 2)?;
         let predicate = extract_fn(
             ctx,

@@ -19,7 +19,7 @@ pub struct Prelude;
 
 impl Prelude {
     /// Creates an iterator over contained values and the corresponding names.
-    pub fn iter<T>() -> impl Iterator<Item = (&'static str, Value<'static, T>)>
+    pub fn iter<T>() -> impl Iterator<Item = (&'static str, Value<T>)>
     where
         T: 'static + Clone,
     {
@@ -36,7 +36,7 @@ impl Prelude {
         .chain([("Array", array_object.into())])
     }
 
-    fn array_functions<T>() -> impl Iterator<Item = (&'static str, Value<'static, T>)>
+    fn array_functions<T>() -> impl Iterator<Item = (&'static str, Value<T>)>
     where
         T: 'static + Clone,
     {
@@ -59,7 +59,7 @@ pub struct Assertions;
 
 impl Assertions {
     /// Creates an iterator over contained values and the corresponding names.
-    pub fn iter<T>() -> impl Iterator<Item = (&'static str, Value<'static, T>)>
+    pub fn iter<T>() -> impl Iterator<Item = (&'static str, Value<T>)>
     where
         T: 'static + Clone + fmt::Display,
     {
@@ -81,7 +81,7 @@ pub struct Comparisons;
 
 impl Comparisons {
     /// Creates an iterator over contained values and the corresponding names.
-    pub fn iter<T>() -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
+    pub fn iter<T>() -> impl Iterator<Item = (&'static str, Value<T>)> {
         [
             ("LESS", Value::opaque_ref(Ordering::Less)),
             ("EQUAL", Value::opaque_ref(Ordering::Equal)),

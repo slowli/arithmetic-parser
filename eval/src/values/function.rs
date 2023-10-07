@@ -10,23 +10,23 @@ use crate::{
     fns::ValueCell,
     Environment, EvalResult, SpannedValue, Value,
 };
-use arithmetic_parser::{LvalueLen, MaybeSpanned, StripCode};
+use arithmetic_parser::{LvalueLen, MaybeSpanned};
 
 /// Context for native function calls.
 #[derive(Debug)]
-pub struct CallContext<'r, 'a, T> {
-    call_span: CodeInModule<'a>,
-    backtrace: Option<&'r mut Backtrace<'a>>,
+pub struct CallContext<'r, T> {
+    call_span: CodeInModule,
+    backtrace: Option<&'r mut Backtrace>,
     operations: Operations<'r, T>,
 }
 
-impl<'r, 'a, T> CallContext<'r, 'a, T> {
+impl<'r, T> CallContext<'r, T> {
     /// Creates a mock call context with the specified module ID and call span.
     /// The provided [`Environment`] is used to extract an [`OrdArithmetic`] implementation.
     pub fn mock(
         module_id: &dyn ModuleId,
-        call_span: MaybeSpanned<'a>,
-        env: &'r Environment<'a, T>,
+        call_span: MaybeSpanned,
+        env: &'r Environment<T>,
     ) -> Self {
         Self {
             call_span: CodeInModule::new(module_id, call_span),
@@ -36,8 +36,8 @@ impl<'r, 'a, T> CallContext<'r, 'a, T> {
     }
 
     pub(crate) fn new(
-        call_span: CodeInModule<'a>,
-        backtrace: Option<&'r mut Backtrace<'a>>,
+        call_span: CodeInModule,
+        backtrace: Option<&'r mut Backtrace>,
         operations: Operations<'r, T>,
     ) -> Self {
         Self {
@@ -48,7 +48,7 @@ impl<'r, 'a, T> CallContext<'r, 'a, T> {
     }
 
     #[allow(clippy::needless_option_as_deref)] // false positive
-    pub(crate) fn backtrace(&mut self) -> Option<&mut Backtrace<'a>> {
+    pub(crate) fn backtrace(&mut self) -> Option<&mut Backtrace> {
         self.backtrace.as_deref_mut()
     }
 
@@ -57,26 +57,26 @@ impl<'r, 'a, T> CallContext<'r, 'a, T> {
     }
 
     /// Returns the call span of the currently executing function.
-    pub fn call_span(&self) -> &CodeInModule<'a> {
+    pub fn call_span(&self) -> &CodeInModule {
         &self.call_span
     }
 
     /// Applies the call span to the specified `value`.
-    pub fn apply_call_span<U>(&self, value: U) -> MaybeSpanned<'a, U> {
+    pub fn apply_call_span<U>(&self, value: U) -> MaybeSpanned<U> {
         self.call_span.code().copy_with_extra(value)
     }
 
     /// Creates an error spanning the call site.
-    pub fn call_site_error(&self, error: ErrorKind) -> Error<'a> {
+    pub fn call_site_error(&self, error: ErrorKind) -> Error {
         Error::from_parts(self.call_span.clone(), error)
     }
 
     /// Checks argument count and returns an error if it doesn't match.
     pub fn check_args_count(
         &self,
-        args: &[SpannedValue<'a, T>],
+        args: &[SpannedValue<T>],
         expected_count: impl Into<LvalueLen>,
-    ) -> Result<(), Error<'a>> {
+    ) -> Result<(), Error> {
         let expected_count = expected_count.into();
         if expected_count.matches(args.len()) {
             Ok(())
@@ -95,23 +95,22 @@ impl<'r, 'a, T> CallContext<'r, 'a, T> {
 /// code. See [`fns`](crate::fns) module docs for different ways to define native functions.
 pub trait NativeFn<T> {
     /// Executes the function on the specified arguments.
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        args: Vec<SpannedValue<'a, T>>,
-        context: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T>;
+        args: Vec<SpannedValue<T>>,
+        context: &mut CallContext<'_, T>,
+    ) -> EvalResult<T>;
 }
 
 impl<T, F> NativeFn<T> for F
 where
-    F: 'static
-        + for<'a> Fn(Vec<SpannedValue<'a, T>>, &mut CallContext<'_, 'a, T>) -> EvalResult<'a, T>,
+    F: 'static + Fn(Vec<SpannedValue<T>>, &mut CallContext<'_, T>) -> EvalResult<T>,
 {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        args: Vec<SpannedValue<'a, T>>,
-        context: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        args: Vec<SpannedValue<T>>,
+        context: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         self(args, context)
     }
 }
@@ -134,43 +133,17 @@ impl<T> dyn NativeFn<T> {
 }
 
 /// Function defined within the interpreter.
-#[derive(Debug)]
-pub struct InterpretedFn<'a, T> {
-    definition: Rc<ExecutableFn<'a, T>>,
-    captures: Vec<Value<'a, T>>,
+#[derive(Debug, Clone)]
+pub struct InterpretedFn<T> {
+    definition: Rc<ExecutableFn<T>>,
+    captures: Vec<Value<T>>,
     capture_names: Vec<String>,
 }
 
-impl<T: Clone> Clone for InterpretedFn<'_, T> {
-    fn clone(&self) -> Self {
-        Self {
-            definition: Rc::clone(&self.definition),
-            captures: self.captures.clone(),
-            capture_names: self.capture_names.clone(),
-        }
-    }
-}
-
-impl<T: 'static + Clone> StripCode for InterpretedFn<'_, T> {
-    type Stripped = InterpretedFn<'static, T>;
-
-    fn strip_code(self) -> Self::Stripped {
-        InterpretedFn {
-            definition: Rc::new(self.definition.to_stripped_code()),
-            captures: self
-                .captures
-                .into_iter()
-                .map(StripCode::strip_code)
-                .collect(),
-            capture_names: self.capture_names,
-        }
-    }
-}
-
-impl<'a, T> InterpretedFn<'a, T> {
+impl<T> InterpretedFn<T> {
     pub(crate) fn new(
-        definition: Rc<ExecutableFn<'a, T>>,
-        captures: Vec<Value<'a, T>>,
+        definition: Rc<ExecutableFn<T>>,
+        captures: Vec<Value<T>>,
         capture_names: Vec<String>,
     ) -> Self {
         Self {
@@ -191,7 +164,7 @@ impl<'a, T> InterpretedFn<'a, T> {
     }
 
     /// Returns values captured by this function.
-    pub fn captures(&self) -> HashMap<&str, &Value<'a, T>> {
+    pub fn captures(&self) -> HashMap<&str, &Value<T>> {
         self.capture_names
             .iter()
             .zip(&self.captures)
@@ -200,19 +173,13 @@ impl<'a, T> InterpretedFn<'a, T> {
     }
 }
 
-impl<T: 'static + Clone> InterpretedFn<'_, T> {
-    fn to_stripped_code(&self) -> InterpretedFn<'static, T> {
-        self.clone().strip_code()
-    }
-}
-
-impl<'a, T: 'static + Clone> InterpretedFn<'a, T> {
+impl<T: 'static + Clone> InterpretedFn<T> {
     /// Evaluates this function with the provided arguments and the execution context.
     pub fn evaluate(
         &self,
-        args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         if !self.arg_count().matches(args.len()) {
             let err = ErrorKind::ArgsLenMismatch {
                 def: self.arg_count(),
@@ -233,7 +200,7 @@ impl<'a, T: 'static + Clone> InterpretedFn<'a, T> {
         self.definition.inner.call_function(captures, args, ctx)
     }
 
-    fn deref_capture(capture: &Value<'a, T>, name: &str) -> Result<Value<'a, T>, ErrorKind> {
+    fn deref_capture(capture: &Value<T>, name: &str) -> Result<Value<T>, ErrorKind> {
         Ok(match capture {
             Value::Ref(opaque_ref) => {
                 if let Some(cell) = opaque_ref.downcast_ref::<ValueCell<T>>() {
@@ -252,14 +219,14 @@ impl<'a, T: 'static + Clone> InterpretedFn<'a, T> {
 /// Function definition. Functions can be either native (defined in the Rust code) or defined
 /// in the interpreter.
 #[derive(Debug)]
-pub enum Function<'a, T> {
+pub enum Function<T> {
     /// Native function.
     Native(Rc<dyn NativeFn<T>>),
     /// Interpreted function.
-    Interpreted(Rc<InterpretedFn<'a, T>>),
+    Interpreted(Rc<InterpretedFn<T>>),
 }
 
-impl<T> Clone for Function<'_, T> {
+impl<T> Clone for Function<T> {
     fn clone(&self) -> Self {
         match self {
             Self::Native(function) => Self::Native(Rc::clone(function)),
@@ -268,7 +235,7 @@ impl<T> Clone for Function<'_, T> {
     }
 }
 
-impl<T: fmt::Display> fmt::Display for Function<'_, T> {
+impl<T: fmt::Display> fmt::Display for Function<T> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Native(_) => formatter.write_str("(native fn)"),
@@ -283,26 +250,13 @@ impl<T: fmt::Display> fmt::Display for Function<'_, T> {
     }
 }
 
-impl<T: PartialEq> PartialEq for Function<'_, T> {
+impl<T: PartialEq> PartialEq for Function<T> {
     fn eq(&self, other: &Self) -> bool {
         self.is_same_function(other)
     }
 }
 
-impl<T: 'static + Clone> StripCode for Function<'_, T> {
-    type Stripped = Function<'static, T>;
-
-    fn strip_code(self) -> Self::Stripped {
-        match self {
-            Self::Native(function) => Function::Native(function),
-            Self::Interpreted(function) => {
-                Function::Interpreted(Rc::new(function.to_stripped_code()))
-            }
-        }
-    }
-}
-
-impl<'a, T> Function<'a, T> {
+impl<T> Function<T> {
     /// Creates a native function.
     pub fn native(function: impl NativeFn<T> + 'static) -> Self {
         Self::Native(Rc::new(function))
@@ -317,7 +271,7 @@ impl<'a, T> Function<'a, T> {
         }
     }
 
-    pub(crate) fn def_span(&self) -> Option<CodeInModule<'a>> {
+    pub(crate) fn def_span(&self) -> Option<CodeInModule> {
         match self {
             Self::Native(_) => None,
             Self::Interpreted(function) => Some(CodeInModule::new(
@@ -328,13 +282,13 @@ impl<'a, T> Function<'a, T> {
     }
 }
 
-impl<'a, T: 'static + Clone> Function<'a, T> {
+impl<T: 'static + Clone> Function<T> {
     /// Evaluates the function on the specified arguments.
     pub fn evaluate(
         &self,
-        args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         match self {
             Self::Native(function) => function.evaluate(args, ctx),
             Self::Interpreted(function) => function.evaluate(args, ctx),

@@ -11,7 +11,7 @@ use arithmetic_parser::grammars::{NumGrammar, Parse, Untyped};
 
 type ComplexGrammar = NumGrammar<Complex64>;
 
-fn compile_module(program: &str) -> ExecutableModule<'_, Complex64> {
+fn compile_module(program: &str) -> ExecutableModule<Complex64> {
     let block = Untyped::<ComplexGrammar>::parse_statements(program).unwrap();
     ExecutableModule::new("custom_cmp", &block).unwrap()
 }

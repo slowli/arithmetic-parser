@@ -126,7 +126,7 @@ impl CyclicGroupArithmetic {
     }
 
     /// Sets generic imports for the provided `module`.
-    fn define_imports(&self, env: &mut Environment<'_, GroupLiteral>) {
+    fn define_imports(&self, env: &mut Environment<GroupLiteral>) {
         let generator = GroupLiteral::GroupElement(self.generator.clone());
         let prime_subgroup_order = GroupLiteral::Scalar(self.for_group.modulus().to_owned());
         env.insert("GEN", Value::Prim(generator))
@@ -165,11 +165,11 @@ impl HashToScalar {
 }
 
 impl NativeFn<GroupLiteral> for HashToScalar {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        args: Vec<SpannedValue<'a, GroupLiteral>>,
-        context: &mut CallContext<'_, 'a, GroupLiteral>,
-    ) -> EvalResult<'a, GroupLiteral> {
+        args: Vec<SpannedValue<GroupLiteral>>,
+        context: &mut CallContext<'_, GroupLiteral>,
+    ) -> EvalResult<GroupLiteral> {
         // It is relatively easy to implement hashing for all types, but we're fine
         // with implementing it only for literals (scalars and group elements).
 

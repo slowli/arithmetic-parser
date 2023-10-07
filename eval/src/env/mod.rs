@@ -42,13 +42,13 @@ use crate::{
 /// );
 /// assert!(other_env.get("x").is_none());
 /// ```
-#[derive(Debug)]
-pub struct Environment<'a, T> {
-    variables: HashMap<String, Value<'a, T>>,
+#[derive(Debug, Clone)]
+pub struct Environment<T> {
+    variables: HashMap<String, Value<T>>,
     arithmetic: Rc<dyn OrdArithmetic<T>>,
 }
 
-impl<T> Default for Environment<'_, T>
+impl<T> Default for Environment<T>
 where
     StdArithmetic: OrdArithmetic<T>,
 {
@@ -57,23 +57,14 @@ where
     }
 }
 
-impl<T: Clone> Clone for Environment<'_, T> {
-    fn clone(&self) -> Self {
-        Self {
-            variables: self.variables.clone(),
-            arithmetic: Rc::clone(&self.arithmetic),
-        }
-    }
-}
-
 /// Compares environments by variables; arithmetics are ignored.
-impl<T: PartialEq> PartialEq for Environment<'_, T> {
+impl<T: PartialEq> PartialEq for Environment<T> {
     fn eq(&self, other: &Self) -> bool {
         self.variables == other.variables
     }
 }
 
-impl<'a, T> Environment<'a, T>
+impl<T> Environment<T>
 where
     StdArithmetic: OrdArithmetic<T>,
 {
@@ -86,7 +77,7 @@ where
     }
 }
 
-impl<'a, T> Environment<'a, T> {
+impl<T> Environment<T> {
     /// Creates an environment with the specified arithmetic.
     pub fn with_arithmetic<A>(arithmetic: A) -> Self
     where
@@ -103,7 +94,7 @@ impl<'a, T> Environment<'a, T> {
     }
 
     /// Gets a variable by name.
-    pub fn get(&self, name: &str) -> Option<&Value<'a, T>> {
+    pub fn get(&self, name: &str) -> Option<&Value<T>> {
         self.variables.get(name)
     }
 
@@ -113,14 +104,14 @@ impl<'a, T> Environment<'a, T> {
     }
 
     /// Iterates over variables.
-    pub fn iter(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &Value<T>)> + '_ {
         self.variables
             .iter()
             .map(|(name, value)| (name.as_str(), value))
     }
 
     /// Inserts a variable with the specified name.
-    pub fn insert(&mut self, name: &str, value: Value<'a, T>) -> &mut Self {
+    pub fn insert(&mut self, name: &str, value: Value<T>) -> &mut Self {
         self.variables.insert(name.to_owned(), value);
         self
     }
@@ -150,8 +141,8 @@ impl<'a, T> Environment<'a, T> {
     }
 }
 
-impl<'a, T> ops::Index<&str> for Environment<'a, T> {
-    type Output = Value<'a, T>;
+impl<T> ops::Index<&str> for Environment<T> {
+    type Output = Value<T>;
 
     fn index(&self, index: &str) -> &Self::Output {
         self.get(index)
@@ -159,9 +150,9 @@ impl<'a, T> ops::Index<&str> for Environment<'a, T> {
     }
 }
 
-impl<'a, T> IntoIterator for Environment<'a, T> {
-    type Item = (String, Value<'a, T>);
-    type IntoIter = IntoIter<'a, T>;
+impl<T> IntoIterator for Environment<T> {
+    type Item = (String, Value<T>);
+    type IntoIter = IntoIter<T>;
 
     fn into_iter(self) -> Self::IntoIter {
         IntoIter {
@@ -172,12 +163,12 @@ impl<'a, T> IntoIterator for Environment<'a, T> {
 
 /// Result of converting `Environment` into an iterator.
 #[derive(Debug)]
-pub struct IntoIter<'a, T> {
-    inner: hash_map::IntoIter<String, Value<'a, T>>,
+pub struct IntoIter<T> {
+    inner: hash_map::IntoIter<String, Value<T>>,
 }
 
-impl<'a, T> Iterator for IntoIter<'a, T> {
-    type Item = (String, Value<'a, T>);
+impl<T> Iterator for IntoIter<T> {
+    type Item = (String, Value<T>);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
@@ -188,15 +179,15 @@ impl<'a, T> Iterator for IntoIter<'a, T> {
     }
 }
 
-impl<T> ExactSizeIterator for IntoIter<'_, T> {
+impl<T> ExactSizeIterator for IntoIter<T> {
     fn len(&self) -> usize {
         self.inner.len()
     }
 }
 
-impl<'r, 'a, T> IntoIterator for &'r Environment<'a, T> {
-    type Item = (&'r str, &'r Value<'a, T>);
-    type IntoIter = Iter<'r, 'a, T>;
+impl<'r, T> IntoIterator for &'r Environment<T> {
+    type Item = (&'r str, &'r Value<T>);
+    type IntoIter = Iter<'r, T>;
 
     fn into_iter(self) -> Self::IntoIter {
         Iter {
@@ -208,16 +199,16 @@ impl<'r, 'a, T> IntoIterator for &'r Environment<'a, T> {
     }
 }
 
-type MapFn<'r, 'a, T> = fn((&'r String, &'r Value<'a, T>)) -> (&'r str, &'r Value<'a, T>);
+type MapFn<'r, T> = fn((&'r String, &'r Value<T>)) -> (&'r str, &'r Value<T>);
 
 /// Iterator over references of the `Environment` entries.
 #[derive(Debug)]
-pub struct Iter<'r, 'a, T> {
-    inner: iter::Map<hash_map::Iter<'r, String, Value<'a, T>>, MapFn<'r, 'a, T>>,
+pub struct Iter<'r, T> {
+    inner: iter::Map<hash_map::Iter<'r, String, Value<T>>, MapFn<'r, T>>,
 }
 
-impl<'r, 'a, T> Iterator for Iter<'r, 'a, T> {
-    type Item = (&'r str, &'r Value<'a, T>);
+impl<'r, T> Iterator for Iter<'r, T> {
+    type Item = (&'r str, &'r Value<T>);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
@@ -228,16 +219,16 @@ impl<'r, 'a, T> Iterator for Iter<'r, 'a, T> {
     }
 }
 
-impl<T> ExactSizeIterator for Iter<'_, '_, T> {
+impl<T> ExactSizeIterator for Iter<'_, T> {
     fn len(&self) -> usize {
         self.inner.len()
     }
 }
 
-impl<'a, T, S, V> Extend<(S, V)> for Environment<'a, T>
+impl<T, S, V> Extend<(S, V)> for Environment<T>
 where
     S: Into<String>,
-    V: Into<Value<'a, T>>,
+    V: Into<Value<T>>,
 {
     fn extend<I: IntoIterator<Item = (S, V)>>(&mut self, iter: I) {
         let variables = iter

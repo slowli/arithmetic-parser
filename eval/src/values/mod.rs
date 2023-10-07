@@ -11,7 +11,7 @@ use crate::{
     alloc::{Rc, Vec},
     fns,
 };
-use arithmetic_parser::{MaybeSpanned, StripCode};
+use arithmetic_parser::MaybeSpanned;
 
 mod function;
 mod object;
@@ -166,7 +166,7 @@ impl fmt::Display for OpaqueRef {
 /// Values produced by expressions during their interpretation.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
-pub enum Value<'a, T> {
+pub enum Value<T> {
     /// Primitive value, such as a number. This does not include Boolean values,
     /// which are a separate variant.
     ///
@@ -176,19 +176,19 @@ pub enum Value<'a, T> {
     /// Boolean value.
     Bool(bool),
     /// Function.
-    Function(Function<'a, T>),
+    Function(Function<T>),
     /// Tuple of zero or more values.
-    Tuple(Tuple<'a, T>),
+    Tuple(Tuple<T>),
     /// Object with zero or more named fields.
-    Object(Object<'a, T>),
+    Object(Object<T>),
     /// Opaque reference to a native value.
     Ref(OpaqueRef),
 }
 
 /// Value together with a span that has produced it.
-pub type SpannedValue<'a, T> = MaybeSpanned<'a, Value<'a, T>>;
+pub type SpannedValue<T> = MaybeSpanned<Value<T>>;
 
-impl<'a, T> Value<'a, T> {
+impl<T> Value<T> {
     /// Creates a value for a native function.
     pub fn native_fn(function: impl NativeFn<T> + 'static) -> Self {
         Self::Function(Function::Native(Rc::new(function)))
@@ -210,7 +210,7 @@ impl<'a, T> Value<'a, T> {
     }
 
     /// Creates a value for an interpreted function.
-    pub(crate) fn interpreted_fn(function: InterpretedFn<'a, T>) -> Self {
+    pub(crate) fn interpreted_fn(function: InterpretedFn<T>) -> Self {
         Self::Function(Function::Interpreted(Rc::new(function)))
     }
 
@@ -246,7 +246,7 @@ impl<'a, T> Value<'a, T> {
         matches!(self, Self::Function(_))
     }
 
-    pub(crate) fn as_object(&self) -> Option<&Object<'a, T>> {
+    pub(crate) fn as_object(&self) -> Option<&Object<T>> {
         match self {
             Self::Object(object) => Some(object),
             _ => None,
@@ -254,41 +254,19 @@ impl<'a, T> Value<'a, T> {
     }
 }
 
-impl<'a, T> From<Vec<Self>> for Value<'a, T> {
+impl<T> From<Vec<Self>> for Value<T> {
     fn from(elements: Vec<Self>) -> Self {
         Self::Tuple(Tuple::from(elements))
     }
 }
 
-impl<T: 'static + Clone> StripCode for Value<'_, T> {
-    type Stripped = Value<'static, T>;
-
-    fn strip_code(self) -> Self::Stripped {
-        match self {
-            Self::Prim(lit) => Value::Prim(lit),
-            Self::Bool(bool) => Value::Bool(bool),
-            Self::Function(function) => Value::Function(function.strip_code()),
-            Self::Tuple(tuple) => {
-                Value::Tuple(tuple.into_iter().map(StripCode::strip_code).collect())
-            }
-            Self::Object(fields) => Value::Object(
-                fields
-                    .into_iter()
-                    .map(|(name, value)| (name, value.strip_code()))
-                    .collect(),
-            ),
-            Self::Ref(reference) => Value::Ref(reference),
-        }
-    }
-}
-
-impl<'a, T: Clone> From<&Value<'a, T>> for Value<'a, T> {
-    fn from(reference: &Value<'a, T>) -> Self {
+impl<T: Clone> From<&Value<T>> for Value<T> {
+    fn from(reference: &Value<T>) -> Self {
         reference.clone()
     }
 }
 
-impl<T: PartialEq> PartialEq for Value<'_, T> {
+impl<T: PartialEq> PartialEq for Value<T> {
     fn eq(&self, rhs: &Self) -> bool {
         match (self, rhs) {
             (Self::Prim(this), Self::Prim(other)) => this == other,
@@ -302,7 +280,7 @@ impl<T: PartialEq> PartialEq for Value<'_, T> {
     }
 }
 
-impl<T: fmt::Display> fmt::Display for Value<'_, T> {
+impl<T: fmt::Display> fmt::Display for Value<T> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Prim(value) => fmt::Display::fmt(value, formatter),

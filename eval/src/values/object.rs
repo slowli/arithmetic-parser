@@ -10,7 +10,6 @@ use crate::{
     alloc::{hash_map, HashMap, String},
     Value,
 };
-use arithmetic_parser::StripCode;
 
 /// Object with zero or more named fields.
 ///
@@ -39,17 +38,17 @@ use arithmetic_parser::StripCode;
 /// assert_eq!(other_obj.len(), 4);
 /// ```
 #[derive(Debug, Clone, PartialEq)]
-pub struct Object<'a, T> {
-    fields: HashMap<String, Value<'a, T>>,
+pub struct Object<T> {
+    fields: HashMap<String, Value<T>>,
 }
 
-impl<'a, T> From<Object<'a, T>> for Value<'a, T> {
-    fn from(object: Object<'a, T>) -> Self {
+impl<T> From<Object<T>> for Value<T> {
+    fn from(object: Object<T>) -> Self {
         Self::Object(object)
     }
 }
 
-impl<T> Default for Object<'_, T> {
+impl<T> Default for Object<T> {
     fn default() -> Self {
         Self {
             fields: HashMap::new(),
@@ -57,7 +56,7 @@ impl<T> Default for Object<'_, T> {
     }
 }
 
-impl<T: fmt::Display> fmt::Display for Object<'_, T> {
+impl<T: fmt::Display> fmt::Display for Object<T> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("#{ ")?;
         for (i, (name, value)) in self.iter().enumerate() {
@@ -72,9 +71,9 @@ impl<T: fmt::Display> fmt::Display for Object<'_, T> {
     }
 }
 
-impl<'a, T> Object<'a, T> {
+impl<T> Object<T> {
     /// Creates an object with a single field.
-    pub fn just(field_name: impl Into<String>, value: Value<'a, T>) -> Self {
+    pub fn just(field_name: impl Into<String>, value: Value<T>) -> Self {
         let fields = iter::once((field_name.into(), value)).collect();
         Self { fields }
     }
@@ -90,7 +89,7 @@ impl<'a, T> Object<'a, T> {
     }
 
     /// Iterates over name-value pairs for all fields defined in this object.
-    pub fn iter(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &Value<T>)> + '_ {
         self.fields
             .iter()
             .map(|(name, value)| (name.as_str(), value))
@@ -103,7 +102,7 @@ impl<'a, T> Object<'a, T> {
 
     /// Returns the value of a field with the specified name, or `None` if this object
     /// does not contain such a field.
-    pub fn get(&self, field_name: &str) -> Option<&Value<'a, T>> {
+    pub fn get(&self, field_name: &str) -> Option<&Value<T>> {
         self.fields.get(field_name)
     }
 
@@ -113,56 +112,38 @@ impl<'a, T> Object<'a, T> {
     }
 
     /// Inserts a field into this object.
-    pub fn insert(
-        &mut self,
-        field_name: impl Into<String>,
-        value: Value<'a, T>,
-    ) -> Option<Value<'a, T>> {
+    pub fn insert(&mut self, field_name: impl Into<String>, value: Value<T>) -> Option<Value<T>> {
         self.fields.insert(field_name.into(), value)
     }
 
     /// Removes and returns the specified field from this object.
-    pub fn remove(&mut self, field_name: &str) -> Option<Value<'a, T>> {
+    pub fn remove(&mut self, field_name: &str) -> Option<Value<T>> {
         self.fields.remove(field_name)
     }
 }
 
-impl<T: 'static + Clone> StripCode for Object<'_, T> {
-    type Stripped = Object<'static, T>;
-
-    fn strip_code(self) -> Self::Stripped {
-        Object {
-            fields: self
-                .fields
-                .into_iter()
-                .map(|(name, value)| (name, value.strip_code()))
-                .collect(),
-        }
-    }
-}
-
-impl<'a, T> ops::Index<&str> for Object<'a, T> {
-    type Output = Value<'a, T>;
+impl<T> ops::Index<&str> for Object<T> {
+    type Output = Value<T>;
 
     fn index(&self, index: &str) -> &Self::Output {
         &self.fields[index]
     }
 }
 
-impl<'a, T> IntoIterator for Object<'a, T> {
-    type Item = (String, Value<'a, T>);
+impl<T> IntoIterator for Object<T> {
+    type Item = (String, Value<T>);
     /// Iterator type should be considered an implementation detail.
-    type IntoIter = hash_map::IntoIter<String, Value<'a, T>>;
+    type IntoIter = hash_map::IntoIter<String, Value<T>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.fields.into_iter()
     }
 }
 
-impl<'r, 'a, T> IntoIterator for &'r Object<'a, T> {
-    type Item = (&'r str, &'r Value<'a, T>);
+impl<'r, T> IntoIterator for &'r Object<T> {
+    type Item = (&'r str, &'r Value<T>);
     /// Iterator type should be considered an implementation detail.
-    type IntoIter = Iter<'r, 'a, T>;
+    type IntoIter = Iter<'r, T>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.fields
@@ -171,15 +152,15 @@ impl<'r, 'a, T> IntoIterator for &'r Object<'a, T> {
     }
 }
 
-pub type Iter<'r, 'a, T> = iter::Map<
-    hash_map::Iter<'r, String, Value<'a, T>>,
-    fn((&'r String, &'r Value<'a, T>)) -> (&'r str, &'r Value<'a, T>),
+pub type Iter<'r, T> = iter::Map<
+    hash_map::Iter<'r, String, Value<T>>,
+    fn((&'r String, &'r Value<T>)) -> (&'r str, &'r Value<T>),
 >;
 
-impl<'a, T, S, V> FromIterator<(S, V)> for Object<'a, T>
+impl<T, S, V> FromIterator<(S, V)> for Object<T>
 where
     S: Into<String>,
-    V: Into<Value<'a, T>>,
+    V: Into<Value<T>>,
 {
     fn from_iter<I: IntoIterator<Item = (S, V)>>(iter: I) -> Self {
         Self {
@@ -191,10 +172,10 @@ where
     }
 }
 
-impl<'a, T, S, V> Extend<(S, V)> for Object<'a, T>
+impl<T, S, V> Extend<(S, V)> for Object<T>
 where
     S: Into<String>,
-    V: Into<Value<'a, T>>,
+    V: Into<Value<T>>,
 {
     fn extend<I: IntoIterator<Item = (S, V)>>(&mut self, iter: I) {
         let new_fields = iter

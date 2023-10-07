@@ -17,7 +17,7 @@ mod expr;
 
 use self::captures::{CapturesExtractor, CompilerExtTarget};
 
-pub(crate) type ImportSpans<'a> = Vec<MaybeSpanned<'a>>;
+pub(crate) type ImportSpans = Vec<MaybeSpanned>;
 
 #[derive(Debug)]
 pub(crate) struct Compiler {
@@ -38,7 +38,7 @@ impl Compiler {
         }
     }
 
-    fn from_env<T>(module_id: Box<dyn ModuleId>, env: &Registers<'_, T>) -> Self {
+    fn from_env<T>(module_id: Box<dyn ModuleId>, env: &Registers<T>) -> Self {
         Self {
             vars_to_registers: env.variables_map().clone(),
             register_count: env.register_count(),
@@ -57,18 +57,18 @@ impl Compiler {
         }
     }
 
-    fn create_error<'a, T>(&self, span: &Spanned<'a, T>, err: ErrorKind) -> Error<'a> {
+    fn create_error<T>(&self, span: &Spanned<'_, T>, err: ErrorKind) -> Error {
         Error::new(self.module_id.as_ref(), span, err)
     }
 
-    fn check_unary_op<'a>(&self, op: &Spanned<'a, UnaryOp>) -> Result<UnaryOp, Error<'a>> {
+    fn check_unary_op(&self, op: &Spanned<'_, UnaryOp>) -> Result<UnaryOp, Error> {
         match op.extra {
             UnaryOp::Neg | UnaryOp::Not => Ok(op.extra),
             _ => Err(self.create_error(op, ErrorKind::unsupported(op.extra))),
         }
     }
 
-    fn check_binary_op<'a>(&self, op: &Spanned<'a, BinaryOp>) -> Result<BinaryOp, Error<'a>> {
+    fn check_binary_op(&self, op: &Spanned<'_, BinaryOp>) -> Result<BinaryOp, Error> {
         match op.extra {
             BinaryOp::Add
             | BinaryOp::Sub
@@ -95,11 +95,11 @@ impl Compiler {
             .expect("Captures must created during module compilation")
     }
 
-    fn push_assignment<'a, T, U>(
+    fn push_assignment<T, U>(
         &mut self,
-        executable: &mut Executable<'a, T>,
-        rhs: CompiledExpr<'a, T>,
-        rhs_span: &Spanned<'a, U>,
+        executable: &mut Executable<T>,
+        rhs: CompiledExpr<T>,
+        rhs_span: &Spanned<'_, U>,
     ) -> usize {
         let register = self.register_count;
         let command = Command::Push(rhs);
@@ -111,7 +111,7 @@ impl Compiler {
     pub fn compile_module<'a, Id: ModuleId, T: Grammar<'a>>(
         module_id: Id,
         block: &Block<'a, T>,
-    ) -> Result<ExecutableModule<'a, T::Lit>, Error<'a>> {
+    ) -> Result<ExecutableModule<T::Lit>, Error> {
         let module_id = Box::new(module_id) as Box<dyn ModuleId>;
         let (captures, import_spans) = Self::extract_captures(module_id.clone_boxed(), block)?;
         let mut compiler = Self::from_env(module_id.clone_boxed(), &captures);
@@ -139,7 +139,7 @@ impl Compiler {
     fn extract_captures<'a, T: Grammar<'a>>(
         module_id: Box<dyn ModuleId>,
         block: &Block<'a, T>,
-    ) -> Result<(Registers<'a, T::Lit>, ImportSpans<'a>), Error<'a>> {
+    ) -> Result<(Registers<T::Lit>, ImportSpans), Error> {
         let mut extractor = CapturesExtractor::new(module_id);
         extractor.eval_block(block)?;
 
@@ -157,12 +157,12 @@ impl Compiler {
         Ok((captures, import_spans))
     }
 
-    fn assign<'a, T, Ty>(
+    fn assign<T, Ty>(
         &mut self,
-        executable: &mut Executable<'a, T>,
-        lhs: &SpannedLvalue<'a, Ty>,
+        executable: &mut Executable<T>,
+        lhs: &SpannedLvalue<'_, Ty>,
         rhs_register: usize,
-    ) -> Result<(), Error<'a>> {
+    ) -> Result<(), Error> {
         match &lhs.extra {
             Lvalue::Variable { .. } => {
                 self.insert_var(executable, lhs.with_no_extra(), rhs_register);
@@ -187,10 +187,10 @@ impl Compiler {
         Ok(())
     }
 
-    fn insert_var<'a, T>(
+    fn insert_var<T>(
         &mut self,
-        executable: &mut Executable<'a, T>,
-        var_span: Spanned<'a>,
+        executable: &mut Executable<T>,
+        var_span: Spanned<'_>,
         register: usize,
     ) {
         let var_name = *var_span.fragment();
@@ -211,11 +211,11 @@ impl Compiler {
 
     fn destructure<'a, T, Ty>(
         &mut self,
-        executable: &mut Executable<'a, T>,
+        executable: &mut Executable<T>,
         destructure: &Destructure<'a, Ty>,
         span: Spanned<'a>,
         rhs_register: usize,
-    ) -> Result<(), Error<'a>> {
+    ) -> Result<(), Error> {
         let command = Command::Destructure {
             source: rhs_register,
             start_len: destructure.start.len(),
@@ -248,11 +248,11 @@ impl Compiler {
 
     fn destructure_object<'a, T, Ty>(
         &mut self,
-        executable: &mut Executable<'a, T>,
+        executable: &mut Executable<T>,
         destructure: &ObjectDestructure<'a, Ty>,
         span: Spanned<'a>,
         rhs_register: usize,
-    ) -> Result<(), Error<'a>> {
+    ) -> Result<(), Error> {
         for field in &destructure.fields {
             let field_name = FieldName::Name((*field.field_name.fragment()).to_owned());
             let field_access = CompiledExpr::FieldAccess {
@@ -303,17 +303,17 @@ pub trait CompilerExt<'a> {
     ///
     /// The fact that an error is *not* returned does not guarantee that the AST node will evaluate
     /// successfully if all variables are assigned.
-    fn undefined_variables(&self) -> Result<HashMap<&'a str, Spanned<'a>>, Error<'a>>;
+    fn undefined_variables(&self) -> Result<HashMap<&'a str, Spanned<'a>>, Error>;
 }
 
 impl<'a, T: Grammar<'a>> CompilerExt<'a> for Block<'a, T> {
-    fn undefined_variables(&self) -> Result<HashMap<&'a str, Spanned<'a>>, Error<'a>> {
+    fn undefined_variables(&self) -> Result<HashMap<&'a str, Spanned<'a>>, Error> {
         CompilerExtTarget::Block(self).get_undefined_variables()
     }
 }
 
 impl<'a, T: Grammar<'a>> CompilerExt<'a> for FnDefinition<'a, T> {
-    fn undefined_variables(&self) -> Result<HashMap<&'a str, Spanned<'a>>, Error<'a>> {
+    fn undefined_variables(&self) -> Result<HashMap<&'a str, Spanned<'a>>, Error> {
         CompilerExtTarget::FnDefinition(self).get_undefined_variables()
     }
 }

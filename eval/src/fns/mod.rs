@@ -33,7 +33,6 @@ use crate::{
     error::AuxErrorInfo,
     CallContext, Error, ErrorKind, EvalResult, Function, NativeFn, OpaqueRef, SpannedValue, Value,
 };
-use arithmetic_parser::StripCode;
 
 mod array;
 mod assertions;
@@ -55,11 +54,11 @@ pub use self::{
     },
 };
 
-fn extract_primitive<'a, T, A>(
-    ctx: &CallContext<'_, 'a, A>,
-    value: SpannedValue<'a, T>,
+fn extract_primitive<T, A>(
+    ctx: &CallContext<'_, A>,
+    value: SpannedValue<T>,
     error_msg: &str,
-) -> Result<T, Error<'a>> {
+) -> Result<T, Error> {
     match value.extra {
         Value::Prim(value) => Ok(value),
         _ => Err(ctx
@@ -68,11 +67,11 @@ fn extract_primitive<'a, T, A>(
     }
 }
 
-fn extract_array<'a, T, A>(
-    ctx: &CallContext<'_, 'a, A>,
-    value: SpannedValue<'a, T>,
+fn extract_array<T, A>(
+    ctx: &CallContext<'_, A>,
+    value: SpannedValue<T>,
     error_msg: &str,
-) -> Result<Vec<Value<'a, T>>, Error<'a>> {
+) -> Result<Vec<Value<T>>, Error> {
     if let Value::Tuple(array) = value.extra {
         Ok(array.into())
     } else {
@@ -83,11 +82,11 @@ fn extract_array<'a, T, A>(
     }
 }
 
-fn extract_fn<'a, T, A>(
-    ctx: &CallContext<'_, 'a, A>,
-    value: SpannedValue<'a, T>,
+fn extract_fn<T, A>(
+    ctx: &CallContext<'_, A>,
+    value: SpannedValue<T>,
     error_msg: &str,
-) -> Result<Function<'a, T>, Error<'a>> {
+) -> Result<Function<T>, Error> {
     if let Value::Function(function) = value.extra {
         Ok(function)
     } else {
@@ -167,10 +166,10 @@ pub enum Compare {
 }
 
 impl Compare {
-    fn extract_primitives<'a, T>(
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> Result<(T, T), Error<'a>> {
+    fn extract_primitives<T>(
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> Result<(T, T), Error> {
         ctx.check_args_count(&args, 2)?;
         let y = args.pop().unwrap();
         let x = args.pop().unwrap();
@@ -183,11 +182,7 @@ impl Compare {
 const COMPARE_ERROR_MSG: &str = "Compare requires 2 primitive arguments";
 
 impl<T> NativeFn<T> for Compare {
-    fn evaluate<'a>(
-        &self,
-        args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+    fn evaluate(&self, args: Vec<SpannedValue<T>>, ctx: &mut CallContext<'_, T>) -> EvalResult<T> {
         let (x, y) = Self::extract_primitives(args, ctx)?;
         let maybe_ordering = ctx.arithmetic().partial_cmp(&x, &y);
 
@@ -242,11 +237,11 @@ impl<T> NativeFn<T> for Compare {
 pub struct Defer;
 
 impl<T: Clone + 'static> NativeFn<T> for Defer {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         const ARG_ERROR: &str = "Argument must be a function";
 
         ctx.check_args_count(&args, 1)?;
@@ -257,14 +252,14 @@ impl<T: Clone + 'static> NativeFn<T> for Defer {
 
         let cell = cell.downcast_ref::<ValueCell<T>>().unwrap();
         // ^ `unwrap()` is safe by construction
-        cell.set(return_value.clone().strip_code());
+        cell.set(return_value.clone());
         Ok(return_value)
     }
 }
 
 #[derive(Debug)]
 pub(crate) struct ValueCell<T> {
-    inner: OnceCell<Value<'static, T>>,
+    inner: OnceCell<Value<T>>,
 }
 
 impl<T> Default for ValueCell<T> {
@@ -275,7 +270,7 @@ impl<T> Default for ValueCell<T> {
     }
 }
 
-impl<'a, T: 'static + fmt::Debug> From<ValueCell<T>> for Value<'a, T> {
+impl<T: 'static + fmt::Debug> From<ValueCell<T>> for Value<T> {
     fn from(cell: ValueCell<T>) -> Self {
         Self::Ref(OpaqueRef::with_identity_eq(cell))
     }
@@ -283,11 +278,11 @@ impl<'a, T: 'static + fmt::Debug> From<ValueCell<T>> for Value<'a, T> {
 
 impl<T> ValueCell<T> {
     /// Gets the internally stored value, or `None` if the cell was not initialized yet.
-    pub fn get(&self) -> Option<&Value<'static, T>> {
+    pub fn get(&self) -> Option<&Value<T>> {
         self.inner.get()
     }
 
-    fn set(&self, value: Value<'static, T>) {
+    fn set(&self, value: Value<T>) {
         self.inner
             .set(value)
             .map_err(drop)
@@ -354,7 +349,7 @@ mod tests {
             .unwrap_err();
         let err = err.source();
         assert_matches!(err.kind(), ErrorKind::CannotCompare);
-        assert_eq!(*err.main_span().code().fragment(), "(1, 2)");
+        assert_eq!(err.main_span().code().span_code(bogus_program), "(1, 2)");
         Ok(())
     }
 
@@ -455,7 +450,7 @@ mod tests {
 
         let err = module.with_env(&env)?.run().unwrap_err();
         let err = err.source();
-        assert_eq!(*err.main_span().code().fragment(), "min(1, (2, 3))");
+        assert_eq!(err.main_span().code().span_code(program), "min(1, (2, 3))");
         assert_matches!(
             err.kind(),
             ErrorKind::NativeCall(ref msg) if msg.contains("requires 2 primitive arguments")
@@ -474,7 +469,7 @@ mod tests {
 
         let err = module.with_env(&env)?.run().unwrap_err();
         let err = err.source();
-        assert_eq!(*err.main_span().code().fragment(), "min(1, NAN)");
+        assert_eq!(err.main_span().code().span_code(program), "min(1, NAN)");
         assert_matches!(err.kind(), ErrorKind::CannotCompare);
         Ok(())
     }

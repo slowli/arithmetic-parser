@@ -4,25 +4,22 @@ use arithmetic_eval::{
     fns, wrap_fn, wrap_fn_with_context, CallContext, Environment, ErrorKind, EvalResult,
     ExecutableModule, Function, NativeFn, SpannedValue, Value,
 };
-use arithmetic_parser::{
-    grammars::{F32Grammar, Parse, Untyped},
-    StripCode,
-};
+use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 
 /// Function that applies the `inner` function the specified amount of times to the result of
 /// the previous execution.
 #[derive(Debug, Clone)]
 struct Repeated<T> {
-    inner: Function<'static, T>,
+    inner: Function<T>,
     times: usize,
 }
 
 impl<T: 'static + Clone> NativeFn<T> for Repeated<T> {
     fn evaluate<'a>(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        context: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        context: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         if args.len() != 1 {
             let err = ErrorKind::native("Should be called with single argument");
             return Err(context.call_site_error(err));
@@ -36,24 +33,24 @@ impl<T: 'static + Clone> NativeFn<T> for Repeated<T> {
     }
 }
 
-fn repeat(function: Function<'_, f32>, times: f32) -> Result<Function<'_, f32>, String> {
+fn repeat(function: Function<f32>, times: f32) -> Result<Function<f32>, String> {
     if times <= 0.0 {
         Err("`times` should be positive".to_owned())
     } else {
         let function = Repeated {
-            inner: function.strip_code(),
+            inner: function,
             times: times as usize,
         };
         Ok(Function::native(function))
     }
 }
 
-fn eager_repeat<'a>(
-    context: &mut CallContext<'_, 'a, f32>,
-    function: Function<'a, f32>,
+fn eager_repeat(
+    context: &mut CallContext<'_, f32>,
+    function: Function<f32>,
     times: f32,
-    mut arg: Value<'a, f32>,
-) -> EvalResult<'a, f32> {
+    mut arg: Value<f32>,
+) -> EvalResult<f32> {
     if times <= 0.0 {
         Err(context.call_site_error(ErrorKind::native("`times` should be positive")))
     } else {

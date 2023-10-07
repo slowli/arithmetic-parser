@@ -34,7 +34,7 @@ impl<'a> CapturesExtractor<'a> {
     pub fn eval_function<T: Grammar<'a>>(
         &mut self,
         definition: &FnDefinition<'a, T>,
-    ) -> Result<(), Error<'a>> {
+    ) -> Result<(), Error> {
         let mut fn_local_vars = HashMap::new();
         extract_vars(
             self.module_id.as_ref(),
@@ -57,13 +57,13 @@ impl<'a> CapturesExtractor<'a> {
         }
     }
 
-    fn create_error<T>(&self, span: &Spanned<'a, T>, err: ErrorKind) -> Error<'a> {
+    fn create_error<T>(&self, span: &Spanned<'a, T>, err: ErrorKind) -> Error {
         Error::new(self.module_id.as_ref(), span, err)
     }
 
     /// Evaluates an expression with the function validation semantics, i.e., to determine
     /// function captures.
-    fn eval<T: Grammar<'a>>(&mut self, expr: &SpannedExpr<'a, T>) -> Result<(), Error<'a>> {
+    fn eval<T: Grammar<'a>>(&mut self, expr: &SpannedExpr<'a, T>) -> Result<(), Error> {
         match &expr.extra {
             Expr::Variable => {
                 self.eval_local_var(expr);
@@ -152,7 +152,7 @@ impl<'a> CapturesExtractor<'a> {
     fn eval_statement<T: Grammar<'a>>(
         &mut self,
         statement: &SpannedStatement<'a, T>,
-    ) -> Result<(), Error<'a>> {
+    ) -> Result<(), Error> {
         match &statement.extra {
             Statement::Expr(expr) => self.eval(expr),
 
@@ -180,7 +180,7 @@ impl<'a> CapturesExtractor<'a> {
         &mut self,
         block: &Block<'a, T>,
         local_vars: HashMap<&'a str, Spanned<'a>>,
-    ) -> Result<(), Error<'a>> {
+    ) -> Result<(), Error> {
         self.local_vars.push(local_vars);
         for statement in &block.statements {
             self.eval_statement(statement)?;
@@ -192,7 +192,7 @@ impl<'a> CapturesExtractor<'a> {
         Ok(())
     }
 
-    pub fn eval_block<T: Grammar<'a>>(&mut self, block: &Block<'a, T>) -> Result<(), Error<'a>> {
+    pub fn eval_block<T: Grammar<'a>>(&mut self, block: &Block<'a, T>) -> Result<(), Error> {
         self.eval_block_inner(block, HashMap::new())
     }
 }
@@ -202,7 +202,7 @@ fn extract_vars<'a, T>(
     vars: &mut HashMap<&'a str, Spanned<'a>>,
     lvalues: &Destructure<'a, T>,
     context: RepeatedAssignmentContext,
-) -> Result<(), Error<'a>> {
+) -> Result<(), Error> {
     let middle = lvalues
         .middle
         .as_ref()
@@ -220,7 +220,7 @@ fn add_var<'a>(
     vars: &mut HashMap<&'a str, Spanned<'a>>,
     var_span: Spanned<'a>,
     context: RepeatedAssignmentContext,
-) -> Result<(), Error<'a>> {
+) -> Result<(), Error> {
     let var_name = *var_span.fragment();
     if var_name != "_" {
         if let Some(prev_span) = vars.insert(var_name, var_span) {
@@ -237,7 +237,7 @@ pub(super) fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
     vars: &mut HashMap<&'a str, Spanned<'a>>,
     lvalues: impl Iterator<Item = &'it SpannedLvalue<'a, T>>,
     context: RepeatedAssignmentContext,
-) -> Result<(), Error<'a>> {
+) -> Result<(), Error> {
     for lvalue in lvalues {
         match &lvalue.extra {
             Lvalue::Variable { .. } => {
@@ -283,7 +283,7 @@ pub(super) enum CompilerExtTarget<'r, 'a, T: Grammar<'a>> {
 }
 
 impl<'a, T: Grammar<'a>> CompilerExtTarget<'_, 'a, T> {
-    pub fn get_undefined_variables(self) -> Result<HashMap<&'a str, Spanned<'a>>, Error<'a>> {
+    pub fn get_undefined_variables(self) -> Result<HashMap<&'a str, Spanned<'a>>, Error> {
         let mut extractor = CapturesExtractor::new(Box::new(WildcardId));
 
         match self {

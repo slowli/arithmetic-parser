@@ -15,10 +15,7 @@ use arithmetic_eval::{
 };
 use arithmetic_parser::grammars::{NumGrammar, NumLiteral, Parse, Untyped};
 
-fn try_evaluate<'a, T>(
-    env: &mut Environment<'a, T>,
-    program: &'a str,
-) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>>
+fn try_evaluate<T>(env: &mut Environment<T>, program: &str) -> Result<Value<T>, ErrorWithBacktrace>
 where
     T: NumLiteral,
 {
@@ -27,7 +24,7 @@ where
     module.with_env(env).unwrap().run()
 }
 
-fn evaluate<'a, T>(env: &mut Environment<'a, T>, program: &'a str) -> Value<'a, T>
+fn evaluate<T>(env: &mut Environment<T>, program: &str) -> Value<T>
 where
     T: NumLiteral,
 {
@@ -77,15 +74,16 @@ where
     let arithmetic = CheckedArithmetic::<Kind>::new();
     test_arithmetic_base::<T, _>(arithmetic);
 
+    let program = "1 - 2 + 5";
     let err =
-        try_evaluate::<T>(&mut Environment::with_arithmetic(arithmetic), "1 - 2 + 5").unwrap_err();
+        try_evaluate::<T>(&mut Environment::with_arithmetic(arithmetic), program).unwrap_err();
     let err_kind = err.source().kind();
     assert_matches!(
         err_kind,
         ErrorKind::Arithmetic(err) if err.to_string().contains("integer overflow")
     );
     let err_span = err.source().main_span().code();
-    assert_eq!(*err_span.fragment(), "1 - 2");
+    assert_eq!(err_span.span_code(program), "1 - 2");
 }
 
 #[test]
@@ -133,25 +131,27 @@ where
     let value = evaluate::<T>(&mut Environment::with_arithmetic(arithmetic), "1 - 2 + 5");
     assert_eq!(value, Value::Prim(4_u8.into()));
 
+    let program = "-2 / 0 + 1";
     let err =
-        try_evaluate::<T>(&mut Environment::with_arithmetic(arithmetic), "-2 / 0 + 1").unwrap_err();
+        try_evaluate::<T>(&mut Environment::with_arithmetic(arithmetic), program).unwrap_err();
     let err_kind = err.source().kind();
     assert_matches!(
         err_kind,
         ErrorKind::Arithmetic(err) if err.to_string().contains("division by zero")
     );
     let err_span = err.source().main_span().code();
-    assert_eq!(*err_span.fragment(), "-2 / 0");
+    assert_eq!(err_span.span_code(program), "-2 / 0");
 
+    let program = "2 ^ -3 + 1";
     let err =
-        try_evaluate::<T>(&mut Environment::with_arithmetic(arithmetic), "2 ^ -3 + 1").unwrap_err();
+        try_evaluate::<T>(&mut Environment::with_arithmetic(arithmetic), program).unwrap_err();
     let err_kind = err.source().kind();
     assert_matches!(
         err_kind,
         ErrorKind::Arithmetic(err) if err.to_string().contains("exponent is too large or negative")
     );
     let err_span = err.source().main_span().code();
-    assert_eq!(*err_span.fragment(), "2 ^ -3");
+    assert_eq!(err_span.span_code(program), "2 ^ -3");
 }
 
 #[test]

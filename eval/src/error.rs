@@ -12,9 +12,7 @@ use crate::{
     fns::FromValueError,
     Value,
 };
-use arithmetic_parser::{
-    BinaryOp, CodeFragment, LocatedSpan, LvalueLen, MaybeSpanned, Op, StripCode, UnaryOp,
-};
+use arithmetic_parser::{BinaryOp, LocatedSpan, LvalueLen, MaybeSpanned, Op, UnaryOp};
 
 /// Arithmetic errors raised by [`Arithmetic`] operations on primitive values.
 ///
@@ -394,7 +392,7 @@ pub enum AuxErrorInfo {
 }
 
 impl AuxErrorInfo {
-    pub(crate) fn arg_value<T: fmt::Display>(value: &Value<'_, T>) -> Self {
+    pub(crate) fn arg_value<T: fmt::Display>(value: &Value<T>) -> Self {
         Self::ArgValue(value.to_string())
     }
 }
@@ -437,32 +435,30 @@ impl fmt::Display for AuxErrorInfo {
 /// }
 /// ```
 #[derive(Debug)]
-pub struct Error<'a> {
+pub struct Error {
     kind: ErrorKind,
-    main_span: CodeInModule<'a>,
-    aux_spans: Vec<CodeInModule<'a, AuxErrorInfo>>,
+    main_span: CodeInModule,
+    aux_spans: Vec<CodeInModule<AuxErrorInfo>>,
 }
 
-impl<'a> Error<'a> {
+impl Error {
     pub(crate) fn new<Span, T>(
         module_id: &dyn ModuleId,
         main_span: &LocatedSpan<Span, T>,
         kind: ErrorKind,
     ) -> Self
     where
-        Span: Copy + Into<CodeFragment<'a>>,
+        Span: Copy,
+        MaybeSpanned: From<LocatedSpan<Span>>,
     {
         Self {
             kind,
-            main_span: CodeInModule::new(
-                module_id,
-                main_span.with_no_extra().map_fragment(Into::into),
-            ),
+            main_span: CodeInModule::new(module_id, main_span.with_no_extra().into()),
             aux_spans: vec![],
         }
     }
 
-    pub(crate) fn from_parts(main_span: CodeInModule<'a>, kind: ErrorKind) -> Self {
+    pub(crate) fn from_parts(main_span: CodeInModule, kind: ErrorKind) -> Self {
         Self {
             kind,
             main_span,
@@ -473,7 +469,7 @@ impl<'a> Error<'a> {
     /// Adds an auxiliary span to this error. The `span` must be in the same module
     /// as the main span.
     #[must_use]
-    pub fn with_span<T>(mut self, span: &MaybeSpanned<'a, T>, info: AuxErrorInfo) -> Self {
+    pub fn with_span<T>(mut self, span: &MaybeSpanned<T>, info: AuxErrorInfo) -> Self {
         self.aux_spans.push(CodeInModule {
             module_id: self.main_span.module_id.clone_boxed(),
             code: span.copy_with_extra(info),
@@ -487,17 +483,17 @@ impl<'a> Error<'a> {
     }
 
     /// Returns the main span for this error.
-    pub fn main_span(&self) -> &CodeInModule<'a> {
+    pub fn main_span(&self) -> &CodeInModule {
         &self.main_span
     }
 
     /// Returns auxiliary spans for this error.
-    pub fn aux_spans(&self) -> &[CodeInModule<'a, AuxErrorInfo>] {
+    pub fn aux_spans(&self) -> &[CodeInModule<AuxErrorInfo>] {
         &self.aux_spans
     }
 }
 
-impl fmt::Display for Error<'_> {
+impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.main_span.fmt_location(formatter)?;
         write!(formatter, ": {}", self.kind)
@@ -505,39 +501,23 @@ impl fmt::Display for Error<'_> {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for Error<'_> {
+impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(&self.kind)
     }
 }
 
-impl StripCode for Error<'_> {
-    type Stripped = Error<'static>;
-
-    fn strip_code(self) -> Self::Stripped {
-        Error {
-            kind: self.kind,
-            main_span: self.main_span.strip_code(),
-            aux_spans: self
-                .aux_spans
-                .into_iter()
-                .map(StripCode::strip_code)
-                .collect(),
-        }
-    }
-}
-
 /// Result of an expression evaluation.
-pub type EvalResult<'a, T> = Result<Value<'a, T>, Error<'a>>;
+pub type EvalResult<T> = Result<Value<T>, Error>;
 
 /// Code fragment together with information about the module containing the fragment.
 #[derive(Debug)]
-pub struct CodeInModule<'a, T = ()> {
+pub struct CodeInModule<T = ()> {
     module_id: Box<dyn ModuleId>,
-    code: MaybeSpanned<'a, T>,
+    code: MaybeSpanned<T>,
 }
 
-impl<T: Clone> Clone for CodeInModule<'_, T> {
+impl<T: Clone> Clone for CodeInModule<T> {
     fn clone(&self) -> Self {
         Self {
             module_id: self.module_id.clone_boxed(),
@@ -546,8 +526,8 @@ impl<T: Clone> Clone for CodeInModule<'_, T> {
     }
 }
 
-impl<'a> CodeInModule<'a> {
-    pub(crate) fn new(module_id: &dyn ModuleId, span: MaybeSpanned<'a>) -> Self {
+impl CodeInModule {
+    pub(crate) fn new(module_id: &dyn ModuleId, span: MaybeSpanned) -> Self {
         Self {
             module_id: module_id.clone_boxed(),
             code: span,
@@ -555,7 +535,7 @@ impl<'a> CodeInModule<'a> {
     }
 }
 
-impl<'a, T> CodeInModule<'a, T> {
+impl<T> CodeInModule<T> {
     /// Returns the ID of the module containing this fragment.
     pub fn module_id(&self) -> &dyn ModuleId {
         self.module_id.as_ref()
@@ -563,7 +543,8 @@ impl<'a, T> CodeInModule<'a, T> {
 
     /// Returns the code fragment within the module. The fragment may be stripped
     /// (i.e., contain only location info, not the code string itself).
-    pub fn code(&self) -> &MaybeSpanned<'a, T> {
+    // FIXME: rename
+    pub fn code(&self) -> &MaybeSpanned<T> {
         &self.code
     }
 
@@ -578,54 +559,31 @@ impl<'a, T> CodeInModule<'a, T> {
     }
 }
 
-impl<T: Clone + 'static> StripCode for CodeInModule<'_, T> {
-    type Stripped = CodeInModule<'static, T>;
-
-    fn strip_code(self) -> Self::Stripped {
-        CodeInModule {
-            module_id: self.module_id,
-            code: self.code.strip_code(),
-        }
-    }
-}
-
 /// Element of a backtrace, i.e., a function / method call.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
-pub struct BacktraceElement<'a> {
+pub struct BacktraceElement {
     /// Function name.
     pub fn_name: String,
     /// Code span of the function definition. `None` for native functions.
-    pub def_span: Option<CodeInModule<'a>>,
+    pub def_span: Option<CodeInModule>,
     /// Code span of the function call.
-    pub call_span: CodeInModule<'a>,
-}
-
-impl StripCode for BacktraceElement<'_> {
-    type Stripped = BacktraceElement<'static>;
-
-    fn strip_code(self) -> Self::Stripped {
-        BacktraceElement {
-            fn_name: self.fn_name,
-            def_span: self.def_span.map(StripCode::strip_code),
-            call_span: self.call_span.strip_code(),
-        }
-    }
+    pub call_span: CodeInModule,
 }
 
 /// Error backtrace.
 #[derive(Debug, Default)]
-pub(crate) struct Backtrace<'a> {
-    calls: Vec<BacktraceElement<'a>>,
+pub(crate) struct Backtrace {
+    calls: Vec<BacktraceElement>,
 }
 
-impl<'a> Backtrace<'a> {
+impl Backtrace {
     /// Appends a function call into the backtrace.
     pub fn push_call(
         &mut self,
         fn_name: &str,
-        def_span: Option<CodeInModule<'a>>,
-        call_span: CodeInModule<'a>,
+        def_span: Option<CodeInModule>,
+        call_span: CodeInModule,
     ) {
         self.calls.push(BacktraceElement {
             fn_name: fn_name.to_owned(),
@@ -640,43 +598,33 @@ impl<'a> Backtrace<'a> {
     }
 }
 
-impl StripCode for Backtrace<'_> {
-    type Stripped = Backtrace<'static>;
-
-    fn strip_code(self) -> Self::Stripped {
-        Backtrace {
-            calls: self.calls.into_iter().map(StripCode::strip_code).collect(),
-        }
-    }
-}
-
 /// Error with the associated backtrace.
 ///
 /// Use the [`StripCode`] implementation to convert this to the `'static` lifetime, e.g.,
 /// before boxing it into `Box<dyn std::error::Error>` or `anyhow::Error`.
 #[derive(Debug)]
-pub struct ErrorWithBacktrace<'a> {
-    inner: Error<'a>,
-    backtrace: Backtrace<'a>,
+pub struct ErrorWithBacktrace {
+    inner: Error,
+    backtrace: Backtrace,
 }
 
-impl<'a> ErrorWithBacktrace<'a> {
-    pub(crate) fn new(inner: Error<'a>, backtrace: Backtrace<'a>) -> Self {
+impl ErrorWithBacktrace {
+    pub(crate) fn new(inner: Error, backtrace: Backtrace) -> Self {
         Self { inner, backtrace }
     }
 
     /// Returns the source of the error.
-    pub fn source(&self) -> &Error<'a> {
+    pub fn source(&self) -> &Error {
         &self.inner
     }
 
     /// Iterates over the error backtrace, starting from the most recent call.
-    pub fn backtrace(&self) -> impl Iterator<Item = &BacktraceElement<'a>> + '_ {
+    pub fn backtrace(&self) -> impl Iterator<Item = &BacktraceElement> + '_ {
         self.backtrace.calls.iter().rev()
     }
 }
 
-impl fmt::Display for ErrorWithBacktrace<'_> {
+impl fmt::Display for ErrorWithBacktrace {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self.inner, formatter)?;
 
@@ -700,19 +648,8 @@ impl fmt::Display for ErrorWithBacktrace<'_> {
     }
 }
 
-impl StripCode for ErrorWithBacktrace<'_> {
-    type Stripped = ErrorWithBacktrace<'static>;
-
-    fn strip_code(self) -> Self::Stripped {
-        ErrorWithBacktrace {
-            inner: self.inner.strip_code(),
-            backtrace: self.backtrace.strip_code(),
-        }
-    }
-}
-
 #[cfg(feature = "std")]
-impl std::error::Error for ErrorWithBacktrace<'_> {
+impl std::error::Error for ErrorWithBacktrace {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         std::error::Error::source(&self.inner)
     }

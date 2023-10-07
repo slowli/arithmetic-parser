@@ -133,16 +133,16 @@ macro_rules! arity_fn {
         impl<Num, F, Ret, $($t,)*> NativeFn<Num> for FnWrapper<(Ret, $($t,)*), F>
         where
             F: Fn($($t,)*) -> Ret,
-            $($t: for<'val> TryFromValue<'val, Num>,)*
-            Ret: for<'val> IntoEvalResult<'val, Num>,
+            $($t: TryFromValue<Num>,)*
+            Ret: IntoEvalResult<Num>,
         {
             #[allow(clippy::shadow_unrelated)] // makes it easier to write macro
             #[allow(unused_variables, unused_mut)] // `args_iter` is unused for 0-ary functions
-            fn evaluate<'a>(
+            fn evaluate(
                 &self,
-                args: Vec<SpannedValue<'a, Num>>,
-                context: &mut CallContext<'_, 'a, Num>,
-            ) -> EvalResult<'a, Num> {
+                args: Vec<SpannedValue<Num>>,
+                context: &mut CallContext<'_, Num>,
+            ) -> EvalResult<Num> {
                 context.check_args_count(&args, $arity)?;
                 let mut args_iter = args.into_iter().enumerate();
 
@@ -362,7 +362,7 @@ macro_rules! wrap_fn_with_context {
 #[doc(hidden)] // necessary for `wrap_fn` macro
 pub fn enforce_closure_type<T, A, F>(function: F) -> F
 where
-    F: for<'a> Fn(Vec<SpannedValue<'a, T>>, &mut CallContext<'_, 'a, A>) -> EvalResult<'a, T>,
+    F: Fn(Vec<SpannedValue<T>>, &mut CallContext<'_, A>) -> EvalResult<T>,
 {
     function
 }
@@ -543,7 +543,7 @@ mod tests {
     #[test]
     #[allow(clippy::cast_precision_loss)] // fine for this test
     fn function_with_object_and_tuple() -> anyhow::Result<()> {
-        fn test_function(tuple: Tuple<'_, f32>) -> Object<'_, f32> {
+        fn test_function(tuple: Tuple<f32>) -> Object<f32> {
             let mut obj = Object::default();
             obj.insert("len", Value::Prim(tuple.len() as f32));
             obj.insert("tuple", tuple.into());

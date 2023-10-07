@@ -196,7 +196,7 @@ fn calling_non_callable_field() {
     let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
     assert_matches!(err.source().kind(), ErrorKind::CannotCall);
     assert_eq!(
-        *err.source().main_span().code().fragment(),
+        err.source().main_span().code().span_code(program),
         "(#{ x: 3, y: 4 }.x)()"
     );
 
@@ -215,7 +215,7 @@ fn field_invalid_receiver_error() {
     let program = "xs = (1, 2, 3); xs.len == 3";
     let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
 
-    assert_eq!(*err.source().main_span().code().fragment(), "xs.len");
+    assert_eq!(err.source().main_span().code().span_code(program), "xs.len");
     assert_matches!(err.source().kind(), ErrorKind::CannotAccessFields);
 }
 
@@ -224,7 +224,7 @@ fn no_field_error() {
     let program = "pt = #{ x: 1, y: 2 }; pt.z";
     let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
 
-    assert_eq!(*err.source().main_span().code().fragment(), "pt.z");
+    assert_eq!(err.source().main_span().code().span_code(program), "pt.z");
     assert_matches!(
         err.source().kind(),
         ErrorKind::NoField { field, available_fields }
@@ -307,7 +307,7 @@ fn object_destructuring_on_non_object() {
     ];
     for &program in programs {
         let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
-        assert_eq!(*err.source().main_span().code().fragment(), "x");
+        assert_eq!(err.source().main_span().code().span_code(program), "x");
         assert_matches!(err.source().kind(), ErrorKind::CannotAccessFields);
     }
 }
@@ -316,12 +316,12 @@ fn object_destructuring_on_non_object() {
 fn object_destructuring_with_missing_field() {
     let program = "{ x, y: Y } = #{ x: 1 };";
     let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
-    assert_eq!(*err.source().main_span().code().fragment(), "y");
+    assert_eq!(err.source().main_span().code().span_code(program), "y");
     assert_matches!(err.source().kind(), ErrorKind::NoField { field, .. } if field == "y");
 
     let program = "({ x, y }, ...pts) = (#{ x: 1 }, #{ x: 2 });";
     let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
-    assert_eq!(*err.source().main_span().code().fragment(), "y");
+    assert_eq!(err.source().main_span().code().span_code(program), "y");
     assert_matches!(err.source().kind(), ErrorKind::NoField { field, .. } if field == "y");
 }
 
@@ -329,7 +329,10 @@ fn object_destructuring_with_missing_field() {
 fn embedded_destructuring_error() {
     let program = "{ x, y: (y, ...) } = #{ x: 1, y: 2 };";
     let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
-    assert_eq!(*err.source().main_span().code().fragment(), "(y, ...)");
+    assert_eq!(
+        err.source().main_span().code().span_code(program),
+        "(y, ...)"
+    );
     assert_matches!(err.source().kind(), ErrorKind::CannotDestructure);
 }
 
@@ -339,13 +342,13 @@ fn object_initialization_repeated_fields() {
     let err = expect_compilation_error(program);
     let err_span = err.main_span().code();
 
-    assert_eq!(*err_span.fragment(), "x");
+    assert_eq!(err_span.span_code(program), "x");
     assert_eq!(err_span.location_offset(), 9);
     assert_matches!(err.kind(), ErrorKind::RepeatedField);
 
     assert_eq!(err.aux_spans().len(), 1);
     let aux_span = err.aux_spans()[0].code();
-    assert_eq!(*aux_span.fragment(), "x");
+    assert_eq!(aux_span.span_code(program), "x");
     assert_eq!(aux_span.location_offset(), 3);
     assert_matches!(aux_span.extra, AuxErrorInfo::PrevAssignment);
 }
@@ -356,7 +359,7 @@ fn object_initialization_repeated_fields_with_shorthand() {
     let err = expect_compilation_error(program);
     let err_span = err.main_span().code();
 
-    assert_eq!(*err_span.fragment(), "x");
+    assert_eq!(err_span.span_code(program), "x");
     assert_eq!(err_span.location_offset(), 20);
     assert_matches!(err.kind(), ErrorKind::RepeatedField);
 }
@@ -367,13 +370,13 @@ fn object_destructuring_repeated_fields() {
     let err = expect_compilation_error(program);
     let err_span = err.main_span().code();
 
-    assert_eq!(*err_span.fragment(), "x");
+    assert_eq!(err_span.span_code(program), "x");
     assert_eq!(err_span.location_offset(), 5);
     assert_matches!(err.kind(), ErrorKind::RepeatedField);
 
     assert_eq!(err.aux_spans().len(), 1);
     let aux_span = err.aux_spans()[0].code();
-    assert_eq!(*aux_span.fragment(), "x");
+    assert_eq!(aux_span.span_code(program), "x");
     assert_eq!(aux_span.location_offset(), 2);
     assert_matches!(aux_span.extra, AuxErrorInfo::PrevAssignment);
 }
@@ -384,13 +387,13 @@ fn object_destructuring_repeated_assignment() {
     let err = expect_compilation_error(program);
     let err_span = err.main_span().code();
 
-    assert_eq!(*err_span.fragment(), "x");
+    assert_eq!(err_span.span_code(program), "x");
     assert_eq!(err_span.location_offset(), 8);
     assert_matches!(err.kind(), ErrorKind::RepeatedAssignment { .. });
 
     assert_eq!(err.aux_spans().len(), 1);
     let aux_span = err.aux_spans()[0].code();
-    assert_eq!(*aux_span.fragment(), "x");
+    assert_eq!(aux_span.span_code(program), "x");
     assert_eq!(aux_span.location_offset(), 2);
     assert_matches!(aux_span.extra, AuxErrorInfo::PrevAssignment);
 }
@@ -401,13 +404,13 @@ fn object_destructuring_repeated_assignment_complex() {
     let err = expect_compilation_error(program);
     let err_span = err.main_span().code();
 
-    assert_eq!(*err_span.fragment(), "x");
+    assert_eq!(err_span.span_code(program), "x");
     assert_eq!(err_span.location_offset(), 10);
     assert_matches!(err.kind(), ErrorKind::RepeatedAssignment { .. });
 
     assert_eq!(err.aux_spans().len(), 1);
     let aux_span = err.aux_spans()[0].code();
-    assert_eq!(*aux_span.fragment(), "x");
+    assert_eq!(aux_span.span_code(program), "x");
     assert_eq!(aux_span.location_offset(), 2);
     assert_matches!(aux_span.extra, AuxErrorInfo::PrevAssignment);
 }
@@ -450,23 +453,26 @@ fn error_in_binary_op_on_object_and_invalid_operand() {
     let lhs_program = "#{ x: 3, y: 4 } + || 5";
     {
         let err = try_evaluate(&mut Environment::new(), lhs_program).unwrap_err();
-        let main_span = err.source().main_span().code().fragment();
-        assert_eq!(*main_span, "|| 5");
+        let main_span = err.source().main_span().code().span_code(lhs_program);
+        assert_eq!(main_span, "|| 5");
     }
 
     let rhs_program = "true + #{ x: 3, y: 4 }";
     let mut env = Environment::new();
     env.insert("true", Value::Bool(true));
     let err = try_evaluate(&mut env, rhs_program).unwrap_err();
-    let main_span = err.source().main_span().code().fragment();
-    assert_eq!(*main_span, "true");
+    let main_span = err.source().main_span().code().span_code(rhs_program);
+    assert_eq!(main_span, "true");
 }
 
 #[test]
 fn error_in_binary_ops_on_objects() {
     let program = "#{ x: 1 } + #{ y: 1 }";
     let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
-    assert_eq!(*err.source().main_span().code().fragment(), "#{ x: 1 }");
+    assert_eq!(
+        err.source().main_span().code().span_code(program),
+        "#{ x: 1 }"
+    );
     assert_matches!(
         err.source().kind(),
         ErrorKind::FieldsMismatch { op: BinaryOp::Add, lhs_fields, rhs_fields }

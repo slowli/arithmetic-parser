@@ -6,7 +6,7 @@ use core::{fmt, marker::PhantomData};
 
 use crate::{
     parser::{statements, streaming_statements},
-    Block, Error, ErrorKind, InputSpan, NomResult, SpannedError,
+    Block, Error, ErrorKind, InputSpan, NomResult,
 };
 
 bitflags! {
@@ -259,7 +259,7 @@ pub trait Parse {
     const FEATURES: Features;
 
     /// Parses a list of statements.
-    fn parse_statements<'a, I>(input: I) -> Result<Block<'a, Self::Base>, Error<'a>>
+    fn parse_statements<'a, I>(input: I) -> Result<Block<'a, Self::Base>, Error>
     where
         I: IntoInputSpan<'a>,
         Self: Sized,
@@ -268,7 +268,7 @@ pub trait Parse {
     }
 
     /// Parses a potentially incomplete list of statements.
-    fn parse_streaming_statements<'a, I>(input: I) -> Result<Block<'a, Self::Base>, Error<'a>>
+    fn parse_streaming_statements<'a, I>(input: I) -> Result<Block<'a, Self::Base>, Error>
     where
         I: IntoInputSpan<'a>,
         Self: Sized,
@@ -304,7 +304,7 @@ impl<T: ParseLiteral> Grammar for Untyped<T> {
     #[inline]
     fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type<'_>> {
         let err = anyhow!("Type annotations are not supported by this parser");
-        let err = SpannedError::new(input, ErrorKind::Type(err));
+        let err = Error::new(input, ErrorKind::Type(err));
         Err(NomErr::Failure(err))
     }
 }
@@ -385,7 +385,7 @@ impl<T: ParseLiteral, Ty: MockTypes> Grammar for WithMockedTypes<T, Ty> {
                 }
             }
             let err = anyhow!("Unrecognized type annotation");
-            let err = SpannedError::new(input, ErrorKind::Type(err));
+            let err = Error::new(input, ErrorKind::Type(err));
             Err(NomErr::Failure(err))
         }
 

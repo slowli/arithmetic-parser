@@ -8,7 +8,7 @@ use arithmetic_eval::{
 };
 use arithmetic_parser::{
     grammars::{F64Grammar, MockTypes, Parse, WithMockedTypes},
-    BinaryOp, Error as ParseError,
+    BinaryOp,
 };
 
 /// We need to process some type annotations, but don't want to depend
@@ -26,7 +26,7 @@ fn create_module(
     module_name: &'static str,
     program: &str,
 ) -> anyhow::Result<ExecutableModule<f64>> {
-    let block = Grammar::parse_statements(program).map_err(ParseError::strip_code)?;
+    let block = Grammar::parse_statements(program)?;
     Ok(ExecutableModule::new(module_name, &block)?)
 }
 

@@ -157,7 +157,7 @@ pub use crate::{
         LvalueType, ObjectDestructure, ObjectDestructureField, ObjectExpr, SpannedExpr,
         SpannedLvalue, SpannedStatement, Statement, StatementType,
     },
-    error::{Context, Error, ErrorKind, SpannedError, UnsupportedType},
+    error::{Context, Error, ErrorKind, UnsupportedType},
     ops::{BinaryOp, Op, OpPriority, UnaryOp},
     parser::is_valid_variable_name,
     spans::{with_span, InputSpan, LocatedSpan, Location, NomResult, Spanned},

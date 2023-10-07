@@ -183,7 +183,7 @@ fn object_errors() {
     let NomErr::Failure(err) = err else {
         panic!("Unexpected error: {err:?}");
     };
-    assert_eq!(err.span(), sp(5, "=", ()));
+    assert_eq!(err.location(), sp(5, "=", ()).into());
 }
 
 #[test]

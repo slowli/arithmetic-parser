@@ -315,7 +315,7 @@ fn fold_args<'a, T: Grammar>(
     input: InputSpan<'a>,
     mut base: SpannedExpr<'a, T>,
     calls: Vec<Spanned<'a, MethodOrFnCall<'a, T>>>,
-) -> Result<SpannedExpr<'a, T>, NomErr<Error<'a>>> {
+) -> Result<SpannedExpr<'a, T>, NomErr<Error>> {
     // Do we need to reorder unary op application and method calls? This is only applicable if:
     //
     // - `base` is a literal (as a corollary, `-` / `!` may be a start of a literal)
@@ -474,7 +474,7 @@ fn fold_binary_expr<'a, T: Grammar>(
     input: InputSpan<'a>,
     first: SpannedExpr<'a, T>,
     rest: Vec<(Spanned<'a, BinaryOp>, SpannedExpr<'a, T>)>,
-) -> Result<SpannedExpr<'a, T>, Error<'a>> {
+) -> Result<SpannedExpr<'a, T>, Error> {
     let mut right_contour: Vec<BinaryOp> = vec![];
 
     rest.into_iter().try_fold(first, |mut acc, (new_op, expr)| {

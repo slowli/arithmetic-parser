@@ -146,7 +146,7 @@ fn chained_comparisons() {
             panic!("Unexpected error: {err:?}");
         };
         assert_matches!(err.kind(), ErrorKind::ChainedComparison);
-        assert_eq!(*err.span().fragment(), input);
+        assert_eq!(err.location().span(input), input);
     }
 }
 
@@ -158,7 +158,7 @@ fn chained_comparisons_with_larger_context() {
         panic!("Unexpected error: {err:?}");
     };
     assert_matches!(err.kind(), ErrorKind::ChainedComparison);
-    assert_eq!(*err.span().fragment(), "1 + 2 > x.abs() == 3");
+    assert_eq!(err.location().span(input), "1 + 2 > x.abs() == 3");
 }
 
 #[test]

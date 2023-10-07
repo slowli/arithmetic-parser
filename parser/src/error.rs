@@ -8,7 +8,8 @@ use nom::{
 use core::fmt;
 
 use crate::{
-    BinaryOp, ExprType, InputSpan, LocatedSpan, LvalueType, Op, Spanned, StatementType, UnaryOp,
+    BinaryOp, ExprType, InputSpan, LocatedSpan, Location, LvalueType, Op, Spanned, StatementType,
+    UnaryOp,
 };
 
 /// Parsing context.
@@ -164,9 +165,9 @@ impl ErrorKind {
     }
 
     #[doc(hidden)]
-    pub fn with_span<'a, T>(self, span: &Spanned<'a, T>) -> Error<'a> {
+    pub fn with_span<T>(self, span: &Spanned<'_, T>) -> Error {
         Error {
-            inner: span.copy_with_extra(self),
+            inner: span.copy_with_extra(self).map_fragment(str::len),
         }
     }
 }
@@ -186,44 +187,31 @@ impl std::error::Error for ErrorKind {
 /// Two primary cases of the `Span` type param are `&str` (for original errors produced by
 /// the parser) and `usize` (for *stripped* errors that have a static lifetime).
 #[derive(Debug)]
-// FIXME: consider immediately stripping spans here as well
-pub struct SpannedError<Span> {
-    inner: LocatedSpan<Span, ErrorKind>,
+pub struct Error {
+    inner: Location<ErrorKind>,
 }
 
-/// Error with code span available as a string reference.
-pub type Error<'a> = SpannedError<&'a str>;
-
-impl<'a> Error<'a> {
-    pub(crate) fn new(span: InputSpan<'a>, kind: ErrorKind) -> Self {
+impl Error {
+    pub(crate) fn new(span: InputSpan<'_>, kind: ErrorKind) -> Self {
         Self {
-            inner: Spanned::new(span, kind),
+            inner: LocatedSpan::from(span)
+                .map_fragment(str::len)
+                .copy_with_extra(kind),
         }
     }
 
-    /// FIXME
-    pub fn strip_code(self) -> SpannedError<usize> {
-        SpannedError {
-            inner: self.inner.map_fragment(str::len),
-        }
-    }
-}
-
-impl<Span> SpannedError<Span> {
     /// Returns the kind of this error.
     pub fn kind(&self) -> &ErrorKind {
         &self.inner.extra
     }
-}
 
-impl<Span: Copy> SpannedError<Span> {
     /// Returns the span of this error.
-    pub fn span(&self) -> LocatedSpan<Span> {
+    pub fn location(&self) -> Location {
         self.inner.with_no_extra()
     }
 }
 
-impl<Span> fmt::Display for SpannedError<Span> {
+impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
@@ -236,13 +224,13 @@ impl<Span> fmt::Display for SpannedError<Span> {
 }
 
 #[cfg(feature = "std")]
-impl<Span: fmt::Debug> std::error::Error for SpannedError<Span> {
+impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         std::error::Error::source(&self.inner.extra)
     }
 }
 
-impl<'a> ParseError<InputSpan<'a>> for Error<'a> {
+impl<'a> ParseError<InputSpan<'a>> for Error {
     fn from_error_kind(mut input: InputSpan<'a>, kind: NomErrorKind) -> Self {
         if kind == NomErrorKind::Char && !input.fragment().is_empty() {
             // Truncate the error span to the first ineligible char.
@@ -270,7 +258,7 @@ impl<'a> ParseError<InputSpan<'a>> for Error<'a> {
     }
 }
 
-impl<'a> ContextError<InputSpan<'a>> for Error<'a> {
+impl<'a> ContextError<InputSpan<'a>> for Error {
     fn add_context(input: InputSpan<'a>, ctx: &'static str, mut target: Self) -> Self {
         let ctx = Context::new(ctx);
         if ctx == Context::Comment {
@@ -286,7 +274,7 @@ impl<'a> ContextError<InputSpan<'a>> for Error<'a> {
     }
 }
 
-impl<'a> FromExternalError<InputSpan<'a>, ErrorKind> for Error<'a> {
+impl<'a> FromExternalError<InputSpan<'a>, ErrorKind> for Error {
     fn from_external_error(input: InputSpan<'a>, _: NomErrorKind, err: ErrorKind) -> Self {
         Self::new(input, err)
     }

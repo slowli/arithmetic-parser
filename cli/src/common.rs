@@ -180,9 +180,9 @@ impl Reporter {
     }
 
     /// Reports a parsing error.
-    fn report_parse_error(&self, err: ParseError<'_>) -> io::Result<()> {
+    fn report_parse_error(&self, err: ParseError) -> io::Result<()> {
         // Parsing errors are always reported for the most recently added snippet.
-        let (file, range) = self.code_map.locate_in_most_recent_file(&err.span());
+        let (file, range) = self.code_map.locate_in_most_recent_file(&err.location());
 
         let label = Label::primary(file, range).with_message("Error occurred here");
         let diagnostic = Diagnostic::error()

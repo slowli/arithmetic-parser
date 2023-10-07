@@ -58,7 +58,7 @@ where
 }
 
 /// Parses a complete list of statements.
-pub(crate) fn statements<T>(input_span: InputSpan<'_>) -> Result<Block<'_, T::Base>, Error<'_>>
+pub(crate) fn statements<T>(input_span: InputSpan<'_>) -> Result<Block<'_, T::Base>, Error>
 where
     T: Parse,
 {
@@ -71,7 +71,7 @@ where
 /// Parses a potentially incomplete list of statements.
 pub(crate) fn streaming_statements<T>(
     input_span: InputSpan<'_>,
-) -> Result<Block<'_, T::Base>, Error<'_>>
+) -> Result<Block<'_, T::Base>, Error>
 where
     T: Parse,
 {
@@ -83,7 +83,7 @@ where
         .or_else(|_| statements_inner::<T, Streaming>(input_span))
 }
 
-fn statements_inner<T, Ty>(input_span: InputSpan<'_>) -> Result<Block<'_, T::Base>, Error<'_>>
+fn statements_inner<T, Ty>(input_span: InputSpan<'_>) -> Result<Block<'_, T::Base>, Error>
 where
     T: Parse,
     Ty: GrammarType,

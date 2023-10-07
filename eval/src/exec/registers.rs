@@ -1,7 +1,7 @@
 //! `Registers` for executing commands and closely related types.
 
 use crate::{
-    alloc::{vec, Box, HashMap, Rc, String, ToOwned, Vec},
+    alloc::{vec, Arc, HashMap, Rc, String, ToOwned, Vec},
     arith::OrdArithmetic,
     error::{Backtrace, EvalResult, LocationInModule, TupleLenMismatchContext},
     exec::command::{Atom, Command, CompiledExpr, FieldName, LocatedAtom, LocatedCommand},
@@ -11,28 +11,17 @@ use crate::{
 use arithmetic_parser::{BinaryOp, Location, LvalueLen, UnaryOp};
 
 /// Sequence of instructions that can be executed with the `Registers`.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Executable<T> {
-    id: Box<dyn ModuleId>, // FIXME: consider using `Rc<_>`?
+    id: Arc<dyn ModuleId>,
     commands: Vec<LocatedCommand<T>>,
     child_fns: Vec<Rc<ExecutableFn<T>>>,
     // Hint how many registers the executable requires.
     register_capacity: usize,
 }
 
-impl<T: Clone> Clone for Executable<T> {
-    fn clone(&self) -> Self {
-        Self {
-            id: self.id.clone_boxed(),
-            commands: self.commands.clone(),
-            child_fns: self.child_fns.clone(),
-            register_capacity: self.register_capacity,
-        }
-    }
-}
-
 impl<T> Executable<T> {
-    pub fn new(id: Box<dyn ModuleId>) -> Self {
+    pub fn new(id: Arc<dyn ModuleId>) -> Self {
         Self {
             id,
             commands: vec![],
@@ -41,12 +30,12 @@ impl<T> Executable<T> {
         }
     }
 
-    pub fn id(&self) -> &dyn ModuleId {
-        self.id.as_ref()
+    pub fn id(&self) -> &Arc<dyn ModuleId> {
+        &self.id
     }
 
     fn create_error<U>(&self, location: &Location<U>, err: ErrorKind) -> Error {
-        Error::new(self.id.as_ref(), location, err)
+        Error::new(self.id.clone(), location, err)
     }
 
     pub fn push_command(&mut self, command: impl Into<LocatedCommand<T>>) {
@@ -363,7 +352,7 @@ impl<T: 'static + Clone> Registers<T> {
                     Self::eval_function(
                         &function,
                         fn_name,
-                        executable.id.as_ref(),
+                        executable.id.clone(),
                         location,
                         arg_values,
                         operations,
@@ -394,7 +383,7 @@ impl<T: 'static + Clone> Registers<T> {
 
     fn execute_binary_expr(
         &self,
-        module_id: &dyn ModuleId,
+        module_id: &Arc<dyn ModuleId>,
         location: Location,
         op: BinaryOp,
         lhs: &LocatedAtom<T>,
@@ -466,7 +455,7 @@ impl<T: 'static + Clone> Registers<T> {
     fn eval_function(
         function: &Function<T>,
         fn_name: &str,
-        module_id: &dyn ModuleId,
+        module_id: Arc<dyn ModuleId>,
         call_location: Location,
         arg_values: Vec<SpannedValue<T>>,
         operations: Operations<'_, T>,

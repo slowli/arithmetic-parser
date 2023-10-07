@@ -3,7 +3,7 @@
 use core::fmt;
 
 use crate::{
-    alloc::{HashMap, Rc, String, ToOwned, Vec},
+    alloc::{Arc, HashMap, Rc, String, ToOwned, Vec},
     arith::OrdArithmetic,
     error::{Backtrace, Error, ErrorKind, LocationInModule},
     exec::{ExecutableFn, ModuleId, Operations},
@@ -23,9 +23,9 @@ pub struct CallContext<'r, T> {
 impl<'r, T> CallContext<'r, T> {
     /// Creates a mock call context with the specified module ID and call span.
     /// The provided [`Environment`] is used to extract an [`OrdArithmetic`] implementation.
-    pub fn mock(module_id: &dyn ModuleId, location: Location, env: &'r Environment<T>) -> Self {
+    pub fn mock<ID: ModuleId>(module_id: ID, location: Location, env: &'r Environment<T>) -> Self {
         Self {
-            call_location: LocationInModule::new(module_id, location),
+            call_location: LocationInModule::new(Arc::new(module_id), location),
             backtrace: None,
             operations: env.operations(),
         }
@@ -150,7 +150,7 @@ impl<T> InterpretedFn<T> {
     }
 
     /// Returns ID of the module defining this function.
-    pub fn module_id(&self) -> &dyn ModuleId {
+    pub fn module_id(&self) -> &Arc<dyn ModuleId> {
         self.definition.inner.id()
     }
 
@@ -237,8 +237,10 @@ impl<T: fmt::Display> fmt::Display for Function<T> {
             Self::Native(_) => formatter.write_str("(native fn)"),
             Self::Interpreted(function) => {
                 formatter.write_str("(interpreted fn @ ")?;
-                let location =
-                    LocationInModule::new(function.module_id(), function.definition.def_location);
+                let location = LocationInModule::new(
+                    function.module_id().clone(),
+                    function.definition.def_location,
+                );
                 location.fmt_location(formatter)?;
                 formatter.write_str(")")
             }
@@ -271,7 +273,7 @@ impl<T> Function<T> {
         match self {
             Self::Native(_) => None,
             Self::Interpreted(function) => Some(LocationInModule::new(
-                function.module_id(),
+                function.module_id().clone(),
                 function.definition.def_location,
             )),
         }

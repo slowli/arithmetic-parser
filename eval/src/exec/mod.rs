@@ -3,6 +3,7 @@
 use core::fmt;
 
 use crate::{
+    alloc::Arc,
     compiler::{Compiler, ImportLocations},
     env::Environment,
     error::{Backtrace, Error, ErrorKind, ErrorWithBacktrace},
@@ -161,7 +162,7 @@ impl<T> ExecutableModule<T> {
     }
 
     /// Gets the identifier of this module.
-    pub fn id(&self) -> &dyn ModuleId {
+    pub fn id(&self) -> &Arc<dyn ModuleId> {
         self.inner.id()
     }
 
@@ -196,7 +197,7 @@ impl<T> ExecutableModule<T> {
         for (name, span) in self.imports.iter() {
             if !env.contains(name) {
                 let err = ErrorKind::Undefined(name.into());
-                return Err(Error::new(self.inner.id(), span, err));
+                return Err(Error::new(self.inner.id().clone(), span, err));
             }
         }
         Ok(())

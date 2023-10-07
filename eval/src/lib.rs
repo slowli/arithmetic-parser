@@ -218,8 +218,9 @@ mod alloc {
         borrow::ToOwned,
         boxed::Box,
         format,
-        rc::Rc,
+        rc::Rc, // FIXME: replace with `Arc` everywhere
         string::{String, ToString},
+        sync::Arc,
         vec,
         vec::Vec,
     };

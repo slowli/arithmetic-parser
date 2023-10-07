@@ -3,6 +3,7 @@
 use core::cmp::Ordering;
 
 use crate::{
+    alloc::Arc,
     arith::OrdArithmetic,
     error::{AuxErrorInfo, Error, ErrorKind, TupleLenMismatchContext},
     exec::ModuleId,
@@ -64,7 +65,7 @@ impl BinaryOpError {
 
     fn span(
         self,
-        module_id: &dyn ModuleId,
+        module_id: Arc<dyn ModuleId>,
         total_span: Location,
         lhs_span: Location,
         rhs_span: Location,
@@ -191,7 +192,7 @@ impl<T: Clone> Value<T> {
 
     #[inline]
     pub(crate) fn try_binary_op(
-        module_id: &dyn ModuleId,
+        module_id: &Arc<dyn ModuleId>,
         total_span: Location,
         lhs: Location<Self>,
         rhs: Location<Self>,
@@ -202,7 +203,7 @@ impl<T: Clone> Value<T> {
         let rhs_span = rhs.with_no_extra();
         lhs.extra
             .try_binary_op_inner(rhs.extra, op, arithmetic)
-            .map_err(|e| e.span(module_id, total_span, lhs_span, rhs_span))
+            .map_err(|e| e.span(module_id.clone(), total_span, lhs_span, rhs_span))
     }
 }
 
@@ -272,7 +273,7 @@ impl<T> Value<T> {
     }
 
     pub(crate) fn compare(
-        module_id: &dyn ModuleId,
+        module_id: &Arc<dyn ModuleId>,
         lhs: &Location<Self>,
         rhs: &Location<Self>,
         op: BinaryOp,
@@ -280,10 +281,10 @@ impl<T> Value<T> {
     ) -> Result<Self, Error> {
         // We only know how to compare primitive values.
         let Value::Prim(lhs_value) = &lhs.extra else {
-            return Err(Error::new(module_id, lhs, ErrorKind::CannotCompare));
+            return Err(Error::new(module_id.clone(), lhs, ErrorKind::CannotCompare));
         };
         let Value::Prim(rhs_value) = &rhs.extra else {
-            return Err(Error::new(module_id, rhs, ErrorKind::CannotCompare));
+            return Err(Error::new(module_id.clone(), rhs, ErrorKind::CannotCompare));
         };
 
         let maybe_ordering = arithmetic.partial_cmp(lhs_value, rhs_value);
@@ -298,7 +299,7 @@ impl<T> Value<T> {
     }
 
     pub(crate) fn try_and(
-        module_id: &dyn ModuleId,
+        module_id: &Arc<dyn ModuleId>,
         lhs: &Location<Self>,
         rhs: &Location<Self>,
     ) -> Result<Self, Error> {
@@ -308,19 +309,19 @@ impl<T> Value<T> {
                 let err = ErrorKind::UnexpectedOperand {
                     op: BinaryOp::And.into(),
                 };
-                Err(Error::new(module_id, rhs, err))
+                Err(Error::new(module_id.clone(), rhs, err))
             }
             _ => {
                 let err = ErrorKind::UnexpectedOperand {
                     op: BinaryOp::And.into(),
                 };
-                Err(Error::new(module_id, lhs, err))
+                Err(Error::new(module_id.clone(), lhs, err))
             }
         }
     }
 
     pub(crate) fn try_or(
-        module_id: &dyn ModuleId,
+        module_id: &Arc<dyn ModuleId>,
         lhs: &Location<Self>,
         rhs: &Location<Self>,
     ) -> Result<Self, Error> {
@@ -330,13 +331,13 @@ impl<T> Value<T> {
                 let err = ErrorKind::UnexpectedOperand {
                     op: BinaryOp::Or.into(),
                 };
-                Err(Error::new(module_id, rhs, err))
+                Err(Error::new(module_id.clone(), rhs, err))
             }
             _ => {
                 let err = ErrorKind::UnexpectedOperand {
                     op: BinaryOp::Or.into(),
                 };
-                Err(Error::new(module_id, lhs, err))
+                Err(Error::new(module_id.clone(), lhs, err))
             }
         }
     }

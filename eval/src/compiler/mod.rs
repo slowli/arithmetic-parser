@@ -1,7 +1,7 @@
 //! Transformation of AST output by the parser into non-recursive format.
 
 use crate::{
-    alloc::{Box, HashMap, String, ToOwned, Vec},
+    alloc::{Arc, HashMap, String, ToOwned, Vec},
     exec::{
         Atom, Command, CompiledExpr, Executable, ExecutableModule, FieldName, ModuleId, Registers,
     },
@@ -25,11 +25,11 @@ pub(crate) struct Compiler {
     vars_to_registers: HashMap<String, usize>,
     scope_depth: usize,
     register_count: usize,
-    module_id: Box<dyn ModuleId>,
+    module_id: Arc<dyn ModuleId>,
 }
 
 impl Compiler {
-    fn new(module_id: Box<dyn ModuleId>) -> Self {
+    fn new(module_id: Arc<dyn ModuleId>) -> Self {
         Self {
             vars_to_registers: HashMap::new(),
             scope_depth: 0,
@@ -38,7 +38,7 @@ impl Compiler {
         }
     }
 
-    fn from_env<T>(module_id: Box<dyn ModuleId>, env: &Registers<T>) -> Self {
+    fn from_env<T>(module_id: Arc<dyn ModuleId>, env: &Registers<T>) -> Self {
         Self {
             vars_to_registers: env.variables_map().clone(),
             register_count: env.register_count(),
@@ -53,12 +53,12 @@ impl Compiler {
             vars_to_registers: self.vars_to_registers.clone(),
             scope_depth: self.scope_depth,
             register_count: self.register_count,
-            module_id: self.module_id.clone_boxed(),
+            module_id: self.module_id.clone(),
         }
     }
 
     fn create_error<T>(&self, span: &Spanned<'_, T>, err: ErrorKind) -> Error {
-        Error::new(self.module_id.as_ref(), span, err)
+        Error::new(self.module_id.clone(), span, err)
     }
 
     fn check_unary_op(&self, op: &Spanned<'_, UnaryOp>) -> Result<UnaryOp, Error> {
@@ -112,9 +112,9 @@ impl Compiler {
         module_id: Id,
         block: &Block<'a, T>,
     ) -> Result<ExecutableModule<T::Lit>, Error> {
-        let module_id = Box::new(module_id) as Box<dyn ModuleId>;
-        let (captures, import_spans) = Self::extract_captures(module_id.clone_boxed(), block)?;
-        let mut compiler = Self::from_env(module_id.clone_boxed(), &captures);
+        let module_id = Arc::new(module_id) as Arc<dyn ModuleId>;
+        let (captures, import_spans) = Self::extract_captures(module_id.clone(), block)?;
+        let mut compiler = Self::from_env(module_id.clone(), &captures);
 
         let mut executable = Executable::new(module_id);
         let empty_span = InputSpan::new("");
@@ -137,7 +137,7 @@ impl Compiler {
     }
 
     fn extract_captures<'a, T: Grammar<'a>>(
-        module_id: Box<dyn ModuleId>,
+        module_id: Arc<dyn ModuleId>,
         block: &Block<'a, T>,
     ) -> Result<(Registers<T::Lit>, ImportLocations), Error> {
         let mut extractor = CapturesExtractor::new(module_id);
@@ -390,7 +390,7 @@ mod tests {
         let program = "y = 5 * x; y - 3 + x";
         let module = Untyped::<F32Grammar>::parse_statements(program).unwrap();
         let (registers, import_spans) =
-            Compiler::extract_captures(Box::new(WildcardId), &module).unwrap();
+            Compiler::extract_captures(Arc::new(WildcardId), &module).unwrap();
 
         assert_eq!(registers.register_count(), 1);
         assert!(registers.variables_map().contains_key("x"));
@@ -409,7 +409,7 @@ mod tests {
         let module = Untyped::<F32Grammar>::parse_statements(program).unwrap();
 
         let (registers, import_spans) =
-            Compiler::extract_captures(Box::new(WildcardId), &module).unwrap();
+            Compiler::extract_captures(Arc::new(WildcardId), &module).unwrap();
         assert_eq!(registers.register_count(), 2);
 
         assert!(registers.variables_map().contains_key("PI"));

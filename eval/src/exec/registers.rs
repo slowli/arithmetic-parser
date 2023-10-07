@@ -1,7 +1,7 @@
 //! `Registers` for executing commands and closely related types.
 
 use crate::{
-    alloc::{vec, Arc, HashMap, Rc, String, ToOwned, Vec},
+    alloc::{vec, Arc, HashMap, String, ToOwned, Vec},
     arith::OrdArithmetic,
     error::{Backtrace, EvalResult, LocationInModule, TupleLenMismatchContext},
     exec::command::{Atom, Command, CompiledExpr, FieldName, LocatedAtom, LocatedCommand},
@@ -15,7 +15,7 @@ use arithmetic_parser::{BinaryOp, Location, LvalueLen, UnaryOp};
 pub(crate) struct Executable<T> {
     id: Arc<dyn ModuleId>,
     commands: Vec<LocatedCommand<T>>,
-    child_fns: Vec<Rc<ExecutableFn<T>>>,
+    child_fns: Vec<Arc<ExecutableFn<T>>>,
     // Hint how many registers the executable requires.
     register_capacity: usize,
 }
@@ -44,7 +44,7 @@ impl<T> Executable<T> {
 
     pub fn push_child_fn(&mut self, child_fn: ExecutableFn<T>) -> usize {
         let fn_ptr = self.child_fns.len();
-        self.child_fns.push(Rc::new(child_fn));
+        self.child_fns.push(Arc::new(child_fn));
         fn_ptr
     }
 
@@ -368,7 +368,7 @@ impl<T: 'static + Clone> Registers<T> {
                 captures,
                 capture_names,
             } => {
-                let fn_executable = Rc::clone(&executable.child_fns[*ptr]);
+                let fn_executable = Arc::clone(&executable.child_fns[*ptr]);
                 let captured_values = captures
                     .iter()
                     .map(|capture| self.resolve_atom(&capture.extra))

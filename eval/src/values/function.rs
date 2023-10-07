@@ -3,7 +3,7 @@
 use core::fmt;
 
 use crate::{
-    alloc::{Arc, HashMap, Rc, String, ToOwned, Vec},
+    alloc::{Arc, HashMap, String, ToOwned, Vec},
     arith::OrdArithmetic,
     error::{Backtrace, Error, ErrorKind, LocationInModule},
     exec::{ExecutableFn, ModuleId, Operations},
@@ -131,14 +131,14 @@ impl<T> dyn NativeFn<T> {
 /// Function defined within the interpreter.
 #[derive(Debug, Clone)]
 pub struct InterpretedFn<T> {
-    definition: Rc<ExecutableFn<T>>,
+    definition: Arc<ExecutableFn<T>>,
     captures: Vec<Value<T>>,
     capture_names: Vec<String>,
 }
 
 impl<T> InterpretedFn<T> {
     pub(crate) fn new(
-        definition: Rc<ExecutableFn<T>>,
+        definition: Arc<ExecutableFn<T>>,
         captures: Vec<Value<T>>,
         capture_names: Vec<String>,
     ) -> Self {
@@ -217,16 +217,16 @@ impl<T: 'static + Clone> InterpretedFn<T> {
 #[derive(Debug)]
 pub enum Function<T> {
     /// Native function.
-    Native(Rc<dyn NativeFn<T>>),
+    Native(Arc<dyn NativeFn<T>>),
     /// Interpreted function.
-    Interpreted(Rc<InterpretedFn<T>>),
+    Interpreted(Arc<InterpretedFn<T>>),
 }
 
 impl<T> Clone for Function<T> {
     fn clone(&self) -> Self {
         match self {
-            Self::Native(function) => Self::Native(Rc::clone(function)),
-            Self::Interpreted(function) => Self::Interpreted(Rc::clone(function)),
+            Self::Native(function) => Self::Native(Arc::clone(function)),
+            Self::Interpreted(function) => Self::Interpreted(Arc::clone(function)),
         }
     }
 }
@@ -257,14 +257,14 @@ impl<T: PartialEq> PartialEq for Function<T> {
 impl<T> Function<T> {
     /// Creates a native function.
     pub fn native(function: impl NativeFn<T> + 'static) -> Self {
-        Self::Native(Rc::new(function))
+        Self::Native(Arc::new(function))
     }
 
     /// Checks if the provided function is the same as this one.
     pub fn is_same_function(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Native(this), Self::Native(other)) => this.data_ptr() == other.data_ptr(),
-            (Self::Interpreted(this), Self::Interpreted(other)) => Rc::ptr_eq(this, other),
+            (Self::Interpreted(this), Self::Interpreted(other)) => Arc::ptr_eq(this, other),
             _ => false,
         }
     }

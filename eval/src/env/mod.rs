@@ -6,7 +6,7 @@ mod variable_map;
 pub use self::variable_map::{Assertions, Comparisons, Prelude};
 
 use crate::{
-    alloc::{hash_map, HashMap, Rc, String, ToOwned},
+    alloc::{hash_map, Arc, HashMap, String, ToOwned},
     arith::{OrdArithmetic, StdArithmetic},
     exec::Operations,
     fns, NativeFn, Value,
@@ -45,7 +45,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct Environment<T> {
     variables: HashMap<String, Value<T>>,
-    arithmetic: Rc<dyn OrdArithmetic<T>>,
+    arithmetic: Arc<dyn OrdArithmetic<T>>,
 }
 
 impl<T> Default for Environment<T>
@@ -72,7 +72,7 @@ where
     pub fn new() -> Self {
         Self {
             variables: HashMap::new(),
-            arithmetic: Rc::new(StdArithmetic),
+            arithmetic: Arc::new(StdArithmetic),
         }
     }
 }
@@ -85,7 +85,7 @@ impl<T> Environment<T> {
     {
         Self {
             variables: HashMap::new(),
-            arithmetic: Rc::new(arithmetic),
+            arithmetic: Arc::new(arithmetic),
         }
     }
 

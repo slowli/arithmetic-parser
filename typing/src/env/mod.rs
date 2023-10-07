@@ -130,7 +130,7 @@ impl<Prim: PrimitiveType> TypeEnvironment<Prim> {
     pub fn process_statements<'a, T>(
         &mut self,
         block: &Block<'a, T>,
-    ) -> Result<Type<Prim>, Errors<'a, Prim>>
+    ) -> Result<Type<Prim>, Errors<Prim>>
     where
         T: Grammar<Type<'a> = TypeAst<'a>>,
         NumArithmetic: MapPrimitiveType<T::Lit, Prim = Prim> + TypeArithmetic<Prim>,
@@ -150,7 +150,7 @@ impl<Prim: PrimitiveType> TypeEnvironment<Prim> {
         &mut self,
         arithmetic: &A,
         block: &Block<'a, T>,
-    ) -> Result<Type<Prim>, Errors<'a, Prim>>
+    ) -> Result<Type<Prim>, Errors<Prim>>
     where
         T: Grammar<Type<'a> = TypeAst<'a>>,
         A: MapPrimitiveType<T::Lit, Prim = Prim> + TypeArithmetic<Prim>,

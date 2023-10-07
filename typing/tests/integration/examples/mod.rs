@@ -294,14 +294,14 @@ fn schnorr_signatures() {
 #[test]
 fn schnorr_signatures_error() {
     let bogus_code = SCHNORR_CODE.replace("s: r - self * e", "s: R - self * e");
-    let code = U64Grammar::parse_statements(bogus_code.as_str()).unwrap();
+    let block = U64Grammar::parse_statements(bogus_code.as_str()).unwrap();
     let errors = prepare_env()
-        .process_with_arithmetic(&GroupArithmetic, &code)
+        .process_with_arithmetic(&GroupArithmetic, &block)
         .unwrap_err();
 
     assert_eq!(errors.len(), 1);
     let err = errors.into_iter().next().unwrap();
-    assert_eq!(*err.main_span().fragment(), "R");
+    assert_eq!(err.main_location().span(&bogus_code), "R");
     assert_eq!(
         err.kind().to_string(),
         "Type `Ge` is not assignable to type `Sc`"

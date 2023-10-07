@@ -24,7 +24,7 @@ fn converting_fn_type_unused_type() {
     let (_, ast) = TypeAst::parse(input).unwrap();
     let err = <Type>::try_from(&ast).unwrap_err().single();
 
-    assert_eq!(err.main_span().location_offset(), 5);
+    assert_eq!(err.main_location().location_offset(), 5);
     assert_matches!(
         err.kind(),
         ErrorKind::AstConversion(AstConversionError::UnusedTypeParam(name)) if name == "T"
@@ -37,7 +37,7 @@ fn converting_fn_type_unused_length() {
     let (_, ast) = TypeAst::parse(input).unwrap();
     let err = <Type>::try_from(&ast).unwrap_err().single();
 
-    assert_eq!(err.main_span().location_offset(), 9);
+    assert_eq!(err.main_location().location_offset(), 9);
     assert_matches!(
         err.kind(),
         ErrorKind::AstConversion(AstConversionError::UnusedLength(name)) if name == "N"
@@ -50,7 +50,7 @@ fn converting_fn_type_free_type_param() {
     let (_, ast) = TypeAst::parse(input).unwrap();
     let err = <Type>::try_from(&ast).unwrap_err().single();
 
-    assert_eq!(err.main_span().location_offset(), 6);
+    assert_eq!(err.main_location().location_offset(), 6);
     assert_matches!(
         err.kind(),
         ErrorKind::AstConversion(AstConversionError::FreeTypeVar(name)) if name == "T"
@@ -63,7 +63,7 @@ fn converting_fn_type_free_length() {
     let (_, ast) = TypeAst::parse(input).unwrap();
     let err = <Type>::try_from(&ast).unwrap_err().single();
 
-    assert_eq!(err.main_span().location_offset(), 6);
+    assert_eq!(err.main_location().location_offset(), 6);
     assert_matches!(
         err.kind(),
         ErrorKind::AstConversion(AstConversionError::FreeLengthVar(name)) if name == "N"
@@ -76,7 +76,7 @@ fn converting_fn_type_invalid_constraint() {
     let (_, ast) = TypeAst::parse(input).unwrap();
     let err = <Type>::try_from(&ast).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "Bug");
+    assert_eq!(err.main_location().span(&input), "Bug");
     assert_matches!(
         err.kind(),
         ErrorKind::AstConversion(AstConversionError::UnknownConstraint(id))
@@ -90,8 +90,8 @@ fn embedded_type_with_constraints() {
     let (_, ast) = TypeAst::parse(input).unwrap();
     let err = <Type>::try_from(&ast).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "for<'U: Lin>");
-    assert_eq!(err.main_span().location_offset(), 5);
+    assert_eq!(err.main_location().span(&input), "for<'U: Lin>");
+    assert_eq!(err.main_location().location_offset(), 5);
     assert_matches!(
         err.kind(),
         ErrorKind::AstConversion(AstConversionError::EmbeddedQuantifier)
@@ -104,8 +104,8 @@ fn object_type_with_duplicate_fields() {
     let (_, ast) = TypeAst::parse(input).unwrap();
     let err = <Type>::try_from(&ast).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "x");
-    assert_eq!(err.main_span().location_offset(), 10);
+    assert_eq!(err.main_location().span(&input), "x");
+    assert_eq!(err.main_location().location_offset(), 10);
     assert_matches!(
         err.kind(),
         ErrorKind::AstConversion(AstConversionError::DuplicateField(field))
@@ -115,10 +115,11 @@ fn object_type_with_duplicate_fields() {
 
 #[test]
 fn error_when_parsing_standalone_some_type() {
-    let errors = <Type>::try_from(&TypeAst::try_from("(_) -> Num").unwrap()).unwrap_err();
+    let code = "(_) -> Num";
+    let errors = <Type>::try_from(&TypeAst::try_from(code).unwrap()).unwrap_err();
     let err = errors.single();
 
-    assert_eq!(*err.main_span().fragment(), "_");
+    assert_eq!(err.main_location().span(code), "_");
     assert_matches!(
         err.kind(),
         ErrorKind::AstConversion(AstConversionError::InvalidSomeType)
@@ -127,10 +128,11 @@ fn error_when_parsing_standalone_some_type() {
 
 #[test]
 fn error_when_parsing_standalone_some_length() {
-    let errors = <Type>::try_from(&TypeAst::try_from("[Num; _]").unwrap()).unwrap_err();
+    let code = "[Num; _]";
+    let errors = <Type>::try_from(&TypeAst::try_from(code).unwrap()).unwrap_err();
     let err = errors.single();
 
-    assert_eq!(*err.main_span().fragment(), "_");
+    assert_eq!(err.main_location().span(code), "_");
     assert_matches!(
         err.kind(),
         ErrorKind::AstConversion(AstConversionError::InvalidSomeLength)
@@ -202,7 +204,7 @@ fn unsupported_type_param_in_generic_fn() {
 
     assert!(err.location().is_empty());
     assert_matches!(err.context(), ErrorContext::Assignment { .. });
-    assert_eq!(*err.main_span().fragment(), "(('Arg,)) -> ('Arg,)");
+    assert_eq!(err.main_location().span(code), "(('Arg,)) -> ('Arg,)");
     assert_matches!(err.kind(), ErrorKind::UnsupportedParam);
 }
 
@@ -220,7 +222,7 @@ fn unsupported_type_param_location() {
 
         assert_eq!(err.location(), [tuple_element(1)]);
         assert_matches!(err.context(), ErrorContext::Assignment { .. });
-        assert_eq!(*err.main_span().fragment(), "(('Arg,)) -> ('Arg,)");
+        assert_eq!(err.main_location().span(code), "(('Arg,)) -> ('Arg,)");
         assert_matches!(err.kind(), ErrorKind::UnsupportedParam);
     }
 }
@@ -232,7 +234,7 @@ fn unsupported_const_param_in_generic_fn() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "([Num; N]) -> [Num; N]");
+    assert_eq!(err.main_location().span(code), "([Num; N]) -> [Num; N]");
     assert_matches!(err.kind(), ErrorKind::UnsupportedParam);
 }
 
@@ -253,9 +255,9 @@ fn adding_dynamically_typed_slices() {
         .collect();
 
     assert_eq!(errors.len(), 2);
-    assert_eq!(*errors[0].main_span().fragment(), "x");
+    assert_eq!(errors[0].main_location().span(code), "x");
     assert_matches!(errors[0].kind(), ErrorKind::DynamicLen(_));
-    assert_eq!(*errors[1].main_span().fragment(), "y");
+    assert_eq!(errors[1].main_location().span(code), "y");
     assert_matches!(errors[1].kind(), ErrorKind::DynamicLen(_));
 }
 
@@ -287,7 +289,7 @@ fn bogus_annotation_in_fn_definition() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "Bogus");
+    assert_eq!(err.main_location().span(code), "Bogus");
     assert_matches!(
         err.kind(),
         ErrorKind::AstConversion(AstConversionError::UnknownType(ty))
@@ -304,7 +306,7 @@ fn custom_constraint_if_not_added_to_env() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.main_span().fragment(), "Hash");
+    assert_eq!(err.main_location().span(code), "Hash");
     assert_matches!(
         err.kind(),
         ErrorKind::AstConversion(AstConversionError::UnknownConstraint(c))
@@ -322,7 +324,7 @@ fn custom_constraint_if_incorrectly_added_to_env() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.main_span().fragment(), "Hash");
+    assert_eq!(err.main_location().span(code), "Hash");
     assert_matches!(
         err.kind(),
         ErrorKind::AstConversion(AstConversionError::NotObjectSafe(c))
@@ -337,8 +339,8 @@ fn type_cast_basic_error() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "(1, 2)");
-    assert_eq!(*err.root_span().fragment(), "(1, 2) as Num");
+    assert_eq!(err.main_location().span(code), "(1, 2)");
+    assert_eq!(err.root_location().span(code), "(1, 2) as Num");
     assert_matches!(
         err.kind(),
         ErrorKind::TypeMismatch(lhs, rhs) if *lhs == Type::NUM && rhs.to_string() == "(Num, Num)"
@@ -363,7 +365,7 @@ fn type_cast_error_in_subtype() {
     );
     assert_matches!(err.context(), ErrorContext::TypeCast { .. });
     assert_eq!(err.location(), [tuple_element(1)]);
-    assert_eq!(*err.main_span().fragment(), "|x: Num| x + 3");
+    assert_eq!(err.main_location().span(code), "|x: Num| x + 3");
 }
 
 #[test]
@@ -373,7 +375,7 @@ fn insufficient_info_when_indexing_tuple() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "xs.0");
+    assert_eq!(err.main_location().span(code), "xs.0");
     assert_matches!(err.kind(), ErrorKind::UnsupportedIndex);
     assert_matches!(err.context(), ErrorContext::TupleIndex { ty } if ty.to_string() == "[Num]");
 }
@@ -445,7 +447,7 @@ fn contradicting_dyn_constraint_via_field_access() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "!obj.x");
+    assert_eq!(err.main_location().span(code), "!obj.x");
     assert_matches!(err.context(), ErrorContext::UnaryOp(_));
     assert_matches!(err.kind(), ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL);
 }
@@ -461,7 +463,7 @@ fn contradicting_field_types_via_annotations() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "!obj.x");
+    assert_eq!(err.main_location().span(code), "!obj.x");
     assert_matches!(err.context(), ErrorContext::UnaryOp(_));
     assert_matches!(
         err.kind(),
@@ -480,7 +482,7 @@ fn contradicting_constraint_with_dyn_object() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.main_span().fragment(), "#{ x: 1 }");
+    assert_eq!(err.main_location().span(code), "#{ x: 1 }");
     assert_eq!(err.location(), [fn_arg(0)]);
     assert_matches!(
         err.kind(),
@@ -500,7 +502,7 @@ fn extra_fields_in_dyn_fn_arg() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.main_span().fragment(), "|obj| obj.x + obj.y");
+    assert_eq!(err.main_location().span(code), "|obj| obj.x + obj.y");
     assert_eq!(err.location(), [fn_arg(1), fn_arg(0)]);
     assert_matches!(
         err.kind(),

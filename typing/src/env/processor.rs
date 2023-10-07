@@ -28,7 +28,7 @@ pub(super) struct TypeProcessor<'a, 'env, Val, Prim: PrimitiveType> {
     /// Variables assigned within the current lvalue (if it is being processed).
     /// Used to determine duplicate vars.
     lvalue_vars: Option<HashMap<&'a str, Spanned<'a>>>,
-    errors: Errors<'a, Prim>,
+    errors: Errors<Prim>,
 }
 
 impl<'env, Val, Prim: PrimitiveType> TypeProcessor<'_, 'env, Val, Prim> {
@@ -601,10 +601,7 @@ where
         }
     }
 
-    pub fn process_statements<T>(
-        mut self,
-        block: &Block<'a, T>,
-    ) -> Result<Type<Prim>, Errors<'a, Prim>>
+    pub fn process_statements<T>(mut self, block: &Block<'a, T>) -> Result<Type<Prim>, Errors<Prim>>
     where
         T: Grammar<Lit = Val, Type<'a> = TypeAst<'a>>,
     {

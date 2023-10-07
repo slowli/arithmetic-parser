@@ -82,19 +82,19 @@ impl<Prim: PrimitiveType> OpErrors<'static, Prim> {
         }
     }
 
-    pub(crate) fn contextualize<'a, T: Grammar>(
+    pub(crate) fn contextualize<T: Grammar>(
         self,
-        span: &SpannedExpr<'a, T>,
+        span: &SpannedExpr<'_, T>,
         context: impl Into<ErrorContext<Prim>>,
-    ) -> Vec<Error<'a, Prim>> {
+    ) -> Vec<Error<Prim>> {
         let context = context.into();
         self.do_contextualize(|item| item.into_expr_error(context.clone(), span))
     }
 
-    fn do_contextualize<'a>(
+    fn do_contextualize(
         self,
-        map_fn: impl Fn(ErrorPrecursor<Prim>) -> Error<'a, Prim>,
-    ) -> Vec<Error<'a, Prim>> {
+        map_fn: impl Fn(ErrorPrecursor<Prim>) -> Error<Prim>,
+    ) -> Vec<Error<Prim>> {
         let Goat::Owned(errors) = self.errors else {
             unreachable!()
         };
@@ -105,7 +105,7 @@ impl<Prim: PrimitiveType> OpErrors<'static, Prim> {
         self,
         span: &SpannedLvalue<'a, TypeAst<'a>>,
         context: &ErrorContext<Prim>,
-    ) -> Vec<Error<'a, Prim>> {
+    ) -> Vec<Error<Prim>> {
         if self.errors.is_empty() {
             vec![]
         } else {
@@ -117,7 +117,7 @@ impl<Prim: PrimitiveType> OpErrors<'static, Prim> {
         self,
         span: &Spanned<'a, Destructure<'a, TypeAst<'a>>>,
         create_context: impl FnOnce() -> ErrorContext<Prim>,
-    ) -> Vec<Error<'a, Prim>> {
+    ) -> Vec<Error<Prim>> {
         if self.errors.is_empty() {
             vec![]
         } else {
@@ -161,14 +161,16 @@ struct ErrorPrecursor<Prim: PrimitiveType> {
 }
 
 impl<Prim: PrimitiveType> ErrorPrecursor<Prim> {
-    fn into_expr_error<'a, T: Grammar>(
+    fn into_expr_error<T: Grammar>(
         self,
         context: ErrorContext<Prim>,
-        root_expr: &SpannedExpr<'a, T>,
-    ) -> Error<'a, Prim> {
+        root_expr: &SpannedExpr<'_, T>,
+    ) -> Error<Prim> {
         Error {
-            inner: ErrorLocation::walk_expr(&self.location, root_expr).copy_with_extra(self.kind),
-            root_span: root_expr.with_no_extra(),
+            inner: ErrorLocation::walk_expr(&self.location, root_expr)
+                .copy_with_extra(self.kind)
+                .into(),
+            root_location: root_expr.with_no_extra().into(),
             context,
             location: self.location,
         }
@@ -178,11 +180,12 @@ impl<Prim: PrimitiveType> ErrorPrecursor<Prim> {
         self,
         context: ErrorContext<Prim>,
         root_lvalue: &SpannedLvalue<'a, TypeAst<'a>>,
-    ) -> Error<'a, Prim> {
+    ) -> Error<Prim> {
         Error {
             inner: ErrorLocation::walk_lvalue(&self.location, root_lvalue)
-                .copy_with_extra(self.kind),
-            root_span: root_lvalue.with_no_extra(),
+                .copy_with_extra(self.kind)
+                .into(),
+            root_location: root_lvalue.with_no_extra().into(),
             context,
             location: self.location,
         }
@@ -192,11 +195,12 @@ impl<Prim: PrimitiveType> ErrorPrecursor<Prim> {
         self,
         context: ErrorContext<Prim>,
         root_destructure: &Spanned<'a, Destructure<'a, TypeAst<'a>>>,
-    ) -> Error<'a, Prim> {
+    ) -> Error<Prim> {
         Error {
             inner: ErrorLocation::walk_destructure(&self.location, root_destructure)
-                .copy_with_extra(self.kind),
-            root_span: root_destructure.with_no_extra(),
+                .copy_with_extra(self.kind)
+                .into(),
+            root_location: root_destructure.with_no_extra().into(),
             context,
             location: self.location,
         }

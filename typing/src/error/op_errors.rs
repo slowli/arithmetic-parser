@@ -4,7 +4,7 @@ use std::ops;
 
 use crate::{
     ast::TypeAst,
-    error::{Error, ErrorContext, ErrorKind, ErrorLocation},
+    error::{Error, ErrorContext, ErrorKind, ErrorPathFragment},
     PrimitiveType,
 };
 use arithmetic_parser::{grammars::Grammar, Destructure, Spanned, SpannedExpr, SpannedLvalue};
@@ -19,7 +19,7 @@ use arithmetic_parser::{grammars::Grammar, Destructure, Spanned, SpannedExpr, Sp
 #[derive(Debug)]
 pub struct OpErrors<'a, Prim: PrimitiveType> {
     errors: Goat<'a, Vec<ErrorPrecursor<Prim>>>,
-    current_location: Vec<ErrorLocation>,
+    current_path: Vec<ErrorPathFragment>,
 }
 
 impl<Prim: PrimitiveType> OpErrors<'_, Prim> {
@@ -27,7 +27,7 @@ impl<Prim: PrimitiveType> OpErrors<'_, Prim> {
     pub fn push(&mut self, kind: ErrorKind<Prim>) {
         self.errors.push(ErrorPrecursor {
             kind,
-            location: self.current_location.clone(),
+            path: self.current_path.clone(),
         });
     }
 
@@ -43,26 +43,26 @@ impl<Prim: PrimitiveType> OpErrors<'_, Prim> {
     pub fn by_ref(&mut self) -> OpErrors<'_, Prim> {
         OpErrors {
             errors: Goat::Borrowed(&mut *self.errors),
-            current_location: self.current_location.clone(),
+            current_path: self.current_path.clone(),
         }
     }
 
-    /// Narrows down the location of the error.
-    pub fn with_location(&mut self, location: impl Into<ErrorLocation>) -> OpErrors<'_, Prim> {
-        let mut current_location = self.current_location.clone();
-        current_location.push(location.into());
+    /// Narrows down the path to the error.
+    pub fn join_path(&mut self, path: impl Into<ErrorPathFragment>) -> OpErrors<'_, Prim> {
+        let mut current_path = self.current_path.clone();
+        current_path.push(path.into());
         OpErrors {
             errors: Goat::Borrowed(&mut *self.errors),
-            current_location,
+            current_path,
         }
     }
 
-    pub(crate) fn push_location(&mut self, location: impl Into<ErrorLocation>) {
-        self.current_location.push(location.into());
+    pub(crate) fn push_path_fragment(&mut self, path: impl Into<ErrorPathFragment>) {
+        self.current_path.push(path.into());
     }
 
-    pub(crate) fn pop_location(&mut self) {
-        self.current_location.pop().expect("Location is empty");
+    pub(crate) fn pop_path_fragment(&mut self) {
+        self.current_path.pop().expect("Location is empty");
     }
 
     #[cfg(test)]
@@ -78,7 +78,7 @@ impl<Prim: PrimitiveType> OpErrors<'static, Prim> {
     pub(crate) fn new() -> Self {
         Self {
             errors: Goat::Owned(vec![]),
-            current_location: vec![],
+            current_path: vec![],
         }
     }
 
@@ -157,7 +157,7 @@ impl<T> ops::DerefMut for Goat<'_, T> {
 #[derive(Debug)]
 struct ErrorPrecursor<Prim: PrimitiveType> {
     kind: ErrorKind<Prim>,
-    location: Vec<ErrorLocation>,
+    path: Vec<ErrorPathFragment>,
 }
 
 impl<Prim: PrimitiveType> ErrorPrecursor<Prim> {
@@ -167,12 +167,12 @@ impl<Prim: PrimitiveType> ErrorPrecursor<Prim> {
         root_expr: &SpannedExpr<'_, T>,
     ) -> Error<Prim> {
         Error {
-            inner: ErrorLocation::walk_expr(&self.location, root_expr)
+            inner: ErrorPathFragment::walk_expr(&self.path, root_expr)
                 .copy_with_extra(self.kind)
                 .into(),
             root_location: root_expr.with_no_extra().into(),
             context,
-            location: self.location,
+            path: self.path,
         }
     }
 
@@ -182,12 +182,12 @@ impl<Prim: PrimitiveType> ErrorPrecursor<Prim> {
         root_lvalue: &SpannedLvalue<'a, TypeAst<'a>>,
     ) -> Error<Prim> {
         Error {
-            inner: ErrorLocation::walk_lvalue(&self.location, root_lvalue)
+            inner: ErrorPathFragment::walk_lvalue(&self.path, root_lvalue)
                 .copy_with_extra(self.kind)
                 .into(),
             root_location: root_lvalue.with_no_extra().into(),
             context,
-            location: self.location,
+            path: self.path,
         }
     }
 
@@ -197,12 +197,12 @@ impl<Prim: PrimitiveType> ErrorPrecursor<Prim> {
         root_destructure: &Spanned<'a, Destructure<'a, TypeAst<'a>>>,
     ) -> Error<Prim> {
         Error {
-            inner: ErrorLocation::walk_destructure(&self.location, root_destructure)
+            inner: ErrorPathFragment::walk_destructure(&self.path, root_destructure)
                 .copy_with_extra(self.kind)
                 .into(),
             root_location: root_destructure.with_no_extra().into(),
             context,
-            location: self.location,
+            path: self.path,
         }
     }
 }

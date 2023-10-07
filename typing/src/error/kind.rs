@@ -3,8 +3,8 @@
 use std::{collections::HashSet, fmt};
 
 use crate::{
-    arith::Constraint, ast::AstConversionError, error::ErrorLocation, PrimitiveType, TupleIndex,
-    TupleLen, Type,
+    arith::Constraint, ast::AstConversionError, error::ErrorPathFragment, PrimitiveType,
+    TupleIndex, TupleLen, Type,
 };
 use arithmetic_parser::UnsupportedType;
 
@@ -19,19 +19,19 @@ pub enum TupleContext {
 }
 
 impl TupleContext {
-    pub(crate) fn element(self, index: usize) -> ErrorLocation {
+    pub(crate) fn element(self, index: usize) -> ErrorPathFragment {
         let index = TupleIndex::Start(index);
         match self {
-            Self::Generic => ErrorLocation::TupleElement(Some(index)),
-            Self::FnArgs => ErrorLocation::FnArg(Some(index)),
+            Self::Generic => ErrorPathFragment::TupleElement(Some(index)),
+            Self::FnArgs => ErrorPathFragment::FnArg(Some(index)),
         }
     }
 
-    pub(crate) fn end_element(self, index: usize) -> ErrorLocation {
+    pub(crate) fn end_element(self, index: usize) -> ErrorPathFragment {
         let index = TupleIndex::End(index);
         match self {
-            Self::Generic => ErrorLocation::TupleElement(Some(index)),
-            Self::FnArgs => ErrorLocation::FnArg(Some(index)),
+            Self::Generic => ErrorPathFragment::TupleElement(Some(index)),
+            Self::FnArgs => ErrorPathFragment::FnArg(Some(index)),
         }
     }
 }

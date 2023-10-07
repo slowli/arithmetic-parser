@@ -182,7 +182,7 @@ impl<Prim: PrimitiveType> Object<Prim> {
     ) {
         for (field_name, ty) in other.fields {
             if let Some(this_field) = self.fields.get(&field_name) {
-                substitutions.unify(this_field, &ty, errors.with_location(field_name.as_str()));
+                substitutions.unify(this_field, &ty, errors.join_path(field_name.as_str()));
             } else {
                 self.fields.insert(field_name, ty);
             }
@@ -229,7 +229,7 @@ impl<Prim: PrimitiveType> Object<Prim> {
         let mut missing_fields = HashSet::new();
         for (field_name, lhs_ty) in self.iter() {
             if let Some(rhs_ty) = rhs.get(field_name) {
-                substitutions.unify(lhs_ty, rhs_ty, errors.with_location(field_name));
+                substitutions.unify(lhs_ty, rhs_ty, errors.join_path(field_name));
             } else {
                 missing_fields.insert(field_name.to_owned());
             }

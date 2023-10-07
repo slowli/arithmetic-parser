@@ -5,7 +5,7 @@ use assert_matches::assert_matches;
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
     defs::Prelude,
-    error::{ErrorContext, ErrorKind, ErrorLocation},
+    error::{ErrorContext, ErrorKind, ErrorPathFragment},
     TupleLen, Type, TypeEnvironment, UnknownLen,
 };
 
@@ -220,7 +220,7 @@ fn unifying_tuples_with_dyn_lengths() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(err.main_location().span(code), "(...[_; _], _, Num)");
-    assert_eq!(err.location(), [ErrorLocation::TupleElement(None)]);
+    assert_eq!(err.path(), [ErrorPathFragment::TupleElement(None)]);
     assert_matches!(
         err.context(),
         ErrorContext::Assignment { lhs, rhs }

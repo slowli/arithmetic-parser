@@ -6,7 +6,7 @@ use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
     arith::NumArithmetic,
     defs::Prelude,
-    error::{ErrorContext, ErrorKind, ErrorLocation},
+    error::{ErrorContext, ErrorKind, ErrorPathFragment},
     Type, TypeEnvironment,
 };
 
@@ -121,7 +121,7 @@ fn no_required_field() {
         .single();
 
     assert_eq!(err.main_location().span(code), "#{ y: 2 }");
-    assert_eq!(err.location(), [fn_arg(0)]);
+    assert_eq!(err.path(), [fn_arg(0)]);
     assert_matches!(
         err.kind(),
         ErrorKind::MissingFields { fields, available_fields }
@@ -143,7 +143,7 @@ fn incompatible_field_types() {
         .single();
 
     assert_eq!(err.main_location().span(code), "#{ x: (1, 2) }");
-    assert_eq!(err.location(), [fn_arg(0), ErrorLocation::from("x")]);
+    assert_eq!(err.path(), [fn_arg(0), ErrorPathFragment::from("x")]);
     assert_matches!(err.context(), ErrorContext::FnCall { .. });
     assert_matches!(
         err.kind(),
@@ -161,7 +161,7 @@ fn incompatible_field_types_via_accesses() {
         .single();
 
     assert_eq!(err.main_location().span(code), "!obj.x");
-    assert_eq!(err.location(), []);
+    assert_eq!(err.path(), []);
     assert_matches!(err.context(), ErrorContext::UnaryOp(_));
     assert_matches!(
         err.kind(),
@@ -182,7 +182,7 @@ fn incompatible_field_types_via_fn() {
         .single();
 
     assert_eq!(err.main_location().span(code), "obj");
-    assert_eq!(err.location(), [fn_arg(0), ErrorLocation::from("x")]);
+    assert_eq!(err.path(), [fn_arg(0), ErrorPathFragment::from("x")]);
     assert_matches!(err.context(), ErrorContext::FnCall { .. });
     assert_matches!(
         err.kind(),
@@ -201,7 +201,7 @@ fn incompatible_fields_via_constraints_for_concrete_object() {
         .single();
 
     assert_eq!(err.main_location().span(code), "#{ x: 1, y: || 2 }");
-    assert_eq!(err.location(), [fn_arg(0), ErrorLocation::from("y")]);
+    assert_eq!(err.path(), [fn_arg(0), ErrorPathFragment::from("y")]);
     assert_matches!(err.context(), ErrorContext::FnCall { .. });
     assert_matches!(
         err.kind(),
@@ -221,7 +221,7 @@ fn incompatible_fields_via_constraints_for_object_constraint() {
         .single();
 
     assert_eq!(err.main_location().span(code), "(obj.run)()");
-    assert_eq!(err.location(), []);
+    assert_eq!(err.path(), []);
     assert_matches!(err.context(), ErrorContext::FnCall { .. });
     assert_matches!(
         err.kind(),
@@ -241,7 +241,7 @@ fn incompatible_fields_via_constraints_for_object_constraint_rev() {
         .single();
 
     assert_eq!(err.main_location().span(code), "obj");
-    assert_eq!(err.location(), [fn_arg(0), ErrorLocation::from("run")]);
+    assert_eq!(err.path(), [fn_arg(0), ErrorPathFragment::from("run")]);
     assert_matches!(err.context(), ErrorContext::FnCall { .. });
     assert_matches!(
         err.kind(),

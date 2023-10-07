@@ -11,12 +11,12 @@ use crate::{
 use arithmetic_parser::{Location, Spanned, UnsupportedType};
 
 mod kind;
-mod location;
+mod path;
 mod op_errors;
 
 pub use self::{
     kind::{ErrorKind, TupleContext},
-    location::ErrorLocation,
+    path::ErrorPathFragment,
     op_errors::OpErrors,
 };
 
@@ -26,7 +26,7 @@ pub struct Error<Prim: PrimitiveType> {
     inner: Location<ErrorKind<Prim>>,
     root_location: Location,
     context: ErrorContext<Prim>,
-    location: Vec<ErrorLocation>,
+    path: Vec<ErrorPathFragment>,
 }
 
 impl<Prim: PrimitiveType> fmt::Display for Error<Prim> {
@@ -57,7 +57,7 @@ impl<Prim: PrimitiveType> Error<Prim> {
             inner: span.copy_with_extra(kind).into(),
             root_location: span.with_no_extra().into(),
             context: ErrorContext::None,
-            location: vec![],
+            path: vec![],
         }
     }
 
@@ -67,7 +67,7 @@ impl<Prim: PrimitiveType> Error<Prim> {
             inner: span.copy_with_extra(ErrorKind::UndefinedVar(ident)).into(),
             root_location: span.with_no_extra().into(),
             context: ErrorContext::None,
-            location: vec![],
+            path: vec![],
         }
     }
 
@@ -79,7 +79,7 @@ impl<Prim: PrimitiveType> Error<Prim> {
                 .into(),
             root_location: span.with_no_extra().into(),
             context: ErrorContext::None,
-            location: vec![],
+            path: vec![],
         }
     }
 
@@ -89,7 +89,7 @@ impl<Prim: PrimitiveType> Error<Prim> {
             inner: span.copy_with_extra(ErrorKind::RepeatedField(ident)).into(),
             root_location: span.with_no_extra().into(),
             context: ErrorContext::None,
-            location: vec![],
+            path: vec![],
         }
     }
 
@@ -99,7 +99,7 @@ impl<Prim: PrimitiveType> Error<Prim> {
             inner: span.copy_with_extra(kind).into(),
             root_location: span.with_no_extra().into(),
             context: ErrorContext::None,
-            location: vec![],
+            path: vec![],
         }
     }
 
@@ -111,7 +111,7 @@ impl<Prim: PrimitiveType> Error<Prim> {
                 .into(),
             root_location: span.into(),
             context: ErrorContext::None,
-            location: vec![],
+            path: vec![],
         }
     }
 
@@ -131,7 +131,7 @@ impl<Prim: PrimitiveType> Error<Prim> {
             context: ErrorContext::TupleIndex {
                 ty: Type::Tuple(receiver),
             },
-            location: vec![],
+            path: vec![],
         }
     }
 
@@ -140,7 +140,7 @@ impl<Prim: PrimitiveType> Error<Prim> {
             inner: span.copy_with_extra(ErrorKind::CannotIndex).into(),
             root_location: span.with_no_extra().into(),
             context: ErrorContext::TupleIndex { ty: receiver },
-            location: vec![],
+            path: vec![],
         }
     }
 
@@ -149,7 +149,7 @@ impl<Prim: PrimitiveType> Error<Prim> {
             inner: span.copy_with_extra(ErrorKind::UnsupportedIndex).into(),
             root_location: span.with_no_extra().into(),
             context: ErrorContext::TupleIndex { ty: receiver },
-            location: vec![],
+            path: vec![],
         }
     }
 
@@ -173,11 +173,10 @@ impl<Prim: PrimitiveType> Error<Prim> {
         &self.context
     }
 
-    /// Gets the location of this error relative to the failed top-level operation.
+    /// Gets the path of this error relative to the failed top-level operation.
     /// This can be used for highlighting relevant parts of types in [`Self::context()`].
-    // FIXME: rename?
-    pub fn location(&self) -> &[ErrorLocation] {
-        &self.location
+    pub fn path(&self) -> &[ErrorPathFragment] {
+        &self.path
     }
 }
 

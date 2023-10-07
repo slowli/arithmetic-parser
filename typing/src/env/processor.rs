@@ -260,7 +260,7 @@ where
             .enumerate()
             .map(|(i, element)| {
                 let loc = context.element(i);
-                self.process_lvalue(element, errors.with_location(loc))
+                self.process_lvalue(element, errors.join_path(loc))
             })
             .collect();
 
@@ -275,7 +275,7 @@ where
             .enumerate()
             .map(|(i, element)| {
                 let loc = context.end_element(i);
-                self.process_lvalue(element, errors.with_location(loc))
+                self.process_lvalue(element, errors.join_path(loc))
             })
             .collect();
 
@@ -315,7 +315,7 @@ where
 
             // We still process lvalues even if they correspond to duplicate fields.
             let field_type = if let Some(binding) = &field.binding {
-                self.process_lvalue(binding, errors.with_location(field_name))
+                self.process_lvalue(binding, errors.join_path(field_name))
             } else {
                 let new_type = self.new_type();
                 if object_fields[field_name] == field.field_name {

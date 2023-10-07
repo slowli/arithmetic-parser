@@ -6,7 +6,7 @@ use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
     arith::{BinaryOpContext, Linearity, NumArithmetic},
     defs::Prelude,
-    error::{ErrorContext, ErrorKind, ErrorLocation, TupleContext},
+    error::{ErrorContext, ErrorKind, ErrorPathFragment, TupleContext},
     DynConstraints, TupleIndex, TupleLen, Type, TypeEnvironment,
 };
 
@@ -17,12 +17,12 @@ mod multiple;
 mod object;
 mod recovery;
 
-fn fn_arg(index: usize) -> ErrorLocation {
-    ErrorLocation::FnArg(Some(TupleIndex::Start(index)))
+fn fn_arg(index: usize) -> ErrorPathFragment {
+    ErrorPathFragment::FnArg(Some(TupleIndex::Start(index)))
 }
 
-fn tuple_element(index: usize) -> ErrorLocation {
-    ErrorLocation::TupleElement(Some(TupleIndex::Start(index)))
+fn tuple_element(index: usize) -> ErrorPathFragment {
+    ErrorPathFragment::TupleElement(Some(TupleIndex::Start(index)))
 }
 
 #[test]
@@ -33,7 +33,7 @@ fn type_recursion() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(err.main_location().span(code), "x + (x, 2)");
-    assert!(err.location().is_empty());
+    assert!(err.path().is_empty());
     assert_matches!(err.context(), ErrorContext::BinaryOp(_));
     assert_matches!(
         err.kind(),
@@ -81,7 +81,7 @@ fn unknown_method() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(err.main_location().span(code), "do_something");
-    assert!(err.location().is_empty());
+    assert!(err.path().is_empty());
     assert_matches!(err.context(), ErrorContext::None);
     assert_matches!(err.kind(), ErrorKind::UndefinedVar(name) if name == "do_something");
     assert_eq!(
@@ -98,7 +98,7 @@ fn immediately_invoked_function_with_invalid_arg() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(err.main_location().span(code), "4 == 7");
-    assert_eq!(err.location(), [fn_arg(0)]);
+    assert_eq!(err.path(), [fn_arg(0)]);
     assert_matches!(
         err.context(),
         ErrorContext::FnCall { definition, call_signature }
@@ -120,7 +120,7 @@ fn destructuring_error_on_assignment() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(err.main_location().span(bogus_code), "(x, y, ...zs)");
-    assert!(err.location().is_empty());
+    assert!(err.path().is_empty());
     assert_matches!(
         err.context(),
         ErrorContext::Assignment { lhs, rhs }
@@ -202,7 +202,7 @@ fn function_passed_as_arg_invalid_arity() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(err.main_location().span(code), "|x, y| x + y");
-    assert_eq!(err.location(), [fn_arg(1)]);
+    assert_eq!(err.path(), [fn_arg(1)]);
     let expected_call_signature = "((Num, Num), for<'T: Ops> ('T, 'T) -> 'T) -> (Num, Num)";
     assert_matches!(
         err.context(),
@@ -253,7 +253,7 @@ fn function_passed_as_arg_invalid_input() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(err.main_location().span(code), "2 != 3");
-    assert_eq!(err.location(), [fn_arg(0), tuple_element(1)]);
+    assert_eq!(err.path(), [fn_arg(0), tuple_element(1)]);
     assert_matches!(
         err.context(),
         ErrorContext::FnCall { definition, call_signature }
@@ -277,7 +277,7 @@ fn incorrect_arg_in_slices() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(err.main_location().span(code), "2 == 3");
-    assert_eq!(err.location(), [fn_arg(0), tuple_element(1)]);
+    assert_eq!(err.path(), [fn_arg(0), tuple_element(1)]);
     assert_matches!(
         err.context(),
         ErrorContext::FnCall { definition, call_signature }
@@ -296,7 +296,7 @@ fn unifying_length_vars_error() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(err.main_location().span(code), "(3, 4, 5)");
-    assert_eq!(err.location(), [fn_arg(1)]);
+    assert_eq!(err.path(), [fn_arg(1)]);
     assert_matches!(
         err.context(),
         ErrorContext::FnCall { definition, call_signature }
@@ -337,7 +337,7 @@ fn comparisons_when_switched_off() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(err.main_location().span(code), "x > 1");
-    assert!(err.location().is_empty());
+    assert!(err.path().is_empty());
     assert_matches!(err.context(), ErrorContext::BinaryOp(_));
     assert_matches!(err.kind(), ErrorKind::UnsupportedFeature(_));
     assert_eq!(
@@ -377,7 +377,7 @@ fn dyn_type_with_bogus_function_call() {
         .single();
 
     assert_eq!(err.main_location().span(code), "|x| x + 1");
-    assert_eq!(err.location(), [fn_arg(1)]);
+    assert_eq!(err.path(), [fn_arg(1)]);
     assert_matches!(
         err.context(),
         ErrorContext::FnCall { call_signature, .. }
@@ -420,7 +420,7 @@ fn locating_type_with_failed_constraint() {
             .single();
 
         assert_eq!(err.main_location().span(code), "true");
-        assert_eq!(err.location()[1..], [tuple_element(1)]);
+        assert_eq!(err.path()[1..], [tuple_element(1)]);
         assert_matches!(err.context(), ErrorContext::BinaryOp(_));
         assert_matches!(err.kind(), ErrorKind::FailedConstraint { .. });
         assert_eq!(err.kind().to_string(), "Type `Bool` fails constraint `Lin`");
@@ -440,8 +440,8 @@ fn locating_tuple_middle_with_failed_constraint() {
     assert_eq!(err.main_location().span(code), "xs");
     assert_eq!(err.root_location().span(code), "xs + 1");
     assert_eq!(
-        err.location(),
-        [ErrorLocation::Lhs, TupleIndex::Middle.into()]
+        err.path(),
+        [ErrorPathFragment::Lhs, TupleIndex::Middle.into()]
     );
     assert_matches!(
         err.context(),
@@ -464,7 +464,7 @@ fn invalid_field_name() {
         err.main_location().span(code),
         "123456789012345678901234567890"
     );
-    assert_eq!(err.location(), []);
+    assert_eq!(err.path(), []);
     assert_matches!(err.context(), ErrorContext::None);
     assert_matches!(err.kind(), ErrorKind::InvalidFieldName(_));
 }
@@ -487,7 +487,7 @@ fn indexing_hard_errors() {
 
     let block_err = errors.next().unwrap();
     assert_eq!(block_err.main_location().span(code), "{ 5 }.1");
-    assert_eq!(block_err.location(), []);
+    assert_eq!(block_err.path(), []);
     assert_matches!(
         block_err.context(),
         ErrorContext::TupleIndex { ty } if *ty == Type::NUM
@@ -535,7 +535,7 @@ fn indexing_unsupported_errors() {
         .single();
 
     assert_eq!(err.main_location().span(code), "xs.0");
-    assert_eq!(err.location(), []);
+    assert_eq!(err.path(), []);
     assert_matches!(err.context(), ErrorContext::TupleIndex { ty: Type::Var(_) });
     assert_matches!(err.kind(), ErrorKind::UnsupportedIndex);
 }

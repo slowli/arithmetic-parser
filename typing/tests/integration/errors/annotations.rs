@@ -202,7 +202,7 @@ fn unsupported_type_param_in_generic_fn() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert!(err.location().is_empty());
+    assert!(err.path().is_empty());
     assert_matches!(err.context(), ErrorContext::Assignment { .. });
     assert_eq!(err.main_location().span(code), "(('Arg,)) -> ('Arg,)");
     assert_matches!(err.kind(), ErrorKind::UnsupportedParam);
@@ -220,7 +220,7 @@ fn unsupported_type_param_location() {
         let mut type_env = TypeEnvironment::new();
         let err = type_env.process_statements(&block).unwrap_err().single();
 
-        assert_eq!(err.location(), [tuple_element(1)]);
+        assert_eq!(err.path(), [tuple_element(1)]);
         assert_matches!(err.context(), ErrorContext::Assignment { .. });
         assert_eq!(err.main_location().span(code), "(('Arg,)) -> ('Arg,)");
         assert_matches!(err.kind(), ErrorKind::UnsupportedParam);
@@ -364,7 +364,7 @@ fn type_cast_error_in_subtype() {
         ErrorKind::FailedConstraint { constraint, .. } if constraint.to_string() == "Lin"
     );
     assert_matches!(err.context(), ErrorContext::TypeCast { .. });
-    assert_eq!(err.location(), [tuple_element(1)]);
+    assert_eq!(err.path(), [tuple_element(1)]);
     assert_eq!(err.main_location().span(code), "|x: Num| x + 3");
 }
 
@@ -483,7 +483,7 @@ fn contradicting_constraint_with_dyn_object() {
         .single();
 
     assert_eq!(err.main_location().span(code), "#{ x: 1 }");
-    assert_eq!(err.location(), [fn_arg(0)]);
+    assert_eq!(err.path(), [fn_arg(0)]);
     assert_matches!(
         err.kind(),
         ErrorKind::FailedConstraint { ty: Type::Dyn(_), constraint }
@@ -503,7 +503,7 @@ fn extra_fields_in_dyn_fn_arg() {
         .single();
 
     assert_eq!(err.main_location().span(code), "|obj| obj.x + obj.y");
-    assert_eq!(err.location(), [fn_arg(1), fn_arg(0)]);
+    assert_eq!(err.path(), [fn_arg(1), fn_arg(0)]);
     assert_matches!(
         err.kind(),
         ErrorKind::MissingFields { fields, .. } if fields.contains("y")

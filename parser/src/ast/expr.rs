@@ -13,7 +13,7 @@ use crate::{
 /// Arithmetic expression with an abstract types for type annotations and literals.
 #[derive(Debug)]
 #[non_exhaustive]
-pub enum Expr<'a, T: Grammar<'a>> {
+pub enum Expr<'a, T: Grammar> {
     /// Variable use, e.g., `x`.
     Variable,
     /// Literal (semantic depends on `T`).
@@ -25,7 +25,7 @@ pub enum Expr<'a, T: Grammar<'a>> {
         /// Value being cast, e.g., `x` in `x as Bool`.
         value: Box<SpannedExpr<'a, T>>,
         /// Type annotation for the case, e.g., `Bool` in `x as Bool`.
-        ty: Spanned<'a, T::Type>,
+        ty: Spanned<'a, T::Type<'a>>,
     },
     /// Function call, e.g., `foo(x, y)` or `|x| { x + 5 }(3)`.
     Function {
@@ -77,7 +77,7 @@ pub enum Expr<'a, T: Grammar<'a>> {
     Object(ObjectExpr<'a, T>),
 }
 
-impl<'a, T: Grammar<'a>> Expr<'a, T> {
+impl<'a, T: Grammar> Expr<'a, T> {
     /// Returns LHS of the binary expression. If this is not a binary expression, returns `None`.
     pub fn binary_lhs(&self) -> Option<&SpannedExpr<'a, T>> {
         match self {
@@ -113,7 +113,7 @@ impl<'a, T: Grammar<'a>> Expr<'a, T> {
     }
 }
 
-impl<'a, T: Grammar<'a>> Clone for Expr<'a, T> {
+impl<'a, T: Grammar> Clone for Expr<'a, T> {
     fn clone(&self) -> Self {
         match self {
             Self::Variable => Self::Variable,
@@ -160,9 +160,9 @@ impl<'a, T: Grammar<'a>> Clone for Expr<'a, T> {
 
 impl<'a, T> PartialEq for Expr<'a, T>
 where
-    T: Grammar<'a>,
+    T: Grammar,
     T::Lit: PartialEq,
-    T::Type: PartialEq,
+    T::Type<'a>: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {

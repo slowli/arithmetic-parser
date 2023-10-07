@@ -155,10 +155,10 @@ impl ParseLiteral for FieldGrammarBase {
     }
 }
 
-impl Grammar<'_> for FieldGrammarBase {
-    type Type = ValueType;
+impl Grammar for FieldGrammarBase {
+    type Type<'a> = ValueType;
 
-    fn parse_type(span: InputSpan<'_>) -> NomResult<'_, Self::Type> {
+    fn parse_type(span: InputSpan<'_>) -> NomResult<'_, Self::Type<'_>> {
         type_info::<Streaming>(span)
     }
 }

@@ -30,9 +30,9 @@ use crate::{
 };
 
 #[allow(clippy::option_if_let_else)]
-fn statement<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedStatement<'a, T::Base>>
+fn statement<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedStatement<'_, T::Base>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     let assignment = tuple((tag("="), peek(not(tag_char('=')))));
@@ -58,9 +58,9 @@ where
 }
 
 /// Parses a complete list of statements.
-pub(crate) fn statements<'a, T>(input_span: InputSpan<'a>) -> Result<Block<'a, T::Base>, Error<'a>>
+pub(crate) fn statements<T>(input_span: InputSpan<'_>) -> Result<Block<'_, T::Base>, Error<'_>>
 where
-    T: Parse<'a>,
+    T: Parse,
 {
     if !input_span.fragment().is_ascii() {
         return Err(Error::new(input_span, ErrorKind::NonAsciiInput));
@@ -69,11 +69,11 @@ where
 }
 
 /// Parses a potentially incomplete list of statements.
-pub(crate) fn streaming_statements<'a, T>(
-    input_span: InputSpan<'a>,
-) -> Result<Block<'a, T::Base>, Error<'a>>
+pub(crate) fn streaming_statements<T>(
+    input_span: InputSpan<'_>,
+) -> Result<Block<'_, T::Base>, Error<'_>>
 where
-    T: Parse<'a>,
+    T: Parse,
 {
     if !input_span.fragment().is_ascii() {
         return Err(Error::new(input_span, ErrorKind::NonAsciiInput));
@@ -83,9 +83,9 @@ where
         .or_else(|_| statements_inner::<T, Streaming>(input_span))
 }
 
-fn statements_inner<'a, T, Ty>(input_span: InputSpan<'a>) -> Result<Block<'a, T::Base>, Error<'a>>
+fn statements_inner<T, Ty>(input_span: InputSpan<'_>) -> Result<Block<'_, T::Base>, Error<'_>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     delimited(ws::<Ty>, separated_statements::<T, Ty>, ws::<Ty>)(input_span)
@@ -102,20 +102,18 @@ where
         })
 }
 
-fn separated_statement<'a, T, Ty>(
-    input: InputSpan<'a>,
-) -> NomResult<'a, SpannedStatement<'a, T::Base>>
+fn separated_statement<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedStatement<'_, T::Base>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     terminated(statement::<T, Ty>, preceded(ws::<Ty>, tag_char(';')))(input)
 }
 
 /// List of statements separated by semicolons.
-fn separated_statements<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, Block<'a, T::Base>>
+fn separated_statements<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, Block<'_, T::Base>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     map(
@@ -131,9 +129,9 @@ where
 }
 
 /// Block of statements, e.g., `{ x = 3; x + y }`.
-fn block<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, Block<'a, T::Base>>
+fn block<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, Block<'_, T::Base>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     preceded(
@@ -146,9 +144,9 @@ where
 }
 
 /// Function definition, e.g., `|x, y: Sc| { x + y }`.
-fn fn_def<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, FnDefinition<'a, T::Base>>
+fn fn_def<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, FnDefinition<'_, T::Base>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     let body_parser = alt((

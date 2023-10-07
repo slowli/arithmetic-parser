@@ -19,21 +19,19 @@ use crate::{
     ObjectDestructureField, Spanned, SpannedLvalue,
 };
 
-fn comma_separated_lvalues<'a, T, Ty>(
-    input: InputSpan<'a>,
-) -> NomResult<'a, Vec<GrammarLvalue<'a, T>>>
+fn comma_separated_lvalues<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, Vec<GrammarLvalue<'_, T>>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     separated_list0(comma_sep::<Ty>, lvalue::<T, Ty>)(input)
 }
 
-fn destructure_rest<'a, T, Ty>(
-    input: InputSpan<'a>,
-) -> NomResult<'a, Spanned<'a, DestructureRest<'a, <T::Base as Grammar<'a>>::Type>>>
+fn destructure_rest<T, Ty>(
+    input: InputSpan<'_>,
+) -> NomResult<'_, Spanned<'_, DestructureRest<'_, <T::Base as Grammar>::Type<'_>>>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     map(
@@ -60,11 +58,11 @@ type DestructureTail<'a, T> = (
     Option<Vec<SpannedLvalue<'a, T>>>,
 );
 
-fn destructure_tail<'a, T, Ty>(
-    input: InputSpan<'a>,
-) -> NomResult<'a, DestructureTail<'a, <T::Base as Grammar<'a>>::Type>>
+fn destructure_tail<T, Ty>(
+    input: InputSpan<'_>,
+) -> NomResult<'_, DestructureTail<'_, <T::Base as Grammar>::Type<'_>>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     tuple((
@@ -74,11 +72,11 @@ where
 }
 
 /// Parse the destructuring *without* the surrounding delimiters.
-pub(super) fn destructure<'a, T, Ty>(
-    input: InputSpan<'a>,
-) -> NomResult<'a, Destructure<'a, <T::Base as Grammar<'a>>::Type>>
+pub(super) fn destructure<T, Ty>(
+    input: InputSpan<'_>,
+) -> NomResult<'_, Destructure<'_, <T::Base as Grammar>::Type<'_>>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     let main_parser = alt((
@@ -109,11 +107,11 @@ where
     })(input)
 }
 
-type GrammarLvalue<'a, T> = SpannedLvalue<'a, <<T as Parse<'a>>::Base as Grammar<'a>>::Type>;
+type GrammarLvalue<'a, T> = SpannedLvalue<'a, <<T as Parse>::Base as Grammar>::Type<'a>>;
 
-fn parenthesized_destructure<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, GrammarLvalue<'a, T>>
+fn parenthesized_destructure<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, GrammarLvalue<'_, T>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     with_span(map(
@@ -127,9 +125,9 @@ where
 }
 
 /// Simple lvalue with an optional type annotation, e.g., `x` or `x: Num`.
-fn simple_lvalue_with_type<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, GrammarLvalue<'a, T>>
+fn simple_lvalue_with_type<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, GrammarLvalue<'_, T>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     // Do not consider `::` as a type delimiter; otherwise, parsing will be inappropriately cut
@@ -147,20 +145,20 @@ where
     )(input)
 }
 
-fn simple_lvalue_without_type<'a, T>(input: InputSpan<'a>) -> NomResult<'a, GrammarLvalue<'a, T>>
+fn simple_lvalue_without_type<T>(input: InputSpan<'_>) -> NomResult<'_, GrammarLvalue<'_, T>>
 where
-    T: Parse<'a>,
+    T: Parse,
 {
     map(var_name, |name| {
         Spanned::new(name, Lvalue::Variable { ty: None })
     })(input)
 }
 
-fn object_destructure_field<'a, T, Ty>(
-    input: InputSpan<'a>,
-) -> NomResult<'a, ObjectDestructureField<'a, <T::Base as Grammar<'a>>::Type>>
+fn object_destructure_field<T, Ty>(
+    input: InputSpan<'_>,
+) -> NomResult<'_, ObjectDestructureField<'_, <T::Base as Grammar>::Type<'_>>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     let field_sep = alt((tag(":"), tag("->")));
@@ -172,11 +170,11 @@ where
     })(input)
 }
 
-pub(super) fn object_destructure<'a, T, Ty>(
-    input: InputSpan<'a>,
-) -> NomResult<'a, ObjectDestructure<'a, <T::Base as Grammar<'a>>::Type>>
+pub(super) fn object_destructure<T, Ty>(
+    input: InputSpan<'_>,
+) -> NomResult<'_, ObjectDestructure<'_, <T::Base as Grammar>::Type<'_>>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     let inner = separated_list1(comma_sep::<Ty>, object_destructure_field::<T, Ty>);
@@ -189,23 +187,23 @@ where
     map(inner, |fields| ObjectDestructure { fields })(input)
 }
 
-fn mapped_object_destructure<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, GrammarLvalue<'a, T>>
+fn mapped_object_destructure<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, GrammarLvalue<'_, T>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     with_span(map(object_destructure::<T, Ty>, Lvalue::Object))(input)
 }
 
 /// Parses an `Lvalue`.
-pub(super) fn lvalue<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, GrammarLvalue<'a, T>>
+pub(super) fn lvalue<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, GrammarLvalue<'_, T>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
-    fn error<'b, T>(input: InputSpan<'b>) -> NomResult<'b, GrammarLvalue<'b, T>>
+    fn error<T>(input: InputSpan<'_>) -> NomResult<'_, GrammarLvalue<'_, T>>
     where
-        T: Parse<'b>,
+        T: Parse,
     {
         let e = ErrorKind::Leftovers.with_span(&input.into());
         Err(NomErr::Error(e))

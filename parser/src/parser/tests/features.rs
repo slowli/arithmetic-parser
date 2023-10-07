@@ -59,7 +59,7 @@ fn fn_defs_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse<'_> for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::FN_DEFINITIONS);
@@ -75,7 +75,7 @@ fn tuples_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse<'_> for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::TUPLES);
@@ -102,7 +102,7 @@ fn blocks_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse<'_> for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::BLOCKS);
@@ -122,7 +122,7 @@ fn methods_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse<'_> for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::METHODS);
@@ -142,7 +142,7 @@ fn order_comparisons_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse<'_> for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::ORDER_COMPARISONS);
@@ -155,7 +155,7 @@ fn order_comparisons_when_switched_off() {
 
 fn assert_binary_op_is_not_parsed<T>(op: BinaryOp)
 where
-    T: for<'a> Parse<'a>,
+    T: Parse,
 {
     let input = format!("x {} 1;", op.as_str());
     let input = InputSpan::new(&input);
@@ -176,7 +176,7 @@ fn boolean_ops_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse<'_> for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::BOOLEAN_OPS);
@@ -199,7 +199,7 @@ fn object_expressions_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse<'_> for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::OBJECTS);
@@ -226,7 +226,7 @@ fn object_expressions_when_blocks_are_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse<'_> for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::BLOCKS);

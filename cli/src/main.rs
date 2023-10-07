@@ -220,7 +220,7 @@ impl EvalArgs {
 
     fn run_inner<T: ReplLiteral>(
         self,
-        (env, type_env): (Environment<'static, T>, TypeEnvironment),
+        (env, type_env): (Environment<T>, TypeEnvironment),
     ) -> io::Result<()> {
         let type_env = self.types.then_some(type_env);
         if self.interactive {
@@ -232,7 +232,7 @@ impl EvalArgs {
 
     fn run_command<T: ReplLiteral>(
         self,
-        env: Environment<'static, T>,
+        env: Environment<T>,
         type_env: Option<TypeEnvironment>,
     ) -> io::Result<()> {
         let command = match self.command {

@@ -47,7 +47,7 @@ pub struct StdLibrary<T: 'static> {
 }
 
 impl<T: ReplLiteral> StdLibrary<T> {
-    fn variables(&self) -> impl Iterator<Item = (&'static str, Value<'static, T>)> {
+    fn variables(&self) -> impl Iterator<Item = (&'static str, Value<T>)> {
         let constants = self
             .constants
             .iter()
@@ -66,7 +66,7 @@ impl<T: ReplLiteral> StdLibrary<T> {
         constants.chain(unary_fns).chain(binary_fns)
     }
 
-    fn num_object(&self) -> Object<'static, T> {
+    fn num_object(&self) -> Object<T> {
         let num_object_entries = self.variables().filter_map(|(name, value)| {
             if value.is_function() {
                 Some((name, value))
@@ -141,7 +141,7 @@ where
     }
 }
 
-pub fn create_int_env<T>(wrapping: bool) -> (Environment<'static, T>, TypeEnvironment)
+pub fn create_int_env<T>(wrapping: bool) -> (Environment<T>, TypeEnvironment)
 where
     T: ReplLiteral + ops::Rem + WrappingNeg + CheckedRem,
     WrappingArithmetic: OrdArithmetic<T>,
@@ -188,7 +188,7 @@ where
     (env, type_env)
 }
 
-pub fn create_modular_env(modulus: u64) -> (Environment<'static, u64>, TypeEnvironment) {
+pub fn create_modular_env(modulus: u64) -> (Environment<u64>, TypeEnvironment) {
     let arith = ModularArithmetic::new(modulus).without_comparisons();
     let mut env = Environment::<u64>::with_arithmetic(arith);
     env.extend(Prelude::iter().chain(Assertions::iter()));
@@ -248,7 +248,7 @@ macro_rules! declare_real_functions {
 declare_real_functions!(f32);
 declare_real_functions!(f64);
 
-pub fn create_float_env<T>(tolerance: T) -> (Environment<'static, T>, TypeEnvironment)
+pub fn create_float_env<T>(tolerance: T) -> (Environment<T>, TypeEnvironment)
 where
     T: ReplLiteral,
     StdArithmetic: OrdArithmetic<T>,
@@ -319,7 +319,7 @@ macro_rules! declare_complex_functions {
 declare_complex_functions!(Complex32, f32);
 declare_complex_functions!(Complex64, f64);
 
-pub fn create_complex_env<T>() -> (Environment<'static, T>, TypeEnvironment)
+pub fn create_complex_env<T>() -> (Environment<T>, TypeEnvironment)
 where
     T: ReplLiteral,
     StdArithmetic: Arithmetic<T>,

@@ -15,13 +15,13 @@ use std::{
 };
 
 use arithmetic_eval::{
-    error::{BacktraceElement, CodeInModule, Error as EvalError, ErrorWithBacktrace},
+    error::{BacktraceElement, Error as EvalError, ErrorWithBacktrace, LocationInModule},
     exec::{IndexedId, ModuleId},
     Environment, ExecutableModule, Function, Object, Value,
 };
 use arithmetic_parser::{
     grammars::{Grammar, NumGrammar, Parse},
-    Block, CodeFragment, Error as ParseError, LocatedSpan, LvalueLen, StripCode,
+    Block, Error as ParseError, LocatedSpan, LvalueLen,
 };
 use arithmetic_typing::{
     arith::{Num, NumArithmetic},
@@ -47,9 +47,9 @@ impl SizedFragment for &str {
     }
 }
 
-impl SizedFragment for CodeFragment<'_> {
+impl SizedFragment for usize {
     fn fragment_len(&self) -> usize {
-        self.len()
+        *self
     }
 }
 
@@ -193,27 +193,30 @@ impl Reporter {
         self.report_error(&diagnostic)
     }
 
-    fn create_diagnostic(&self, e: &EvalError<'_>) -> Diagnostic<FileId> {
-        let main_span = e.main_span();
+    fn create_diagnostic(&self, err: &EvalError) -> Diagnostic<FileId> {
+        let main_span = err.location();
         let (file, range) = self
             .code_map
-            .locate(main_span.module_id(), main_span.code());
+            .locate(main_span.module_id(), main_span.in_module());
         let main_label = Label::primary(file, range);
-        let message = e.kind().main_span_info();
+        let message = err.kind().main_span_info();
 
         let mut labels = vec![main_label.with_message(message)];
-        for aux_span in e.aux_spans() {
-            let (file, range) = self.code_map.locate(aux_span.module_id(), aux_span.code());
-            let label = Label::primary(file, range).with_message(aux_span.code().extra.to_string());
+        for aux_span in err.aux_spans() {
+            let (file, range) = self
+                .code_map
+                .locate(aux_span.module_id(), aux_span.in_module());
+            let label =
+                Label::primary(file, range).with_message(aux_span.in_module().extra.to_string());
             labels.push(label);
         }
 
         let mut diagnostic = Diagnostic::new(Severity::Error)
-            .with_message(e.kind().to_short_string())
+            .with_message(err.kind().to_short_string())
             .with_code("EVAL")
             .with_labels(labels);
 
-        if let Some(help) = e.kind().help() {
+        if let Some(help) = err.kind().help() {
             let help = textwrap::fill(&help, HELP_WIDTH);
             diagnostic = diagnostic.with_notes(vec![help]);
         }
@@ -234,32 +237,35 @@ impl Reporter {
         })
     }
 
-    fn report_eval_error(&self, e: &ErrorWithBacktrace<'_>) -> io::Result<()> {
+    fn report_eval_error(&self, e: &ErrorWithBacktrace) -> io::Result<()> {
         let mut diagnostic = self.create_diagnostic(e.source());
 
         let mut calls_iter = e.backtrace().peekable();
         if let Some(BacktraceElement {
-            fn_name, def_span, ..
+            fn_name,
+            def_location: def_span,
+            ..
         }) = calls_iter.peek()
         {
             if let Some(def_span) = def_span {
-                let (file_id, def_range) =
-                    self.code_map.locate(def_span.module_id(), def_span.code());
+                let (file_id, def_range) = self
+                    .code_map
+                    .locate(def_span.module_id(), def_span.in_module());
                 let def_label = Label::secondary(file_id, def_range)
                     .with_message(format!("The error occurred in function `{}`", fn_name));
                 diagnostic.labels.push(def_label);
             }
 
             for (depth, call) in calls_iter.enumerate() {
-                let call_span = &call.call_span;
-                if Self::spans_are_equal(call_span, e.source().main_span()) {
+                let call_span = &call.call_location;
+                if Self::spans_are_equal(call_span, e.source().location()) {
                     // The span is already output.
                     continue;
                 }
 
                 let (file_id, call_range) = self
                     .code_map
-                    .locate(call_span.module_id(), call_span.code());
+                    .locate(call_span.module_id(), call_span.in_module());
                 let call_label = Label::secondary(file_id, call_range)
                     .with_message(format!("Call at depth {}", depth + 1));
                 diagnostic.labels.push(call_label);
@@ -284,8 +290,8 @@ impl Reporter {
         Ok(())
     }
 
-    fn spans_are_equal(span: &CodeInModule<'_>, other: &CodeInModule<'_>) -> bool {
-        span.code() == other.code()
+    fn spans_are_equal(span: &LocationInModule, other: &LocationInModule) -> bool {
+        span.in_module() == other.in_module()
             && span.module_id().downcast_ref::<IndexedId>()
                 == other.module_id().downcast_ref::<IndexedId>()
     }
@@ -324,7 +330,7 @@ impl Reporter {
 
     fn dump_value<T: ReplLiteral>(
         writer: &mut StandardStream,
-        value: &Value<'_, T>,
+        value: &Value<T>,
         indent: usize,
     ) -> io::Result<()> {
         let bool_color = ColorSpec::new().set_fg(Some(Color::Cyan)).clone();
@@ -405,7 +411,7 @@ impl Reporter {
 
     fn dump_object<T: ReplLiteral>(
         writer: &mut StandardStream,
-        object: &Object<'_, T>,
+        object: &Object<T>,
         indent: usize,
     ) -> io::Result<()> {
         let fields_count = object.len();
@@ -423,15 +429,15 @@ impl Reporter {
         write!(writer, "{}}}", " ".repeat(indent))
     }
 
-    fn report_value<T: ReplLiteral>(&mut self, value: &Value<'_, T>) -> io::Result<()> {
+    fn report_value<T: ReplLiteral>(&mut self, value: &Value<T>) -> io::Result<()> {
         Self::dump_value(&mut self.writer, value, 0)?;
         writeln!(self.writer)
     }
 }
 
-fn order_vars<'a, 'v: 'a, T: 'a>(
-    values: impl IntoIterator<Item = (&'a str, &'a Value<'v, T>)>,
-) -> impl Iterator<Item = (&'a str, &'a Value<'v, T>)> {
+fn order_vars<'a, T: 'a>(
+    values: impl IntoIterator<Item = (&'a str, &'a Value<T>)>,
+) -> impl Iterator<Item = (&'a str, &'a Value<T>)> {
     let mut values: Vec<_> = values.into_iter().collect();
     values.sort_unstable_by_key(|(name, _)| *name);
     values.into_iter()
@@ -439,15 +445,15 @@ fn order_vars<'a, 'v: 'a, T: 'a>(
 
 pub struct Env<T> {
     reporter: Reporter,
-    original_env: Environment<'static, T>,
+    original_env: Environment<T>,
     original_type_env: Option<TypeEnvironment>,
-    env: Environment<'static, T>,
+    env: Environment<T>,
     type_env: Option<TypeEnvironment>,
 }
 
 impl<T: ReplLiteral> Env<T> {
     pub fn new(
-        env: Environment<'static, T>,
+        env: Environment<T>,
         type_env: Option<TypeEnvironment>,
         color_choice: ColorChoice,
     ) -> Self {
@@ -574,7 +580,7 @@ impl<T: ReplLiteral> Env<T> {
         G: Grammar<'a, Lit = T>,
     {
         let module_id = self.reporter.code_map.latest_module_id();
-        let module = ExecutableModule::new(module_id, block).map(ExecutableModule::strip_code);
+        let module = ExecutableModule::new(module_id, block);
         let module = match module {
             Ok(module) => module,
             Err(err) => {

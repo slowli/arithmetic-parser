@@ -513,9 +513,5 @@ fn quick_sort() {
         .process_with_arithmetic(&NumArithmetic::with_comparisons(), &code)
         .unwrap();
 
-    assert_eq!(
-        env["quick_sort"].to_string(),
-        "([Num; N], ([Num], any) -> [Num]) -> [Num]"
-    );
-    assert_eq!(env["sort"].to_string(), "([Num; N]) -> [Num]");
+    assert_eq!(env["sort"].to_string(), "([Num]) -> [Num]");
 }

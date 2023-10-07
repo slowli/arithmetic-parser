@@ -222,7 +222,7 @@ impl EvalArgs {
         self,
         (env, type_env): (Environment<'static, T>, TypeEnvironment),
     ) -> io::Result<()> {
-        let type_env = if self.types { Some(type_env) } else { None };
+        let type_env = self.types.then_some(type_env);
         if self.interactive {
             repl(env, type_env, Command::color_choice(self.color))
         } else {

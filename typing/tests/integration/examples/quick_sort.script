@@ -1,18 +1,16 @@
 //! Version of the quicksort sample from the eval README
 //! with a couple of necessary type annotations.
 
-quick_sort = |xs, quick_sort: (_, any) -> [Num]| {
-    // `any` is necessary because `quick_sort` is recursive otherwise.
-
-    if(xs as [Num] == (), || () as [Num], || {
-        (pivot, ...rest) = xs as any;
-        lesser_part = rest.filter(|x| x < pivot).quick_sort(quick_sort);
-        greater_part = rest.filter(|x| x >= pivot).quick_sort(quick_sort);
-        lesser_part.push(pivot).merge(greater_part)
-    })()
-};
-
-sort = |xs| xs.quick_sort(quick_sort);
+sort = defer(|quick_sort: (_) -> [Num]| {
+    |xs| {
+        if(xs as [Num] == (), || () as [Num], || {
+            (pivot, ...rest) = xs as any;
+            lesser_part = rest.filter(|x| x < pivot).quick_sort();
+            greater_part = rest.filter(|x| x >= pivot).quick_sort();
+            lesser_part.push(pivot).merge(greater_part)
+        })()
+    }
+});
 
 assert_eq((1, 7, -3, 2, -1, 4, 2).sort(), (-3, -1, 1, 2, 2, 4, 7));
 

@@ -179,7 +179,7 @@ where
         .chain(defs::Assertions::iter())
         .chain(comparison_type_defs())
         .chain(T::STD_LIB.type_defs())
-        .chain(vec![
+        .chain([
             ("rem", binary_fn()),
             ("array", defs::Prelude::array(NumType::Num).into()),
         ])
@@ -196,7 +196,7 @@ pub fn create_modular_env(modulus: u64) -> (Environment<'static, u64>, TypeEnvir
 
     let type_env = defs::Prelude::iter()
         .chain(defs::Assertions::iter())
-        .chain(vec![("MAX_VALUE", Type::NUM)])
+        .chain([("MAX_VALUE", Type::NUM)])
         .collect();
 
     (env, type_env)
@@ -268,9 +268,14 @@ where
         .chain(defs::Assertions::iter())
         .chain(comparison_type_defs())
         .chain(T::STD_LIB.type_defs())
-        .chain(vec![("array", defs::Prelude::array(NumType::Num).into())])
+        .chain([
+            ("array", defs::Prelude::array(NumType::Num).into()),
+            (
+                "assert_close",
+                defs::Assertions::assert_close(NumType::Num).into(),
+            ),
+        ])
         .collect();
-
     (env, type_env)
 }
 
@@ -333,4 +338,55 @@ where
         .collect();
 
     (env, type_env)
+}
+
+#[cfg(test)]
+mod tests {
+    use assert_matches::assert_matches;
+
+    use std::collections::HashSet;
+
+    use super::*;
+    use arithmetic_typing::arith::Num;
+
+    #[test]
+    fn environments_are_consistent_for_ints() {
+        let (env, type_env) = create_int_env::<i64>(true);
+        assert_same_values(&env, &type_env);
+    }
+
+    fn assert_same_values<T>(env: &Environment<T>, type_env: &TypeEnvironment) {
+        for (name, value) in env {
+            let value_type = &type_env[name];
+            match value {
+                Value::Prim(_) => assert_matches!(value_type, Type::Prim(Num::Num)),
+                Value::Bool(_) => assert_matches!(value_type, Type::Prim(Num::Bool)),
+                Value::Tuple(_) => assert_matches!(value_type, Type::Tuple(_)),
+                Value::Object(_) => assert_matches!(value_type, Type::Object(_)),
+                Value::Function(_) => assert_matches!(value_type, Type::Function(_)),
+                _ => { /* no check */ }
+            }
+        }
+        let all_names: HashSet<_> = env.iter().map(|(name, _)| name).collect();
+        let all_type_names: HashSet<_> = type_env.iter().map(|(name, _)| name).collect();
+        assert_eq!(all_names, all_type_names);
+    }
+
+    #[test]
+    fn environments_are_consistent_for_modular_arithmetic() {
+        let (env, type_env) = create_modular_env(17);
+        assert_same_values(&env, &type_env);
+    }
+
+    #[test]
+    fn environments_are_consistent_for_floats() {
+        let (env, type_env) = create_float_env::<f64>(1e-5);
+        assert_same_values(&env, &type_env);
+    }
+
+    #[test]
+    fn environments_are_consistent_for_complex_numbers() {
+        let (env, type_env) = create_complex_env::<Complex64>();
+        assert_same_values(&env, &type_env);
+    }
 }

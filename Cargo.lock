@@ -137,6 +137,7 @@ dependencies = [
  "arithmetic-eval",
  "arithmetic-parser",
  "arithmetic-typing",
+ "assert_matches",
  "clap",
  "codespan",
  "codespan-reporting",

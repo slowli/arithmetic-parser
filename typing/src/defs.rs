@@ -72,6 +72,8 @@ pub enum Prelude {
     If,
     /// Type of the `while` function.
     While,
+    /// Type of the `defer` function.
+    Defer,
     /// Type of the `map` function.
     Map,
     /// Type of the `filter` function.
@@ -112,6 +114,16 @@ impl<Prim: WithBoolean> From<Prelude> for Type<Prim> {
                     .with_arg(Type::param(0)) // state
                     .with_arg(condition_fn)
                     .with_arg(iter_fn)
+                    .returning(Type::param(0))
+                    .into()
+            }
+
+            Prelude::Defer => {
+                let fn_arg = Function::builder()
+                    .with_arg(Type::param(0))
+                    .returning(Type::param(0));
+                Function::builder()
+                    .with_arg(fn_arg)
                     .returning(Type::param(0))
                     .into()
             }
@@ -183,7 +195,7 @@ impl<Prim: WithBoolean> From<Prelude> for Type<Prim> {
 }
 
 impl Prelude {
-    const VALUES: &'static [Self] = &[Self::True, Self::False, Self::If, Self::While];
+    const VALUES: &'static [Self] = &[Self::True, Self::False, Self::If, Self::While, Self::Defer];
 
     const ARRAY_FUNCTIONS: &'static [Self] = &[
         Self::Map,
@@ -201,6 +213,7 @@ impl Prelude {
             Self::False => "false",
             Self::If => "if",
             Self::While => "while",
+            Self::Defer => "defer",
             Self::Map => "map",
             Self::Filter => "filter",
             Self::Fold => "fold",
@@ -251,6 +264,8 @@ pub enum Assertions {
     Assert,
     /// Type of the `assert_eq` function.
     AssertEq,
+    /// Type of the `assert_fails` function.
+    AssertFails,
 }
 
 impl<Prim: WithBoolean> From<Assertions> for Type<Prim> {
@@ -265,23 +280,42 @@ impl<Prim: WithBoolean> From<Assertions> for Type<Prim> {
                 .with_arg(Type::param(0))
                 .returning(Type::void())
                 .into(),
+            Assertions::AssertFails => {
+                let checked_fn = Function::builder().returning(Type::param(0));
+                Function::builder()
+                    .with_arg(checked_fn)
+                    .returning(Type::void())
+                    .into()
+            }
         }
     }
 }
 
 impl Assertions {
-    const VALUES: &'static [Self] = &[Self::Assert, Self::AssertEq];
+    const VALUES: &'static [Self] = &[Self::Assert, Self::AssertEq, Self::AssertFails];
 
     fn as_str(self) -> &'static str {
         match self {
             Self::Assert => "assert",
             Self::AssertEq => "assert_eq",
+            Self::AssertFails => "assert_fails",
         }
     }
 
     /// Returns an iterator over all type definitions in `Assertions`.
     pub fn iter<Prim: WithBoolean>() -> impl Iterator<Item = (&'static str, Type<Prim>)> {
         Self::VALUES.iter().map(|&val| (val.as_str(), val.into()))
+    }
+
+    /// Returns the type of the `assert_close` function from the eval crate.
+    ///
+    /// This function is not included into [`Self::iter()`] because in the general case
+    /// we don't know the type of arguments it accepts.
+    pub fn assert_close<T: PrimitiveType>(value: T) -> Function<T> {
+        Function::builder()
+            .with_arg(Type::Prim(value.clone()))
+            .with_arg(Type::Prim(value))
+            .returning(Type::void())
     }
 }
 
@@ -297,6 +331,7 @@ mod tests {
         ("true", "Bool"),
         ("if", "(Bool, 'T, 'T) -> 'T"),
         ("while", "('T, ('T) -> Bool, ('T) -> 'T) -> 'T"),
+        ("defer", "(('T) -> 'T) -> 'T"),
         ("map", "(['T; N], ('T) -> 'U) -> ['U; N]"),
         ("filter", "(['T], ('T) -> Bool) -> ['T]"),
         ("fold", "(['T], 'U, ('U, 'T) -> 'U) -> 'U"),
@@ -318,7 +353,7 @@ mod tests {
 
         assert_eq!(
             Prelude::iter::<Num>()
-                .filter_map(|(name, _)| if name == "Array" { None } else { Some(name) })
+                .filter_map(|(name, _)| (name != "Array").then_some(name))
                 .collect::<HashSet<_>>(),
             expected_types.keys().copied().collect::<HashSet<_>>()
         );
@@ -328,5 +363,33 @@ mod tests {
     fn string_presentation_of_array_type() {
         let array_fn = Prelude::array(Num::Num);
         assert_eq!(array_fn.to_string(), "(Num, (Num) -> 'T) -> ['T]");
+    }
+
+    const EXPECTED_ASSERT_TYPES: &[(&str, &str)] = &[
+        ("assert", "(Bool) -> ()"),
+        ("assert_eq", "('T, 'T) -> ()"),
+        ("assert_fails", "(() -> 'T) -> ()"),
+    ];
+
+    #[test]
+    fn string_representation_of_assert_types() {
+        let expected_types: HashMap<_, _> = EXPECTED_ASSERT_TYPES.iter().copied().collect();
+
+        for (name, ty) in Assertions::iter::<Num>() {
+            assert_eq!(ty.to_string(), expected_types[name]);
+        }
+
+        assert_eq!(
+            Assertions::iter::<Num>()
+                .map(|(name, _)| name)
+                .collect::<HashSet<_>>(),
+            expected_types.keys().copied().collect::<HashSet<_>>()
+        );
+    }
+
+    #[test]
+    fn string_representation_of_assert_close() {
+        let assert_close_fn = Assertions::assert_close(Num::Num);
+        assert_eq!(assert_close_fn.to_string(), "(Num, Num) -> ()");
     }
 }

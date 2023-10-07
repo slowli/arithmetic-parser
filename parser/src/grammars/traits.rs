@@ -188,6 +188,7 @@ pub trait Grammar<'a>: ParseLiteral {
     ///
     /// The output should follow `nom` conventions on errors / failures.
     fn parse_type(input: InputSpan<'a>) -> NomResult<'a, Self::Type>;
+    // FIXME: why is `'a` not here?
 }
 
 /// Helper trait allowing `Parse` to accept multiple types as inputs.

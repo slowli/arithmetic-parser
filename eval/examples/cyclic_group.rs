@@ -184,7 +184,7 @@ impl NativeFn<GroupLiteral> for HashToScalar {
                     let err = ErrorKind::native("Cannot hash value");
                     return Err(context
                         .call_site_error(err)
-                        .with_span(arg, AuxErrorInfo::InvalidArg));
+                        .with_location(arg, AuxErrorInfo::InvalidArg));
                 }
             }
         }

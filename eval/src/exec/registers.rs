@@ -3,18 +3,18 @@
 use crate::{
     alloc::{vec, Box, HashMap, Rc, String, ToOwned, Vec},
     arith::OrdArithmetic,
-    error::{Backtrace, CodeInModule, EvalResult, TupleLenMismatchContext},
-    exec::command::{Atom, Command, CompiledExpr, FieldName, SpannedAtom, SpannedCommand},
+    error::{Backtrace, EvalResult, LocationInModule, TupleLenMismatchContext},
+    exec::command::{Atom, Command, CompiledExpr, FieldName, LocatedAtom, LocatedCommand},
     exec::ModuleId,
     CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, SpannedValue, Value,
 };
-use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, UnaryOp};
+use arithmetic_parser::{BinaryOp, Location, LvalueLen, UnaryOp};
 
 /// Sequence of instructions that can be executed with the `Registers`.
 #[derive(Debug)]
 pub(crate) struct Executable<T> {
     id: Box<dyn ModuleId>, // FIXME: consider using `Rc<_>`?
-    commands: Vec<SpannedCommand<T>>,
+    commands: Vec<LocatedCommand<T>>,
     child_fns: Vec<Rc<ExecutableFn<T>>>,
     // Hint how many registers the executable requires.
     register_capacity: usize,
@@ -45,11 +45,11 @@ impl<T> Executable<T> {
         self.id.as_ref()
     }
 
-    fn create_error<U>(&self, span: &MaybeSpanned<U>, err: ErrorKind) -> Error {
-        Error::new(self.id.as_ref(), span, err)
+    fn create_error<U>(&self, location: &Location<U>, err: ErrorKind) -> Error {
+        Error::new(self.id.as_ref(), location, err)
     }
 
-    pub fn push_command(&mut self, command: impl Into<SpannedCommand<T>>) {
+    pub fn push_command(&mut self, command: impl Into<LocatedCommand<T>>) {
         self.commands.push(command.into());
     }
 
@@ -98,7 +98,7 @@ impl<T: 'static + Clone> Executable<T> {
 #[derive(Debug)]
 pub(crate) struct ExecutableFn<T> {
     pub inner: Executable<T>,
-    pub def_span: MaybeSpanned,
+    pub def_location: Location,
     pub arg_count: LvalueLen,
 }
 
@@ -300,7 +300,7 @@ impl<T: 'static + Clone> Registers<T> {
 
     fn execute_expr(
         &self,
-        span: MaybeSpanned,
+        location: Location,
         expr: &CompiledExpr<T>,
         executable: &Executable<T>,
         operations: Operations<'_, T>,
@@ -327,12 +327,12 @@ impl<T: 'static + Clone> Registers<T> {
                     UnaryOp::Not => inner_value.try_not(),
                     _ => unreachable!("Checked during compilation"),
                 }
-                .map_err(|err| executable.create_error(&span, err))
+                .map_err(|err| executable.create_error(&location, err))
             }
 
             CompiledExpr::Binary { op, lhs, rhs } => {
                 let arith = operations.arithmetic;
-                self.execute_binary_expr(executable.id(), span, *op, lhs, rhs, arith)
+                self.execute_binary_expr(executable.id(), location, *op, lhs, rhs, arith)
             }
 
             CompiledExpr::FieldAccess {
@@ -340,14 +340,14 @@ impl<T: 'static + Clone> Registers<T> {
                 field: FieldName::Index(index),
             } => self
                 .access_index_field(&receiver.extra, *index)
-                .map_err(|err| executable.create_error(&span, err)),
+                .map_err(|err| executable.create_error(&location, err)),
 
             CompiledExpr::FieldAccess {
                 receiver,
                 field: FieldName::Name(name),
             } => self
                 .access_named_field(&receiver.extra, name)
-                .map_err(|err| executable.create_error(&span, err)),
+                .map_err(|err| executable.create_error(&location, err)),
 
             CompiledExpr::FunctionCall {
                 name,
@@ -364,13 +364,13 @@ impl<T: 'static + Clone> Registers<T> {
                         &function,
                         fn_name,
                         executable.id.as_ref(),
-                        span,
+                        location,
                         arg_values,
                         operations,
                         backtrace,
                     )
                 } else {
-                    Err(executable.create_error(&span, ErrorKind::CannotCall))
+                    Err(executable.create_error(&location, ErrorKind::CannotCall))
                 }
             }
 
@@ -395,10 +395,10 @@ impl<T: 'static + Clone> Registers<T> {
     fn execute_binary_expr(
         &self,
         module_id: &dyn ModuleId,
-        span: MaybeSpanned,
+        location: Location,
         op: BinaryOp,
-        lhs: &SpannedAtom<T>,
-        rhs: &SpannedAtom<T>,
+        lhs: &LocatedAtom<T>,
+        rhs: &LocatedAtom<T>,
         arithmetic: &dyn OrdArithmetic<T>,
     ) -> EvalResult<T> {
         let lhs_value = lhs.copy_with_extra(self.resolve_atom(&lhs.extra));
@@ -406,7 +406,7 @@ impl<T: 'static + Clone> Registers<T> {
 
         match op {
             BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Power => {
-                Value::try_binary_op(module_id, span, lhs_value, rhs_value, op, arithmetic)
+                Value::try_binary_op(module_id, location, lhs_value, rhs_value, op, arithmetic)
             }
 
             BinaryOp::Eq | BinaryOp::NotEq => {
@@ -467,14 +467,14 @@ impl<T: 'static + Clone> Registers<T> {
         function: &Function<T>,
         fn_name: &str,
         module_id: &dyn ModuleId,
-        call_span: MaybeSpanned,
+        call_location: Location,
         arg_values: Vec<SpannedValue<T>>,
         operations: Operations<'_, T>,
         mut backtrace: Option<&mut Backtrace>,
     ) -> EvalResult<T> {
-        let full_call_span = CodeInModule::new(module_id, call_span);
+        let full_call_span = LocationInModule::new(module_id, call_location);
         if let Some(backtrace) = &mut backtrace {
-            backtrace.push_call(fn_name, function.def_span(), full_call_span.clone());
+            backtrace.push_call(fn_name, function.def_location(), full_call_span.clone());
         }
         let mut context = CallContext::new(full_call_span, backtrace.as_deref_mut(), operations);
 

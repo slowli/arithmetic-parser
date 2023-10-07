@@ -8,7 +8,7 @@ use crate::{
     exec::ModuleId,
     Object, Tuple, Value,
 };
-use arithmetic_parser::{BinaryOp, MaybeSpanned, Op, UnaryOp};
+use arithmetic_parser::{BinaryOp, Location, Op, UnaryOp};
 
 #[derive(Debug, Clone, Copy)]
 enum OpSide {
@@ -65,9 +65,9 @@ impl BinaryOpError {
     fn span(
         self,
         module_id: &dyn ModuleId,
-        total_span: MaybeSpanned,
-        lhs_span: MaybeSpanned,
-        rhs_span: MaybeSpanned,
+        total_span: Location,
+        lhs_span: Location,
+        rhs_span: Location,
     ) -> Error {
         let main_span = match self.side {
             Some(OpSide::Lhs) => lhs_span,
@@ -85,7 +85,7 @@ impl BinaryOpError {
 
         let mut err = Error::new(module_id, &main_span, self.inner);
         if let Some(aux_info) = aux_info {
-            err = err.with_span(&rhs_span, aux_info);
+            err = err.with_location(&rhs_span, aux_info);
         }
         err
     }
@@ -192,9 +192,9 @@ impl<T: Clone> Value<T> {
     #[inline]
     pub(crate) fn try_binary_op(
         module_id: &dyn ModuleId,
-        total_span: MaybeSpanned,
-        lhs: MaybeSpanned<Self>,
-        rhs: MaybeSpanned<Self>,
+        total_span: Location,
+        lhs: Location<Self>,
+        rhs: Location<Self>,
         op: BinaryOp,
         arithmetic: &dyn OrdArithmetic<T>,
     ) -> Result<Self, Error> {
@@ -273,8 +273,8 @@ impl<T> Value<T> {
 
     pub(crate) fn compare(
         module_id: &dyn ModuleId,
-        lhs: &MaybeSpanned<Self>,
-        rhs: &MaybeSpanned<Self>,
+        lhs: &Location<Self>,
+        rhs: &Location<Self>,
         op: BinaryOp,
         arithmetic: &dyn OrdArithmetic<T>,
     ) -> Result<Self, Error> {
@@ -299,8 +299,8 @@ impl<T> Value<T> {
 
     pub(crate) fn try_and(
         module_id: &dyn ModuleId,
-        lhs: &MaybeSpanned<Self>,
-        rhs: &MaybeSpanned<Self>,
+        lhs: &Location<Self>,
+        rhs: &Location<Self>,
     ) -> Result<Self, Error> {
         match (&lhs.extra, &rhs.extra) {
             (Value::Bool(this), Value::Bool(other)) => Ok(Value::Bool(*this && *other)),
@@ -321,8 +321,8 @@ impl<T> Value<T> {
 
     pub(crate) fn try_or(
         module_id: &dyn ModuleId,
-        lhs: &MaybeSpanned<Self>,
-        rhs: &MaybeSpanned<Self>,
+        lhs: &Location<Self>,
+        rhs: &Location<Self>,
     ) -> Result<Self, Error> {
         match (&lhs.extra, &rhs.extra) {
             (Value::Bool(this), Value::Bool(other)) => Ok(Value::Bool(*this || *other)),

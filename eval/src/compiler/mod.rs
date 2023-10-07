@@ -8,7 +8,7 @@ use crate::{
     Error, ErrorKind, Value,
 };
 use arithmetic_parser::{
-    grammars::Grammar, BinaryOp, Block, Destructure, FnDefinition, InputSpan, Lvalue, MaybeSpanned,
+    grammars::Grammar, BinaryOp, Block, Destructure, FnDefinition, InputSpan, Location, Lvalue,
     ObjectDestructure, Spanned, SpannedLvalue, UnaryOp,
 };
 
@@ -17,7 +17,7 @@ mod expr;
 
 use self::captures::{CapturesExtractor, CompilerExtTarget};
 
-pub(crate) type ImportSpans = Vec<MaybeSpanned>;
+pub(crate) type ImportLocations = Vec<Location>;
 
 #[derive(Debug)]
 pub(crate) struct Compiler {
@@ -139,7 +139,7 @@ impl Compiler {
     fn extract_captures<'a, T: Grammar<'a>>(
         module_id: Box<dyn ModuleId>,
         block: &Block<'a, T>,
-    ) -> Result<(Registers<T::Lit>, ImportSpans), Error> {
+    ) -> Result<(Registers<T::Lit>, ImportLocations), Error> {
         let mut extractor = CapturesExtractor::new(module_id);
         extractor.eval_block(block)?;
 
@@ -395,7 +395,7 @@ mod tests {
         assert_eq!(registers.register_count(), 1);
         assert!(registers.variables_map().contains_key("x"));
         assert_eq!(import_spans.len(), 1);
-        assert_eq!(import_spans[0], MaybeSpanned::from_str(program, 8..9));
+        assert_eq!(import_spans[0], Location::from_str(program, 8..9));
     }
 
     #[test]

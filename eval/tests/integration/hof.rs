@@ -27,7 +27,7 @@ impl<T: 'static + Clone> NativeFn<T> for Repeated<T> {
         let mut arg = args.pop().unwrap();
         for _ in 0..self.times {
             let result = self.inner.evaluate(vec![arg], context)?;
-            arg = context.apply_call_span(result);
+            arg = context.apply_call_location(result);
         }
         Ok(arg.extra)
     }
@@ -55,7 +55,7 @@ fn eager_repeat(
         Err(context.call_site_error(ErrorKind::native("`times` should be positive")))
     } else {
         for _ in 0..times as usize {
-            arg = function.evaluate(vec![context.apply_call_span(arg)], context)?;
+            arg = function.evaluate(vec![context.apply_call_location(arg)], context)?;
         }
         Ok(arg)
     }

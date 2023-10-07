@@ -21,7 +21,7 @@ use arithmetic_eval::{
 };
 use arithmetic_parser::{
     grammars::{F32Grammar, Parse, Untyped},
-    MaybeSpanned,
+    Location,
 };
 
 const SEED: u64 = 123;
@@ -107,10 +107,10 @@ fn bench_mul_fold(bencher: &mut Bencher<'_>) {
 
 fn bench_fold_fn(bencher: &mut Bencher<'_>) {
     let env = Environment::new();
-    let mut ctx = CallContext::mock(&WildcardId, MaybeSpanned::from_str("", ..), &env);
-    let acc = ctx.apply_call_span(Value::Prim(1.0));
+    let mut ctx = CallContext::mock(&WildcardId, Location::from_str("", ..), &env);
+    let acc = ctx.apply_call_location(Value::Prim(1.0));
     let fold_fn = fns::Binary::new(|x: f32, y| x * y);
-    let fold_fn = ctx.apply_call_span(Value::native_fn(fold_fn));
+    let fold_fn = ctx.apply_call_location(Value::native_fn(fold_fn));
 
     let mut rng = StdRng::seed_from_u64(SEED);
 
@@ -122,7 +122,7 @@ fn bench_fold_fn(bencher: &mut Bencher<'_>) {
                 .collect::<Vec<_>>()
         },
         |array| {
-            let array = ctx.apply_call_span(Value::from(array));
+            let array = ctx.apply_call_location(Value::from(array));
             fns::Fold
                 .evaluate(vec![array, acc.clone(), fold_fn.clone()], &mut ctx)
                 .unwrap()
@@ -142,7 +142,7 @@ fn bench_interpreted_fn(bencher: &mut Bencher<'_>) {
 
     let mut rng = StdRng::seed_from_u64(SEED);
     let env = Environment::new();
-    let mut ctx = CallContext::mock(&WildcardId, MaybeSpanned::from_str("", ..), &env);
+    let mut ctx = CallContext::mock(&WildcardId, Location::from_str("", ..), &env);
 
     bencher.iter_batched(
         || {
@@ -155,7 +155,7 @@ fn bench_interpreted_fn(bencher: &mut Bencher<'_>) {
             let results = array.chunks(2).map(|chunk| {
                 let args = chunk
                     .iter()
-                    .map(|val| ctx.apply_call_span(val.to_owned()))
+                    .map(|val| ctx.apply_call_location(val.to_owned()))
                     .collect();
                 interpreted_fn.evaluate(args, &mut ctx).unwrap()
             });
@@ -319,8 +319,8 @@ fn bench_quick_sort_interpreted(bencher: &mut Bencher<'_>) {
             )
         },
         |items| {
-            let mut ctx = CallContext::mock(&"test", MaybeSpanned::from_str("", ..), &env);
-            let items = MaybeSpanned::from_str("", ..).copy_with_extra(items);
+            let mut ctx = CallContext::mock(&"test", Location::from_str("", ..), &env);
+            let items = Location::from_str("", ..).copy_with_extra(items);
             sort_fn.evaluate(vec![items], &mut ctx).unwrap()
         },
         BatchSize::SmallInput,

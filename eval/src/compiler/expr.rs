@@ -6,7 +6,7 @@ use super::{captures::extract_vars_iter, CapturesExtractor, Compiler};
 use crate::{
     alloc::{HashMap, String, ToOwned, Vec},
     error::RepeatedAssignmentContext,
-    exec::{Atom, Command, CompiledExpr, Executable, ExecutableFn, FieldName, SpannedAtom},
+    exec::{Atom, Command, CompiledExpr, Executable, ExecutableFn, FieldName, LocatedAtom},
     Error, ErrorKind,
 };
 use arithmetic_parser::{
@@ -19,7 +19,7 @@ impl Compiler {
         &mut self,
         executable: &mut Executable<T::Lit>,
         expr: &SpannedExpr<'a, T>,
-    ) -> Result<SpannedAtom<T::Lit>, Error> {
+    ) -> Result<LocatedAtom<T::Lit>, Error> {
         let atom = match &expr.extra {
             Expr::Literal(lit) => Atom::Constant(lit.clone()),
 
@@ -143,7 +143,7 @@ impl Compiler {
         &mut self,
         executable: &mut Executable<T::Lit>,
         call_expr: &SpannedExpr<'a, T>,
-        name: SpannedAtom<T::Lit>,
+        name: LocatedAtom<T::Lit>,
         original_name: Option<String>,
         args: &[SpannedExpr<'a, T>],
     ) -> Result<Atom<T::Lit>, Error> {
@@ -268,7 +268,7 @@ impl Compiler {
         &mut self,
         executable: &mut Executable<T::Lit>,
         block: &Block<'a, T>,
-    ) -> Result<Option<SpannedAtom<T::Lit>>, Error> {
+    ) -> Result<Option<LocatedAtom<T::Lit>>, Error> {
         for statement in &block.statements {
             self.compile_statement(executable, statement)?;
         }
@@ -317,7 +317,7 @@ impl Compiler {
         let fn_executable = self.compile_function(def, &captures)?;
         let fn_executable = ExecutableFn {
             inner: fn_executable,
-            def_span: def_expr.with_no_extra().into(),
+            def_location: def_expr.with_no_extra().into(),
             arg_count: def.args.extra.len(),
         };
 
@@ -341,7 +341,7 @@ impl Compiler {
     fn get_captures<'a, T>(
         &self,
         extractor: CapturesExtractor<'a>,
-    ) -> HashMap<&'a str, SpannedAtom<T>> {
+    ) -> HashMap<&'a str, LocatedAtom<T>> {
         extractor
             .captures
             .into_iter()
@@ -356,7 +356,7 @@ impl Compiler {
     fn compile_function<'a, T: Grammar<'a>>(
         &self,
         def: &FnDefinition<'a, T>,
-        captures: &HashMap<&'a str, SpannedAtom<T::Lit>>,
+        captures: &HashMap<&'a str, LocatedAtom<T::Lit>>,
     ) -> Result<Executable<T::Lit>, Error> {
         // Allocate registers for captures.
         let mut this = Self::new(self.module_id.clone_boxed());
@@ -389,7 +389,7 @@ impl Compiler {
         &mut self,
         executable: &mut Executable<T::Lit>,
         statement: &SpannedStatement<'a, T>,
-    ) -> Result<Option<SpannedAtom<T::Lit>>, Error> {
+    ) -> Result<Option<LocatedAtom<T::Lit>>, Error> {
         Ok(match &statement.extra {
             Statement::Expr(expr) => Some(self.compile_expr(executable, expr)?),
 

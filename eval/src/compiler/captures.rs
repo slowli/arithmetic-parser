@@ -119,7 +119,7 @@ impl<'a> CapturesExtractor<'a> {
                     if let Some(prev_span) = object_fields.insert(field_str, *name) {
                         let err = ErrorKind::RepeatedField;
                         return Err(Error::new(self.module_id.as_ref(), name, err)
-                            .with_span(&prev_span.into(), AuxErrorInfo::PrevAssignment));
+                            .with_location(&prev_span.into(), AuxErrorInfo::PrevAssignment));
                     }
                 }
 
@@ -226,7 +226,7 @@ fn add_var<'a>(
         if let Some(prev_span) = vars.insert(var_name, var_span) {
             let err = ErrorKind::RepeatedAssignment { context };
             return Err(Error::new(module_id, &var_span, err)
-                .with_span(&prev_span.into(), AuxErrorInfo::PrevAssignment));
+                .with_location(&prev_span.into(), AuxErrorInfo::PrevAssignment));
         }
     }
     Ok(())
@@ -255,7 +255,7 @@ pub(super) fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
                     if let Some(prev_span) = object_fields.insert(field_str, field.field_name) {
                         let err = ErrorKind::RepeatedField;
                         return Err(Error::new(module_id, &field.field_name, err)
-                            .with_span(&prev_span.into(), AuxErrorInfo::PrevAssignment));
+                            .with_location(&prev_span.into(), AuxErrorInfo::PrevAssignment));
                     }
 
                     if let Some(binding) = &field.binding {

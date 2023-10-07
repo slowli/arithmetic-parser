@@ -160,7 +160,7 @@ pub use crate::{
     error::{Context, Error, ErrorKind, SpannedError, UnsupportedType},
     ops::{BinaryOp, Op, OpPriority, UnaryOp},
     parser::is_valid_variable_name,
-    spans::{with_span, InputSpan, LocatedSpan, MaybeSpanned, NomResult, Spanned},
+    spans::{with_span, InputSpan, LocatedSpan, Location, NomResult, Spanned},
 };
 
 mod ast;

@@ -70,7 +70,7 @@ impl<T> NativeFn<T> for If {
             let err = ErrorKind::native("`if` requires first arg to be boolean");
             Err(ctx
                 .call_site_error(err)
-                .with_span(&args[0], AuxErrorInfo::InvalidArg))
+                .with_location(&args[0], AuxErrorInfo::InvalidArg))
         }
     }
 }

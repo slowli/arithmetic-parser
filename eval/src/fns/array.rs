@@ -71,7 +71,7 @@ where
 
             let cmp = ctx.arithmetic().partial_cmp(&next_index, &len);
             if matches!(cmp, Some(Ordering::Less | Ordering::Equal)) {
-                let spanned = ctx.apply_call_span(Value::Prim(index));
+                let spanned = ctx.apply_call_location(Value::Prim(index));
                 array.push(generation_fn.evaluate(vec![spanned], ctx)?);
                 index = next_index;
             } else {
@@ -127,7 +127,7 @@ impl<T: FromPrimitive> NativeFn<T> for Len {
                 let err = ErrorKind::native("`len` requires object or tuple arg");
                 return Err(ctx
                     .call_site_error(err)
-                    .with_span(&arg, AuxErrorInfo::InvalidArg));
+                    .with_location(&arg, AuxErrorInfo::InvalidArg));
             }
         };
         let len = T::from_usize(len).ok_or_else(|| {
@@ -191,7 +191,7 @@ impl<T: 'static + Clone> NativeFn<T> for Map {
         let mapped: Result<Tuple<_>, _> = array
             .into_iter()
             .map(|value| {
-                let spanned = ctx.apply_call_span(value);
+                let spanned = ctx.apply_call_location(value);
                 map_fn.evaluate(vec![spanned], ctx)
             })
             .collect();
@@ -252,7 +252,7 @@ impl<T: 'static + Clone> NativeFn<T> for Filter {
 
         let mut filtered = vec![];
         for value in array {
-            let spanned = ctx.apply_call_span(value.clone());
+            let spanned = ctx.apply_call_location(value.clone());
             match filter_fn.evaluate(vec![spanned], ctx)? {
                 Value::Bool(true) => filtered.push(value),
                 Value::Bool(false) => { /* do nothing */ }
@@ -320,7 +320,7 @@ impl<T: 'static + Clone> NativeFn<T> for Fold {
         )?;
 
         array.into_iter().try_fold(acc, |acc, value| {
-            let spanned_args = vec![ctx.apply_call_span(acc), ctx.apply_call_span(value)];
+            let spanned_args = vec![ctx.apply_call_location(acc), ctx.apply_call_location(value)];
             fold_fn.evaluate(spanned_args, ctx)
         })
     }
@@ -495,7 +495,7 @@ impl<T: Clone + 'static> NativeFn<T> for Any {
         )?;
 
         for value in array {
-            let spanned = ctx.apply_call_span(value);
+            let spanned = ctx.apply_call_location(value);
             let result = predicate.evaluate(vec![spanned], ctx)?;
             match result {
                 Value::Bool(false) => { /* continue */ }
@@ -565,7 +565,7 @@ impl<T: Clone + 'static> NativeFn<T> for All {
         )?;
 
         for value in array {
-            let spanned = ctx.apply_call_span(value);
+            let spanned = ctx.apply_call_location(value);
             let result = predicate.evaluate(vec![spanned], ctx)?;
             match result {
                 Value::Bool(false) => return Ok(Value::Bool(false)),

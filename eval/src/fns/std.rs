@@ -48,7 +48,7 @@ impl<T: fmt::Display> NativeFn<T> for Dbg {
         mut args: Vec<SpannedValue<T>>,
         ctx: &mut CallContext<'_, T>,
     ) -> EvalResult<T> {
-        let module_id = ctx.call_span().module_id();
+        let module_id = ctx.call_location().module_id();
         for arg in &args {
             Self::print_value(module_id, arg);
         }

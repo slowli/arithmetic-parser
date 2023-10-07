@@ -11,7 +11,7 @@ use crate::{
     alloc::{Rc, Vec},
     fns,
 };
-use arithmetic_parser::MaybeSpanned;
+use arithmetic_parser::Location;
 
 mod function;
 mod object;
@@ -186,7 +186,7 @@ pub enum Value<T> {
 }
 
 /// Value together with a span that has produced it.
-pub type SpannedValue<T> = MaybeSpanned<Value<T>>;
+pub type SpannedValue<T> = Location<Value<T>>;
 
 impl<T> Value<T> {
     /// Creates a value for a native function.

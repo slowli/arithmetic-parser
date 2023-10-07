@@ -157,7 +157,7 @@ fn undefined_var() {
     let module = ExecutableModule::new(WildcardId, &block).unwrap();
 
     let err = module.with_env(&Environment::new()).unwrap_err();
-    assert_eq!(err.main_span().code().span_code(program), "x");
+    assert_eq!(err.location().in_module().span(program), "x");
     assert_matches!(err.kind(), ErrorKind::Undefined(var) if var == "x");
 }
 
@@ -168,7 +168,7 @@ fn undefined_function() {
     let module = ExecutableModule::new(WildcardId, &block).unwrap();
 
     let err = module.with_env(&Environment::new()).unwrap_err();
-    assert_eq!(err.main_span().code().span_code(program), "sin");
+    assert_eq!(err.location().in_module().span(program), "sin");
     assert_matches!(err.kind(), ErrorKind::Undefined(var) if var == "sin");
 }
 
@@ -179,7 +179,7 @@ fn arg_len_mismatch() {
     let program = "foo = |x| x + 5; foo()";
     let err = try_evaluate(&mut env, program).unwrap_err();
     let err = err.source();
-    assert_eq!(err.main_span().code().span_code(program), "foo()");
+    assert_eq!(err.location().in_module().span(program), "foo()");
     assert_matches!(
         err.kind(),
         ErrorKind::ArgsLenMismatch {
@@ -191,7 +191,7 @@ fn arg_len_mismatch() {
     let other_program = "foo(1, 2) * 3.0";
     let err = try_evaluate(&mut env, other_program).unwrap_err();
     let err = err.source();
-    assert_eq!(err.main_span().code().span_code(other_program), "foo(1, 2)");
+    assert_eq!(err.location().in_module().span(other_program), "foo(1, 2)");
     assert_matches!(
         err.kind(),
         ErrorKind::ArgsLenMismatch {
@@ -206,7 +206,7 @@ fn arg_len_mismatch_with_variadic_function() {
     let program = "foo = |fn, ...xs| fn(xs); foo()";
     let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
     let err = err.source();
-    assert_eq!(err.main_span().code().span_code(program), "foo()");
+    assert_eq!(err.location().in_module().span(program), "foo()");
     assert_matches!(
         err.kind(),
         ErrorKind::ArgsLenMismatch {
@@ -220,8 +220,8 @@ fn arg_len_mismatch_with_variadic_function() {
 fn repeated_args_in_fn_definition() {
     let program = "add = |x, x| x + 2;";
     let err = expect_compilation_error(program);
-    assert_eq!(err.main_span().code().span_code(program), "x");
-    assert_eq!(err.main_span().code().location_offset(), 10);
+    assert_eq!(err.location().in_module().span(program), "x");
+    assert_eq!(err.location().in_module().location_offset(), 10);
     assert_matches!(
         err.kind(),
         ErrorKind::RepeatedAssignment {
@@ -231,8 +231,8 @@ fn repeated_args_in_fn_definition() {
 
     let other_program = "add = |x, (y, x)| x + y;";
     let err = expect_compilation_error(other_program);
-    assert_eq!(err.main_span().code().span_code(other_program), "x");
-    assert_eq!(err.main_span().code().location_offset(), 14);
+    assert_eq!(err.location().in_module().span(other_program), "x");
+    assert_eq!(err.location().in_module().location_offset(), 14);
     assert_matches!(err.kind(), ErrorKind::RepeatedAssignment { .. });
 }
 
@@ -240,8 +240,8 @@ fn repeated_args_in_fn_definition() {
 fn repeated_var_in_lvalue() {
     let program = "(x, x) = (1, 2);";
     let err = expect_compilation_error(program);
-    assert_eq!(err.main_span().code().span_code(program), "x");
-    assert_eq!(err.main_span().code().location_offset(), 4);
+    assert_eq!(err.location().in_module().span(program), "x");
+    assert_eq!(err.location().in_module().location_offset(), 4);
     assert_matches!(
         err.kind(),
         ErrorKind::RepeatedAssignment {
@@ -251,8 +251,8 @@ fn repeated_var_in_lvalue() {
 
     let other_program = "(x, ...x) = (1, 2);";
     let err = expect_compilation_error(other_program);
-    assert_eq!(err.main_span().code().span_code(other_program), "x");
-    assert_eq!(err.main_span().code().location_offset(), 7);
+    assert_eq!(err.location().in_module().span(other_program), "x");
+    assert_eq!(err.location().in_module().location_offset(), 7);
     assert_matches!(
         err.kind(),
         ErrorKind::RepeatedAssignment {
@@ -270,7 +270,7 @@ fn error_in_function_args() {
 
     let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
     let err = err.source();
-    assert_eq!(err.main_span().code().span_code(program), "(_, z)");
+    assert_eq!(err.location().in_module().span(program), "(_, z)");
     assert_matches!(err.kind(), ErrorKind::CannotDestructure);
 }
 
@@ -279,7 +279,7 @@ fn cannot_call_error() {
     let program = "x = 5; x(1.0)";
     let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
     let err = err.source();
-    assert_eq!(err.main_span().code().location_offset(), 7);
+    assert_eq!(err.location().in_module().location_offset(), 7);
     assert_matches!(err.kind(), ErrorKind::CannotCall);
 
     let other_program = "2 + true(5)";
@@ -287,7 +287,7 @@ fn cannot_call_error() {
     env.insert("true", Value::Bool(true));
     let err = try_evaluate(&mut env, other_program).unwrap_err();
     let err = err.source();
-    assert_eq!(err.main_span().code().span_code(other_program), "true(5)");
+    assert_eq!(err.location().in_module().span(other_program), "true(5)");
     assert_matches!(err.kind(), ErrorKind::CannotCall);
 }
 
@@ -296,7 +296,7 @@ fn tuple_len_mismatch_error() {
     let program = "x = (1, 2) + (3, 4, 5);";
     let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
     let err = err.source();
-    assert_eq!(err.main_span().code().span_code(program), "(1, 2)");
+    assert_eq!(err.location().in_module().span(program), "(1, 2)");
     assert_matches!(
         err.kind(),
         ErrorKind::TupleLenMismatch {
@@ -312,7 +312,7 @@ fn cannot_destructure_error() {
     let program = "(x, y) = 1.0;";
     let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
     let err = err.source();
-    assert_eq!(err.main_span().code().span_code(program), "(x, y)");
+    assert_eq!(err.location().in_module().span(program), "(x, y)");
     assert_matches!(err.kind(), ErrorKind::CannotDestructure);
 }
 
@@ -323,7 +323,7 @@ fn unexpected_operand() {
     let program = "1 / || 2";
     let err = try_evaluate(&mut env, program).unwrap_err();
     let err = err.source();
-    assert_eq!(err.main_span().code().span_code(program), "|| 2");
+    assert_eq!(err.location().in_module().span(program), "|| 2");
     assert_matches!(
         err.kind(),
         ErrorKind::UnexpectedOperand { op } if *op == BinaryOp::Div.into()
@@ -332,7 +332,7 @@ fn unexpected_operand() {
     let other_program = "1 == 1 && !(2, 3)";
     let err = try_evaluate(&mut env, other_program).unwrap_err();
     let err = err.source();
-    assert_eq!(err.main_span().code().span_code(other_program), "!(2, 3)");
+    assert_eq!(err.location().in_module().span(other_program), "!(2, 3)");
     assert_matches!(
         err.kind(),
         ErrorKind::UnexpectedOperand { op } if *op == UnaryOp::Not.into()
@@ -351,12 +351,12 @@ fn comparison_of_invalid_values() {
     let program = "(2,) > 5";
     let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
     assert_matches!(err.source().kind(), ErrorKind::CannotCompare);
-    assert_eq!(err.source().main_span().code().span_code(program), "(2,)");
+    assert_eq!(err.source().location().in_module().span(program), "(2,)");
 
     let program = "2 > (3, 5)";
     let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
     assert_matches!(err.source().kind(), ErrorKind::CannotCompare);
-    assert_eq!(err.source().main_span().code().span_code(program), "(3, 5)");
+    assert_eq!(err.source().location().in_module().span(program), "(3, 5)");
 }
 
 #[test]
@@ -392,7 +392,7 @@ fn comparison_error_within_capture() {
     let program = "ge = |x, y| x >= (y,); ge(2, 3)";
     let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
     assert_matches!(err.source().kind(), ErrorKind::CannotCompare);
-    assert_eq!(err.source().main_span().code().span_code(program), "(y,)");
+    assert_eq!(err.source().location().in_module().span(program), "(y,)");
 }
 
 #[test]
@@ -430,7 +430,7 @@ fn indexed_field_out_of_bounds_error() {
     let program = "x = 3; (x,).1 == 3";
     let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
 
-    assert_eq!(err.source().main_span().code().span_code(program), "(x,).1");
+    assert_eq!(err.source().location().in_module().span(program), "(x,).1");
     assert_matches!(
         err.source().kind(),
         ErrorKind::IndexOutOfBounds { index: 1, len: 1 }
@@ -442,7 +442,7 @@ fn indexed_field_invalid_receiver_error() {
     let program = "x = 3; x.1 == 3";
     let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
 
-    assert_eq!(err.source().main_span().code().span_code(program), "x.1");
+    assert_eq!(err.source().location().in_module().span(program), "x.1");
     assert_matches!(err.source().kind(), ErrorKind::CannotIndex);
 }
 
@@ -452,7 +452,7 @@ fn overly_large_indexed_field() {
     let err = expect_compilation_error(program);
 
     assert_eq!(
-        err.main_span().code().span_code(program),
+        err.location().in_module().span(program),
         "123456789012345678901234567890"
     );
     assert_matches!(

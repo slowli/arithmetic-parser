@@ -151,12 +151,12 @@ impl<'a> Spanned<'a> {
     }
 }
 
-/// Value with an optional associated code span.
-pub type MaybeSpanned<T = ()> = LocatedSpan<usize, T>;
-// FIXME: simplify; rename
+/// Value with an associated code location. Unlike [`Spanned`], `Location` does not retain a reference
+/// to the original code span, just its start position and length.
+pub type Location<T = ()> = LocatedSpan<usize, T>;
 
-impl MaybeSpanned {
-    /// Creates a span from a `range` in the provided `code`. This is mostly useful for testing.
+impl Location {
+    /// Creates a location from a `range` in the provided `code`. This is mostly useful for testing.
     pub fn from_str<'a, R>(code: &'a str, range: R) -> Self
     where
         InputSpan<'a>: Slice<R>,
@@ -165,20 +165,20 @@ impl MaybeSpanned {
     }
 }
 
-impl<T> MaybeSpanned<T> {
-    /// Returns either the original code fragment (if it's retained), or a string in the form
-    /// `{default_name} at {line}:{column}`.
-    pub fn location(&self, default_name: &str) -> String {
+impl<T> Location<T> {
+    /// Returns a string representation of this location in the form `{default_name} at {line}:{column}`.
+    pub fn to_string(&self, default_name: &str) -> String {
         format!("{default_name} at {}:{}", self.line, self.column)
     }
 
-    /// Returns this span in the provided `code`.
-    pub fn span_code<'a>(&self, code: &'a str) -> &'a str {
+    /// Returns this location in the provided `code`. It is caller's responsibility to ensure that this
+    /// is called with the original `code` that produced this location.
+    pub fn span<'a>(&self, code: &'a str) -> &'a str {
         &code[self.offset..(self.offset + self.fragment)]
     }
 }
 
-impl<T> From<Spanned<'_, T>> for MaybeSpanned<T> {
+impl<T> From<Spanned<'_, T>> for Location<T> {
     fn from(value: Spanned<'_, T>) -> Self {
         value.map_fragment(str::len)
     }

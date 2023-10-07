@@ -63,7 +63,7 @@ fn extract_primitive<T, A>(
         Value::Prim(value) => Ok(value),
         _ => Err(ctx
             .call_site_error(ErrorKind::native(error_msg))
-            .with_span(&value, AuxErrorInfo::InvalidArg)),
+            .with_location(&value, AuxErrorInfo::InvalidArg)),
     }
 }
 
@@ -78,7 +78,7 @@ fn extract_array<T, A>(
         let err = ErrorKind::native(error_msg);
         Err(ctx
             .call_site_error(err)
-            .with_span(&value, AuxErrorInfo::InvalidArg))
+            .with_location(&value, AuxErrorInfo::InvalidArg))
     }
 }
 
@@ -93,7 +93,7 @@ fn extract_fn<T, A>(
         let err = ErrorKind::native(error_msg);
         Err(ctx
             .call_site_error(err)
-            .with_span(&value, AuxErrorInfo::InvalidArg))
+            .with_location(&value, AuxErrorInfo::InvalidArg))
     }
 }
 
@@ -247,7 +247,7 @@ impl<T: Clone + 'static> NativeFn<T> for Defer {
         ctx.check_args_count(&args, 1)?;
         let function = extract_fn(ctx, args.pop().unwrap(), ARG_ERROR)?;
         let cell = OpaqueRef::with_identity_eq(ValueCell::<T>::default());
-        let spanned_cell = ctx.apply_call_span(Value::Ref(cell.clone()));
+        let spanned_cell = ctx.apply_call_location(Value::Ref(cell.clone()));
         let return_value = function.evaluate(vec![spanned_cell], ctx)?;
 
         let cell = cell.downcast_ref::<ValueCell<T>>().unwrap();
@@ -349,7 +349,7 @@ mod tests {
             .unwrap_err();
         let err = err.source();
         assert_matches!(err.kind(), ErrorKind::CannotCompare);
-        assert_eq!(err.main_span().code().span_code(bogus_program), "(1, 2)");
+        assert_eq!(err.location().in_module().span(bogus_program), "(1, 2)");
         Ok(())
     }
 
@@ -450,7 +450,7 @@ mod tests {
 
         let err = module.with_env(&env)?.run().unwrap_err();
         let err = err.source();
-        assert_eq!(err.main_span().code().span_code(program), "min(1, (2, 3))");
+        assert_eq!(err.location().in_module().span(program), "min(1, (2, 3))");
         assert_matches!(
             err.kind(),
             ErrorKind::NativeCall(ref msg) if msg.contains("requires 2 primitive arguments")
@@ -469,7 +469,7 @@ mod tests {
 
         let err = module.with_env(&env)?.run().unwrap_err();
         let err = err.source();
-        assert_eq!(err.main_span().code().span_code(program), "min(1, NAN)");
+        assert_eq!(err.location().in_module().span(program), "min(1, NAN)");
         assert_matches!(err.kind(), ErrorKind::CannotCompare);
         Ok(())
     }

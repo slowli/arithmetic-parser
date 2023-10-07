@@ -37,7 +37,7 @@ use crate::{
 /// env.insert_native_fn("assert", fns::Assert);
 ///
 /// let err = module.with_env(&env)?.run().unwrap_err();
-/// assert_eq!(*err.source().main_span().code().fragment(), "assert(3^2 > 10)");
+/// assert_eq!(*err.source().location().in_module().fragment(), "assert(3^2 > 10)");
 /// assert_matches!(
 ///     err.source().kind(),
 ///     ErrorKind::NativeCall(ref msg) if msg == "Assertion failed: 3^2 > 10"
@@ -67,7 +67,7 @@ impl<T> NativeFn<T> for Assert {
                 let err = ErrorKind::native("`assert` requires a single boolean argument");
                 Err(ctx
                     .call_site_error(err)
-                    .with_span(&args[0], AuxErrorInfo::InvalidArg))
+                    .with_location(&args[0], AuxErrorInfo::InvalidArg))
             }
         }
     }
@@ -79,8 +79,8 @@ fn create_error_with_values<T: fmt::Display>(
     ctx: &CallContext<'_, T>,
 ) -> Error {
     ctx.call_site_error(err)
-        .with_span(&args[0], AuxErrorInfo::arg_value(&args[0].extra))
-        .with_span(&args[1], AuxErrorInfo::arg_value(&args[1].extra))
+        .with_location(&args[0], AuxErrorInfo::arg_value(&args[0].extra))
+        .with_location(&args[1], AuxErrorInfo::arg_value(&args[1].extra))
 }
 
 /// Equality assertion function.
@@ -111,7 +111,7 @@ fn create_error_with_values<T: fmt::Display>(
 /// env.insert_native_fn("assert_eq", fns::AssertEq);
 ///
 /// let err = module.with_env(&env)?.run().unwrap_err();
-/// assert_eq!(*err.source().main_span().code().fragment(), "assert_eq(3^2, 10)");
+/// assert_eq!(*err.source().location().in_module().fragment(), "assert_eq(3^2, 10)");
 /// assert_matches!(
 ///     err.source().kind(),
 ///     ErrorKind::NativeCall(ref msg) if msg == "Assertion failed: 3^2 == 10"
@@ -172,7 +172,7 @@ impl<T: fmt::Display> NativeFn<T> for AssertEq {
 ///
 /// let err = module.with_env(&env)?.run().unwrap_err();
 /// assert_eq!(
-///     *err.source().main_span().code().fragment(),
+///     *err.source().location().in_module().fragment(),
 ///     "assert_close(sqrt(10), 3)"
 /// );
 /// # Ok(())
@@ -201,7 +201,7 @@ impl<T> AssertClose<T> {
             Value::Prim(value) => Ok(value),
             _ => Err(ctx
                 .call_site_error(ErrorKind::native(ARG_ERROR))
-                .with_span(value, AuxErrorInfo::InvalidArg)),
+                .with_location(value, AuxErrorInfo::InvalidArg)),
         }
     }
 }
@@ -270,7 +270,7 @@ impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
 ///
 /// let err = module.with_env(&env)?.run().unwrap_err();
 /// assert_eq!(
-///     *err.source().main_span().code().fragment(),
+///     *err.source().location().in_module().fragment(),
 ///     "assert_fails(|| obj.x)"
 /// );
 /// # Ok(())
@@ -300,7 +300,7 @@ impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
 ///
 /// let err = module.with_env(&env)?.run().unwrap_err();
 /// assert_eq!(
-///     *err.source().main_span().code().fragment(),
+///     *err.source().location().in_module().fragment(),
 ///     "assert_fails(assert_fails)"
 /// );
 /// # Ok(())
@@ -365,17 +365,17 @@ mod tests {
     use super::*;
     use crate::{arith::CheckedArithmetic, exec::WildcardId, Environment, Object};
 
-    use arithmetic_parser::{LvalueLen, MaybeSpanned};
+    use arithmetic_parser::{Location, LvalueLen};
     use assert_matches::assert_matches;
 
     fn span_value<T>(value: Value<T>) -> SpannedValue<T> {
-        MaybeSpanned::from_str("", ..).copy_with_extra(value)
+        Location::from_str("", ..).copy_with_extra(value)
     }
 
     #[test]
     fn assert_basics() {
         let env = Environment::with_arithmetic(<CheckedArithmetic>::new());
-        let mut ctx = CallContext::<u32>::mock(&WildcardId, MaybeSpanned::from_str("", ..), &env);
+        let mut ctx = CallContext::<u32>::mock(&WildcardId, Location::from_str("", ..), &env);
 
         let err = Assert.evaluate(vec![], &mut ctx).unwrap_err();
         assert_matches!(err.kind(), ErrorKind::ArgsLenMismatch { .. });
@@ -407,7 +407,7 @@ mod tests {
     #[test]
     fn assert_eq_basics() {
         let env = Environment::with_arithmetic(<CheckedArithmetic>::new());
-        let mut ctx = CallContext::<u32>::mock(&WildcardId, MaybeSpanned::from_str("", ..), &env);
+        let mut ctx = CallContext::<u32>::mock(&WildcardId, Location::from_str("", ..), &env);
 
         let err = AssertEq.evaluate(vec![], &mut ctx).unwrap_err();
         assert_matches!(err.kind(), ErrorKind::ArgsLenMismatch { .. });
@@ -428,7 +428,7 @@ mod tests {
     fn assert_close_basics() {
         let assert_close = AssertClose::new(1e-3);
         let env = Environment::new();
-        let mut ctx = CallContext::<f32>::mock(&WildcardId, MaybeSpanned::from_str("", ..), &env);
+        let mut ctx = CallContext::<f32>::mock(&WildcardId, Location::from_str("", ..), &env);
 
         let err = assert_close.evaluate(vec![], &mut ctx).unwrap_err();
         assert_matches!(err.kind(), ErrorKind::ArgsLenMismatch { .. });
@@ -484,7 +484,7 @@ mod tests {
     fn assert_fails_basics() {
         let assert_fails = AssertFails::default();
         let env = Environment::new();
-        let mut ctx = CallContext::<f32>::mock(&WildcardId, MaybeSpanned::from_str("", ..), &env);
+        let mut ctx = CallContext::<f32>::mock(&WildcardId, Location::from_str("", ..), &env);
 
         let err = assert_fails.evaluate(vec![], &mut ctx).unwrap_err();
         assert_matches!(err.kind(), ErrorKind::ArgsLenMismatch { .. });
@@ -520,7 +520,7 @@ mod tests {
             |err| matches!(err.kind(), ErrorKind::NativeCall(msg) if msg == "oops"),
         );
         let env = Environment::new();
-        let mut ctx = CallContext::<f32>::mock(&WildcardId, MaybeSpanned::from_str("", ..), &env);
+        let mut ctx = CallContext::<f32>::mock(&WildcardId, Location::from_str("", ..), &env);
 
         let wrong_fn = Value::wrapped_fn(f32::abs);
         let err = assert_fails

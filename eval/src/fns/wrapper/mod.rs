@@ -153,7 +153,7 @@ macro_rules! arity_fn {
                         err.set_arg_index(index);
                         context
                             .call_site_error(ErrorKind::Wrapper(err))
-                            .with_span(&span, AuxErrorInfo::InvalidArg)
+                            .with_location(&span, AuxErrorInfo::InvalidArg)
                     })?;
                 )*
 
@@ -284,7 +284,7 @@ macro_rules! wrap_fn {
                         err.set_arg_index(index);
                         context
                             .call_site_error($crate::error::ErrorKind::Wrapper(err))
-                            .with_span(&span, $crate::error::AuxErrorInfo::InvalidArg)
+                            .with_location(&span, $crate::error::AuxErrorInfo::InvalidArg)
                     })?;
             )+
 
@@ -317,7 +317,7 @@ macro_rules! wrap_fn {
 ///     array
 ///         .into_iter()
 ///         .map(|value| {
-///             let arg = context.apply_call_span(value);
+///             let arg = context.apply_call_location(value);
 ///             map_fn.evaluate(vec![arg], context)
 ///         })
 ///         .collect()

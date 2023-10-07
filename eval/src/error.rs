@@ -12,7 +12,7 @@ use crate::{
     fns::FromValueError,
     Value,
 };
-use arithmetic_parser::{BinaryOp, LocatedSpan, LvalueLen, MaybeSpanned, Op, UnaryOp};
+use arithmetic_parser::{BinaryOp, LocatedSpan, Location, LvalueLen, Op, UnaryOp};
 
 /// Arithmetic errors raised by [`Arithmetic`] operations on primitive values.
 ///
@@ -437,8 +437,8 @@ impl fmt::Display for AuxErrorInfo {
 #[derive(Debug)]
 pub struct Error {
     kind: ErrorKind,
-    main_span: CodeInModule,
-    aux_spans: Vec<CodeInModule<AuxErrorInfo>>,
+    main_location: LocationInModule,
+    aux_locations: Vec<LocationInModule<AuxErrorInfo>>,
 }
 
 impl Error {
@@ -449,30 +449,30 @@ impl Error {
     ) -> Self
     where
         Span: Copy,
-        MaybeSpanned: From<LocatedSpan<Span>>,
+        Location: From<LocatedSpan<Span>>,
     {
         Self {
             kind,
-            main_span: CodeInModule::new(module_id, main_span.with_no_extra().into()),
-            aux_spans: vec![],
+            main_location: LocationInModule::new(module_id, main_span.with_no_extra().into()),
+            aux_locations: vec![],
         }
     }
 
-    pub(crate) fn from_parts(main_span: CodeInModule, kind: ErrorKind) -> Self {
+    pub(crate) fn from_parts(main_span: LocationInModule, kind: ErrorKind) -> Self {
         Self {
             kind,
-            main_span,
-            aux_spans: vec![],
+            main_location: main_span,
+            aux_locations: vec![],
         }
     }
 
     /// Adds an auxiliary span to this error. The `span` must be in the same module
     /// as the main span.
     #[must_use]
-    pub fn with_span<T>(mut self, span: &MaybeSpanned<T>, info: AuxErrorInfo) -> Self {
-        self.aux_spans.push(CodeInModule {
-            module_id: self.main_span.module_id.clone_boxed(),
-            code: span.copy_with_extra(info),
+    pub fn with_location<T>(mut self, location: &Location<T>, info: AuxErrorInfo) -> Self {
+        self.aux_locations.push(LocationInModule {
+            module_id: self.main_location.module_id.clone_boxed(),
+            location: location.copy_with_extra(info),
         });
         self
     }
@@ -483,19 +483,19 @@ impl Error {
     }
 
     /// Returns the main span for this error.
-    pub fn main_span(&self) -> &CodeInModule {
-        &self.main_span
+    pub fn location(&self) -> &LocationInModule {
+        &self.main_location
     }
 
     /// Returns auxiliary spans for this error.
-    pub fn aux_spans(&self) -> &[CodeInModule<AuxErrorInfo>] {
-        &self.aux_spans
+    pub fn aux_spans(&self) -> &[LocationInModule<AuxErrorInfo>] {
+        &self.aux_locations
     }
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.main_span.fmt_location(formatter)?;
+        self.main_location.fmt_location(formatter)?;
         write!(formatter, ": {}", self.kind)
     }
 }
@@ -512,30 +512,30 @@ pub type EvalResult<T> = Result<Value<T>, Error>;
 
 /// Code fragment together with information about the module containing the fragment.
 #[derive(Debug)]
-pub struct CodeInModule<T = ()> {
+pub struct LocationInModule<T = ()> {
     module_id: Box<dyn ModuleId>,
-    code: MaybeSpanned<T>,
+    location: Location<T>,
 }
 
-impl<T: Clone> Clone for CodeInModule<T> {
+impl<T: Clone> Clone for LocationInModule<T> {
     fn clone(&self) -> Self {
         Self {
             module_id: self.module_id.clone_boxed(),
-            code: self.code.clone(),
+            location: self.location.clone(),
         }
     }
 }
 
-impl CodeInModule {
-    pub(crate) fn new(module_id: &dyn ModuleId, span: MaybeSpanned) -> Self {
+impl LocationInModule {
+    pub(crate) fn new(module_id: &dyn ModuleId, location: Location) -> Self {
         Self {
             module_id: module_id.clone_boxed(),
-            code: span,
+            location,
         }
     }
 }
 
-impl<T> CodeInModule<T> {
+impl<T> LocationInModule<T> {
     /// Returns the ID of the module containing this fragment.
     pub fn module_id(&self) -> &dyn ModuleId {
         self.module_id.as_ref()
@@ -543,9 +543,8 @@ impl<T> CodeInModule<T> {
 
     /// Returns the code fragment within the module. The fragment may be stripped
     /// (i.e., contain only location info, not the code string itself).
-    // FIXME: rename
-    pub fn code(&self) -> &MaybeSpanned<T> {
-        &self.code
+    pub fn in_module(&self) -> &Location<T> {
+        &self.location
     }
 
     pub(crate) fn fmt_location(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -553,8 +552,8 @@ impl<T> CodeInModule<T> {
             formatter,
             "{}:{}:{}",
             self.module_id,
-            self.code.location_line(),
-            self.code.get_column()
+            self.location.location_line(),
+            self.location.get_column()
         )
     }
 }
@@ -566,9 +565,9 @@ pub struct BacktraceElement {
     /// Function name.
     pub fn_name: String,
     /// Code span of the function definition. `None` for native functions.
-    pub def_span: Option<CodeInModule>,
+    pub def_location: Option<LocationInModule>,
     /// Code span of the function call.
-    pub call_span: CodeInModule,
+    pub call_location: LocationInModule,
 }
 
 /// Error backtrace.
@@ -582,13 +581,13 @@ impl Backtrace {
     pub fn push_call(
         &mut self,
         fn_name: &str,
-        def_span: Option<CodeInModule>,
-        call_span: CodeInModule,
+        def_location: Option<LocationInModule>,
+        call_location: LocationInModule,
     ) {
         self.calls.push(BacktraceElement {
             fn_name: fn_name.to_owned(),
-            def_span,
-            call_span,
+            def_location,
+            call_location,
         });
     }
 
@@ -633,14 +632,14 @@ impl fmt::Display for ErrorWithBacktrace {
             for (index, call) in self.backtrace.calls.iter().enumerate() {
                 write!(formatter, "{:>4}: {} ", index + 1, call.fn_name)?;
 
-                if let Some(ref def_span) = call.def_span {
+                if let Some(ref def_span) = call.def_location {
                     write!(formatter, "(module `{}`)", def_span.module_id)?;
                 } else {
                     formatter.write_str("(native)")?;
                 }
 
                 write!(formatter, " called at ")?;
-                call.call_span.fmt_location(formatter)?;
+                call.call_location.fmt_location(formatter)?;
                 writeln!(formatter)?;
             }
         }
@@ -677,7 +676,7 @@ mod tests {
     #[test]
     fn display_for_spanned_eval_error() {
         let input = "(_, test) = (1, 2);";
-        let main_span = MaybeSpanned::from_str(input, 4..8);
+        let main_span = Location::from_str(input, 4..8);
         let err = Error::new(
             &"test_module",
             &main_span,
@@ -693,11 +692,11 @@ mod tests {
     #[test]
     fn display_for_error_with_backtrace() {
         let input = "(_, test) = (1, 2);";
-        let main_span = MaybeSpanned::from_str(input, 4..8);
+        let main_span = Location::from_str(input, 4..8);
         let err = Error::new(&"test", &main_span, ErrorKind::Undefined("test".to_owned()));
 
         let mut err = ErrorWithBacktrace::new(err, Backtrace::default());
-        let call_span = CodeInModule::new(&"test", MaybeSpanned::from_str(input, ..));
+        let call_span = LocationInModule::new(&"test", Location::from_str(input, ..));
         err.backtrace.push_call("test_fn", None, call_span);
 
         let err_string = err.to_string();

@@ -67,7 +67,7 @@ fn main() -> anyhow::Result<()> {
     // Naturally, spans in the stripped module do not retain refs to source code,
     // but rather contain info sufficient to be recoverable.
     assert_eq!(
-        err.source().main_span().code().location("call"),
+        err.source().location().in_module().to_string("call"),
         "call at 1:40"
     );
 

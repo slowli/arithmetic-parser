@@ -5,17 +5,17 @@ use core::fmt;
 use crate::{
     alloc::{HashMap, Rc, String, ToOwned, Vec},
     arith::OrdArithmetic,
-    error::{Backtrace, CodeInModule, Error, ErrorKind},
+    error::{Backtrace, Error, ErrorKind, LocationInModule},
     exec::{ExecutableFn, ModuleId, Operations},
     fns::ValueCell,
     Environment, EvalResult, SpannedValue, Value,
 };
-use arithmetic_parser::{LvalueLen, MaybeSpanned};
+use arithmetic_parser::{Location, LvalueLen};
 
 /// Context for native function calls.
 #[derive(Debug)]
 pub struct CallContext<'r, T> {
-    call_span: CodeInModule,
+    call_location: LocationInModule,
     backtrace: Option<&'r mut Backtrace>,
     operations: Operations<'r, T>,
 }
@@ -23,25 +23,21 @@ pub struct CallContext<'r, T> {
 impl<'r, T> CallContext<'r, T> {
     /// Creates a mock call context with the specified module ID and call span.
     /// The provided [`Environment`] is used to extract an [`OrdArithmetic`] implementation.
-    pub fn mock(
-        module_id: &dyn ModuleId,
-        call_span: MaybeSpanned,
-        env: &'r Environment<T>,
-    ) -> Self {
+    pub fn mock(module_id: &dyn ModuleId, location: Location, env: &'r Environment<T>) -> Self {
         Self {
-            call_span: CodeInModule::new(module_id, call_span),
+            call_location: LocationInModule::new(module_id, location),
             backtrace: None,
             operations: env.operations(),
         }
     }
 
     pub(crate) fn new(
-        call_span: CodeInModule,
+        call_location: LocationInModule,
         backtrace: Option<&'r mut Backtrace>,
         operations: Operations<'r, T>,
     ) -> Self {
         Self {
-            call_span,
+            call_location,
             backtrace,
             operations,
         }
@@ -56,19 +52,19 @@ impl<'r, T> CallContext<'r, T> {
         self.operations.arithmetic
     }
 
-    /// Returns the call span of the currently executing function.
-    pub fn call_span(&self) -> &CodeInModule {
-        &self.call_span
+    /// Returns the call location of the currently executing function.
+    pub fn call_location(&self) -> &LocationInModule {
+        &self.call_location
     }
 
     /// Applies the call span to the specified `value`.
-    pub fn apply_call_span<U>(&self, value: U) -> MaybeSpanned<U> {
-        self.call_span.code().copy_with_extra(value)
+    pub fn apply_call_location<U>(&self, value: U) -> Location<U> {
+        self.call_location.in_module().copy_with_extra(value)
     }
 
     /// Creates an error spanning the call site.
     pub fn call_site_error(&self, error: ErrorKind) -> Error {
-        Error::from_parts(self.call_span.clone(), error)
+        Error::from_parts(self.call_location.clone(), error)
     }
 
     /// Checks argument count and returns an error if it doesn't match.
@@ -242,7 +238,7 @@ impl<T: fmt::Display> fmt::Display for Function<T> {
             Self::Interpreted(function) => {
                 formatter.write_str("(interpreted fn @ ")?;
                 let location =
-                    CodeInModule::new(function.module_id(), function.definition.def_span);
+                    LocationInModule::new(function.module_id(), function.definition.def_location);
                 location.fmt_location(formatter)?;
                 formatter.write_str(")")
             }
@@ -271,12 +267,12 @@ impl<T> Function<T> {
         }
     }
 
-    pub(crate) fn def_span(&self) -> Option<CodeInModule> {
+    pub(crate) fn def_location(&self) -> Option<LocationInModule> {
         match self {
             Self::Native(_) => None,
-            Self::Interpreted(function) => Some(CodeInModule::new(
+            Self::Interpreted(function) => Some(LocationInModule::new(
                 function.module_id(),
-                function.definition.def_span,
+                function.definition.def_location,
             )),
         }
     }

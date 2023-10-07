@@ -1,7 +1,7 @@
 //! Executable `Command` and its building blocks.
 
 use crate::alloc::{String, Vec};
-use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, UnaryOp};
+use arithmetic_parser::{BinaryOp, Location, LvalueLen, UnaryOp};
 
 /// Pointer to a register or constant.
 #[derive(Debug)]
@@ -21,7 +21,7 @@ impl<T: Clone> Clone for Atom<T> {
     }
 }
 
-pub(crate) type SpannedAtom<T> = MaybeSpanned<Atom<T>>;
+pub(crate) type LocatedAtom<T> = Location<Atom<T>>;
 
 #[derive(Debug, Clone)]
 pub(crate) enum FieldName {
@@ -37,26 +37,26 @@ pub(crate) enum CompiledExpr<T> {
     Object(Vec<(String, Atom<T>)>),
     Unary {
         op: UnaryOp,
-        inner: SpannedAtom<T>,
+        inner: LocatedAtom<T>,
     },
     Binary {
         op: BinaryOp,
-        lhs: SpannedAtom<T>,
-        rhs: SpannedAtom<T>,
+        lhs: LocatedAtom<T>,
+        rhs: LocatedAtom<T>,
     },
     FieldAccess {
-        receiver: SpannedAtom<T>,
+        receiver: LocatedAtom<T>,
         field: FieldName,
     },
     FunctionCall {
-        name: SpannedAtom<T>,
+        name: LocatedAtom<T>,
         // Original function name if it is a proper variable name.
         original_name: Option<String>,
-        args: Vec<SpannedAtom<T>>,
+        args: Vec<LocatedAtom<T>>,
     },
     DefineFunction {
         ptr: usize,
-        captures: Vec<SpannedAtom<T>>,
+        captures: Vec<LocatedAtom<T>>,
         // Original capture names.
         capture_names: Vec<String>,
     },
@@ -99,4 +99,4 @@ pub(crate) enum Command<T> {
     TruncateRegisters(usize),
 }
 
-pub(crate) type SpannedCommand<T> = MaybeSpanned<Command<T>>;
+pub(crate) type LocatedCommand<T> = Location<Command<T>>;

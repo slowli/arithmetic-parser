@@ -3,12 +3,12 @@
 use core::fmt;
 
 use crate::{
-    compiler::{Compiler, ImportSpans},
+    compiler::{Compiler, ImportLocations},
     env::Environment,
     error::{Backtrace, Error, ErrorKind, ErrorWithBacktrace},
     Value,
 };
-use arithmetic_parser::{grammars::Grammar, Block, MaybeSpanned};
+use arithmetic_parser::{grammars::Grammar, Block, Location};
 
 mod command;
 mod module_id;
@@ -16,7 +16,7 @@ mod registers;
 
 pub use self::module_id::{IndexedId, ModuleId, WildcardId};
 pub(crate) use self::{
-    command::{Atom, Command, CompiledExpr, FieldName, SpannedAtom},
+    command::{Atom, Command, CompiledExpr, FieldName, LocatedAtom},
     registers::{Executable, ExecutableFn, Operations, Registers},
 };
 pub use crate::compiler::CompilerExt;
@@ -149,13 +149,13 @@ impl<T> ExecutableModule<T> {
     pub(crate) fn from_parts(
         inner: Executable<T>,
         imports: Registers<T>,
-        import_spans: ImportSpans,
+        import_locations: ImportLocations,
     ) -> Self {
         Self {
             inner,
             imports: ModuleImports {
                 inner: imports,
-                spans: import_spans,
+                locations: import_locations,
             },
         }
     }
@@ -193,7 +193,7 @@ impl<T> ExecutableModule<T> {
     }
 
     fn check_imports(&self, env: &Environment<T>) -> Result<(), Error> {
-        for (name, span) in self.imports.spanned_iter() {
+        for (name, span) in self.imports.iter() {
             if !env.contains(name) {
                 let err = ErrorKind::Undefined(name.into());
                 return Err(Error::new(self.inner.id(), span, err));
@@ -284,12 +284,12 @@ impl<T: 'static + Clone> WithEnvironment<'_, T> {
 #[derive(Debug, Clone)]
 struct ModuleImports<T> {
     inner: Registers<T>,
-    spans: ImportSpans,
+    locations: ImportLocations,
 }
 
 impl<T> ModuleImports<T> {
-    fn spanned_iter(&self) -> impl Iterator<Item = (&str, &MaybeSpanned)> + '_ {
+    fn iter(&self) -> impl Iterator<Item = (&str, &Location)> + '_ {
         let iter = self.inner.variables_map().iter();
-        iter.map(move |(name, idx)| (name.as_str(), &self.spans[*idx]))
+        iter.map(move |(name, idx)| (name.as_str(), &self.locations[*idx]))
     }
 }

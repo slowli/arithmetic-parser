@@ -82,8 +82,8 @@ where
         err_kind,
         ErrorKind::Arithmetic(err) if err.to_string().contains("integer overflow")
     );
-    let err_span = err.source().main_span().code();
-    assert_eq!(err_span.span_code(program), "1 - 2");
+    let err_span = err.source().location().in_module();
+    assert_eq!(err_span.span(program), "1 - 2");
 }
 
 #[test]
@@ -139,8 +139,8 @@ where
         err_kind,
         ErrorKind::Arithmetic(err) if err.to_string().contains("division by zero")
     );
-    let err_span = err.source().main_span().code();
-    assert_eq!(err_span.span_code(program), "-2 / 0");
+    let err_span = err.source().location().in_module();
+    assert_eq!(err_span.span(program), "-2 / 0");
 
     let program = "2 ^ -3 + 1";
     let err =
@@ -150,8 +150,8 @@ where
         err_kind,
         ErrorKind::Arithmetic(err) if err.to_string().contains("exponent is too large or negative")
     );
-    let err_span = err.source().main_span().code();
-    assert_eq!(err_span.span_code(program), "2 ^ -3");
+    let err_span = err.source().location().in_module();
+    assert_eq!(err_span.span(program), "2 ^ -3");
 }
 
 #[test]

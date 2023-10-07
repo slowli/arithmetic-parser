@@ -23,7 +23,7 @@ extern "C" {
 }
 
 #[allow(clippy::type_complexity)]
-fn initialize_env(env: &mut Environment<'_, f64>) {
+fn initialize_env(env: &mut Environment<f64>) {
     const CONSTANTS: &[(&str, f64)] = &[
         ("E", f64_consts::E),
         ("PI", f64_consts::PI),

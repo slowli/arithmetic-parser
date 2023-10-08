@@ -152,10 +152,10 @@ pub trait ParseLiteral: 'static {
 /// #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// struct Num;
 ///
-/// impl Grammar<'_> for IntegerGrammar {
-///     type Type = Num;
+/// impl Grammar for IntegerGrammar {
+///     type Type<'a> = Num;
 ///
-///     fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
+///     fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type<'_>> {
 ///         use nom::{bytes::complete::tag, combinator::map};
 ///         map(tag("Num"), |_| Num)(input)
 ///     }
@@ -239,7 +239,7 @@ impl<'a> IntoInputSpan<'a> for &'a str {
 /// #   }
 /// }
 ///
-/// impl Parse<'_> for IntegerGrammar {
+/// impl Parse for IntegerGrammar {
 ///     type Base = Untyped<Self>;
 ///     const FEATURES: Features = Features::empty();
 /// }

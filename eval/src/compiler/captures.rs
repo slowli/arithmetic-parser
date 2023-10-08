@@ -3,7 +3,7 @@
 use core::iter;
 
 use crate::{
-    alloc::{vec, Arc, HashMap, ToOwned, Vec},
+    alloc::{vec, Arc, HashMap, String, ToOwned, Vec},
     error::{AuxErrorInfo, Error, ErrorKind, RepeatedAssignmentContext},
     exec::{ModuleId, WildcardId},
 };

@@ -20,9 +20,13 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Remove `MaybeSpanned` type in favor of `Location`. (#121)
 
+- Change `Grammar` and `Parse` traits to use a generic associated `Type` instead of trait lifetimes. (#123)
+
 ### Removed
 
 - Remove `StripCode` and `StripResultExt` traits as obsolete. (#121)
+
+- Remove lifetime generic from `Error`. (#123)
 
 ## 0.3.0 - 2021-05-24
 

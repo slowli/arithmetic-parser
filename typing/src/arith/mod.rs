@@ -6,7 +6,7 @@ use num_traits::NumOps;
 use std::{fmt, str::FromStr};
 
 use crate::{
-    error::{ErrorKind, ErrorLocation, OpErrors},
+    error::{ErrorKind, ErrorPathFragment, OpErrors},
     PrimitiveType, Type,
 };
 use arithmetic_parser::{BinaryOp, UnaryOp};
@@ -135,12 +135,12 @@ impl<Prim: WithBoolean> TypeArithmetic<Prim> for BoolArithmetic {
                 substitutions.unify(
                     &Type::BOOL,
                     &context.lhs,
-                    errors.with_location(ErrorLocation::Lhs),
+                    errors.join_path(ErrorPathFragment::Lhs),
                 );
                 substitutions.unify(
                     &Type::BOOL,
                     &context.rhs,
-                    errors.with_location(ErrorLocation::Rhs),
+                    errors.join_path(ErrorPathFragment::Rhs),
                 );
                 Type::BOOL
             }
@@ -280,11 +280,11 @@ impl NumArithmetic {
                 let resolved_rhs_ty = resolved_rhs_ty.clone();
                 settings
                     .lin
-                    .visitor(substitutions, errors.with_location(ErrorLocation::Lhs))
+                    .visitor(substitutions, errors.join_path(ErrorPathFragment::Lhs))
                     .visit_type(lhs_ty);
                 settings
                     .lin
-                    .visitor(substitutions, errors.with_location(ErrorLocation::Rhs))
+                    .visitor(substitutions, errors.join_path(ErrorPathFragment::Rhs))
                     .visit_type(rhs_ty);
                 resolved_rhs_ty
             }
@@ -292,22 +292,22 @@ impl NumArithmetic {
                 let resolved_lhs_ty = resolved_lhs_ty.clone();
                 settings
                     .lin
-                    .visitor(substitutions, errors.with_location(ErrorLocation::Lhs))
+                    .visitor(substitutions, errors.join_path(ErrorPathFragment::Lhs))
                     .visit_type(lhs_ty);
                 settings
                     .lin
-                    .visitor(substitutions, errors.with_location(ErrorLocation::Rhs))
+                    .visitor(substitutions, errors.join_path(ErrorPathFragment::Rhs))
                     .visit_type(rhs_ty);
                 resolved_lhs_ty
             }
             _ => {
-                let lhs_is_valid = errors.with_location(ErrorLocation::Lhs).check(|errors| {
+                let lhs_is_valid = errors.join_path(ErrorPathFragment::Lhs).check(|errors| {
                     settings
                         .ops
                         .visitor(substitutions, errors)
                         .visit_type(lhs_ty);
                 });
-                let rhs_is_valid = errors.with_location(ErrorLocation::Rhs).check(|errors| {
+                let rhs_is_valid = errors.join_path(ErrorPathFragment::Rhs).check(|errors| {
                     settings
                         .ops
                         .visitor(substitutions, errors)
@@ -383,12 +383,12 @@ impl NumArithmetic {
                     substitutions.unify(
                         &ty,
                         &context.lhs,
-                        errors.with_location(ErrorLocation::Lhs),
+                        errors.join_path(ErrorPathFragment::Lhs),
                     );
                     substitutions.unify(
                         &ty,
                         &context.rhs,
-                        errors.with_location(ErrorLocation::Rhs),
+                        errors.join_path(ErrorPathFragment::Rhs),
                     );
                 } else {
                     let err = ErrorKind::unsupported(context.op);

@@ -8,7 +8,7 @@ use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
     arith::{Num, NumArithmetic},
     defs::Prelude,
-    error::{ErrorContext, ErrorKind, ErrorLocation},
+    error::{ErrorContext, ErrorKind, ErrorPathFragment},
     Function, TupleLen, Type, TypeEnvironment, UnknownLen,
 };
 
@@ -681,8 +681,8 @@ fn comparison_type_errors() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.main_span().fragment(), "(2 <= 1)");
-    assert_eq!(err.location(), [ErrorLocation::Lhs]);
+    assert_eq!(err.main_location().span(code), "(2 <= 1)");
+    assert_eq!(err.path(), [ErrorPathFragment::Lhs]);
     assert_matches!(err.context(), ErrorContext::BinaryOp(_));
     assert_matches!(
         err.kind(),

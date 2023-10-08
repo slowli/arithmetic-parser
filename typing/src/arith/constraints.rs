@@ -239,17 +239,17 @@ where
         }
 
         for (i, element) in tuple.element_types() {
-            self.errors.push_location(i);
+            self.errors.push_path_fragment(i);
             self.visit_type(element);
-            self.errors.pop_location();
+            self.errors.pop_path_fragment();
         }
     }
 
     fn visit_object(&mut self, obj: &Object<Prim>) {
         for (name, element) in obj.iter() {
-            self.errors.push_location(name);
+            self.errors.push_path_fragment(name);
             self.visit_type(element);
-            self.errors.pop_location();
+            self.errors.pop_path_fragment();
         }
     }
 

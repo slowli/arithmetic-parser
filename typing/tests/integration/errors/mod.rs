@@ -6,7 +6,7 @@ use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
     arith::{BinaryOpContext, Linearity, NumArithmetic},
     defs::Prelude,
-    error::{ErrorContext, ErrorKind, ErrorLocation, TupleContext},
+    error::{ErrorContext, ErrorKind, ErrorPathFragment, TupleContext},
     DynConstraints, TupleIndex, TupleLen, Type, TypeEnvironment,
 };
 
@@ -17,12 +17,12 @@ mod multiple;
 mod object;
 mod recovery;
 
-fn fn_arg(index: usize) -> ErrorLocation {
-    ErrorLocation::FnArg(Some(TupleIndex::Start(index)))
+fn fn_arg(index: usize) -> ErrorPathFragment {
+    ErrorPathFragment::FnArg(Some(TupleIndex::Start(index)))
 }
 
-fn tuple_element(index: usize) -> ErrorLocation {
-    ErrorLocation::TupleElement(Some(TupleIndex::Start(index)))
+fn tuple_element(index: usize) -> ErrorPathFragment {
+    ErrorPathFragment::TupleElement(Some(TupleIndex::Start(index)))
 }
 
 #[test]
@@ -32,8 +32,8 @@ fn type_recursion() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "x + (x, 2)");
-    assert!(err.location().is_empty());
+    assert_eq!(err.main_location().span(code), "x + (x, 2)");
+    assert!(err.path().is_empty());
     assert_matches!(err.context(), ErrorContext::BinaryOp(_));
     assert_matches!(
         err.kind(),
@@ -80,8 +80,8 @@ fn unknown_method() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "do_something");
-    assert!(err.location().is_empty());
+    assert_eq!(err.main_location().span(code), "do_something");
+    assert!(err.path().is_empty());
     assert_matches!(err.context(), ErrorContext::None);
     assert_matches!(err.kind(), ErrorKind::UndefinedVar(name) if name == "do_something");
     assert_eq!(
@@ -97,8 +97,8 @@ fn immediately_invoked_function_with_invalid_arg() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "4 == 7");
-    assert_eq!(err.location(), [fn_arg(0)]);
+    assert_eq!(err.main_location().span(code), "4 == 7");
+    assert_eq!(err.path(), [fn_arg(0)]);
     assert_matches!(
         err.context(),
         ErrorContext::FnCall { definition, call_signature }
@@ -119,8 +119,8 @@ fn destructuring_error_on_assignment() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "(x, y, ...zs)");
-    assert!(err.location().is_empty());
+    assert_eq!(err.main_location().span(bogus_code), "(x, y, ...zs)");
+    assert!(err.path().is_empty());
     assert_matches!(
         err.context(),
         ErrorContext::Assignment { lhs, rhs }
@@ -201,8 +201,8 @@ fn function_passed_as_arg_invalid_arity() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "|x, y| x + y");
-    assert_eq!(err.location(), [fn_arg(1)]);
+    assert_eq!(err.main_location().span(code), "|x, y| x + y");
+    assert_eq!(err.path(), [fn_arg(1)]);
     let expected_call_signature = "((Num, Num), for<'T: Ops> ('T, 'T) -> 'T) -> (Num, Num)";
     assert_matches!(
         err.context(),
@@ -252,8 +252,8 @@ fn function_passed_as_arg_invalid_input() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "2 != 3");
-    assert_eq!(err.location(), [fn_arg(0), tuple_element(1)]);
+    assert_eq!(err.main_location().span(code), "2 != 3");
+    assert_eq!(err.path(), [fn_arg(0), tuple_element(1)]);
     assert_matches!(
         err.context(),
         ErrorContext::FnCall { definition, call_signature }
@@ -276,8 +276,8 @@ fn incorrect_arg_in_slices() {
 
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "2 == 3");
-    assert_eq!(err.location(), [fn_arg(0), tuple_element(1)]);
+    assert_eq!(err.main_location().span(code), "2 == 3");
+    assert_eq!(err.path(), [fn_arg(0), tuple_element(1)]);
     assert_matches!(
         err.context(),
         ErrorContext::FnCall { definition, call_signature }
@@ -295,8 +295,8 @@ fn unifying_length_vars_error() {
     type_env.insert("zip_with", zip_fn_type());
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "(3, 4, 5)");
-    assert_eq!(err.location(), [fn_arg(1)]);
+    assert_eq!(err.main_location().span(code), "(3, 4, 5)");
+    assert_eq!(err.path(), [fn_arg(1)]);
     assert_matches!(
         err.context(),
         ErrorContext::FnCall { definition, call_signature }
@@ -336,8 +336,8 @@ fn comparisons_when_switched_off() {
     type_env.insert("filter", Prelude::Filter);
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "x > 1");
-    assert!(err.location().is_empty());
+    assert_eq!(err.main_location().span(code), "x > 1");
+    assert!(err.path().is_empty());
     assert_matches!(err.context(), ErrorContext::BinaryOp(_));
     assert_matches!(err.kind(), ErrorKind::UnsupportedFeature(_));
     assert_eq!(
@@ -356,7 +356,7 @@ fn constraint_error() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.main_span().fragment(), "1 == 2");
+    assert_eq!(err.main_location().span(code), "1 == 2");
     assert_matches!(
         err.kind(),
         ErrorKind::FailedConstraint { ty, constraint }
@@ -376,8 +376,8 @@ fn dyn_type_with_bogus_function_call() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.main_span().fragment(), "|x| x + 1");
-    assert_eq!(err.location(), [fn_arg(1)]);
+    assert_eq!(err.main_location().span(code), "|x| x + 1");
+    assert_eq!(err.path(), [fn_arg(1)]);
     assert_matches!(
         err.context(),
         ErrorContext::FnCall { call_signature, .. }
@@ -419,8 +419,8 @@ fn locating_type_with_failed_constraint() {
             .unwrap_err()
             .single();
 
-        assert_eq!(*err.main_span().fragment(), "true");
-        assert_eq!(err.location()[1..], [tuple_element(1)]);
+        assert_eq!(err.main_location().span(code), "true");
+        assert_eq!(err.path()[1..], [tuple_element(1)]);
         assert_matches!(err.context(), ErrorContext::BinaryOp(_));
         assert_matches!(err.kind(), ErrorKind::FailedConstraint { .. });
         assert_eq!(err.kind().to_string(), "Type `Bool` fails constraint `Lin`");
@@ -437,11 +437,11 @@ fn locating_tuple_middle_with_failed_constraint() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.main_span().fragment(), "xs");
-    assert_eq!(*err.root_span().fragment(), "xs + 1");
+    assert_eq!(err.main_location().span(code), "xs");
+    assert_eq!(err.root_location().span(code), "xs + 1");
     assert_eq!(
-        err.location(),
-        [ErrorLocation::Lhs, TupleIndex::Middle.into()]
+        err.path(),
+        [ErrorPathFragment::Lhs, TupleIndex::Middle.into()]
     );
     assert_matches!(
         err.context(),
@@ -461,10 +461,10 @@ fn invalid_field_name() {
         .single();
 
     assert_eq!(
-        *err.main_span().fragment(),
+        err.main_location().span(code),
         "123456789012345678901234567890"
     );
-    assert_eq!(err.location(), []);
+    assert_eq!(err.path(), []);
     assert_matches!(err.context(), ErrorContext::None);
     assert_matches!(err.kind(), ErrorKind::InvalidFieldName(_));
 }
@@ -486,8 +486,8 @@ fn indexing_hard_errors() {
     let mut errors = errors.into_iter();
 
     let block_err = errors.next().unwrap();
-    assert_eq!(*block_err.main_span().fragment(), "{ 5 }.1");
-    assert_eq!(block_err.location(), []);
+    assert_eq!(block_err.main_location().span(code), "{ 5 }.1");
+    assert_eq!(block_err.path(), []);
     assert_matches!(
         block_err.context(),
         ErrorContext::TupleIndex { ty } if *ty == Type::NUM
@@ -495,11 +495,11 @@ fn indexing_hard_errors() {
     assert_matches!(block_err.kind(), ErrorKind::CannotIndex);
 
     let fn_err = errors.next().unwrap();
-    assert_eq!(*fn_err.main_span().fragment(), "(|x| x + 1).0");
+    assert_eq!(fn_err.main_location().span(code), "(|x| x + 1).0");
     assert_matches!(fn_err.kind(), ErrorKind::CannotIndex);
 
     let oob_err = errors.next().unwrap();
-    assert_eq!(*oob_err.main_span().fragment(), "xs.2");
+    assert_eq!(oob_err.main_location().span(code), "xs.2");
     assert_matches!(
         oob_err.kind(),
         ErrorKind::IndexOutOfBounds { index, len } if *index == 2 && *len == TupleLen::from(2)
@@ -516,7 +516,7 @@ fn overly_large_indexed_field() {
         .single();
 
     assert_eq!(
-        *err.main_span().fragment(),
+        err.main_location().span(code),
         "123456789012345678901234567890"
     );
     assert_matches!(
@@ -534,8 +534,8 @@ fn indexing_unsupported_errors() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.main_span().fragment(), "xs.0");
-    assert_eq!(err.location(), []);
+    assert_eq!(err.main_location().span(code), "xs.0");
+    assert_eq!(err.path(), []);
     assert_matches!(err.context(), ErrorContext::TupleIndex { ty: Type::Var(_) });
     assert_matches!(err.kind(), ErrorKind::UnsupportedIndex);
 }
@@ -549,8 +549,8 @@ fn multiple_var_assignments() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.main_span().fragment(), "x");
-    assert_eq!(err.main_span().location_offset(), 4);
+    assert_eq!(err.main_location().span(code), "x");
+    assert_eq!(err.main_location().location_offset(), 4);
     assert_matches!(err.kind(), ErrorKind::RepeatedAssignment(var) if var == "x");
 }
 
@@ -563,8 +563,8 @@ fn multiple_var_assignments_in_fn_def() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.main_span().fragment(), "x");
-    assert_eq!(err.main_span().location_offset(), 4);
+    assert_eq!(err.main_location().span(code), "x");
+    assert_eq!(err.main_location().location_offset(), 4);
     assert_matches!(err.kind(), ErrorKind::RepeatedAssignment(var) if var == "x");
 }
 
@@ -577,8 +577,8 @@ fn multiple_var_assignments_complex() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.main_span().fragment(), "x");
-    assert_eq!(err.main_span().location_offset(), 6);
+    assert_eq!(err.main_location().span(code), "x");
+    assert_eq!(err.main_location().location_offset(), 6);
     assert_matches!(err.kind(), ErrorKind::RepeatedAssignment(var) if var == "x");
 }
 
@@ -591,7 +591,7 @@ fn multiple_var_assignments_in_fn_def_complex() {
         .unwrap_err()
         .single();
 
-    assert_eq!(*err.main_span().fragment(), "x");
-    assert_eq!(err.main_span().location_offset(), 13);
+    assert_eq!(err.main_location().span(code), "x");
+    assert_eq!(err.main_location().location_offset(), 13);
     assert_matches!(err.kind(), ErrorKind::RepeatedAssignment(var) if var == "x");
 }

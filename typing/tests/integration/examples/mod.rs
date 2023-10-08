@@ -9,7 +9,7 @@ use arithmetic_typing::{
         Substitutions, TypeArithmetic, UnaryOpContext, WithBoolean,
     },
     defs::{Assertions, Prelude},
-    error::{ErrorLocation, OpErrors},
+    error::{ErrorPathFragment, OpErrors},
     visit::Visit,
     Annotated, DynConstraints, Function, PrimitiveType, Type, TypeEnvironment, UnknownLen,
 };
@@ -188,8 +188,8 @@ impl TypeArithmetic<GroupPrim> for GroupArithmetic {
 
         match context.op {
             BinaryOp::Add | BinaryOp::Sub => {
-                substitutions.unify(&SC, &context.lhs, errors.with_location(ErrorLocation::Lhs));
-                substitutions.unify(&SC, &context.rhs, errors.with_location(ErrorLocation::Rhs));
+                substitutions.unify(&SC, &context.lhs, errors.join_path(ErrorPathFragment::Lhs));
+                substitutions.unify(&SC, &context.rhs, errors.join_path(ErrorPathFragment::Rhs));
                 SC
             }
 
@@ -204,12 +204,12 @@ impl TypeArithmetic<GroupPrim> for GroupArithmetic {
                         substitutions.unify(
                             &SC,
                             &context.lhs,
-                            errors.with_location(ErrorLocation::Lhs),
+                            errors.join_path(ErrorPathFragment::Lhs),
                         );
                         substitutions.unify(
                             &SC,
                             &context.rhs,
-                            errors.with_location(ErrorLocation::Rhs),
+                            errors.join_path(ErrorPathFragment::Rhs),
                         );
                         SC
                     }
@@ -217,21 +217,21 @@ impl TypeArithmetic<GroupPrim> for GroupArithmetic {
                         substitutions.unify(
                             &GE,
                             &context.lhs,
-                            errors.with_location(ErrorLocation::Lhs),
+                            errors.join_path(ErrorPathFragment::Lhs),
                         );
                         substitutions.unify(
                             &GE,
                             &context.rhs,
-                            errors.with_location(ErrorLocation::Rhs),
+                            errors.join_path(ErrorPathFragment::Rhs),
                         );
                         GE
                     }
                     _ => {
                         MulOperand
-                            .visitor(substitutions, errors.with_location(ErrorLocation::Lhs))
+                            .visitor(substitutions, errors.join_path(ErrorPathFragment::Lhs))
                             .visit_type(&context.lhs);
                         MulOperand
-                            .visitor(substitutions, errors.with_location(ErrorLocation::Rhs))
+                            .visitor(substitutions, errors.join_path(ErrorPathFragment::Rhs))
                             .visit_type(&context.rhs);
                         substitutions.unify(&context.lhs, &context.rhs, errors);
                         context.lhs.clone()
@@ -294,14 +294,14 @@ fn schnorr_signatures() {
 #[test]
 fn schnorr_signatures_error() {
     let bogus_code = SCHNORR_CODE.replace("s: r - self * e", "s: R - self * e");
-    let code = U64Grammar::parse_statements(bogus_code.as_str()).unwrap();
+    let block = U64Grammar::parse_statements(bogus_code.as_str()).unwrap();
     let errors = prepare_env()
-        .process_with_arithmetic(&GroupArithmetic, &code)
+        .process_with_arithmetic(&GroupArithmetic, &block)
         .unwrap_err();
 
     assert_eq!(errors.len(), 1);
     let err = errors.into_iter().next().unwrap();
-    assert_eq!(*err.main_span().fragment(), "R");
+    assert_eq!(err.main_location().span(&bogus_code), "R");
     assert_eq!(
         err.kind().to_string(),
         "Type `Ge` is not assignable to type `Sc`"

@@ -133,7 +133,7 @@ impl TypeVar {
 /// # `Any` type
 ///
 /// [`Self::Any`], denoted as `any`, is a catch-all type similar to `any` in TypeScript.
-/// It allows to circumvent type system limitations at the cost of being exteremely imprecise.
+/// It allows to circumvent type system limitations at the cost of being extremely imprecise.
 /// `any` type can be used in any context (destructured, called with args of any quantity
 /// and type and so on), with each application of the type evaluated independently.
 /// Thus, the same `any` variable can be treated as a function, a tuple, a primitive type, etc.
@@ -162,7 +162,7 @@ impl TypeVar {
 /// let errors = env.process_statements(&ast).unwrap_err();
 /// # assert_eq!(errors.len(), 1);
 /// let err = errors.iter().next().unwrap();
-/// assert_eq!(*err.main_span().fragment(), "x(1)");
+/// assert_eq!(err.main_location().span(bogus_code), "x(1)");
 /// # Ok(())
 /// # }
 /// ```
@@ -421,7 +421,7 @@ impl<Prim: PrimitiveType> Type<Prim> {
 /// let errors = env.process_statements(&ast).unwrap_err();
 ///
 /// let err = errors.iter().next().unwrap();
-/// assert_eq!(*err.main_span().fragment(), "true");
+/// assert_eq!(err.main_location().span(code), "true");
 /// assert_matches!(err.kind(), ErrorKind::FailedConstraint { .. });
 /// # Ok(())
 /// # }

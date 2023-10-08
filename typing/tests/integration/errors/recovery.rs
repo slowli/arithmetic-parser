@@ -28,8 +28,8 @@ fn vars_are_not_assigned_beyond_first_error() {
     assert_eq!(errors.first_failing_statement(), 1);
 
     let err = errors.single();
-    assert_eq!(*err.main_span().fragment(), "x");
-    assert_eq!(*err.root_span().fragment(), "x.map(x)");
+    assert_eq!(err.main_location().span(code), "x");
+    assert_eq!(err.root_location().span(code), "x.map(x)");
     assert_matches!(err.kind(), ErrorKind::TypeMismatch(..));
     assert_eq!(type_env["x"], Type::slice(Type::NUM, 2));
     assert!(type_env.get("y").is_none());
@@ -71,7 +71,7 @@ fn vars_are_not_redefined_beyond_first_error() {
     assert_eq!(errors.first_failing_statement(), 1);
 
     let err = errors.single();
-    assert_eq!(*err.main_span().fragment(), "x");
+    assert_eq!(err.main_location().span(code), "x");
     assert_matches!(err.kind(), ErrorKind::TypeMismatch(..));
     assert_eq!(type_env["x"], Type::slice(Type::NUM, 2));
 }
@@ -88,7 +88,7 @@ fn vars_are_not_assigned_beyond_first_error_in_expr() {
     type_env.insert("map", Prelude::Map);
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "x");
+    assert_eq!(err.main_location().span(code), "x");
     assert_matches!(err.kind(), ErrorKind::TypeMismatch(..));
     assert_eq!(type_env["x"], Type::slice(Type::NUM, 2));
     assert!(type_env.get("y").is_none());
@@ -108,8 +108,8 @@ fn errors_in_inner_scopes_are_handled_adequately() {
     assert_eq!(errors.first_failing_statement(), 1);
 
     let err = errors.single();
-    assert_eq!(*err.main_span().fragment(), "bogus");
-    assert_eq!(*err.root_span().fragment(), "x.map(bogus)");
+    assert_eq!(err.main_location().span(code), "bogus");
+    assert_eq!(err.root_location().span(code), "x.map(bogus)");
     assert_matches!(err.kind(), ErrorKind::TypeMismatch(..));
     assert_eq!(type_env["x"], Type::slice(Type::NUM, 2));
     assert!(type_env.get("y").is_none());
@@ -130,7 +130,7 @@ fn errors_in_functions_are_handled_adequately() {
     assert_eq!(errors.first_failing_statement(), 1);
 
     let err = errors.single();
-    assert_eq!(*err.main_span().fragment(), "bogus");
+    assert_eq!(err.main_location().span(code), "bogus");
     assert_matches!(err.kind(), ErrorKind::TypeMismatch(..));
     assert_eq!(type_env["x"], Type::slice(Type::NUM, 2));
     assert!(type_env.get("y").is_none());

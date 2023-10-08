@@ -42,10 +42,10 @@ impl TupleIndex {
     }
 }
 
-/// Fragment of an error location.
+/// Fragment of a path for an [`Error`](crate::error::Error).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum ErrorLocation {
+pub enum ErrorPathFragment {
     /// Function argument with the specified index (0-based; can be `None` if the error cannot
     /// be attributed to a specific index).
     FnArg(Option<TupleIndex>),
@@ -62,37 +62,37 @@ pub enum ErrorLocation {
     Rhs,
 }
 
-impl From<TupleIndex> for ErrorLocation {
+impl From<TupleIndex> for ErrorPathFragment {
     fn from(index: TupleIndex) -> Self {
         Self::TupleElement(Some(index))
     }
 }
 
-impl From<&str> for ErrorLocation {
+impl From<&str> for ErrorPathFragment {
     fn from(field_name: &str) -> Self {
         Self::ObjectField(field_name.to_owned())
     }
 }
 
-impl ErrorLocation {
+impl ErrorPathFragment {
     /// Walks the provided `expr` and returns the most exact span found in it.
     pub(super) fn walk_expr<'a, T: Grammar>(
-        location: &[Self],
+        path: &[Self],
         expr: &SpannedExpr<'a, T>,
     ) -> Spanned<'a> {
-        let mut refined = Self::walk(location, expr, Self::step_into_expr);
+        let mut refined = Self::walk(path, expr, Self::step_into_expr);
         while let Expr::TypeCast { value, .. } = &refined.extra {
             refined = value.as_ref();
         }
         refined.with_no_extra()
     }
 
-    fn walk<T: Copy>(mut location: &[Self], init: T, refine: impl Fn(&Self, T) -> Option<T>) -> T {
+    fn walk<T: Copy>(mut path: &[Self], init: T, refine: impl Fn(&Self, T) -> Option<T>) -> T {
         let mut refined = init;
-        while !location.is_empty() {
-            if let Some(refinement) = refine(&location[0], refined) {
+        while !path.is_empty() {
+            if let Some(refinement) = refine(&path[0], refined) {
                 refined = refinement;
-                location = &location[1..];
+                path = &path[1..];
             } else {
                 break;
             }
@@ -148,19 +148,19 @@ impl ErrorLocation {
     }
 
     pub(super) fn walk_lvalue<'a>(
-        location: &[Self],
+        path: &[Self],
         lvalue: &SpannedLvalue<'a, TypeAst<'a>>,
     ) -> Spanned<'a> {
         let lvalue = LvalueTree::from_lvalue(lvalue);
-        Self::walk(location, lvalue, Self::step_into_lvalue).with_no_extra()
+        Self::walk(path, lvalue, Self::step_into_lvalue).with_no_extra()
     }
 
     pub(super) fn walk_destructure<'a>(
-        location: &[Self],
+        path: &[Self],
         destructure: &Spanned<'a, Destructure<'a, TypeAst<'a>>>,
     ) -> Spanned<'a> {
         let destructure = LvalueTree::from_span(destructure);
-        Self::walk(location, destructure, Self::step_into_lvalue).with_no_extra()
+        Self::walk(path, destructure, Self::step_into_lvalue).with_no_extra()
     }
 
     fn step_into_lvalue<'r, 'a>(
@@ -277,8 +277,8 @@ mod tests {
     #[test]
     fn walking_simple_expr() {
         let expr = parse_expr("1 + (2, x)");
-        let location = &[ErrorLocation::Rhs, TupleIndex::Start(1).into()];
-        let located = ErrorLocation::walk_expr(location, &expr);
+        let path = &[ErrorPathFragment::Rhs, TupleIndex::Start(1).into()];
+        let located = ErrorPathFragment::walk_expr(path, &expr);
 
         assert_eq!(*located.fragment(), "x");
     }
@@ -286,11 +286,11 @@ mod tests {
     #[test]
     fn walking_expr_with_fn_call() {
         let expr = parse_expr("hash(1, (false, 2), x)");
-        let location = &[
-            ErrorLocation::FnArg(Some(TupleIndex::Start(1))),
+        let path = &[
+            ErrorPathFragment::FnArg(Some(TupleIndex::Start(1))),
             TupleIndex::Start(0).into(),
         ];
-        let located = ErrorLocation::walk_expr(location, &expr);
+        let located = ErrorPathFragment::walk_expr(path, &expr);
 
         assert_eq!(*located.fragment(), "false");
     }
@@ -298,13 +298,13 @@ mod tests {
     #[test]
     fn walking_expr_with_method_call() {
         let expr = parse_expr("xs.map(|x| x + 1)");
-        let location = &[ErrorLocation::FnArg(Some(TupleIndex::Start(0)))];
-        let located = ErrorLocation::walk_expr(location, &expr);
+        let path = &[ErrorPathFragment::FnArg(Some(TupleIndex::Start(0)))];
+        let located = ErrorPathFragment::walk_expr(path, &expr);
 
         assert_eq!(*located.fragment(), "xs");
 
-        let other_location = &[ErrorLocation::FnArg(Some(TupleIndex::Start(1)))];
-        let other_located = ErrorLocation::walk_expr(other_location, &expr);
+        let other_path = &[ErrorPathFragment::FnArg(Some(TupleIndex::Start(1)))];
+        let other_located = ErrorPathFragment::walk_expr(other_path, &expr);
 
         assert_eq!(*other_located.fragment(), "|x| x + 1");
     }
@@ -312,11 +312,11 @@ mod tests {
     #[test]
     fn walking_expr_with_partial_match() {
         let expr = parse_expr("hash(1, xs)");
-        let location = &[
-            ErrorLocation::FnArg(Some(TupleIndex::Start(1))),
+        let path = &[
+            ErrorPathFragment::FnArg(Some(TupleIndex::Start(1))),
             TupleIndex::Start(0).into(),
         ];
-        let located = ErrorLocation::walk_expr(location, &expr);
+        let located = ErrorPathFragment::walk_expr(path, &expr);
 
         assert_eq!(*located.fragment(), "xs");
     }
@@ -324,11 +324,11 @@ mod tests {
     #[test]
     fn walking_expr_with_intermediate_type_cast() {
         let expr = parse_expr("hash(1, (xs, ys) as Pair)");
-        let location = &[
-            ErrorLocation::FnArg(Some(TupleIndex::Start(1))),
+        let path = &[
+            ErrorPathFragment::FnArg(Some(TupleIndex::Start(1))),
             TupleIndex::Start(0).into(),
         ];
-        let located = ErrorLocation::walk_expr(location, &expr);
+        let located = ErrorPathFragment::walk_expr(path, &expr);
 
         assert_eq!(*located.fragment(), "xs");
     }
@@ -336,11 +336,11 @@ mod tests {
     #[test]
     fn walking_expr_with_final_type_cast() {
         let expr = parse_expr("hash(1, (xs as [_] as Slice, ys))");
-        let location = &[
-            ErrorLocation::FnArg(Some(TupleIndex::Start(1))),
+        let path = &[
+            ErrorPathFragment::FnArg(Some(TupleIndex::Start(1))),
             TupleIndex::Start(0).into(),
         ];
-        let located = ErrorLocation::walk_expr(location, &expr);
+        let located = ErrorPathFragment::walk_expr(path, &expr);
 
         assert_eq!(*located.fragment(), "xs");
     }
@@ -348,76 +348,76 @@ mod tests {
     #[test]
     fn walking_lvalue() {
         let lvalue = parse_lvalue("((u, v), ...ys, _, z) = x;");
-        let start_location = &[ErrorLocation::from(TupleIndex::Start(0))];
-        let located_start = ErrorLocation::walk_lvalue(start_location, &lvalue);
+        let start_path = &[ErrorPathFragment::from(TupleIndex::Start(0))];
+        let located_start = ErrorPathFragment::walk_lvalue(start_path, &lvalue);
         assert_eq!(*located_start.fragment(), "(u, v)");
 
-        let embedded_location = &[
-            ErrorLocation::from(TupleIndex::Start(0)),
-            ErrorLocation::from(TupleIndex::Start(1)),
+        let embedded_path = &[
+            ErrorPathFragment::from(TupleIndex::Start(0)),
+            ErrorPathFragment::from(TupleIndex::Start(1)),
         ];
-        let embedded = ErrorLocation::walk_lvalue(embedded_location, &lvalue);
+        let embedded = ErrorPathFragment::walk_lvalue(embedded_path, &lvalue);
         assert_eq!(*embedded.fragment(), "v");
 
-        let middle_location = &[ErrorLocation::from(TupleIndex::Middle)];
-        let located_middle = ErrorLocation::walk_lvalue(middle_location, &lvalue);
+        let middle_path = &[ErrorPathFragment::from(TupleIndex::Middle)];
+        let located_middle = ErrorPathFragment::walk_lvalue(middle_path, &lvalue);
         assert_eq!(*located_middle.fragment(), "ys");
 
-        let end_location = &[ErrorLocation::from(TupleIndex::End(1))];
-        let located_end = ErrorLocation::walk_lvalue(end_location, &lvalue);
+        let end_path = &[ErrorPathFragment::from(TupleIndex::End(1))];
+        let located_end = ErrorPathFragment::walk_lvalue(end_path, &lvalue);
         assert_eq!(*located_end.fragment(), "z");
     }
 
     #[test]
     fn walking_lvalue_with_annotations() {
         let lvalue = parse_lvalue("x: (Bool, ...[(Num, Bool); _]) = x;");
-        let start_location = &[ErrorLocation::from(TupleIndex::Start(0))];
-        let located_start = ErrorLocation::walk_lvalue(start_location, &lvalue);
+        let start_path = &[ErrorPathFragment::from(TupleIndex::Start(0))];
+        let located_start = ErrorPathFragment::walk_lvalue(start_path, &lvalue);
         assert_eq!(*located_start.fragment(), "Bool");
 
-        let middle_location = &[ErrorLocation::from(TupleIndex::Middle)];
-        let located_middle = ErrorLocation::walk_lvalue(middle_location, &lvalue);
+        let middle_path = &[ErrorPathFragment::from(TupleIndex::Middle)];
+        let located_middle = ErrorPathFragment::walk_lvalue(middle_path, &lvalue);
         assert_eq!(*located_middle.fragment(), "(Num, Bool)");
 
-        let narrowed_location = &[
-            ErrorLocation::from(TupleIndex::Middle),
+        let narrowed_path = &[
+            ErrorPathFragment::from(TupleIndex::Middle),
             TupleIndex::Start(0).into(),
         ];
-        let located_ty = ErrorLocation::walk_lvalue(narrowed_location, &lvalue);
+        let located_ty = ErrorPathFragment::walk_lvalue(narrowed_path, &lvalue);
         assert_eq!(*located_ty.fragment(), "Num");
     }
 
     #[test]
     fn walking_lvalue_with_annotation_mix() {
         let lvalue = parse_lvalue("(flag, y: [Num]) = x;");
-        let start_location = &[ErrorLocation::from(TupleIndex::Start(0))];
-        let located_start = ErrorLocation::walk_lvalue(start_location, &lvalue);
+        let start_path = &[ErrorPathFragment::from(TupleIndex::Start(0))];
+        let located_start = ErrorPathFragment::walk_lvalue(start_path, &lvalue);
         assert_eq!(*located_start.fragment(), "flag");
 
-        let slice_location = &[ErrorLocation::from(TupleIndex::Start(1))];
-        let located_slice = ErrorLocation::walk_lvalue(slice_location, &lvalue);
+        let slice_path = &[ErrorPathFragment::from(TupleIndex::Start(1))];
+        let located_slice = ErrorPathFragment::walk_lvalue(slice_path, &lvalue);
         assert_eq!(*located_slice.fragment(), "[Num]");
 
-        let slice_elem_location = &[
-            ErrorLocation::from(TupleIndex::Start(1)),
-            ErrorLocation::from(TupleIndex::Middle),
+        let slice_elem_path = &[
+            ErrorPathFragment::from(TupleIndex::Start(1)),
+            ErrorPathFragment::from(TupleIndex::Middle),
         ];
-        let located_slice_elem = ErrorLocation::walk_lvalue(slice_elem_location, &lvalue);
+        let located_slice_elem = ErrorPathFragment::walk_lvalue(slice_elem_path, &lvalue);
         assert_eq!(*located_slice_elem.fragment(), "Num");
     }
 
     #[test]
     fn walking_slice() {
         let lvalue = parse_lvalue("xs: [(Num, Bool); _] = x;");
-        let slice_location = &[ErrorLocation::from(TupleIndex::Middle)];
-        let located_slice = ErrorLocation::walk_lvalue(slice_location, &lvalue);
+        let slice_path = &[ErrorPathFragment::from(TupleIndex::Middle)];
+        let located_slice = ErrorPathFragment::walk_lvalue(slice_path, &lvalue);
         assert_eq!(*located_slice.fragment(), "(Num, Bool)");
 
-        let narrow_location = &[
-            ErrorLocation::from(TupleIndex::Middle),
-            ErrorLocation::from(TupleIndex::Start(1)),
+        let narrow_path = &[
+            ErrorPathFragment::from(TupleIndex::Middle),
+            ErrorPathFragment::from(TupleIndex::Start(1)),
         ];
-        let located_elem = ErrorLocation::walk_lvalue(narrow_location, &lvalue);
+        let located_elem = ErrorPathFragment::walk_lvalue(narrow_path, &lvalue);
         assert_eq!(*located_elem.fragment(), "Bool");
     }
 }

@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     arith::{CompleteConstraints, Constraint},
-    error::{ErrorKind, ErrorLocation, OpErrors, TupleContext},
+    error::{ErrorKind, ErrorPathFragment, OpErrors, TupleContext},
     visit::{self, Visit, VisitMut},
     Function, Object, PrimitiveType, Tuple, TupleLen, Type, TypeVar, UnknownLen,
 };
@@ -308,9 +308,9 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         } else {
             // TODO: is this always applicable?
             for (lhs_elem, rhs_elem) in lhs.equal_elements_dyn(rhs) {
-                let elem_errors = errors.with_location(match context {
-                    TupleContext::Generic => ErrorLocation::TupleElement(None),
-                    TupleContext::FnArgs => ErrorLocation::FnArg(None),
+                let elem_errors = errors.join_path(match context {
+                    TupleContext::Generic => ErrorPathFragment::TupleElement(None),
+                    TupleContext::FnArgs => ErrorPathFragment::FnArg(None),
                 });
                 self.unify(lhs_elem, rhs_elem, elem_errors);
             }
@@ -327,7 +327,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
     ) {
         for (i, (lhs_elem, rhs_elem)) in lhs_elements.zip(rhs_elements).enumerate() {
             let location = context.element(i);
-            self.unify(lhs_elem, rhs_elem, errors.with_location(location));
+            self.unify(lhs_elem, rhs_elem, errors.join_path(location));
         }
     }
 
@@ -515,7 +515,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
 
         if lhs_fields == rhs_fields {
             for (field_name, ty) in lhs.iter() {
-                self.unify(ty, &rhs[field_name], errors.with_location(field_name));
+                self.unify(ty, &rhs[field_name], errors.join_path(field_name));
             }
         } else {
             errors.push(ErrorKind::FieldsMismatch {
@@ -555,7 +555,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         self.unify(
             &instantiated_lhs.return_type,
             &instantiated_rhs.return_type,
-            errors.with_location(ErrorLocation::FnReturnType),
+            errors.join_path(ErrorPathFragment::FnReturnType),
         );
     }
 

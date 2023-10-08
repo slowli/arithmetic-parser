@@ -8,143 +8,148 @@ use crate::{
     visit::VisitMut,
     PrimitiveType, Tuple, Type,
 };
-use arithmetic_parser::{Spanned, UnsupportedType};
+use arithmetic_parser::{Location, Spanned, UnsupportedType};
 
 mod kind;
-mod location;
 mod op_errors;
+mod path;
 
 pub use self::{
     kind::{ErrorKind, TupleContext},
-    location::ErrorLocation,
     op_errors::OpErrors,
+    path::ErrorPathFragment,
 };
 
 /// Type error together with the corresponding code span.
-// TODO: implement `StripCode`?
 #[derive(Debug, Clone)]
-pub struct Error<'a, Prim: PrimitiveType> {
-    inner: Spanned<'a, ErrorKind<Prim>>,
-    root_span: Spanned<'a>,
+pub struct Error<Prim: PrimitiveType> {
+    inner: Location<ErrorKind<Prim>>,
+    root_location: Location,
     context: ErrorContext<Prim>,
-    location: Vec<ErrorLocation>,
+    path: Vec<ErrorPathFragment>,
 }
 
-impl<Prim: PrimitiveType> fmt::Display for Error<'_, Prim> {
+impl<Prim: PrimitiveType> fmt::Display for Error<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
             "{}:{}: {}",
-            self.main_span().location_line(),
-            self.main_span().get_column(),
+            self.main_location().location_line(),
+            self.main_location().get_column(),
             self.kind()
         )
     }
 }
 
-impl<Prim: PrimitiveType> std::error::Error for Error<'_, Prim> {
+impl<Prim: PrimitiveType> std::error::Error for Error<Prim> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(self.kind())
     }
 }
 
-impl<'a, Prim: PrimitiveType> Error<'a, Prim> {
+impl<Prim: PrimitiveType> Error<Prim> {
     pub(crate) fn unsupported<T>(
         unsupported: impl Into<UnsupportedType>,
-        span: &Spanned<'a, T>,
+        span: &Spanned<'_, T>,
     ) -> Self {
         let kind = ErrorKind::unsupported(unsupported);
         Self {
-            inner: span.copy_with_extra(kind),
-            root_span: span.with_no_extra(),
+            inner: span.copy_with_extra(kind).into(),
+            root_location: span.with_no_extra().into(),
             context: ErrorContext::None,
-            location: vec![],
+            path: vec![],
         }
     }
 
-    pub(crate) fn undefined_var<T>(span: &Spanned<'a, T>) -> Self {
+    pub(crate) fn undefined_var<T>(span: &Spanned<'_, T>) -> Self {
         let ident = (*span.fragment()).to_owned();
         Self {
-            inner: span.copy_with_extra(ErrorKind::UndefinedVar(ident)),
-            root_span: span.with_no_extra(),
+            inner: span.copy_with_extra(ErrorKind::UndefinedVar(ident)).into(),
+            root_location: span.with_no_extra().into(),
             context: ErrorContext::None,
-            location: vec![],
+            path: vec![],
         }
     }
 
-    pub(crate) fn repeated_assignment(span: Spanned<'a>) -> Self {
+    pub(crate) fn repeated_assignment(span: Spanned<'_>) -> Self {
         let ident = (*span.fragment()).to_owned();
         Self {
-            inner: span.copy_with_extra(ErrorKind::RepeatedAssignment(ident)),
-            root_span: span.with_no_extra(),
+            inner: span
+                .copy_with_extra(ErrorKind::RepeatedAssignment(ident))
+                .into(),
+            root_location: span.with_no_extra().into(),
             context: ErrorContext::None,
-            location: vec![],
+            path: vec![],
         }
     }
 
-    pub(crate) fn repeated_field(span: Spanned<'a>) -> Self {
+    pub(crate) fn repeated_field(span: Spanned<'_>) -> Self {
         let ident = (*span.fragment()).to_owned();
         Self {
-            inner: span.copy_with_extra(ErrorKind::RepeatedField(ident)),
-            root_span: span.with_no_extra(),
+            inner: span.copy_with_extra(ErrorKind::RepeatedField(ident)).into(),
+            root_location: span.with_no_extra().into(),
             context: ErrorContext::None,
-            location: vec![],
+            path: vec![],
         }
     }
 
-    pub(crate) fn conversion<T>(kind: AstConversionError, span: &Spanned<'a, T>) -> Self {
+    pub(crate) fn conversion<T>(kind: AstConversionError, span: &Spanned<'_, T>) -> Self {
         let kind = ErrorKind::AstConversion(kind);
         Self {
-            inner: span.copy_with_extra(kind),
-            root_span: span.with_no_extra(),
+            inner: span.copy_with_extra(kind).into(),
+            root_location: span.with_no_extra().into(),
             context: ErrorContext::None,
-            location: vec![],
+            path: vec![],
         }
     }
 
-    pub(crate) fn invalid_field_name(span: Spanned<'a>) -> Self {
+    pub(crate) fn invalid_field_name(span: Spanned<'_>) -> Self {
         let ident = (*span.fragment()).to_owned();
         Self {
-            inner: span.copy_with_extra(ErrorKind::InvalidFieldName(ident)),
-            root_span: span,
+            inner: span
+                .copy_with_extra(ErrorKind::InvalidFieldName(ident))
+                .into(),
+            root_location: span.into(),
             context: ErrorContext::None,
-            location: vec![],
+            path: vec![],
         }
     }
 
     pub(crate) fn index_out_of_bounds<T>(
         receiver: Tuple<Prim>,
-        span: &Spanned<'a, T>,
+        span: &Spanned<'_, T>,
         index: usize,
     ) -> Self {
         Self {
-            inner: span.copy_with_extra(ErrorKind::IndexOutOfBounds {
-                index,
-                len: receiver.len(),
-            }),
-            root_span: span.with_no_extra(),
+            inner: span
+                .copy_with_extra(ErrorKind::IndexOutOfBounds {
+                    index,
+                    len: receiver.len(),
+                })
+                .into(),
+            root_location: span.with_no_extra().into(),
             context: ErrorContext::TupleIndex {
                 ty: Type::Tuple(receiver),
             },
-            location: vec![],
+            path: vec![],
         }
     }
 
-    pub(crate) fn cannot_index<T>(receiver: Type<Prim>, span: &Spanned<'a, T>) -> Self {
+    pub(crate) fn cannot_index<T>(receiver: Type<Prim>, span: &Spanned<'_, T>) -> Self {
         Self {
-            inner: span.copy_with_extra(ErrorKind::CannotIndex),
-            root_span: span.with_no_extra(),
+            inner: span.copy_with_extra(ErrorKind::CannotIndex).into(),
+            root_location: span.with_no_extra().into(),
             context: ErrorContext::TupleIndex { ty: receiver },
-            location: vec![],
+            path: vec![],
         }
     }
 
-    pub(crate) fn unsupported_index<T>(receiver: Type<Prim>, span: &Spanned<'a, T>) -> Self {
+    pub(crate) fn unsupported_index<T>(receiver: Type<Prim>, span: &Spanned<'_, T>) -> Self {
         Self {
-            inner: span.copy_with_extra(ErrorKind::UnsupportedIndex),
-            root_span: span.with_no_extra(),
+            inner: span.copy_with_extra(ErrorKind::UnsupportedIndex).into(),
+            root_location: span.with_no_extra().into(),
             context: ErrorContext::TupleIndex { ty: receiver },
-            location: vec![],
+            path: vec![],
         }
     }
 
@@ -154,13 +159,13 @@ impl<'a, Prim: PrimitiveType> Error<'a, Prim> {
     }
 
     /// Gets the most specific code span of this error.
-    pub fn main_span(&self) -> Spanned<'a> {
+    pub fn main_location(&self) -> Location {
         self.inner.with_no_extra()
     }
 
-    /// Gets the root code span of the failed operation. May coincide with [`Self::main_span()`].
-    pub fn root_span(&self) -> Spanned<'a> {
-        self.root_span
+    /// Gets the root code location of the failed operation. May coincide with [`Self::main_location()`].
+    pub fn root_location(&self) -> Location {
+        self.root_location
     }
 
     /// Gets the context for an operation that has failed.
@@ -168,10 +173,10 @@ impl<'a, Prim: PrimitiveType> Error<'a, Prim> {
         &self.context
     }
 
-    /// Gets the location of this error relative to the failed top-level operation.
+    /// Gets the path of this error relative to the failed top-level operation.
     /// This can be used for highlighting relevant parts of types in [`Self::context()`].
-    pub fn location(&self) -> &[ErrorLocation] {
-        &self.location
+    pub fn path(&self) -> &[ErrorPathFragment] {
+        &self.path
     }
 }
 
@@ -204,12 +209,12 @@ impl<'a, Prim: PrimitiveType> Error<'a, Prim> {
 /// # }
 /// ```
 #[derive(Debug, Clone)]
-pub struct Errors<'a, Prim: PrimitiveType> {
-    inner: Vec<Error<'a, Prim>>,
+pub struct Errors<Prim: PrimitiveType> {
+    inner: Vec<Error<Prim>>,
     first_failing_statement: usize,
 }
 
-impl<'a, Prim: PrimitiveType> Errors<'a, Prim> {
+impl<Prim: PrimitiveType> Errors<Prim> {
     pub(crate) fn new() -> Self {
         Self {
             inner: vec![],
@@ -217,11 +222,11 @@ impl<'a, Prim: PrimitiveType> Errors<'a, Prim> {
         }
     }
 
-    pub(crate) fn push(&mut self, err: Error<'a, Prim>) {
+    pub(crate) fn push(&mut self, err: Error<Prim>) {
         self.inner.push(err);
     }
 
-    pub(crate) fn extend(&mut self, errors: Vec<Error<'a, Prim>>) {
+    pub(crate) fn extend(&mut self, errors: Vec<Error<Prim>>) {
         self.inner.extend(errors);
     }
 
@@ -236,7 +241,7 @@ impl<'a, Prim: PrimitiveType> Errors<'a, Prim> {
     }
 
     /// Iterates over errors contained in this list.
-    pub fn iter(&self) -> impl Iterator<Item = &Error<'a, Prim>> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = &Error<Prim>> + '_ {
         self.inner.iter()
     }
 
@@ -260,7 +265,7 @@ impl<'a, Prim: PrimitiveType> Errors<'a, Prim> {
     }
 }
 
-impl<Prim: PrimitiveType> fmt::Display for Errors<'_, Prim> {
+impl<Prim: PrimitiveType> fmt::Display for Errors<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (i, error) in self.inner.iter().enumerate() {
             write!(formatter, "{error}")?;
@@ -272,10 +277,10 @@ impl<Prim: PrimitiveType> fmt::Display for Errors<'_, Prim> {
     }
 }
 
-impl<Prim: PrimitiveType> std::error::Error for Errors<'_, Prim> {}
+impl<Prim: PrimitiveType> std::error::Error for Errors<Prim> {}
 
-impl<'a, Prim: PrimitiveType> IntoIterator for Errors<'a, Prim> {
-    type Item = Error<'a, Prim>;
+impl<Prim: PrimitiveType> IntoIterator for Errors<Prim> {
+    type Item = Error<Prim>;
     type IntoIter = std::vec::IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {

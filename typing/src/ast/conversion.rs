@@ -41,11 +41,11 @@ use arithmetic_parser::{
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let code = "bogus_slice: ['T; _] = (1, 2, 3);";
-/// let code = Annotated::<F32Grammar>::parse_statements(code)?;
+/// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 ///
-/// let errors = TypeEnvironment::new().process_statements(&code).unwrap_err();
+/// let errors = TypeEnvironment::new().process_statements(&ast).unwrap_err();
 /// let err = errors.into_iter().next().unwrap();
-/// assert_eq!(*err.main_span().fragment(), "'T");
+/// assert_eq!(err.main_location().span(code), "'T");
 /// assert_matches!(
 ///     err.kind(),
 ///     ErrorKind::AstConversion(AstConversionError::FreeTypeVar(id))
@@ -145,14 +145,14 @@ impl std::error::Error for AstConversionError {}
 pub(crate) struct AstConversionState<'r, 'a, Prim: PrimitiveType> {
     env: Option<&'r mut TypeEnvironment<Prim>>,
     known_constraints: ConstraintSet<Prim>,
-    errors: &'r mut Errors<'a, Prim>,
+    errors: &'r mut Errors<Prim>,
     len_params: HashMap<&'a str, usize>,
     type_params: HashMap<&'a str, usize>,
     is_in_function: bool,
 }
 
 impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
-    pub fn new(env: &'r mut TypeEnvironment<Prim>, errors: &'r mut Errors<'a, Prim>) -> Self {
+    pub fn new(env: &'r mut TypeEnvironment<Prim>, errors: &'r mut Errors<Prim>) -> Self {
         let known_constraints = env.known_constraints.clone();
         Self {
             env: Some(env),
@@ -164,7 +164,7 @@ impl<'r, 'a, Prim: PrimitiveType> AstConversionState<'r, 'a, Prim> {
         }
     }
 
-    fn without_env(errors: &'r mut Errors<'a, Prim>) -> Self {
+    fn without_env(errors: &'r mut Errors<Prim>) -> Self {
         Self {
             env: None,
             known_constraints: Prim::well_known_constraints(),
@@ -451,7 +451,7 @@ impl<'a> FunctionAst<'a> {
     }
 
     /// Tries to convert this type into a [`Function`].
-    pub fn try_convert<Prim>(&self) -> Result<Function<Prim>, Errors<'a, Prim>>
+    pub fn try_convert<Prim>(&self) -> Result<Function<Prim>, Errors<Prim>>
     where
         Prim: PrimitiveType,
     {
@@ -502,7 +502,7 @@ impl<'a> TypeAst<'a> {
 }
 
 impl<'a, Prim: PrimitiveType> TryFrom<&SpannedTypeAst<'a>> for Type<Prim> {
-    type Error = Errors<'a, Prim>;
+    type Error = Errors<Prim>;
 
     fn try_from(ast: &SpannedTypeAst<'a>) -> Result<Self, Self::Error> {
         let mut errors = Errors::new();

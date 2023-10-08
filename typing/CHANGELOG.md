@@ -15,6 +15,13 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Remove `Object::just()` constructor in favor of more general `From<[_; N]>` implementation. (#117)
 
+- Rename `ErrorLocation` to `ErrorPathFragment` and its getter in `Error` from `location()` to `path()`
+  in order to distinguish it from `Location` from the parser crate. (#124)
+
+### Removed
+
+- Remove lifetime generic from `Error` and related types. (#124)
+
 ### Fixed
 
 - Fix false positive during recursive type check for native parameterized functions.

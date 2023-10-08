@@ -19,12 +19,12 @@ mod object;
 
 type F32Grammar = Annotated<NumGrammar<f32>>;
 
-trait ErrorsExt<'a, Prim: PrimitiveType> {
-    fn single(self) -> Error<'a, Prim>;
+trait ErrorsExt<Prim: PrimitiveType> {
+    fn single(self) -> Error<Prim>;
 }
 
-impl<'a, Prim: PrimitiveType> ErrorsExt<'a, Prim> for Errors<'a, Prim> {
-    fn single(self) -> Error<'a, Prim> {
+impl<Prim: PrimitiveType> ErrorsExt<Prim> for Errors<Prim> {
+    fn single(self) -> Error<Prim> {
         if self.len() == 1 {
             self.into_iter().next().unwrap()
         } else {

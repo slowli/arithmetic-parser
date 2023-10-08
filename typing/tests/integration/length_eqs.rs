@@ -4,27 +4,14 @@ use assert_matches::assert_matches;
 
 use arithmetic_parser::grammars::{NumGrammar, Parse};
 use arithmetic_typing::{
-    arith::Num,
     defs::Prelude,
-    error::{Error, ErrorKind, Errors, TupleContext},
+    error::{ErrorKind, TupleContext},
     Annotated, Function, TupleLen, Type, TypeEnvironment, UnknownLen,
 };
 
+use crate::ErrorsExt;
+
 type F32Grammar = Annotated<NumGrammar<f32>>;
-
-trait SingleError<'a> {
-    fn single(self) -> Error<'a, Num>;
-}
-
-impl<'a> SingleError<'a> for Errors<'a, Num> {
-    fn single(self) -> Error<'a, Num> {
-        if self.len() == 1 {
-            self.into_iter().next().unwrap()
-        } else {
-            panic!("Expected one error, got {self:?}");
-        }
-    }
-}
 
 #[test]
 fn push_fn_basics() {
@@ -51,8 +38,8 @@ fn push_fn_in_other_fn_definition() {
     type_env.insert("push", Prelude::Push);
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "(_, z)");
-    assert_eq!(*err.root_span().fragment(), "(_, (_, z))");
+    assert_eq!(err.main_location().span(code), "(_, z)");
+    assert_eq!(err.root_location().span(code), "(_, (_, z))");
     assert_matches!(
         err.kind(),
         ErrorKind::TupleLenMismatch {
@@ -144,8 +131,8 @@ fn requirements_on_len_via_destructuring() {
         .insert("map", Prelude::Map);
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "(1,)");
-    assert_eq!(*err.root_span().fragment(), "(1,).len_at_least2()");
+    assert_eq!(err.main_location().span(code), "(1,)");
+    assert_eq!(err.root_location().span(code), "(1,).len_at_least2()");
     assert_matches!(
         err.kind(),
         ErrorKind::TupleLenMismatch {
@@ -185,7 +172,7 @@ fn reversing_a_slice() {
         .insert("merge", Prelude::Merge);
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert_eq!(*err.main_span().fragment(), "(_, ...)");
+    assert_eq!(err.main_location().span(code), "(_, ...)");
     assert_matches!(err.kind(), ErrorKind::TupleLenMismatch { .. });
     assert_eq!(type_env["reverse"].to_string(), "(['T; N]) -> ['T]");
     assert_eq!(type_env["ys"].to_string(), "[Bool]");
@@ -243,9 +230,9 @@ fn square_function() {
     let errors = type_env.process_statements(&block).unwrap_err();
     let err = errors.into_iter().next().unwrap();
 
-    assert_eq!(*err.main_span().fragment(), "(1, 2)");
+    assert_eq!(err.main_location().span(code), "(1, 2)");
     assert_eq!(
-        *err.root_span().fragment(),
+        err.root_location().span(code),
         "((1, 2), (3, 4), (5, 6)).is_square()"
     );
     assert_matches!(
@@ -299,13 +286,10 @@ fn column_row_equality_fn() {
         zs.push((5, 6)).row_eq_col(); // works: `N` can be unified with `*`
         zs.push((3, 4, 5)); // fail: `zs` elements are `(Num, Num)`
     "#;
-    let test_code = F32Grammar::parse_statements(test_code).unwrap();
-    let err = type_env
-        .process_statements(&test_code)
-        .unwrap_err()
-        .single();
-    assert_eq!(*err.main_span().fragment(), "(3, 4, 5)");
-    assert_eq!(*err.root_span().fragment(), "zs.push((3, 4, 5))");
+    let block = F32Grammar::parse_statements(test_code).unwrap();
+    let err = type_env.process_statements(&block).unwrap_err().single();
+    assert_eq!(err.main_location().span(test_code), "(3, 4, 5)");
+    assert_eq!(err.root_location().span(test_code), "zs.push((3, 4, 5))");
     assert_matches!(err.kind(), ErrorKind::TupleLenMismatch { .. });
 }
 

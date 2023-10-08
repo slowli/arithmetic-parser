@@ -10,7 +10,7 @@ use arithmetic_parser::{
 use arithmetic_typing::{
     arith::*,
     defs::Assertions,
-    error::{ErrorLocation, OpErrors},
+    error::{ErrorPathFragment, OpErrors},
     Annotated, PrimitiveType, Type, TypeEnvironment,
 };
 
@@ -131,12 +131,12 @@ impl TypeArithmetic<StrType> for StrArithmetic {
                 substitutions.unify(
                     &Type::Prim(StrType::Str),
                     lhs_ty,
-                    errors.with_location(ErrorLocation::Lhs),
+                    errors.join_path(ErrorPathFragment::Lhs),
                 );
                 substitutions.unify(
                     &Type::Prim(StrType::Str),
                     rhs_ty,
-                    errors.with_location(ErrorLocation::Rhs),
+                    errors.join_path(ErrorPathFragment::Rhs),
                 );
                 Type::BOOL
             }

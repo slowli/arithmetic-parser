@@ -275,9 +275,11 @@ impl Reporter {
         self.report_error(&diagnostic)
     }
 
-    fn report_typing_errors(&self, errors: &TypingErrors<'_, Num>) -> io::Result<()> {
+    fn report_typing_errors(&self, errors: &TypingErrors<Num>) -> io::Result<()> {
         for err in errors.iter() {
-            let (file, range) = self.code_map.locate_in_most_recent_file(&err.main_span());
+            let (file, range) = self
+                .code_map
+                .locate_in_most_recent_file(&err.main_location());
 
             let label = Label::primary(file, range).with_message("Error occurred here");
             let diagnostic = Diagnostic::error()
@@ -562,10 +564,10 @@ impl<T: ReplLiteral> Env<T> {
         Ok(())
     }
 
-    fn process_types<'a>(
+    fn process_types(
         &mut self,
-        block: &Block<'a, Annotated<NumGrammar<T>>>,
-    ) -> io::Result<Result<(), TypingErrors<'a, Num>>> {
+        block: &Block<'_, Annotated<NumGrammar<T>>>,
+    ) -> io::Result<Result<(), TypingErrors<Num>>> {
         let res = self.type_env.as_mut().map_or(Ok(Type::Any), |type_env| {
             type_env.process_with_arithmetic(&NumArithmetic::with_comparisons(), block)
         });

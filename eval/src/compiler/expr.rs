@@ -308,9 +308,7 @@ impl Compiler {
         def_expr: &SpannedExpr<'a, T>,
         def: &FnDefinition<'a, T>,
     ) -> Result<Atom<T::Lit>, Error> {
-        let module_id = self.module_id.clone_boxed();
-
-        let mut extractor = CapturesExtractor::new(module_id);
+        let mut extractor = CapturesExtractor::new(self.module_id.clone());
         extractor.eval_function(def)?;
         let captures = self.get_captures(extractor);
 
@@ -359,7 +357,7 @@ impl Compiler {
         captures: &HashMap<&'a str, LocatedAtom<T::Lit>>,
     ) -> Result<Executable<T::Lit>, Error> {
         // Allocate registers for captures.
-        let mut this = Self::new(self.module_id.clone_boxed());
+        let mut this = Self::new(self.module_id.clone());
         this.scope_depth = 1; // Disable generating variable annotations.
 
         for (i, &name) in captures.keys().enumerate() {
@@ -367,7 +365,7 @@ impl Compiler {
         }
         this.register_count = captures.len() + 1; // one additional register for args
 
-        let mut executable = Executable::new(self.module_id.clone_boxed());
+        let mut executable = Executable::new(self.module_id.clone());
         let args_span = def.args.with_no_extra();
         this.destructure(&mut executable, &def.args.extra, args_span, captures.len())?;
 
@@ -395,7 +393,7 @@ impl Compiler {
 
             Statement::Assignment { lhs, rhs } => {
                 extract_vars_iter(
-                    self.module_id.as_ref(),
+                    &self.module_id,
                     &mut HashMap::new(),
                     iter::once(lhs),
                     RepeatedAssignmentContext::Assignment,

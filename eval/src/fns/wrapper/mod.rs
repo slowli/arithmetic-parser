@@ -17,7 +17,7 @@ pub use self::traits::{
 /// This is a slightly shorter way to create wrappers compared to calling [`FnWrapper::new()`].
 ///
 /// See [`FnWrapper`] for more details on function requirements.
-pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
+pub const fn wrap<const CTX: bool, T, F>(function: F) -> FnWrapper<T, F, CTX> {
     FnWrapper::new(function)
 }
 
@@ -28,13 +28,10 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// via [`Environment::insert_wrapped_fn()`], [`Value::wrapped_fn()`], or [`wrap()`].
 ///
 /// Arguments of a wrapped function must implement [`TryFromValue`] trait for the applicable
-/// grammar, and the output type must implement [`IntoEvalResult`]. If arguments and/or output
-/// have non-`'static` lifetime, use the [`wrap_fn`] macro. If you need [`CallContext`] (e.g.,
-/// to call functions provided as an argument), use the [`wrap_fn_with_context`] macro.
+/// grammar, and the output type must implement [`IntoEvalResult`]. If you need [`CallContext`] (e.g.,
+/// to call functions provided as an argument), it should be specified as a first argument.
 ///
 /// [`Environment::insert_wrapped_fn()`]: crate::Environment::insert_wrapped_fn()
-/// [`wrap_fn`]: crate::wrap_fn
-/// [`wrap_fn_with_context`]: crate::wrap_fn_with_context
 /// [`Value::wrapped_fn()`]: crate::Value::wrapped_fn()
 ///
 /// # Examples
@@ -83,12 +80,43 @@ pub const fn wrap<T, F>(function: F) -> FnWrapper<T, F> {
 /// # Ok(())
 /// # }
 /// ```
-pub struct FnWrapper<T, F> {
+///
+/// ## Using `CallContext` to call functions
+///
+/// ```
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # use arithmetic_eval::{CallContext, Function, Environment, Value, ExecutableModule, Error};
+/// fn map_array(
+///     context: &mut CallContext<'_, f32>,
+///     array: Vec<Value<f32>>,
+///     map_fn: Function<f32>,
+/// ) -> Result<Vec<Value<f32>>, Error> {
+///     array
+///         .into_iter()
+///         .map(|value| {
+///             let arg = context.apply_call_location(value);
+///             map_fn.evaluate(vec![arg], context)
+///         })
+///         .collect()
+/// }
+///
+/// # fn main() -> anyhow::Result<()> {
+/// let program = "map((1, 2, 3), |x| x + 3) == (4, 5, 6)";
+/// let module = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test", &module)?;
+///
+/// let mut env = Environment::new();
+/// env.insert_wrapped_fn("map", map_array);
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
+/// # Ok(())
+/// # }
+/// ```
+pub struct FnWrapper<T, F, const CTX: bool = false> {
     function: F,
     _arg_types: PhantomData<T>,
 }
 
-impl<T, F> fmt::Debug for FnWrapper<T, F>
+impl<T, F, const CTX: bool> fmt::Debug for FnWrapper<T, F, CTX>
 where
     F: fmt::Debug,
 {
@@ -96,11 +124,12 @@ where
         formatter
             .debug_struct("FnWrapper")
             .field("function", &self.function)
+            .field("context", &CTX)
             .finish()
     }
 }
 
-impl<T, F: Clone> Clone for FnWrapper<T, F> {
+impl<T, F: Clone, const CTX: bool> Clone for FnWrapper<T, F, CTX> {
     fn clone(&self) -> Self {
         Self {
             function: self.function.clone(),
@@ -109,11 +138,11 @@ impl<T, F: Clone> Clone for FnWrapper<T, F> {
     }
 }
 
-impl<T, F: Copy> Copy for FnWrapper<T, F> {}
+impl<T, F: Copy, const CTX: bool> Copy for FnWrapper<T, F, CTX> {}
 
 // Ideally, we would want to constrain `T` and `F`, but this would make it impossible to declare
 // the constructor as `const fn`; see https://github.com/rust-lang/rust/issues/57563.
-impl<T, F> FnWrapper<T, F> {
+impl<T, F, const CTX: bool> FnWrapper<T, F, CTX> {
     /// Creates a new wrapper.
     ///
     /// Note that the created wrapper is not guaranteed to be usable as [`NativeFn`]. For this
@@ -129,10 +158,10 @@ impl<T, F> FnWrapper<T, F> {
 }
 
 macro_rules! arity_fn {
-    ($arity:tt => $($arg_name:ident : $t:ident),*) => {
-        impl<Num, F, Ret, $($t,)*> NativeFn<Num> for FnWrapper<(Ret, $($t,)*), F>
+    ($arity:tt, $with_ctx:tt $(, $ctx_name:ident : $ctx_t:ty)? => $($arg_name:ident : $t:ident),*) => {
+        impl<Num, F, Ret, $($t,)*> NativeFn<Num> for FnWrapper<(Ret, $($t,)*), F, $with_ctx>
         where
-            F: Fn($($t,)*) -> Ret,
+            F: Fn($($ctx_t,)? $($t,)*) -> Ret,
             $($t: TryFromValue<Num>,)*
             Ret: IntoEvalResult<Num>,
         {
@@ -157,24 +186,36 @@ macro_rules! arity_fn {
                     })?;
                 )*
 
-                let output = (self.function)($($arg_name,)*);
+                $(let $ctx_name = &mut *context;)?
+                let output = (self.function)($($ctx_name,)? $($arg_name,)*);
                 output.into_eval_result().map_err(|err| err.into_spanned(context))
             }
         }
     };
 }
 
-arity_fn!(0 =>);
-arity_fn!(1 => x0: T);
-arity_fn!(2 => x0: T, x1: U);
-arity_fn!(3 => x0: T, x1: U, x2: V);
-arity_fn!(4 => x0: T, x1: U, x2: V, x3: W);
-arity_fn!(5 => x0: T, x1: U, x2: V, x3: W, x4: X);
-arity_fn!(6 => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y);
-arity_fn!(7 => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z);
-arity_fn!(8 => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z, x7: A);
-arity_fn!(9 => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z, x7: A, x8: B);
-arity_fn!(10 => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z, x7: A, x8: B, x9: C);
+arity_fn!(0, false =>);
+arity_fn!(0, true, ctx: &mut CallContext<'_, Num> =>);
+arity_fn!(1, false => x0: T);
+arity_fn!(1, true, ctx: &mut CallContext<'_, Num> => x0: T);
+arity_fn!(2, false => x0: T, x1: U);
+arity_fn!(2, true, ctx: &mut CallContext<'_, Num> => x0: T, x1: U);
+arity_fn!(3, false => x0: T, x1: U, x2: V);
+arity_fn!(3, true, ctx: &mut CallContext<'_, Num> => x0: T, x1: U, x2: V);
+arity_fn!(4, false => x0: T, x1: U, x2: V, x3: W);
+arity_fn!(4, true, ctx: &mut CallContext<'_, Num> => x0: T, x1: U, x2: V, x3: W);
+arity_fn!(5, false => x0: T, x1: U, x2: V, x3: W, x4: X);
+arity_fn!(5, true, ctx: &mut CallContext<'_, Num> => x0: T, x1: U, x2: V, x3: W, x4: X);
+arity_fn!(6, false => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y);
+arity_fn!(6, true, ctx: &mut CallContext<'_, Num> => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y);
+arity_fn!(7, false => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z);
+arity_fn!(7, true, ctx: &mut CallContext<'_, Num> => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z);
+arity_fn!(8, false => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z, x7: A);
+arity_fn!(8, true, ctx: &mut CallContext<'_, Num> => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z, x7: A);
+arity_fn!(9, false => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z, x7: A, x8: B);
+arity_fn!(9, true, ctx: &mut CallContext<'_, Num> => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z, x7: A, x8: B);
+arity_fn!(10, false => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z, x7: A, x8: B, x9: C);
+arity_fn!(10, true, ctx: &mut CallContext<'_, Num> => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z, x7: A, x8: B, x9: C);
 
 /// Unary function wrapper.
 pub type Unary<T> = FnWrapper<(T, T), fn(T) -> T>;
@@ -188,185 +229,6 @@ pub type Ternary<T> = FnWrapper<(T, T, T, T), fn(T, T, T) -> T>;
 /// Quaternary function wrapper.
 pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 
-/// An alternative for [`wrap`] function which works for arguments / return results with
-/// non-`'static` lifetime.
-///
-/// The macro must be called with 2 arguments (in this order):
-///
-/// - Function arity (from 0 to 10 inclusive)
-/// - Function or closure with the specified number of arguments. Using a function is recommended;
-///   using a closure may lead to hard-to-debug type inference errors.
-///
-/// As with `wrap`, all function arguments must implement [`TryFromValue`] and the return result
-/// must implement [`IntoEvalResult`]. Unlike `wrap`, the arguments / return result do not
-/// need to have a `'static` lifetime; examples include [`Value`]s, [`Function`]s
-/// and [`EvalResult`]s. Lifetimes of all arguments and the return result must match.
-///
-/// [`Value`]: crate::Value
-/// [`Function`]: crate::Function
-///
-/// # Examples
-///
-/// ```
-/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{wrap_fn, Function, Environment, ExecutableModule, Value};
-/// fn is_function<T>(value: Value<T>) -> bool {
-///     value.is_function()
-/// }
-///
-/// # fn main() -> anyhow::Result<()> {
-/// let program = "is_function(is_function) && !is_function(1)";
-/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = ExecutableModule::new("test", &program)?;
-///
-/// let mut env = Environment::new();
-///  env.insert_native_fn("is_function", wrap_fn!(1, is_function));
-/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
-/// # Ok(())
-/// # }
-/// ```
-///
-/// Usage of lifetimes:
-///
-/// ```
-/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{
-/// #     wrap_fn, CallContext, Function, Environment, ExecutableModule, Value, env::Prelude,
-/// # };
-/// // Note that both `Value`s have the same lifetime due to elision.
-/// fn take_if<T>(value: Value<T>, condition: bool) -> Value<T> {
-///     if condition { value } else { Value::void() }
-/// }
-///
-/// # fn main() -> anyhow::Result<()> {
-/// let program = "take_if((1, 2), true) == (1, 2) && take_if((3, 4), false) != (3, 4)";
-/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = ExecutableModule::new("test", &program)?;
-///
-/// let mut env = Environment::new();
-/// env.extend(Prelude::iter());
-/// env.insert_native_fn("take_if", wrap_fn!(2, take_if));
-/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
-/// # Ok(())
-/// # }
-/// ```
-#[macro_export]
-macro_rules! wrap_fn {
-    (0, $function:expr) => { $crate::wrap_fn!(@arg 0 =>; $function) };
-    (1, $function:expr) => { $crate::wrap_fn!(@arg 1 => x0; $function) };
-    (2, $function:expr) => { $crate::wrap_fn!(@arg 2 => x0, x1; $function) };
-    (3, $function:expr) => { $crate::wrap_fn!(@arg 3 => x0, x1, x2; $function) };
-    (4, $function:expr) => { $crate::wrap_fn!(@arg 4 => x0, x1, x2, x3; $function) };
-    (5, $function:expr) => { $crate::wrap_fn!(@arg 5 => x0, x1, x2, x3, x4; $function) };
-    (6, $function:expr) => { $crate::wrap_fn!(@arg 6 => x0, x1, x2, x3, x4, x5; $function) };
-    (7, $function:expr) => { $crate::wrap_fn!(@arg 7 => x0, x1, x2, x3, x4, x5, x6; $function) };
-    (8, $function:expr) => {
-        $crate::wrap_fn!(@arg 8 => x0, x1, x2, x3, x4, x5, x6, x7; $function)
-    };
-    (9, $function:expr) => {
-        $crate::wrap_fn!(@arg 9 => x0, x1, x2, x3, x4, x5, x6, x7, x8; $function)
-    };
-    (10, $function:expr) => {
-        $crate::wrap_fn!(@arg 10 => x0, x1, x2, x3, x4, x5, x6, x7, x8, x9; $function)
-    };
-
-    ($($ctx:ident,)? @arg $arity:expr => $($arg_name:ident),*; $function:expr) => {{
-        let function = $function;
-        $crate::fns::enforce_closure_type(move |args, context| {
-            context.check_args_count(&args, $arity)?;
-            let mut args_iter = args.into_iter().enumerate();
-
-            $(
-                let (index, $arg_name) = args_iter.next().unwrap();
-                let span = $arg_name.with_no_extra();
-                let $arg_name = $crate::fns::TryFromValue::try_from_value($arg_name.extra)
-                    .map_err(|mut err| {
-                        err.set_arg_index(index);
-                        context
-                            .call_site_error($crate::error::ErrorKind::Wrapper(err))
-                            .with_location(&span, $crate::error::AuxErrorInfo::InvalidArg)
-                    })?;
-            )+
-
-            // We need `$ctx` just as a marker that the function receives a context.
-            let output = function($({ let $ctx = (); context },)? $($arg_name,)+);
-            $crate::fns::IntoEvalResult::into_eval_result(output)
-                .map_err(|err| err.into_spanned(context))
-        })
-    }}
-}
-
-/// Analogue of [`wrap_fn`](crate::wrap_fn) macro that injects the [`CallContext`]
-/// as the first argument. This can be used to call functions within the implementation.
-///
-/// As with `wrap_fn`, this macro must be called with 2 args: the arity of the function
-/// (**excluding** `CallContext`), and then the function / closure itself.
-///
-/// # Examples
-///
-/// ```
-/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-/// # use arithmetic_eval::{
-/// #     wrap_fn_with_context, CallContext, Function, Environment, Value, ExecutableModule, Error,
-/// # };
-/// fn map_array(
-///     context: &mut CallContext<'_, f32>,
-///     array: Vec<Value<f32>>,
-///     map_fn: Function<f32>,
-/// ) -> Result<Vec<Value<f32>>, Error> {
-///     array
-///         .into_iter()
-///         .map(|value| {
-///             let arg = context.apply_call_location(value);
-///             map_fn.evaluate(vec![arg], context)
-///         })
-///         .collect()
-/// }
-///
-/// # fn main() -> anyhow::Result<()> {
-/// let program = "map((1, 2, 3), |x| x + 3) == (4, 5, 6)";
-/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = ExecutableModule::new("test", &program)?;
-///
-/// let mut env = Environment::new();
-/// env.insert_native_fn("map", wrap_fn_with_context!(2, map_array));
-/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
-/// # Ok(())
-/// # }
-/// ```
-#[macro_export]
-macro_rules! wrap_fn_with_context {
-    (0, $function:expr) => { $crate::wrap_fn!(_ctx, @arg 0 =>; $function) };
-    (1, $function:expr) => { $crate::wrap_fn!(_ctx, @arg 1 => x0; $function) };
-    (2, $function:expr) => { $crate::wrap_fn!(_ctx, @arg 2 => x0, x1; $function) };
-    (3, $function:expr) => { $crate::wrap_fn!(_ctx, @arg 3 => x0, x1, x2; $function) };
-    (4, $function:expr) => { $crate::wrap_fn!(_ctx, @arg 4 => x0, x1, x2, x3; $function) };
-    (5, $function:expr) => { $crate::wrap_fn!(_ctx, @arg 5 => x0, x1, x2, x3, x4; $function) };
-    (6, $function:expr) => {
-        $crate::wrap_fn!(_ctx, @arg 6 => x0, x1, x2, x3, x4, x5; $function)
-    };
-    (7, $function:expr) => {
-        $crate::wrap_fn!(_ctx, @arg 7 => x0, x1, x2, x3, x4, x5, x6; $function)
-    };
-    (8, $function:expr) => {
-        $crate::wrap_fn!(_ctx, @arg 8 => x0, x1, x2, x3, x4, x5, x6, x7; $function)
-    };
-    (9, $function:expr) => {
-        $crate::wrap_fn!(_ctx, @arg 9 => x0, x1, x2, x3, x4, x5, x6, x7, x8; $function)
-    };
-    (10, $function:expr) => {
-        $crate::wrap_fn!(_ctx, @arg 10 => x0, x1, x2, x3, x4, x5, x6, x7, x8, x9; $function)
-    };
-}
-
-#[doc(hidden)] // necessary for `wrap_fn` macro
-pub fn enforce_closure_type<T, A, F>(function: F) -> F
-where
-    F: Fn(Vec<SpannedValue<T>>, &mut CallContext<'_, A>) -> EvalResult<T>,
-{
-    function
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -374,7 +236,7 @@ mod tests {
         alloc::{format, ToOwned},
         env::{Environment, Prelude},
         exec::{ExecutableModule, WildcardId},
-        Object, Tuple, Value,
+        Function, Object, Tuple, Value,
     };
 
     use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
@@ -557,7 +419,7 @@ mod tests {
         let block = Untyped::<F32Grammar>::parse_statements(program)?;
         let module = ExecutableModule::new(WildcardId, &block)?;
 
-        let test_function = Value::native_fn(wrap_fn!(1, test_function));
+        let test_function = Value::native_fn(wrap(test_function));
         let mut env = Environment::new();
         env.insert("test", test_function).extend(Prelude::iter());
 
@@ -584,6 +446,28 @@ mod tests {
         let err_message = err.source().kind().to_short_string();
         assert!(err_message.contains("Cannot convert primitive value to bool"));
         assert!(err_message.contains("location: arg0[1].0"));
+        Ok(())
+    }
+
+    #[test]
+    fn function_with_context() -> anyhow::Result<()> {
+        #[allow(clippy::needless_pass_by_value)] // required for wrapping to work
+        fn call(
+            ctx: &mut CallContext<'_, f32>,
+            func: Function<f32>,
+            value: f32,
+        ) -> EvalResult<f32> {
+            let args = vec![ctx.apply_call_location(Value::Prim(value))];
+            func.evaluate(args, ctx)
+        }
+
+        let program = "(|x| { x + 1 }).call(1)";
+        let block = Untyped::<F32Grammar>::parse_statements(program)?;
+        let module = ExecutableModule::new(WildcardId, &block)?;
+
+        let mut env = Environment::new();
+        env.insert_wrapped_fn("call", call);
+        assert_eq!(module.with_env(&env)?.run()?, Value::Prim(2.0));
         Ok(())
     }
 }

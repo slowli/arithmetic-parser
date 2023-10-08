@@ -218,8 +218,8 @@ mod alloc {
         borrow::ToOwned,
         boxed::Box,
         format,
-        rc::Rc,
         string::{String, ToString},
+        sync::Arc,
         vec,
         vec::Vec,
     };

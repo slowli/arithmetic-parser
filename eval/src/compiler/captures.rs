@@ -3,26 +3,56 @@
 use core::iter;
 
 use crate::{
-    alloc::{vec, Box, HashMap, Vec},
+    alloc::{vec, Arc, HashMap, String, ToOwned, Vec},
     error::{AuxErrorInfo, Error, ErrorKind, RepeatedAssignmentContext},
     exec::{ModuleId, WildcardId},
 };
 use arithmetic_parser::{
-    grammars::Grammar, Block, Destructure, Expr, FnDefinition, Lvalue, Spanned, SpannedExpr,
-    SpannedLvalue, SpannedStatement, Statement,
+    grammars::Grammar, Block, Destructure, Expr, FnDefinition, Location, Lvalue, Spanned,
+    SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
 };
+
+#[derive(Debug, Clone)]
+pub(crate) struct Captures {
+    map: HashMap<String, usize>,
+    locations: Vec<Location>,
+}
+
+impl Captures {
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &Location)> + '_ {
+        let iter = self.map.iter();
+        iter.map(move |(name, &idx)| (name.as_str(), &self.locations[idx]))
+    }
+
+    pub fn len(&self) -> usize {
+        self.locations.len()
+    }
+
+    pub fn contains(&self, name: &str) -> bool {
+        self.map.contains_key(name)
+    }
+
+    #[cfg(test)]
+    pub fn location(&self, name: &str) -> Option<&Location> {
+        Some(&self.locations[*self.map.get(name)?])
+    }
+
+    pub fn variables_map(&self) -> &HashMap<String, usize> {
+        &self.map
+    }
+}
 
 /// Helper context for symbolic execution of a function body or a block in order to determine
 /// variables captured by it.
 #[derive(Debug)]
 pub(super) struct CapturesExtractor<'a> {
-    module_id: Box<dyn ModuleId>,
+    module_id: Arc<dyn ModuleId>,
     local_vars: Vec<HashMap<&'a str, Spanned<'a>>>,
     pub captures: HashMap<&'a str, Spanned<'a>>,
 }
 
 impl<'a> CapturesExtractor<'a> {
-    pub fn new(module_id: Box<dyn ModuleId>) -> Self {
+    pub fn new(module_id: Arc<dyn ModuleId>) -> Self {
         Self {
             module_id,
             local_vars: vec![],
@@ -37,7 +67,7 @@ impl<'a> CapturesExtractor<'a> {
     ) -> Result<(), Error> {
         let mut fn_local_vars = HashMap::new();
         extract_vars(
-            self.module_id.as_ref(),
+            &self.module_id,
             &mut fn_local_vars,
             &definition.args.extra,
             RepeatedAssignmentContext::FnArgs,
@@ -58,7 +88,7 @@ impl<'a> CapturesExtractor<'a> {
     }
 
     fn create_error<T>(&self, span: &Spanned<'a, T>, err: ErrorKind) -> Error {
-        Error::new(self.module_id.as_ref(), span, err)
+        Error::new(self.module_id.clone(), span, err)
     }
 
     /// Evaluates an expression with the function validation semantics, i.e., to determine
@@ -118,7 +148,7 @@ impl<'a> CapturesExtractor<'a> {
                     let field_str = *name.fragment();
                     if let Some(prev_span) = object_fields.insert(field_str, *name) {
                         let err = ErrorKind::RepeatedField;
-                        return Err(Error::new(self.module_id.as_ref(), name, err)
+                        return Err(Error::new(self.module_id.clone(), name, err)
                             .with_location(&prev_span.into(), AuxErrorInfo::PrevAssignment));
                     }
                 }
@@ -160,7 +190,7 @@ impl<'a> CapturesExtractor<'a> {
                 self.eval(rhs)?;
                 let mut new_vars = HashMap::new();
                 extract_vars_iter(
-                    self.module_id.as_ref(),
+                    &self.module_id,
                     &mut new_vars,
                     iter::once(lhs),
                     RepeatedAssignmentContext::Assignment,
@@ -195,10 +225,20 @@ impl<'a> CapturesExtractor<'a> {
     pub fn eval_block<T: Grammar<'a>>(&mut self, block: &Block<'a, T>) -> Result<(), Error> {
         self.eval_block_inner(block, HashMap::new())
     }
+
+    pub fn into_captures(self) -> Captures {
+        let (map, locations) = self
+            .captures
+            .into_iter()
+            .enumerate()
+            .map(|(i, (name, span))| ((name.to_owned(), i), Location::from(span)))
+            .unzip();
+        Captures { map, locations }
+    }
 }
 
 fn extract_vars<'a, T>(
-    module_id: &dyn ModuleId,
+    module_id: &Arc<dyn ModuleId>,
     vars: &mut HashMap<&'a str, Spanned<'a>>,
     lvalues: &Destructure<'a, T>,
     context: RepeatedAssignmentContext,
@@ -216,7 +256,7 @@ fn extract_vars<'a, T>(
 }
 
 fn add_var<'a>(
-    module_id: &dyn ModuleId,
+    module_id: &Arc<dyn ModuleId>,
     vars: &mut HashMap<&'a str, Spanned<'a>>,
     var_span: Spanned<'a>,
     context: RepeatedAssignmentContext,
@@ -225,7 +265,7 @@ fn add_var<'a>(
     if var_name != "_" {
         if let Some(prev_span) = vars.insert(var_name, var_span) {
             let err = ErrorKind::RepeatedAssignment { context };
-            return Err(Error::new(module_id, &var_span, err)
+            return Err(Error::new(module_id.clone(), &var_span, err)
                 .with_location(&prev_span.into(), AuxErrorInfo::PrevAssignment));
         }
     }
@@ -233,7 +273,7 @@ fn add_var<'a>(
 }
 
 pub(super) fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
-    module_id: &dyn ModuleId,
+    module_id: &Arc<dyn ModuleId>,
     vars: &mut HashMap<&'a str, Spanned<'a>>,
     lvalues: impl Iterator<Item = &'it SpannedLvalue<'a, T>>,
     context: RepeatedAssignmentContext,
@@ -254,7 +294,7 @@ pub(super) fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
                     let field_str = *field.field_name.fragment();
                     if let Some(prev_span) = object_fields.insert(field_str, field.field_name) {
                         let err = ErrorKind::RepeatedField;
-                        return Err(Error::new(module_id, &field.field_name, err)
+                        return Err(Error::new(module_id.clone(), &field.field_name, err)
                             .with_location(&prev_span.into(), AuxErrorInfo::PrevAssignment));
                     }
 
@@ -268,7 +308,7 @@ pub(super) fn extract_vars_iter<'it, 'a: 'it, T: 'it>(
 
             _ => {
                 let err = ErrorKind::unsupported(lvalue.extra.ty());
-                return Err(Error::new(module_id, lvalue, err));
+                return Err(Error::new(module_id.clone(), lvalue, err));
             }
         }
     }
@@ -284,13 +324,11 @@ pub(super) enum CompilerExtTarget<'r, 'a, T: Grammar<'a>> {
 
 impl<'a, T: Grammar<'a>> CompilerExtTarget<'_, 'a, T> {
     pub fn get_undefined_variables(self) -> Result<HashMap<&'a str, Spanned<'a>>, Error> {
-        let mut extractor = CapturesExtractor::new(Box::new(WildcardId));
-
+        let mut extractor = CapturesExtractor::new(Arc::new(WildcardId));
         match self {
             Self::Block(block) => extractor.eval_block_inner(block, HashMap::new())?,
             Self::FnDefinition(definition) => extractor.eval_function(definition)?,
         }
-
         Ok(extractor.captures)
     }
 }

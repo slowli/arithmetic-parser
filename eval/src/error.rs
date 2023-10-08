@@ -7,7 +7,7 @@ use derive_more::Display;
 use core::fmt;
 
 use crate::{
-    alloc::{format, vec, Box, HashSet, String, ToOwned, ToString, Vec},
+    alloc::{format, vec, Arc, HashSet, String, ToOwned, ToString, Vec},
     exec::ModuleId,
     fns::FromValueError,
     Value,
@@ -425,7 +425,7 @@ pub struct Error {
 
 impl Error {
     pub(crate) fn new<Span, T>(
-        module_id: &dyn ModuleId,
+        module_id: Arc<dyn ModuleId>,
         main_span: &LocatedSpan<Span, T>,
         kind: ErrorKind,
     ) -> Self
@@ -453,7 +453,7 @@ impl Error {
     #[must_use]
     pub fn with_location<T>(mut self, location: &Location<T>, info: AuxErrorInfo) -> Self {
         self.aux_locations.push(LocationInModule {
-            module_id: self.main_location.module_id.clone_boxed(),
+            module_id: self.main_location.module_id.clone(),
             location: location.copy_with_extra(info),
         });
         self
@@ -493,25 +493,16 @@ impl std::error::Error for Error {
 pub type EvalResult<T> = Result<Value<T>, Error>;
 
 /// Code fragment together with information about the module containing the fragment.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LocationInModule<T = ()> {
-    module_id: Box<dyn ModuleId>,
+    module_id: Arc<dyn ModuleId>,
     location: Location<T>,
 }
 
-impl<T: Clone> Clone for LocationInModule<T> {
-    fn clone(&self) -> Self {
-        Self {
-            module_id: self.module_id.clone_boxed(),
-            location: self.location.clone(),
-        }
-    }
-}
-
 impl LocationInModule {
-    pub(crate) fn new(module_id: &dyn ModuleId, location: Location) -> Self {
+    pub(crate) fn new(module_id: Arc<dyn ModuleId>, location: Location) -> Self {
         Self {
-            module_id: module_id.clone_boxed(),
+            module_id,
             location,
         }
     }
@@ -660,7 +651,7 @@ mod tests {
         let input = "(_, test) = (1, 2);";
         let main_span = Location::from_str(input, 4..8);
         let err = Error::new(
-            &"test_module",
+            Arc::new("test_module"),
             &main_span,
             ErrorKind::Undefined("test".to_owned()),
         );
@@ -675,10 +666,14 @@ mod tests {
     fn display_for_error_with_backtrace() {
         let input = "(_, test) = (1, 2);";
         let main_span = Location::from_str(input, 4..8);
-        let err = Error::new(&"test", &main_span, ErrorKind::Undefined("test".to_owned()));
+        let err = Error::new(
+            Arc::new("test"),
+            &main_span,
+            ErrorKind::Undefined("test".to_owned()),
+        );
 
         let mut err = ErrorWithBacktrace::new(err, Backtrace::default());
-        let call_span = LocationInModule::new(&"test", Location::from_str(input, ..));
+        let call_span = LocationInModule::new(Arc::new("test"), Location::from_str(input, ..));
         err.backtrace.push_call("test_fn", None, call_span);
 
         let err_string = err.to_string();

@@ -107,7 +107,7 @@ fn bench_mul_fold(bencher: &mut Bencher<'_>) {
 
 fn bench_fold_fn(bencher: &mut Bencher<'_>) {
     let env = Environment::new();
-    let mut ctx = CallContext::mock(&WildcardId, Location::from_str("", ..), &env);
+    let mut ctx = CallContext::mock(WildcardId, Location::from_str("", ..), &env);
     let acc = ctx.apply_call_location(Value::Prim(1.0));
     let fold_fn = fns::Binary::new(|x: f32, y| x * y);
     let fold_fn = ctx.apply_call_location(Value::native_fn(fold_fn));
@@ -142,7 +142,7 @@ fn bench_interpreted_fn(bencher: &mut Bencher<'_>) {
 
     let mut rng = StdRng::seed_from_u64(SEED);
     let env = Environment::new();
-    let mut ctx = CallContext::mock(&WildcardId, Location::from_str("", ..), &env);
+    let mut ctx = CallContext::mock(WildcardId, Location::from_str("", ..), &env);
 
     bencher.iter_batched(
         || {
@@ -319,7 +319,7 @@ fn bench_quick_sort_interpreted(bencher: &mut Bencher<'_>) {
             )
         },
         |items| {
-            let mut ctx = CallContext::mock(&"test", Location::from_str("", ..), &env);
+            let mut ctx = CallContext::mock("test", Location::from_str("", ..), &env);
             let items = Location::from_str("", ..).copy_with_extra(items);
             sort_fn.evaluate(vec![items], &mut ctx).unwrap()
         },

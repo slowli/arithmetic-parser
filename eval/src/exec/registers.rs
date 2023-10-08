@@ -1,8 +1,9 @@
 //! `Registers` for executing commands and closely related types.
 
 use crate::{
-    alloc::{vec, Box, HashMap, Rc, String, ToOwned, Vec},
+    alloc::{vec, Arc, HashMap, String, ToOwned, Vec},
     arith::OrdArithmetic,
+    compiler::Captures,
     error::{Backtrace, EvalResult, LocationInModule, TupleLenMismatchContext},
     exec::command::{Atom, Command, CompiledExpr, FieldName, LocatedAtom, LocatedCommand},
     exec::ModuleId,
@@ -11,28 +12,17 @@ use crate::{
 use arithmetic_parser::{BinaryOp, Location, LvalueLen, UnaryOp};
 
 /// Sequence of instructions that can be executed with the `Registers`.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Executable<T> {
-    id: Box<dyn ModuleId>, // FIXME: consider using `Rc<_>`?
+    id: Arc<dyn ModuleId>,
     commands: Vec<LocatedCommand<T>>,
-    child_fns: Vec<Rc<ExecutableFn<T>>>,
+    child_fns: Vec<Arc<ExecutableFn<T>>>,
     // Hint how many registers the executable requires.
     register_capacity: usize,
 }
 
-impl<T: Clone> Clone for Executable<T> {
-    fn clone(&self) -> Self {
-        Self {
-            id: self.id.clone_boxed(),
-            commands: self.commands.clone(),
-            child_fns: self.child_fns.clone(),
-            register_capacity: self.register_capacity,
-        }
-    }
-}
-
 impl<T> Executable<T> {
-    pub fn new(id: Box<dyn ModuleId>) -> Self {
+    pub fn new(id: Arc<dyn ModuleId>) -> Self {
         Self {
             id,
             commands: vec![],
@@ -41,12 +31,12 @@ impl<T> Executable<T> {
         }
     }
 
-    pub fn id(&self) -> &dyn ModuleId {
-        self.id.as_ref()
+    pub fn id(&self) -> &Arc<dyn ModuleId> {
+        &self.id
     }
 
     fn create_error<U>(&self, location: &Location<U>, err: ErrorKind) -> Error {
-        Error::new(self.id.as_ref(), location, err)
+        Error::new(self.id.clone(), location, err)
     }
 
     pub fn push_command(&mut self, command: impl Into<LocatedCommand<T>>) {
@@ -55,7 +45,7 @@ impl<T> Executable<T> {
 
     pub fn push_child_fn(&mut self, child_fn: ExecutableFn<T>) -> usize {
         let fn_ptr = self.child_fns.len();
-        self.child_fns.push(Rc::new(child_fn));
+        self.child_fns.push(Arc::new(child_fn));
         fn_ptr
     }
 
@@ -144,31 +134,14 @@ impl<T> Registers<T> {
             inner_scope_start: None,
         }
     }
+}
 
-    pub fn variables(&self) -> impl Iterator<Item = (&str, &Value<T>)> + '_ {
-        self.vars
-            .iter()
-            .map(move |(name, register)| (name.as_str(), &self.registers[*register]))
-    }
-
-    pub fn variables_map(&self) -> &HashMap<String, usize> {
-        &self.vars
-    }
-
-    pub fn register_count(&self) -> usize {
-        self.registers.len()
-    }
-
-    /// Allocates a new register with the specified name if the name was not allocated previously.
-    pub fn insert_var(&mut self, name: &str, value: Value<T>) -> bool {
-        if self.vars.contains_key(name) {
-            false
-        } else {
-            let register = self.registers.len();
-            self.registers.push(value);
-            self.vars.insert(name.to_owned(), register);
-
-            true
+impl<T> From<&Captures> for Registers<T> {
+    fn from(captures: &Captures) -> Self {
+        Self {
+            registers: (0..captures.len()).map(|_| Value::void()).collect(),
+            vars: captures.variables_map().clone(),
+            inner_scope_start: None,
         }
     }
 }
@@ -363,7 +336,7 @@ impl<T: 'static + Clone> Registers<T> {
                     Self::eval_function(
                         &function,
                         fn_name,
-                        executable.id.as_ref(),
+                        executable.id.clone(),
                         location,
                         arg_values,
                         operations,
@@ -379,7 +352,7 @@ impl<T: 'static + Clone> Registers<T> {
                 captures,
                 capture_names,
             } => {
-                let fn_executable = Rc::clone(&executable.child_fns[*ptr]);
+                let fn_executable = Arc::clone(&executable.child_fns[*ptr]);
                 let captured_values = captures
                     .iter()
                     .map(|capture| self.resolve_atom(&capture.extra))
@@ -394,7 +367,7 @@ impl<T: 'static + Clone> Registers<T> {
 
     fn execute_binary_expr(
         &self,
-        module_id: &dyn ModuleId,
+        module_id: &Arc<dyn ModuleId>,
         location: Location,
         op: BinaryOp,
         lhs: &LocatedAtom<T>,
@@ -466,7 +439,7 @@ impl<T: 'static + Clone> Registers<T> {
     fn eval_function(
         function: &Function<T>,
         fn_name: &str,
-        module_id: &dyn ModuleId,
+        module_id: Arc<dyn ModuleId>,
         call_location: Location,
         arg_values: Vec<SpannedValue<T>>,
         operations: Operations<'_, T>,

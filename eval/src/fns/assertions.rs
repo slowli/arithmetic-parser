@@ -381,7 +381,7 @@ mod tests {
     #[test]
     fn assert_basics() {
         let env = Environment::with_arithmetic(<CheckedArithmetic>::new());
-        let mut ctx = CallContext::<u32>::mock(&WildcardId, Location::from_str("", ..), &env);
+        let mut ctx = CallContext::<u32>::mock(WildcardId, Location::from_str("", ..), &env);
 
         let err = Assert.evaluate(vec![], &mut ctx).unwrap_err();
         assert_matches!(err.kind(), ErrorKind::ArgsLenMismatch { .. });
@@ -413,7 +413,7 @@ mod tests {
     #[test]
     fn assert_eq_basics() {
         let env = Environment::with_arithmetic(<CheckedArithmetic>::new());
-        let mut ctx = CallContext::<u32>::mock(&WildcardId, Location::from_str("", ..), &env);
+        let mut ctx = CallContext::<u32>::mock(WildcardId, Location::from_str("", ..), &env);
 
         let err = AssertEq.evaluate(vec![], &mut ctx).unwrap_err();
         assert_matches!(err.kind(), ErrorKind::ArgsLenMismatch { .. });
@@ -434,7 +434,7 @@ mod tests {
     fn assert_close_basics() {
         let assert_close = AssertClose::new(1e-3);
         let env = Environment::new();
-        let mut ctx = CallContext::<f32>::mock(&WildcardId, Location::from_str("", ..), &env);
+        let mut ctx = CallContext::<f32>::mock(WildcardId, Location::from_str("", ..), &env);
 
         let err = assert_close.evaluate(vec![], &mut ctx).unwrap_err();
         assert_matches!(err.kind(), ErrorKind::ArgsLenMismatch { .. });
@@ -490,7 +490,7 @@ mod tests {
     fn assert_fails_basics() {
         let assert_fails = AssertFails::default();
         let env = Environment::new();
-        let mut ctx = CallContext::<f32>::mock(&WildcardId, Location::from_str("", ..), &env);
+        let mut ctx = CallContext::<f32>::mock(WildcardId, Location::from_str("", ..), &env);
 
         let err = assert_fails.evaluate(vec![], &mut ctx).unwrap_err();
         assert_matches!(err.kind(), ErrorKind::ArgsLenMismatch { .. });
@@ -526,7 +526,7 @@ mod tests {
             |err| matches!(err.kind(), ErrorKind::NativeCall(msg) if msg == "oops"),
         );
         let env = Environment::new();
-        let mut ctx = CallContext::<f32>::mock(&WildcardId, Location::from_str("", ..), &env);
+        let mut ctx = CallContext::<f32>::mock(WildcardId, Location::from_str("", ..), &env);
 
         let wrong_fn = Value::wrapped_fn(f32::abs);
         let err = assert_fails

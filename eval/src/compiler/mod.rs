@@ -1,23 +1,20 @@
 //! Transformation of AST output by the parser into non-recursive format.
 
 use crate::{
-    alloc::{Box, HashMap, String, ToOwned, Vec},
-    exec::{
-        Atom, Command, CompiledExpr, Executable, ExecutableModule, FieldName, ModuleId, Registers,
-    },
-    Error, ErrorKind, Value,
+    alloc::{Arc, HashMap, String, ToOwned},
+    exec::{Atom, Command, CompiledExpr, Executable, ExecutableModule, FieldName, ModuleId},
+    Error, ErrorKind,
 };
 use arithmetic_parser::{
-    grammars::Grammar, BinaryOp, Block, Destructure, FnDefinition, InputSpan, Location, Lvalue,
+    grammars::Grammar, BinaryOp, Block, Destructure, FnDefinition, InputSpan, Lvalue,
     ObjectDestructure, Spanned, SpannedLvalue, UnaryOp,
 };
 
 mod captures;
 mod expr;
 
+pub(crate) use self::captures::Captures;
 use self::captures::{CapturesExtractor, CompilerExtTarget};
-
-pub(crate) type ImportLocations = Vec<Location>;
 
 #[derive(Debug)]
 pub(crate) struct Compiler {
@@ -25,11 +22,11 @@ pub(crate) struct Compiler {
     vars_to_registers: HashMap<String, usize>,
     scope_depth: usize,
     register_count: usize,
-    module_id: Box<dyn ModuleId>,
+    module_id: Arc<dyn ModuleId>,
 }
 
 impl Compiler {
-    fn new(module_id: Box<dyn ModuleId>) -> Self {
+    fn new(module_id: Arc<dyn ModuleId>) -> Self {
         Self {
             vars_to_registers: HashMap::new(),
             scope_depth: 0,
@@ -38,10 +35,10 @@ impl Compiler {
         }
     }
 
-    fn from_env<T>(module_id: Box<dyn ModuleId>, env: &Registers<T>) -> Self {
+    fn from_env(module_id: Arc<dyn ModuleId>, env: &Captures) -> Self {
         Self {
             vars_to_registers: env.variables_map().clone(),
-            register_count: env.register_count(),
+            register_count: env.len(),
             scope_depth: 0,
             module_id,
         }
@@ -53,12 +50,12 @@ impl Compiler {
             vars_to_registers: self.vars_to_registers.clone(),
             scope_depth: self.scope_depth,
             register_count: self.register_count,
-            module_id: self.module_id.clone_boxed(),
+            module_id: self.module_id.clone(),
         }
     }
 
     fn create_error<T>(&self, span: &Spanned<'_, T>, err: ErrorKind) -> Error {
-        Error::new(self.module_id.as_ref(), span, err)
+        Error::new(self.module_id.clone(), span, err)
     }
 
     fn check_unary_op(&self, op: &Spanned<'_, UnaryOp>) -> Result<UnaryOp, Error> {
@@ -112,9 +109,9 @@ impl Compiler {
         module_id: Id,
         block: &Block<'a, T>,
     ) -> Result<ExecutableModule<T::Lit>, Error> {
-        let module_id = Box::new(module_id) as Box<dyn ModuleId>;
-        let (captures, import_spans) = Self::extract_captures(module_id.clone_boxed(), block)?;
-        let mut compiler = Self::from_env(module_id.clone_boxed(), &captures);
+        let module_id = Arc::new(module_id) as Arc<dyn ModuleId>;
+        let captures = Self::extract_captures(module_id.clone(), block)?;
+        let mut compiler = Self::from_env(module_id.clone(), &captures);
 
         let mut executable = Executable::new(module_id);
         let empty_span = InputSpan::new("");
@@ -129,32 +126,16 @@ impl Compiler {
         );
 
         executable.finalize_block(compiler.register_count);
-        Ok(ExecutableModule::from_parts(
-            executable,
-            captures,
-            import_spans,
-        ))
+        Ok(ExecutableModule::from_parts(executable, captures))
     }
 
     fn extract_captures<'a, T: Grammar<'a>>(
-        module_id: Box<dyn ModuleId>,
+        module_id: Arc<dyn ModuleId>,
         block: &Block<'a, T>,
-    ) -> Result<(Registers<T::Lit>, ImportLocations), Error> {
+    ) -> Result<Captures, Error> {
         let mut extractor = CapturesExtractor::new(module_id);
         extractor.eval_block(block)?;
-
-        let mut captures = Registers::new();
-        for &var_name in extractor.captures.keys() {
-            captures.insert_var(var_name, Value::void());
-        }
-
-        let import_spans = extractor
-            .captures
-            .into_iter()
-            .map(|(_, var_span)| var_span.into())
-            .collect();
-
-        Ok((captures, import_spans))
+        Ok(extractor.into_captures())
     }
 
     fn assign<T, Ty>(
@@ -320,11 +301,13 @@ impl<'a, T: Grammar<'a>> CompilerExt<'a> for FnDefinition<'a, T> {
 
 #[cfg(test)]
 mod tests {
+    use arithmetic_parser::{
+        grammars::{F32Grammar, Parse, ParseLiteral, Typed, Untyped},
+        Expr, Location, NomResult,
+    };
+
     use super::*;
     use crate::{exec::WildcardId, Environment, Value};
-
-    use arithmetic_parser::grammars::{F32Grammar, Parse, ParseLiteral, Typed, Untyped};
-    use arithmetic_parser::{Expr, NomResult};
 
     #[test]
     fn compilation_basics() {
@@ -389,13 +372,11 @@ mod tests {
     fn extracting_captures() {
         let program = "y = 5 * x; y - 3 + x";
         let module = Untyped::<F32Grammar>::parse_statements(program).unwrap();
-        let (registers, import_spans) =
-            Compiler::extract_captures(Box::new(WildcardId), &module).unwrap();
+        let captures = Compiler::extract_captures(Arc::new(WildcardId), &module).unwrap();
 
-        assert_eq!(registers.register_count(), 1);
-        assert!(registers.variables_map().contains_key("x"));
-        assert_eq!(import_spans.len(), 1);
-        assert_eq!(import_spans[0], Location::from_str(program, 8..9));
+        let captures: Vec<_> = captures.iter().collect();
+        assert_eq!(captures.len(), 1);
+        assert_eq!(captures[0], ("x", &Location::from_str(program, 8..9)));
     }
 
     #[test]
@@ -408,13 +389,12 @@ mod tests {
         "#;
         let module = Untyped::<F32Grammar>::parse_statements(program).unwrap();
 
-        let (registers, import_spans) =
-            Compiler::extract_captures(Box::new(WildcardId), &module).unwrap();
-        assert_eq!(registers.register_count(), 2);
+        let captures = Compiler::extract_captures(Arc::new(WildcardId), &module).unwrap();
+        assert_eq!(captures.len(), 2);
 
-        assert!(registers.variables_map().contains_key("PI"));
-        let x_register = registers.variables_map()["x"];
-        assert_eq!(import_spans[x_register].location_line(), 2); // should be the first mention
+        assert!(captures.contains("PI"));
+        let x_location = captures.location("x").unwrap();
+        assert_eq!(x_location.location_line(), 2); // should be the first mention
     }
 
     #[test]

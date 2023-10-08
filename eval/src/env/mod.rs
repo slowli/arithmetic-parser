@@ -6,7 +6,7 @@ mod variable_map;
 pub use self::variable_map::{Assertions, Comparisons, Prelude};
 
 use crate::{
-    alloc::{hash_map, HashMap, Rc, String, ToOwned},
+    alloc::{hash_map, Arc, HashMap, String, ToOwned},
     arith::{OrdArithmetic, StdArithmetic},
     exec::Operations,
     fns, NativeFn, Value,
@@ -45,7 +45,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct Environment<T> {
     variables: HashMap<String, Value<T>>,
-    arithmetic: Rc<dyn OrdArithmetic<T>>,
+    arithmetic: Arc<dyn OrdArithmetic<T>>,
 }
 
 impl<T> Default for Environment<T>
@@ -72,7 +72,7 @@ where
     pub fn new() -> Self {
         Self {
             variables: HashMap::new(),
-            arithmetic: Rc::new(StdArithmetic),
+            arithmetic: Arc::new(StdArithmetic),
         }
     }
 }
@@ -85,7 +85,7 @@ impl<T> Environment<T> {
     {
         Self {
             variables: HashMap::new(),
-            arithmetic: Rc::new(arithmetic),
+            arithmetic: Arc::new(arithmetic),
         }
     }
 
@@ -132,11 +132,15 @@ impl<T> Environment<T> {
     /// the Rust compiler will usually be able to extract the `Args` type param
     /// from the function definition, provided that type of function arguments and its return type
     /// are defined explicitly or can be unequivocally inferred from the declaration.
-    pub fn insert_wrapped_fn<Args, F>(&mut self, name: &str, fn_to_wrap: F) -> &mut Self
+    pub fn insert_wrapped_fn<const CTX: bool, Args, F>(
+        &mut self,
+        name: &str,
+        fn_to_wrap: F,
+    ) -> &mut Self
     where
-        fns::FnWrapper<Args, F>: NativeFn<T> + 'static,
+        fns::FnWrapper<Args, F, CTX>: NativeFn<T> + 'static,
     {
-        let wrapped = fns::wrap::<Args, _>(fn_to_wrap);
+        let wrapped = fns::wrap::<CTX, Args, _>(fn_to_wrap);
         self.insert(name, Value::native_fn(wrapped))
     }
 }

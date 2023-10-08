@@ -3,7 +3,7 @@
 use core::fmt;
 
 use crate::{
-    alloc::{HashMap, Rc, String, ToOwned, Vec},
+    alloc::{Arc, HashMap, String, ToOwned, Vec},
     arith::OrdArithmetic,
     error::{Backtrace, Error, ErrorKind, LocationInModule},
     exec::{ExecutableFn, ModuleId, Operations},
@@ -23,9 +23,9 @@ pub struct CallContext<'r, T> {
 impl<'r, T> CallContext<'r, T> {
     /// Creates a mock call context with the specified module ID and call span.
     /// The provided [`Environment`] is used to extract an [`OrdArithmetic`] implementation.
-    pub fn mock(module_id: &dyn ModuleId, location: Location, env: &'r Environment<T>) -> Self {
+    pub fn mock<ID: ModuleId>(module_id: ID, location: Location, env: &'r Environment<T>) -> Self {
         Self {
-            call_location: LocationInModule::new(module_id, location),
+            call_location: LocationInModule::new(Arc::new(module_id), location),
             backtrace: None,
             operations: env.operations(),
         }
@@ -131,14 +131,14 @@ impl<T> dyn NativeFn<T> {
 /// Function defined within the interpreter.
 #[derive(Debug, Clone)]
 pub struct InterpretedFn<T> {
-    definition: Rc<ExecutableFn<T>>,
+    definition: Arc<ExecutableFn<T>>,
     captures: Vec<Value<T>>,
     capture_names: Vec<String>,
 }
 
 impl<T> InterpretedFn<T> {
     pub(crate) fn new(
-        definition: Rc<ExecutableFn<T>>,
+        definition: Arc<ExecutableFn<T>>,
         captures: Vec<Value<T>>,
         capture_names: Vec<String>,
     ) -> Self {
@@ -150,7 +150,7 @@ impl<T> InterpretedFn<T> {
     }
 
     /// Returns ID of the module defining this function.
-    pub fn module_id(&self) -> &dyn ModuleId {
+    pub fn module_id(&self) -> &Arc<dyn ModuleId> {
         self.definition.inner.id()
     }
 
@@ -217,16 +217,16 @@ impl<T: 'static + Clone> InterpretedFn<T> {
 #[derive(Debug)]
 pub enum Function<T> {
     /// Native function.
-    Native(Rc<dyn NativeFn<T>>),
+    Native(Arc<dyn NativeFn<T>>),
     /// Interpreted function.
-    Interpreted(Rc<InterpretedFn<T>>),
+    Interpreted(Arc<InterpretedFn<T>>),
 }
 
 impl<T> Clone for Function<T> {
     fn clone(&self) -> Self {
         match self {
-            Self::Native(function) => Self::Native(Rc::clone(function)),
-            Self::Interpreted(function) => Self::Interpreted(Rc::clone(function)),
+            Self::Native(function) => Self::Native(Arc::clone(function)),
+            Self::Interpreted(function) => Self::Interpreted(Arc::clone(function)),
         }
     }
 }
@@ -237,8 +237,10 @@ impl<T: fmt::Display> fmt::Display for Function<T> {
             Self::Native(_) => formatter.write_str("(native fn)"),
             Self::Interpreted(function) => {
                 formatter.write_str("(interpreted fn @ ")?;
-                let location =
-                    LocationInModule::new(function.module_id(), function.definition.def_location);
+                let location = LocationInModule::new(
+                    function.module_id().clone(),
+                    function.definition.def_location,
+                );
                 location.fmt_location(formatter)?;
                 formatter.write_str(")")
             }
@@ -255,14 +257,14 @@ impl<T: PartialEq> PartialEq for Function<T> {
 impl<T> Function<T> {
     /// Creates a native function.
     pub fn native(function: impl NativeFn<T> + 'static) -> Self {
-        Self::Native(Rc::new(function))
+        Self::Native(Arc::new(function))
     }
 
     /// Checks if the provided function is the same as this one.
     pub fn is_same_function(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Native(this), Self::Native(other)) => this.data_ptr() == other.data_ptr(),
-            (Self::Interpreted(this), Self::Interpreted(other)) => Rc::ptr_eq(this, other),
+            (Self::Interpreted(this), Self::Interpreted(other)) => Arc::ptr_eq(this, other),
             _ => false,
         }
     }
@@ -271,7 +273,7 @@ impl<T> Function<T> {
         match self {
             Self::Native(_) => None,
             Self::Interpreted(function) => Some(LocationInModule::new(
-                function.module_id(),
+                function.module_id().clone(),
                 function.definition.def_location,
             )),
         }

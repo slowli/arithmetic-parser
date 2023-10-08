@@ -8,7 +8,7 @@ use core::{
 };
 
 use crate::{
-    alloc::{Rc, Vec},
+    alloc::{Arc, Vec},
     fns,
 };
 use arithmetic_parser::Location;
@@ -65,15 +65,16 @@ impl fmt::Display for ValueType {
 /// Opaque reference to a native value.
 ///
 /// The references cannot be created by interpreted code, but can be used as function args
-/// or return values of native functions. References are [`Rc`]'d, thus can easily be cloned.
+/// or return values of native functions. References are [`Arc`]'d, thus can easily be cloned.
 ///
 /// References are comparable among each other:
 ///
 /// - If the wrapped value implements [`PartialEq`], this implementation will be used
 ///   for comparison.
-/// - If `PartialEq` is not implemented, the comparison is by the `Rc` pointer.
+/// - If `PartialEq` is not implemented, the comparison is by the `Arc` pointer.
+#[derive(Clone)]
 pub struct OpaqueRef {
-    value: Rc<dyn Any>,
+    value: Arc<dyn Any>,
     type_name: &'static str,
     dyn_eq: fn(&dyn Any, &dyn Any) -> bool,
     dyn_fmt: fn(&dyn Any, &mut fmt::Formatter<'_>) -> fmt::Result,
@@ -89,7 +90,7 @@ impl OpaqueRef {
         T: Any + fmt::Debug + PartialEq,
     {
         Self {
-            value: Rc::new(value),
+            value: Arc::new(value),
             type_name: type_name::<T>(),
 
             dyn_eq: |this, other| {
@@ -112,7 +113,7 @@ impl OpaqueRef {
     #[allow(clippy::missing_panics_doc)] // false positive; `unwrap()`s never panic
     pub fn with_identity_eq<T: Any>(value: T) -> Self {
         Self {
-            value: Rc::new(value),
+            value: Arc::new(value),
             type_name: type_name::<T>(),
 
             dyn_eq: |this, other| {
@@ -127,17 +128,6 @@ impl OpaqueRef {
     /// Tries to downcast this reference to a specific type.
     pub fn downcast_ref<T: Any>(&self) -> Option<&T> {
         self.value.downcast_ref()
-    }
-}
-
-impl Clone for OpaqueRef {
-    fn clone(&self) -> Self {
-        Self {
-            value: Rc::clone(&self.value),
-            type_name: self.type_name,
-            dyn_eq: self.dyn_eq,
-            dyn_fmt: self.dyn_fmt,
-        }
     }
 }
 
@@ -191,7 +181,7 @@ pub type SpannedValue<T> = Location<Value<T>>;
 impl<T> Value<T> {
     /// Creates a value for a native function.
     pub fn native_fn(function: impl NativeFn<T> + 'static) -> Self {
-        Self::Function(Function::Native(Rc::new(function)))
+        Self::Function(Function::Native(Arc::new(function)))
     }
 
     /// Creates a [wrapped function](fns::FnWrapper).
@@ -201,17 +191,17 @@ impl<T> Value<T> {
     /// will usually be able to extract the `Args` type param from the function definition,
     /// provided that type of function arguments and its return type are defined explicitly
     /// or can be unequivocally inferred from the declaration.
-    pub fn wrapped_fn<Args, F>(fn_to_wrap: F) -> Self
+    pub fn wrapped_fn<const CTX: bool, Args, F>(fn_to_wrap: F) -> Self
     where
-        fns::FnWrapper<Args, F>: NativeFn<T> + 'static,
+        fns::FnWrapper<Args, F, CTX>: NativeFn<T> + 'static,
     {
-        let wrapped = fns::wrap::<Args, _>(fn_to_wrap);
+        let wrapped = fns::wrap::<CTX, Args, _>(fn_to_wrap);
         Self::native_fn(wrapped)
     }
 
     /// Creates a value for an interpreted function.
     pub(crate) fn interpreted_fn(function: InterpretedFn<T>) -> Self {
-        Self::Function(Function::Interpreted(Rc::new(function)))
+        Self::Function(Function::Interpreted(Arc::new(function)))
     }
 
     /// Creates a void value (an empty tuple).

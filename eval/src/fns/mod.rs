@@ -7,20 +7,7 @@
 //! - Implement [`NativeFn`] manually. This is the most versatile approach, but it can be overly
 //!   verbose.
 //! - Use [`FnWrapper`] or the [`wrap`] function. This allows specifying arguments / output
-//!   with custom types (such as `bool` or a [`Number`]), but does not work for non-`'static`
-//!   types.
-//! - Use [`wrap_fn`](crate::wrap_fn) or [`wrap_fn_with_context`](crate::wrap_fn_with_context)
-//!   macros. These macros support
-//!   the same eloquent interface as `wrap`, and also do not have `'static` requirement for args.
-//!   As a downside, debugging compile-time errors when using macros can be rather painful.
-//!
-//! ## Why multiple ways to do the same thing?
-//!
-//! In the ideal world, `FnWrapper` would be used for all cases, since it does not involve
-//! macro magic. Unfortunately, Rust currently does not provide means to describe
-//! lifetime restrictions on args / return type of wrapped functions in the general case.
-//! As such, the implicit `'static` requirement is a temporary measure, and macros fill the gaps
-//! in their usual clunky manner.
+//!   with custom types (such as `bool` or a [`Number`]).
 //!
 //! [`Number`]: crate::Number
 
@@ -48,9 +35,8 @@ pub use self::{
     assertions::{Assert, AssertClose, AssertEq, AssertFails},
     flow::{If, While},
     wrapper::{
-        enforce_closure_type, wrap, Binary, ErrorOutput, FnWrapper, FromValueError,
-        FromValueErrorKind, FromValueErrorLocation, IntoEvalResult, Quaternary, Ternary,
-        TryFromValue, Unary,
+        wrap, Binary, ErrorOutput, FnWrapper, FromValueError, FromValueErrorKind,
+        FromValueErrorLocation, IntoEvalResult, Quaternary, Ternary, TryFromValue, Unary,
     },
 };
 

@@ -5,8 +5,6 @@ use core::{
     fmt,
 };
 
-use crate::alloc::Box;
-
 /// Identifier of an [`ExecutableModule`](crate::ExecutableModule). This is usually a "small" type,
 /// such as an integer or a string.
 ///
@@ -19,12 +17,7 @@ use crate::alloc::Box;
 ///
 /// [`InterpretedFn`]: crate::InterpretedFn
 /// [`LocationInModule`]: crate::error::LocationInModule
-pub trait ModuleId: Any + fmt::Display + Send + Sync {
-    /// Clones this module ID and boxes the result. It is expected that the output will have
-    /// the same specific type as the original module ID. This operation is generally expected
-    /// to be quite cheap.
-    fn clone_boxed(&self) -> Box<dyn ModuleId>;
-}
+pub trait ModuleId: Any + fmt::Display + Send + Sync {}
 
 impl dyn ModuleId {
     /// Returns `true` if the boxed type is the same as `T`.
@@ -64,11 +57,7 @@ impl fmt::Debug for dyn ModuleId {
     }
 }
 
-impl ModuleId for &'static str {
-    fn clone_boxed(&self) -> Box<dyn ModuleId> {
-        Box::new(*self)
-    }
-}
+impl ModuleId for &'static str {}
 
 /// Module identifier that has a single possible value, which is displayed as `*`.
 ///
@@ -77,11 +66,7 @@ impl ModuleId for &'static str {
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WildcardId;
 
-impl ModuleId for WildcardId {
-    fn clone_boxed(&self) -> Box<dyn ModuleId> {
-        Box::new(*self)
-    }
-}
+impl ModuleId for WildcardId {}
 
 impl fmt::Display for WildcardId {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -119,8 +104,4 @@ impl fmt::Display for IndexedId {
     }
 }
 
-impl ModuleId for IndexedId {
-    fn clone_boxed(&self) -> Box<dyn ModuleId> {
-        Box::new(*self)
-    }
-}
+impl ModuleId for IndexedId {}

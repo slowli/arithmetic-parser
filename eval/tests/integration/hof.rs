@@ -1,8 +1,8 @@
 //! Demonstrates how to define high-order native functions.
 
 use arithmetic_eval::{
-    fns, wrap_fn, wrap_fn_with_context, CallContext, Environment, ErrorKind, EvalResult,
-    ExecutableModule, Function, NativeFn, SpannedValue, Value,
+    fns, CallContext, Environment, ErrorKind, EvalResult, ExecutableModule, Function, NativeFn,
+    SpannedValue, Value,
 };
 use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 
@@ -75,7 +75,7 @@ fn repeated_function() -> anyhow::Result<()> {
     let program = ExecutableModule::new("repeat", &program)?;
 
     let mut env = Environment::new();
-    env.insert_native_fn("repeat", wrap_fn!(2, repeat))
+    env.insert_wrapped_fn("repeat", repeat)
         .insert_native_fn("assert_eq", fns::AssertEq);
     program.with_env(&env)?.run()?;
     Ok(())
@@ -94,7 +94,7 @@ fn eager_repeated_function() -> anyhow::Result<()> {
     let program = ExecutableModule::new("repeat", &program)?;
 
     let mut env = Environment::new();
-    env.insert_native_fn("repeat", wrap_fn_with_context!(3, eager_repeat))
+    env.insert_wrapped_fn("repeat", eager_repeat)
         .insert_native_fn("assert_eq", fns::AssertEq);
     program.with_env(&env)?.run()?;
     Ok(())

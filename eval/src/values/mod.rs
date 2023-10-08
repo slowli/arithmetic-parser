@@ -191,11 +191,11 @@ impl<T> Value<T> {
     /// will usually be able to extract the `Args` type param from the function definition,
     /// provided that type of function arguments and its return type are defined explicitly
     /// or can be unequivocally inferred from the declaration.
-    pub fn wrapped_fn<Args, F>(fn_to_wrap: F) -> Self
+    pub fn wrapped_fn<const CTX: bool, Args, F>(fn_to_wrap: F) -> Self
     where
-        fns::FnWrapper<Args, F>: NativeFn<T> + 'static,
+        fns::FnWrapper<Args, F, CTX>: NativeFn<T> + 'static,
     {
-        let wrapped = fns::wrap::<Args, _>(fn_to_wrap);
+        let wrapped = fns::wrap::<CTX, Args, _>(fn_to_wrap);
         Self::native_fn(wrapped)
     }
 

@@ -48,9 +48,8 @@ pub use self::{
     assertions::{Assert, AssertClose, AssertEq, AssertFails},
     flow::{If, While},
     wrapper::{
-        enforce_closure_type, wrap, Binary, ErrorOutput, FnWrapper, FromValueError,
-        FromValueErrorKind, FromValueErrorLocation, IntoEvalResult, Quaternary, Ternary,
-        TryFromValue, Unary,
+        wrap, Binary, ErrorOutput, FnWrapper, FromValueError, FromValueErrorKind,
+        FromValueErrorLocation, IntoEvalResult, Quaternary, Ternary, TryFromValue, Unary,
     },
 };
 

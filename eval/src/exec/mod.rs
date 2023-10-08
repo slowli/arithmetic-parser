@@ -131,10 +131,10 @@ static_assertions::assert_impl_all!(ExecutableModule<f32>: Send, Sync);
 
 impl<T: Clone + fmt::Debug> ExecutableModule<T> {
     /// Creates a new module.
-    pub fn new<'a, G, Id>(id: Id, block: &Block<'a, G>) -> Result<Self, Error>
+    pub fn new<G, Id>(id: Id, block: &Block<'_, G>) -> Result<Self, Error>
     where
         Id: ModuleId,
-        G: Grammar<'a, Lit = T>,
+        G: Grammar<Lit = T>,
     {
         Compiler::compile_module(id, block)
     }

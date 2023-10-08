@@ -19,7 +19,9 @@ use crate::{
     DynConstraints, Function, Object, PrimitiveType, Slice, Tuple, Type, TypeEnvironment,
     UnknownLen,
 };
-use arithmetic_parser::{ErrorKind as ParseErrorKind, InputSpan, NomResult, Spanned, SpannedError};
+use arithmetic_parser::{
+    Error as ParseError, ErrorKind as ParseErrorKind, InputSpan, NomResult, Spanned,
+};
 
 /// Kinds of errors that can occur when converting `*Ast` types into their "main" counterparts.
 ///
@@ -483,7 +485,7 @@ fn parse_inner<'a, Ast>(
 fn from_str<'a, Ast>(
     parser: fn(InputSpan<'a>) -> NomResult<'a, Ast>,
     def: &'a str,
-) -> Result<Ast, SpannedError<&'a str>> {
+) -> Result<Ast, ParseError> {
     let input = InputSpan::new(def);
     let (_, ast) = parse_inner(parser, input).map_err(|err| match err {
         NomErr::Incomplete(_) => ParseErrorKind::Incomplete.with_span(&input.into()),
@@ -494,7 +496,7 @@ fn from_str<'a, Ast>(
 
 impl<'a> TypeAst<'a> {
     /// Parses type AST from a string.
-    pub fn try_from(def: &'a str) -> Result<SpannedTypeAst<'a>, SpannedError<&'a str>> {
+    pub fn try_from(def: &'a str) -> Result<SpannedTypeAst<'a>, ParseError> {
         from_str(TypeAst::parse, def)
     }
 }
@@ -516,7 +518,7 @@ impl<'a, Prim: PrimitiveType> TryFrom<&SpannedTypeAst<'a>> for Type<Prim> {
 }
 
 impl<'a> TryFrom<&'a str> for FunctionAst<'a> {
-    type Error = SpannedError<&'a str>;
+    type Error = ParseError;
 
     fn try_from(def: &'a str) -> Result<Self, Self::Error> {
         from_str(FunctionAst::parse, def)

@@ -180,9 +180,9 @@ impl Reporter {
     }
 
     /// Reports a parsing error.
-    fn report_parse_error(&self, err: ParseError<'_>) -> io::Result<()> {
+    fn report_parse_error(&self, err: ParseError) -> io::Result<()> {
         // Parsing errors are always reported for the most recently added snippet.
-        let (file, range) = self.code_map.locate_in_most_recent_file(&err.span());
+        let (file, range) = self.code_map.locate_in_most_recent_file(&err.location());
 
         let label = Label::primary(file, range).with_message("Error occurred here");
         let diagnostic = Diagnostic::error()
@@ -575,9 +575,9 @@ impl<T: ReplLiteral> Env<T> {
         Ok(res.map(drop))
     }
 
-    fn compile_and_execute<'a, G>(&mut self, block: &Block<'a, G>) -> io::Result<ParseAndEvalResult>
+    fn compile_and_execute<G>(&mut self, block: &Block<'_, G>) -> io::Result<ParseAndEvalResult>
     where
-        G: Grammar<'a, Lit = T>,
+        G: Grammar<Lit = T>,
     {
         let module_id = self.reporter.code_map.latest_module_id();
         let module = ExecutableModule::new(module_id, block);

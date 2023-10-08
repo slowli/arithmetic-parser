@@ -270,17 +270,17 @@ impl<T: ParseLiteral> ParseLiteral for Annotated<T> {
     }
 }
 
-impl<'a, T: ParseLiteral> Grammar<'a> for Annotated<T> {
-    type Type = TypeAst<'a>;
+impl<T: ParseLiteral> Grammar for Annotated<T> {
+    type Type<'a> = TypeAst<'a>;
 
-    fn parse_type(input: InputSpan<'a>) -> NomResult<'a, Self::Type> {
+    fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type<'_>> {
         use nom::combinator::map;
         map(TypeAst::parse, |ast| ast.extra)(input)
     }
 }
 
 /// Supports all syntax features.
-impl<T: ParseLiteral> Parse<'_> for Annotated<T> {
+impl<T: ParseLiteral> Parse for Annotated<T> {
     type Base = Self;
 
     const FEATURES: Features = Features::all();

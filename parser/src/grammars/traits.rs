@@ -6,7 +6,7 @@ use core::{fmt, marker::PhantomData};
 
 use crate::{
     parser::{statements, streaming_statements},
-    Block, Error, ErrorKind, InputSpan, NomResult, SpannedError,
+    Block, Error, ErrorKind, InputSpan, NomResult,
 };
 
 bitflags! {
@@ -152,10 +152,10 @@ pub trait ParseLiteral: 'static {
 /// #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// struct Num;
 ///
-/// impl Grammar<'_> for IntegerGrammar {
-///     type Type = Num;
+/// impl Grammar for IntegerGrammar {
+///     type Type<'a> = Num;
 ///
-///     fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
+///     fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type<'_>> {
 ///         use nom::{bytes::complete::tag, combinator::map};
 ///         map(tag("Num"), |_| Num)(input)
 ///     }
@@ -178,17 +178,16 @@ pub trait ParseLiteral: 'static {
 /// # Ok(())
 /// # }
 /// ```
-pub trait Grammar<'a>: ParseLiteral {
-    /// Type of the type annotation used in the grammar.
-    type Type: Clone + fmt::Debug;
+pub trait Grammar: ParseLiteral {
+    /// Type of the type annotation used in the grammar. This type may be parametric by the input lifetime.
+    type Type<'a>: 'a + Clone + fmt::Debug;
 
     /// Attempts to parse a type annotation.
     ///
     /// # Return value
     ///
     /// The output should follow `nom` conventions on errors / failures.
-    fn parse_type(input: InputSpan<'a>) -> NomResult<'a, Self::Type>;
-    // FIXME: why is `'a` not here?
+    fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type<'_>>;
 }
 
 /// Helper trait allowing `Parse` to accept multiple types as inputs.
@@ -240,7 +239,7 @@ impl<'a> IntoInputSpan<'a> for &'a str {
 /// #   }
 /// }
 ///
-/// impl Parse<'_> for IntegerGrammar {
+/// impl Parse for IntegerGrammar {
 ///     type Base = Untyped<Self>;
 ///     const FEATURES: Features = Features::empty();
 /// }
@@ -253,14 +252,14 @@ impl<'a> IntoInputSpan<'a> for &'a str {
 /// # Ok(())
 /// # }
 /// ```
-pub trait Parse<'a> {
+pub trait Parse {
     /// Base for the grammar providing the literal and type annotation parsers.
-    type Base: Grammar<'a>;
+    type Base: Grammar;
     /// Features supported by this grammar.
     const FEATURES: Features;
 
     /// Parses a list of statements.
-    fn parse_statements<I>(input: I) -> Result<Block<'a, Self::Base>, Error<'a>>
+    fn parse_statements<'a, I>(input: I) -> Result<Block<'a, Self::Base>, Error>
     where
         I: IntoInputSpan<'a>,
         Self: Sized,
@@ -269,7 +268,7 @@ pub trait Parse<'a> {
     }
 
     /// Parses a potentially incomplete list of statements.
-    fn parse_streaming_statements<I>(input: I) -> Result<Block<'a, Self::Base>, Error<'a>>
+    fn parse_streaming_statements<'a, I>(input: I) -> Result<Block<'a, Self::Base>, Error>
     where
         I: IntoInputSpan<'a>,
         Self: Sized,
@@ -299,18 +298,18 @@ impl<T: ParseLiteral> ParseLiteral for Untyped<T> {
     }
 }
 
-impl<T: ParseLiteral> Grammar<'_> for Untyped<T> {
-    type Type = ();
+impl<T: ParseLiteral> Grammar for Untyped<T> {
+    type Type<'a> = ();
 
     #[inline]
-    fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
+    fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type<'_>> {
         let err = anyhow!("Type annotations are not supported by this parser");
-        let err = SpannedError::new(input, ErrorKind::Type(err));
+        let err = Error::new(input, ErrorKind::Type(err));
         Err(NomErr::Failure(err))
     }
 }
 
-impl<T: ParseLiteral> Parse<'_> for Untyped<T> {
+impl<T: ParseLiteral> Parse for Untyped<T> {
     type Base = Self;
 
     const FEATURES: Features = Features::all().without(Features::TYPE_ANNOTATIONS);
@@ -326,7 +325,7 @@ impl<T: ParseLiteral> Parse<'_> for Untyped<T> {
 // TODO: consider name change (`Parser`?)
 pub struct Typed<T>(PhantomData<T>);
 
-impl<'a, T: Grammar<'a>> Parse<'a> for Typed<T> {
+impl<T: Grammar> Parse for Typed<T> {
     type Base = T;
 
     const FEATURES: Features = Features::all();
@@ -372,10 +371,10 @@ impl<T: ParseLiteral, Ty: MockTypes> ParseLiteral for WithMockedTypes<T, Ty> {
     }
 }
 
-impl<T: ParseLiteral, Ty: MockTypes> Grammar<'_> for WithMockedTypes<T, Ty> {
-    type Type = ();
+impl<T: ParseLiteral, Ty: MockTypes> Grammar for WithMockedTypes<T, Ty> {
+    type Type<'a> = ();
 
-    fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
+    fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type<'_>> {
         use nom::Slice;
 
         fn type_parser<M: MockTypes>(input: InputSpan<'_>) -> NomResult<'_, ()> {
@@ -386,7 +385,7 @@ impl<T: ParseLiteral, Ty: MockTypes> Grammar<'_> for WithMockedTypes<T, Ty> {
                 }
             }
             let err = anyhow!("Unrecognized type annotation");
-            let err = SpannedError::new(input, ErrorKind::Type(err));
+            let err = Error::new(input, ErrorKind::Type(err));
             Err(NomErr::Failure(err))
         }
 
@@ -394,7 +393,7 @@ impl<T: ParseLiteral, Ty: MockTypes> Grammar<'_> for WithMockedTypes<T, Ty> {
     }
 }
 
-impl<T: ParseLiteral, Ty: MockTypes> Parse<'_> for WithMockedTypes<T, Ty> {
+impl<T: ParseLiteral, Ty: MockTypes> Parse for WithMockedTypes<T, Ty> {
     type Base = Self;
 
     const FEATURES: Features = Features::all();

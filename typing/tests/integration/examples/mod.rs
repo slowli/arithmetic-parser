@@ -23,7 +23,7 @@ const EL_GAMAL_CODE: &str = include_str!("elgamal.script");
 #[derive(Debug, Clone, Copy)]
 struct U64Grammar;
 
-impl Parse<'_> for U64Grammar {
+impl Parse for U64Grammar {
     type Base = Annotated<NumGrammar<u64>>;
     // ^ We don't use large literals in code, so `u64` is fine
 

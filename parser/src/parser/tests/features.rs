@@ -43,7 +43,7 @@ fn type_hints_when_switched_off() {
 
     let input = InputSpan::new("(x, y: Sc) = (1 + 2, 3 + 5)");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(spanned) if spanned.span().location_offset() == 5);
+    assert_matches!(err, NomErr::Failure(spanned) if spanned.location().location_offset() == 5);
 
     let input = InputSpan::new("duplicate = |x| { x * (1, 2) }");
     let (rem, _) = statement::<SimpleGrammar, Complete>(input).unwrap();
@@ -51,7 +51,7 @@ fn type_hints_when_switched_off() {
 
     let input = InputSpan::new("duplicate = |x: Sc| { x * (1, 2) }");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(spanned) if *spanned.span().fragment() == ":");
+    assert_matches!(err, NomErr::Failure(spanned) if spanned.location().span(&input) == ":");
 }
 
 #[test]
@@ -59,7 +59,7 @@ fn fn_defs_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse<'_> for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::FN_DEFINITIONS);
@@ -67,7 +67,7 @@ fn fn_defs_when_switched_off() {
 
     let input = InputSpan::new("foo = |x| { x + 3 }");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Error(spanned) if *spanned.span().fragment() == "|");
+    assert_matches!(err, NomErr::Error(spanned) if spanned.location().span(&input) == "|");
 }
 
 #[test]
@@ -75,7 +75,7 @@ fn tuples_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse<'_> for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::TUPLES);
@@ -83,11 +83,11 @@ fn tuples_when_switched_off() {
 
     let input = InputSpan::new("tup = (1 + 2, 3 + 5)");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(spanned) if spanned.span().location_offset() == 6);
+    assert_matches!(err, NomErr::Failure(spanned) if spanned.location().location_offset() == 6);
 
     let input = InputSpan::new("(x, y) = (1 + 2, 3 + 5)");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(spanned) if spanned.span().location_offset() == 0);
+    assert_matches!(err, NomErr::Failure(spanned) if spanned.location().location_offset() == 0);
 
     let input = InputSpan::new("{ x, y } = #{ x: 1, y: 2 }");
     let stmt = statement::<SimpleGrammar, Complete>(input).unwrap().1;
@@ -102,7 +102,7 @@ fn blocks_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse<'_> for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::BLOCKS);
@@ -110,11 +110,11 @@ fn blocks_when_switched_off() {
 
     let input = InputSpan::new("x = { y = 10; y * 2 }");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Error(spanned) if spanned.span().location_offset() == 4);
+    assert_matches!(err, NomErr::Error(spanned) if spanned.location().location_offset() == 4);
 
     let input = InputSpan::new("foo({ y = 10; y * 2 }, z)");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(spanned) if spanned.span().location_offset() == 4);
+    assert_matches!(err, NomErr::Failure(spanned) if spanned.location().location_offset() == 4);
 }
 
 #[test]
@@ -122,7 +122,7 @@ fn methods_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse<'_> for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::METHODS);
@@ -142,7 +142,7 @@ fn order_comparisons_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse<'_> for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::ORDER_COMPARISONS);
@@ -155,7 +155,7 @@ fn order_comparisons_when_switched_off() {
 
 fn assert_binary_op_is_not_parsed<T>(op: BinaryOp)
 where
-    T: for<'a> Parse<'a>,
+    T: Parse,
 {
     let input = format!("x {} 1;", op.as_str());
     let input = InputSpan::new(&input);
@@ -163,8 +163,8 @@ where
     let NomErr::Failure(spanned_err) = err else {
         panic!("Unexpected error: {err}");
     };
-    assert_eq!(spanned_err.span().location_offset(), 2);
-    assert_eq!(*spanned_err.span().fragment(), op.as_str());
+    assert_eq!(spanned_err.location().location_offset(), 2);
+    assert_eq!(spanned_err.location().span(&input), op.as_str());
     assert_matches!(
         *spanned_err.kind(),
         ErrorKind::UnsupportedOp(Op::Binary(real_op)) if real_op == op
@@ -176,7 +176,7 @@ fn boolean_ops_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse<'_> for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::BOOLEAN_OPS);
@@ -199,7 +199,7 @@ fn object_expressions_when_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse<'_> for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::OBJECTS);
@@ -207,11 +207,11 @@ fn object_expressions_when_switched_off() {
 
     let input = InputSpan::new("#{ x = 1; y = 2; };");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Error(spanned) if *spanned.span().fragment() == "#");
+    assert_matches!(err, NomErr::Error(spanned) if spanned.location().span(&input) == "#");
 
     let input = InputSpan::new("{ x, y } = #{ x = 1; y = 2; }");
     let err = statement::<SimpleGrammar, Complete>(input).unwrap_err();
-    assert_matches!(err, NomErr::Failure(spanned) if spanned.span().location_offset() == 3);
+    assert_matches!(err, NomErr::Failure(spanned) if spanned.location().location_offset() == 3);
 
     let input = InputSpan::new("(x, y) = (1 + 2, 3 + 5)");
     let stmt = statement::<SimpleGrammar, Complete>(input).unwrap().1;
@@ -226,7 +226,7 @@ fn object_expressions_when_blocks_are_switched_off() {
     #[derive(Debug, Clone)]
     struct SimpleGrammar;
 
-    impl Parse<'_> for SimpleGrammar {
+    impl Parse for SimpleGrammar {
         type Base = FieldGrammarBase;
 
         const FEATURES: Features = Features::all().without(Features::BLOCKS);

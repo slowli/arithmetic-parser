@@ -105,9 +105,9 @@ impl Compiler {
         register
     }
 
-    pub fn compile_module<'a, Id: ModuleId, T: Grammar<'a>>(
+    pub fn compile_module<Id: ModuleId, T: Grammar>(
         module_id: Id,
-        block: &Block<'a, T>,
+        block: &Block<'_, T>,
     ) -> Result<ExecutableModule<T::Lit>, Error> {
         let module_id = Arc::new(module_id) as Arc<dyn ModuleId>;
         let captures = Self::extract_captures(module_id.clone(), block)?;
@@ -129,9 +129,9 @@ impl Compiler {
         Ok(ExecutableModule::from_parts(executable, captures))
     }
 
-    fn extract_captures<'a, T: Grammar<'a>>(
+    fn extract_captures<T: Grammar>(
         module_id: Arc<dyn ModuleId>,
-        block: &Block<'a, T>,
+        block: &Block<'_, T>,
     ) -> Result<Captures, Error> {
         let mut extractor = CapturesExtractor::new(module_id);
         extractor.eval_block(block)?;
@@ -287,13 +287,13 @@ pub trait CompilerExt<'a> {
     fn undefined_variables(&self) -> Result<HashMap<&'a str, Spanned<'a>>, Error>;
 }
 
-impl<'a, T: Grammar<'a>> CompilerExt<'a> for Block<'a, T> {
+impl<'a, T: Grammar> CompilerExt<'a> for Block<'a, T> {
     fn undefined_variables(&self) -> Result<HashMap<&'a str, Spanned<'a>>, Error> {
         CompilerExtTarget::Block(self).get_undefined_variables()
     }
 }
 
-impl<'a, T: Grammar<'a>> CompilerExt<'a> for FnDefinition<'a, T> {
+impl<'a, T: Grammar> CompilerExt<'a> for FnDefinition<'a, T> {
     fn undefined_variables(&self) -> Result<HashMap<&'a str, Spanned<'a>>, Error> {
         CompilerExtTarget::FnDefinition(self).get_undefined_variables()
     }
@@ -409,10 +409,10 @@ mod tests {
             }
         }
 
-        impl Grammar<'_> for TypedGrammar {
-            type Type = ();
+        impl Grammar for TypedGrammar {
+            type Type<'a> = ();
 
-            fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type> {
+            fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type<'_>> {
                 use nom::{bytes::complete::tag, combinator::map};
                 map(tag("Num"), drop)(input)
             }

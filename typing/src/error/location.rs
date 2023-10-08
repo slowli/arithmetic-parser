@@ -76,7 +76,7 @@ impl From<&str> for ErrorLocation {
 
 impl ErrorLocation {
     /// Walks the provided `expr` and returns the most exact span found in it.
-    pub(super) fn walk_expr<'a, T: Grammar<'a>>(
+    pub(super) fn walk_expr<'a, T: Grammar>(
         location: &[Self],
         expr: &SpannedExpr<'a, T>,
     ) -> Spanned<'a> {
@@ -100,7 +100,7 @@ impl ErrorLocation {
         refined
     }
 
-    fn step_into_expr<'r, 'a, T: Grammar<'a>>(
+    fn step_into_expr<'r, 'a, T: Grammar>(
         &self,
         mut expr: &'r SpannedExpr<'a, T>,
     ) -> Option<&'r SpannedExpr<'a, T>> {

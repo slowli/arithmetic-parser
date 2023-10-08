@@ -132,7 +132,7 @@ impl<Prim: PrimitiveType> TypeEnvironment<Prim> {
         block: &Block<'a, T>,
     ) -> Result<Type<Prim>, Errors<'a, Prim>>
     where
-        T: Grammar<'a, Type = TypeAst<'a>>,
+        T: Grammar<Type<'a> = TypeAst<'a>>,
         NumArithmetic: MapPrimitiveType<T::Lit, Prim = Prim> + TypeArithmetic<Prim>,
     {
         self.process_with_arithmetic(&NumArithmetic::without_comparisons(), block)
@@ -152,7 +152,7 @@ impl<Prim: PrimitiveType> TypeEnvironment<Prim> {
         block: &Block<'a, T>,
     ) -> Result<Type<Prim>, Errors<'a, Prim>>
     where
-        T: Grammar<'a, Type = TypeAst<'a>>,
+        T: Grammar<Type<'a> = TypeAst<'a>>,
         A: MapPrimitiveType<T::Lit, Prim = Prim> + TypeArithmetic<Prim>,
     {
         TypeProcessor::new(self, arithmetic).process_statements(block)

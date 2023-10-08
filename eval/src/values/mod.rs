@@ -1,7 +1,5 @@
 //! Values used by the interpreter.
 
-// TODO: consider removing lifetimes from `Value` (i.e., strip code spans immediately)
-
 use core::{
     any::{type_name, Any},
     fmt,

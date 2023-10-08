@@ -10,7 +10,7 @@ use crate::{
 /// Code span.
 pub type InputSpan<'a> = nom_locate::LocatedSpan<&'a str, ()>;
 /// Parsing outcome generalized by the type returned on success.
-pub type NomResult<'a, T> = nom::IResult<InputSpan<'a>, T, Error<'a>>;
+pub type NomResult<'a, T> = nom::IResult<InputSpan<'a>, T, Error>;
 
 /// Code span together with information related to where it is located in the code.
 ///

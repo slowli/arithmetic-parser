@@ -30,9 +30,9 @@ use crate::{
 /// # Return value
 ///
 /// The second component of the returned tuple is set to `true` if the list is `,`-terminated.
-fn fn_args<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, (Vec<SpannedExpr<'a, T::Base>>, bool)>
+fn fn_args<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, (Vec<SpannedExpr<'_, T::Base>>, bool)>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     let maybe_comma = map(opt(preceded(ws::<Ty>, tag_char(','))), |c| c.is_some());
@@ -49,9 +49,9 @@ where
 
 /// Expression enclosed in parentheses. This may be a simple value (e.g., `(1 + 2)`)
 /// or a tuple (e.g., `(x, y)`), depending on the number of comma-separated terms.
-pub(super) fn paren_expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>
+pub(super) fn paren_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     with_span(fn_args::<T, Ty>)(input).and_then(|(rest, parsed)| {
@@ -77,9 +77,9 @@ where
 }
 
 /// Parses a block and wraps it into an `Expr`.
-fn block_expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>
+fn block_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     map(with_span(block::<T, Ty>), |spanned| {
@@ -87,11 +87,11 @@ where
     })(input)
 }
 
-fn object_expr_field<'a, T, Ty>(
-    input: InputSpan<'a>,
-) -> NomResult<'a, (Spanned<'a>, Option<SpannedExpr<'a, T::Base>>)>
+fn object_expr_field<T, Ty>(
+    input: InputSpan<'_>,
+) -> NomResult<'_, (Spanned<'_>, Option<SpannedExpr<'_, T::Base>>)>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     let colon_sep = delimited(ws::<Ty>, tag_char(':'), ws::<Ty>);
@@ -101,11 +101,9 @@ where
     ))(input)
 }
 
-pub(super) fn object_expr<'a, T, Ty>(
-    input: InputSpan<'a>,
-) -> NomResult<'a, SpannedExpr<'a, T::Base>>
+pub(super) fn object_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     let object = preceded(
@@ -125,9 +123,9 @@ where
 }
 
 /// Parses a function definition and wraps it into an `Expr`.
-fn fn_def_expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>
+fn fn_def_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     map(with_span(fn_def::<T, Ty>), |spanned| {
@@ -139,14 +137,14 @@ where
 ///
 /// From the construction, the evaluation priorities within such an expression are always higher
 /// than for possible binary ops surrounding it.
-fn simplest_expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>
+fn simplest_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
-    fn error<'b, T>(input: InputSpan<'b>) -> NomResult<'b, SpannedExpr<'b, T::Base>>
+    fn error<T>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
     where
-        T: Parse<'b>,
+        T: Parse,
     {
         let e = ErrorKind::Leftovers.with_span(&input.into());
         Err(NomErr::Error(e))
@@ -195,23 +193,23 @@ where
 }
 
 #[derive(Debug)]
-struct MethodOrFnCall<'a, T: Grammar<'a>> {
+struct MethodOrFnCall<'a, T: Grammar> {
     separator: Option<Spanned<'a>>,
     fn_name: Option<SpannedExpr<'a, T>>,
     args: Option<Vec<SpannedExpr<'a, T>>>,
 }
 
-impl<'a, T: Grammar<'a>> MethodOrFnCall<'a, T> {
+impl<T: Grammar> MethodOrFnCall<'_, T> {
     fn is_method(&self) -> bool {
         self.fn_name.is_some() && self.args.is_some()
     }
 }
 
-type MethodParseResult<'a, T> = NomResult<'a, MethodOrFnCall<'a, <T as Parse<'a>>::Base>>;
+type MethodParseResult<'a, T> = NomResult<'a, MethodOrFnCall<'a, <T as Parse>::Base>>;
 
-fn fn_call<'a, T, Ty>(input: InputSpan<'a>) -> MethodParseResult<'a, T>
+fn fn_call<T, Ty>(input: InputSpan<'_>) -> MethodParseResult<'_, T>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     map(fn_args::<T, Ty>, |(args, _)| MethodOrFnCall {
@@ -221,9 +219,9 @@ where
     })(input)
 }
 
-fn method_or_fn_call<'a, T, Ty>(input: InputSpan<'a>) -> MethodParseResult<'a, T>
+fn method_or_fn_call<T, Ty>(input: InputSpan<'_>) -> MethodParseResult<'_, T>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     let var_name_or_digits = alt((var_name, take_while1(|c: char| c.is_ascii_digit())));
@@ -268,9 +266,9 @@ where
 }
 
 /// Expression, which includes, besides `simplest_expr`s, function calls.
-fn expr_with_calls<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>
+fn expr_with_calls<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     let method_or_fn_call = if T::FEATURES.contains(Features::METHODS) {
@@ -289,11 +287,9 @@ where
 }
 
 /// Simple expression, which includes `expr_with_calls` and type casts.
-pub(super) fn simple_expr<'a, T, Ty>(
-    input: InputSpan<'a>,
-) -> NomResult<'a, SpannedExpr<'a, T::Base>>
+pub(super) fn simple_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     let as_keyword = delimited(ws::<Ty>, tag("as"), mandatory_ws::<Ty>);
@@ -315,11 +311,11 @@ where
 
 #[allow(clippy::option_if_let_else, clippy::range_plus_one)]
 // ^-- See explanations in the function code.
-fn fold_args<'a, T: Grammar<'a>>(
+fn fold_args<'a, T: Grammar>(
     input: InputSpan<'a>,
     mut base: SpannedExpr<'a, T>,
     calls: Vec<Spanned<'a, MethodOrFnCall<'a, T>>>,
-) -> Result<SpannedExpr<'a, T>, NomErr<Error<'a>>> {
+) -> Result<SpannedExpr<'a, T>, NomErr<Error>> {
     // Do we need to reorder unary op application and method calls? This is only applicable if:
     //
     // - `base` is a literal (as a corollary, `-` / `!` may be a start of a literal)
@@ -401,11 +397,9 @@ fn fold_args<'a, T: Grammar<'a>>(
 
 /// Parses an expression with binary operations into a tree with the hierarchy reflecting
 /// the evaluation order of the operations.
-pub(super) fn binary_expr<'a, T, Ty>(
-    input: InputSpan<'a>,
-) -> NomResult<'a, SpannedExpr<'a, T::Base>>
+pub(super) fn binary_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     // First, we parse the expression into a list with simple expressions interspersed
@@ -476,11 +470,11 @@ where
 // 1   *
 //    / \
 //   2  foo(x, y)
-fn fold_binary_expr<'a, T: Grammar<'a>>(
+fn fold_binary_expr<'a, T: Grammar>(
     input: InputSpan<'a>,
     first: SpannedExpr<'a, T>,
     rest: Vec<(Spanned<'a, BinaryOp>, SpannedExpr<'a, T>)>,
-) -> Result<SpannedExpr<'a, T>, Error<'a>> {
+) -> Result<SpannedExpr<'a, T>, Error> {
     let mut right_contour: Vec<BinaryOp> = vec![];
 
     rest.into_iter().try_fold(first, |mut acc, (new_op, expr)| {
@@ -540,9 +534,9 @@ fn fold_binary_expr<'a, T: Grammar<'a>>(
     })
 }
 
-pub(super) fn expr<'a, T, Ty>(input: InputSpan<'a>) -> NomResult<'a, SpannedExpr<'a, T::Base>>
+pub(super) fn expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
 where
-    T: Parse<'a>,
+    T: Parse,
     Ty: GrammarType,
 {
     context(Context::Expr.to_str(), binary_expr::<T, Ty>)(input)

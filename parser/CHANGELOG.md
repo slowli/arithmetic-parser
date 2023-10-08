@@ -18,6 +18,12 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Bump minimum supported Rust version to 1.65 and switch to 2021 Rust edition. (#107, #108, #112)
 
+- Remove `MaybeSpanned` type in favor of `Location`. (#121)
+
+### Removed
+
+- Remove `StripCode` and `StripResultExt` traits as obsolete. (#121)
+
 ## 0.3.0 - 2021-05-24
 
 ### Added

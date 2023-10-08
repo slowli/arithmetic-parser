@@ -18,6 +18,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Support block expressions in the name position for method calls such as `xs.{Array.map}(|x| x > 0)`. (#117)
 
+- Make `ExecutableModule` thread-safe (`Send + Sync`). (#122)
+
 ### Changed
 
 - Introduce new structs (`Tuple` and `Object`) to represent tuple and object values,
@@ -43,6 +45,9 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 - Remove the lifetime param in `Value`, `ExecutableModule`, `Error` and other types in the crate
   by stripping code spans on compilation. (#121)
 
+- Simplify the `ModuleId` trait: remove its method; use `&Arc<dyn ModuleId>` instead of `&dyn ModuleId`
+  where appropriate. (#122)
+
 ### Removed
 
 - Remove `ExecutableModelBuilder::set_imports()` as error-prone. Instead, deferred imports
@@ -53,6 +58,9 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Remove `loop` native function since it has overly convoluted interface.
   `while` can be used instead. (#105)
+
+- Remove `wrap_fn` and `wrap_fn_with_context` macros as obsolete. This functionality is now
+  fully covered by the `wrap()` function. (#122)
 
 ### Fixed
 

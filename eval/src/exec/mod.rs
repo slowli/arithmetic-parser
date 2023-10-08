@@ -4,12 +4,12 @@ use core::fmt;
 
 use crate::{
     alloc::Arc,
-    compiler::{Compiler, ImportLocations},
+    compiler::{Captures, Compiler},
     env::Environment,
     error::{Backtrace, Error, ErrorKind, ErrorWithBacktrace},
     Value,
 };
-use arithmetic_parser::{grammars::Grammar, Block, Location};
+use arithmetic_parser::{grammars::Grammar, Block};
 
 mod command;
 mod module_id;
@@ -120,20 +120,14 @@ pub use crate::compiler::CompilerExt;
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ExecutableModule<T> {
     inner: Executable<T>,
-    imports: ModuleImports<T>,
+    captures: Captures,
 }
 
-impl<T: Clone> Clone for ExecutableModule<T> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-            imports: self.imports.clone(),
-        }
-    }
-}
+#[cfg(test)]
+static_assertions::assert_impl_all!(ExecutableModule<f32>: Send, Sync);
 
 impl<T: Clone + fmt::Debug> ExecutableModule<T> {
     /// Creates a new module.
@@ -147,18 +141,8 @@ impl<T: Clone + fmt::Debug> ExecutableModule<T> {
 }
 
 impl<T> ExecutableModule<T> {
-    pub(crate) fn from_parts(
-        inner: Executable<T>,
-        imports: Registers<T>,
-        import_locations: ImportLocations,
-    ) -> Self {
-        Self {
-            inner,
-            imports: ModuleImports {
-                inner: imports,
-                locations: import_locations,
-            },
-        }
+    pub(crate) fn from_parts(inner: Executable<T>, captures: Captures) -> Self {
+        Self { inner, captures }
     }
 
     /// Gets the identifier of this module.
@@ -168,12 +152,12 @@ impl<T> ExecutableModule<T> {
 
     /// Returns a shared reference to imports of this module.
     pub fn import_names(&self) -> impl Iterator<Item = &str> + '_ {
-        self.imports.inner.variables().map(|(name, _)| name)
+        self.captures.iter().map(|(name, _)| name)
     }
 
     /// Checks if the specified variable is an import.
     pub fn is_import(&self, name: &str) -> bool {
-        self.imports.inner.variables_map().contains_key(name)
+        self.captures.contains(name)
     }
 
     /// Combines this module with the specified [`Environment`]. The environment must contain
@@ -194,7 +178,7 @@ impl<T> ExecutableModule<T> {
     }
 
     fn check_imports(&self, env: &Environment<T>) -> Result<(), Error> {
-        for (name, span) in self.imports.iter() {
+        for (name, span) in self.captures.iter() {
             if !env.contains(name) {
                 let err = ErrorKind::Undefined(name.into());
                 return Err(Error::new(self.inner.id().clone(), span, err));
@@ -268,7 +252,7 @@ impl<T: 'static + Clone> WithEnvironment<'_, T> {
     ///
     /// Returns an error if module execution fails.
     pub fn run(self) -> Result<Value<T>, ErrorWithBacktrace> {
-        let mut registers = self.module.imports.inner.clone();
+        let mut registers = Registers::from(&self.module.captures);
         registers.update_from_env(self.env.as_ref());
         let result = self
             .module
@@ -278,19 +262,5 @@ impl<T: 'static + Clone> WithEnvironment<'_, T> {
             registers.update_env(env);
         }
         result
-    }
-}
-
-/// Imports of an [`ExecutableModule`].
-#[derive(Debug, Clone)]
-struct ModuleImports<T> {
-    inner: Registers<T>,
-    locations: ImportLocations,
-}
-
-impl<T> ModuleImports<T> {
-    fn iter(&self) -> impl Iterator<Item = (&str, &Location)> + '_ {
-        let iter = self.inner.variables_map().iter();
-        iter.map(move |(name, idx)| (name.as_str(), &self.locations[*idx]))
     }
 }

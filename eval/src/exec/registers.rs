@@ -3,6 +3,7 @@
 use crate::{
     alloc::{vec, Arc, HashMap, String, ToOwned, Vec},
     arith::OrdArithmetic,
+    compiler::Captures,
     error::{Backtrace, EvalResult, LocationInModule, TupleLenMismatchContext},
     exec::command::{Atom, Command, CompiledExpr, FieldName, LocatedAtom, LocatedCommand},
     exec::ModuleId,
@@ -133,31 +134,14 @@ impl<T> Registers<T> {
             inner_scope_start: None,
         }
     }
+}
 
-    pub fn variables(&self) -> impl Iterator<Item = (&str, &Value<T>)> + '_ {
-        self.vars
-            .iter()
-            .map(move |(name, register)| (name.as_str(), &self.registers[*register]))
-    }
-
-    pub fn variables_map(&self) -> &HashMap<String, usize> {
-        &self.vars
-    }
-
-    pub fn register_count(&self) -> usize {
-        self.registers.len()
-    }
-
-    /// Allocates a new register with the specified name if the name was not allocated previously.
-    pub fn insert_var(&mut self, name: &str, value: Value<T>) -> bool {
-        if self.vars.contains_key(name) {
-            false
-        } else {
-            let register = self.registers.len();
-            self.registers.push(value);
-            self.vars.insert(name.to_owned(), register);
-
-            true
+impl<T> From<&Captures> for Registers<T> {
+    fn from(captures: &Captures) -> Self {
+        Self {
+            registers: (0..captures.len()).map(|_| Value::void()).collect(),
+            vars: captures.variables_map().clone(),
+            inner_scope_start: None,
         }
     }
 }

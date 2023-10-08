@@ -3,14 +3,44 @@
 use core::iter;
 
 use crate::{
-    alloc::{vec, Arc, HashMap, Vec},
+    alloc::{vec, Arc, HashMap, ToOwned, Vec},
     error::{AuxErrorInfo, Error, ErrorKind, RepeatedAssignmentContext},
     exec::{ModuleId, WildcardId},
 };
 use arithmetic_parser::{
-    grammars::Grammar, Block, Destructure, Expr, FnDefinition, Lvalue, Spanned, SpannedExpr,
-    SpannedLvalue, SpannedStatement, Statement,
+    grammars::Grammar, Block, Destructure, Expr, FnDefinition, Location, Lvalue, Spanned,
+    SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
 };
+
+#[derive(Debug, Clone)]
+pub(crate) struct Captures {
+    map: HashMap<String, usize>,
+    locations: Vec<Location>,
+}
+
+impl Captures {
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &Location)> + '_ {
+        let iter = self.map.iter();
+        iter.map(move |(name, &idx)| (name.as_str(), &self.locations[idx]))
+    }
+
+    pub fn len(&self) -> usize {
+        self.locations.len()
+    }
+
+    pub fn contains(&self, name: &str) -> bool {
+        self.map.contains_key(name)
+    }
+
+    #[cfg(test)]
+    pub fn location(&self, name: &str) -> Option<&Location> {
+        Some(&self.locations[*self.map.get(name)?])
+    }
+
+    pub fn variables_map(&self) -> &HashMap<String, usize> {
+        &self.map
+    }
+}
 
 /// Helper context for symbolic execution of a function body or a block in order to determine
 /// variables captured by it.
@@ -194,6 +224,16 @@ impl<'a> CapturesExtractor<'a> {
 
     pub fn eval_block<T: Grammar<'a>>(&mut self, block: &Block<'a, T>) -> Result<(), Error> {
         self.eval_block_inner(block, HashMap::new())
+    }
+
+    pub fn into_captures(self) -> Captures {
+        let (map, locations) = self
+            .captures
+            .into_iter()
+            .enumerate()
+            .map(|(i, (name, span))| ((name.to_owned(), i), Location::from(span)))
+            .unzip();
+        Captures { map, locations }
     }
 }
 

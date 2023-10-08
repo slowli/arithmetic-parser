@@ -210,7 +210,7 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 /// ```
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{wrap_fn, Function, Environment, ExecutableModule, Value};
-/// fn is_function<T>(value: Value<'_, T>) -> bool {
+/// fn is_function<T>(value: Value<T>) -> bool {
 ///     value.is_function()
 /// }
 ///
@@ -234,7 +234,7 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 /// #     wrap_fn, CallContext, Function, Environment, ExecutableModule, Value, env::Prelude,
 /// # };
 /// // Note that both `Value`s have the same lifetime due to elision.
-/// fn take_if<T>(value: Value<'_, T>, condition: bool) -> Value<'_, T> {
+/// fn take_if<T>(value: Value<T>, condition: bool) -> Value<T> {
 ///     if condition { value } else { Value::void() }
 /// }
 ///
@@ -309,11 +309,11 @@ macro_rules! wrap_fn {
 /// # use arithmetic_eval::{
 /// #     wrap_fn_with_context, CallContext, Function, Environment, Value, ExecutableModule, Error,
 /// # };
-/// fn map_array<'a>(
-///     context: &mut CallContext<'_, 'a, f32>,
-///     array: Vec<Value<'a, f32>>,
-///     map_fn: Function<'a, f32>,
-/// ) -> Result<Vec<Value<'a, f32>>, Error<'a>> {
+/// fn map_array(
+///     context: &mut CallContext<'_, f32>,
+///     array: Vec<Value<f32>>,
+///     map_fn: Function<f32>,
+/// ) -> Result<Vec<Value<f32>>, Error> {
 ///     array
 ///         .into_iter()
 ///         .map(|value| {

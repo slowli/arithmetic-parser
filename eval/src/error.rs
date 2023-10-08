@@ -416,24 +416,6 @@ impl fmt::Display for AuxErrorInfo {
 }
 
 /// Evaluation error together with one or more relevant code spans.
-///
-/// Use the [`StripCode`] implementation to convert an `Error` to the `'static` lifetime, e.g.,
-/// before boxing it into `Box<dyn std::error::Error>` or `anyhow::Error`.
-/// If the error is wrapped into a [`Result`], you can do this via the `StripResultExt` trait
-/// defined in the `arithmetic-parser` crate:
-///
-/// ```
-/// # use arithmetic_parser::{grammars::{F64Grammar, Parse, Untyped}, StripResultExt};
-/// # use arithmetic_eval::{Error, ExecutableModule};
-/// fn compile_code(code: &str) -> anyhow::Result<ExecutableModule<'_, f64>> {
-///     let block = Untyped::<F64Grammar>::parse_statements(code).strip_err()?;
-///
-///     // Without `strip_err()` call, the code below won't compile:
-///     // `Error<'_>` in general cannot be boxed into `anyhow::Error`,
-///     // only `Error<'static>` can.
-///     Ok(ExecutableModule::new("module", &block).strip_err()?)
-/// }
-/// ```
 #[derive(Debug)]
 pub struct Error {
     kind: ErrorKind,

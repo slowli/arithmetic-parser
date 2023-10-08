@@ -30,17 +30,20 @@ use crate::{
 ///     assert(1 + 2 != 5); // this assertion is fine
 ///     assert(3^2 > 10); // this one will fail
 /// "#;
-/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = ExecutableModule::new("test_assert", &program)?;
+/// let module = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_assert", &module)?;
 ///
 /// let mut env = Environment::new();
 /// env.insert_native_fn("assert", fns::Assert);
 ///
 /// let err = module.with_env(&env)?.run().unwrap_err();
-/// assert_eq!(*err.source().location().in_module().fragment(), "assert(3^2 > 10)");
+/// assert_eq!(
+///     err.source().location().in_module().span(&program),
+///     "assert(3^2 > 10)"
+/// );
 /// assert_matches!(
 ///     err.source().kind(),
-///     ErrorKind::NativeCall(ref msg) if msg == "Assertion failed: 3^2 > 10"
+///     ErrorKind::NativeCall(msg) if msg == "Assertion failed"
 /// );
 /// # Ok(())
 /// # }
@@ -104,17 +107,20 @@ fn create_error_with_values<T: fmt::Display>(
 ///     assert_eq(1 + 2, 3); // this assertion is fine
 ///     assert_eq(3^2, 10); // this one will fail
 /// "#;
-/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = ExecutableModule::new("test_assert", &program)?;
+/// let module = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_assert", &module)?;
 ///
 /// let mut env = Environment::new();
 /// env.insert_native_fn("assert_eq", fns::AssertEq);
 ///
 /// let err = module.with_env(&env)?.run().unwrap_err();
-/// assert_eq!(*err.source().location().in_module().fragment(), "assert_eq(3^2, 10)");
+/// assert_eq!(
+///     err.source().location().in_module().span(program),
+///     "assert_eq(3^2, 10)"
+/// );
 /// assert_matches!(
 ///     err.source().kind(),
-///     ErrorKind::NativeCall(ref msg) if msg == "Assertion failed: 3^2 == 10"
+///     ErrorKind::NativeCall(msg) if msg == "Equality assertion failed"
 /// );
 /// # Ok(())
 /// # }
@@ -163,8 +169,8 @@ impl<T: fmt::Display> NativeFn<T> for AssertEq {
 ///     assert_close(sqrt(9), 3); // this assertion is fine
 ///     assert_close(sqrt(10), 3); // this one should fail
 /// "#;
-/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = ExecutableModule::new("test_assert", &program)?;
+/// let module = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_assert", &module)?;
 ///
 /// let mut env = Environment::new();
 /// env.insert_native_fn("assert_close", fns::AssertClose::new(1e-4))
@@ -172,7 +178,7 @@ impl<T: fmt::Display> NativeFn<T> for AssertEq {
 ///
 /// let err = module.with_env(&env)?.run().unwrap_err();
 /// assert_eq!(
-///     *err.source().location().in_module().fragment(),
+///     err.source().location().in_module().span(program),
 ///     "assert_close(sqrt(10), 3)"
 /// );
 /// # Ok(())
@@ -247,7 +253,7 @@ impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
 /// (using [`arithmetic-typing`](https://docs.rs/arithmetic-typing/) notation)
 ///
 /// ```text
-/// () -> 'T
+/// (() -> 'T) -> ()
 /// ```
 ///
 /// # Examples
@@ -262,15 +268,15 @@ impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
 ///     assert_fails(|| obj.x + obj.y); // pass: `obj.y` is not defined
 ///     assert_fails(|| obj.x); // fail: function executes successfully
 /// "#;
-/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = ExecutableModule::new("test_assert", &program)?;
+/// let module = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_assert", &module)?;
 ///
 /// let mut env = Environment::new();
 /// env.insert_native_fn("assert_fails", fns::AssertFails::default());
 ///
 /// let err = module.with_env(&env)?.run().unwrap_err();
 /// assert_eq!(
-///     *err.source().location().in_module().fragment(),
+///     err.source().location().in_module().span(program),
 ///     "assert_fails(|| obj.x)"
 /// );
 /// # Ok(())
@@ -292,15 +298,15 @@ impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
 ///     assert_fails(|| assert_fails(1)); // pass: native error
 ///     assert_fails(assert_fails); // fail: arg len mismatch
 /// "#;
-/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = ExecutableModule::new("test_assert", &program)?;
+/// let module = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_assert", &module)?;
 ///
 /// let mut env = Environment::new();
 /// env.insert_native_fn("assert_fails", assert_fails);
 ///
 /// let err = module.with_env(&env)?.run().unwrap_err();
 /// assert_eq!(
-///     *err.source().location().in_module().fragment(),
+///     err.source().location().in_module().span(program),
 ///     "assert_fails(assert_fails)"
 /// );
 /// # Ok(())

@@ -77,9 +77,6 @@ fn main() -> anyhow::Result<()> {
     let fold_module = create_module("rfold", &fold_program)?;
     let rfold_fn = fold_module.with_env(&env)?.run()?;
 
-    // Due to lifetime checks, we need to re-assign `env`, since the original one
-    // is inferred to have `'static` lifetime.
-    let mut env = env;
     env.insert("fold", rfold_fn);
     let rfold_sum = sum_module.with_env(&env)?.run()?;
     env.insert("sum", rfold_sum);

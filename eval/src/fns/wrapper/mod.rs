@@ -29,11 +29,9 @@ pub const fn wrap<const CTX: bool, T, F>(function: F) -> FnWrapper<T, F, CTX> {
 ///
 /// Arguments of a wrapped function must implement [`TryFromValue`] trait for the applicable
 /// grammar, and the output type must implement [`IntoEvalResult`]. If you need [`CallContext`] (e.g.,
-/// to call functions provided as an argument), provide it as a first argument.
+/// to call functions provided as an argument), it should be specified as a first argument.
 ///
 /// [`Environment::insert_wrapped_fn()`]: crate::Environment::insert_wrapped_fn()
-/// [`wrap_fn`]: crate::wrap_fn
-/// [`wrap_fn_with_context`]: crate::wrap_fn_with_context
 /// [`Value::wrapped_fn()`]: crate::Value::wrapped_fn()
 ///
 /// # Examples
@@ -83,7 +81,36 @@ pub const fn wrap<const CTX: bool, T, F>(function: F) -> FnWrapper<T, F, CTX> {
 /// # }
 /// ```
 ///
-/// FIXME: example with context
+/// ## Using `CallContext` to call functions
+///
+/// ```
+/// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+/// # use arithmetic_eval::{CallContext, Function, Environment, Value, ExecutableModule, Error};
+/// fn map_array(
+///     context: &mut CallContext<'_, f32>,
+///     array: Vec<Value<f32>>,
+///     map_fn: Function<f32>,
+/// ) -> Result<Vec<Value<f32>>, Error> {
+///     array
+///         .into_iter()
+///         .map(|value| {
+///             let arg = context.apply_call_location(value);
+///             map_fn.evaluate(vec![arg], context)
+///         })
+///         .collect()
+/// }
+///
+/// # fn main() -> anyhow::Result<()> {
+/// let program = "map((1, 2, 3), |x| x + 3) == (4, 5, 6)";
+/// let module = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test", &module)?;
+///
+/// let mut env = Environment::new();
+/// env.insert_wrapped_fn("map", map_array);
+/// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));
+/// # Ok(())
+/// # }
+/// ```
 pub struct FnWrapper<T, F, const CTX: bool = false> {
     function: F,
     _arg_types: PhantomData<T>,

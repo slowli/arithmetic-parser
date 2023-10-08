@@ -41,11 +41,11 @@ use arithmetic_parser::{
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let code = "bogus_slice: ['T; _] = (1, 2, 3);";
-/// let code = Annotated::<F32Grammar>::parse_statements(code)?;
+/// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 ///
-/// let errors = TypeEnvironment::new().process_statements(&code).unwrap_err();
+/// let errors = TypeEnvironment::new().process_statements(&ast).unwrap_err();
 /// let err = errors.into_iter().next().unwrap();
-/// assert_eq!(*err.main_location().fragment(), "'T");
+/// assert_eq!(err.main_location().span(code), "'T");
 /// assert_matches!(
 ///     err.kind(),
 ///     ErrorKind::AstConversion(AstConversionError::FreeTypeVar(id))

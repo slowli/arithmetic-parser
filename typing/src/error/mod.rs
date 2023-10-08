@@ -11,13 +11,13 @@ use crate::{
 use arithmetic_parser::{Location, Spanned, UnsupportedType};
 
 mod kind;
-mod path;
 mod op_errors;
+mod path;
 
 pub use self::{
     kind::{ErrorKind, TupleContext},
-    path::ErrorPathFragment,
     op_errors::OpErrors,
+    path::ErrorPathFragment,
 };
 
 /// Type error together with the corresponding code span.

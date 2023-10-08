@@ -605,16 +605,17 @@ pub(crate) enum IndexError {
 /// // Slices with fixed length are equivalent to tuples.
 /// assert_eq!(env["xs"].to_string(), "(Num, Num, Num)");
 ///
-/// let ast = Parser::parse_statements(r#"
+/// let code = r#"
 ///     xs: [Num] = (1, 2, 3);
 ///     ys = xs + 1; // works fine: despite `xs` having unknown length,
 ///                  // it's always possible to add a number to it
 ///     (_, _, z) = xs; // does not work: the tuple length is erased
-/// "#)?;
+/// "#;
+/// let ast = Parser::parse_statements(code)?;
 /// let errors = env.process_statements(&ast).unwrap_err();
 ///
 /// let err = errors.iter().next().unwrap();
-/// assert_eq!(*err.main_location().fragment(), "(_, _, z)");
+/// assert_eq!(err.main_location().span(code), "(_, _, z)");
 /// assert_eq!(env["ys"], env["xs"]);
 /// # Ok(())
 /// # }

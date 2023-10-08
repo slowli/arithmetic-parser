@@ -8,7 +8,7 @@ use arithmetic_eval::{
 };
 use arithmetic_parser::{
     grammars::{F64Grammar, MockTypes, Parse, WithMockedTypes},
-    BinaryOp, StripCode, StripResultExt,
+    BinaryOp, Error as ParseError,
 };
 
 /// We need to process some type annotations, but don't want to depend
@@ -22,25 +22,14 @@ impl MockTypes for MockedTypesList {
 
 type Grammar = WithMockedTypes<F64Grammar, MockedTypesList>;
 
-fn create_module<'a>(
-    module_name: &'static str,
-    program: &'a str,
-) -> anyhow::Result<ExecutableModule<'a, f64>> {
-    let block = Grammar::parse_statements(program).strip_err()?;
-    Ok(ExecutableModule::new(module_name, &block).strip_err()?)
-}
-
-fn create_static_module(
+fn create_module(
     module_name: &'static str,
     program: &str,
-) -> anyhow::Result<ExecutableModule<'static, f64>> {
-    // By default, the module is tied by its lifetime to the `program`. However,
-    // we can break this tie using the `StripCode` trait.
-    create_module(module_name, program).map(StripCode::strip_code)
+) -> anyhow::Result<ExecutableModule<f64>> {
+    let block = Grammar::parse_statements(program).map_err(ParseError::strip_code)?;
+    Ok(ExecutableModule::new(module_name, &block)?)
 }
 
-#[allow(unknown_lints, clippy::redundant_locals)]
-// ^ False positive (explained in the comment near the reassignment)
 fn main() -> anyhow::Result<()> {
     let mut env = Environment::new();
     env.extend(Prelude::iter().chain(Assertions::iter()));
@@ -50,7 +39,7 @@ fn main() -> anyhow::Result<()> {
 
     let sum_module = {
         let dynamic_program = String::from("|...vars| fold(vars, 0, |acc, x| acc + x)");
-        create_static_module("sum", &dynamic_program)?
+        create_module("sum", &dynamic_program)?
         // Ensure that the program is indeed dropped by using a separate scope.
     };
 
@@ -78,7 +67,7 @@ fn main() -> anyhow::Result<()> {
     // Naturally, spans in the stripped module do not retain refs to source code,
     // but rather contain info sufficient to be recoverable.
     assert_eq!(
-        err.source().main_span().code().code_or_location("call"),
+        err.source().location().in_module().to_string("call"),
         "call at 1:40"
     );
 
@@ -86,15 +75,12 @@ fn main() -> anyhow::Result<()> {
     let fold_program = include_str!("rfold.script");
     let fold_program = String::from(fold_program);
     let fold_module = create_module("rfold", &fold_program)?;
-    let rfold_fn = fold_module.with_env(&env).strip_err()?.run().strip_err()?;
+    let rfold_fn = fold_module.with_env(&env)?.run()?;
 
-    // Due to lifetime checks, we need to re-assign `env`, since the original one
-    // is inferred to have `'static` lifetime.
-    let mut env = env;
     env.insert("fold", rfold_fn);
-    let rfold_sum = sum_module.with_env(&env).strip_err()?.run().strip_err()?;
+    let rfold_sum = sum_module.with_env(&env)?.run()?;
     env.insert("sum", rfold_sum);
-    let sum_value = test_module.with_env(&env).strip_err()?.run().strip_err()?;
+    let sum_value = test_module.with_env(&env)?.run()?;
     assert_eq!(sum_value, Value::Prim(-2.0));
 
     Ok(())

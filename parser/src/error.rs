@@ -8,8 +8,7 @@ use nom::{
 use core::fmt;
 
 use crate::{
-    BinaryOp, ExprType, InputSpan, LocatedSpan, LvalueType, Op, Spanned, StatementType, StripCode,
-    UnaryOp,
+    BinaryOp, ExprType, InputSpan, LocatedSpan, LvalueType, Op, Spanned, StatementType, UnaryOp,
 };
 
 /// Parsing context.
@@ -187,6 +186,7 @@ impl std::error::Error for ErrorKind {
 /// Two primary cases of the `Span` type param are `&str` (for original errors produced by
 /// the parser) and `usize` (for *stripped* errors that have a static lifetime).
 #[derive(Debug)]
+// FIXME: consider immediately stripping spans here as well
 pub struct SpannedError<Span> {
     inner: LocatedSpan<Span, ErrorKind>,
 }
@@ -198,6 +198,13 @@ impl<'a> Error<'a> {
     pub(crate) fn new(span: InputSpan<'a>, kind: ErrorKind) -> Self {
         Self {
             inner: Spanned::new(span, kind),
+        }
+    }
+
+    /// FIXME
+    pub fn strip_code(self) -> SpannedError<usize> {
+        SpannedError {
+            inner: self.inner.map_fragment(str::len),
         }
     }
 }
@@ -232,16 +239,6 @@ impl<Span> fmt::Display for SpannedError<Span> {
 impl<Span: fmt::Debug> std::error::Error for SpannedError<Span> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         std::error::Error::source(&self.inner.extra)
-    }
-}
-
-impl StripCode for Error<'_> {
-    type Stripped = SpannedError<usize>;
-
-    fn strip_code(self) -> Self::Stripped {
-        SpannedError {
-            inner: self.inner.map_fragment(str::len),
-        }
     }
 }
 

@@ -6,7 +6,7 @@ use super::{captures::extract_vars_iter, CapturesExtractor, Compiler};
 use crate::{
     alloc::{HashMap, String, ToOwned, Vec},
     error::RepeatedAssignmentContext,
-    exec::{Atom, Command, CompiledExpr, Executable, ExecutableFn, FieldName, SpannedAtom},
+    exec::{Atom, Command, CompiledExpr, Executable, ExecutableFn, FieldName, LocatedAtom},
     Error, ErrorKind,
 };
 use arithmetic_parser::{
@@ -17,9 +17,9 @@ use arithmetic_parser::{
 impl Compiler {
     fn compile_expr<'a, T: Grammar<'a>>(
         &mut self,
-        executable: &mut Executable<'a, T::Lit>,
+        executable: &mut Executable<T::Lit>,
         expr: &SpannedExpr<'a, T>,
-    ) -> Result<SpannedAtom<'a, T::Lit>, Error<'a>> {
+    ) -> Result<LocatedAtom<T::Lit>, Error> {
         let atom = match &expr.extra {
             Expr::Literal(lit) => Atom::Constant(lit.clone()),
 
@@ -91,10 +91,7 @@ impl Compiler {
         Ok(expr.copy_with_extra(atom).into())
     }
 
-    fn compile_var_access<'a, T, A>(
-        &self,
-        var_span: &Spanned<'a, T>,
-    ) -> Result<Atom<A>, Error<'a>> {
+    fn compile_var_access<T, A>(&self, var_span: &Spanned<'_, T>) -> Result<Atom<A>, Error> {
         let var_name = *var_span.fragment();
         let register = self.vars_to_registers.get(var_name).ok_or_else(|| {
             let err = ErrorKind::Undefined(var_name.to_owned());
@@ -105,12 +102,12 @@ impl Compiler {
 
     fn compile_binary_expr<'a, T: Grammar<'a>>(
         &mut self,
-        executable: &mut Executable<'a, T::Lit>,
+        executable: &mut Executable<T::Lit>,
         binary_expr: &SpannedExpr<'a, T>,
         op: &Spanned<'a, BinaryOp>,
         lhs: &SpannedExpr<'a, T>,
         rhs: &SpannedExpr<'a, T>,
-    ) -> Result<Atom<T::Lit>, Error<'a>> {
+    ) -> Result<Atom<T::Lit>, Error> {
         let lhs = self.compile_expr(executable, lhs)?;
         let rhs = self.compile_expr(executable, rhs)?;
 
@@ -126,11 +123,11 @@ impl Compiler {
 
     fn compile_fn_call<'a, T: Grammar<'a>>(
         &mut self,
-        executable: &mut Executable<'a, T::Lit>,
+        executable: &mut Executable<T::Lit>,
         call_expr: &SpannedExpr<'a, T>,
         name: &SpannedExpr<'a, T>,
         args: &[SpannedExpr<'a, T>],
-    ) -> Result<Atom<T::Lit>, Error<'a>> {
+    ) -> Result<Atom<T::Lit>, Error> {
         let original_name = *name.fragment();
         let original_name = if is_valid_variable_name(original_name) {
             Some(original_name.to_owned())
@@ -144,12 +141,12 @@ impl Compiler {
 
     fn compile_fn_call_with_precompiled_name<'a, T: Grammar<'a>>(
         &mut self,
-        executable: &mut Executable<'a, T::Lit>,
+        executable: &mut Executable<T::Lit>,
         call_expr: &SpannedExpr<'a, T>,
-        name: SpannedAtom<'a, T::Lit>,
+        name: LocatedAtom<T::Lit>,
         original_name: Option<String>,
         args: &[SpannedExpr<'a, T>],
-    ) -> Result<Atom<T::Lit>, Error<'a>> {
+    ) -> Result<Atom<T::Lit>, Error> {
         let args = args
             .iter()
             .map(|arg| self.compile_expr(executable, arg))
@@ -165,11 +162,11 @@ impl Compiler {
 
     fn compile_field_access<'a, T: Grammar<'a>>(
         &mut self,
-        executable: &mut Executable<'a, T::Lit>,
+        executable: &mut Executable<T::Lit>,
         call_expr: &SpannedExpr<'a, T>,
         name: &Spanned<'a>,
         receiver: &SpannedExpr<'a, T>,
-    ) -> Result<Atom<T::Lit>, Error<'a>> {
+    ) -> Result<Atom<T::Lit>, Error> {
         let name_str = *name.fragment();
         let field = name_str
             .parse::<usize>()
@@ -191,12 +188,12 @@ impl Compiler {
 
     fn compile_method_call<'a, T: Grammar<'a>>(
         &mut self,
-        executable: &mut Executable<'a, T::Lit>,
+        executable: &mut Executable<T::Lit>,
         call_expr: &SpannedExpr<'a, T>,
         name: &SpannedExpr<'a, T>,
         receiver: &SpannedExpr<'a, T>,
         args: &[SpannedExpr<'a, T>],
-    ) -> Result<Atom<T::Lit>, Error<'a>> {
+    ) -> Result<Atom<T::Lit>, Error> {
         let original_name = if matches!(name.extra, Expr::Variable) {
             Some((*name.fragment()).to_owned())
         } else {
@@ -219,10 +216,10 @@ impl Compiler {
 
     fn compile_block<'r, 'a: 'r, T: Grammar<'a>>(
         &mut self,
-        executable: &mut Executable<'a, T::Lit>,
+        executable: &mut Executable<T::Lit>,
         block_expr: &SpannedExpr<'a, T>,
         block: &Block<'a, T>,
-    ) -> Result<Atom<T::Lit>, Error<'a>> {
+    ) -> Result<Atom<T::Lit>, Error> {
         let backup_state = self.backup();
         if self.scope_depth == 0 {
             let command = Command::StartInnerScope;
@@ -269,9 +266,9 @@ impl Compiler {
 
     pub(super) fn compile_block_inner<'a, T: Grammar<'a>>(
         &mut self,
-        executable: &mut Executable<'a, T::Lit>,
+        executable: &mut Executable<T::Lit>,
         block: &Block<'a, T>,
-    ) -> Result<Option<SpannedAtom<'a, T::Lit>>, Error<'a>> {
+    ) -> Result<Option<LocatedAtom<T::Lit>>, Error> {
         for statement in &block.statements {
             self.compile_statement(executable, statement)?;
         }
@@ -286,10 +283,10 @@ impl Compiler {
     #[allow(clippy::option_if_let_else)] // false positive
     fn compile_object<'a, T: Grammar<'a>>(
         &mut self,
-        executable: &mut Executable<'a, T::Lit>,
+        executable: &mut Executable<T::Lit>,
         object_expr: &SpannedExpr<'a, T>,
         object: &ObjectExpr<'a, T>,
-    ) -> Result<Atom<T::Lit>, Error<'a>> {
+    ) -> Result<Atom<T::Lit>, Error> {
         let fields = object.fields.iter().map(|(name, field_expr)| {
             let name_str = *name.fragment();
             if let Some(field_expr) = field_expr {
@@ -307,10 +304,10 @@ impl Compiler {
 
     fn compile_fn_definition<'a, T: Grammar<'a>>(
         &mut self,
-        executable: &mut Executable<'a, T::Lit>,
+        executable: &mut Executable<T::Lit>,
         def_expr: &SpannedExpr<'a, T>,
         def: &FnDefinition<'a, T>,
-    ) -> Result<Atom<T::Lit>, Error<'a>> {
+    ) -> Result<Atom<T::Lit>, Error> {
         let module_id = self.module_id.clone_boxed();
 
         let mut extractor = CapturesExtractor::new(module_id);
@@ -320,7 +317,7 @@ impl Compiler {
         let fn_executable = self.compile_function(def, &captures)?;
         let fn_executable = ExecutableFn {
             inner: fn_executable,
-            def_span: def_expr.with_no_extra().into(),
+            def_location: def_expr.with_no_extra().into(),
             arg_count: def.args.extra.len(),
         };
 
@@ -344,7 +341,7 @@ impl Compiler {
     fn get_captures<'a, T>(
         &self,
         extractor: CapturesExtractor<'a>,
-    ) -> HashMap<&'a str, SpannedAtom<'a, T>> {
+    ) -> HashMap<&'a str, LocatedAtom<T>> {
         extractor
             .captures
             .into_iter()
@@ -359,8 +356,8 @@ impl Compiler {
     fn compile_function<'a, T: Grammar<'a>>(
         &self,
         def: &FnDefinition<'a, T>,
-        captures: &HashMap<&'a str, SpannedAtom<'a, T::Lit>>,
-    ) -> Result<Executable<'a, T::Lit>, Error<'a>> {
+        captures: &HashMap<&'a str, LocatedAtom<T::Lit>>,
+    ) -> Result<Executable<T::Lit>, Error> {
         // Allocate registers for captures.
         let mut this = Self::new(self.module_id.clone_boxed());
         this.scope_depth = 1; // Disable generating variable annotations.
@@ -390,9 +387,9 @@ impl Compiler {
 
     fn compile_statement<'a, T: Grammar<'a>>(
         &mut self,
-        executable: &mut Executable<'a, T::Lit>,
+        executable: &mut Executable<T::Lit>,
         statement: &SpannedStatement<'a, T>,
-    ) -> Result<Option<SpannedAtom<'a, T::Lit>>, Error<'a>> {
+    ) -> Result<Option<LocatedAtom<T::Lit>>, Error> {
         Ok(match &statement.extra {
             Statement::Expr(expr) => Some(self.compile_expr(executable, expr)?),
 

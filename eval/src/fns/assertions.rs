@@ -4,11 +4,10 @@ use core::{cmp::Ordering, fmt};
 
 use super::extract_fn;
 use crate::{
-    alloc::{format, Vec},
+    alloc::Vec,
     error::{AuxErrorInfo, Error},
     CallContext, ErrorKind, EvalResult, NativeFn, SpannedValue, Value,
 };
-use arithmetic_parser::CodeFragment;
 
 /// Assertion function.
 ///
@@ -31,17 +30,20 @@ use arithmetic_parser::CodeFragment;
 ///     assert(1 + 2 != 5); // this assertion is fine
 ///     assert(3^2 > 10); // this one will fail
 /// "#;
-/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = ExecutableModule::new("test_assert", &program)?;
+/// let module = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_assert", &module)?;
 ///
 /// let mut env = Environment::new();
 /// env.insert_native_fn("assert", fns::Assert);
 ///
 /// let err = module.with_env(&env)?.run().unwrap_err();
-/// assert_eq!(*err.source().main_span().code().fragment(), "assert(3^2 > 10)");
+/// assert_eq!(
+///     err.source().location().in_module().span(&program),
+///     "assert(3^2 > 10)"
+/// );
 /// assert_matches!(
 ///     err.source().kind(),
-///     ErrorKind::NativeCall(ref msg) if msg == "Assertion failed: 3^2 > 10"
+///     ErrorKind::NativeCall(msg) if msg == "Assertion failed"
 /// );
 /// # Ok(())
 /// # }
@@ -52,19 +54,15 @@ pub struct Assert;
 impl<T> NativeFn<T> for Assert {
     fn evaluate<'a>(
         &self,
-        args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         ctx.check_args_count(&args, 1)?;
         match args[0].extra {
             Value::Bool(true) => Ok(Value::void()),
 
             Value::Bool(false) => {
-                let err = if let CodeFragment::Str(code) = args[0].fragment() {
-                    ErrorKind::native(format!("Assertion failed: {code}"))
-                } else {
-                    ErrorKind::native("Assertion failed")
-                };
+                let err = ErrorKind::native("Assertion failed");
                 Err(ctx.call_site_error(err))
             }
 
@@ -72,20 +70,20 @@ impl<T> NativeFn<T> for Assert {
                 let err = ErrorKind::native("`assert` requires a single boolean argument");
                 Err(ctx
                     .call_site_error(err)
-                    .with_span(&args[0], AuxErrorInfo::InvalidArg))
+                    .with_location(&args[0], AuxErrorInfo::InvalidArg))
             }
         }
     }
 }
 
-fn create_error_with_values<'a, T: fmt::Display>(
+fn create_error_with_values<T: fmt::Display>(
     err: ErrorKind,
-    args: &[SpannedValue<'a, T>],
-    ctx: &CallContext<'_, 'a, T>,
-) -> Error<'a> {
+    args: &[SpannedValue<T>],
+    ctx: &CallContext<'_, T>,
+) -> Error {
     ctx.call_site_error(err)
-        .with_span(&args[0], AuxErrorInfo::arg_value(&args[0].extra))
-        .with_span(&args[1], AuxErrorInfo::arg_value(&args[1].extra))
+        .with_location(&args[0], AuxErrorInfo::arg_value(&args[0].extra))
+        .with_location(&args[1], AuxErrorInfo::arg_value(&args[1].extra))
 }
 
 /// Equality assertion function.
@@ -109,17 +107,20 @@ fn create_error_with_values<'a, T: fmt::Display>(
 ///     assert_eq(1 + 2, 3); // this assertion is fine
 ///     assert_eq(3^2, 10); // this one will fail
 /// "#;
-/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = ExecutableModule::new("test_assert", &program)?;
+/// let module = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_assert", &module)?;
 ///
 /// let mut env = Environment::new();
 /// env.insert_native_fn("assert_eq", fns::AssertEq);
 ///
 /// let err = module.with_env(&env)?.run().unwrap_err();
-/// assert_eq!(*err.source().main_span().code().fragment(), "assert_eq(3^2, 10)");
+/// assert_eq!(
+///     err.source().location().in_module().span(program),
+///     "assert_eq(3^2, 10)"
+/// );
 /// assert_matches!(
 ///     err.source().kind(),
-///     ErrorKind::NativeCall(ref msg) if msg == "Assertion failed: 3^2 == 10"
+///     ErrorKind::NativeCall(msg) if msg == "Equality assertion failed"
 /// );
 /// # Ok(())
 /// # }
@@ -128,11 +129,7 @@ fn create_error_with_values<'a, T: fmt::Display>(
 pub struct AssertEq;
 
 impl<T: fmt::Display> NativeFn<T> for AssertEq {
-    fn evaluate<'a>(
-        &self,
-        args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+    fn evaluate(&self, args: Vec<SpannedValue<T>>, ctx: &mut CallContext<'_, T>) -> EvalResult<T> {
         ctx.check_args_count(&args, 2)?;
 
         let is_equal = args[0]
@@ -142,13 +139,7 @@ impl<T: fmt::Display> NativeFn<T> for AssertEq {
         if is_equal {
             Ok(Value::void())
         } else {
-            let err = if let (CodeFragment::Str(lhs), CodeFragment::Str(rhs)) =
-                (args[0].fragment(), args[1].fragment())
-            {
-                ErrorKind::native(format!("Assertion failed: {lhs} == {rhs}"))
-            } else {
-                ErrorKind::native("Equality assertion failed")
-            };
+            let err = ErrorKind::native("Equality assertion failed");
             Err(create_error_with_values(err, &args, ctx))
         }
     }
@@ -178,8 +169,8 @@ impl<T: fmt::Display> NativeFn<T> for AssertEq {
 ///     assert_close(sqrt(9), 3); // this assertion is fine
 ///     assert_close(sqrt(10), 3); // this one should fail
 /// "#;
-/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = ExecutableModule::new("test_assert", &program)?;
+/// let module = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_assert", &module)?;
 ///
 /// let mut env = Environment::new();
 /// env.insert_native_fn("assert_close", fns::AssertClose::new(1e-4))
@@ -187,7 +178,7 @@ impl<T: fmt::Display> NativeFn<T> for AssertEq {
 ///
 /// let err = module.with_env(&env)?.run().unwrap_err();
 /// assert_eq!(
-///     *err.source().main_span().code().fragment(),
+///     err.source().location().in_module().span(program),
 ///     "assert_close(sqrt(10), 3)"
 /// );
 /// # Ok(())
@@ -206,27 +197,23 @@ impl<T> AssertClose<T> {
         Self { tolerance }
     }
 
-    fn extract_primitive_ref<'r, 'a>(
-        ctx: &mut CallContext<'_, 'a, T>,
-        value: &'r SpannedValue<'a, T>,
-    ) -> Result<&'r T, Error<'a>> {
+    fn extract_primitive_ref<'r>(
+        ctx: &mut CallContext<'_, T>,
+        value: &'r SpannedValue<T>,
+    ) -> Result<&'r T, Error> {
         const ARG_ERROR: &str = "Function arguments must be primitive numbers";
 
         match &value.extra {
             Value::Prim(value) => Ok(value),
             _ => Err(ctx
                 .call_site_error(ErrorKind::native(ARG_ERROR))
-                .with_span(value, AuxErrorInfo::InvalidArg)),
+                .with_location(value, AuxErrorInfo::InvalidArg)),
         }
     }
 }
 
 impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
-    fn evaluate<'a>(
-        &self,
-        args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+    fn evaluate(&self, args: Vec<SpannedValue<T>>, ctx: &mut CallContext<'_, T>) -> EvalResult<T> {
         ctx.check_args_count(&args, 2)?;
         let rhs = Self::extract_primitive_ref(ctx, &args[0])?;
         let lhs = Self::extract_primitive_ref(ctx, &args[1])?;
@@ -266,7 +253,7 @@ impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
 /// (using [`arithmetic-typing`](https://docs.rs/arithmetic-typing/) notation)
 ///
 /// ```text
-/// () -> 'T
+/// (() -> 'T) -> ()
 /// ```
 ///
 /// # Examples
@@ -281,15 +268,15 @@ impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
 ///     assert_fails(|| obj.x + obj.y); // pass: `obj.y` is not defined
 ///     assert_fails(|| obj.x); // fail: function executes successfully
 /// "#;
-/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = ExecutableModule::new("test_assert", &program)?;
+/// let module = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_assert", &module)?;
 ///
 /// let mut env = Environment::new();
 /// env.insert_native_fn("assert_fails", fns::AssertFails::default());
 ///
 /// let err = module.with_env(&env)?.run().unwrap_err();
 /// assert_eq!(
-///     *err.source().main_span().code().fragment(),
+///     err.source().location().in_module().span(program),
 ///     "assert_fails(|| obj.x)"
 /// );
 /// # Ok(())
@@ -311,15 +298,15 @@ impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
 ///     assert_fails(|| assert_fails(1)); // pass: native error
 ///     assert_fails(assert_fails); // fail: arg len mismatch
 /// "#;
-/// let program = Untyped::<F32Grammar>::parse_statements(program)?;
-/// let module = ExecutableModule::new("test_assert", &program)?;
+/// let module = Untyped::<F32Grammar>::parse_statements(program)?;
+/// let module = ExecutableModule::new("test_assert", &module)?;
 ///
 /// let mut env = Environment::new();
 /// env.insert_native_fn("assert_fails", assert_fails);
 ///
 /// let err = module.with_env(&env)?.run().unwrap_err();
 /// assert_eq!(
-///     *err.source().main_span().code().fragment(),
+///     err.source().location().in_module().span(program),
 ///     "assert_fails(assert_fails)"
 /// );
 /// # Ok(())
@@ -327,7 +314,7 @@ impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
 /// ```
 #[derive(Clone, Copy)]
 pub struct AssertFails {
-    error_matcher: fn(&Error<'_>) -> bool,
+    error_matcher: fn(&Error) -> bool,
 }
 
 impl fmt::Debug for AssertFails {
@@ -347,17 +334,17 @@ impl Default for AssertFails {
 impl AssertFails {
     /// Creates an assertion function with a custom error matcher. If the error does not match,
     /// the assertion will fail, and the error will bubble up.
-    pub fn new(error_matcher: fn(&Error<'_>) -> bool) -> Self {
+    pub fn new(error_matcher: fn(&Error) -> bool) -> Self {
         Self { error_matcher }
     }
 }
 
 impl<T: 'static + Clone> NativeFn<T> for AssertFails {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         const ARG_ERROR: &str = "Single argument must be a function";
 
         ctx.check_args_count(&args, 1)?;
@@ -384,17 +371,17 @@ mod tests {
     use super::*;
     use crate::{arith::CheckedArithmetic, exec::WildcardId, Environment, Object};
 
-    use arithmetic_parser::{LvalueLen, MaybeSpanned};
+    use arithmetic_parser::{Location, LvalueLen};
     use assert_matches::assert_matches;
 
-    fn span_value<T>(value: Value<'_, T>) -> SpannedValue<'_, T> {
-        MaybeSpanned::from_str("", ..).copy_with_extra(value)
+    fn span_value<T>(value: Value<T>) -> SpannedValue<T> {
+        Location::from_str("", ..).copy_with_extra(value)
     }
 
     #[test]
     fn assert_basics() {
         let env = Environment::with_arithmetic(<CheckedArithmetic>::new());
-        let mut ctx = CallContext::<u32>::mock(&WildcardId, MaybeSpanned::from_str("", ..), &env);
+        let mut ctx = CallContext::<u32>::mock(&WildcardId, Location::from_str("", ..), &env);
 
         let err = Assert.evaluate(vec![], &mut ctx).unwrap_err();
         assert_matches!(err.kind(), ErrorKind::ArgsLenMismatch { .. });
@@ -426,7 +413,7 @@ mod tests {
     #[test]
     fn assert_eq_basics() {
         let env = Environment::with_arithmetic(<CheckedArithmetic>::new());
-        let mut ctx = CallContext::<u32>::mock(&WildcardId, MaybeSpanned::from_str("", ..), &env);
+        let mut ctx = CallContext::<u32>::mock(&WildcardId, Location::from_str("", ..), &env);
 
         let err = AssertEq.evaluate(vec![], &mut ctx).unwrap_err();
         assert_matches!(err.kind(), ErrorKind::ArgsLenMismatch { .. });
@@ -436,7 +423,7 @@ mod tests {
         let err = AssertEq.evaluate(vec![x.clone(), y], &mut ctx).unwrap_err();
         assert_matches!(
             err.kind(),
-            ErrorKind::NativeCall(s) if s.contains("Assertion failed")
+            ErrorKind::NativeCall(s) if s.contains("assertion failed")
         );
 
         let return_value = AssertEq.evaluate(vec![x.clone(), x], &mut ctx).unwrap();
@@ -447,7 +434,7 @@ mod tests {
     fn assert_close_basics() {
         let assert_close = AssertClose::new(1e-3);
         let env = Environment::new();
-        let mut ctx = CallContext::<f32>::mock(&WildcardId, MaybeSpanned::from_str("", ..), &env);
+        let mut ctx = CallContext::<f32>::mock(&WildcardId, Location::from_str("", ..), &env);
 
         let err = assert_close.evaluate(vec![], &mut ctx).unwrap_err();
         assert_matches!(err.kind(), ErrorKind::ArgsLenMismatch { .. });
@@ -503,7 +490,7 @@ mod tests {
     fn assert_fails_basics() {
         let assert_fails = AssertFails::default();
         let env = Environment::new();
-        let mut ctx = CallContext::<f32>::mock(&WildcardId, MaybeSpanned::from_str("", ..), &env);
+        let mut ctx = CallContext::<f32>::mock(&WildcardId, Location::from_str("", ..), &env);
 
         let err = assert_fails.evaluate(vec![], &mut ctx).unwrap_err();
         assert_matches!(err.kind(), ErrorKind::ArgsLenMismatch { .. });
@@ -539,7 +526,7 @@ mod tests {
             |err| matches!(err.kind(), ErrorKind::NativeCall(msg) if msg == "oops"),
         );
         let env = Environment::new();
-        let mut ctx = CallContext::<f32>::mock(&WildcardId, MaybeSpanned::from_str("", ..), &env);
+        let mut ctx = CallContext::<f32>::mock(&WildcardId, Location::from_str("", ..), &env);
 
         let wrong_fn = Value::wrapped_fn(f32::abs);
         let err = assert_fails

@@ -6,7 +6,6 @@ use crate::{
     alloc::{vec, Vec},
     Value,
 };
-use arithmetic_parser::StripCode;
 
 /// Tuple of zero or more values.
 ///
@@ -30,35 +29,35 @@ use arithmetic_parser::StripCode;
 /// assert_eq!(other_tuple.len(), 5);
 /// ```
 #[derive(Debug, Clone, PartialEq)]
-pub struct Tuple<'a, T> {
-    elements: Vec<Value<'a, T>>,
+pub struct Tuple<T> {
+    elements: Vec<Value<T>>,
 }
 
-impl<'a, T> Default for Tuple<'a, T> {
+impl<T> Default for Tuple<T> {
     fn default() -> Self {
         Self::void()
     }
 }
 
-impl<'a, T> From<Tuple<'a, T>> for Value<'a, T> {
-    fn from(tuple: Tuple<'a, T>) -> Self {
+impl<T> From<Tuple<T>> for Value<T> {
+    fn from(tuple: Tuple<T>) -> Self {
         Self::Tuple(tuple)
     }
 }
 
-impl<'a, T> From<Vec<Value<'a, T>>> for Tuple<'a, T> {
-    fn from(elements: Vec<Value<'a, T>>) -> Self {
+impl<T> From<Vec<Value<T>>> for Tuple<T> {
+    fn from(elements: Vec<Value<T>>) -> Self {
         Self { elements }
     }
 }
 
-impl<'a, T> From<Tuple<'a, T>> for Vec<Value<'a, T>> {
-    fn from(tuple: Tuple<'a, T>) -> Self {
+impl<T> From<Tuple<T>> for Vec<Value<T>> {
+    fn from(tuple: Tuple<T>) -> Self {
         tuple.elements
     }
 }
 
-impl<T: fmt::Display> fmt::Display for Tuple<'_, T> {
+impl<T: fmt::Display> fmt::Display for Tuple<T> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(formatter, "(")?;
         for (i, element) in self.iter().enumerate() {
@@ -73,7 +72,7 @@ impl<T: fmt::Display> fmt::Display for Tuple<'_, T> {
     }
 }
 
-impl<'a, T> Tuple<'a, T> {
+impl<T> Tuple<T> {
     /// Creates a new empty tuple (aka a void value).
     pub const fn void() -> Self {
         Self {
@@ -92,57 +91,47 @@ impl<'a, T> Tuple<'a, T> {
     }
 
     /// Iterates over the elements in this tuple.
-    pub fn iter(&self) -> impl Iterator<Item = &Value<'a, T>> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = &Value<T>> + '_ {
         self.elements.iter()
     }
 
     /// Pushes a value to the end of this tuple.
-    pub fn push(&mut self, value: impl Into<Value<'a, T>>) {
+    pub fn push(&mut self, value: impl Into<Value<T>>) {
         self.elements.push(value.into());
     }
 }
 
-impl<T: 'static + Clone> StripCode for Tuple<'_, T> {
-    type Stripped = Tuple<'static, T>;
-
-    fn strip_code(self) -> Self::Stripped {
-        Tuple {
-            elements: self.elements.into_iter().map(Value::strip_code).collect(),
-        }
-    }
-}
-
-impl<'a, T> ops::Index<usize> for Tuple<'a, T> {
-    type Output = Value<'a, T>;
+impl<T> ops::Index<usize> for Tuple<T> {
+    type Output = Value<T>;
 
     fn index(&self, index: usize) -> &Self::Output {
         &self.elements[index]
     }
 }
 
-impl<'a, T> IntoIterator for Tuple<'a, T> {
-    type Item = Value<'a, T>;
+impl<T> IntoIterator for Tuple<T> {
+    type Item = Value<T>;
     /// Iterator type should be considered an implementation detail.
-    type IntoIter = vec::IntoIter<Value<'a, T>>;
+    type IntoIter = vec::IntoIter<Value<T>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.elements.into_iter()
     }
 }
 
-impl<'r, 'a, T> IntoIterator for &'r Tuple<'a, T> {
-    type Item = &'r Value<'a, T>;
+impl<'r, T> IntoIterator for &'r Tuple<T> {
+    type Item = &'r Value<T>;
     /// Iterator type should be considered an implementation detail.
-    type IntoIter = core::slice::Iter<'r, Value<'a, T>>;
+    type IntoIter = core::slice::Iter<'r, Value<T>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.elements.iter()
     }
 }
 
-impl<'a, T, V> FromIterator<V> for Tuple<'a, T>
+impl<T, V> FromIterator<V> for Tuple<T>
 where
-    V: Into<Value<'a, T>>,
+    V: Into<Value<T>>,
 {
     fn from_iter<I: IntoIterator<Item = V>>(iter: I) -> Self {
         Self {
@@ -151,9 +140,9 @@ where
     }
 }
 
-impl<'a, T, V> Extend<V> for Tuple<'a, T>
+impl<T, V> Extend<V> for Tuple<T>
 where
-    V: Into<Value<'a, T>>,
+    V: Into<Value<T>>,
 {
     fn extend<I: IntoIterator<Item = V>>(&mut self, iter: I) {
         let new_elements = iter.into_iter().map(Into::into);

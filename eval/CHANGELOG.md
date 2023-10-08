@@ -40,6 +40,9 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Bump minimum supported Rust version to 1.65 and switch to 2021 Rust edition. (#107, #108, #112)
 
+- Remove the lifetime param in `Value`, `ExecutableModule`, `Error` and other types in the crate
+  by stripping code spans on compilation. (#121)
+
 ### Removed
 
 - Remove `ExecutableModelBuilder::set_imports()` as error-prone. Instead, deferred imports

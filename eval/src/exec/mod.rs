@@ -3,12 +3,12 @@
 use core::fmt;
 
 use crate::{
-    compiler::{Compiler, ImportSpans},
+    compiler::{Compiler, ImportLocations},
     env::Environment,
     error::{Backtrace, Error, ErrorKind, ErrorWithBacktrace},
     Value,
 };
-use arithmetic_parser::{grammars::Grammar, Block, MaybeSpanned, StripCode};
+use arithmetic_parser::{grammars::Grammar, Block, Location};
 
 mod command;
 mod module_id;
@@ -16,7 +16,7 @@ mod registers;
 
 pub use self::module_id::{IndexedId, ModuleId, WildcardId};
 pub(crate) use self::{
-    command::{Atom, Command, CompiledExpr, FieldName, SpannedAtom},
+    command::{Atom, Command, CompiledExpr, FieldName, LocatedAtom},
     registers::{Executable, ExecutableFn, Operations, Registers},
 };
 pub use crate::compiler::CompilerExt;
@@ -120,12 +120,12 @@ pub use crate::compiler::CompilerExt;
 /// # }
 /// ```
 #[derive(Debug)]
-pub struct ExecutableModule<'a, T> {
-    inner: Executable<'a, T>,
-    imports: ModuleImports<'a, T>,
+pub struct ExecutableModule<T> {
+    inner: Executable<T>,
+    imports: ModuleImports<T>,
 }
 
-impl<T: Clone> Clone for ExecutableModule<'_, T> {
+impl<T: Clone> Clone for ExecutableModule<T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -134,20 +134,9 @@ impl<T: Clone> Clone for ExecutableModule<'_, T> {
     }
 }
 
-impl<T: 'static + Clone> StripCode for ExecutableModule<'_, T> {
-    type Stripped = ExecutableModule<'static, T>;
-
-    fn strip_code(self) -> Self::Stripped {
-        ExecutableModule {
-            inner: self.inner.strip_code(),
-            imports: self.imports.strip_code(),
-        }
-    }
-}
-
-impl<'a, T: Clone + fmt::Debug> ExecutableModule<'a, T> {
+impl<T: Clone + fmt::Debug> ExecutableModule<T> {
     /// Creates a new module.
-    pub fn new<G, Id>(id: Id, block: &Block<'a, G>) -> Result<Self, Error<'a>>
+    pub fn new<'a, G, Id>(id: Id, block: &Block<'a, G>) -> Result<Self, Error>
     where
         Id: ModuleId,
         G: Grammar<'a, Lit = T>,
@@ -156,17 +145,17 @@ impl<'a, T: Clone + fmt::Debug> ExecutableModule<'a, T> {
     }
 }
 
-impl<'a, T> ExecutableModule<'a, T> {
+impl<T> ExecutableModule<T> {
     pub(crate) fn from_parts(
-        inner: Executable<'a, T>,
-        imports: Registers<'a, T>,
-        import_spans: ImportSpans<'a>,
+        inner: Executable<T>,
+        imports: Registers<T>,
+        import_locations: ImportLocations,
     ) -> Self {
         Self {
             inner,
             imports: ModuleImports {
                 inner: imports,
-                spans: import_spans,
+                locations: import_locations,
             },
         }
     }
@@ -194,8 +183,8 @@ impl<'a, T> ExecutableModule<'a, T> {
     /// Returns an error if the environment does not contain all variables imported by this module.
     pub fn with_env<'s>(
         &'s self,
-        env: &'s Environment<'a, T>,
-    ) -> Result<WithEnvironment<'s, 'a, T>, Error<'a>> {
+        env: &'s Environment<T>,
+    ) -> Result<WithEnvironment<'s, T>, Error> {
         self.check_imports(env)?;
         Ok(WithEnvironment {
             module: self,
@@ -203,8 +192,8 @@ impl<'a, T> ExecutableModule<'a, T> {
         })
     }
 
-    fn check_imports(&self, env: &Environment<'a, T>) -> Result<(), Error<'a>> {
-        for (name, span) in self.imports.spanned_iter() {
+    fn check_imports(&self, env: &Environment<T>) -> Result<(), Error> {
+        for (name, span) in self.imports.iter() {
             if !env.contains(name) {
                 let err = ErrorKind::Undefined(name.into());
                 return Err(Error::new(self.inner.id(), span, err));
@@ -221,8 +210,8 @@ impl<'a, T> ExecutableModule<'a, T> {
     /// Returns an error if the environment does not contain all variables imported by this module.
     pub fn with_mutable_env<'s>(
         &'s self,
-        env: &'s mut Environment<'a, T>,
-    ) -> Result<WithEnvironment<'s, 'a, T>, Error<'a>> {
+        env: &'s mut Environment<T>,
+    ) -> Result<WithEnvironment<'s, T>, Error> {
         self.check_imports(env)?;
         Ok(WithEnvironment {
             module: self,
@@ -231,12 +220,12 @@ impl<'a, T> ExecutableModule<'a, T> {
     }
 }
 
-impl<'a, T: 'static + Clone> ExecutableModule<'a, T> {
+impl<T: 'static + Clone> ExecutableModule<T> {
     fn run_with_registers(
         &self,
-        registers: &mut Registers<'a, T>,
+        registers: &mut Registers<T>,
         operations: Operations<'_, T>,
-    ) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
+    ) -> Result<Value<T>, ErrorWithBacktrace> {
         let mut backtrace = Backtrace::default();
         registers
             .execute(&self.inner, operations, Some(&mut backtrace))
@@ -261,12 +250,12 @@ impl<T> AsRef<T> for Reference<'_, T> {
 
 /// Container for an [`ExecutableModule`] together with an [`Environment`].
 #[derive(Debug)]
-pub struct WithEnvironment<'env, 'a, T> {
-    module: &'env ExecutableModule<'a, T>,
-    env: Reference<'env, Environment<'a, T>>,
+pub struct WithEnvironment<'env, T> {
+    module: &'env ExecutableModule<T>,
+    env: Reference<'env, Environment<T>>,
 }
 
-impl<'a, T: 'static + Clone> WithEnvironment<'_, 'a, T> {
+impl<T: 'static + Clone> WithEnvironment<'_, T> {
     /// Runs the module in the previously provided [`Environment`].
     ///
     /// If a mutable reference was provided to the environment, the environment is modified
@@ -277,7 +266,7 @@ impl<'a, T: 'static + Clone> WithEnvironment<'_, 'a, T> {
     /// # Errors
     ///
     /// Returns an error if module execution fails.
-    pub fn run(self) -> Result<Value<'a, T>, ErrorWithBacktrace<'a>> {
+    pub fn run(self) -> Result<Value<T>, ErrorWithBacktrace> {
         let mut registers = self.module.imports.inner.clone();
         registers.update_from_env(self.env.as_ref());
         let result = self
@@ -293,25 +282,14 @@ impl<'a, T: 'static + Clone> WithEnvironment<'_, 'a, T> {
 
 /// Imports of an [`ExecutableModule`].
 #[derive(Debug, Clone)]
-struct ModuleImports<'a, T> {
-    inner: Registers<'a, T>,
-    spans: ImportSpans<'a>,
+struct ModuleImports<T> {
+    inner: Registers<T>,
+    locations: ImportLocations,
 }
 
-impl<'a, T> ModuleImports<'a, T> {
-    fn spanned_iter(&self) -> impl Iterator<Item = (&str, &MaybeSpanned<'a>)> + '_ {
+impl<T> ModuleImports<T> {
+    fn iter(&self) -> impl Iterator<Item = (&str, &Location)> + '_ {
         let iter = self.inner.variables_map().iter();
-        iter.map(move |(name, idx)| (name.as_str(), &self.spans[*idx]))
-    }
-}
-
-impl<T: 'static + Clone> StripCode for ModuleImports<'_, T> {
-    type Stripped = ModuleImports<'static, T>;
-
-    fn strip_code(self) -> Self::Stripped {
-        ModuleImports {
-            inner: self.inner.strip_code(),
-            spans: self.spans.into_iter().map(StripCode::strip_code).collect(),
-        }
+        iter.map(move |(name, idx)| (name.as_str(), &self.locations[*idx]))
     }
 }

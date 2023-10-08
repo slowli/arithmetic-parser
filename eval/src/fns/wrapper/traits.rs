@@ -17,7 +17,7 @@ pub struct FromValueError {
 }
 
 impl FromValueError {
-    pub(crate) fn invalid_type<T>(expected: ValueType, actual_value: &Value<'_, T>) -> Self {
+    pub(crate) fn invalid_type<T>(expected: ValueType, actual_value: &Value<T>) -> Self {
         Self {
             kind: FromValueErrorKind::InvalidType {
                 expected,
@@ -129,13 +129,13 @@ pub enum FromValueErrorLocation {
 ///
 /// This trait is implemented for base value types (such as [`Number`]s, [`Function`]s, [`Value`]s),
 /// and for two container types: vectors and tuples.
-pub trait TryFromValue<'a, T>: Sized {
+pub trait TryFromValue<T>: Sized {
     /// Attempts to convert `value` to a type supported by the function.
-    fn try_from_value(value: Value<'a, T>) -> Result<Self, FromValueError>;
+    fn try_from_value(value: Value<T>) -> Result<Self, FromValueError>;
 }
 
-impl<'a, T: Number> TryFromValue<'a, T> for T {
-    fn try_from_value(value: Value<'a, T>) -> Result<Self, FromValueError> {
+impl<T: Number> TryFromValue<T> for T {
+    fn try_from_value(value: Value<T>) -> Result<Self, FromValueError> {
         match value {
             Value::Prim(number) => Ok(number),
             _ => Err(FromValueError::invalid_type(ValueType::Prim, &value)),
@@ -143,8 +143,8 @@ impl<'a, T: Number> TryFromValue<'a, T> for T {
     }
 }
 
-impl<'a, T> TryFromValue<'a, T> for bool {
-    fn try_from_value(value: Value<'a, T>) -> Result<Self, FromValueError> {
+impl<T> TryFromValue<T> for bool {
+    fn try_from_value(value: Value<T>) -> Result<Self, FromValueError> {
         match value {
             Value::Bool(flag) => Ok(flag),
             _ => Err(FromValueError::invalid_type(ValueType::Bool, &value)),
@@ -152,14 +152,14 @@ impl<'a, T> TryFromValue<'a, T> for bool {
     }
 }
 
-impl<'a, T> TryFromValue<'a, T> for Value<'a, T> {
-    fn try_from_value(value: Value<'a, T>) -> Result<Self, FromValueError> {
+impl<T> TryFromValue<T> for Value<T> {
+    fn try_from_value(value: Value<T>) -> Result<Self, FromValueError> {
         Ok(value)
     }
 }
 
-impl<'a, T> TryFromValue<'a, T> for Function<'a, T> {
-    fn try_from_value(value: Value<'a, T>) -> Result<Self, FromValueError> {
+impl<T> TryFromValue<T> for Function<T> {
+    fn try_from_value(value: Value<T>) -> Result<Self, FromValueError> {
         match value {
             Value::Function(function) => Ok(function),
             _ => Err(FromValueError::invalid_type(ValueType::Function, &value)),
@@ -167,8 +167,8 @@ impl<'a, T> TryFromValue<'a, T> for Function<'a, T> {
     }
 }
 
-impl<'a, T> TryFromValue<'a, T> for Tuple<'a, T> {
-    fn try_from_value(value: Value<'a, T>) -> Result<Self, FromValueError> {
+impl<T> TryFromValue<T> for Tuple<T> {
+    fn try_from_value(value: Value<T>) -> Result<Self, FromValueError> {
         match value {
             Value::Tuple(tuple) => Ok(tuple),
             _ => Err(FromValueError::invalid_type(ValueType::Array, &value)),
@@ -176,8 +176,8 @@ impl<'a, T> TryFromValue<'a, T> for Tuple<'a, T> {
     }
 }
 
-impl<'a, T> TryFromValue<'a, T> for Object<'a, T> {
-    fn try_from_value(value: Value<'a, T>) -> Result<Self, FromValueError> {
+impl<T> TryFromValue<T> for Object<T> {
+    fn try_from_value(value: Value<T>) -> Result<Self, FromValueError> {
         match value {
             Value::Object(object) => Ok(object),
             _ => Err(FromValueError::invalid_type(ValueType::Object, &value)),
@@ -185,11 +185,11 @@ impl<'a, T> TryFromValue<'a, T> for Object<'a, T> {
     }
 }
 
-impl<'a, U, T> TryFromValue<'a, T> for Vec<U>
+impl<U, T> TryFromValue<T> for Vec<U>
 where
-    U: TryFromValue<'a, T>,
+    U: TryFromValue<T>,
 {
-    fn try_from_value(value: Value<'a, T>) -> Result<Self, FromValueError> {
+    fn try_from_value(value: Value<T>) -> Result<Self, FromValueError> {
         match value {
             Value::Tuple(values) => {
                 let tuple_len = values.len();
@@ -213,12 +213,12 @@ where
 
 macro_rules! try_from_value_for_tuple {
     ($size:expr => $($var:ident : $ty:ident),+) => {
-        impl<'a, Num, $($ty,)+> TryFromValue<'a, Num> for ($($ty,)+)
+        impl<Num, $($ty,)+> TryFromValue<Num> for ($($ty,)+)
         where
-            $($ty: TryFromValue<'a, Num>,)+
+            $($ty: TryFromValue<Num>,)+
         {
             #[allow(clippy::shadow_unrelated)] // makes it easier to write macro
-            fn try_from_value(value: Value<'a, Num>) -> Result<Self, FromValueError> {
+            fn try_from_value(value: Value<Num>) -> Result<Self, FromValueError> {
                 const EXPECTED_TYPE: ValueType = ValueType::Tuple($size);
 
                 match value {
@@ -257,16 +257,16 @@ try_from_value_for_tuple!(10 => x0: T, x1: U, x2: V, x3: W, x4: X, x5: Y, x6: Z,
 /// [wrapped functions](crate::fns::FnWrapper).
 #[derive(Debug)]
 #[non_exhaustive]
-pub enum ErrorOutput<'a> {
+pub enum ErrorOutput {
     /// Error together with the defined span(s).
-    Spanned(Error<'a>),
+    Spanned(Error),
     /// Error message. The error span will be defined as the call span of the native function.
     Message(String),
 }
 
-impl<'a> ErrorOutput<'a> {
+impl ErrorOutput {
     #[doc(hidden)] // necessary for `wrap_fn` macro
-    pub fn into_spanned<A>(self, context: &CallContext<'_, 'a, A>) -> Error<'a> {
+    pub fn into_spanned<A>(self, context: &CallContext<'_, A>) -> Error {
         match self {
             Self::Spanned(err) => err,
             Self::Message(message) => context.call_site_error(ErrorKind::native(message)),
@@ -286,84 +286,84 @@ impl<'a> ErrorOutput<'a> {
 /// This trait is implemented for base value types (such as [`Number`]s, [`Function`]s, [`Value`]s),
 /// for two container types: vectors and tuples, and for `Result`s with the error type
 /// convertible to [`ErrorOutput`].
-pub trait IntoEvalResult<'a, T> {
+pub trait IntoEvalResult<T> {
     /// Performs the conversion.
-    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>>;
+    fn into_eval_result(self) -> Result<Value<T>, ErrorOutput>;
 }
 
-impl<'a, T, U> IntoEvalResult<'a, T> for Result<U, String>
+impl<T, U> IntoEvalResult<T> for Result<U, String>
 where
-    U: IntoEvalResult<'a, T>,
+    U: IntoEvalResult<T>,
 {
-    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
+    fn into_eval_result(self) -> Result<Value<T>, ErrorOutput> {
         self.map_err(ErrorOutput::Message)
             .and_then(U::into_eval_result)
     }
 }
 
-impl<'a, T, U> IntoEvalResult<'a, T> for Result<U, Error<'a>>
+impl<T, U> IntoEvalResult<T> for Result<U, Error>
 where
-    U: IntoEvalResult<'a, T>,
+    U: IntoEvalResult<T>,
 {
-    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
+    fn into_eval_result(self) -> Result<Value<T>, ErrorOutput> {
         self.map_err(ErrorOutput::Spanned)
             .and_then(U::into_eval_result)
     }
 }
 
-impl<'a, T: Number> IntoEvalResult<'a, T> for T {
-    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
+impl<T: Number> IntoEvalResult<T> for T {
+    fn into_eval_result(self) -> Result<Value<T>, ErrorOutput> {
         Ok(Value::Prim(self))
     }
 }
 
-impl<'a, T> IntoEvalResult<'a, T> for () {
-    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
+impl<T> IntoEvalResult<T> for () {
+    fn into_eval_result(self) -> Result<Value<T>, ErrorOutput> {
         Ok(Value::void())
     }
 }
 
-impl<'a, T> IntoEvalResult<'a, T> for bool {
-    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
+impl<T> IntoEvalResult<T> for bool {
+    fn into_eval_result(self) -> Result<Value<T>, ErrorOutput> {
         Ok(Value::Bool(self))
     }
 }
 
-impl<'a, T> IntoEvalResult<'a, T> for cmp::Ordering {
-    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
+impl<T> IntoEvalResult<T> for cmp::Ordering {
+    fn into_eval_result(self) -> Result<Value<T>, ErrorOutput> {
         Ok(Value::opaque_ref(self))
     }
 }
 
-impl<'a, T> IntoEvalResult<'a, T> for Value<'a, T> {
-    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
+impl<T> IntoEvalResult<T> for Value<T> {
+    fn into_eval_result(self) -> Result<Value<T>, ErrorOutput> {
         Ok(self)
     }
 }
 
-impl<'a, T> IntoEvalResult<'a, T> for Function<'a, T> {
-    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
+impl<T> IntoEvalResult<T> for Function<T> {
+    fn into_eval_result(self) -> Result<Value<T>, ErrorOutput> {
         Ok(Value::Function(self))
     }
 }
 
-impl<'a, T> IntoEvalResult<'a, T> for Tuple<'a, T> {
-    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
+impl<T> IntoEvalResult<T> for Tuple<T> {
+    fn into_eval_result(self) -> Result<Value<T>, ErrorOutput> {
         Ok(Value::Tuple(self))
     }
 }
 
-impl<'a, T> IntoEvalResult<'a, T> for Object<'a, T> {
-    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
+impl<T> IntoEvalResult<T> for Object<T> {
+    fn into_eval_result(self) -> Result<Value<T>, ErrorOutput> {
         Ok(Value::Object(self))
     }
 }
 
-impl<'a, U, T> IntoEvalResult<'a, T> for Vec<U>
+impl<U, T> IntoEvalResult<T> for Vec<U>
 where
-    U: IntoEvalResult<'a, T>,
+    U: IntoEvalResult<T>,
 {
-    fn into_eval_result(self) -> Result<Value<'a, T>, ErrorOutput<'a>> {
+    fn into_eval_result(self) -> Result<Value<T>, ErrorOutput> {
         let values = self
             .into_iter()
             .map(U::into_eval_result)
@@ -374,11 +374,11 @@ where
 
 macro_rules! into_value_for_tuple {
     ($($i:tt : $ty:ident),+) => {
-        impl<'a, Num, $($ty,)+> IntoEvalResult<'a, Num> for ($($ty,)+)
+        impl<Num, $($ty,)+> IntoEvalResult<Num> for ($($ty,)+)
         where
-            $($ty: IntoEvalResult<'a, Num>,)+
+            $($ty: IntoEvalResult<Num>,)+
         {
-            fn into_eval_result(self) -> Result<Value<'a, Num>, ErrorOutput<'a>> {
+            fn into_eval_result(self) -> Result<Value<Num>, ErrorOutput> {
                 Ok(Value::from(vec![$(self.$i.into_eval_result()?,)+]))
             }
         }

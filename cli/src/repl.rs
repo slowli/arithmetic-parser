@@ -21,7 +21,7 @@ fn into_io_error(err: ReadlineError) -> io::Error {
 }
 
 pub fn repl<T: ReplLiteral>(
-    env: Environment<'static, T>,
+    env: Environment<T>,
     type_env: Option<TypeEnvironment>,
     color_choice: ColorChoice,
 ) -> io::Result<()> {

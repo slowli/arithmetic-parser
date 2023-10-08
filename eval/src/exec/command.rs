@@ -1,7 +1,7 @@
 //! Executable `Command` and its building blocks.
 
 use crate::alloc::{String, Vec};
-use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
+use arithmetic_parser::{BinaryOp, Location, LvalueLen, UnaryOp};
 
 /// Pointer to a register or constant.
 #[derive(Debug)]
@@ -21,7 +21,7 @@ impl<T: Clone> Clone for Atom<T> {
     }
 }
 
-pub(crate) type SpannedAtom<'a, T> = MaybeSpanned<'a, Atom<T>>;
+pub(crate) type LocatedAtom<T> = Location<Atom<T>>;
 
 #[derive(Debug, Clone)]
 pub(crate) enum FieldName {
@@ -30,143 +30,43 @@ pub(crate) enum FieldName {
 }
 
 /// Atomic operation on registers and/or constants.
-#[derive(Debug)]
-pub(crate) enum CompiledExpr<'a, T> {
+#[derive(Debug, Clone)]
+pub(crate) enum CompiledExpr<T> {
     Atom(Atom<T>),
     Tuple(Vec<Atom<T>>),
     Object(Vec<(String, Atom<T>)>),
     Unary {
         op: UnaryOp,
-        inner: SpannedAtom<'a, T>,
+        inner: LocatedAtom<T>,
     },
     Binary {
         op: BinaryOp,
-        lhs: SpannedAtom<'a, T>,
-        rhs: SpannedAtom<'a, T>,
+        lhs: LocatedAtom<T>,
+        rhs: LocatedAtom<T>,
     },
     FieldAccess {
-        receiver: SpannedAtom<'a, T>,
+        receiver: LocatedAtom<T>,
         field: FieldName,
     },
     FunctionCall {
-        name: SpannedAtom<'a, T>,
+        name: LocatedAtom<T>,
         // Original function name if it is a proper variable name.
         original_name: Option<String>,
-        args: Vec<SpannedAtom<'a, T>>,
+        args: Vec<LocatedAtom<T>>,
     },
     DefineFunction {
         ptr: usize,
-        captures: Vec<SpannedAtom<'a, T>>,
+        captures: Vec<LocatedAtom<T>>,
         // Original capture names.
         capture_names: Vec<String>,
     },
 }
 
-impl<T: Clone> Clone for CompiledExpr<'_, T> {
-    fn clone(&self) -> Self {
-        match self {
-            Self::Atom(atom) => Self::Atom(atom.clone()),
-            Self::Tuple(atoms) => Self::Tuple(atoms.clone()),
-            Self::Object(fields) => Self::Object(fields.clone()),
-
-            Self::Unary { op, inner } => Self::Unary {
-                op: *op,
-                inner: inner.clone(),
-            },
-
-            Self::Binary { op, lhs, rhs } => Self::Binary {
-                op: *op,
-                lhs: lhs.clone(),
-                rhs: rhs.clone(),
-            },
-
-            Self::FieldAccess {
-                receiver,
-                field: index,
-            } => Self::FieldAccess {
-                receiver: receiver.clone(),
-                field: index.clone(),
-            },
-
-            Self::FunctionCall {
-                name,
-                original_name,
-                args,
-            } => Self::FunctionCall {
-                name: name.clone(),
-                original_name: original_name.clone(),
-                args: args.clone(),
-            },
-
-            Self::DefineFunction {
-                ptr,
-                captures,
-                capture_names,
-            } => Self::DefineFunction {
-                ptr: *ptr,
-                captures: captures.clone(),
-                capture_names: capture_names.clone(),
-            },
-        }
-    }
-}
-
-impl<T: 'static + Clone> StripCode for CompiledExpr<'_, T> {
-    type Stripped = CompiledExpr<'static, T>;
-
-    fn strip_code(self) -> Self::Stripped {
-        match self {
-            Self::Atom(atom) => CompiledExpr::Atom(atom),
-            Self::Tuple(atoms) => CompiledExpr::Tuple(atoms),
-            Self::Object(fields) => CompiledExpr::Object(fields),
-
-            Self::Unary { op, inner } => CompiledExpr::Unary {
-                op,
-                inner: inner.strip_code(),
-            },
-
-            Self::Binary { op, lhs, rhs } => CompiledExpr::Binary {
-                op,
-                lhs: lhs.strip_code(),
-                rhs: rhs.strip_code(),
-            },
-
-            Self::FieldAccess {
-                receiver,
-                field: index,
-            } => CompiledExpr::FieldAccess {
-                receiver: receiver.strip_code(),
-                field: index,
-            },
-
-            Self::FunctionCall {
-                name,
-                original_name,
-                args,
-            } => CompiledExpr::FunctionCall {
-                name: name.strip_code(),
-                original_name,
-                args: args.into_iter().map(StripCode::strip_code).collect(),
-            },
-
-            Self::DefineFunction {
-                ptr,
-                captures,
-                capture_names,
-            } => CompiledExpr::DefineFunction {
-                ptr,
-                captures: captures.into_iter().map(StripCode::strip_code).collect(),
-                capture_names,
-            },
-        }
-    }
-}
-
 /// Commands for a primitive register VM used to execute compiled programs.
-#[derive(Debug)]
-pub(crate) enum Command<'a, T> {
+#[derive(Debug, Clone)]
+pub(crate) enum Command<T> {
     /// Create a new register and push the result of the specified computation there.
-    Push(CompiledExpr<'a, T>),
+    Push(CompiledExpr<T>),
 
     /// Destructure a tuple value. This will push `start_len` starting elements from the tuple,
     /// the middle of the tuple (as a tuple), and `end_len` ending elements from the tuple
@@ -199,81 +99,4 @@ pub(crate) enum Command<'a, T> {
     TruncateRegisters(usize),
 }
 
-impl<T: Clone> Clone for Command<'_, T> {
-    fn clone(&self) -> Self {
-        match self {
-            Self::Push(expr) => Self::Push(expr.clone()),
-
-            Self::Destructure {
-                source,
-                start_len,
-                end_len,
-                lvalue_len,
-                unchecked,
-            } => Self::Destructure {
-                source: *source,
-                start_len: *start_len,
-                end_len: *end_len,
-                lvalue_len: *lvalue_len,
-                unchecked: *unchecked,
-            },
-
-            Self::Copy {
-                source,
-                destination,
-            } => Self::Copy {
-                source: *source,
-                destination: *destination,
-            },
-
-            Self::Annotate { register, name } => Self::Annotate {
-                register: *register,
-                name: name.clone(),
-            },
-
-            Self::StartInnerScope => Self::StartInnerScope,
-            Self::EndInnerScope => Self::EndInnerScope,
-            Self::TruncateRegisters(size) => Self::TruncateRegisters(*size),
-        }
-    }
-}
-
-impl<T: 'static + Clone> StripCode for Command<'_, T> {
-    type Stripped = Command<'static, T>;
-
-    fn strip_code(self) -> Self::Stripped {
-        match self {
-            Self::Push(expr) => Command::Push(expr.strip_code()),
-
-            Self::Destructure {
-                source,
-                start_len,
-                end_len,
-                lvalue_len,
-                unchecked,
-            } => Command::Destructure {
-                source,
-                start_len,
-                end_len,
-                lvalue_len,
-                unchecked,
-            },
-
-            Self::Copy {
-                source,
-                destination,
-            } => Command::Copy {
-                source,
-                destination,
-            },
-
-            Self::Annotate { register, name } => Command::Annotate { register, name },
-
-            Self::StartInnerScope => Command::StartInnerScope,
-            Self::EndInnerScope => Command::EndInnerScope,
-            Self::TruncateRegisters(size) => Command::TruncateRegisters(size),
-        }
-    }
-}
-
-pub(crate) type SpannedCommand<'a, T> = MaybeSpanned<'a, Command<'a, T>>;
+pub(crate) type LocatedCommand<T> = Location<Command<T>>;

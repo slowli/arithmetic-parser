@@ -12,13 +12,13 @@ use crate::alloc::Box;
 ///
 /// The ID is provided when [creating](crate::ExecutableModule::new()) a module. It is displayed
 /// in error messages (using `Display::fmt`). `ModuleId` is also associated with some types
-/// (e.g., [`InterpretedFn`] and [`CodeInModule`]), which allows to obtain module info.
+/// (e.g., [`InterpretedFn`] and [`LocationInModule`]), which allows to obtain module info.
 /// This can be particularly useful for outputting rich error information.
 ///
 /// A `ModuleId` can be downcast to a specific type, similarly to [`Any`].
 ///
 /// [`InterpretedFn`]: crate::InterpretedFn
-/// [`CodeInModule`]: crate::error::CodeInModule
+/// [`LocationInModule`]: crate::error::LocationInModule
 pub trait ModuleId: Any + fmt::Display + Send + Sync {
     /// Clones this module ID and boxes the result. It is expected that the output will have
     /// the same specific type as the original module ID. This operation is generally expected

@@ -3,24 +3,24 @@
 use crate::{
     alloc::{vec, Box, HashMap, Rc, String, ToOwned, Vec},
     arith::OrdArithmetic,
-    error::{Backtrace, CodeInModule, EvalResult, TupleLenMismatchContext},
-    exec::command::{Atom, Command, CompiledExpr, FieldName, SpannedAtom, SpannedCommand},
+    error::{Backtrace, EvalResult, LocationInModule, TupleLenMismatchContext},
+    exec::command::{Atom, Command, CompiledExpr, FieldName, LocatedAtom, LocatedCommand},
     exec::ModuleId,
     CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, SpannedValue, Value,
 };
-use arithmetic_parser::{BinaryOp, LvalueLen, MaybeSpanned, StripCode, UnaryOp};
+use arithmetic_parser::{BinaryOp, Location, LvalueLen, UnaryOp};
 
 /// Sequence of instructions that can be executed with the `Registers`.
 #[derive(Debug)]
-pub(crate) struct Executable<'a, T> {
-    id: Box<dyn ModuleId>,
-    commands: Vec<SpannedCommand<'a, T>>,
-    child_fns: Vec<Rc<ExecutableFn<'a, T>>>,
+pub(crate) struct Executable<T> {
+    id: Box<dyn ModuleId>, // FIXME: consider using `Rc<_>`?
+    commands: Vec<LocatedCommand<T>>,
+    child_fns: Vec<Rc<ExecutableFn<T>>>,
     // Hint how many registers the executable requires.
     register_capacity: usize,
 }
 
-impl<'a, T: Clone> Clone for Executable<'a, T> {
+impl<T: Clone> Clone for Executable<T> {
     fn clone(&self) -> Self {
         Self {
             id: self.id.clone_boxed(),
@@ -31,28 +31,7 @@ impl<'a, T: Clone> Clone for Executable<'a, T> {
     }
 }
 
-impl<T: 'static + Clone> StripCode for Executable<'_, T> {
-    type Stripped = Executable<'static, T>;
-
-    fn strip_code(self) -> Self::Stripped {
-        Executable {
-            id: self.id,
-            commands: self
-                .commands
-                .into_iter()
-                .map(|command| command.map_extra(StripCode::strip_code).strip_code())
-                .collect(),
-            child_fns: self
-                .child_fns
-                .into_iter()
-                .map(|function| Rc::new(function.to_stripped_code()))
-                .collect(),
-            register_capacity: self.register_capacity,
-        }
-    }
-}
-
-impl<'a, T> Executable<'a, T> {
+impl<T> Executable<T> {
     pub fn new(id: Box<dyn ModuleId>) -> Self {
         Self {
             id,
@@ -66,15 +45,15 @@ impl<'a, T> Executable<'a, T> {
         self.id.as_ref()
     }
 
-    fn create_error<U>(&self, span: &MaybeSpanned<'a, U>, err: ErrorKind) -> Error<'a> {
-        Error::new(self.id.as_ref(), span, err)
+    fn create_error<U>(&self, location: &Location<U>, err: ErrorKind) -> Error {
+        Error::new(self.id.as_ref(), location, err)
     }
 
-    pub fn push_command(&mut self, command: impl Into<SpannedCommand<'a, T>>) {
+    pub fn push_command(&mut self, command: impl Into<LocatedCommand<T>>) {
         self.commands.push(command.into());
     }
 
-    pub fn push_child_fn(&mut self, child_fn: ExecutableFn<'a, T>) -> usize {
+    pub fn push_child_fn(&mut self, child_fn: ExecutableFn<T>) -> usize {
         let fn_ptr = self.child_fns.len();
         self.child_fns.push(Rc::new(child_fn));
         fn_ptr
@@ -97,13 +76,13 @@ impl<'a, T> Executable<'a, T> {
     }
 }
 
-impl<'a, T: 'static + Clone> Executable<'a, T> {
+impl<T: 'static + Clone> Executable<T> {
     pub fn call_function(
         &self,
-        captures: Vec<Value<'a, T>>,
-        args: Vec<Value<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        captures: Vec<Value<T>>,
+        args: Vec<Value<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         let mut registers = captures;
         registers.push(Value::Tuple(args.into()));
         let mut env = Registers {
@@ -117,32 +96,10 @@ impl<'a, T: 'static + Clone> Executable<'a, T> {
 
 /// `Executable` together with function-specific info.
 #[derive(Debug)]
-pub(crate) struct ExecutableFn<'a, T> {
-    pub inner: Executable<'a, T>,
-    pub def_span: MaybeSpanned<'a>,
+pub(crate) struct ExecutableFn<T> {
+    pub inner: Executable<T>,
+    pub def_location: Location,
     pub arg_count: LvalueLen,
-}
-
-impl<T: 'static + Clone> ExecutableFn<'_, T> {
-    pub fn to_stripped_code(&self) -> ExecutableFn<'static, T> {
-        ExecutableFn {
-            inner: self.inner.clone().strip_code(),
-            def_span: self.def_span.strip_code(),
-            arg_count: self.arg_count,
-        }
-    }
-}
-
-impl<T: 'static + Clone> StripCode for ExecutableFn<'_, T> {
-    type Stripped = ExecutableFn<'static, T>;
-
-    fn strip_code(self) -> Self::Stripped {
-        ExecutableFn {
-            inner: self.inner.strip_code(),
-            def_span: self.def_span.strip_code(),
-            arg_count: self.arg_count,
-        }
-    }
 }
 
 /// Encompasses all irreducible operations defined externally for `Value`s; for now, these are just
@@ -166,10 +123,10 @@ impl<'r, T> From<&'r dyn OrdArithmetic<T>> for Operations<'r, T> {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct Registers<'a, T> {
+#[derive(Debug, Clone)]
+pub(crate) struct Registers<T> {
     // TODO: restore `SmallVec` wrapped into a covariant wrapper.
-    registers: Vec<Value<'a, T>>,
+    registers: Vec<Value<T>>,
     // Maps variables to registers. Variables are mapped only from the global scope;
     // thus, we don't need to remove them on error in an inner scope.
     // TODO: investigate using stack-hosted small strings for keys.
@@ -179,33 +136,7 @@ pub(crate) struct Registers<'a, T> {
     inner_scope_start: Option<usize>,
 }
 
-impl<T: Clone> Clone for Registers<'_, T> {
-    fn clone(&self) -> Self {
-        Self {
-            registers: self.registers.clone(),
-            vars: self.vars.clone(),
-            inner_scope_start: self.inner_scope_start,
-        }
-    }
-}
-
-impl<T: 'static + Clone> StripCode for Registers<'_, T> {
-    type Stripped = Registers<'static, T>;
-
-    fn strip_code(self) -> Self::Stripped {
-        Registers {
-            registers: self
-                .registers
-                .into_iter()
-                .map(StripCode::strip_code)
-                .collect(),
-            vars: self.vars,
-            inner_scope_start: self.inner_scope_start,
-        }
-    }
-}
-
-impl<'a, T> Registers<'a, T> {
+impl<T> Registers<T> {
     pub fn new() -> Self {
         Self {
             registers: vec![],
@@ -214,7 +145,7 @@ impl<'a, T> Registers<'a, T> {
         }
     }
 
-    pub fn variables(&self) -> impl Iterator<Item = (&str, &Value<'a, T>)> + '_ {
+    pub fn variables(&self) -> impl Iterator<Item = (&str, &Value<T>)> + '_ {
         self.vars
             .iter()
             .map(move |(name, register)| (name.as_str(), &self.registers[*register]))
@@ -229,7 +160,7 @@ impl<'a, T> Registers<'a, T> {
     }
 
     /// Allocates a new register with the specified name if the name was not allocated previously.
-    pub fn insert_var(&mut self, name: &str, value: Value<'a, T>) -> bool {
+    pub fn insert_var(&mut self, name: &str, value: Value<T>) -> bool {
         if self.vars.contains_key(name) {
             false
         } else {
@@ -242,9 +173,9 @@ impl<'a, T> Registers<'a, T> {
     }
 }
 
-impl<'a, T: Clone> Registers<'a, T> {
+impl<T: Clone> Registers<T> {
     /// Updates from the specified environment. Updates are performed in place.
-    pub fn update_from_env(&mut self, env: &Environment<'a, T>) {
+    pub fn update_from_env(&mut self, env: &Environment<T>) {
         for (var_name, register) in &self.vars {
             if let Some(value) = env.get(var_name) {
                 self.registers[*register] = value.clone();
@@ -253,7 +184,7 @@ impl<'a, T: Clone> Registers<'a, T> {
     }
 
     /// Updates environment from this instance.
-    pub fn update_env(&self, env: &mut Environment<'a, T>) {
+    pub fn update_env(&self, env: &mut Environment<T>) {
         for (var_name, register) in &self.vars {
             let value = self.registers[*register].clone();
             // ^-- We cannot move `value` from `registers` because multiple names may be pointing
@@ -264,13 +195,13 @@ impl<'a, T: Clone> Registers<'a, T> {
     }
 }
 
-impl<'a, T: 'static + Clone> Registers<'a, T> {
+impl<T: 'static + Clone> Registers<T> {
     pub fn execute(
         &mut self,
-        executable: &Executable<'a, T>,
+        executable: &Executable<T>,
         operations: Operations<'_, T>,
-        backtrace: Option<&mut Backtrace<'a>>,
-    ) -> EvalResult<'a, T> {
+        backtrace: Option<&mut Backtrace>,
+    ) -> EvalResult<T> {
         self.execute_inner(executable, operations, backtrace)
             .map_err(|err| {
                 if let Some(scope_start) = self.inner_scope_start.take() {
@@ -283,10 +214,10 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
     #[allow(clippy::needless_option_as_deref)] // false positive
     fn execute_inner(
         &mut self,
-        executable: &Executable<'a, T>,
+        executable: &Executable<T>,
         operations: Operations<'_, T>,
-        mut backtrace: Option<&mut Backtrace<'a>>,
-    ) -> EvalResult<'a, T> {
+        mut backtrace: Option<&mut Backtrace>,
+    ) -> EvalResult<T> {
         if let Some(additional_capacity) = executable
             .register_capacity
             .checked_sub(self.registers.len())
@@ -369,12 +300,12 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
 
     fn execute_expr(
         &self,
-        span: MaybeSpanned<'a>,
-        expr: &CompiledExpr<'a, T>,
-        executable: &Executable<'a, T>,
+        location: Location,
+        expr: &CompiledExpr<T>,
+        executable: &Executable<T>,
         operations: Operations<'_, T>,
-        backtrace: Option<&mut Backtrace<'a>>,
-    ) -> EvalResult<'a, T> {
+        backtrace: Option<&mut Backtrace>,
+    ) -> EvalResult<T> {
         match expr {
             CompiledExpr::Atom(atom) => Ok(self.resolve_atom(atom)),
 
@@ -396,12 +327,12 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
                     UnaryOp::Not => inner_value.try_not(),
                     _ => unreachable!("Checked during compilation"),
                 }
-                .map_err(|err| executable.create_error(&span, err))
+                .map_err(|err| executable.create_error(&location, err))
             }
 
             CompiledExpr::Binary { op, lhs, rhs } => {
                 let arith = operations.arithmetic;
-                self.execute_binary_expr(executable.id(), span, *op, lhs, rhs, arith)
+                self.execute_binary_expr(executable.id(), location, *op, lhs, rhs, arith)
             }
 
             CompiledExpr::FieldAccess {
@@ -409,14 +340,14 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
                 field: FieldName::Index(index),
             } => self
                 .access_index_field(&receiver.extra, *index)
-                .map_err(|err| executable.create_error(&span, err)),
+                .map_err(|err| executable.create_error(&location, err)),
 
             CompiledExpr::FieldAccess {
                 receiver,
                 field: FieldName::Name(name),
             } => self
                 .access_named_field(&receiver.extra, name)
-                .map_err(|err| executable.create_error(&span, err)),
+                .map_err(|err| executable.create_error(&location, err)),
 
             CompiledExpr::FunctionCall {
                 name,
@@ -433,13 +364,13 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
                         &function,
                         fn_name,
                         executable.id.as_ref(),
-                        span,
+                        location,
                         arg_values,
                         operations,
                         backtrace,
                     )
                 } else {
-                    Err(executable.create_error(&span, ErrorKind::CannotCall))
+                    Err(executable.create_error(&location, ErrorKind::CannotCall))
                 }
             }
 
@@ -464,18 +395,18 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
     fn execute_binary_expr(
         &self,
         module_id: &dyn ModuleId,
-        span: MaybeSpanned<'a>,
+        location: Location,
         op: BinaryOp,
-        lhs: &SpannedAtom<'a, T>,
-        rhs: &SpannedAtom<'a, T>,
+        lhs: &LocatedAtom<T>,
+        rhs: &LocatedAtom<T>,
         arithmetic: &dyn OrdArithmetic<T>,
-    ) -> EvalResult<'a, T> {
+    ) -> EvalResult<T> {
         let lhs_value = lhs.copy_with_extra(self.resolve_atom(&lhs.extra));
         let rhs_value = rhs.copy_with_extra(self.resolve_atom(&rhs.extra));
 
         match op {
             BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Power => {
-                Value::try_binary_op(module_id, span, lhs_value, rhs_value, op, arithmetic)
+                Value::try_binary_op(module_id, location, lhs_value, rhs_value, op, arithmetic)
             }
 
             BinaryOp::Eq | BinaryOp::NotEq => {
@@ -496,11 +427,7 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
         }
     }
 
-    fn access_index_field(
-        &self,
-        receiver: &Atom<T>,
-        index: usize,
-    ) -> Result<Value<'a, T>, ErrorKind> {
+    fn access_index_field(&self, receiver: &Atom<T>, index: usize) -> Result<Value<T>, ErrorKind> {
         let receiver = match receiver {
             Atom::Register(idx) => &self.registers[*idx],
             Atom::Constant(_) => {
@@ -523,11 +450,7 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
         }
     }
 
-    fn access_named_field(
-        &self,
-        receiver: &Atom<T>,
-        name: &str,
-    ) -> Result<Value<'a, T>, ErrorKind> {
+    fn access_named_field(&self, receiver: &Atom<T>, name: &str) -> Result<Value<T>, ErrorKind> {
         let Atom::Register(idx) = receiver else {
             return Err(ErrorKind::CannotAccessFields);
         };
@@ -541,17 +464,17 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
 
     #[allow(clippy::needless_option_as_deref)] // false positive
     fn eval_function(
-        function: &Function<'a, T>,
+        function: &Function<T>,
         fn_name: &str,
         module_id: &dyn ModuleId,
-        call_span: MaybeSpanned<'a>,
-        arg_values: Vec<SpannedValue<'a, T>>,
+        call_location: Location,
+        arg_values: Vec<SpannedValue<T>>,
         operations: Operations<'_, T>,
-        mut backtrace: Option<&mut Backtrace<'a>>,
-    ) -> EvalResult<'a, T> {
-        let full_call_span = CodeInModule::new(module_id, call_span);
+        mut backtrace: Option<&mut Backtrace>,
+    ) -> EvalResult<T> {
+        let full_call_span = LocationInModule::new(module_id, call_location);
         if let Some(backtrace) = &mut backtrace {
-            backtrace.push_call(fn_name, function.def_span(), full_call_span.clone());
+            backtrace.push_call(fn_name, function.def_location(), full_call_span.clone());
         }
         let mut context = CallContext::new(full_call_span, backtrace.as_deref_mut(), operations);
 
@@ -564,7 +487,7 @@ impl<'a, T: 'static + Clone> Registers<'a, T> {
     }
 
     #[inline]
-    fn resolve_atom(&self, atom: &Atom<T>) -> Value<'a, T> {
+    fn resolve_atom(&self, atom: &Atom<T>) -> Value<T> {
         match atom {
             Atom::Register(index) => self.registers[*index].clone(),
             Atom::Constant(value) => Value::Prim(value.clone()),

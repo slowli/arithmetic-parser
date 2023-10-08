@@ -46,9 +46,9 @@ where
 {
     fn evaluate<'a>(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         ctx.check_args_count(&args, 2)?;
         let generation_fn = extract_fn(
             ctx,
@@ -71,7 +71,7 @@ where
 
             let cmp = ctx.arithmetic().partial_cmp(&next_index, &len);
             if matches!(cmp, Some(Ordering::Less | Ordering::Equal)) {
-                let spanned = ctx.apply_call_span(Value::Prim(index));
+                let spanned = ctx.apply_call_location(Value::Prim(index));
                 array.push(generation_fn.evaluate(vec![spanned], ctx)?);
                 index = next_index;
             } else {
@@ -112,11 +112,11 @@ where
 pub struct Len;
 
 impl<T: FromPrimitive> NativeFn<T> for Len {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         ctx.check_args_count(&args, 1)?;
         let arg = args.pop().unwrap();
 
@@ -127,7 +127,7 @@ impl<T: FromPrimitive> NativeFn<T> for Len {
                 let err = ErrorKind::native("`len` requires object or tuple arg");
                 return Err(ctx
                     .call_site_error(err)
-                    .with_span(&arg, AuxErrorInfo::InvalidArg));
+                    .with_location(&arg, AuxErrorInfo::InvalidArg));
             }
         };
         let len = T::from_usize(len).ok_or_else(|| {
@@ -171,11 +171,11 @@ impl<T: FromPrimitive> NativeFn<T> for Len {
 pub struct Map;
 
 impl<T: 'static + Clone> NativeFn<T> for Map {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         ctx.check_args_count(&args, 2)?;
         let map_fn = extract_fn(
             ctx,
@@ -191,7 +191,7 @@ impl<T: 'static + Clone> NativeFn<T> for Map {
         let mapped: Result<Tuple<_>, _> = array
             .into_iter()
             .map(|value| {
-                let spanned = ctx.apply_call_span(value);
+                let spanned = ctx.apply_call_location(value);
                 map_fn.evaluate(vec![spanned], ctx)
             })
             .collect();
@@ -233,11 +233,11 @@ impl<T: 'static + Clone> NativeFn<T> for Map {
 pub struct Filter;
 
 impl<T: 'static + Clone> NativeFn<T> for Filter {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         ctx.check_args_count(&args, 2)?;
         let filter_fn = extract_fn(
             ctx,
@@ -252,7 +252,7 @@ impl<T: 'static + Clone> NativeFn<T> for Filter {
 
         let mut filtered = vec![];
         for value in array {
-            let spanned = ctx.apply_call_span(value.clone());
+            let spanned = ctx.apply_call_location(value.clone());
             match filter_fn.evaluate(vec![spanned], ctx)? {
                 Value::Bool(true) => filtered.push(value),
                 Value::Bool(false) => { /* do nothing */ }
@@ -301,11 +301,11 @@ impl<T: 'static + Clone> NativeFn<T> for Filter {
 pub struct Fold;
 
 impl<T: 'static + Clone> NativeFn<T> for Fold {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         ctx.check_args_count(&args, 3)?;
         let fold_fn = extract_fn(
             ctx,
@@ -320,7 +320,7 @@ impl<T: 'static + Clone> NativeFn<T> for Fold {
         )?;
 
         array.into_iter().try_fold(acc, |acc, value| {
-            let spanned_args = vec![ctx.apply_call_span(acc), ctx.apply_call_span(value)];
+            let spanned_args = vec![ctx.apply_call_location(acc), ctx.apply_call_location(value)];
             fold_fn.evaluate(spanned_args, ctx)
         })
     }
@@ -368,11 +368,11 @@ impl<T: 'static + Clone> NativeFn<T> for Fold {
 pub struct Push;
 
 impl<T> NativeFn<T> for Push {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         ctx.check_args_count(&args, 2)?;
         let elem = args.pop().unwrap().extra;
         let mut array = extract_array(
@@ -421,11 +421,11 @@ impl<T> NativeFn<T> for Push {
 pub struct Merge;
 
 impl<T: Clone> NativeFn<T> for Merge {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         ctx.check_args_count(&args, 2)?;
         let second = extract_array(
             ctx,
@@ -477,11 +477,11 @@ impl<T: Clone> NativeFn<T> for Merge {
 pub struct Any;
 
 impl<T: Clone + 'static> NativeFn<T> for Any {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         ctx.check_args_count(&args, 2)?;
         let predicate = extract_fn(
             ctx,
@@ -495,7 +495,7 @@ impl<T: Clone + 'static> NativeFn<T> for Any {
         )?;
 
         for value in array {
-            let spanned = ctx.apply_call_span(value);
+            let spanned = ctx.apply_call_location(value);
             let result = predicate.evaluate(vec![spanned], ctx)?;
             match result {
                 Value::Bool(false) => { /* continue */ }
@@ -547,11 +547,11 @@ impl<T: Clone + 'static> NativeFn<T> for Any {
 pub struct All;
 
 impl<T: Clone + 'static> NativeFn<T> for All {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
         ctx.check_args_count(&args, 2)?;
         let predicate = extract_fn(
             ctx,
@@ -565,7 +565,7 @@ impl<T: Clone + 'static> NativeFn<T> for All {
         )?;
 
         for value in array {
-            let spanned = ctx.apply_call_span(value);
+            let spanned = ctx.apply_call_location(value);
             let result = predicate.evaluate(vec![spanned], ctx)?;
             match result {
                 Value::Bool(false) => return Ok(Value::Bool(false)),

@@ -23,10 +23,7 @@ use arithmetic_eval::{
     env::{Assertions, Prelude},
     fns, CallContext, Environment, EvalResult, ExecutableModule, NativeFn, SpannedValue, Value,
 };
-use arithmetic_parser::{
-    grammars::{NumGrammar, Parse, Untyped},
-    CodeFragment,
-};
+use arithmetic_parser::grammars::{NumGrammar, Parse, Untyped};
 
 #[global_allocator]
 static ALLOCATOR: Heap = Heap::empty();
@@ -47,29 +44,20 @@ const MINMAX_SCRIPT: &str = r#"
 struct Dbg;
 
 impl NativeFn<i32> for Dbg {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, i32>>,
-        ctx: &mut CallContext<'_, 'a, i32>,
-    ) -> EvalResult<'a, i32> {
+        mut args: Vec<SpannedValue<i32>>,
+        ctx: &mut CallContext<'_, i32>,
+    ) -> EvalResult<i32> {
         ctx.check_args_count(&args, 1)?;
         let arg = args.pop().unwrap();
 
-        match arg.fragment() {
-            CodeFragment::Str(code) => hprintln!(
-                "[{line}:{col}] {code} = {val}",
-                line = arg.location_line(),
-                col = arg.get_column(),
-                code = code,
-                val = arg.extra
-            ),
-            CodeFragment::Stripped(_) => hprintln!(
-                "[{line}:{col}] {val}",
-                line = arg.location_line(),
-                col = arg.get_column(),
-                val = arg.extra
-            ),
-        }
+        hprintln!(
+            "[{line}:{col}] {val}",
+            line = arg.location_line(),
+            col = arg.get_column(),
+            val = arg.extra
+        );
         Ok(arg.extra)
     }
 }

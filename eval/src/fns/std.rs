@@ -3,7 +3,6 @@
 use std::fmt;
 
 use crate::{exec::ModuleId, CallContext, EvalResult, NativeFn, SpannedValue, Value};
-use arithmetic_parser::CodeFragment;
 
 /// Acts similarly to the `dbg!` macro, outputting the argument(s) to stderr and returning
 /// them. If a single argument is provided, it's returned as-is; otherwise, the arguments
@@ -32,34 +31,24 @@ use arithmetic_parser::CodeFragment;
 pub struct Dbg;
 
 impl Dbg {
-    fn print_value<T: fmt::Display>(module_id: &dyn ModuleId, value: &SpannedValue<'_, T>) {
-        match value.fragment() {
-            CodeFragment::Str(code) => eprintln!(
-                "[{module}:{line}:{col}] {code} = {val}",
-                module = module_id,
-                line = value.location_line(),
-                col = value.get_column(),
-                code = code,
-                val = value.extra
-            ),
-            CodeFragment::Stripped(_) => eprintln!(
-                "[{module}:{line}:{col}] {val}",
-                module = module_id,
-                line = value.location_line(),
-                col = value.get_column(),
-                val = value.extra
-            ),
-        }
+    fn print_value<T: fmt::Display>(module_id: &dyn ModuleId, value: &SpannedValue<T>) {
+        eprintln!(
+            "[{module}:{line}:{col}] {val}",
+            module = module_id,
+            line = value.location_line(),
+            col = value.get_column(),
+            val = value.extra
+        );
     }
 }
 
 impl<T: fmt::Display> NativeFn<T> for Dbg {
-    fn evaluate<'a>(
+    fn evaluate(
         &self,
-        mut args: Vec<SpannedValue<'a, T>>,
-        ctx: &mut CallContext<'_, 'a, T>,
-    ) -> EvalResult<'a, T> {
-        let module_id = ctx.call_span().module_id();
+        mut args: Vec<SpannedValue<T>>,
+        ctx: &mut CallContext<'_, T>,
+    ) -> EvalResult<T> {
+        let module_id = ctx.call_location().module_id();
         for arg in &args {
             Self::print_value(module_id, arg);
         }

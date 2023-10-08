@@ -3,7 +3,7 @@
 use nom::Slice;
 
 use crate::{
-    alloc::{format, String, ToOwned},
+    alloc::{format, String},
     Error,
 };
 
@@ -151,63 +151,13 @@ impl<'a> Spanned<'a> {
     }
 }
 
-/// Container for a code fragment that can be in one of the two states: either the code string
-/// is retained, or it is stripped away.
-///
-/// The stripped version allows to retain information about code location within [`LocatedSpan`]
-/// without a restriction by the code lifetime.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CodeFragment<'a> {
-    /// Original code fragment: a string reference.
-    Str(&'a str),
-    /// Stripped code fragment: just the string length.
-    Stripped(usize),
-}
+/// Value with an associated code location. Unlike [`Spanned`], `Location` does not retain a reference
+/// to the original code span, just its start position and length.
+pub type Location<T = ()> = LocatedSpan<usize, T>;
 
-impl PartialEq<&str> for CodeFragment<'_> {
-    fn eq(&self, &other: &&str) -> bool {
-        match self {
-            Self::Str(string) => *string == other,
-            Self::Stripped(_) => false,
-        }
-    }
-}
-
-impl CodeFragment<'_> {
-    /// Strips this code fragment, extending its lifetime beyond the lifetime of the code.
-    pub fn strip(self) -> CodeFragment<'static> {
-        match self {
-            Self::Str(string) => CodeFragment::Stripped(string.len()),
-            Self::Stripped(len) => CodeFragment::Stripped(len),
-        }
-    }
-
-    /// Gets the length of this code fragment.
-    pub fn len(self) -> usize {
-        match self {
-            Self::Str(string) => string.len(),
-            Self::Stripped(len) => len,
-        }
-    }
-
-    /// Checks if this code fragment is empty.
-    pub fn is_empty(self) -> bool {
-        self.len() == 0
-    }
-}
-
-impl<'a> From<&'a str> for CodeFragment<'a> {
-    fn from(value: &'a str) -> Self {
-        CodeFragment::Str(value)
-    }
-}
-
-/// Value with an optional associated code span.
-pub type MaybeSpanned<'a, T = ()> = LocatedSpan<CodeFragment<'a>, T>;
-
-impl<'a> MaybeSpanned<'a> {
-    /// Creates a span from a `range` in the provided `code`. This is mostly useful for testing.
-    pub fn from_str<R>(code: &'a str, range: R) -> Self
+impl Location {
+    /// Creates a location from a `range` in the provided `code`. This is mostly useful for testing.
+    pub fn from_str<'a, R>(code: &'a str, range: R) -> Self
     where
         InputSpan<'a>: Slice<R>,
     {
@@ -215,42 +165,22 @@ impl<'a> MaybeSpanned<'a> {
     }
 }
 
-impl<T> MaybeSpanned<'_, T> {
-    /// Returns either the original code fragment (if it's retained), or a string in the form
-    /// `{default_name} at {line}:{column}`.
-    pub fn code_or_location(&self, default_name: &str) -> String {
-        match self.fragment {
-            CodeFragment::Str(code) => code.to_owned(),
-            CodeFragment::Stripped(_) => {
-                format!("{default_name} at {}:{}", self.line, self.column)
-            }
-        }
+impl<T> Location<T> {
+    /// Returns a string representation of this location in the form `{default_name} at {line}:{column}`.
+    pub fn to_string(&self, default_name: &str) -> String {
+        format!("{default_name} at {}:{}", self.line, self.column)
+    }
+
+    /// Returns this location in the provided `code`. It is caller's responsibility to ensure that this
+    /// is called with the original `code` that produced this location.
+    pub fn span<'a>(&self, code: &'a str) -> &'a str {
+        &code[self.offset..(self.offset + self.fragment)]
     }
 }
 
-impl<'a, T> From<Spanned<'a, T>> for MaybeSpanned<'a, T> {
-    fn from(value: Spanned<'a, T>) -> Self {
-        value.map_fragment(CodeFragment::from)
-    }
-}
-
-/// Encapsulates stripping references to code fragments. The result can outlive the code.
-///
-/// Implementors of this trait are usually generic by the code lifetime: `Foo<'_, ..>`,
-/// with the result of stripping being `Foo<'static, ..>`.
-pub trait StripCode {
-    /// Resulting type after code stripping.
-    type Stripped: 'static;
-
-    /// Strips references to code fragments in this type.
-    fn strip_code(self) -> Self::Stripped;
-}
-
-impl<T: Clone + 'static> StripCode for MaybeSpanned<'_, T> {
-    type Stripped = MaybeSpanned<'static, T>;
-
-    fn strip_code(self) -> Self::Stripped {
-        self.map_fragment(CodeFragment::strip)
+impl<T> From<Spanned<'_, T>> for Location<T> {
+    fn from(value: Spanned<'_, T>) -> Self {
+        value.map_fragment(str::len)
     }
 }
 
@@ -293,25 +223,5 @@ pub(crate) fn unite_spans<'a, T, U>(
         column: start.column,
         fragment: &input.fragment()[start_idx..end_idx],
         extra: (),
-    }
-}
-
-/// Helper trait for [`Result`]s with the error component that implements [`StripCode`].
-pub trait StripResultExt {
-    /// Type wrapped by the `Result::Ok` variant.
-    type Ok;
-    /// Result of stripping code fragments from an error.
-    type StrippedErr: 'static;
-
-    /// Strips code fragments from the error variant.
-    fn strip_err(self) -> Result<Self::Ok, Self::StrippedErr>;
-}
-
-impl<T, E: StripCode> StripResultExt for Result<T, E> {
-    type Ok = T;
-    type StrippedErr = E::Stripped;
-
-    fn strip_err(self) -> Result<T, Self::StrippedErr> {
-        self.map_err(StripCode::strip_code)
     }
 }

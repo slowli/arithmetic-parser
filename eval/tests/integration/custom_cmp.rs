@@ -18,11 +18,11 @@ fn compile_module(program: &str) -> ExecutableModule<Complex64> {
 
 #[test]
 fn no_comparisons() {
-    const PROGRAM: &str = r#"
+    const PROGRAM: &str = "
         // Without comparisons, all comparison ops will return `false`.
         assert(!(1 < -1 || 1 <= -1 || 1 > -1 || 1 >= -1));
         assert(!(-1 + 2i < 1 + i));
-    "#;
+    ";
     let module = compile_module(PROGRAM);
 
     let mut env = Environment::with_arithmetic(StdArithmetic.without_comparisons());
@@ -34,7 +34,7 @@ fn no_comparisons() {
 fn custom_cmp_function() {
     //! Defines comparisons by the real part of the number.
 
-    const PROGRAM: &str = r#"
+    const PROGRAM: &str = "
         // The defined arithmetic compares numbers by their real part.
         assert(1 > -1);
         assert(-1 + 2i < 1 + i);
@@ -44,7 +44,7 @@ fn custom_cmp_function() {
         assert(is_positive(1));
         assert(!is_positive(-1));
         assert(!is_positive(0));
-    "#;
+    ";
     let module = compile_module(PROGRAM);
 
     let arithmetic =
@@ -58,13 +58,13 @@ fn custom_cmp_function() {
 fn partial_cmp_function() {
     //! Defines comparisons on real numbers, leaving numbers with imaginary parts non-comparable.
 
-    const PROGRAM: &str = r#"
+    const PROGRAM: &str = "
         // Real numbers can be compared.
         assert(-1 < 1 && 2 > 1);
         // Numbers with an imaginary part are not comparable.
         assert(!(-1 < i || -1 <= i || -1 > i || -1 >= i));
         assert(!(2i > 3 || 2i <= 3));
-    "#;
+    ";
     let module = compile_module(PROGRAM);
 
     let arithmetic = StdArithmetic.with_comparison(|x: &Complex64, y: &Complex64| {

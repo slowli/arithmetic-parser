@@ -154,10 +154,10 @@ impl<T: FromPrimitive> NativeFn<T> for Len {
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
-/// let program = r#"
+/// let program = "
 ///     xs = (1, -2, 3, -0.3);
 ///     map(xs, |x| if(x > 0, x, 0)) == (1, 0, 3, 0)
-/// "#;
+/// ";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = ExecutableModule::new("test_map", &program)?;
 ///
@@ -216,10 +216,10 @@ impl<T: 'static + Clone> NativeFn<T> for Map {
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
-/// let program = r#"
+/// let program = "
 ///     xs = (1, -2, 3, -7, -0.3);
 ///     filter(xs, |x| x > -1) == (1, 3, -0.3)
-/// "#;
+/// ";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = ExecutableModule::new("test_filter", &program)?;
 ///
@@ -284,10 +284,10 @@ impl<T: 'static + Clone> NativeFn<T> for Filter {
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
-/// let program = r#"
+/// let program = "
 ///     xs = (1, -2, 3, -7);
 ///     fold(xs, 1, |acc, x| acc * x) == 42
-/// "#;
+/// ";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = ExecutableModule::new("test_fold", &program)?;
 ///
@@ -342,7 +342,7 @@ impl<T: 'static + Clone> NativeFn<T> for Fold {
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
-/// let program = r#"
+/// let program = "
 ///     repeat = |x, times| {
 ///         (_, acc) = while(
 ///             (0, ()),
@@ -353,7 +353,7 @@ impl<T: 'static + Clone> NativeFn<T> for Fold {
 ///     };
 ///     repeat(-2, 3) == (-2, -2, -2) &&
 ///         repeat((7,), 4) == ((7,), (7,), (7,), (7,))
-/// "#;
+/// ";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = ExecutableModule::new("test_push", &program)?;
 ///
@@ -402,11 +402,11 @@ impl<T> NativeFn<T> for Push {
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
-/// let program = r#"
+/// let program = "
 ///     // Merges all arguments (which should be tuples) into a single tuple.
 ///     super_merge = |...xs| fold(xs, (), merge);
 ///     super_merge((1, 2), (3,), (), (4, 5, 6)) == (1, 2, 3, 4, 5, 6)
-/// "#;
+/// ";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = ExecutableModule::new("test_merge", &program)?;
 ///
@@ -459,10 +459,10 @@ impl<T: Clone> NativeFn<T> for Merge {
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
-/// let program = r#"
+/// let program = "
 ///     assert(any((1, 3, -1), |x| x < 0));
 ///     assert(!any((1, 2, 3), |x| x < 0));
-/// "#;
+/// ";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = ExecutableModule::new("test_any", &program)?;
 ///
@@ -529,10 +529,10 @@ impl<T: Clone + 'static> NativeFn<T> for Any {
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
-/// let program = r#"
+/// let program = "
 ///     assert(all((1, 2, 3, 5), |x| x > 0));
 ///     assert(!all((1, -2, 3), |x| x > 0));
-/// "#;
+/// ";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = ExecutableModule::new("test_all", &program)?;
 ///
@@ -599,10 +599,10 @@ mod tests {
         Len: NativeFn<T>,
         A: OrdArithmetic<T> + 'static,
     {
-        let code = r#"
+        let code = "
             len((1, 2, 3)) == 3 && len(()) == 0 &&
             len(#{}) == 0 && len(#{ x: 1 }) == 1 && len(#{ x: 1, y: 2 }) == 2
-        "#;
+        ";
         let block = Untyped::<NumGrammar<T>>::parse_statements(code).unwrap();
         let module = ExecutableModule::new("len", &block).unwrap();
         let mut env = Environment::with_arithmetic(arithmetic);
@@ -646,12 +646,12 @@ mod tests {
 
     #[test]
     fn array_function_in_floating_point_arithmetic() -> anyhow::Result<()> {
-        let code = r#"
+        let code = "
             array(0, |_| 1) == () && array(-1, |_| 1) == () &&
             array(0.1, |_| 1) == () && array(0.999, |_| 1) == () &&
             array(1, |_| 1) == (1,) && array(1.5, |_| 1) == (1,) &&
             array(2, |_| 1) == (1, 1) && array(3, |i| i) == (0, 1, 2)
-        "#;
+        ";
         let block = Untyped::<NumGrammar<f32>>::parse_statements(code)?;
         let module = ExecutableModule::new("array", &block)?;
 
@@ -665,9 +665,9 @@ mod tests {
 
     #[test]
     fn array_function_in_unsigned_int_arithmetic() -> anyhow::Result<()> {
-        let code = r#"
+        let code = "
             array(0, |_| 1) == () && array(1, |_| 1) == (1,) && array(3, |i| i) == (0, 1, 2)
-        "#;
+        ";
         let block = Untyped::<NumGrammar<u32>>::parse_statements(code)?;
         let module = ExecutableModule::new("array", &block)?;
 
@@ -681,9 +681,9 @@ mod tests {
 
     #[test]
     fn all_and_any_are_short_circuit() -> anyhow::Result<()> {
-        let code = r#"
+        let code = "
             !all((1, 5 == 5), |x| x < 0) && any((-1, 1, 5 == 4), |x| x > 0)
-        "#;
+        ";
         let block = Untyped::<F32Grammar>::parse_statements(code)?;
         let module = ExecutableModule::new("array", &block)?;
 

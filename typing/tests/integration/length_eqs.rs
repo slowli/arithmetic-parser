@@ -27,11 +27,11 @@ fn push_fn_basics() {
 
 #[test]
 fn push_fn_in_other_fn_definition() {
-    let code = r#"
+    let code = "
         push_fork = |...xs, item| (xs, xs.push(item));
         (xs, ys) = push_fork(1, 2, 3, 4);
         (_, (_, z)) = push_fork(4);
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
 
     let mut type_env = TypeEnvironment::new();
@@ -59,10 +59,10 @@ fn push_fn_in_other_fn_definition() {
 
 #[test]
 fn several_push_applications() {
-    let code = r#"
+    let code = "
         push2 = |xs, x, y| xs.push(x).push(y);
         (head, ...tail) = (1, 2).push2(3, 4);
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
 
     let mut type_env = TypeEnvironment::new();

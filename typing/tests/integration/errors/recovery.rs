@@ -16,10 +16,10 @@ use crate::{ErrorsExt, F32Grammar};
 
 #[test]
 fn vars_are_not_assigned_beyond_first_error() {
-    let code = r#"
+    let code = "
         x = (1, 2);
         y = x.map(x);
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("map", Prelude::Map);
@@ -59,10 +59,10 @@ fn first_failing_statement_on_error_in_return_value() {
 
 #[test]
 fn vars_are_not_redefined_beyond_first_error() {
-    let code = r#"
+    let code = "
         x = (1, 2);
         x = x.map(x);
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("map", Prelude::Map);
@@ -78,11 +78,11 @@ fn vars_are_not_redefined_beyond_first_error() {
 
 #[test]
 fn vars_are_not_assigned_beyond_first_error_in_expr() {
-    let code = r#"
+    let code = "
         x = (1, 2);
         x.map(x);
         y = (3, 4);
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("map", Prelude::Map);
@@ -96,10 +96,10 @@ fn vars_are_not_assigned_beyond_first_error_in_expr() {
 
 #[test]
 fn errors_in_inner_scopes_are_handled_adequately() {
-    let code = r#"
+    let code = "
         x = (1, 2);
         y = { bogus = 5; x.map(bogus) };
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("map", Prelude::Map);

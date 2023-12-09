@@ -92,7 +92,7 @@ impl<T> NativeFn<T> for If {
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
-/// let program = r#"
+/// let program = "
 ///     factorial = |x| {
 ///         (_, acc) = while(
 ///             (x, 1),
@@ -102,7 +102,7 @@ impl<T> NativeFn<T> for If {
 ///         acc
 ///     };
 ///     factorial(5) == 120 && factorial(10) == 3628800
-/// "#;
+/// ";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = ExecutableModule::new("test_while", &program)?;
 ///

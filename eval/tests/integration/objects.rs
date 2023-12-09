@@ -29,20 +29,20 @@ fn object_basics() {
 
 #[test]
 fn object_field_access() {
-    let program = r#"
+    let program = "
         obj = #{ x: 1, y: (2, 3) };
         obj.x == 1 && obj.y.1 == 3
-    "#;
+    ";
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(return_value, Value::Bool(true));
 }
 
 #[test]
 fn capturing_vars_in_object() {
-    let program = r#"
+    let program = "
         (x, y) = (1, 2);
         #{ x, y: y + 1 }
-    "#;
+    ";
     let return_value = evaluate(&mut Environment::new(), program);
     let Value::Object(fields) = return_value else {
         panic!("Unexpected return value: {return_value:?}");
@@ -55,12 +55,12 @@ fn capturing_vars_in_object() {
 
 #[test]
 fn object_expr_does_not_capture_surroundings() {
-    let program = r#"
+    let program = "
         z = 5;
         obj = #{ x: 1, y: z };
         v = (obj,);
         obj
-    "#;
+    ";
     let return_value = evaluate(&mut Environment::new(), program);
     let Value::Object(fields) = return_value else {
         panic!("Unexpected return value: {return_value:?}");
@@ -73,13 +73,13 @@ fn object_expr_does_not_capture_surroundings() {
 
 #[test]
 fn object_expr_does_not_capture_inner_scopes() {
-    let program = r#"
+    let program = "
         #{
             x: 1,
             y: { z = 5; z + 1 },
             vec: (1, 6),
         }
-    "#;
+    ";
     let return_value = evaluate(&mut Environment::new(), program);
     let Value::Object(fields) = return_value else {
         panic!("Unexpected return value: {return_value:?}");
@@ -96,13 +96,13 @@ fn object_expr_does_not_capture_inner_scopes() {
 
 #[test]
 fn object_in_object() {
-    let program = r#"
+    let program = "
         pt_x = 1;
         #{
             pt_x,
             pt: #{ x: pt_x, y: pt_x + 1 },
         }
-    "#;
+    ";
     let return_value = evaluate(&mut Environment::new(), program);
     let Value::Object(fields) = return_value else {
         panic!("Unexpected return value: {return_value:?}");
@@ -121,24 +121,24 @@ fn object_in_object() {
 
 #[test]
 fn accessing_embedded_objects() {
-    let program = r#"
+    let program = "
         pt_x = 1;
         obj = #{
             pt_x,
             pt: #{ x: pt_x, y: pt_x + 1 },
         };
         obj.pt.x == obj.pt_x && obj.pt.y == 2
-    "#;
+    ";
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(return_value, Value::Bool(true));
 }
 
 #[test]
 fn accessing_fields_within_object() {
-    let program = r#"
+    let program = "
         pt = #{ x: 3, y: 4 };
         #{ pt, len_sq: pt.x * pt.x + pt.y * pt.y }
-    "#;
+    ";
     let return_value = evaluate(&mut Environment::new(), program);
     let Value::Object(fields) = return_value else {
         panic!("Unexpected return value: {return_value:?}");
@@ -155,29 +155,29 @@ fn accessing_fields_within_object() {
 
 #[test]
 fn callable_object_field() {
-    let program = r#"
+    let program = "
         (x, y) = (3, 4);
         obj = #{ x, y, len_sq: || x * x + y * y };
         obj.x == 3 && obj.y == 4 && (obj.len_sq)() == 25 && {obj.len_sq}() == 25
-    "#;
+    ";
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(return_value, Value::Bool(true));
 
-    let program = r#"
+    let program = "
         obj = { POW = 2; #{ sq: |x| x ^ POW } };
         sq = obj.sq;
         (obj.sq)(3) == 9 && {obj.sq}(3) == 9 && sq(4) == 16
-    "#;
+    ";
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(return_value, Value::Bool(true));
 }
 
 #[test]
 fn returning_object_with_callable_field() {
-    let program = r#"
+    let program = "
         new_point = |x, y| #{ x, y, len2: || x * x + y * y };
         {new_point(3, 4).len2}() == 25
-    "#;
+    ";
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(return_value, Value::Bool(true));
 
@@ -236,7 +236,7 @@ fn no_field_error() {
 
 #[test]
 fn object_comparison() {
-    let program = r#"
+    let program = "
         #{ x: 1 } == #{ x: 1 } &&
         #{ x: 1 } == #{ x: 2 - 1 } &&
         #{ x: 1 } != #{ x: 0 } &&
@@ -244,53 +244,53 @@ fn object_comparison() {
         #{ x: 1 } != #{ x: 1, y: 1 } &&
         #{ x: 1 } != (1,) && (1,) != #{ x: 1 } &&
         #{ x: 1 } != 1 && 1 != #{ x: 1 }
-    "#;
+    ";
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(return_value, Value::Bool(true));
 }
 
 #[test]
 fn object_destructuring() {
-    let program = r#"
+    let program = "
         { x } = #{ x: 1 };
         { x -> y } = #{ x: 2 };
         obj = #{ xs: (3, 4, 5), flag: 1 == 1 };
         { xs: (head, ...tail), flag } = obj;
         x == 1 && y == 2 && head == 3 && tail == (4, 5) && flag
-    "#;
+    ";
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(return_value, Value::Bool(true));
 }
 
 #[test]
 fn embedded_object_destructuring() {
-    let program = r#"
+    let program = "
         ({ x, y }, ...pts) = (#{ x: 1, y: 2 }, #{ x: 2, y: 3 });
         x == 1 && y == 2 && pts.0.x == 2 && pts.0.y == 3
-    "#;
+    ";
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(return_value, Value::Bool(true));
 }
 
 #[test]
 fn object_destructuring_in_fn_args() {
-    let program = r#"
+    let program = "
         manhattan = |{ x, y }| x + y;
         manhattan(#{ x: 1, y: 2 }) == 3
-    "#;
+    ";
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(return_value, Value::Bool(true));
 }
 
 #[test]
 fn object_destructuring_in_pipeline() {
-    let program = r#"
+    let program = "
         minmax = |...xs| xs.fold(#{ min: INF, max: -INF }, |{ min, max }, x| #{
             min: if(x < min, x, min),
             max: if(x > max, x, max),
         });
         assert_eq(minmax(5, -4, 6, 9, 1), #{ min: -4, max: 9 });
-    "#;
+    ";
     let mut env = Environment::new();
     env.insert("INF", Value::Prim(f32::INFINITY));
     env.extend(Prelude::iter().chain(Assertions::iter()));
@@ -417,10 +417,10 @@ fn object_destructuring_repeated_assignment_complex() {
 
 #[test]
 fn negation_on_object() {
-    let program = r#"
+    let program = "
         pt = -#{ x: -3, y: 4 };
         pt == #{ x: 3, y: -4 }
-    "#;
+    ";
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(return_value, Value::Bool(true));
 }

@@ -76,7 +76,7 @@ impl Features {
 ///
 /// // Here's how a grammar can be used.
 /// # fn main() -> anyhow::Result<()> {
-/// let program = r#"
+/// let program = "
 ///     x = 1 + 2 * 3 + sin(a^3 / b^2);
 ///     some_function = |a, b| (a + b, a - b);
 ///     other_function = |x| {
@@ -85,7 +85,7 @@ impl Features {
 ///     };
 ///     (y, z) = some_function({ x = x - 1; x }, x);
 ///     other_function(y - z)
-/// "#;
+/// ";
 /// let parsed = Untyped::<IntegerGrammar>::parse_statements(program)?;
 /// println!("{:#?}", parsed);
 /// # Ok(())
@@ -163,7 +163,7 @@ pub trait ParseLiteral: 'static {
 ///
 /// // Here's how a grammar can be used.
 /// # fn main() -> anyhow::Result<()> {
-/// let program = r#"
+/// let program = "
 ///     x = 1 + 2 * 3 + sin(a^3 / b^2);
 ///     some_function = |a, b: Num| (a + b, a - b);
 ///     other_function = |x| {
@@ -172,7 +172,7 @@ pub trait ParseLiteral: 'static {
 ///     };
 ///     (y, z: Num) = some_function({ x = x - 1; x }, x);
 ///     other_function(y - z)
-/// "#;
+/// ";
 /// let parsed = Typed::<IntegerGrammar>::parse_statements(program)?;
 /// println!("{:#?}", parsed);
 /// # Ok(())

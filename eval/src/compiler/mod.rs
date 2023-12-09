@@ -381,12 +381,12 @@ mod tests {
 
     #[test]
     fn extracting_captures_with_inner_fns() {
-        let program = r#"
+        let program = "
             y = 5 * x;          // x is a capture
             fun = |z| {         // z is not a capture
                 z * x + y * PI  // y is not a capture for the entire module, PI is
             };
-        "#;
+        ";
         let module = Untyped::<F32Grammar>::parse_statements(program).unwrap();
 
         let captures = Compiler::extract_captures(Arc::new(WildcardId), &module).unwrap();

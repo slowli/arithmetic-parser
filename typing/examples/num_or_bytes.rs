@@ -166,7 +166,7 @@ impl TypeArithmetic<NumOrBytesType> for NumOrBytesArithmetic {
 type Parser = Annotated<NumGrammar<NumOrBytes>>;
 
 fn main() -> anyhow::Result<()> {
-    let code = r#"
+    let code = "
         x = 1 + 3;
         y = 0x1234 + 0x56;
         z = (1, 0x12) + (x, y);
@@ -177,7 +177,7 @@ fn main() -> anyhow::Result<()> {
 
         product = |xs, init| xs.fold(init, |acc, x| acc * x);
         product_of_ints = (1, 5, 2).product(1);
-    "#;
+    ";
     let ast = Parser::parse_statements(code)?;
 
     let mut env = TypeEnvironment::<NumOrBytesType>::new();

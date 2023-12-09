@@ -103,11 +103,11 @@ fn extract_fn<T, A>(
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
-/// let program = r#"
+/// let program = "
 ///     // Finds a minimum number in an array.
 ///     extended_min = |...xs| fold(xs, INFINITY, min);
 ///     extended_min(2, -3, 7, 1, 3) == -3
-/// "#;
+/// ";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = ExecutableModule::new("test_min", &program)?;
 ///
@@ -126,9 +126,9 @@ fn extract_fn<T, A>(
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, env::Comparisons, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
-/// let program = r#"
+/// let program = "
 ///     map((1, -7, 0, 2), |x| cmp(x, 0)) == (GREATER, LESS, EQUAL, GREATER)
-/// "#;
+/// ";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = ExecutableModule::new("test_cmp", &program)?;
 ///
@@ -203,12 +203,12 @@ impl<T> NativeFn<T> for Compare {
 /// # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 /// # use arithmetic_eval::{fns, env::Comparisons, Environment, ExecutableModule, Value};
 /// # fn main() -> anyhow::Result<()> {
-/// let program = r#"
+/// let program = "
 ///     recursive_fib = defer(|fib| {
 ///         |n| if(n >= 0 && n <= 1, || n, || fib(n - 1) + fib(n - 2))()
 ///     });
 ///     recursive_fib(10)
-/// "#;
+/// ";
 /// let program = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = ExecutableModule::new("test_defer", &program)?;
 ///
@@ -289,10 +289,10 @@ mod tests {
 
     #[test]
     fn if_basics() -> anyhow::Result<()> {
-        let block = r#"
+        let block = "
             x = 1.0;
             if(x < 2, x + 5, 3 - x)
-        "#;
+        ";
         let block = Untyped::<F32Grammar>::parse_statements(block)?;
         let module = ExecutableModule::new(WildcardId, &block)?;
         let mut env = Environment::new();
@@ -303,10 +303,10 @@ mod tests {
 
     #[test]
     fn if_with_closures() -> anyhow::Result<()> {
-        let block = r#"
+        let block = "
             x = 4.5;
             if(x < 2, || x + 5, || 3 - x)()
-        "#;
+        ";
         let block = Untyped::<F32Grammar>::parse_statements(block)?;
         let module = ExecutableModule::new(WildcardId, &block)?;
         let mut env = Environment::new();
@@ -341,7 +341,7 @@ mod tests {
 
     #[test]
     fn while_basic() -> anyhow::Result<()> {
-        let program = r#"
+        let program = "
             // Finds the greatest power of 2 lesser or equal to the value.
             discrete_log2 = |x| {
                 while(0, |i| 2^i <= x, |i| i + 1) - 1
@@ -349,7 +349,7 @@ mod tests {
 
             (discrete_log2(1), discrete_log2(2),
                 discrete_log2(4), discrete_log2(6.5), discrete_log2(1000))
-        "#;
+        ";
         let block = Untyped::<F32Grammar>::parse_statements(program)?;
 
         let module = ExecutableModule::new(WildcardId, &block)?;
@@ -372,12 +372,12 @@ mod tests {
 
     #[test]
     fn max_value_with_fold() -> anyhow::Result<()> {
-        let program = r#"
+        let program = "
             max_value = |...xs| {
                 fold(xs, -Inf, |acc, x| if(x > acc, x, acc))
             };
             max_value(1, -2, 7, 2, 5) == 7 && max_value(3, -5, 9) == 9
-        "#;
+        ";
         let block = Untyped::<F32Grammar>::parse_statements(program)?;
 
         let module = ExecutableModule::new(WildcardId, &block)?;
@@ -398,13 +398,13 @@ mod tests {
             (&[1.0], &[1.0]),
         ];
 
-        let program = r#"
+        let program = "
             reverse = |xs| {
                 fold(xs, (), |acc, x| merge((x,), acc))
             };
             xs = (-4, 3, 0, 1);
             reverse(xs) == (1, 0, 3, -4)
-        "#;
+        ";
         let block = Untyped::<F32Grammar>::parse_statements(program)?;
         let module = ExecutableModule::new(WildcardId, &block)?;
 

@@ -240,11 +240,11 @@ fn unsupported_const_param_in_generic_fn() {
 
 #[test]
 fn adding_dynamically_typed_slices() {
-    let code = r#"
+    let code = "
         x: [Num] = (1, 2);
         y: [Num] = (3, 4, 5);
         x + y
-    "#;
+    ";
 
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -263,11 +263,11 @@ fn adding_dynamically_typed_slices() {
 
 #[test]
 fn unifying_dynamic_slices_error() {
-    let code = r#"
+    let code = "
         x: [Num] = (1, 2);
         y: [Num] = (3, 4, 5);
         x.zip_with(y)
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("zip_with", zip_fn_type());
@@ -454,11 +454,11 @@ fn contradicting_dyn_constraint_via_field_access() {
 
 #[test]
 fn contradicting_field_types_via_annotations() {
-    let code = r#"
+    let code = "
        |obj| {
             { x -> _: Num } = obj; !obj.x
        }
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();

@@ -261,10 +261,10 @@ where
 /// // We can compare numbers by their integer value. This can lead
 /// // to pretty confusing results, though.
 /// let bogus_arithmetic = base.with_natural_comparison();
-/// let program = Untyped::<NumGrammar<u32>>::parse_statements(r#"
+/// let program = Untyped::<NumGrammar<u32>>::parse_statements("
 ///     (x, y, z) = (1, 12, 5);
 ///     x == y && x < z && y > z
-/// "#)?;
+/// ")?;
 /// let module = ExecutableModule::new("test", &program)?;
 /// let env = Environment::with_arithmetic(bogus_arithmetic);
 /// assert_eq!(module.with_env(&env)?.run()?, Value::Bool(true));

@@ -26,10 +26,10 @@ use crate::{
 /// # use arithmetic_eval::{fns, Environment, ErrorKind, ExecutableModule};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
-/// let program = r#"
+/// let program = "
 ///     assert(1 + 2 != 5); // this assertion is fine
 ///     assert(3^2 > 10); // this one will fail
-/// "#;
+/// ";
 /// let module = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = ExecutableModule::new("test_assert", &module)?;
 ///
@@ -103,10 +103,10 @@ fn create_error_with_values<T: fmt::Display>(
 /// # use arithmetic_eval::{fns, Environment, ErrorKind, ExecutableModule};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
-/// let program = r#"
+/// let program = "
 ///     assert_eq(1 + 2, 3); // this assertion is fine
 ///     assert_eq(3^2, 10); // this one will fail
-/// "#;
+/// ";
 /// let module = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = ExecutableModule::new("test_assert", &module)?;
 ///
@@ -165,10 +165,10 @@ impl<T: fmt::Display> NativeFn<T> for AssertEq {
 /// # use arithmetic_eval::{fns, Environment, ExecutableModule};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
-/// let program = r#"
+/// let program = "
 ///     assert_close(sqrt(9), 3); // this assertion is fine
 ///     assert_close(sqrt(10), 3); // this one should fail
-/// "#;
+/// ";
 /// let module = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = ExecutableModule::new("test_assert", &module)?;
 ///
@@ -263,11 +263,11 @@ impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
 /// # use arithmetic_eval::{fns, Environment, ExecutableModule};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
-/// let program = r#"
+/// let program = "
 ///     obj = #{ x: 3 };
 ///     assert_fails(|| obj.x + obj.y); // pass: `obj.y` is not defined
 ///     assert_fails(|| obj.x); // fail: function executes successfully
-/// "#;
+/// ";
 /// let module = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = ExecutableModule::new("test_assert", &module)?;
 ///
@@ -294,10 +294,10 @@ impl<T: Clone + fmt::Display> NativeFn<T> for AssertClose<T> {
 ///     matches!(err.kind(), ErrorKind::NativeCall(_))
 /// });
 ///
-/// let program = r#"
+/// let program = "
 ///     assert_fails(|| assert_fails(1)); // pass: native error
 ///     assert_fails(assert_fails); // fail: arg len mismatch
-/// "#;
+/// ";
 /// let module = Untyped::<F32Grammar>::parse_statements(program)?;
 /// let module = ExecutableModule::new("test_assert", &module)?;
 ///

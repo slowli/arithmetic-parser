@@ -26,12 +26,12 @@ fn type_hint_within_tuple() {
 
 #[test]
 fn type_hint_in_fn_arg() {
-    let code = r#"
+    let code = "
         foo = |tuple: (Num, _), fun| {
             (x, flag) = tuple;
             flag && fun() == x
         };
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
@@ -106,10 +106,10 @@ fn widening_type_hint_with_slice_arg() {
 
 #[test]
 fn fn_narrowed_via_type_hint() {
-    let code = r#"
+    let code = "
         identity: (Num) -> _ = |x| x;
         identity((1, 2));
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
@@ -134,10 +134,10 @@ fn fn_incorrectly_narrowed_via_type_hint() {
 
 #[test]
 fn fn_instantiated_via_type_hint() {
-    let code = r#"
+    let code = "
         identity: (_) -> _ = |x| x;
         identity(5) == 5;
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
@@ -168,13 +168,13 @@ fn assigning_to_dynamically_sized_slice() {
 
 #[test]
 fn assigning_to_a_slice_and_then_narrowing() {
-    let code = r#"
+    let code = "
         slice_fn = |xs| {
             _unused: [Num] = xs;
             (x, y, z) = xs;
             x + y * z
         };
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
@@ -184,7 +184,7 @@ fn assigning_to_a_slice_and_then_narrowing() {
 
 #[test]
 fn unifying_tuples_with_middle() {
-    let code = r#"
+    let code = "
         xs: (Num, ...[Num; _]) = (1, 2, 3);
         ys: (...[_; _], _) = (4, 5, |x| x);
         zs: (_, ...[Num], _) = (6, 7, 8, 9);
@@ -193,7 +193,7 @@ fn unifying_tuples_with_middle() {
         (...xs_head: Num, _) = xs;
         (_, _, _: (_) -> _) = ys;
         (_, ...zs_middle, _) = zs;
-    "#;
+    ";
 
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -208,11 +208,11 @@ fn unifying_tuples_with_middle() {
 
 #[test]
 fn unifying_tuples_with_dyn_lengths() {
-    let code = r#"
+    let code = "
         xs: (_, ...[_], _) = (true, 1, 2, 3, 4);
         (_, _, ...ys) = xs; // should work
         zs: (...[_; _], _, Num) = xs; // should not work (Bool and Num cannot be unified)
-    "#;
+    ";
 
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -234,11 +234,11 @@ fn unifying_tuples_with_dyn_lengths() {
 
 #[test]
 fn fn_with_varargs() {
-    let code = r#"
+    let code = "
         sum = |...xs: Num| xs.fold(0, |acc, x| acc + x);
         sum_spec: (Num, Num, Num) -> _ = sum;
         tuple_sum = |init, ...xs: (_, _)| xs.fold((init, init), |acc, x| acc + x);
-    "#;
+    ";
 
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -265,11 +265,11 @@ fn any_type() {
 
 #[test]
 fn type_with_tuple_of_any() {
-    let code = r#"
+    let code = "
         test: [any; _] = (1, 1 == 2, |x| x + 1);
         (x, y, z) = test;
         test(1) // should fail: slices are not callable
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
@@ -287,11 +287,11 @@ fn type_with_tuple_of_any() {
 
 #[test]
 fn type_with_any_fn() {
-    let code = r#"
+    let code = "
         fun: (any) -> _ = |x| x == 1;
         fun(1 == 1) && fun((1, 2, 3)) && fun(|x| x + 1);
         fun(1, 2) // should fail: function is only callable with 1 arg
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
@@ -307,10 +307,10 @@ fn type_with_any_fn() {
 
 #[test]
 fn dyn_type_in_slice() {
-    let code = r#"
+    let code = "
         lin_tuple: [dyn Lin; _] = (1, (2, 5), 9);
         bogus_tuple: [dyn Lin; _] = (1, 2, 3 == 4);
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
@@ -369,7 +369,7 @@ fn generalizing_dyn_constraint() {
 
 #[test]
 fn dyn_annotation_on_fn_arg() {
-    let code = r#"
+    let code = "
         test = |obj: dyn { x: Num, y: Num }| obj.x + obj.y;
         test(#{ x: 1, y: 2 });
         test(#{ x: 1, y: 2, z: 3 });
@@ -378,7 +378,7 @@ fn dyn_annotation_on_fn_arg() {
         test(pt);
         pt: dyn { x: Num, y: Num, z: Num } = #{ x: 1, y: 2, z: 3 };
         test(pt);
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
@@ -392,7 +392,7 @@ fn dyn_annotation_on_fn_arg() {
 
 #[test]
 fn partial_dyn_annotation_on_fn_arg() {
-    let code = r#"
+    let code = "
         test = |obj: dyn { x: _, y: _ }| obj.x + obj.y;
         test(#{ x: 1, y: 2 });
         test(#{ x: 1, y: 2, z: 3 });
@@ -404,7 +404,7 @@ fn partial_dyn_annotation_on_fn_arg() {
         test(pt);
         pt: dyn { x: _, y: _ } = #{ x: 1, y: 2 };
         test(pt);
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
@@ -417,10 +417,10 @@ fn partial_dyn_annotation_on_fn_arg() {
 
 #[test]
 fn dyn_annotation_propagation() {
-    let code = r#"
+    let code = "
         test = |objs: [dyn { x: _ }; _]| objs.map(|obj| obj.x + 1);
         (#{ x: 1, y: 2 }, #{ x: 2 }, #{ x: 3, y: (1,) }).test();
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env
@@ -436,9 +436,9 @@ fn dyn_annotation_propagation() {
 
 #[test]
 fn mix_of_any_and_specific_types_in_fns() {
-    let code = r#"
+    let code = "
         accepts_fn = |fn| { _unused: (any) -> any = fn; (fn(2), fn(3)) + (4, 5) };
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
@@ -451,11 +451,11 @@ fn mix_of_any_and_specific_types_in_fns() {
 
 #[test]
 fn annotations_for_fns_with_slices() {
-    let code = r#"
+    let code = "
         first: (_) -> [_] = |(x, y)| (x,);
         inc: ([_]) -> [_] = |xs: [Num; _]| xs.map(|x| x + 1);
         bogus: ([_]) -> [_] = |(x, y)| (x,);
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.insert("map", Prelude::Map);
@@ -474,7 +474,7 @@ fn annotations_for_fns_with_slices() {
 
 #[test]
 fn annotations_for_fns_with_slices_in_contravariant_position() {
-    let code = r#"
+    let code = "
         |fn| {
             _unused: ([_]) -> [_] = fn;
             fn((1, 2)) + (3, 4);
@@ -482,7 +482,7 @@ fn annotations_for_fns_with_slices_in_contravariant_position() {
             (x, ...) = fn((1, 2, 3));
             x
         }
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let output = type_env.process_statements(&block).unwrap();
@@ -555,10 +555,10 @@ fn object_annotations() {
 
 #[test]
 fn object_annotations_in_function() {
-    let code = r#"
+    let code = "
         test = |obj: { x: _ }| obj.x == 1;
         test(#{ x: 1 });
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
@@ -577,10 +577,10 @@ fn object_annotations_in_function() {
 
 #[test]
 fn object_destructure_with_narrowing_annotation() {
-    let code = r#"
+    let code = "
         test = |{ x -> x_: Num, y }| x_ + y;
         test(#{ x: 1, y: 2 });
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
@@ -593,10 +593,10 @@ fn object_destructure_with_narrowing_annotation() {
 
 #[test]
 fn embedded_object_type_annotation() {
-    let code = r#"
+    let code = "
         test = |{ pt -> pt: { x: Num, y: Num } }| pt.x + pt.y;
         test(#{ pt: #{ x: 1, y: 2 } });
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();

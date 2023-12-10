@@ -44,12 +44,12 @@ use crate::{arith::WithBoolean, Function, Object, PrimitiveType, Type, UnknownLe
 /// # use arithmetic_typing::{defs::Prelude, error::ErrorKind, Annotated, TypeEnvironment, Type};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
-/// let code = r#"
+/// let code = "
 ///     len = |xs| xs.fold(0, |acc, _| acc + 1);
 ///     slice = (1, 2).merge((3, 4));
 ///     slice.len(); // methods working on slices are applicable
 ///     (_, _, _, z) = slice; // but destructuring is not
-/// "#;
+/// ";
 /// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 ///
 /// let mut env: TypeEnvironment = Prelude::iter().collect();

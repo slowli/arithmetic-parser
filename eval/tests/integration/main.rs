@@ -63,11 +63,11 @@ fn basic_program_with_tuples() {
 
 #[test]
 fn arithmetic_ops_on_tuples() {
-    let program = r#"
+    let program = "
         x = (1, 2) + (3, 4);
         (y, z) = (0, 3) * (2, 0.5) - x;
         u = (1, 2) + 3 * (0.5, z);
-    "#;
+    ";
     let mut env = Environment::new();
     evaluate(&mut env, program);
     assert_eq!(
@@ -108,7 +108,7 @@ fn comparisons() {
         .insert("false", Value::Bool(false))
         .insert_native_fn("sin", SIN);
 
-    let program = r#"
+    let program = "
         foo = |x| { x + 1 };
         alias = foo;
 
@@ -116,7 +116,7 @@ fn comparisons() {
             && true == true && true != false && (true, false) == (true, false)
             && foo == foo && foo == alias && foo != 1 && sin == sin && foo != sin
             && (foo, (-1, 3)) == (alias, (-1, 3))
-    "#;
+    ";
     let return_value = evaluate(&mut env, program);
     assert_eq!(return_value, Value::Bool(true));
 }
@@ -130,13 +130,13 @@ fn tuple_destructuring_with_multiple_components() {
 
 #[test]
 fn tuple_destructuring_with_middle() {
-    let program = r#"
+    let program = "
         (x, ...) = (1, 2, 3);
         (..., u, v) = (-5, -4, -3, -2, -1);
         (_, _, ...middle, y) = (1, 2, 3, 4, 5);
         ((_, a), ..., (b, ...)) = ((1, 2), (3, 4, 5));
         x == 1 && u == -2 && v == -1 && middle == (3, 4) && y == 5 && a == 2 && b == 3
-    "#;
+    ";
     let return_value = evaluate(&mut Environment::new(), program);
     assert_eq!(return_value, Value::Bool(true));
 }
@@ -263,10 +263,10 @@ fn repeated_var_in_lvalue() {
 
 #[test]
 fn error_in_function_args() {
-    let program = r#"
+    let program = "
         add = |x, (_, z)| x + z;
         add(1, 2)
-    "#;
+    ";
 
     let err = try_evaluate(&mut Environment::new(), program).unwrap_err();
     let err = err.source();
@@ -370,10 +370,10 @@ fn comparison_return_value() {
 
 #[test]
 fn comparison_constants_are_comparable() {
-    let program = r#"
+    let program = "
         EQUAL != LESS && cmp(5, 3) != LESS && (LESS, GREATER) == (cmp(3, 4), cmp(4, -5)) &&
             EQUAL != 0 && LESS != -1
-    "#;
+    ";
     let mut env = Environment::new();
     env.extend(Comparisons::iter());
     let return_value = evaluate(&mut env, program);

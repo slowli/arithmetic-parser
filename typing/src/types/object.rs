@@ -30,11 +30,11 @@ use crate::{
 /// # use arithmetic_typing::{error::ErrorKind, Annotated, TypeEnvironment};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
-/// let code = r#"
+/// let code = "
 ///     sum_coords = |pt: { x: Num, y: Num }| pt.x + pt.y;
 ///     sum_coords(#{ x: 3, y: 4 }); // OK
 ///     sum_coords(#{ x: 3, y: 4, z: 5 }); // fails
-/// "#;
+/// ";
 /// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 /// let err = TypeEnvironment::new().process_statements(&ast).unwrap_err();
 /// # assert_eq!(err.len(), 1);
@@ -55,11 +55,11 @@ use crate::{
 /// # use arithmetic_typing::{error::ErrorKind, Annotated, TypeEnvironment};
 /// # use assert_matches::assert_matches;
 /// # fn main() -> anyhow::Result<()> {
-/// let code = r#"
+/// let code = "
 ///     sum_coords = |pt| pt.x + pt.y;
 ///     sum_coords(#{ x: 3, y: 4 }); // OK
 ///     sum_coords(#{ x: 3, y: 4, z: 5 }); // also OK
-/// "#;
+/// ";
 /// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 /// let mut env = TypeEnvironment::new();
 /// env.process_statements(&ast)?;

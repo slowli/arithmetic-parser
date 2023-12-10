@@ -113,10 +113,10 @@
 //! // (for which the linearity constraint is applied based on the arg usage)
 //! // *and* by its length.
 //!
-//! let usage_code = r#"
+//! let usage_code = "
 //!     num_sum: Num = (1, 2, 3).sum_with(0);
 //!     tuple_sum: (Num, Num) = ((1, 2), (3, 4)).sum_with((0, 0));
-//! "#;
+//! ";
 //! let ast = Annotated::<F32Grammar>::parse_statements(usage_code)?;
 //! // Both lengths and element types differ in these invocations,
 //! // but it works fine since they are treated independently.

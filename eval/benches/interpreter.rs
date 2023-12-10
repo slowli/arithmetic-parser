@@ -287,7 +287,7 @@ fn bench_quick_sort_native_slow(bencher: &mut Bencher<'_>) {
 }
 
 fn bench_quick_sort_interpreted(bencher: &mut Bencher<'_>) {
-    let program = r#"
+    let program = "
         quick_sort = |xs, quick_sort| {
             if(xs == (), || (), || {
                 (pivot, ...rest) = xs;
@@ -297,7 +297,7 @@ fn bench_quick_sort_interpreted(bencher: &mut Bencher<'_>) {
             })()
         };
         |xs| quick_sort(xs, quick_sort)
-    "#;
+    ";
     let program = Untyped::<F32Grammar>::parse_statements(program).unwrap();
     let sort_module = ExecutableModule::new("sort", &program).unwrap();
 

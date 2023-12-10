@@ -248,10 +248,10 @@ mod tests {
         let binary_fn = Binary::new(f32::min);
         let ternary_fn = Ternary::new(|x: f32, y, z| if x > 0.0 { y } else { z });
 
-        let program = r#"
+        let program = "
             unary_fn(2) == 5 && binary_fn(1, -3) == -3 &&
                 ternary_fn(1, 2, 3) == 2 && ternary_fn(-1, 2, 3) == 3
-        "#;
+        ";
         let block = Untyped::<F32Grammar>::parse_statements(program)?;
         let module = ExecutableModule::new(WildcardId, &block)?;
 
@@ -285,10 +285,10 @@ mod tests {
 
     #[test]
     fn functions_with_composite_args() -> anyhow::Result<()> {
-        let program = r#"
+        let program = "
             array_min_max((1, 5, -3, 2, 1)) == (-3, 5) &&
                 total_sum(((1, 2), (3, 4)), ((5, 6, 7), 8)) == 36
-        "#;
+        ";
         let block = Untyped::<F32Grammar>::parse_statements(program)?;
         let module = ExecutableModule::new(WildcardId, &block)?;
 
@@ -412,10 +412,10 @@ mod tests {
             obj
         }
 
-        let program = r#"
+        let program = "
             { len, tuple } = test((1, 1, 1));
             len == 3 && tuple == (1, 1, 1)
-        "#;
+        ";
         let block = Untyped::<F32Grammar>::parse_statements(program)?;
         let module = ExecutableModule::new(WildcardId, &block)?;
 

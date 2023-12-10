@@ -146,14 +146,14 @@
 //! };
 //!
 //! # fn main() -> anyhow::Result<()> {
-//! let program = r#"
+//! let program = "
 //!     // The interpreter supports all parser features, including
 //!     // function definitions, tuples and blocks.
 //!     order = |x, y| (min(x, y), max(x, y));
 //!     assert_eq(order(0.5, -1), (-1, 0.5));
 //!     (_, M) = order(3^2, { x = 3; x + 5 });
 //!     M
-//! "#;
+//! ";
 //! let program = Untyped::<F32Grammar>::parse_statements(program)?;
 //! // To execute statements, we first compile them into a module.
 //! let module = ExecutableModule::new("test", &program)?;
@@ -177,14 +177,14 @@
 //! # use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 //! # use arithmetic_eval::{env::{Assertions, Environment, Prelude}, ExecutableModule, Value};
 //! # fn main() -> anyhow::Result<()> {
-//! let program = r#"
+//! let program = "
 //!     minmax = |...xs| xs.fold(#{ min: INF, max: -INF }, |acc, x| #{
 //!          min: if(x < acc.min, x, acc.min),
 //!          max: if(x > acc.max, x, acc.max),
 //!     });
 //!     assert_eq(minmax(3, 7, 2, 4).min, 2);
 //!     assert_eq(minmax(5, -4, 6, 9, 1), #{ min: -4, max: 9 });
-//! "#;
+//! ";
 //! let program = Untyped::<F32Grammar>::parse_statements(program)?;
 //! let module = ExecutableModule::new("minmax", &program)?;
 //!

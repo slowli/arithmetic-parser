@@ -30,7 +30,7 @@ static ALLOCATOR: Heap = Heap::empty();
 
 const HEAP_SIZE: usize = 49_152;
 
-const MINMAX_SCRIPT: &str = r#"
+const MINMAX_SCRIPT: &str = "
     minmax = |xs| fold(xs, #{ min: MAX_VALUE, max: MIN_VALUE }, |acc, x| #{
          min: if(x < acc.min, x, acc.min),
          max: if(x > acc.max, x, acc.max),
@@ -38,7 +38,7 @@ const MINMAX_SCRIPT: &str = r#"
     xs = dbg(array(10, |_| rand_num()));
     { min, max } = dbg(minmax(xs));
     assert(fold(xs, true, |acc, x| acc && x >= min && x <= max));
-"#;
+";
 
 /// Analogue of `arithmetic_eval::fns::Dbg` that writes to the semihosting interface.
 struct Dbg;

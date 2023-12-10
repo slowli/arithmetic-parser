@@ -95,7 +95,7 @@
 //!     NomResult, Statement, Expr, FnDefinition, LvalueLen,
 //! };
 //!
-//! const PROGRAM: &str = r#"
+//! const PROGRAM: &str = "
 //!     // This is a comment.
 //!     x = 1 + 2.5 * 3 + sin(a^3 / b^2 /* another comment */);
 //!     // Function declarations have syntax similar to Rust closures.
@@ -107,7 +107,7 @@
 //!     // Tuples and blocks are supported and have a similar syntax to Rust.
 //!     (y, z) = some_function({ x = x - 0.5; x }, x);
 //!     other_function(y - z)
-//! "#;
+//! ";
 //!
 //! # fn main() -> anyhow::Result<()> {
 //! let block = Untyped::<F32Grammar>::parse_statements(PROGRAM)?;

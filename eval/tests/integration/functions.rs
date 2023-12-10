@@ -20,10 +20,10 @@ fn program_with_interpreted_function() {
 
 #[test]
 fn destructuring_in_fn_args() {
-    let program = r#"
+    let program = "
         swap = |x, (y, z)| ((x, y), z);
         swap(1, (2, 3))
-    "#;
+    ";
     let return_value = evaluate(&mut Environment::new(), program);
     let inner_tuple = Value::from(vec![Value::Prim(1.0), Value::Prim(2.0)]);
     assert_eq!(

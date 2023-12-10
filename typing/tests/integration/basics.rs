@@ -36,10 +36,10 @@ fn boolean_statements() {
 
 #[test]
 fn spreading_binary_ops() {
-    let code = r#"
+    let code = "
         x = 3 * (1, 2);
         y = (1, x, 3) * 4;
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();
@@ -50,13 +50,13 @@ fn spreading_binary_ops() {
 
 #[test]
 fn function_definition() {
-    let code = r#"
+    let code = "
         sign = |x, msg| {
             (r, R) = hash() * (1, 3);
             c = hash(R, msg);
             (R, r + c * x)
         };
-    "#;
+    ";
 
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -71,11 +71,11 @@ fn function_definition() {
 
 #[test]
 fn non_linear_types_in_function() {
-    let code = r#"
+    let code = "
         compare = |x, y| x == y;
         compare_hash = |x, z| x == 2 ^ hash(z);
         add_hashes = |x, y| hash(x, y) + hash(y, x);
-    "#;
+    ";
 
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
@@ -98,11 +98,11 @@ fn non_linear_types_in_function() {
 
 #[test]
 fn method_basics() {
-    let code = r#"
+    let code = "
         foo = 3.plus(4);
         do_something = |x| x - 5;
         bar = foo.do_something();
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     let plus_type = Function::builder()
@@ -140,10 +140,10 @@ fn variable_scoping() {
 
 #[test]
 fn destructuring_for_tuple_on_assignment() {
-    let code = r#"
+    let code = "
         (x, ...ys) = (1, 2, 3);
         (...zs, fn, flag) = (4, 5, 6, |x| x + 3, 1 == 1);
-    "#;
+    ";
     let block = F32Grammar::parse_statements(code).unwrap();
     let mut type_env = TypeEnvironment::new();
     type_env.process_statements(&block).unwrap();

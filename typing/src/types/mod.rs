@@ -144,12 +144,12 @@ impl TypeVar {
 /// # use assert_matches::assert_matches;
 ///
 /// # fn main() -> anyhow::Result<()> {
-/// let code = r#"
+/// let code = "
 ///     wildcard: any = 1; // `any` can be assigned from anything
 ///     wildcard == 1 && wildcard == (2, 3);
 ///     (x, y, ...) = wildcard; // destructuring `any` always succeeds
-///     wildcard(1, |x| x + 1); // calling `any` as a funcion works as well
-/// "#;
+///     wildcard(1, |x| x + 1); // calling `any` as a function works as well
+/// ";
 /// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 /// let mut env = TypeEnvironment::new();
 /// env.process_statements(&ast)?;
@@ -375,12 +375,12 @@ impl<Prim: PrimitiveType> Type<Prim> {
 /// # use arithmetic_typing::{defs::Prelude, Annotated, TypeEnvironment, Type, Function};
 /// #
 /// # fn main() -> anyhow::Result<()> {
-/// let code = r#"
+/// let code = "
 ///     sum_lengths = |...pts: dyn { x: _, y: _ }| {
 ///         pts.fold(0, |acc, { x, y }| acc + sqrt(x * x + y * y))
 ///     };
 ///     sum_lengths(#{ x: 1, y: 2 }, #{ x: 3, y: 4, z: 5 })
-/// "#;
+/// ";
 /// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 ///
 /// let mut env = TypeEnvironment::new();
@@ -413,10 +413,10 @@ impl<Prim: PrimitiveType> Type<Prim> {
 /// let mut env = TypeEnvironment::new();
 /// env.insert("true", Prelude::True).insert("digest", digest_fn);
 ///
-/// let code = r#"
+/// let code = "
 ///     digest(1, 2, (3, 4), #{ x: 5, y: (6,) }) == 1;
 ///     digest(3, true) == 0; // fails: `true` is not linear
-/// "#;
+/// ";
 /// let ast = Annotated::<F32Grammar>::parse_statements(code)?;
 /// let errors = env.process_statements(&ast).unwrap_err();
 ///

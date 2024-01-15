@@ -220,7 +220,7 @@ impl<'r, 'a> From<&'r TypeAst<'a>> for LvalueTree<'r, 'a> {
 }
 
 impl<'r> From<&'r ()> for LvalueTree<'r, '_> {
-    fn from(_: &'r ()) -> Self {
+    fn from((): &'r ()) -> Self {
         Self::JustSpan
     }
 }

@@ -114,6 +114,7 @@ impl<'r, T> From<&'r dyn OrdArithmetic<T>> for Operations<'r, T> {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_field_names)] // since the field is private, it's never accessed as `var.registers`
 pub(crate) struct Registers<T> {
     // TODO: restore `SmallVec` wrapped into a covariant wrapper.
     registers: Vec<Value<T>>,

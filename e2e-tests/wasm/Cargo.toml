@@ -13,7 +13,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # WASM glue
-wasm-bindgen = { version = "0.2.90", features = ["serde-serialize"] }
+wasm-bindgen = { version = "0.2.91", features = ["serde-serialize"] }
 
 arithmetic-parser = { path = "../../parser", default-features = false }
 arithmetic-eval = { path = "../../eval" }

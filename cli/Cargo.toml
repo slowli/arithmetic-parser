@@ -14,14 +14,14 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
-clap = { version = "4.5.0", features = ["derive", "env", "wrap_help"] }
+clap = { version = "4.5.2", features = ["derive", "env", "wrap_help"] }
 codespan = "0.11.1"
 codespan-reporting = "0.11.1"
 is-terminal = "0.4.12"
 num-complex.workspace = true
 num-traits.workspace = true
 rustyline = "13.0.0"
-textwrap = "0.16.0"
+textwrap = "0.16.1"
 unindent = "0.2.3"
 
 arithmetic-parser = { version = "0.3.0", path = "../parser" }

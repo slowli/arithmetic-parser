@@ -12,6 +12,9 @@ use arithmetic_typing::{
 };
 
 /// Literal for arithmetic: either an integer or a byte buffer.
+#[allow(dead_code)]
+// ^ Variant values would be used in arithmetic implementation, which is omitted since it's not the focus
+// of the example.
 #[derive(Debug, Clone)]
 enum NumOrBytes {
     /// Integer number, such as 1.

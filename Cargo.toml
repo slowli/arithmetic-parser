@@ -27,13 +27,13 @@ bitflags = "2.5.0"
 criterion = "0.5.0"
 derive_more = "0.99.7"
 glass_pumpkin = "1.0.0"
-hashbrown = "0.14.3"
+hashbrown = "0.14.5"
 hex = "0.4.2"
 nom = { version = "7", default-features = false, features = ["alloc"] }
 nom_locate = { version = "4", default-features = false, features = ["alloc"] }
 num-bigint = "0.4.0"
 num-complex = "0.4.5"
-num-traits = { version = "0.2.18", default-features = false }
+num-traits = { version = "0.2.19", default-features = false }
 once_cell = { version = "1.19.0", default-features = false }
 pulldown-cmark = "0.9.6"
 rand = "0.8.3"

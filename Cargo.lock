@@ -106,7 +106,7 @@ dependencies = [
  "num-complex",
  "num-traits",
  "once_cell",
- "pulldown-cmark",
+ "pulldown-cmark 0.11.0",
  "rand",
  "sha2",
  "static_assertions",
@@ -127,7 +127,7 @@ dependencies = [
  "num-bigint",
  "num-complex",
  "num-traits",
- "pulldown-cmark",
+ "pulldown-cmark 0.11.0",
  "version-sync",
 ]
 
@@ -185,7 +185,7 @@ dependencies = [
  "hex",
  "nom",
  "num-traits",
- "pulldown-cmark",
+ "pulldown-cmark 0.11.0",
  "version-sync",
 ]
 
@@ -1051,10 +1051,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57206b407293d2bcd3af849ce869d52068623f19e1b5ff8e8778e3309439682b"
 dependencies = [
  "bitflags",
- "getopts",
  "memchr",
  "unicase",
 ]
+
+[[package]]
+name = "pulldown-cmark"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8746739f11d39ce5ad5c2520a9b75285310dbfe78c541ccf832d38615765aec0"
+dependencies = [
+ "bitflags",
+ "getopts",
+ "memchr",
+ "pulldown-cmark-escape",
+ "unicase",
+]
+
+[[package]]
+name = "pulldown-cmark-escape"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "007d8adb5ddab6f8e3f491ac63566a7d5002cc7ed73901f72057943fa71ae1ae"
 
 [[package]]
 name = "quick-xml"
@@ -1577,7 +1595,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "835169da0173ea373ddf5987632aac1f918967fbbe58195e304342282efa6089"
 dependencies = [
  "proc-macro2",
- "pulldown-cmark",
+ "pulldown-cmark 0.9.6",
  "regex",
  "semver 1.0.23",
  "syn 2.0.68",

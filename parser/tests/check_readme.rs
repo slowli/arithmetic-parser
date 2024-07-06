@@ -1,6 +1,6 @@
 //! Tests that the README code sample actually parses.
 
-use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag};
+use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag, TagEnd};
 
 use std::fs;
 
@@ -36,10 +36,11 @@ fn code_sample_in_readme_is_parsed() {
                 assert!(code.is_none(), "Embedded code samples");
                 code = Some(String::with_capacity(1_024));
             }
-            Event::End(Tag::CodeBlock(CodeBlockKind::Fenced(lang))) if lang.as_ref() == "text" => {
-                let code_sample = code.take().unwrap();
-                assert!(!code_sample.is_empty());
-                check_sample(&code_sample);
+            Event::End(TagEnd::CodeBlock) => {
+                if let Some(code_sample) = code.take() {
+                    assert!(!code_sample.is_empty());
+                    check_sample(&code_sample);
+                }
             }
             Event::Text(text) => {
                 if let Some(code) = &mut code {

@@ -10,7 +10,7 @@ env:
   # Minimum supported Rust version.
   msrv: 1.65.0
   # Nightly Rust toolchain for building docs and checking nostd support.
-  nightly: nightly-2023-09-09
+  nightly: nightly-2024-07-05
 
 jobs:
   # Checks minimum supported Rust version.
@@ -49,7 +49,7 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - name: Install cargo-deny

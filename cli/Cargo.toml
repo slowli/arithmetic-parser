@@ -14,10 +14,10 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
-clap = { version = "4.5.8", features = ["derive", "env", "wrap_help"] }
+clap = { version = "4.5.16", features = ["derive", "env", "wrap_help"] }
 codespan = "0.11.1"
 codespan-reporting = "0.11.1"
-is-terminal = "0.4.12"
+is-terminal = "0.4.13"
 num-complex.workspace = true
 num-traits.workspace = true
 rustyline = "14.0.0"

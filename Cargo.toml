@@ -16,7 +16,7 @@ resolver = "2"
 version = "0.3.0"
 authors = ["Alex Ostrovski <ostrovski.alex@gmail.com>"]
 edition = "2021"
-rust-version = "1.65"
+rust-version = "1.70"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/slowli/arithmetic-parser"
 

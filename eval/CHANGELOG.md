@@ -40,7 +40,7 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 - Make `hashbrown` an optional dependency, which is only necessary if the std library
   is not available. (#106)
 
-- Bump minimum supported Rust version to 1.65 and switch to 2021 Rust edition. (#107, #108, #112)
+- Bump minimum supported Rust version to 1.70 and switch to 2021 Rust edition. (#107, #108, #112)
 
 - Remove the lifetime param in `Value`, `ExecutableModule`, `Error` and other types in the crate
   by stripping code spans on compilation. (#121)

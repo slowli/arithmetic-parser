@@ -1,7 +1,5 @@
 //! Simple CLI / REPL for evaluating arithmetic expressions.
 
-#![allow(clippy::incompatible_msrv)] // FIXME
-
 use anyhow::format_err;
 use clap::{Args, Parser, Subcommand};
 use codespan_reporting::term::{termcolor::ColorChoice, ColorArg};

@@ -2,7 +2,6 @@
 
 [![Build Status](https://github.com/slowli/arithmetic-parser/workflows/CI/badge.svg?branch=master)](https://github.com/slowli/arithmetic-parser/actions)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue)](https://github.com/slowli/arithmetic-parser#license)
-![rust 1.65+ required](https://img.shields.io/badge/rust-1.65+-blue.svg)
 
 CLI and REPL for parsing and evaluating arithmetic expressions
 that uses [`arithmetic-parser`](../parser) and [`arithmetic-eval`](../eval) internally.

@@ -142,7 +142,6 @@ dependencies = [
  "clap",
  "codespan",
  "codespan-reporting",
- "is-terminal",
  "num-complex",
  "num-traits",
  "rustyline",
@@ -651,9 +650,9 @@ dependencies = [
 
 [[package]]
 name = "handlebars"
-version = "4.5.0"
+version = "5.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "faa67bab9ff362228eb3d00bd024a4965d8231bbb7921167f0cfa66c6626b225"
+checksum = "d08485b96a0e6393e9e4d1b8d48cf74ad6c063cd905eb33f42c1ce3f0377539b"
 dependencies = [
  "log",
  "pest",
@@ -1056,9 +1055,9 @@ checksum = "007d8adb5ddab6f8e3f491ac63566a7d5002cc7ed73901f72057943fa71ae1ae"
 
 [[package]]
 name = "quick-xml"
-version = "0.30.0"
+version = "0.31.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eff6510e86862b57b210fd8cbe8ed3f0d7d600b9c2863cd4549a2e033c66e956"
+checksum = "1004a344b30a54e2ee58d66a71b32d2db2feb0a31f9a2d302bf0536f15de2a33"
 dependencies = [
  "memchr",
 ]
@@ -1340,8 +1339,9 @@ dependencies = [
 
 [[package]]
 name = "term-transcript"
-version = "0.3.0"
-source = "git+https://github.com/slowli/term-transcript.git?rev=982d74b9808ca1d975008a1256793a5d6b47b6b0#982d74b9808ca1d975008a1256793a5d6b47b6b0"
+version = "0.4.0-beta.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56fa98b635bc17f60fe03b7f48bd61d467120144660ed5a56694193160258cdc"
 dependencies = [
  "bytecount",
  "handlebars",

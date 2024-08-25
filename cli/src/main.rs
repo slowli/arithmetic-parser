@@ -3,11 +3,10 @@
 use anyhow::format_err;
 use clap::{Args, Parser, Subcommand};
 use codespan_reporting::term::{termcolor::ColorChoice, ColorArg};
-use is_terminal::IsTerminal;
 use num_complex::{Complex32, Complex64};
 
 use std::{
-    io::{self, Read},
+    io::{self, IsTerminal, Read},
     process,
     str::FromStr,
 };

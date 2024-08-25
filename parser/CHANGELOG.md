@@ -16,7 +16,7 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Update `nom` parser dependency to v7 and `nom_locate` to v4. (#99, #100)
 
-- Bump minimum supported Rust version to 1.65 and switch to 2021 Rust edition. (#107, #108, #112)
+- Bump minimum supported Rust version to 1.70 and switch to 2021 Rust edition. (#107, #108, #112)
 
 - Remove `MaybeSpanned` type in favor of `Location`. (#121)
 

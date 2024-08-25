@@ -11,7 +11,7 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ### Changed
 
-- Bump minimum supported Rust version to 1.65 and switch to 2021 Rust edition. (#107, #108, #112)
+- Bump minimum supported Rust version to 1.70 and switch to 2021 Rust edition. (#107, #108, #112)
 
 - Remove `Object::just()` constructor in favor of more general `From<[_; N]>` implementation. (#117)
 

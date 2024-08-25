@@ -3,14 +3,14 @@
 //! # How it works
 //!
 //! 1. A `Block` of statements is *compiled* into an [`ExecutableModule`]. Internally,
-//!   compilation processes the AST of the block and transforms it into a non-recusrive form.
-//!   An [`ExecutableModule`] may require *imports* (such as [`NativeFn`]s or constant [`Value`]s),
-//!   which can be taken from an [`Environment`].
+//!    compilation processes the AST of the block and transforms it into a non-recusrive form.
+//!    An [`ExecutableModule`] may require *imports* (such as [`NativeFn`]s or constant [`Value`]s),
+//!    which can be taken from an [`Environment`].
 //! 2. [`ExecutableModule`] can then be executed, for the return value and/or for the
-//!   changes at the top-level variable scope. There are two major variables influencing
-//!   the execution outcome. An [arithmetic](crate::arith) is used to define arithmetic ops
-//!   (`+`, unary and binary `-`, `*`, `/`, `^`) and comparisons (`==`, `!=`, `>`, `<`, `>=`, `<=`).
-//!   Imports may be redefined at this stage as well.
+//!    changes at the top-level variable scope. There are two major variables influencing
+//!    the execution outcome. An [arithmetic](crate::arith) is used to define arithmetic ops
+//!    (`+`, unary and binary `-`, `*`, `/`, `^`) and comparisons (`==`, `!=`, `>`, `<`, `>=`, `<=`).
+//!    Imports may be redefined at this stage as well.
 //!
 //! # Type system
 //!

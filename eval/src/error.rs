@@ -111,7 +111,7 @@ impl fmt::Display for RepeatedAssignmentContext {
 pub enum ErrorKind {
     /// Mismatch between length of tuples in a binary operation or assignment.
     #[display(
-        fmt = "Mismatch between length of tuples in {context}: LHS has {lhs} element(s), whereas RHS has {rhs}"
+        "Mismatch between length of tuples in {context}: LHS has {lhs} element(s), whereas RHS has {rhs}"
     )]
     TupleLenMismatch {
         /// Length of a tuple on the left-hand side.
@@ -124,7 +124,7 @@ pub enum ErrorKind {
 
     /// Field set differs between LHS and RHS, which are both objects.
     #[display(
-        fmt = "Cannot perform {op} on objects: LHS has fields {lhs_fields:?}, whereas RHS has fields {rhs_fields:?}"
+        "Cannot perform {op} on objects: LHS has fields {lhs_fields:?}, whereas RHS has fields {rhs_fields:?}"
     )]
     FieldsMismatch {
         /// Fields in LHS.
@@ -137,8 +137,8 @@ pub enum ErrorKind {
 
     /// Mismatch between the number of arguments in the function definition and its call.
     #[display(
-        fmt = "Mismatch between the number of arguments in the function definition and its call: \
-            definition requires {def} arg(s), call has {call}"
+        "Mismatch between the number of arguments in the function definition and its call: \
+         definition requires {def} arg(s), call has {call}"
     )]
     ArgsLenMismatch {
         /// Number of args at the function definition.
@@ -148,11 +148,11 @@ pub enum ErrorKind {
     },
 
     /// Cannot destructure a non-tuple variable.
-    #[display(fmt = "Cannot destructure a non-tuple variable")]
+    #[display("Cannot destructure a non-tuple variable")]
     CannotDestructure,
 
     /// Repeated assignment to the same variable in function args or tuple destructuring.
-    #[display(fmt = "Repeated assignment to the same variable in {context}")]
+    #[display("Repeated assignment to the same variable in {context}")]
     RepeatedAssignment {
         /// Context in which the error has occurred.
         context: RepeatedAssignmentContext,
@@ -160,32 +160,32 @@ pub enum ErrorKind {
 
     /// Repeated field in object initialization (e.g., `#{ x: 1, x: 2 }`) or destructure
     /// (e.g., `{ x, x }`).
-    #[display(fmt = "Repeated object field")]
+    #[display("Repeated object field")]
     RepeatedField,
 
     /// Variable with the enclosed name is not defined.
-    #[display(fmt = "Variable `{_0}` is not defined")]
+    #[display("Variable `{_0}` is not defined")]
     Undefined(String),
     /// Variable is not initialized.
-    #[display(fmt = "Variable `{_0}` is not initialized")]
+    #[display("Variable `{_0}` is not initialized")]
     Uninitialized(String),
 
     /// Field name is invalid.
-    #[display(fmt = "`{_0}` is not a valid field name")]
+    #[display("`{_0}` is not a valid field name")]
     InvalidFieldName(String),
 
     /// Value is not callable (i.e., it is not a function).
-    #[display(fmt = "Value is not callable")]
+    #[display("Value is not callable")]
     CannotCall,
     /// Value cannot be indexed (i.e., it is not a tuple).
-    #[display(fmt = "Value cannot be indexed")]
+    #[display("Value cannot be indexed")]
     CannotIndex,
     /// A field cannot be accessed for the value (i.e., it is not an object).
-    #[display(fmt = "Fields cannot be accessed for the object")]
+    #[display("Fields cannot be accessed for the object")]
     CannotAccessFields,
 
     /// Index is out of bounds for the indexed tuple.
-    #[display(fmt = "Attempting to get element {index} from tuple with length {len}")]
+    #[display("Attempting to get element {index} from tuple with length {len}")]
     IndexOutOfBounds {
         /// Index.
         index: usize,
@@ -193,7 +193,7 @@ pub enum ErrorKind {
         len: usize,
     },
     /// Object does not have a required field.
-    #[display(fmt = "Object does not have field {field}")]
+    #[display("Object does not have field {field}")]
     NoField {
         /// Missing field.
         field: String,
@@ -202,15 +202,15 @@ pub enum ErrorKind {
     },
 
     /// Generic error during execution of a native function.
-    #[display(fmt = "Failed executing native function: {_0}")]
+    #[display("Failed executing native function: {_0}")]
     NativeCall(String),
 
     /// Error while converting arguments for [`FnWrapper`](crate::fns::FnWrapper).
-    #[display(fmt = "Failed converting arguments for native function wrapper: {_0}")]
+    #[display("Failed converting arguments for native function wrapper: {_0}")]
     Wrapper(FromValueError),
 
     /// Unexpected operand type for the specified operation.
-    #[display(fmt = "Unexpected operand type for {op}")]
+    #[display("Unexpected operand type for {op}")]
     UnexpectedOperand {
         /// Operation which failed.
         op: Op,
@@ -218,15 +218,15 @@ pub enum ErrorKind {
 
     /// Value cannot be compared to other values. Only primitive values can be compared; other value types
     /// cannot.
-    #[display(fmt = "Value cannot be compared to other values")]
+    #[display("Value cannot be compared to other values")]
     CannotCompare,
 
     /// Construct not supported by the interpreter.
-    #[display(fmt = "Unsupported {_0}")]
+    #[display("Unsupported {_0}")]
     Unsupported(UnsupportedType),
 
     /// [`Arithmetic`](crate::arith::Arithmetic) error, such as division by zero.
-    #[display(fmt = "Arithmetic error: {_0}")]
+    #[display("Arithmetic error: {_0}")]
     Arithmetic(ArithmeticError),
 }
 

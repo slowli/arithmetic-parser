@@ -106,7 +106,7 @@ dependencies = [
  "num-complex",
  "num-traits",
  "once_cell",
- "pulldown-cmark 0.11.2",
+ "pulldown-cmark 0.12.0",
  "rand",
  "sha2",
  "static_assertions",
@@ -127,7 +127,7 @@ dependencies = [
  "num-bigint",
  "num-complex",
  "num-traits",
- "pulldown-cmark 0.11.2",
+ "pulldown-cmark 0.12.0",
  "version-sync",
 ]
 
@@ -185,7 +185,7 @@ dependencies = [
  "hex",
  "nom",
  "num-traits",
- "pulldown-cmark 0.11.2",
+ "pulldown-cmark 0.12.0",
  "version-sync",
 ]
 
@@ -207,7 +207,7 @@ version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5deb64efa5bd81e31fcd1938615a6d98c82eafcbcd787162b6f63b91d6bac5b3"
 dependencies = [
- "rustc_version 0.2.3",
+ "rustc_version",
 ]
 
 [[package]]
@@ -364,12 +364,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b6a852b24ab71dffc585bcb46eaf7959d175cb865a7152e35b348d1b2960422"
 
 [[package]]
-name = "convert_case"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
-
-[[package]]
 name = "core2"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -514,15 +508,23 @@ dependencies = [
 
 [[package]]
 name = "derive_more"
-version = "0.99.18"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f33878137e4dafd7fa914ad4e259e18a4e8e532b9617a2d0150262bf53abfce"
+checksum = "4a9b99b9cbbe49445b21764dc0625032a89b145a2642e67603e1c936f5458d05"
 dependencies = [
- "convert_case",
+ "derive_more-impl",
+]
+
+[[package]]
+name = "derive_more-impl"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb7330aeadfbe296029522e6c40f315320aba36fc43a5b3632f3795348f3bd22"
+dependencies = [
  "proc-macro2",
  "quote",
- "rustc_version 0.4.0",
  "syn 2.0.68",
+ "unicode-xid",
 ]
 
 [[package]]
@@ -1057,9 +1059,9 @@ dependencies = [
 
 [[package]]
 name = "pulldown-cmark"
-version = "0.11.2"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb4e75767fbc9d92b90e4d0c011f61358cde9513b31ef07ea3631b15ffc3b4fd"
+checksum = "4d31cbfcd94884c3a67ec210c83efb06cb43674043458b0ad59f6947f8462c23"
 dependencies = [
  "bitflags",
  "getopts",
@@ -1188,15 +1190,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "138e3e0acb6c9fb258b19b67cb8abd63c00679d2851805ea151465464fe9030a"
 dependencies = [
  "semver 0.9.0",
-]
-
-[[package]]
-name = "rustc_version"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bfa0f585226d2e68097d4f95d113b15b83a82e819ab25717ec0590d9584ef366"
-dependencies = [
- "semver 1.0.23",
 ]
 
 [[package]]
@@ -1558,6 +1551,12 @@ name = "unicode-width"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0336d538f7abc86d282a4189614dfaa90810dfc2c6f6427eaf88e16311dd225d"
+
+[[package]]
+name = "unicode-xid"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "229730647fbc343e3a80e463c1db7f78f3855d3f3739bee0dda773c9a037c90a"
 
 [[package]]
 name = "unindent"

@@ -1,20 +1,20 @@
 //! Transformation of AST output by the parser into non-recursive format.
 
-use crate::{
-    alloc::{Arc, HashMap, String, ToOwned},
-    exec::{Atom, Command, CompiledExpr, Executable, ExecutableModule, FieldName, ModuleId},
-    Error, ErrorKind,
-};
 use arithmetic_parser::{
     grammars::Grammar, BinaryOp, Block, Destructure, FnDefinition, InputSpan, Lvalue,
     ObjectDestructure, Spanned, SpannedLvalue, UnaryOp,
 };
 
-mod captures;
-mod expr;
-
 pub(crate) use self::captures::Captures;
 use self::captures::{CapturesExtractor, CompilerExtTarget};
+use crate::{
+    alloc::{Arc, HashMap, String, ToOwned},
+    exec::{Atom, Command, CompiledExpr, Executable, ExecutableModule, FieldName, ModuleId},
+    Error, ErrorKind,
+};
+
+mod captures;
+mod expr;
 
 #[derive(Debug)]
 pub(crate) struct Compiler {

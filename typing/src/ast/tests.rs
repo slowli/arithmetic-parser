@@ -1,6 +1,6 @@
-use assert_matches::assert_matches;
-
 use std::ops::Range;
+
+use assert_matches::assert_matches;
 
 use super::*;
 

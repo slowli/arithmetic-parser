@@ -2,16 +2,6 @@
 
 use std::{borrow::Cow, fmt};
 
-use crate::{
-    arith::{CompleteConstraints, ConstraintSet, Num, ObjectSafeConstraint, WithBoolean},
-    PrimitiveType,
-};
-
-mod fn_type;
-mod object;
-mod quantifier;
-mod tuple;
-
 pub(crate) use self::{
     fn_type::{FnParams, ParamConstraints},
     quantifier::ParamQuantifier,
@@ -22,6 +12,15 @@ pub use self::{
     object::Object,
     tuple::{LengthVar, Slice, Tuple, TupleIndex, TupleLen, UnknownLen},
 };
+use crate::{
+    arith::{CompleteConstraints, ConstraintSet, Num, ObjectSafeConstraint, WithBoolean},
+    PrimitiveType,
+};
+
+mod fn_type;
+mod object;
+mod quantifier;
+mod tuple;
 
 /// Type variable.
 ///
@@ -481,10 +480,10 @@ impl<Prim: PrimitiveType> DynConstraints<Prim> {
 
 #[cfg(test)]
 mod tests {
+    use std::convert::TryFrom;
+
     use super::*;
     use crate::ast::TypeAst;
-
-    use std::convert::TryFrom;
 
     #[test]
     fn types_are_equal_to_self() -> anyhow::Result<()> {

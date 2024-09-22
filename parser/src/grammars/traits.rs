@@ -1,8 +1,8 @@
+use core::{fmt, marker::PhantomData};
+
 use anyhow::anyhow;
 use bitflags::bitflags;
 use nom::Err as NomErr;
-
-use core::{fmt, marker::PhantomData};
 
 use crate::{
     parser::{statements, streaming_statements},

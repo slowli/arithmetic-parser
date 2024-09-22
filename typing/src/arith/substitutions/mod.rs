@@ -6,6 +6,7 @@ use std::{
     iter, ops, ptr,
 };
 
+use self::fns::{MonoTypeTransformer, ParamMapping};
 use crate::{
     arith::{CompleteConstraints, Constraint},
     error::{ErrorKind, ErrorPathFragment, OpErrors, TupleContext},
@@ -14,8 +15,6 @@ use crate::{
 };
 
 mod fns;
-use self::fns::{MonoTypeTransformer, ParamMapping};
-
 #[cfg(test)]
 mod tests;
 

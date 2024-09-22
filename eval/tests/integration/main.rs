@@ -1,7 +1,5 @@
 //! Tests of basic functionality.
 
-use assert_matches::assert_matches;
-
 use arithmetic_eval::{
     env::{Comparisons, Environment},
     error::{Error, ErrorKind, ErrorWithBacktrace, RepeatedAssignmentContext},
@@ -12,6 +10,7 @@ use arithmetic_parser::{
     grammars::{F32Grammar, Parse, Untyped},
     BinaryOp, LvalueLen, UnaryOp,
 };
+use assert_matches::assert_matches;
 
 #[cfg(feature = "complex")]
 mod custom_cmp;

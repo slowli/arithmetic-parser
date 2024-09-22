@@ -230,10 +230,11 @@ mod alloc {
          to get a hash map implementation"
     );
 
-    #[cfg(feature = "hashbrown")]
-    pub use hashbrown::{hash_map, HashMap, HashSet};
     #[cfg(not(feature = "hashbrown"))]
     pub use std::collections::{hash_map, HashMap, HashSet};
+
+    #[cfg(feature = "hashbrown")]
+    pub use hashbrown::{hash_map, HashMap, HashSet};
 }
 
 pub use self::{

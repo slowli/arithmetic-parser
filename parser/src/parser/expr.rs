@@ -1,5 +1,7 @@
 //! `Expr`-related parsing functions.
 
+use core::mem;
+
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while1},
@@ -10,8 +12,6 @@ use nom::{
     sequence::{delimited, preceded, terminated, tuple},
     Err as NomErr, Slice,
 };
-
-use core::mem;
 
 use super::{
     block, fn_def,

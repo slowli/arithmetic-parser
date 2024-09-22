@@ -256,13 +256,13 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for ParamPlacement<Prim> {
 
 #[cfg(test)]
 mod tests {
+    use core::iter;
+
     use super::*;
     use crate::{
         arith::{CompleteConstraints, Num},
         Object,
     };
-
-    use core::iter;
 
     #[test]
     fn analyzing_map_fn() {

@@ -429,10 +429,10 @@ impl<Prim: PrimitiveType> FunctionBuilder<Prim> {
 
 #[cfg(test)]
 mod tests {
+    use core::iter;
+
     use super::*;
     use crate::{arith::Linearity, UnknownLen};
-
-    use core::iter;
 
     #[test]
     fn constraints_display() {

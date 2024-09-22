@@ -1,14 +1,5 @@
 //! Common utils.
 
-use codespan::{FileId, Files};
-use codespan_reporting::{
-    diagnostic::{Diagnostic, Label, Severity},
-    files::Error as FilesError,
-    term::termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor},
-    term::{emit, Config as ReportingConfig},
-};
-use unindent::unindent;
-
 use std::{
     io::{self, Write},
     ops::Range,
@@ -28,6 +19,17 @@ use arithmetic_typing::{
     error::Errors as TypingErrors,
     Annotated, Type, TypeEnvironment,
 };
+use codespan::{FileId, Files};
+use codespan_reporting::{
+    diagnostic::{Diagnostic, Label, Severity},
+    files::Error as FilesError,
+    term::{
+        emit,
+        termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor},
+        Config as ReportingConfig,
+    },
+};
+use unindent::unindent;
 
 use crate::library::ReplLiteral;
 

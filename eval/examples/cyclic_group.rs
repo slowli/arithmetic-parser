@@ -7,11 +7,6 @@
 //! ⚠ This implementation is NOT SECURE (e.g., in terms of side-channel attacks)
 //! and should be viewed only as a showcase of the crate abilities.
 
-use glass_pumpkin::safe_prime;
-use num_bigint::{BigUint, RandBigInt};
-use rand::thread_rng;
-use sha2::{digest::Digest, Sha256};
-
 use std::{cell::RefCell, fmt};
 
 use arithmetic_eval::{
@@ -25,6 +20,10 @@ use arithmetic_parser::{
     grammars::{Features, NumGrammar, NumLiteral, Parse, Untyped},
     InputSpan, NomResult,
 };
+use glass_pumpkin::safe_prime;
+use num_bigint::{BigUint, RandBigInt};
+use rand::thread_rng;
+use sha2::{digest::Digest, Sha256};
 
 /// Literals for our cyclic groups. We type them into scalars and group elements despite
 /// both being represented by `BigUint`, since allowed arithmetic ops on scalars and group elements

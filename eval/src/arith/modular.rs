@@ -1,11 +1,11 @@
 //! Modular arithmetic.
 
-use num_traits::{NumOps, One, Signed, Unsigned, Zero};
-
 use core::{
     convert::{TryFrom, TryInto},
     mem,
 };
+
+use num_traits::{NumOps, One, Signed, Unsigned, Zero};
 
 use crate::{arith::Arithmetic, error::ArithmeticError};
 
@@ -200,9 +200,9 @@ static_assertions::assert_impl_all!(ModularArithmetic<u64>: Arithmetic<u64>);
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use rand::{rngs::StdRng, Rng, SeedableRng};
+
+    use super::*;
 
     #[test]
     fn modular_arithmetic_basics() {

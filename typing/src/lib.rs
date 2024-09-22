@@ -154,6 +154,7 @@ pub mod error;
 mod types;
 pub mod visit;
 
+use self::{arith::ConstraintSet, ast::TypeAst};
 pub use self::{
     env::TypeEnvironment,
     types::{
@@ -161,8 +162,6 @@ pub use self::{
         Tuple, TupleIndex, TupleLen, Type, TypeVar, UnknownLen,
     },
 };
-
-use self::{arith::ConstraintSet, ast::TypeAst};
 
 /// Primitive types in a certain type system.
 ///

@@ -1,7 +1,8 @@
 //! Executable `Command` and its building blocks.
 
-use crate::alloc::{String, Vec};
 use arithmetic_parser::{BinaryOp, Location, LvalueLen, UnaryOp};
+
+use crate::alloc::{String, Vec};
 
 /// Pointer to a register or constant.
 #[derive(Debug)]

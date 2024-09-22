@@ -2,6 +2,12 @@
 
 use std::{collections::HashMap, fmt, iter, mem};
 
+use arithmetic_parser::{
+    grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Destructure, DestructureRest, Expr,
+    FnDefinition, Lvalue, ObjectDestructure, ObjectExpr, Spanned, SpannedExpr, SpannedLvalue,
+    SpannedStatement, Statement, UnaryOp,
+};
+
 use crate::{
     arith::{BinaryOpContext, UnaryOpContext},
     ast::{AstConversionState, SpannedTypeAst, TypeAst},
@@ -10,11 +16,6 @@ use crate::{
     types::IndexError,
     visit::VisitMut,
     Function, Object, PrimitiveType, Slice, Tuple, TupleLen, Type,
-};
-use arithmetic_parser::{
-    grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Destructure, DestructureRest, Expr,
-    FnDefinition, Lvalue, ObjectDestructure, ObjectExpr, Spanned, SpannedExpr, SpannedLvalue,
-    SpannedStatement, Statement, UnaryOp,
 };
 
 /// Processor for deriving type information.

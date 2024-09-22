@@ -2,11 +2,12 @@
 
 use std::{collections::HashSet, fmt};
 
+use arithmetic_parser::UnsupportedType;
+
 use crate::{
     arith::Constraint, ast::AstConversionError, error::ErrorPathFragment, PrimitiveType,
     TupleIndex, TupleLen, Type,
 };
-use arithmetic_parser::UnsupportedType;
 
 /// Context in which a tuple is used.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

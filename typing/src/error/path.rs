@@ -1,12 +1,13 @@
 //! `ErrorLocation` and related functionality.
 
-use crate::{
-    ast::{SpannedTypeAst, TupleAst, TypeAst},
-    TupleIndex,
-};
 use arithmetic_parser::{
     grammars::Grammar, Destructure, DestructureRest, Expr, Lvalue, Spanned, SpannedExpr,
     SpannedLvalue,
+};
+
+use crate::{
+    ast::{SpannedTypeAst, TupleAst, TypeAst},
+    TupleIndex,
 };
 
 impl TupleIndex {
@@ -244,13 +245,13 @@ impl<'r, 'a> LvalueTree<'r, 'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::Annotated;
-
     use arithmetic_parser::{
         grammars::{NumGrammar, Parse},
         Statement,
     };
+
+    use super::*;
+    use crate::Annotated;
 
     type F32Grammar = Annotated<NumGrammar<f32>>;
 

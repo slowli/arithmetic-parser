@@ -1,7 +1,5 @@
 //! Tests focused on objects.
 
-use assert_matches::assert_matches;
-
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
     arith::NumArithmetic,
@@ -9,6 +7,7 @@ use arithmetic_typing::{
     error::{ErrorKind, TupleContext},
     TupleLen, Type, TypeEnvironment,
 };
+use assert_matches::assert_matches;
 
 use crate::{hash_fn_type, ErrorsExt, F32Grammar};
 

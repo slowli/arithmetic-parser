@@ -5,16 +5,6 @@
 
 extern crate alloc;
 
-use cortex_m_rt::entry;
-use cortex_m_semihosting::{debug, hprintln, syscall};
-use embedded_alloc::LlffHeap as Heap;
-#[cfg(target_arch = "arm")]
-use panic_halt as _;
-use rand_chacha::{
-    rand_core::{RngCore, SeedableRng},
-    ChaChaRng,
-};
-
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
@@ -24,6 +14,15 @@ use arithmetic_eval::{
     fns, CallContext, Environment, EvalResult, ExecutableModule, NativeFn, SpannedValue, Value,
 };
 use arithmetic_parser::grammars::{NumGrammar, Parse, Untyped};
+use cortex_m_rt::entry;
+use cortex_m_semihosting::{debug, hprintln, syscall};
+use embedded_alloc::LlffHeap as Heap;
+#[cfg(target_arch = "arm")]
+use panic_halt as _;
+use rand_chacha::{
+    rand_core::{RngCore, SeedableRng},
+    ChaChaRng,
+};
 
 #[global_allocator]
 static ALLOCATOR: Heap = Heap::empty();

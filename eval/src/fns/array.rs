@@ -585,14 +585,14 @@ impl<T: Clone + 'static> NativeFn<T> for All {
 
 #[cfg(test)]
 mod tests {
+    use arithmetic_parser::grammars::{F32Grammar, NumGrammar, NumLiteral, Parse, Untyped};
+    use assert_matches::assert_matches;
+
     use super::*;
     use crate::{
         arith::{OrdArithmetic, StdArithmetic, WrappingArithmetic},
         Environment, ExecutableModule,
     };
-
-    use arithmetic_parser::grammars::{F32Grammar, NumGrammar, NumLiteral, Parse, Untyped};
-    use assert_matches::assert_matches;
 
     fn test_len_function<T: NumLiteral, A>(arithmetic: A)
     where

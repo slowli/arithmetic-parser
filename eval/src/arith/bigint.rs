@@ -1,7 +1,7 @@
+use core::{convert::TryFrom, mem};
+
 use num_bigint::{BigInt, BigUint};
 use num_traits::{One, Signed, Zero};
-
-use core::{convert::TryFrom, mem};
 
 use super::{Arithmetic, ArithmeticError, ModularArithmetic};
 
@@ -74,12 +74,12 @@ impl Arithmetic<BigUint> for ModularArithmetic<BigUint> {
 
 #[cfg(test)]
 mod bigint_tests {
-    use super::*;
-    use crate::arith::{CheckedArithmetic, NegateOnlyZero, OrdArithmetic, Unchecked};
-
     use num_bigint::{BigInt, BigUint};
     use rand::{rngs::StdRng, Rng, SeedableRng};
     use static_assertions::assert_impl_all;
+
+    use super::*;
+    use crate::arith::{CheckedArithmetic, NegateOnlyZero, OrdArithmetic, Unchecked};
 
     assert_impl_all!(CheckedArithmetic<NegateOnlyZero>: OrdArithmetic<BigUint>);
     assert_impl_all!(CheckedArithmetic<Unchecked>: OrdArithmetic<BigInt>);

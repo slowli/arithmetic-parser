@@ -2,23 +2,23 @@
 
 use std::fmt;
 
-use crate::{
-    arith::{BinaryOpContext, UnaryOpContext},
-    ast::AstConversionError,
-    visit::VisitMut,
-    PrimitiveType, Tuple, Type,
-};
 use arithmetic_parser::{Location, Spanned, UnsupportedType};
-
-mod kind;
-mod op_errors;
-mod path;
 
 pub use self::{
     kind::{ErrorKind, TupleContext},
     op_errors::OpErrors,
     path::ErrorPathFragment,
 };
+use crate::{
+    arith::{BinaryOpContext, UnaryOpContext},
+    ast::AstConversionError,
+    visit::VisitMut,
+    PrimitiveType, Tuple, Type,
+};
+
+mod kind;
+mod op_errors;
+mod path;
 
 /// Type error together with the corresponding code span.
 #[derive(Debug, Clone)]

@@ -681,9 +681,9 @@ impl<Prim: PrimitiveType> From<Slice<Prim>> for Tuple<Prim> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use assert_matches::assert_matches;
+
+    use super::*;
 
     #[test]
     fn tuple_length_display() {

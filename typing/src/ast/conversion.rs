@@ -1,12 +1,15 @@
 //! Logic for converting `*Ast` types into their "main" counterparts.
 
-use nom::Err as NomErr;
-
 use std::{
     collections::{HashMap, HashSet},
     convert::TryFrom,
     fmt,
 };
+
+use arithmetic_parser::{
+    Error as ParseError, ErrorKind as ParseErrorKind, InputSpan, NomResult, Spanned,
+};
+use nom::Err as NomErr;
 
 use crate::{
     arith::{CompleteConstraints, Constraint, ConstraintSet},
@@ -18,9 +21,6 @@ use crate::{
     types::{ParamConstraints, ParamQuantifier},
     DynConstraints, Function, Object, PrimitiveType, Slice, Tuple, Type, TypeEnvironment,
     UnknownLen,
-};
-use arithmetic_parser::{
-    Error as ParseError, ErrorKind as ParseErrorKind, InputSpan, NomResult, Spanned,
 };
 
 /// Kinds of errors that can occur when converting `*Ast` types into their "main" counterparts.

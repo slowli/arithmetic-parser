@@ -1,7 +1,5 @@
 //! Errors with explicit type annotations.
 
-use assert_matches::assert_matches;
-
 use std::convert::TryFrom;
 
 use arithmetic_parser::{grammars::Parse, InputSpan};
@@ -11,6 +9,7 @@ use arithmetic_typing::{
     error::{ErrorContext, ErrorKind, TupleContext},
     TupleLen, Type, TypeEnvironment,
 };
+use assert_matches::assert_matches;
 
 use crate::{
     assert_incompatible_types,

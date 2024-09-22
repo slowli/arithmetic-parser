@@ -6,6 +6,7 @@
 //! [`TypeAst`] and [`FunctionAst`]. These two types expose `parse` method which
 //! allows to integrate them into `nom` parsing.
 
+use arithmetic_parser::{with_span, ErrorKind as ParseErrorKind, InputSpan, NomResult, Spanned};
 use nom::{
     branch::alt,
     bytes::complete::{tag, take, take_until, take_while, take_while1, take_while_m_n},
@@ -15,14 +16,12 @@ use nom::{
     sequence::{delimited, preceded, separated_pair, terminated, tuple},
 };
 
-use arithmetic_parser::{with_span, ErrorKind as ParseErrorKind, InputSpan, NomResult, Spanned};
+pub use self::conversion::AstConversionError;
+pub(crate) use self::conversion::AstConversionState;
 
 mod conversion;
 #[cfg(test)]
 mod tests;
-
-pub use self::conversion::AstConversionError;
-pub(crate) use self::conversion::AstConversionState;
 
 /// Type annotation after parsing.
 ///

@@ -18,6 +18,8 @@
 //! See [`ParseLiteral`], [`Grammar`] and [`Parse`] docs for the examples of various grammar
 //! definitions.
 
+use core::{fmt, marker::PhantomData};
+
 use nom::{
     bytes::complete::take_while_m_n,
     character::complete::{char as tag_char, digit1},
@@ -27,16 +29,13 @@ use nom::{
     Slice,
 };
 
-use core::{fmt, marker::PhantomData};
-
-mod traits;
-
 pub use self::traits::{
     Features, Grammar, IntoInputSpan, MockTypes, Parse, ParseLiteral, Typed, Untyped,
     WithMockedTypes,
 };
-
 use crate::{spans::NomResult, ErrorKind, InputSpan};
+
+mod traits;
 
 /// Single-type numeric grammar parameterized by the literal type.
 #[derive(Debug)]
@@ -236,10 +235,10 @@ mod bigint {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use assert_matches::assert_matches;
     use nom::Err as NomErr;
+
+    use super::*;
 
     #[test]
     fn parsing_numbers_with_dot() {
@@ -284,8 +283,9 @@ mod tests {
     #[cfg(feature = "num-complex")]
     #[test]
     fn parsing_i() {
-        use crate::{Expr, UnaryOp};
         use num_complex::Complex32;
+
+        use crate::{Expr, UnaryOp};
 
         type C32Grammar = Untyped<NumGrammar<Complex32>>;
 

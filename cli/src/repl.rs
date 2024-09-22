@@ -1,12 +1,11 @@
 //! REPL for arithmetic expressions.
 
-use codespan_reporting::term::termcolor::ColorChoice;
-use rustyline::{error::ReadlineError, Editor};
-
 use std::io;
 
 use arithmetic_eval::Environment;
 use arithmetic_typing::TypeEnvironment;
+use codespan_reporting::term::termcolor::ColorChoice;
+use rustyline::{error::ReadlineError, Editor};
 
 use crate::{
     common::{Env, ParseAndEvalResult},

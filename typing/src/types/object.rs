@@ -256,10 +256,10 @@ impl<Prim: PrimitiveType> ops::Index<&str> for Object<Prim> {
 
 #[cfg(test)]
 mod tests {
+    use assert_matches::assert_matches;
+
     use super::*;
     use crate::arith::Num;
-
-    use assert_matches::assert_matches;
 
     fn get_err(errors: OpErrors<'_, Num>) -> ErrorKind<Num> {
         let mut errors = errors.into_vec();

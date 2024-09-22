@@ -321,10 +321,10 @@ impl Assertions {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::{HashMap, HashSet};
+
     use super::*;
     use crate::arith::Num;
-
-    use std::collections::{HashMap, HashSet};
 
     const EXPECTED_PRELUDE_TYPES: &[(&str, &str)] = &[
         ("false", "Bool"),

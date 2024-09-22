@@ -2,18 +2,7 @@
 
 use core::fmt;
 
-use crate::{
-    alloc::Arc,
-    compiler::{Captures, Compiler},
-    env::Environment,
-    error::{Backtrace, Error, ErrorKind, ErrorWithBacktrace},
-    Value,
-};
 use arithmetic_parser::{grammars::Grammar, Block};
-
-mod command;
-mod module_id;
-mod registers;
 
 pub use self::module_id::{IndexedId, ModuleId, WildcardId};
 pub(crate) use self::{
@@ -21,6 +10,17 @@ pub(crate) use self::{
     registers::{Executable, ExecutableFn, Operations, Registers},
 };
 pub use crate::compiler::CompilerExt;
+use crate::{
+    alloc::Arc,
+    compiler::{Captures, Compiler},
+    env::Environment,
+    error::{Backtrace, Error, ErrorKind, ErrorWithBacktrace},
+    Value,
+};
+
+mod command;
+mod module_id;
+mod registers;
 
 /// Executable module together with its imports.
 ///

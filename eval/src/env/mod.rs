@@ -2,15 +2,15 @@
 
 use core::{iter, ops};
 
-mod variable_map;
 pub use self::variable_map::{Assertions, Comparisons, Prelude};
-
 use crate::{
     alloc::{hash_map, Arc, HashMap, String, ToOwned},
     arith::{OrdArithmetic, StdArithmetic},
     exec::Operations,
     fns, NativeFn, Value,
 };
+
+mod variable_map;
 
 /// Environment containing named `Value`s.
 ///

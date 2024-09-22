@@ -1,11 +1,11 @@
 //! Error handling.
 
+use core::fmt;
+
 use nom::{
     error::{ContextError, ErrorKind as NomErrorKind, FromExternalError, ParseError},
     Slice,
 };
-
-use core::fmt;
 
 use crate::{
     BinaryOp, ExprType, InputSpan, LocatedSpan, Location, LvalueType, Op, Spanned, StatementType,

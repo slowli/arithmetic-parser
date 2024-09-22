@@ -2,16 +2,17 @@
 
 use core::iter;
 
+use arithmetic_parser::{
+    grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Expr, FnDefinition, ObjectExpr,
+    Spanned, SpannedExpr, SpannedStatement, Statement,
+};
+
 use super::{captures::extract_vars_iter, CapturesExtractor, Compiler};
 use crate::{
     alloc::{HashMap, String, ToOwned, Vec},
     error::RepeatedAssignmentContext,
     exec::{Atom, Command, CompiledExpr, Executable, ExecutableFn, FieldName, LocatedAtom},
     Error, ErrorKind,
-};
-use arithmetic_parser::{
-    grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Expr, FnDefinition, ObjectExpr,
-    Spanned, SpannedExpr, SpannedStatement, Statement,
 };
 
 impl Compiler {

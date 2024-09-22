@@ -3,8 +3,6 @@
 //!
 //! The example uses complex-valued literals and features a primitive form of constant folding.
 
-use num_complex::Complex32;
-
 use std::{
     collections::{HashMap, HashSet},
     fmt::{self, Write as _},
@@ -17,6 +15,7 @@ use arithmetic_parser::{
     BinaryOp, Block, Expr, FnDefinition, InputSpan, Lvalue, OpPriority, SpannedExpr, SpannedLvalue,
     Statement, UnaryOp,
 };
+use num_complex::Complex32;
 
 type ComplexGrammar = Untyped<NumGrammar<Complex32>>;
 

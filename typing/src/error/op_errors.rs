@@ -2,12 +2,13 @@
 
 use std::ops;
 
+use arithmetic_parser::{grammars::Grammar, Destructure, Spanned, SpannedExpr, SpannedLvalue};
+
 use crate::{
     ast::TypeAst,
     error::{Error, ErrorContext, ErrorKind, ErrorPathFragment},
     PrimitiveType,
 };
-use arithmetic_parser::{grammars::Grammar, Destructure, Spanned, SpannedExpr, SpannedLvalue};
 
 /// Error container tied to a particular top-level operation that has a certain span
 /// and [context](ErrorContext).

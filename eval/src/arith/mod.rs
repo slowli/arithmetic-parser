@@ -33,13 +33,6 @@
 
 use core::{cmp::Ordering, fmt};
 
-use crate::{alloc::Box, error::ArithmeticError};
-
-#[cfg(feature = "bigint")]
-mod bigint;
-mod generic;
-mod modular;
-
 pub use self::{
     generic::{
         Checked, CheckedArithmetic, CheckedArithmeticKind, NegateOnlyZero, StdArithmetic,
@@ -47,6 +40,12 @@ pub use self::{
     },
     modular::{DoubleWidth, ModularArithmetic},
 };
+use crate::{alloc::Box, error::ArithmeticError};
+
+#[cfg(feature = "bigint")]
+mod bigint;
+mod generic;
+mod modular;
 
 /// Encapsulates arithmetic operations on a certain primitive type (or an enum of primitive types).
 ///

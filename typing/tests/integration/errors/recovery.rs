@@ -1,7 +1,5 @@
 //! Tests error recovery basics.
 
-use assert_matches::assert_matches;
-
 use std::collections::HashSet;
 
 use arithmetic_parser::grammars::Parse;
@@ -11,6 +9,7 @@ use arithmetic_typing::{
     error::ErrorKind,
     Type, TypeEnvironment,
 };
+use assert_matches::assert_matches;
 
 use crate::{ErrorsExt, F32Grammar};
 

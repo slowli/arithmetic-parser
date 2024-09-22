@@ -1,11 +1,10 @@
 //! Tests for multiple errors.
 
-use assert_matches::assert_matches;
-
 use arithmetic_parser::grammars::{NumGrammar, Parse};
 use arithmetic_typing::{
     defs::Prelude, error::ErrorKind, Annotated, TupleLen, Type, TypeEnvironment,
 };
+use assert_matches::assert_matches;
 
 type F32Grammar = Annotated<NumGrammar<f32>>;
 

@@ -1,8 +1,9 @@
 //! Evaluation errors.
 
-pub use arithmetic_parser::UnsupportedType;
-
 use core::fmt;
+
+pub use arithmetic_parser::UnsupportedType;
+use arithmetic_parser::{BinaryOp, LocatedSpan, Location, LvalueLen, Op, UnaryOp};
 
 use crate::{
     alloc::{format, vec, Arc, HashSet, String, ToOwned, ToString, Vec},
@@ -10,7 +11,6 @@ use crate::{
     fns::FromValueError,
     Value,
 };
-use arithmetic_parser::{BinaryOp, LocatedSpan, Location, LvalueLen, Op, UnaryOp};
 
 /// Arithmetic errors raised by [`Arithmetic`] operations on primitive values.
 ///

@@ -1,8 +1,5 @@
 //! Tests that the README code samples actually work.
 
-use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag, TagEnd};
-use rand::{thread_rng, Rng};
-
 use std::fs;
 
 use arithmetic_eval::{
@@ -10,6 +7,8 @@ use arithmetic_eval::{
     fns, ExecutableModule, Value,
 };
 use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag, TagEnd};
+use rand::{thread_rng, Rng};
 
 fn read_file(path: &str) -> String {
     fs::read_to_string(path).unwrap_or_else(|err| panic!("Cannot read file {path}: {err}"))

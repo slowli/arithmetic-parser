@@ -602,9 +602,6 @@ impl Backtrace {
 }
 
 /// Error with the associated backtrace.
-///
-/// Use the [`StripCode`] implementation to convert this to the `'static` lifetime, e.g.,
-/// before boxing it into `Box<dyn std::error::Error>` or `anyhow::Error`.
 #[derive(Debug)]
 pub struct ErrorWithBacktrace {
     inner: Error,

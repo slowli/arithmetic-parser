@@ -5,7 +5,8 @@
 ![rust 1.70+ required](https://img.shields.io/badge/rust-1.70+-blue.svg)
 ![no_std supported](https://img.shields.io/badge/no__std-tested-green.svg)
 
-**Links:** [![crate docs (master)](https://img.shields.io/badge/master-yellow.svg?label=docs)](https://slowli.github.io/arithmetic-parser/arithmetic_typing/)
+**Links:** [![Docs on docs.rs](https://img.shields.io/docsrs/arithmetic-typing)](https://docs.rs/arithmetic-typing/)
+[![crate docs (master)](https://img.shields.io/badge/master-yellow.svg?label=docs)](https://slowli.github.io/arithmetic-parser/arithmetic_typing/)
 
 Hindley–Milner type inference for arithmetic expressions parsed
 by the [`arithmetic-parser`] crate.

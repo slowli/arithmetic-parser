@@ -14,19 +14,19 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
-clap = { version = "4.5.17", features = ["derive", "env", "wrap_help"] }
-codespan = "0.11.1"
-codespan-reporting = "0.11.1"
+clap = { workspace = true, features = ["derive", "env", "wrap_help"] }
+codespan.workspace = true
+codespan-reporting.workspace = true
 num-complex.workspace = true
 num-traits.workspace = true
-rustyline = "14.0.0"
-textwrap = "0.16.1"
-unindent = "0.2.3"
+rustyline.workspace = true
+textwrap.workspace = true
+unindent.workspace = true
 
 arithmetic-parser = { workspace = true, default-features = true }
-arithmetic-eval = { workspace = true, features = ["complex"] }
+arithmetic-eval = { workspace = true, default-features = true, features = ["complex"] }
 arithmetic-typing.workspace = true
 
 [dev-dependencies]
 assert_matches.workspace = true
-term-transcript = "=0.4.0-beta.1"
+term-transcript.workspace = true

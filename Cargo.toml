@@ -25,7 +25,14 @@ repository = "https://github.com/slowli/arithmetic-parser"
 anyhow = { version = "1.0.89", default-features = false }
 assert_matches = "1.3.0"
 bitflags = "2.6.0"
+clap = "4.5.17"
+codespan = "0.11.1"
+codespan-reporting = "0.11.1"
+cortex-m = "0.7"
+cortex-m-rt = "0.7"
+cortex-m-semihosting = "0.5"
 criterion = "0.5.0"
+embedded-alloc = "0.6.0"
 glass_pumpkin = "1.7.0"
 hashbrown = "0.14.5"
 hex = "0.4.2"
@@ -35,16 +42,23 @@ num-bigint = "0.4.6"
 num-complex = "0.4.6"
 num-traits = { version = "0.2.19", default-features = false }
 once_cell = { version = "1.19.0", default-features = false }
+panic-halt = "0.2.0"
 pulldown-cmark = "0.12.1"
 rand = "0.8.3"
+rand_chacha = { version = "0.3.1", default-features = false }
+rustyline = "14.0.0"
 sha2 = "0.10.0"
 static_assertions = "1.1.0"
+term-transcript = "=0.4.0-beta.1"
+textwrap = "0.16.1"
 typed-arena = "2.0.1"
+unindent = "0.2.3"
 version-sync = "0.9"
+wasm-bindgen = "0.2.93"
 
 # Workspace dependencies
 arithmetic-parser = { version = "=0.3.0", path = "parser", default-features = false }
-arithmetic-eval = { version = "=0.3.0", path = "eval" }
+arithmetic-eval = { version = "=0.3.0", path = "eval", default-features = false }
 arithmetic-typing = { version = "=0.3.0", path = "typing" }
 
 # Speed up big integer crates.

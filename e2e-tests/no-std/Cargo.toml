@@ -10,14 +10,14 @@ publish = false
 
 [dependencies]
 # Cortex-M dependencies
-cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
-cortex-m-rt = "0.7"
-cortex-m-semihosting = "0.5"
-embedded-alloc = "0.6.0"
-panic-halt = "0.2.0"
+cortex-m = { workspace = true, features = ["critical-section-single-core"] }
+cortex-m-rt.workspace = true
+cortex-m-semihosting.workspace = true
+embedded-alloc.workspace = true
+panic-halt.workspace = true
 
-rand_chacha = { version = "0.3.1", default-features = false }
+rand_chacha.workspace = true
 
 # Arithmetic dependencies
-arithmetic-parser = { path = "../../parser", default-features = false }
-arithmetic-eval = { path = "../../eval", default-features = false, features = ["hashbrown"] }
+arithmetic-parser.workspace = true
+arithmetic-eval = { workspace = true, features = ["hashbrown"] }

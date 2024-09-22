@@ -70,6 +70,21 @@
 //! `x as Bool` is equivalent to `{ _x: Bool = x; _x }`. As such, casts are safe (cannot be used
 //! to transmute the type arbitrarily), unless `any` type is involved.
 //!
+//! # Crate features
+//!
+//! ## `std`
+//!
+//! *(On by default)*
+//!
+//! Enables support of types from `std`, such as the `Error` trait, and propagates to dependencies.
+//!
+//! ## `hashbrown`
+//!
+//! *(Off by default)*
+//!
+//! Imports hash maps and sets from the [eponymous crate][`hashbrown`] instead of using ones
+//! from the Rust std library. This feature is necessary if the `std` feature is disabled.
+//!
 //! # Examples
 //!
 //! ```

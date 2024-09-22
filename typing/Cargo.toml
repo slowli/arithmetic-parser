@@ -12,7 +12,7 @@ categories = ["mathematics"]
 keywords = ["typing", "type-system", "arithmetic", "scripting", "language"]
 
 [dependencies]
-arithmetic-parser = { version = "0.3.0", path = "../parser" }
+arithmetic-parser.workspace = true
 
 anyhow.workspace = true
 nom.workspace = true

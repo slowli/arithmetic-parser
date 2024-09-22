@@ -31,7 +31,7 @@ Add this to your `Crate.toml`:
 
 ```toml
 [dependencies]
-arithmetic-eval = "0.3.0"
+arithmetic-eval = "0.4.0-beta.1"
 ```
 
 ### Script samples

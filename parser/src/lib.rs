@@ -134,7 +134,7 @@
 //! ```
 
 #![cfg_attr(not(feature = "std"), no_std)]
-#![doc(html_root_url = "https://docs.rs/arithmetic-parser/0.3.0")]
+#![doc(html_root_url = "https://docs.rs/arithmetic-parser/0.4.0-beta.1")]
 #![warn(missing_docs, missing_debug_implementations)]
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(

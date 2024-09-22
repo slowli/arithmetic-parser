@@ -21,7 +21,7 @@ Add this to your `Crate.toml`:
 
 ```toml
 [dependencies]
-arithmetic-typing = "0.3.0"
+arithmetic-typing = "0.4.0-beta.1"
 ```
 
 ### Quick overview

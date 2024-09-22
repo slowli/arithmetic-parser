@@ -92,7 +92,7 @@ checksum = "86fdf8605db99b54d3cd748a44c6d04df638eb5dafb219b135d0149bd0db01f6"
 
 [[package]]
 name = "arithmetic-eval"
-version = "0.3.0"
+version = "0.4.0-beta.1"
 dependencies = [
  "anyhow",
  "arithmetic-parser",
@@ -115,7 +115,7 @@ dependencies = [
 
 [[package]]
 name = "arithmetic-parser"
-version = "0.3.0"
+version = "0.4.0-beta.1"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -132,7 +132,7 @@ dependencies = [
 
 [[package]]
 name = "arithmetic-parser-cli"
-version = "0.3.0"
+version = "0.4.0-beta.1"
 dependencies = [
  "anyhow",
  "arithmetic-eval",
@@ -152,7 +152,7 @@ dependencies = [
 
 [[package]]
 name = "arithmetic-parser-nostd"
-version = "0.3.0"
+version = "0.4.0-beta.1"
 dependencies = [
  "arithmetic-eval",
  "arithmetic-parser",
@@ -166,7 +166,7 @@ dependencies = [
 
 [[package]]
 name = "arithmetic-parser-wasm"
-version = "0.3.0"
+version = "0.4.0-beta.1"
 dependencies = [
  "arithmetic-eval",
  "arithmetic-parser",
@@ -175,7 +175,7 @@ dependencies = [
 
 [[package]]
 name = "arithmetic-typing"
-version = "0.3.0"
+version = "0.4.0-beta.1"
 dependencies = [
  "anyhow",
  "arithmetic-parser",

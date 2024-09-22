@@ -5,6 +5,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ## [Unreleased]
 
+## 0.4.0-beta.1 - 2024-09-22
+
 ### Added
 
 - Support block expressions in the name position for method calls, e.g., `xs.{Array.map}(|x| x > 0)`. (#117)

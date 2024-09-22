@@ -128,7 +128,7 @@
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
 //! [`arithmetic-eval`]: https://crates.io/crates/arithmetic-eval
 
-#![doc(html_root_url = "https://docs.rs/arithmetic-typing/0.3.0")]
+#![doc(html_root_url = "https://docs.rs/arithmetic-typing/0.4.0-beta.1")]
 #![warn(missing_docs, missing_debug_implementations)]
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(

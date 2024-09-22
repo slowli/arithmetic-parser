@@ -1,24 +1,26 @@
 //! Types allowing to customize various aspects of the type system, such as type constraints
 //! and behavior of unary / binary ops.
 
+use core::{fmt, str::FromStr};
+
+use arithmetic_parser::{BinaryOp, UnaryOp};
 use num_traits::NumOps;
 
-use std::{fmt, str::FromStr};
-
+pub(crate) use self::constraints::CompleteConstraints;
+pub use self::{
+    constraints::{
+        Constraint, ConstraintSet, LinearType, Linearity, ObjectSafeConstraint, Ops,
+        StructConstraint,
+    },
+    substitutions::Substitutions,
+};
 use crate::{
     error::{ErrorKind, ErrorPathFragment, OpErrors},
     PrimitiveType, Type,
 };
-use arithmetic_parser::{BinaryOp, UnaryOp};
 
 mod constraints;
 mod substitutions;
-
-pub(crate) use self::constraints::CompleteConstraints;
-pub use self::constraints::{
-    Constraint, ConstraintSet, LinearType, Linearity, ObjectSafeConstraint, Ops, StructConstraint,
-};
-pub use self::substitutions::Substitutions;
 
 /// Maps a literal value from a certain [`Grammar`] to its type. This assumes that all literals
 /// are primitive.

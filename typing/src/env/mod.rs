@@ -1,8 +1,12 @@
 //! `TypeEnvironment` and related types.
 
-use std::{collections::HashMap, iter::FromIterator, ops};
+use core::ops;
 
+use arithmetic_parser::{grammars::Grammar, Block};
+
+use self::processor::TypeProcessor;
 use crate::{
+    alloc::{HashMap, String, ToOwned},
     arith::{
         Constraint, ConstraintSet, MapPrimitiveType, Num, NumArithmetic, ObjectSafeConstraint,
         Substitutions, TypeArithmetic,
@@ -13,11 +17,8 @@ use crate::{
     visit::VisitMut,
     Function, PrimitiveType, Type,
 };
-use arithmetic_parser::{grammars::Grammar, Block};
 
 mod processor;
-
-use self::processor::TypeProcessor;
 
 /// Environment containing type information on named variables.
 ///

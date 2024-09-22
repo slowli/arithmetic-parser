@@ -66,7 +66,7 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo
 
       - name: Format
-        run: cargo fmt --all -- --check
+        run: cargo fmt --all -- --check --config imports_granularity=Crate --config group_imports=StdExternalCrate
       - name: Clippy
         run: cargo clippy --workspace --all-features --all-targets -- -D warnings
       - name: Lint dependencies
@@ -129,8 +129,13 @@ jobs:
           key: ${{ runner.os }}-nostd-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-nostd-cargo
 
+      - name: Build parser library
+        run: cargo build -p arithmetic-parser --lib --no-default-features --target thumbv7m-none-eabi -Z avoid-dev-deps
+      - name: Build eval & typing libraries
+        run: cargo build -p arithmetic-eval -p arithmetic-typing --lib --no-default-features --features hashbrown --target thumbv7m-none-eabi -Z avoid-dev-deps
+
       - name: Run binary
-        run: cargo run -p arithmetic-parser-nostd --release
+        run: cargo run -p arithmetic-parser-nostd --release --target thumbv7m-none-eabi
 
   document:
     if: github.event_name == 'push'
@@ -139,6 +144,8 @@ jobs:
       - build-msrv
       - build-nostd
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4

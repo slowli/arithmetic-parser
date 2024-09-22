@@ -1,7 +1,5 @@
 //! Tests for basic functionality.
 
-use assert_matches::assert_matches;
-
 use core::iter;
 
 use arithmetic_parser::grammars::Parse;
@@ -11,6 +9,7 @@ use arithmetic_typing::{
     error::{ErrorContext, ErrorKind, ErrorPathFragment},
     Function, TupleLen, Type, TypeEnvironment, UnknownLen,
 };
+use assert_matches::assert_matches;
 
 use crate::{assert_incompatible_types, hash_fn_type, zip_fn_type, ErrorsExt, F32Grammar};
 

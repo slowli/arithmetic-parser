@@ -2,16 +2,15 @@
 
 use core::{fmt, marker::PhantomData};
 
+pub use self::traits::{
+    ErrorOutput, FromValueError, FromValueErrorKind, FromValueErrorLocation, IntoEvalResult,
+    TryFromValue,
+};
 use crate::{
     alloc::Vec, error::AuxErrorInfo, CallContext, ErrorKind, EvalResult, NativeFn, SpannedValue,
 };
 
 mod traits;
-
-pub use self::traits::{
-    ErrorOutput, FromValueError, FromValueErrorKind, FromValueErrorLocation, IntoEvalResult,
-    TryFromValue,
-};
 
 /// Wraps a function enriching it with the information about its arguments.
 /// This is a slightly shorter way to create wrappers compared to calling [`FnWrapper::new()`].
@@ -231,6 +230,9 @@ pub type Quaternary<T> = FnWrapper<(T, T, T, T, T), fn(T, T, T, T) -> T>;
 
 #[cfg(test)]
 mod tests {
+    use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+    use assert_matches::assert_matches;
+
     use super::*;
     use crate::{
         alloc::{format, ToOwned},
@@ -238,9 +240,6 @@ mod tests {
         exec::{ExecutableModule, WildcardId},
         Function, Object, Tuple, Value,
     };
-
-    use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-    use assert_matches::assert_matches;
 
     #[test]
     fn functions_with_primitive_args() -> anyhow::Result<()> {

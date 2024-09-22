@@ -2,6 +2,8 @@
 
 use core::fmt;
 
+use arithmetic_parser::{Location, LvalueLen};
+
 use crate::{
     alloc::{Arc, HashMap, String, ToOwned, Vec},
     arith::OrdArithmetic,
@@ -10,7 +12,6 @@ use crate::{
     fns::ValueCell,
     Environment, EvalResult, SpannedValue, Value,
 };
-use arithmetic_parser::{Location, LvalueLen};
 
 /// Context for native function calls.
 #[derive(Debug)]

@@ -1,7 +1,5 @@
 //! Tests for errors.
 
-use assert_matches::assert_matches;
-
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
     arith::{BinaryOpContext, Linearity, NumArithmetic},
@@ -9,6 +7,7 @@ use arithmetic_typing::{
     error::{ErrorContext, ErrorKind, ErrorPathFragment, TupleContext},
     DynConstraints, TupleIndex, TupleLen, Type, TypeEnvironment,
 };
+use assert_matches::assert_matches;
 
 use crate::{assert_incompatible_types, hash_fn_type, zip_fn_type, ErrorsExt, F32Grammar};
 

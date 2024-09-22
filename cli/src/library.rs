@@ -1,8 +1,5 @@
 //! Standard libraries for different arithmetics.
 
-use num_complex::{Complex, Complex32, Complex64};
-use num_traits::{CheckedRem, Num, WrappingNeg};
-
 use std::{fmt, iter, ops};
 
 use arithmetic_eval::{
@@ -17,6 +14,8 @@ use arithmetic_parser::grammars::NumLiteral;
 use arithmetic_typing::{
     arith::Num as NumType, defs, Function, Object as ObjectType, Type, TypeEnvironment,
 };
+use num_complex::{Complex, Complex32, Complex64};
+use num_traits::{CheckedRem, Num, WrappingNeg};
 
 fn binary_fn() -> Type {
     Function::builder()
@@ -342,12 +341,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use assert_matches::assert_matches;
-
     use std::collections::HashSet;
 
-    use super::*;
     use arithmetic_typing::arith::Num;
+    use assert_matches::assert_matches;
+
+    use super::*;
 
     #[test]
     fn environments_are_consistent_for_ints() {

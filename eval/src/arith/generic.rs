@@ -1,11 +1,11 @@
 //! Generic arithmetics.
 
+use core::{cmp::Ordering, convert::TryFrom, marker::PhantomData, ops};
+
 use num_traits::{
     checked_pow, CheckedAdd, CheckedDiv, CheckedMul, CheckedNeg, CheckedSub, NumOps, One, Pow,
     Signed, Unsigned, WrappingAdd, WrappingMul, WrappingNeg, WrappingSub, Zero,
 };
-
-use core::{cmp::Ordering, convert::TryFrom, marker::PhantomData, ops};
 
 use crate::{
     arith::{Arithmetic, OrdArithmetic},

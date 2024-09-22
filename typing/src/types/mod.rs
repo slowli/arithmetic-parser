@@ -1,16 +1,6 @@
 //! Base types, such as `Type` and `DynConstraints`.
 
-use std::{borrow::Cow, fmt};
-
-use crate::{
-    arith::{CompleteConstraints, ConstraintSet, Num, ObjectSafeConstraint, WithBoolean},
-    PrimitiveType,
-};
-
-mod fn_type;
-mod object;
-mod quantifier;
-mod tuple;
+use core::fmt;
 
 pub(crate) use self::{
     fn_type::{FnParams, ParamConstraints},
@@ -22,6 +12,16 @@ pub use self::{
     object::Object,
     tuple::{LengthVar, Slice, Tuple, TupleIndex, TupleLen, UnknownLen},
 };
+use crate::{
+    alloc::{format, vec, Box, Cow},
+    arith::{CompleteConstraints, ConstraintSet, Num, ObjectSafeConstraint, WithBoolean},
+    PrimitiveType,
+};
+
+mod fn_type;
+mod object;
+mod quantifier;
+mod tuple;
 
 /// Type variable.
 ///
@@ -482,9 +482,7 @@ impl<Prim: PrimitiveType> DynConstraints<Prim> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::TypeAst;
-
-    use std::convert::TryFrom;
+    use crate::{alloc::Vec, ast::TypeAst};
 
     #[test]
     fn types_are_equal_to_self() -> anyhow::Result<()> {

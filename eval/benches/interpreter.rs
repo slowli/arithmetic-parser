@@ -8,10 +8,6 @@
 //!
 //! Generally, the interpreter seems to be ~50x slower than the comparable native code.
 
-use criterion::{criterion_group, criterion_main, BatchSize, Bencher, Criterion, Throughput};
-use rand::{rngs::StdRng, Rng, SeedableRng};
-use typed_arena::Arena;
-
 use std::cmp::Ordering;
 
 use arithmetic_eval::{
@@ -23,6 +19,9 @@ use arithmetic_parser::{
     grammars::{F32Grammar, Parse, Untyped},
     Location,
 };
+use criterion::{criterion_group, criterion_main, BatchSize, Bencher, Criterion, Throughput};
+use rand::{rngs::StdRng, Rng, SeedableRng};
+use typed_arena::Arena;
 
 const SEED: u64 = 123;
 const ELEMENTS: u64 = 50;

@@ -1,7 +1,5 @@
 //! Shows how to use owned modules.
 
-use assert_matches::assert_matches;
-
 use arithmetic_eval::{
     env::{Assertions, Environment, Prelude},
     fns, ErrorKind, ExecutableModule, Value,
@@ -10,6 +8,7 @@ use arithmetic_parser::{
     grammars::{F64Grammar, MockTypes, Parse, WithMockedTypes},
     BinaryOp,
 };
+use assert_matches::assert_matches;
 
 /// We need to process some type annotations, but don't want to depend
 /// on the typing crate for that. Hence, we define a grammar that gobbles up the exact

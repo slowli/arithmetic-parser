@@ -1,11 +1,10 @@
 //! Tests targeting functions / methods.
 
-use assert_matches::assert_matches;
-
 use arithmetic_eval::{
     fns::FromValueErrorKind, Environment, ErrorKind, Function, NativeFn, Tuple, Value, ValueType,
 };
 use arithmetic_parser::LvalueLen;
+use assert_matches::assert_matches;
 
 use crate::{evaluate, try_evaluate, SIN};
 

@@ -1,13 +1,12 @@
 //! Tests targeting objects / object field access.
 
-use assert_matches::assert_matches;
-
 use arithmetic_eval::{
     env::{Assertions, Environment, Prelude},
     error::{AuxErrorInfo, ErrorKind},
     Value,
 };
 use arithmetic_parser::BinaryOp;
+use assert_matches::assert_matches;
 
 use crate::{evaluate, expect_compilation_error, try_evaluate};
 

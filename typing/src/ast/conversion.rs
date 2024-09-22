@@ -1,14 +1,14 @@
 //! Logic for converting `*Ast` types into their "main" counterparts.
 
+use core::fmt;
+
+use arithmetic_parser::{
+    Error as ParseError, ErrorKind as ParseErrorKind, InputSpan, NomResult, Spanned,
+};
 use nom::Err as NomErr;
 
-use std::{
-    collections::{HashMap, HashSet},
-    convert::TryFrom,
-    fmt,
-};
-
 use crate::{
+    alloc::{Box, HashMap, HashSet, String, ToOwned},
     arith::{CompleteConstraints, Constraint, ConstraintSet},
     ast::{
         ConstraintsAst, FunctionAst, ObjectAst, SliceAst, SpannedTypeAst, TupleAst, TupleLenAst,
@@ -18,9 +18,6 @@ use crate::{
     types::{ParamConstraints, ParamQuantifier},
     DynConstraints, Function, Object, PrimitiveType, Slice, Tuple, Type, TypeEnvironment,
     UnknownLen,
-};
-use arithmetic_parser::{
-    Error as ParseError, ErrorKind as ParseErrorKind, InputSpan, NomResult, Spanned,
 };
 
 /// Kinds of errors that can occur when converting `*Ast` types into their "main" counterparts.
@@ -138,6 +135,7 @@ impl fmt::Display for AstConversionError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for AstConversionError {}
 
 /// Intermediate conversion state.
@@ -530,7 +528,10 @@ mod tests {
     use assert_matches::assert_matches;
 
     use super::*;
-    use crate::arith::Num;
+    use crate::{
+        alloc::{vec, ToString},
+        arith::Num,
+    };
 
     #[test]
     fn converting_raw_fn_type() {

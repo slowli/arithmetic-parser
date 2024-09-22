@@ -200,7 +200,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![doc(html_root_url = "https://docs.rs/arithmetic-eval/0.3.0")]
+#![doc(html_root_url = "https://docs.rs/arithmetic-eval/0.4.0-beta.1")]
 #![warn(missing_docs, missing_debug_implementations)]
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(
@@ -214,7 +214,7 @@ mod alloc {
     #[cfg(not(feature = "std"))]
     extern crate alloc as std;
 
-    pub use std::{
+    pub(crate) use std::{
         borrow::ToOwned,
         boxed::Box,
         format,
@@ -230,10 +230,11 @@ mod alloc {
          to get a hash map implementation"
     );
 
-    #[cfg(feature = "hashbrown")]
-    pub use hashbrown::{hash_map, HashMap, HashSet};
     #[cfg(not(feature = "hashbrown"))]
-    pub use std::collections::{hash_map, HashMap, HashSet};
+    pub(crate) use std::collections::{hash_map, HashMap, HashSet};
+
+    #[cfg(feature = "hashbrown")]
+    pub(crate) use hashbrown::{hash_map, HashMap, HashSet};
 }
 
 pub use self::{

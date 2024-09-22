@@ -1,24 +1,25 @@
 //! Errors related to type inference.
 
-use std::fmt;
+use core::fmt;
 
-use crate::{
-    arith::{BinaryOpContext, UnaryOpContext},
-    ast::AstConversionError,
-    visit::VisitMut,
-    PrimitiveType, Tuple, Type,
-};
 use arithmetic_parser::{Location, Spanned, UnsupportedType};
-
-mod kind;
-mod op_errors;
-mod path;
 
 pub use self::{
     kind::{ErrorKind, TupleContext},
     op_errors::OpErrors,
     path::ErrorPathFragment,
 };
+use crate::{
+    alloc::{vec, ToOwned, Vec},
+    arith::{BinaryOpContext, UnaryOpContext},
+    ast::AstConversionError,
+    visit::VisitMut,
+    PrimitiveType, Tuple, Type,
+};
+
+mod kind;
+mod op_errors;
+mod path;
 
 /// Type error together with the corresponding code span.
 #[derive(Debug, Clone)]
@@ -41,6 +42,7 @@ impl<Prim: PrimitiveType> fmt::Display for Error<Prim> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<Prim: PrimitiveType> std::error::Error for Error<Prim> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(self.kind())
@@ -57,7 +59,7 @@ impl<Prim: PrimitiveType> Error<Prim> {
             inner: span.copy_with_extra(kind).into(),
             root_location: span.with_no_extra().into(),
             context: ErrorContext::None,
-            path: vec![],
+            path: Vec::new(),
         }
     }
 
@@ -67,7 +69,7 @@ impl<Prim: PrimitiveType> Error<Prim> {
             inner: span.copy_with_extra(ErrorKind::UndefinedVar(ident)).into(),
             root_location: span.with_no_extra().into(),
             context: ErrorContext::None,
-            path: vec![],
+            path: Vec::new(),
         }
     }
 
@@ -79,7 +81,7 @@ impl<Prim: PrimitiveType> Error<Prim> {
                 .into(),
             root_location: span.with_no_extra().into(),
             context: ErrorContext::None,
-            path: vec![],
+            path: Vec::new(),
         }
     }
 
@@ -89,7 +91,7 @@ impl<Prim: PrimitiveType> Error<Prim> {
             inner: span.copy_with_extra(ErrorKind::RepeatedField(ident)).into(),
             root_location: span.with_no_extra().into(),
             context: ErrorContext::None,
-            path: vec![],
+            path: Vec::new(),
         }
     }
 
@@ -99,7 +101,7 @@ impl<Prim: PrimitiveType> Error<Prim> {
             inner: span.copy_with_extra(kind).into(),
             root_location: span.with_no_extra().into(),
             context: ErrorContext::None,
-            path: vec![],
+            path: Vec::new(),
         }
     }
 
@@ -111,7 +113,7 @@ impl<Prim: PrimitiveType> Error<Prim> {
                 .into(),
             root_location: span.into(),
             context: ErrorContext::None,
-            path: vec![],
+            path: Vec::new(),
         }
     }
 
@@ -131,7 +133,7 @@ impl<Prim: PrimitiveType> Error<Prim> {
             context: ErrorContext::TupleIndex {
                 ty: Type::Tuple(receiver),
             },
-            path: vec![],
+            path: Vec::new(),
         }
     }
 
@@ -140,7 +142,7 @@ impl<Prim: PrimitiveType> Error<Prim> {
             inner: span.copy_with_extra(ErrorKind::CannotIndex).into(),
             root_location: span.with_no_extra().into(),
             context: ErrorContext::TupleIndex { ty: receiver },
-            path: vec![],
+            path: Vec::new(),
         }
     }
 
@@ -149,7 +151,7 @@ impl<Prim: PrimitiveType> Error<Prim> {
             inner: span.copy_with_extra(ErrorKind::UnsupportedIndex).into(),
             root_location: span.with_no_extra().into(),
             context: ErrorContext::TupleIndex { ty: receiver },
-            path: vec![],
+            path: Vec::new(),
         }
     }
 
@@ -217,7 +219,7 @@ pub struct Errors<Prim: PrimitiveType> {
 impl<Prim: PrimitiveType> Errors<Prim> {
     pub(crate) fn new() -> Self {
         Self {
-            inner: vec![],
+            inner: Vec::new(),
             first_failing_statement: 0,
         }
     }
@@ -277,11 +279,12 @@ impl<Prim: PrimitiveType> fmt::Display for Errors<Prim> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<Prim: PrimitiveType> std::error::Error for Errors<Prim> {}
 
 impl<Prim: PrimitiveType> IntoIterator for Errors<Prim> {
     type Item = Error<Prim>;
-    type IntoIter = std::vec::IntoIter<Self::Item>;
+    type IntoIter = vec::IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.inner.into_iter()

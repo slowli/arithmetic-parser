@@ -1,7 +1,5 @@
 //! Tests that the README code samples actually work.
 
-use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag, TagEnd};
-
 use std::fs;
 
 use arithmetic_parser::grammars::{F32Grammar, Parse};
@@ -10,6 +8,7 @@ use arithmetic_typing::{
     defs::{Assertions, Prelude},
     Annotated, Type, TypeEnvironment,
 };
+use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag, TagEnd};
 
 type Grammar = Annotated<F32Grammar>;
 

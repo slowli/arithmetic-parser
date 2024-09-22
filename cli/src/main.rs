@@ -1,22 +1,17 @@
 //! Simple CLI / REPL for evaluating arithmetic expressions.
 
-use anyhow::format_err;
-use clap::{Args, Parser, Subcommand};
-use codespan_reporting::term::{termcolor::ColorChoice, ColorArg};
-use num_complex::{Complex32, Complex64};
-
 use std::{
     io::{self, IsTerminal, Read},
     process,
     str::FromStr,
 };
 
+use anyhow::format_err;
 use arithmetic_eval::Environment;
 use arithmetic_typing::TypeEnvironment;
-
-mod common;
-mod library;
-mod repl;
+use clap::{Args, Parser, Subcommand};
+use codespan_reporting::term::{termcolor::ColorChoice, ColorArg};
+use num_complex::{Complex32, Complex64};
 
 use crate::{
     common::{Env, ParseAndEvalResult, Reporter, ERROR_EXIT_CODE},
@@ -25,6 +20,10 @@ use crate::{
     },
     repl::repl,
 };
+
+mod common;
+mod library;
+mod repl;
 
 const ABOUT: &str = "CLI and REPL for parsing and evaluating arithmetic expressions.";
 

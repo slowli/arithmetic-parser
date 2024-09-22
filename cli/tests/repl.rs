@@ -1,12 +1,12 @@
 //! E2E tests for interactive binary usage.
 
+use std::{process::Command, time::Duration};
+
 use term_transcript::{
     svg::{ScrollOptions, Template, TemplateOptions},
     test::{MatchKind, TestConfig},
     ShellOptions, UserInput,
 };
-
-use std::{process::Command, time::Duration};
 
 const PATH_TO_BIN: &str = env!("CARGO_BIN_EXE_arithmetic-parser");
 

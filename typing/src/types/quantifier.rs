@@ -1,11 +1,9 @@
 //! Quantification of type / length parameters.
 
-use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
-    mem,
-};
+use core::mem;
 
 use crate::{
+    alloc::{hash_map::Entry, vec, HashMap, HashSet, Vec},
     types::{FnParams, ParamConstraints},
     visit::{self, Visit, VisitMut},
     Function, Object, PrimitiveType, Tuple, Type, UnknownLen,
@@ -256,13 +254,14 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for ParamPlacement<Prim> {
 
 #[cfg(test)]
 mod tests {
+    use core::iter;
+
     use super::*;
     use crate::{
+        alloc::ToString,
         arith::{CompleteConstraints, Num},
         Object,
     };
-
-    use core::iter;
 
     #[test]
     fn analyzing_map_fn() {

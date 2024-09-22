@@ -1,6 +1,6 @@
 # CLI / REPL for Arithmetic Parser
 
-[![Build Status](https://github.com/slowli/arithmetic-parser/workflows/CI/badge.svg?branch=master)](https://github.com/slowli/arithmetic-parser/actions)
+[![Build Status](https://github.com/slowli/arithmetic-parser/actions/workflows/ci.yml/badge.svg)](https://github.com/slowli/arithmetic-parser/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue)](https://github.com/slowli/arithmetic-parser#license)
 
 CLI and REPL for parsing and evaluating arithmetic expressions

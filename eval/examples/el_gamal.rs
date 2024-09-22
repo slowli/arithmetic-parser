@@ -5,10 +5,6 @@
 //! ⚠ This implementation is NOT SECURE (e.g., in terms of side-channel attacks)
 //! and should be viewed only as a showcase of the crate abilities.
 
-use glass_pumpkin::safe_prime;
-use num_bigint::{BigUint, RandBigInt};
-use rand::thread_rng;
-
 use std::cell::RefCell;
 
 use arithmetic_eval::{
@@ -17,6 +13,9 @@ use arithmetic_eval::{
     fns, Environment, ExecutableModule, Value,
 };
 use arithmetic_parser::grammars::{NumGrammar, Parse, Untyped};
+use glass_pumpkin::safe_prime;
+use num_bigint::{BigUint, RandBigInt};
+use rand::thread_rng;
 
 // NB: this is nowhere near a secure value (~2,048 bits).
 const BIT_LENGTH: usize = 256;

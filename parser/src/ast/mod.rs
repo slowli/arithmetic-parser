@@ -2,9 +2,6 @@
 
 use core::fmt;
 
-mod expr;
-mod lvalue;
-
 pub use self::{
     expr::{Expr, ExprType, SpannedExpr},
     lvalue::{
@@ -17,6 +14,9 @@ use crate::{
     grammars::Grammar,
     spans::Spanned,
 };
+
+mod expr;
+mod lvalue;
 
 /// Object expression, such as `#{ x, y: x + 2 }`.
 #[derive(Debug)]

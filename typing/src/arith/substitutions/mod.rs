@@ -1,12 +1,10 @@
 //! Substitutions type and dependencies.
 
-use std::{
-    cmp::Ordering,
-    collections::{HashMap, HashSet},
-    iter, ops, ptr,
-};
+use core::{cmp::Ordering, iter, ops, ptr};
 
+use self::fns::{MonoTypeTransformer, ParamMapping};
 use crate::{
+    alloc::{vec, HashMap, HashSet, String, Vec},
     arith::{CompleteConstraints, Constraint},
     error::{ErrorKind, ErrorPathFragment, OpErrors, TupleContext},
     visit::{self, Visit, VisitMut},
@@ -14,8 +12,6 @@ use crate::{
 };
 
 mod fns;
-use self::fns::{MonoTypeTransformer, ParamMapping};
-
 #[cfg(test)]
 mod tests;
 

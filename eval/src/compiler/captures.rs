@@ -2,14 +2,15 @@
 
 use core::iter;
 
+use arithmetic_parser::{
+    grammars::Grammar, Block, Destructure, Expr, FnDefinition, Location, Lvalue, Spanned,
+    SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
+};
+
 use crate::{
     alloc::{vec, Arc, HashMap, String, ToOwned, Vec},
     error::{AuxErrorInfo, Error, ErrorKind, RepeatedAssignmentContext},
     exec::{ModuleId, WildcardId},
-};
-use arithmetic_parser::{
-    grammars::Grammar, Block, Destructure, Expr, FnDefinition, Location, Lvalue, Spanned,
-    SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
 };
 
 #[derive(Debug, Clone)]

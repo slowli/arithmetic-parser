@@ -1,10 +1,9 @@
 //! Tests that the README code sample actually parses.
 
-use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag, TagEnd};
-
 use std::fs;
 
 use arithmetic_parser::grammars::{F64Grammar, MockTypes, Parse, WithMockedTypes};
+use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag, TagEnd};
 
 struct MockedTypesList;
 

@@ -1,8 +1,12 @@
 //! Tuple types.
 
-use std::{borrow::Cow, cmp, fmt, iter, ops};
+use core::{cmp, fmt, iter, ops};
 
-use crate::{arith::Num, PrimitiveType, Type};
+use crate::{
+    alloc::{format, Box, Cow, Vec},
+    arith::Num,
+    PrimitiveType, Type,
+};
 
 /// Length variable.
 ///
@@ -681,9 +685,10 @@ impl<Prim: PrimitiveType> From<Slice<Prim>> for Tuple<Prim> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use assert_matches::assert_matches;
+
+    use super::*;
+    use crate::alloc::{vec, ToString};
 
     #[test]
     fn tuple_length_display() {

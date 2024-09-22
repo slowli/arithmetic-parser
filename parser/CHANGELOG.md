@@ -5,6 +5,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ## [Unreleased]
 
+## 0.4.0-beta.1 - 2024-09-22
+
 ### Added
 
 - Make crate no-std-compatible and check compatibility in CI. (#101)

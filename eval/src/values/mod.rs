@@ -5,22 +5,22 @@ use core::{
     fmt,
 };
 
-use crate::{
-    alloc::{Arc, Vec},
-    fns,
-};
 use arithmetic_parser::Location;
-
-mod function;
-mod object;
-mod ops;
-mod tuple;
 
 pub use self::{
     function::{CallContext, Function, InterpretedFn, NativeFn},
     object::Object,
     tuple::Tuple,
 };
+use crate::{
+    alloc::{Arc, Vec},
+    fns,
+};
+
+mod function;
+mod object;
+mod ops;
+mod tuple;
 
 /// Possible high-level types of [`Value`]s.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -284,9 +284,9 @@ impl<T: fmt::Display> fmt::Display for Value<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use core::cmp::Ordering;
+
+    use super::*;
 
     #[test]
     fn opaque_ref_equality() {

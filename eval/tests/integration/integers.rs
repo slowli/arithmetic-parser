@@ -1,8 +1,5 @@
 //! Tests for integer arithmetics.
 
-use assert_matches::assert_matches;
-use num_traits::Bounded;
-
 use arithmetic_eval::{
     arith::{
         ArithmeticExt, Checked, CheckedArithmetic, ModularArithmetic, OrdArithmetic,
@@ -14,6 +11,8 @@ use arithmetic_eval::{
     ExecutableModule, Number, Value,
 };
 use arithmetic_parser::grammars::{NumGrammar, NumLiteral, Parse, Untyped};
+use assert_matches::assert_matches;
+use num_traits::Bounded;
 
 fn try_evaluate<T>(env: &mut Environment<T>, program: &str) -> Result<Value<T>, ErrorWithBacktrace>
 where

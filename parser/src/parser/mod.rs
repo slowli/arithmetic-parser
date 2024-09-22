@@ -10,12 +10,6 @@ use nom::{
     Err as NomErr,
 };
 
-mod expr;
-mod helpers;
-mod lvalue;
-#[cfg(test)]
-mod tests;
-
 pub use self::helpers::is_valid_variable_name;
 use self::{
     expr::expr,
@@ -28,6 +22,12 @@ use crate::{
     spans::with_span,
     Block, Error, ErrorKind, FnDefinition, InputSpan, NomResult, SpannedStatement, Statement,
 };
+
+mod expr;
+mod helpers;
+mod lvalue;
+#[cfg(test)]
+mod tests;
 
 #[allow(clippy::option_if_let_else)]
 fn statement<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedStatement<'_, T::Base>>

@@ -1,11 +1,7 @@
 //! Functional type substitutions.
 
-use std::{
-    collections::{hash_map::Entry, HashMap},
-    sync::Arc,
-};
-
 use crate::{
+    alloc::{hash_map::Entry, Arc, HashMap},
     arith::{CompleteConstraints, Substitutions},
     types::{FnParams, ParamConstraints, ParamQuantifier},
     visit::{self, VisitMut},

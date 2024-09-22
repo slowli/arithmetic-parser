@@ -1,13 +1,12 @@
 //! Demonstrates how to use custom comparison functions.
 
-use num_complex::Complex64;
-
 use arithmetic_eval::{
     arith::{ArithmeticExt, StdArithmetic},
     env::{Assertions, Prelude},
     Environment, ExecutableModule,
 };
 use arithmetic_parser::grammars::{NumGrammar, Parse, Untyped};
+use num_complex::Complex64;
 
 type ComplexGrammar = NumGrammar<Complex64>;
 

@@ -18,7 +18,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 # Public dependencies (present in the public API).
-arithmetic-parser = { version = "0.3.0", path = "../parser", default-features = false }
+arithmetic-parser = { workspace = true, default-features = false }
 anyhow.workspace = true
 num-bigint = { workspace = true, optional = true }
 num-complex = { workspace = true, optional = true }

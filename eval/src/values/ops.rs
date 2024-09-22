@@ -2,6 +2,8 @@
 
 use core::cmp::Ordering;
 
+use arithmetic_parser::{BinaryOp, Location, Op, UnaryOp};
+
 use crate::{
     alloc::Arc,
     arith::OrdArithmetic,
@@ -9,7 +11,6 @@ use crate::{
     exec::ModuleId,
     Object, Tuple, Value,
 };
-use arithmetic_parser::{BinaryOp, Location, Op, UnaryOp};
 
 #[derive(Debug, Clone, Copy)]
 enum OpSide {

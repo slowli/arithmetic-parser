@@ -1,15 +1,18 @@
 //! `Registers` for executing commands and closely related types.
 
+use arithmetic_parser::{BinaryOp, Location, LvalueLen, UnaryOp};
+
 use crate::{
     alloc::{vec, Arc, HashMap, String, ToOwned, Vec},
     arith::OrdArithmetic,
     compiler::Captures,
     error::{Backtrace, EvalResult, LocationInModule, TupleLenMismatchContext},
-    exec::command::{Atom, Command, CompiledExpr, FieldName, LocatedAtom, LocatedCommand},
-    exec::ModuleId,
+    exec::{
+        command::{Atom, Command, CompiledExpr, FieldName, LocatedAtom, LocatedCommand},
+        ModuleId,
+    },
     CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, SpannedValue, Value,
 };
-use arithmetic_parser::{BinaryOp, Location, LvalueLen, UnaryOp};
 
 /// Sequence of instructions that can be executed with the `Registers`.
 #[derive(Debug, Clone)]
@@ -472,9 +475,10 @@ impl<T: 'static + Clone> Registers<T> {
 
 #[cfg(test)]
 mod tests {
+    use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+
     use super::*;
     use crate::{compiler::Compiler, exec::WildcardId};
-    use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 
     #[test]
     fn iterative_evaluation() {

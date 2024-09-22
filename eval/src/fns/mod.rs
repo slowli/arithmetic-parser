@@ -11,22 +11,9 @@
 //!
 //! [`Number`]: crate::Number
 
-use once_cell::unsync::OnceCell;
-
 use core::{cmp::Ordering, fmt};
 
-use crate::{
-    alloc::{vec, Vec},
-    error::AuxErrorInfo,
-    CallContext, Error, ErrorKind, EvalResult, Function, NativeFn, OpaqueRef, SpannedValue, Value,
-};
-
-mod array;
-mod assertions;
-mod flow;
-#[cfg(feature = "std")]
-mod std;
-mod wrapper;
+use once_cell::unsync::OnceCell;
 
 #[cfg(feature = "std")]
 pub use self::std::Dbg;
@@ -39,6 +26,18 @@ pub use self::{
         FromValueErrorLocation, IntoEvalResult, Quaternary, Ternary, TryFromValue, Unary,
     },
 };
+use crate::{
+    alloc::{vec, Vec},
+    error::AuxErrorInfo,
+    CallContext, Error, ErrorKind, EvalResult, Function, NativeFn, OpaqueRef, SpannedValue, Value,
+};
+
+mod array;
+mod assertions;
+mod flow;
+#[cfg(feature = "std")]
+mod std;
+mod wrapper;
 
 fn extract_primitive<T, A>(
     ctx: &CallContext<'_, A>,
@@ -278,14 +277,14 @@ impl<T> ValueCell<T> {
 
 #[cfg(test)]
 mod tests {
+    use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+    use assert_matches::assert_matches;
+
     use super::*;
     use crate::{
         env::Environment,
         exec::{ExecutableModule, WildcardId},
     };
-
-    use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
-    use assert_matches::assert_matches;
 
     #[test]
     fn if_basics() -> anyhow::Result<()> {

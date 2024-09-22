@@ -368,11 +368,11 @@ impl<T: 'static + Clone> NativeFn<T> for AssertFails {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::{arith::CheckedArithmetic, exec::WildcardId, Environment, Object};
-
     use arithmetic_parser::{Location, LvalueLen};
     use assert_matches::assert_matches;
+
+    use super::*;
+    use crate::{arith::CheckedArithmetic, exec::WildcardId, Environment, Object};
 
     fn span_value<T>(value: Value<T>) -> SpannedValue<T> {
         Location::from_str("", ..).copy_with_extra(value)

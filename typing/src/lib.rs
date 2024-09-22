@@ -70,6 +70,21 @@
 //! `x as Bool` is equivalent to `{ _x: Bool = x; _x }`. As such, casts are safe (cannot be used
 //! to transmute the type arbitrarily), unless `any` type is involved.
 //!
+//! # Crate features
+//!
+//! ## `std`
+//!
+//! *(On by default)*
+//!
+//! Enables support of types from `std`, such as the `Error` trait, and propagates to dependencies.
+//!
+//! ## `hashbrown`
+//!
+//! *(Off by default)*
+//!
+//! Imports hash maps and sets from the [eponymous crate][`hashbrown`] instead of using ones
+//! from the Rust std library. This feature is necessary if the `std` feature is disabled.
+//!
 //! # Examples
 //!
 //! ```
@@ -128,7 +143,8 @@
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
 //! [`arithmetic-eval`]: https://crates.io/crates/arithmetic-eval
 
-#![doc(html_root_url = "https://docs.rs/arithmetic-typing/0.3.0")]
+#![cfg_attr(not(feature = "std"), no_std)]
+#![doc(html_root_url = "https://docs.rs/arithmetic-typing/0.4.0-beta.1")]
 #![warn(missing_docs, missing_debug_implementations)]
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(
@@ -139,11 +155,20 @@
     clippy::option_if_let_else // too many false positives
 )]
 
-use std::{fmt, marker::PhantomData, str::FromStr};
+use core::{fmt, marker::PhantomData, str::FromStr};
 
 use arithmetic_parser::{
     grammars::{Features, Grammar, Parse, ParseLiteral},
     InputSpan, NomResult,
+};
+
+use self::{arith::ConstraintSet, ast::TypeAst};
+pub use self::{
+    env::TypeEnvironment,
+    types::{
+        DynConstraints, FnWithConstraints, Function, FunctionBuilder, LengthVar, Object, Slice,
+        Tuple, TupleIndex, TupleLen, Type, TypeVar, UnknownLen,
+    },
 };
 
 pub mod arith;
@@ -154,15 +179,33 @@ pub mod error;
 mod types;
 pub mod visit;
 
-pub use self::{
-    env::TypeEnvironment,
-    types::{
-        DynConstraints, FnWithConstraints, Function, FunctionBuilder, LengthVar, Object, Slice,
-        Tuple, TupleIndex, TupleLen, Type, TypeVar, UnknownLen,
-    },
-};
+// Polyfill for `alloc` types.
+mod alloc {
+    #[cfg(not(feature = "std"))]
+    extern crate alloc as std;
 
-use self::{arith::ConstraintSet, ast::TypeAst};
+    pub(crate) use std::{
+        borrow::{Cow, ToOwned},
+        boxed::Box,
+        format,
+        string::{String, ToString},
+        sync::Arc,
+        vec,
+        vec::Vec,
+    };
+
+    #[cfg(all(not(feature = "std"), not(feature = "hashbrown")))]
+    compile_error!(
+        "One of `std` or `hashbrown` features must be enabled in order \
+         to get a hash map implementation"
+    );
+
+    #[cfg(not(feature = "hashbrown"))]
+    pub(crate) use std::collections::{hash_map, HashMap, HashSet};
+
+    #[cfg(feature = "hashbrown")]
+    pub(crate) use hashbrown::{hash_map, HashMap, HashSet};
+}
 
 /// Primitive types in a certain type system.
 ///

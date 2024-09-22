@@ -129,8 +129,11 @@ jobs:
           key: ${{ runner.os }}-nostd-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-nostd-cargo
 
+      - name: Build libraries
+        run: cargo build -p arithmetic-parser -p arithmetic-typing -p arithmetic-eval --lib --no-default-features --target thumbv7m-none-eabi -Z avoid-dev-deps
+
       - name: Run binary
-        run: cargo run -p arithmetic-parser-nostd --release
+        run: cargo run -p arithmetic-parser-nostd --release --target thumbv7m-none-eabi
 
   document:
     if: github.event_name == 'push'

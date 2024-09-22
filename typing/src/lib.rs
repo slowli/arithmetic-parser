@@ -128,6 +128,7 @@
 //! [`arithmetic-parser`]: https://crates.io/crates/arithmetic-parser
 //! [`arithmetic-eval`]: https://crates.io/crates/arithmetic-eval
 
+#![cfg_attr(not(feature = "std"), no_std)]
 #![doc(html_root_url = "https://docs.rs/arithmetic-typing/0.4.0-beta.1")]
 #![warn(missing_docs, missing_debug_implementations)]
 #![warn(clippy::all, clippy::pedantic)]
@@ -139,11 +140,20 @@
     clippy::option_if_let_else // too many false positives
 )]
 
-use std::{fmt, marker::PhantomData, str::FromStr};
+use core::{fmt, marker::PhantomData, str::FromStr};
 
 use arithmetic_parser::{
     grammars::{Features, Grammar, Parse, ParseLiteral},
     InputSpan, NomResult,
+};
+
+use self::{arith::ConstraintSet, ast::TypeAst};
+pub use self::{
+    env::TypeEnvironment,
+    types::{
+        DynConstraints, FnWithConstraints, Function, FunctionBuilder, LengthVar, Object, Slice,
+        Tuple, TupleIndex, TupleLen, Type, TypeVar, UnknownLen,
+    },
 };
 
 pub mod arith;
@@ -154,14 +164,33 @@ pub mod error;
 mod types;
 pub mod visit;
 
-use self::{arith::ConstraintSet, ast::TypeAst};
-pub use self::{
-    env::TypeEnvironment,
-    types::{
-        DynConstraints, FnWithConstraints, Function, FunctionBuilder, LengthVar, Object, Slice,
-        Tuple, TupleIndex, TupleLen, Type, TypeVar, UnknownLen,
-    },
-};
+// Polyfill for `alloc` types.
+mod alloc {
+    #[cfg(not(feature = "std"))]
+    extern crate alloc as std;
+
+    pub(crate) use std::{
+        borrow::{Cow, ToOwned},
+        boxed::Box,
+        format,
+        string::{String, ToString},
+        sync::Arc,
+        vec,
+        vec::Vec,
+    };
+
+    #[cfg(all(not(feature = "std"), not(feature = "hashbrown")))]
+    compile_error!(
+        "One of `std` or `hashbrown` features must be enabled in order \
+         to get a hash map implementation"
+    );
+
+    #[cfg(not(feature = "hashbrown"))]
+    pub(crate) use std::collections::{hash_map, HashMap, HashSet};
+
+    #[cfg(feature = "hashbrown")]
+    pub(crate) use hashbrown::{hash_map, HashMap, HashSet};
+}
 
 /// Primitive types in a certain type system.
 ///

@@ -214,7 +214,7 @@ mod alloc {
     #[cfg(not(feature = "std"))]
     extern crate alloc as std;
 
-    pub use std::{
+    pub(crate) use std::{
         borrow::ToOwned,
         boxed::Box,
         format,
@@ -231,10 +231,10 @@ mod alloc {
     );
 
     #[cfg(not(feature = "hashbrown"))]
-    pub use std::collections::{hash_map, HashMap, HashSet};
+    pub(crate) use std::collections::{hash_map, HashMap, HashSet};
 
     #[cfg(feature = "hashbrown")]
-    pub use hashbrown::{hash_map, HashMap, HashSet};
+    pub(crate) use hashbrown::{hash_map, HashMap, HashSet};
 }
 
 pub use self::{

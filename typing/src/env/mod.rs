@@ -1,11 +1,12 @@
 //! `TypeEnvironment` and related types.
 
-use std::{collections::HashMap, iter::FromIterator, ops};
+use core::ops;
 
 use arithmetic_parser::{grammars::Grammar, Block};
 
 use self::processor::TypeProcessor;
 use crate::{
+    alloc::{HashMap, String, ToOwned},
     arith::{
         Constraint, ConstraintSet, MapPrimitiveType, Num, NumArithmetic, ObjectSafeConstraint,
         Substitutions, TypeArithmetic,

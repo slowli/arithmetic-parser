@@ -1,8 +1,9 @@
 //! `TypeConstraints` and implementations.
 
-use std::{collections::HashMap, fmt, marker::PhantomData};
+use core::{fmt, marker::PhantomData};
 
 use crate::{
+    alloc::{Box, HashMap, String, ToString},
     arith::Substitutions,
     error::{ErrorKind, OpErrors},
     visit::{self, Visit},

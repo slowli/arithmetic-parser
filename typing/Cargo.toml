@@ -8,7 +8,7 @@ license.workspace = true
 repository.workspace = true
 readme = "README.md"
 description = "Hindley-Milner type inference for arithmetic expressions."
-categories = ["mathematics"]
+categories = ["mathematics", "no-std"]
 keywords = ["typing", "type-system", "arithmetic", "scripting", "language"]
 
 [dependencies]
@@ -18,8 +18,16 @@ anyhow.workspace = true
 nom.workspace = true
 num-traits.workspace = true
 
+# Optional dependencies
+hashbrown = { workspace = true, optional = true }
+
 [dev-dependencies]
 assert_matches.workspace = true
 hex.workspace = true
 pulldown-cmark.workspace = true
 version-sync.workspace = true
+
+[features]
+default = ["std"]
+# Enables support of types from `std`, such as the `Error` trait.
+std = ["arithmetic-parser/std"]

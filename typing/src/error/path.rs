@@ -6,6 +6,7 @@ use arithmetic_parser::{
 };
 
 use crate::{
+    alloc::{String, ToOwned},
     ast::{SpannedTypeAst, TupleAst, TypeAst},
     TupleIndex,
 };

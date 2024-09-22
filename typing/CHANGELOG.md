@@ -11,6 +11,8 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 - Support block expressions in the name position for method calls, e.g., `xs.{Array.map}(|x| x > 0)`. (#117)
 
+- Support no-std compilation mode.
+
 ### Changed
 
 - Bump minimum supported Rust version to 1.70 and switch to 2021 Rust edition. (#107, #108, #112)

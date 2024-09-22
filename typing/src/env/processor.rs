@@ -1,6 +1,6 @@
 //! The meat of the entire crate: `TypeProcessor`.
 
-use std::{collections::HashMap, fmt, iter, mem};
+use core::{fmt, iter, mem};
 
 use arithmetic_parser::{
     grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Destructure, DestructureRest, Expr,
@@ -9,6 +9,7 @@ use arithmetic_parser::{
 };
 
 use crate::{
+    alloc::{vec, HashMap, String, ToOwned, Vec},
     arith::{BinaryOpContext, UnaryOpContext},
     ast::{AstConversionState, SpannedTypeAst, TypeAst},
     env::{FullArithmetic, TypeEnvironment},

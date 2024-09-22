@@ -18,6 +18,7 @@ use nom::{
 
 pub use self::conversion::AstConversionError;
 pub(crate) use self::conversion::AstConversionState;
+use crate::alloc::{Box, Vec};
 
 mod conversion;
 #[cfg(test)]
@@ -394,7 +395,7 @@ fn constraints(input: InputSpan<'_>) -> NomResult<'_, ConstraintsAst<'_>> {
             tuple((len_params, opt(preceded(semicolon, type_params)))),
             |(static_lengths, type_params)| (static_lengths, type_params.unwrap_or_default()),
         ),
-        map(type_params, |type_params| (vec![], type_params)),
+        map(type_params, |type_params| (Vec::new(), type_params)),
     ));
 
     let constraints_parser = tuple((

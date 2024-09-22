@@ -1,10 +1,6 @@
 //! Logic for converting `*Ast` types into their "main" counterparts.
 
-use std::{
-    collections::{HashMap, HashSet},
-    convert::TryFrom,
-    fmt,
-};
+use core::fmt;
 
 use arithmetic_parser::{
     Error as ParseError, ErrorKind as ParseErrorKind, InputSpan, NomResult, Spanned,
@@ -12,6 +8,7 @@ use arithmetic_parser::{
 use nom::Err as NomErr;
 
 use crate::{
+    alloc::{Box, HashMap, HashSet, String, ToOwned},
     arith::{CompleteConstraints, Constraint, ConstraintSet},
     ast::{
         ConstraintsAst, FunctionAst, ObjectAst, SliceAst, SpannedTypeAst, TupleAst, TupleLenAst,
@@ -138,6 +135,7 @@ impl fmt::Display for AstConversionError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for AstConversionError {}
 
 /// Intermediate conversion state.
@@ -530,7 +528,10 @@ mod tests {
     use assert_matches::assert_matches;
 
     use super::*;
-    use crate::arith::Num;
+    use crate::{
+        alloc::{vec, ToString},
+        arith::Num,
+    };
 
     #[test]
     fn converting_raw_fn_type() {

@@ -1,12 +1,9 @@
 //! Functional type (`Function`) and closely related types.
 
-use std::{
-    collections::{HashMap, HashSet},
-    fmt,
-    sync::Arc,
-};
+use core::fmt;
 
 use crate::{
+    alloc::{Arc, HashMap, HashSet, Vec},
     arith::{CompleteConstraints, Constraint, ConstraintSet, Num},
     types::ParamQuantifier,
     LengthVar, PrimitiveType, Tuple, TupleLen, Type, TypeVar,
@@ -80,8 +77,8 @@ pub(crate) struct FnParams<Prim: PrimitiveType> {
 impl<Prim: PrimitiveType> Default for FnParams<Prim> {
     fn default() -> Self {
         Self {
-            type_params: vec![],
-            len_params: vec![],
+            type_params: Vec::new(),
+            len_params: Vec::new(),
             constraints: None,
         }
     }
@@ -432,7 +429,7 @@ mod tests {
     use core::iter;
 
     use super::*;
-    use crate::{arith::Linearity, UnknownLen};
+    use crate::{alloc::ToString, arith::Linearity, UnknownLen};
 
     #[test]
     fn constraints_display() {

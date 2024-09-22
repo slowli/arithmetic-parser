@@ -1,10 +1,11 @@
 //! `OpErrors` type.
 
-use std::ops;
+use core::ops;
 
 use arithmetic_parser::{grammars::Grammar, Destructure, Spanned, SpannedExpr, SpannedLvalue};
 
 use crate::{
+    alloc::Vec,
     ast::TypeAst,
     error::{Error, ErrorContext, ErrorKind, ErrorPathFragment},
     PrimitiveType,
@@ -78,8 +79,8 @@ impl<Prim: PrimitiveType> OpErrors<'_, Prim> {
 impl<Prim: PrimitiveType> OpErrors<'static, Prim> {
     pub(crate) fn new() -> Self {
         Self {
-            errors: Goat::Owned(vec![]),
-            current_path: vec![],
+            errors: Goat::Owned(Vec::new()),
+            current_path: Vec::new(),
         }
     }
 
@@ -108,7 +109,7 @@ impl<Prim: PrimitiveType> OpErrors<'static, Prim> {
         context: &ErrorContext<Prim>,
     ) -> Vec<Error<Prim>> {
         if self.errors.is_empty() {
-            vec![]
+            Vec::new()
         } else {
             self.do_contextualize(|item| item.into_assignment_error(context.clone(), span))
         }
@@ -120,7 +121,7 @@ impl<Prim: PrimitiveType> OpErrors<'static, Prim> {
         create_context: impl FnOnce() -> ErrorContext<Prim>,
     ) -> Vec<Error<Prim>> {
         if self.errors.is_empty() {
-            vec![]
+            Vec::new()
         } else {
             let context = create_context();
             self.do_contextualize(|item| item.into_destructure_error(context.clone(), span))

@@ -180,6 +180,7 @@ dependencies = [
  "anyhow",
  "arithmetic-parser",
  "assert_matches",
+ "hashbrown",
  "hex",
  "nom",
  "num-traits",

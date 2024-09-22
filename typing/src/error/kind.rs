@@ -1,12 +1,15 @@
 //! `ErrorKind` and tightly related types.
 
-use std::{collections::HashSet, fmt};
+use core::fmt;
 
 use arithmetic_parser::UnsupportedType;
 
 use crate::{
-    arith::Constraint, ast::AstConversionError, error::ErrorPathFragment, PrimitiveType,
-    TupleIndex, TupleLen, Type,
+    alloc::{Box, HashSet, String},
+    arith::Constraint,
+    ast::AstConversionError,
+    error::ErrorPathFragment,
+    PrimitiveType, TupleIndex, TupleLen, Type,
 };
 
 /// Context in which a tuple is used.
@@ -229,6 +232,7 @@ impl<Prim: PrimitiveType> fmt::Display for ErrorKind<Prim> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<Prim: PrimitiveType> std::error::Error for ErrorKind<Prim> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {

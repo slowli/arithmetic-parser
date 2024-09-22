@@ -1,7 +1,7 @@
 //! Types allowing to customize various aspects of the type system, such as type constraints
 //! and behavior of unary / binary ops.
 
-use std::{fmt, str::FromStr};
+use core::{fmt, str::FromStr};
 
 use arithmetic_parser::{BinaryOp, UnaryOp};
 use num_traits::NumOps;

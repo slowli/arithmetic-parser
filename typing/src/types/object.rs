@@ -1,11 +1,9 @@
 //! Object types.
 
-use std::{
-    collections::{HashMap, HashSet},
-    fmt, ops,
-};
+use core::{fmt, ops};
 
 use crate::{
+    alloc::{HashMap, HashSet, String, ToOwned, Vec},
     arith::Substitutions,
     error::{ErrorKind, OpErrors},
     DynConstraints, PrimitiveType, Type,

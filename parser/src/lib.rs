@@ -148,7 +148,7 @@ mod alloc {
     #[cfg(not(feature = "std"))]
     extern crate alloc as std;
 
-    pub use std::{boxed::Box, format, string::String, vec, vec::Vec};
+    pub(crate) use std::{boxed::Box, format, string::String, vec, vec::Vec};
 }
 
 pub use crate::{

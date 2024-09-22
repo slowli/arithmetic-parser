@@ -2,7 +2,7 @@
 //!
 //! [`arithmetic-eval`]: https://docs.rs/arithmetic-eval/
 
-use std::iter;
+use core::iter;
 
 use crate::{arith::WithBoolean, Function, Object, PrimitiveType, Type, UnknownLen};
 
@@ -321,10 +321,11 @@ impl Assertions {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashMap, HashSet};
-
     use super::*;
-    use crate::arith::Num;
+    use crate::{
+        alloc::{HashMap, HashSet, ToString},
+        arith::Num,
+    };
 
     const EXPECTED_PRELUDE_TYPES: &[(&str, &str)] = &[
         ("false", "Bool"),

@@ -7,7 +7,7 @@ extern crate alloc;
 
 use cortex_m_rt::entry;
 use cortex_m_semihosting::{debug, hprintln, syscall};
-use embedded_alloc::Heap;
+use embedded_alloc::LlffHeap as Heap;
 #[cfg(target_arch = "arm")]
 use panic_halt as _;
 use rand_chacha::{

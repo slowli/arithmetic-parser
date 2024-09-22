@@ -38,8 +38,6 @@ mod registers;
 /// for such cases.
 ///
 /// `ExecutableModule`s are generic with respect to the primitive value type, just like [`Value`].
-/// The lifetime of a module depends on the lifetime of the code, but this dependency
-/// can be eliminated via [`StripCode`] implementation.
 ///
 /// # Examples
 ///

@@ -27,13 +27,9 @@ skip-tree = [
   { name = "cortex-m-rt", version = "^0.7" },
   # Used by some less frequently updated crates; since it only provides WinAPI declarations,
   # multiple versions should be OK (?).
-  { name = "windows-sys", version = "^0.48" },
+  { name = "windows-sys", version = "^0.52" },
 ]
 
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
-allow-git = [
-  # Temporarily allow to depend on a revision that has `atty` dep removed
-  "https://github.com/slowli/term-transcript.git",
-]

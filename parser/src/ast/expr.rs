@@ -113,7 +113,7 @@ impl<'a, T: Grammar> Expr<'a, T> {
     }
 }
 
-impl<'a, T: Grammar> Clone for Expr<'a, T> {
+impl<T: Grammar> Clone for Expr<'_, T> {
     fn clone(&self) -> Self {
         match self {
             Self::Variable => Self::Variable,

@@ -187,7 +187,7 @@ impl<T> From<Spanned<'_, T>> for Location<T> {
 /// Wrapper around parsers allowing to capture both their output and the relevant span.
 pub fn with_span<'a, O>(
     mut parser: impl FnMut(InputSpan<'a>) -> NomResult<'a, O>,
-) -> impl FnMut(InputSpan<'a>) -> NomResult<'a, Spanned<'_, O>> {
+) -> impl FnMut(InputSpan<'a>) -> NomResult<'a, Spanned<'a, O>> {
     move |input: InputSpan<'_>| {
         parser(input).map(|(rest, output)| {
             let len = rest.location_offset() - input.location_offset();

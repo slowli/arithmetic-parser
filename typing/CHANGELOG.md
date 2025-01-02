@@ -5,6 +5,10 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ## [Unreleased]
 
+### Changed
+
+- Update `hashbrown` dependency to 0.15.
+
 ## 0.4.0-beta.1 - 2024-09-22
 
 ### Added

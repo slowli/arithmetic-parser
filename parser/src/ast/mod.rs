@@ -27,7 +27,7 @@ pub struct ObjectExpr<'a, T: Grammar> {
     pub fields: Vec<(Spanned<'a>, Option<SpannedExpr<'a, T>>)>,
 }
 
-impl<'a, T: Grammar> Clone for ObjectExpr<'a, T> {
+impl<T: Grammar> Clone for ObjectExpr<'_, T> {
     fn clone(&self) -> Self {
         Self {
             fields: self.fields.clone(),
@@ -35,7 +35,7 @@ impl<'a, T: Grammar> Clone for ObjectExpr<'a, T> {
     }
 }
 
-impl<'a, T: Grammar> PartialEq for ObjectExpr<'a, T> {
+impl<T: Grammar> PartialEq for ObjectExpr<'_, T> {
     fn eq(&self, other: &Self) -> bool {
         self.fields == other.fields
     }
@@ -56,7 +56,7 @@ pub enum Statement<'a, T: Grammar> {
     },
 }
 
-impl<'a, T: Grammar> Statement<'a, T> {
+impl<T: Grammar> Statement<'_, T> {
     /// Returns the type of this statement.
     pub fn ty(&self) -> StatementType {
         match self {
@@ -66,7 +66,7 @@ impl<'a, T: Grammar> Statement<'a, T> {
     }
 }
 
-impl<'a, T: Grammar> Clone for Statement<'a, T> {
+impl<T: Grammar> Clone for Statement<'_, T> {
     fn clone(&self) -> Self {
         match self {
             Self::Expr(expr) => Self::Expr(expr.clone()),
@@ -135,7 +135,7 @@ pub struct Block<'a, T: Grammar> {
     pub return_value: Option<Box<SpannedExpr<'a, T>>>,
 }
 
-impl<'a, T: Grammar> Clone for Block<'a, T> {
+impl<T: Grammar> Clone for Block<'_, T> {
     fn clone(&self) -> Self {
         Self {
             statements: self.statements.clone(),
@@ -155,7 +155,7 @@ where
     }
 }
 
-impl<'a, T: Grammar> Block<'a, T> {
+impl<T: Grammar> Block<'_, T> {
     /// Creates an empty block.
     pub fn empty() -> Self {
         Self {
@@ -177,7 +177,7 @@ pub struct FnDefinition<'a, T: Grammar> {
     pub body: Block<'a, T>,
 }
 
-impl<'a, T: Grammar> Clone for FnDefinition<'a, T> {
+impl<T: Grammar> Clone for FnDefinition<'_, T> {
     fn clone(&self) -> Self {
         Self {
             args: self.args.clone(),

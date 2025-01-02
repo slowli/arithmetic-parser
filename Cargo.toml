@@ -34,7 +34,7 @@ cortex-m-semihosting = "0.5"
 criterion = "0.5.0"
 embedded-alloc = "0.6.0"
 glass_pumpkin = "1.7.0"
-hashbrown = "0.14.5"
+hashbrown = "0.15"
 hex = "0.4.2"
 nom = { version = "7", default-features = false, features = ["alloc"] }
 nom_locate = { version = "4", default-features = false, features = ["alloc"] }
@@ -42,7 +42,7 @@ num-bigint = "0.4.6"
 num-complex = "0.4.6"
 num-traits = { version = "0.2.19", default-features = false }
 once_cell = { version = "1.20.2", default-features = false }
-panic-halt = "0.2.0"
+panic-halt = "1.0.0"
 pulldown-cmark = "0.12.2"
 rand = "0.8.3"
 rand_chacha = { version = "0.3.1", default-features = false }

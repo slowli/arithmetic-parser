@@ -184,7 +184,7 @@ struct StructConstraintVisitor<'r, Prim: PrimitiveType, C, F> {
     errors: OpErrors<'r, Prim>,
 }
 
-impl<'r, Prim, C, F> Visit<Prim> for StructConstraintVisitor<'r, Prim, C, F>
+impl<Prim, C, F> Visit<Prim> for StructConstraintVisitor<'_, Prim, C, F>
 where
     Prim: PrimitiveType,
     C: Constraint<Prim> + Clone,

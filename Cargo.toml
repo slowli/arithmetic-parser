@@ -24,8 +24,8 @@ repository = "https://github.com/slowli/arithmetic-parser"
 # External dependencies
 anyhow = { version = "1.0.95", default-features = false }
 assert_matches = "1.3.0"
-bitflags = "2.6.0"
-clap = "4.5.23"
+bitflags = "2.8.0"
+clap = "4.5.28"
 codespan = "0.11.1"
 codespan-reporting = "0.11.1"
 cortex-m = "0.7"

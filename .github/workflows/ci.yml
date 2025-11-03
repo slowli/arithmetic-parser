@@ -84,9 +84,9 @@ jobs:
       - name: Run eval example
         run: cargo run --manifest-path=eval/Cargo.toml --example owned_module
       - name: Run ElGamal encryption example
-        run: cargo run --manifest-path=eval/Cargo.toml --example el_gamal --features bigint,num-bigint/rand
+        run: cargo run --manifest-path=eval/Cargo.toml --example el_gamal --features bigint
       - name: Run cyclic group example
-        run: cargo run --manifest-path=eval/Cargo.toml --example cyclic_group --features bigint,num-bigint/rand
+        run: cargo run --manifest-path=eval/Cargo.toml --example cyclic_group --features bigint
       - name: Run typing example (strings)
         run: cargo run -p arithmetic-typing --example strings
       - name: Run typing example (num_or_bytes)

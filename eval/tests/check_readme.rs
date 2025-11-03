@@ -8,7 +8,7 @@ use arithmetic_eval::{
 };
 use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag, TagEnd};
-use rand::{thread_rng, Rng};
+use rand::Rng;
 
 fn read_file(path: &str) -> String {
     fs::read_to_string(path).unwrap_or_else(|err| panic!("Cannot read file {path}: {err}"))
@@ -25,7 +25,7 @@ fn check_sample(code_sample: &str) {
         .insert_native_fn("assert_close", fns::AssertClose::new(1e-4))
         .insert_wrapped_fn("sqrt", f32::sqrt)
         .insert_wrapped_fn("rand_num", |min: f32, max: f32| {
-            thread_rng().gen_range(min..max)
+            rand::rng().random_range(min..max)
         });
 
     module.with_env(&env).unwrap().run().unwrap();

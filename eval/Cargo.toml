@@ -63,9 +63,9 @@ required-features = ["std"]
 [[example]]
 name = "el_gamal"
 path = "examples/el_gamal.rs"
-required-features = ["std", "bigint", "num-bigint/rand"]
+required-features = ["std", "bigint"]
 
 [[example]]
 name = "cyclic_group"
 path = "examples/cyclic_group.rs"
-required-features = ["std", "bigint", "num-bigint/rand"]
+required-features = ["std", "bigint"]

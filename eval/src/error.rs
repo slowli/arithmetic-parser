@@ -6,7 +6,7 @@ pub use arithmetic_parser::UnsupportedType;
 use arithmetic_parser::{BinaryOp, LocatedSpan, Location, LvalueLen, Op, UnaryOp};
 
 use crate::{
-    alloc::{format, vec, Arc, HashSet, String, ToOwned, ToString, Vec},
+    alloc::{format, vec, Arc, Box, HashSet, String, ToOwned, ToString, Vec},
     exec::ModuleId,
     fns::FromValueError,
     Value,

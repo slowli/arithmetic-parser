@@ -290,7 +290,7 @@ fn unifying_dyn_type_as_rhs() {
 
     for lhs in invalid_lhs {
         let err = unify(&mut substitutions, lhs, &rhs).unwrap_err();
-        assert_matches!(err, ErrorKind::TypeMismatch(_, rhs_ty) if rhs_ty == rhs);
+        assert_matches!(err, ErrorKind::TypeMismatch(_, rhs_ty) if *rhs_ty == rhs);
     }
 }
 
@@ -396,7 +396,7 @@ fn unifying_dyn_object_as_lhs() {
         let err = unify(&mut substitutions, &lhs, &rhs.into()).unwrap_err();
         assert_matches!(
             err,
-            ErrorKind::TypeMismatch(lhs, rhs) if lhs == Type::NUM && rhs == Type::BOOL
+            ErrorKind::TypeMismatch(lhs, rhs) if *lhs == Type::NUM && *rhs == Type::BOOL
         );
     }
     {
@@ -435,7 +435,7 @@ fn unifying_dyn_object_as_lhs() {
         assert_matches!(
             err,
             ErrorKind::TypeMismatch(lhs_ty, rhs_ty)
-                if lhs_ty == Type::NUM && rhs_ty == Type::BOOL
+                if *lhs_ty == Type::NUM && *rhs_ty == Type::BOOL
         );
     }
     {

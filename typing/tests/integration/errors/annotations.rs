@@ -342,7 +342,7 @@ fn type_cast_basic_error() {
     assert_eq!(err.root_location().span(code), "(1, 2) as Num");
     assert_matches!(
         err.kind(),
-        ErrorKind::TypeMismatch(lhs, rhs) if *lhs == Type::NUM && rhs.to_string() == "(Num, Num)"
+        ErrorKind::TypeMismatch(lhs, rhs) if **lhs == Type::NUM && rhs.to_string() == "(Num, Num)"
     );
     assert_matches!(
         err.context(),
@@ -448,7 +448,7 @@ fn contradicting_dyn_constraint_via_field_access() {
 
     assert_eq!(err.main_location().span(code), "!obj.x");
     assert_matches!(err.context(), ErrorContext::UnaryOp(_));
-    assert_matches!(err.kind(), ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL);
+    assert_matches!(err.kind(), ErrorKind::FailedConstraint { ty, .. } if **ty == Type::BOOL);
 }
 
 #[test]
@@ -466,7 +466,7 @@ fn contradicting_field_types_via_annotations() {
     assert_matches!(err.context(), ErrorContext::UnaryOp(_));
     assert_matches!(
         err.kind(),
-        ErrorKind::TypeMismatch(lhs, rhs) if *lhs == Type::BOOL && *rhs == Type::NUM
+        ErrorKind::TypeMismatch(lhs, rhs) if **lhs == Type::BOOL && **rhs == Type::NUM
     );
 }
 
@@ -485,8 +485,8 @@ fn contradicting_constraint_with_dyn_object() {
     assert_eq!(err.path(), [fn_arg(0)]);
     assert_matches!(
         err.kind(),
-        ErrorKind::FailedConstraint { ty: Type::Dyn(_), constraint }
-            if constraint.to_string() == "Hash"
+        ErrorKind::FailedConstraint { ty, constraint }
+            if constraint.to_string() == "Hash" && matches!(ty.as_ref(), Type::Dyn(_))
     );
 }
 

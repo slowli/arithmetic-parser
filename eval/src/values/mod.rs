@@ -93,9 +93,7 @@ impl OpaqueRef {
 
             dyn_eq: |this, other| {
                 let this_cast = this.downcast_ref::<T>().unwrap();
-                other
-                    .downcast_ref::<T>()
-                    .map_or(false, |other_cast| other_cast == this_cast)
+                other.downcast_ref::<T>() == Some(this_cast)
             },
             dyn_fmt: |this, formatter| {
                 let this_cast = this.downcast_ref::<T>().unwrap();

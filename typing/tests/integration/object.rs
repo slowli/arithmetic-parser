@@ -165,7 +165,7 @@ fn recursive_object_definitions() {
     let bogus_block = F32Grammar::parse_statements(bogus_code).unwrap();
     let err = env.process_statements(&bogus_block).unwrap_err().single();
 
-    assert_matches!(err.kind(), ErrorKind::TypeMismatch(lhs, _) if *lhs == Type::NUM);
+    assert_matches!(err.kind(), ErrorKind::TypeMismatch(lhs, _) if **lhs == Type::NUM);
 
     let bogus_code = "
         normalize_pt(#{

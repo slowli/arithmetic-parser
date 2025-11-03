@@ -289,7 +289,7 @@ impl<T> Value<T> {
         };
 
         let maybe_ordering = arithmetic.partial_cmp(lhs_value, rhs_value);
-        let cmp_result = maybe_ordering.map_or(false, |ordering| match op {
+        let cmp_result = maybe_ordering.is_some_and(|ordering| match op {
             BinaryOp::Gt => ordering == Ordering::Greater,
             BinaryOp::Lt => ordering == Ordering::Less,
             BinaryOp::Ge => ordering != Ordering::Less,

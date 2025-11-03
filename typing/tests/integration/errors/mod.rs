@@ -106,7 +106,7 @@ fn immediately_invoked_function_with_invalid_arg() {
     );
     assert_matches!(
         err.kind(),
-        ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
+        ErrorKind::FailedConstraint { ty, .. } if **ty == Type::BOOL
     );
     assert_eq!(err.kind().to_string(), "Type `Bool` fails constraint `Ops`");
 }
@@ -236,8 +236,9 @@ fn function_passed_as_arg_invalid_arg_type() {
 
     assert_matches!(
         err.kind(),
-        ErrorKind::TypeMismatch(Type::Tuple(t), rhs)
-            if t.len() == TupleLen::from(2) && *rhs == Type::NUM
+        ErrorKind::TypeMismatch(lhs, rhs) if **rhs == Type::NUM => {
+            assert_matches!(lhs.as_ref(), Type::Tuple(t) if t.len() == TupleLen::from(2));
+        }
     );
 }
 
@@ -359,7 +360,7 @@ fn constraint_error() {
     assert_matches!(
         err.kind(),
         ErrorKind::FailedConstraint { ty, constraint }
-            if *ty == Type::BOOL && constraint.to_string() == "Ops"
+            if **ty == Type::BOOL && constraint.to_string() == "Ops"
     );
 }
 
@@ -385,10 +386,7 @@ fn dyn_type_with_bogus_function_call() {
 
     assert_matches!(
         err.kind(),
-        ErrorKind::FailedConstraint {
-            ty: Type::Function(_),
-            ..
-        }
+        ErrorKind::FailedConstraint { ty, .. } if matches!(ty.as_ref(), Type::Function(_))
     );
 }
 
@@ -447,7 +445,7 @@ fn locating_tuple_middle_with_failed_constraint() {
         ErrorContext::BinaryOp(BinaryOpContext { lhs, .. })
             if lhs.to_string() == "(Num, ...[Bool; _])"
     );
-    assert_matches!(err.kind(), ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL);
+    assert_matches!(err.kind(), ErrorKind::FailedConstraint { ty, .. } if **ty == Type::BOOL);
 }
 
 #[test]

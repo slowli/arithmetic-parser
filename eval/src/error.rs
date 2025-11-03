@@ -449,7 +449,7 @@ impl fmt::Display for AuxErrorInfo {
 /// Evaluation error together with one or more relevant code spans.
 #[derive(Debug)]
 pub struct Error {
-    kind: ErrorKind,
+    kind: Box<ErrorKind>,
     main_location: LocationInModule,
     aux_locations: Vec<LocationInModule<AuxErrorInfo>>,
 }
@@ -465,7 +465,7 @@ impl Error {
         Location: From<LocatedSpan<Span>>,
     {
         Self {
-            kind,
+            kind: Box::new(kind),
             main_location: LocationInModule::new(module_id, main_span.with_no_extra().into()),
             aux_locations: vec![],
         }
@@ -473,7 +473,7 @@ impl Error {
 
     pub(crate) fn from_parts(main_span: LocationInModule, kind: ErrorKind) -> Self {
         Self {
-            kind,
+            kind: Box::new(kind),
             main_location: main_span,
             aux_locations: vec![],
         }

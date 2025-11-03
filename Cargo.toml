@@ -36,9 +36,8 @@ embedded-alloc = "0.6.0"
 glass_pumpkin = "1.8.0"
 hashbrown = "0.16"
 hex = "0.4.2"
-# FIXME: update nom as well
-nom = { version = "7", default-features = false, features = ["alloc"] }
-nom_locate = { version = "4", default-features = false, features = ["alloc"] }
+nom = { version = "8", default-features = false, features = ["alloc"] }
+nom_locate = { version = "5", default-features = false, features = ["alloc"] }
 num-bigint = "0.4.6"
 num-complex = "0.4.6"
 num-traits = { version = "0.2.19", default-features = false }
@@ -50,7 +49,7 @@ rand_chacha = { version = "0.9.0", default-features = false }
 rustyline = "17.0.2"
 sha2 = "0.10.9"
 static_assertions = "1.1.0"
-term-transcript = "=0.4.0"
+term-transcript = "0.4.0"
 textwrap = "0.16.2"
 typed-arena = "2.0.1"
 unindent = "0.2.4"

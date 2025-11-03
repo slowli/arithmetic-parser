@@ -13,6 +13,7 @@ use arithmetic_typing::{
     error::{ErrorPathFragment, OpErrors},
     Annotated, PrimitiveType, Type, TypeEnvironment,
 };
+use nom::Parser as _;
 
 /// Primitive type: string or boolean.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -83,7 +84,8 @@ impl ParseLiteral for StrGrammar {
         map(
             preceded(tag_char('"'), cut(terminated(opt(parser), tag_char('"')))),
             Option::unwrap_or_default,
-        )(input)
+        )
+        .parse(input)
     }
 }
 

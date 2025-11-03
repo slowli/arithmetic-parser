@@ -6,8 +6,8 @@ use nom::{
     character::complete::char as tag_char,
     combinator::{cut, map, not, opt, peek},
     multi::many0,
-    sequence::{delimited, preceded, terminated, tuple},
-    Err as NomErr,
+    sequence::{delimited, preceded, terminated},
+    Err as NomErr, Parser as _,
 };
 
 pub use self::helpers::is_valid_variable_name;
@@ -35,14 +35,14 @@ where
     T: Parse,
     Ty: GrammarType,
 {
-    let assignment = tuple((tag("="), peek(not(tag_char('=')))));
-    let assignment_parser = tuple((
+    let assignment = (tag("="), peek(not(tag_char('='))));
+    let assignment_parser = (
         opt(terminated(
             lvalue::<T, Ty>,
             delimited(ws::<Ty>, assignment, ws::<Ty>),
         )),
         expr::<T, Ty>,
-    ));
+    );
 
     with_span(map(assignment_parser, |(lvalue, rvalue)| {
         // Clippy lint is triggered here. `rvalue` cannot be moved into both branches, so it's a false positive.
@@ -54,7 +54,8 @@ where
         } else {
             Statement::Expr(rvalue)
         }
-    }))(input)
+    }))
+    .parse(input)
 }
 
 /// Parses a complete list of statements.
@@ -88,7 +89,8 @@ where
     T: Parse,
     Ty: GrammarType,
 {
-    delimited(ws::<Ty>, separated_statements::<T, Ty>, ws::<Ty>)(input_span)
+    delimited(ws::<Ty>, separated_statements::<T, Ty>, ws::<Ty>)
+        .parse(input_span)
         .map_err(|e| match e {
             NomErr::Failure(e) | NomErr::Error(e) => e,
             NomErr::Incomplete(_) => ErrorKind::Incomplete.with_span(&input_span.into()),
@@ -107,7 +109,7 @@ where
     T: Parse,
     Ty: GrammarType,
 {
-    terminated(statement::<T, Ty>, preceded(ws::<Ty>, tag_char(';')))(input)
+    terminated(statement::<T, Ty>, preceded(ws::<Ty>, tag_char(';'))).parse(input)
 }
 
 /// List of statements separated by semicolons.
@@ -117,15 +119,16 @@ where
     Ty: GrammarType,
 {
     map(
-        tuple((
+        (
             many0(terminated(separated_statement::<T, Ty>, ws::<Ty>)),
             opt(expr::<T, Ty>),
-        )),
+        ),
         |(statements, return_value)| Block {
             statements,
             return_value: return_value.map(Box::new),
         },
-    )(input)
+    )
+    .parse(input)
 }
 
 /// Block of statements, e.g., `{ x = 3; x + y }`.
@@ -140,7 +143,8 @@ where
             separated_statements::<T, Ty>,
             preceded(ws::<Ty>, tag_char('}')),
         )),
-    )(input)
+    )
+    .parse(input)
 }
 
 /// Function definition, e.g., `|x, y: Sc| { x + y }`.
@@ -165,6 +169,6 @@ where
         )),
     );
 
-    let parser = tuple((with_span(args_parser), cut(preceded(ws::<Ty>, body_parser))));
-    map(parser, |(args, body)| FnDefinition { args, body })(input)
+    let parser = (with_span(args_parser), cut(preceded(ws::<Ty>, body_parser)));
+    map(parser, |(args, body)| FnDefinition { args, body }).parse(input)
 }

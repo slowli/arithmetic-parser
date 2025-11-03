@@ -11,6 +11,7 @@ use nom::{
     error::context,
     multi::many0,
     sequence::{delimited, preceded},
+    Parser as _,
 };
 
 use crate::{grammars::Features, BinaryOp, Context, InputSpan, NomResult, Spanned, UnaryOp};
@@ -97,7 +98,7 @@ pub(super) fn ws<Ty: GrammarType>(input: InputSpan<'_>) -> NomResult<'_, InputSp
 
     fn long_comment_body<T: GrammarType>(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
         if T::COMPLETE {
-            context(Context::Comment.to_str(), cut(take_until("*/")))(input)
+            context(Context::Comment.to_str(), cut(take_until("*/"))).parse(input)
         } else {
             streaming::take_until("*/")(input)
         }
@@ -106,14 +107,14 @@ pub(super) fn ws<Ty: GrammarType>(input: InputSpan<'_>) -> NomResult<'_, InputSp
     let comment = preceded(tag("//"), take_while(|c: char| c != '\n'));
     let long_comment = delimited(tag("/*"), long_comment_body::<Ty>, tag("*/"));
     let ws_line = alt((narrow_ws::<Ty>, comment, long_comment));
-    recognize(many0(ws_line))(input)
+    recognize(many0(ws_line)).parse(input)
 }
 
 pub(super) fn mandatory_ws<Ty: GrammarType>(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
     let not_ident_char = peek(not(take_while_m_n(1, 1, |c: char| {
         c.is_ascii_alphanumeric() || c == '_'
     })));
-    preceded(not_ident_char, ws::<Ty>)(input)
+    preceded(not_ident_char, ws::<Ty>).parse(input)
 }
 
 /// Variable name, like `a_foo` or `Bar`.
@@ -126,7 +127,8 @@ pub(super) fn var_name(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
             })),
             take_while1(|c: char| c.is_ascii_alphanumeric() || c == '_'),
         ),
-    )(input)
+    )
+    .parse(input)
 }
 
 /// Checks if the provided string is a valid variable name.
@@ -142,5 +144,5 @@ pub fn is_valid_variable_name(name: &str) -> bool {
 }
 
 pub(super) fn comma_sep<Ty: GrammarType>(input: InputSpan<'_>) -> NomResult<'_, char> {
-    delimited(ws::<Ty>, tag_char(','), ws::<Ty>)(input)
+    delimited(ws::<Ty>, tag_char(','), ws::<Ty>).parse(input)
 }

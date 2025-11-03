@@ -2,7 +2,7 @@ use core::{fmt, marker::PhantomData};
 
 use anyhow::anyhow;
 use bitflags::bitflags;
-use nom::Err as NomErr;
+use nom::{Err as NomErr, Input};
 
 use crate::{
     parser::{statements, streaming_statements},
@@ -375,12 +375,10 @@ impl<T: ParseLiteral, Ty: MockTypes> Grammar for WithMockedTypes<T, Ty> {
     type Type<'a> = ();
 
     fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type<'_>> {
-        use nom::Slice;
-
         fn type_parser<M: MockTypes>(input: InputSpan<'_>) -> NomResult<'_, ()> {
             for &annotation in M::MOCKED_TYPES {
                 if input.fragment().starts_with(annotation) {
-                    let rest = input.slice(annotation.len()..);
+                    let rest = input.take_from(annotation.len());
                     return Ok((rest, ()));
                 }
             }

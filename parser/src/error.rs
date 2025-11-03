@@ -4,7 +4,7 @@ use core::fmt;
 
 use nom::{
     error::{ContextError, ErrorKind as NomErrorKind, FromExternalError, ParseError},
-    Slice,
+    Input,
 };
 
 use crate::{
@@ -234,7 +234,7 @@ impl<'a> ParseError<InputSpan<'a>> for Error {
     fn from_error_kind(mut input: InputSpan<'a>, kind: NomErrorKind) -> Self {
         if kind == NomErrorKind::Char && !input.fragment().is_empty() {
             // Truncate the error span to the first ineligible char.
-            input = input.slice(..1);
+            input = input.take(1);
         }
 
         let error_kind = if kind == NomErrorKind::Char {

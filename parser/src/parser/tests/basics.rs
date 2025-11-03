@@ -1,7 +1,7 @@
 //! Tests for basic parsers.
 
 use assert_matches::assert_matches;
-use nom::{Err as NomErr, Slice};
+use nom::{Err as NomErr, Input};
 
 use super::{sp, FieldGrammar, Literal, LiteralType};
 use crate::{
@@ -45,35 +45,41 @@ fn whitespace_can_include_comments() {
     assert_eq!(ws::<Complete>(input).unwrap().0, input);
 
     let input = InputSpan::new("   ge(1)");
-    assert_eq!(ws::<Complete>(input).unwrap().0, input.slice(3..));
+    assert_eq!(ws::<Complete>(input).unwrap().0, input.take_from(3));
 
     let input = InputSpan::new("  \nge(1)");
-    assert_eq!(ws::<Complete>(input).unwrap().0, input.slice(3..));
+    assert_eq!(ws::<Complete>(input).unwrap().0, input.take_from(3));
     let input = InputSpan::new("// Comment\nge(1)");
-    assert_eq!(ws::<Complete>(input).unwrap().0, input.slice(11..));
+    assert_eq!(ws::<Complete>(input).unwrap().0, input.take_from(11));
     let input = InputSpan::new("//!\nge(1)");
-    assert_eq!(ws::<Complete>(input).unwrap().0, input.slice(4..));
+    assert_eq!(ws::<Complete>(input).unwrap().0, input.take_from(4));
 
     let input = InputSpan::new(
         "   // This is a comment.
              \t// This is a comment, too
              this_is_not // although this *is*",
     );
-    assert_eq!(ws::<Complete>(input).unwrap().0, input.slice(78..));
+    assert_eq!(ws::<Complete>(input).unwrap().0, input.take_from(78));
 }
 
 #[test]
 fn mandatory_whitespace() {
     let input = InputSpan::new(" Type");
-    assert_eq!(mandatory_ws::<Complete>(input).unwrap().0, input.slice(1..));
+    assert_eq!(
+        mandatory_ws::<Complete>(input).unwrap().0,
+        input.take_from(1)
+    );
     let input = InputSpan::new("(Type)");
     assert_eq!(mandatory_ws::<Complete>(input).unwrap().0, input);
     let input = InputSpan::new("\n \tType");
-    assert_eq!(mandatory_ws::<Complete>(input).unwrap().0, input.slice(3..));
+    assert_eq!(
+        mandatory_ws::<Complete>(input).unwrap().0,
+        input.take_from(3)
+    );
     let input = InputSpan::new("/* Comment */ Type");
     assert_eq!(
         mandatory_ws::<Complete>(input).unwrap().0,
-        input.slice(14..)
+        input.take_from(14)
     );
 }
 
@@ -87,9 +93,9 @@ fn mandatory_whitespace_errors() {
 #[test]
 fn multiline_comments() {
     let input = InputSpan::new("/* !! */ foo");
-    assert_eq!(ws::<Complete>(input).unwrap().0, input.slice(9..));
+    assert_eq!(ws::<Complete>(input).unwrap().0, input.take_from(9));
     let input = InputSpan::new("/*\nFoo\n*/ foo");
-    assert_eq!(ws::<Complete>(input).unwrap().0, input.slice(10..));
+    assert_eq!(ws::<Complete>(input).unwrap().0, input.take_from(10));
     let input = InputSpan::new("/* Foo");
     assert!(ws::<Streaming>(input).unwrap_err().is_incomplete());
 
@@ -161,11 +167,11 @@ fn string_literal_works() {
 #[test]
 fn var_name_works() {
     let input = InputSpan::new("A + B");
-    assert_eq!(var_name(input).unwrap().1, input.slice(..1));
+    assert_eq!(var_name(input).unwrap().1, input.take(1));
     let input = InputSpan::new("Abc_d + B");
-    assert_eq!(var_name(input).unwrap().1, input.slice(..5));
+    assert_eq!(var_name(input).unwrap().1, input.take(5));
     let input = InputSpan::new("_ + 3");
-    assert_eq!(var_name(input).unwrap().1, input.slice(..1));
+    assert_eq!(var_name(input).unwrap().1, input.take(1));
 }
 
 #[test]

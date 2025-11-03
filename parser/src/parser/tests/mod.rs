@@ -733,7 +733,7 @@ fn no_unary_op_if_literal_without_it_not_parsed() {
             assert_matches!(receiver.extra, Expr::Literal(s) if s == "foo");
         }
         _ => panic!("Unexpected expr: {expr:?}"),
-    };
+    }
 }
 
 #[test]

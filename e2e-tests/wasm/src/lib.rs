@@ -30,6 +30,7 @@ fn initialize_env(env: &mut Environment<f64>) {
         ("Inf", f64::INFINITY),
     ];
 
+    #[allow(clippy::incompatible_msrv)] // Weird false positive; a function doesn't have to be constant to be mentioned here
     const UNARY_FNS: &[(&str, fn(f64) -> f64)] = &[
         // Rounding functions.
         ("floor", f64::floor),

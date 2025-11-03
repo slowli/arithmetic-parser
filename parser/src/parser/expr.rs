@@ -486,9 +486,9 @@ fn fold_binary_expr<'a, T: Grammar>(
             .unwrap_or(right_contour.len());
 
         // We determine the error span later.
-        let chained_comparison = right_contour.get(insert_pos).map_or(false, |past_op| {
-            past_op.is_comparison() && new_op.extra.is_comparison()
-        });
+        let chained_comparison = right_contour
+            .get(insert_pos)
+            .is_some_and(|past_op| past_op.is_comparison() && new_op.extra.is_comparison());
 
         right_contour.truncate(insert_pos);
         right_contour.push(new_op.extra);

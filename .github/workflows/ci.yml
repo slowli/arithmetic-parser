@@ -10,7 +10,7 @@ env:
   # Minimum supported Rust version.
   msrv: 1.70.0
   # Nightly Rust toolchain for building docs and checking nostd support.
-  nightly: nightly-2024-07-05
+  nightly: nightly-2025-11-02
 
 jobs:
   # Checks minimum supported Rust version.
@@ -56,7 +56,7 @@ jobs:
         uses: baptiste0928/cargo-install@v3
         with:
           crate: cargo-deny
-          version: "^0.16"
+          version: "^0.18"
 
       - name: Cache cargo build
         uses: actions/cache@v4

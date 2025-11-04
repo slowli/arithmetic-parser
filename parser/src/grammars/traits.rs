@@ -66,11 +66,11 @@ impl Features {
 ///
 ///     // We use the `nom` crate to construct necessary parsers.
 ///     fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
-///         use nom::{character::complete::digit1, combinator::map_res};
+///         use nom::{character::complete::digit1, combinator::map_res, Parser};
 ///         let parser = |s: InputSpan<'_>| {
 ///             s.fragment().parse().map_err(ErrorKind::literal)
 ///         };
-///         map_res(digit1, parser)(input)
+///         map_res(digit1, parser).parse(input)
 ///     }
 /// }
 ///
@@ -141,11 +141,11 @@ pub trait ParseLiteral: 'static {
 ///     type Lit = u64;
 ///
 ///     fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
-///         use nom::{character::complete::digit1, combinator::map_res};
+///         use nom::{character::complete::digit1, combinator::map_res, Parser};
 ///         let parser = |s: InputSpan<'_>| {
 ///             s.fragment().parse().map_err(ErrorKind::literal)
 ///         };
-///         map_res(digit1, parser)(input)
+///         map_res(digit1, parser).parse(input)
 ///     }
 /// }
 ///
@@ -156,8 +156,8 @@ pub trait ParseLiteral: 'static {
 ///     type Type<'a> = Num;
 ///
 ///     fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type<'_>> {
-///         use nom::{bytes::complete::tag, combinator::map};
-///         map(tag("Num"), |_| Num)(input)
+///         use nom::{bytes::complete::tag, combinator::map, Parser};
+///         map(tag("Num"), |_| Num).parse(input)
 ///     }
 /// }
 ///
@@ -233,9 +233,9 @@ impl<'a> IntoInputSpan<'a> for &'a str {
 ///     // Implementation skipped...
 /// #   type Lit = u64;
 /// #   fn parse_literal(input: InputSpan<'_>) -> NomResult<'_, Self::Lit> {
-/// #       use nom::{character::complete::digit1, combinator::map_res};
+/// #       use nom::{character::complete::digit1, combinator::map_res, Parser};
 /// #       let parser = |s: InputSpan<'_>| s.fragment().parse().map_err(ErrorKind::literal);
-/// #       map_res(digit1, parser)(input)
+/// #       map_res(digit1, parser).parse(input)
 /// #   }
 /// }
 ///

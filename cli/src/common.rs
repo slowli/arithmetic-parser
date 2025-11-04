@@ -235,7 +235,7 @@ impl Reporter {
         )
         .map_err(|err| match err {
             FilesError::Io(err) => err,
-            _ => io::Error::new(io::ErrorKind::Other, err),
+            _ => io::Error::other(err),
         })
     }
 

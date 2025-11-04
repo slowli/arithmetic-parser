@@ -3,7 +3,7 @@ use num_traits::Zero;
 use rand::RngCore;
 
 fn gen_uint(rng: &mut impl RngCore, bit_size: u64) -> BigUint {
-    let byte_size = (bit_size + 7) / 8;
+    let byte_size = bit_size.div_ceil(8);
     let mut bytes = vec![0u8; byte_size as usize];
     rng.fill_bytes(&mut bytes);
 

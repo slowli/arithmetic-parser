@@ -1,0 +1,113 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Parser for arithmetic expressions with flexible definition of literals and support of type annotations."><title>arithmetic_parser - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="arithmetic_parser" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0-nightly (bd3ac0330 2025-11-01)" data-channel="nightly" data-search-js="search-5c29b3b5.js" data-stringdex-js="stringdex-c3e638e9.js" data-settings-js="settings-c38705f0.js" ><script src="../static.files/storage-e2aeef58.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-ce535bd0.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate arithmetic_parser</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../arithmetic_parser/index.html">arithmetic_<wbr>parser</a><span class="version">0.4.0-beta.1</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#supported-syntax-features" title="Supported syntax features">Supported syntax features</a><ul><li><a href="#optional-syntax-features" title="Optional syntax features">Optional syntax features</a></li><li><a href="#differences-with-rust" title="Differences with Rust">Differences with Rust</a></li></ul></li><li><a href="#crate-features" title="Crate features">Crate features</a><ul><li><a href="#std" title="`std`"><code>std</code></a></li><li><a href="#num-complex" title="`num-complex`"><code>num-complex</code></a></li><li><a href="#num-bigint" title="`num-bigint`"><code>num-bigint</code></a></li></ul></li><li><a href="#examples" title="Examples">Examples</a></li></ul><h3><a href="#modules">Crate Items</a></h3><ul class="block"><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li><li><a href="#functions" title="Functions">Functions</a></li><li><a href="#types" title="Type Aliases">Type Aliases</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>arithmetic_<wbr>parser</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/arithmetic_parser/lib.rs.html#1-171">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Parser for arithmetic expressions with flexible definition of literals and support
+of type annotations.</p>
+<p>Overall, parsed grammars are similar to Rust syntax,
+<a href="#differences-with-rust">with a few notable differences</a>.</p>
+<h2 id="supported-syntax-features"><a class="doc-anchor" href="#supported-syntax-features">§</a>Supported syntax features</h2>
+<ul>
+<li><strong>Variables.</strong> A variable name is defined similar to Rust and other programming languages,
+as a sequence of alphanumeric chars and underscores that does not start with a digit.</li>
+<li><strong>Literals.</strong> The parser for literals is user-provided, thus allowing to apply the library
+to different domains (e.g., finite group arithmetic).</li>
+<li><code>//</code> and <code>/* .. */</code> <strong>comments</strong>.</li>
+<li>Basic <strong>arithmetic operations</strong>: <code>+</code>, <code>-</code> (binary and unary), <code>*</code>, <code>/</code>, <code>^</code> (power).
+The parser outputs AST with nodes organized according to the operation priority.</li>
+<li><strong>Function calls</strong>: <code>foo(1.0, x)</code>.</li>
+<li><strong>Parentheses</strong> which predictably influence operation priority.</li>
+</ul>
+<p>The parser supports both complete and streaming (incomplete) modes; the latter is useful
+for REPLs and similar applications.</p>
+<h3 id="optional-syntax-features"><a class="doc-anchor" href="#optional-syntax-features">§</a>Optional syntax features</h3>
+<p>These features can be switched on or off when defining a <a href="grammars/trait.Parse.html" title="trait arithmetic_parser::grammars::Parse"><code>Parse</code></a> impl
+by declaring the corresponding <a href="grammars/struct.Features.html" title="struct arithmetic_parser::grammars::Features"><code>Features</code></a>.</p>
+<ul>
+<li><strong>Tuples.</strong> A tuple is two or more elements separated by commas, such as <code>(x, y)</code>
+or <code>(1, 2 * x)</code>. Tuples are parsed both as lvalues and rvalues.</li>
+<li><strong>Tuple destructuring.</strong> Using a tuple as an lvalue, for example, <code>(x, y, z) = foo</code>.
+The “rest” syntax is also supported, either named or unnamed: <code>(head, ...tail) = foo</code>,
+<code>(a, ..., b, c) = foo</code>.</li>
+<li><strong>Function definitions.</strong> A definition looks like a closure definition in Rust, e.g.,
+<code>|x| x - 10</code> or <code>|x, y| { z = max(x, y); (z - x, z - y) }</code>. A definition may be
+assigned to a variable (which is the way to define named functions).</li>
+<li><strong>Destructuring for function args.</strong> Similar to tuple destructuring, it is possible to
+destructure and group args in function definitions, for example, <code>|(x, y), ...zs| { }</code>.</li>
+<li><strong>Blocks.</strong> A block is several <code>;</code>-delimited statements enclosed in <code>{}</code> braces,
+e.g, <code>{ z = max(x, y); (z - x, z - y) }</code>. The blocks can be used in all contexts
+instead of a simple expression; for example, <code>min({ z = 5; z - 1 }, 3)</code>.</li>
+<li><strong>Objects.</strong> Object is a mapping of string fields to values. Objects are defined via
+<em>object expressions</em>, which look similar to struct initialization in Rust or object
+initialization in JavaScript; for example, <code>#{ x: 1, y }</code>. (Note the <code>#</code> char at the start
+of the block; it is used to distinguish object expressions from blocks.)</li>
+<li><strong>Methods.</strong> Method call is a function call separated from the receiver with a <code>.</code> char
+(e.g., <code>foo.bar(2, x)</code>).</li>
+<li><strong>Type annotations.</strong> A type annotation in the form <code>var: Type</code> can be present
+in the lvalues or in the function argument definitions. The parser for type annotations
+is user-defined.</li>
+<li><strong>Boolean operations</strong>: <code>==</code>, <code>!=</code>, <code>&amp;&amp;</code>, <code>||</code>, <code>!</code>.</li>
+<li><strong>Order comparisons,</strong> that is, <code>&gt;</code>, <code>&lt;</code>, <code>&gt;=</code>, and <code>&lt;=</code> boolean ops.</li>
+</ul>
+<h3 id="differences-with-rust"><a class="doc-anchor" href="#differences-with-rust">§</a>Differences with Rust</h3>
+<p><em>(within shared syntax constructs; of course, Rust is much more expressive)</em></p>
+<ul>
+<li>No keyword for assigning a variable (i.e., no <code>let</code> / <code>let mut</code>). There are no
+keywords in general.</li>
+<li>Functions are only defined via the closure syntax.</li>
+<li>There is “rest” destructuting for tuples and function arguments.</li>
+<li>Type annotations are placed within tuple elements, for example, <code>(x: Num, _) = y</code>.</li>
+<li>Object expressions are enclosed in <code>#{ ... }</code>, similarly to <a href="https://rhai.rs/">Rhai</a>.</li>
+<li>Object field access and method calls accept arbitrary block-enclosed “names” in addition to
+simple names. E.g., <code>xs.{Array.len}()</code> is a valid method call with <code>xs</code> receiver, <code>Array.len</code>
+method name and an empty args list.</li>
+</ul>
+<h2 id="crate-features"><a class="doc-anchor" href="#crate-features">§</a>Crate features</h2><h3 id="std"><a class="doc-anchor" href="#std">§</a><code>std</code></h3>
+<p><em>(On by default)</em></p>
+<p>Enables support of types from <code>std</code>, such as the <code>Error</code> trait, and propagates to dependencies.</p>
+<h3 id="num-complex"><a class="doc-anchor" href="#num-complex">§</a><code>num-complex</code></h3>
+<p><em>(Off by default)</em></p>
+<p>Implements <a href="grammars/trait.NumLiteral.html" title="trait arithmetic_parser::grammars::NumLiteral"><code>NumLiteral</code></a> for floating-point complex numbers
+(<code>Complex32</code> and <code>Complex64</code>).</p>
+<h3 id="num-bigint"><a class="doc-anchor" href="#num-bigint">§</a><code>num-bigint</code></h3>
+<p><em>(Off by default)</em></p>
+<p>Implements <a href="grammars/trait.NumLiteral.html" title="trait arithmetic_parser::grammars::NumLiteral"><code>NumLiteral</code></a> for <code>BigInt</code> and <code>BigUint</code> from the <code>num-bigint</code> crate.</p>
+<h2 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h2>
+<p>Using a grammar for arithmetic on real values.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>arithmetic_parser::{
+    grammars::{F32Grammar, Parse, Untyped},
+    NomResult, Statement, Expr, FnDefinition, LvalueLen,
+};
+
+<span class="kw">const </span>PROGRAM: <span class="kw-2">&amp;</span>str = <span class="string">"
+    // This is a comment.
+    x = 1 + 2.5 * 3 + sin(a^3 / b^2 /* another comment */);
+    // Function declarations have syntax similar to Rust closures.
+    some_function = |a, b| (a + b, a - b);
+    other_function = |x| {
+        r = min(rand(), 0.5);
+        r * x
+    };
+    // Tuples and blocks are supported and have a similar syntax to Rust.
+    (y, z) = some_function({ x = x - 0.5; x }, x);
+    other_function(y - z)
+"</span>;
+
+<span class="kw">let </span>block = Untyped::&lt;F32Grammar&gt;::parse_statements(PROGRAM)<span class="question-mark">?</span>;
+<span class="comment">// First statement is an assignment.
+</span><span class="macro">assert_matches!</span>(
+    block.statements[<span class="number">0</span>].extra,
+    Statement::Assignment { <span class="kw-2">ref </span>lhs, .. } <span class="kw">if </span><span class="kw-2">*</span>lhs.fragment() == <span class="string">"x"
+</span>);
+<span class="comment">// The RHS of the second statement is a function.
+</span><span class="kw">let </span>some_function = <span class="kw">match </span><span class="kw-2">&amp;</span>block.statements[<span class="number">1</span>].extra {
+    Statement::Assignment { rhs, .. } =&gt; <span class="kw-2">&amp;</span>rhs.extra,
+    <span class="kw">_ </span>=&gt; <span class="macro">panic!</span>(<span class="string">"Unexpected parsing result"</span>),
+};
+<span class="comment">// This function has a single argument and a single statement in the body.
+</span><span class="macro">assert_matches!</span>(
+    some_function,
+    Expr::FnDefinition(FnDefinition { <span class="kw-2">ref </span>args, <span class="kw-2">ref </span>body, .. })
+        <span class="kw">if </span>args.extra.len() == LvalueLen::Exact(<span class="number">2</span>)
+            &amp;&amp; body.statements.is_empty()
+            &amp;&amp; body.return_value.is_some()
+);</code></pre></div></div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="grammars/index.html" title="mod arithmetic_parser::grammars">grammars</a></dt><dd>Grammar functionality and a collection of standard grammars.</dd></dl><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Block.html" title="struct arithmetic_parser::Block">Block</a></dt><dd>Block of statements.</dd><dt><a class="struct" href="struct.Destructure.html" title="struct arithmetic_parser::Destructure">Destructure</a></dt><dd>Tuple destructuring, such as <code>(a, b, ..., c)</code>.</dd><dt><a class="struct" href="struct.Error.html" title="struct arithmetic_parser::Error">Error</a></dt><dd>Parsing error with a generic code span.</dd><dt><a class="struct" href="struct.FnDefinition.html" title="struct arithmetic_parser::FnDefinition">FnDefinition</a></dt><dd>Function definition, e.g., <code>|x, y| x + y</code>.</dd><dt><a class="struct" href="struct.LocatedSpan.html" title="struct arithmetic_parser::LocatedSpan">Located<wbr>Span</a></dt><dd>Code span together with information related to where it is located in the code.</dd><dt><a class="struct" href="struct.ObjectDestructure.html" title="struct arithmetic_parser::ObjectDestructure">Object<wbr>Destructure</a></dt><dd>Object destructuring, such as <code>{ x, y: new_y }</code>.</dd><dt><a class="struct" href="struct.ObjectDestructureField.html" title="struct arithmetic_parser::ObjectDestructureField">Object<wbr>Destructure<wbr>Field</a></dt><dd>Single field in <a href="struct.ObjectDestructure.html" title="struct arithmetic_parser::ObjectDestructure"><code>ObjectDestructure</code></a>, such as <code>x</code> and <code>y: new_y</code> in <code>{ x, y: new_y }</code>.</dd><dt><a class="struct" href="struct.ObjectExpr.html" title="struct arithmetic_parser::ObjectExpr">Object<wbr>Expr</a></dt><dd>Object expression, such as <code>#{ x, y: x + 2 }</code>.</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.BinaryOp.html" title="enum arithmetic_parser::BinaryOp">Binary<wbr>Op</a></dt><dd>Binary arithmetic operation.</dd><dt><a class="enum" href="enum.Context.html" title="enum arithmetic_parser::Context">Context</a></dt><dd>Parsing context.</dd><dt><a class="enum" href="enum.DestructureRest.html" title="enum arithmetic_parser::DestructureRest">Destructure<wbr>Rest</a></dt><dd>Rest syntax, such as <code>...rest</code> in <code>(a, ...rest, b)</code>.</dd><dt><a class="enum" href="enum.ErrorKind.html" title="enum arithmetic_parser::ErrorKind">Error<wbr>Kind</a></dt><dd>Parsing error kind.</dd><dt><a class="enum" href="enum.Expr.html" title="enum arithmetic_parser::Expr">Expr</a></dt><dd>Arithmetic expression with an abstract types for type annotations and literals.</dd><dt><a class="enum" href="enum.ExprType.html" title="enum arithmetic_parser::ExprType">Expr<wbr>Type</a></dt><dd>Type of an <code>Expr</code>.</dd><dt><a class="enum" href="enum.Lvalue.html" title="enum arithmetic_parser::Lvalue">Lvalue</a></dt><dd>Assignable value.</dd><dt><a class="enum" href="enum.LvalueLen.html" title="enum arithmetic_parser::LvalueLen">Lvalue<wbr>Len</a></dt><dd>Length of an assigned lvalue.</dd><dt><a class="enum" href="enum.LvalueType.html" title="enum arithmetic_parser::LvalueType">Lvalue<wbr>Type</a></dt><dd>Type of an <a href="enum.Lvalue.html" title="enum arithmetic_parser::Lvalue"><code>Lvalue</code></a>.</dd><dt><a class="enum" href="enum.Op.html" title="enum arithmetic_parser::Op">Op</a></dt><dd>Generic operation, either unary or binary.</dd><dt><a class="enum" href="enum.OpPriority.html" title="enum arithmetic_parser::OpPriority">OpPriority</a></dt><dd>Priority of an operation.</dd><dt><a class="enum" href="enum.Statement.html" title="enum arithmetic_parser::Statement">Statement</a></dt><dd>Statement: an expression or a variable assignment.</dd><dt><a class="enum" href="enum.StatementType.html" title="enum arithmetic_parser::StatementType">Statement<wbr>Type</a></dt><dd>Type of a <a href="enum.Statement.html" title="enum arithmetic_parser::Statement"><code>Statement</code></a>.</dd><dt><a class="enum" href="enum.UnaryOp.html" title="enum arithmetic_parser::UnaryOp">UnaryOp</a></dt><dd>Unary operation.</dd><dt><a class="enum" href="enum.UnsupportedType.html" title="enum arithmetic_parser::UnsupportedType">Unsupported<wbr>Type</a></dt><dd>Description of a construct not supported by a certain module (e.g., interpreter
+or type inference).</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.is_valid_variable_name.html" title="fn arithmetic_parser::is_valid_variable_name">is_<wbr>valid_<wbr>variable_<wbr>name</a></dt><dd>Checks if the provided string is a valid variable name.</dd><dt><a class="fn" href="fn.with_span.html" title="fn arithmetic_parser::with_span">with_<wbr>span</a></dt><dd>Wrapper around parsers allowing to capture both their output and the relevant span.</dd></dl><h2 id="types" class="section-header">Type Aliases<a href="#types" class="anchor">§</a></h2><dl class="item-table"><dt><a class="type" href="type.InputSpan.html" title="type arithmetic_parser::InputSpan">Input<wbr>Span</a></dt><dd>Code span.</dd><dt><a class="type" href="type.Location.html" title="type arithmetic_parser::Location">Location</a></dt><dd>Value with an associated code location. Unlike <a href="type.Spanned.html" title="type arithmetic_parser::Spanned"><code>Spanned</code></a>, <code>Location</code> does not retain a reference
+to the original code span, just its start position and length.</dd><dt><a class="type" href="type.NomResult.html" title="type arithmetic_parser::NomResult">NomResult</a></dt><dd>Parsing outcome generalized by the type returned on success.</dd><dt><a class="type" href="type.Spanned.html" title="type arithmetic_parser::Spanned">Spanned</a></dt><dd>Value with an associated code span.</dd><dt><a class="type" href="type.SpannedExpr.html" title="type arithmetic_parser::SpannedExpr">Spanned<wbr>Expr</a></dt><dd><code>Expr</code> with the associated type and code span.</dd><dt><a class="type" href="type.SpannedLvalue.html" title="type arithmetic_parser::SpannedLvalue">Spanned<wbr>Lvalue</a></dt><dd><a href="enum.Lvalue.html" title="enum arithmetic_parser::Lvalue"><code>Lvalue</code></a> with the associated code span.</dd><dt><a class="type" href="type.SpannedStatement.html" title="type arithmetic_parser::SpannedStatement">Spanned<wbr>Statement</a></dt><dd>Statement with the associated code span.</dd></dl><script type="text/json" id="notable-traits-data">{"&[u8]":"<h3>Notable traits for <code>&amp;[<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.u8.html\">u8</a>]</code></h3><pre><code><div class=\"where\">impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/std/io/trait.Read.html\" title=\"trait std::io::Read\">Read</a> for &amp;[<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.u8.html\">u8</a>]</div>"}</script></section></div></main></body></html>

@@ -1,0 +1,102 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Hindley–Milner type inference for arithmetic expressions parsed by the `arithmetic-parser` crate."><title>arithmetic_typing - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="arithmetic_typing" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0-nightly (bd3ac0330 2025-11-01)" data-channel="nightly" data-search-js="search-5c29b3b5.js" data-stringdex-js="stringdex-c3e638e9.js" data-settings-js="settings-c38705f0.js" ><script src="../static.files/storage-e2aeef58.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-ce535bd0.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate arithmetic_typing</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../arithmetic_typing/index.html">arithmetic_<wbr>typing</a><span class="version">0.4.0-beta.1</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#type-system" title="Type system">Type system</a></li><li><a href="#inference-rules" title="Inference rules">Inference rules</a></li><li><a href="#operations" title="Operations">Operations</a><ul><li><a href="#field-access" title="Field access">Field access</a></li><li><a href="#method-calls" title="Method calls">Method calls</a></li><li><a href="#type-casts" title="Type casts">Type casts</a></li></ul></li><li><a href="#crate-features" title="Crate features">Crate features</a><ul><li><a href="#std" title="`std`"><code>std</code></a></li><li><a href="#hashbrown" title="`hashbrown`"><code>hashbrown</code></a></li></ul></li><li><a href="#examples" title="Examples">Examples</a></li></ul><h3><a href="#modules">Crate Items</a></h3><ul class="block"><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li><li><a href="#traits" title="Traits">Traits</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>arithmetic_<wbr>typing</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/arithmetic_typing/lib.rs.html#1-330">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Hindley–Milner type inference for arithmetic expressions parsed
+by the <a href="https://crates.io/crates/arithmetic-parser"><code>arithmetic-parser</code></a> crate.</p>
+<p>This crate allows parsing type annotations as a part of a <a href="../arithmetic_parser/grammars/traits/trait.Grammar.html" title="trait arithmetic_parser::grammars::traits::Grammar"><code>Grammar</code></a>, and to infer
+and check types for expressions / statements produced by <code>arithmetic-parser</code>.
+Type inference is <em>partially</em> compatible with the interpreter from <a href="https://crates.io/crates/arithmetic-eval"><code>arithmetic-eval</code></a>;
+if the inference algorithm succeeds on a certain expression / statement / block,
+it will execute successfully, but not all successfully executing items pass type inference.
+(An exception here is <a href="enum.Type.html#variant.Any" title="variant arithmetic_typing::Type::Any"><code>Type::Any</code></a>, which is specifically designed to circumvent
+the type system limitations. If <code>Any</code> is used too liberally, it can result in code passing
+type checks, but failing during execution.)</p>
+<h2 id="type-system"><a class="doc-anchor" href="#type-system">§</a>Type system</h2>
+<p>The type system corresponds to types of <code>Value</code>s in <code>arithmetic-eval</code>:</p>
+<ul>
+<li>Primitive types are customizable via <a href="trait.PrimitiveType.html" title="trait arithmetic_typing::PrimitiveType"><code>PrimitiveType</code></a> impl. In the simplest case,
+there can be 2 primitive types: Booleans (<code>Bool</code>) and numbers (<code>Num</code>),
+as encapsulated in <a href="arith/enum.Num.html" title="enum arithmetic_typing::arith::Num"><code>Num</code></a>.</li>
+<li>There are two container types – <a href="struct.Tuple.html" title="struct arithmetic_typing::Tuple">tuples</a> and <a href="struct.Object.html" title="struct arithmetic_typing::Object">objects</a>.</li>
+<li>Tuple types can be represented either
+in the tuple form, such as <code>(Num, Bool)</code>, or as a slice, such as <code>[Num; 3]</code>.
+As in Rust, all slice elements must have the same type. Unlike Rust, tuple and slice
+forms are equivalent; e.g., <code>[Num; 3]</code> and <code>(Num, Num, Num)</code> are the same type.</li>
+<li>Object types are represented in a brace form, such as <code>{ x: Num }</code>. Objects can act as
+either specific types or type constraints.</li>
+<li>Functions are first-class types. Functions can have type and/or const params.
+Const params always specify tuple length.</li>
+<li>Type params can be constrained. Constraints are expressed via <a href="arith/trait.Constraint.html" title="trait arithmetic_typing::arith::Constraint"><code>Constraint</code></a>s.
+As an example, <a href="arith/enum.Num.html" title="enum arithmetic_typing::arith::Num"><code>Num</code></a> has a few known constraints, such as type <a href="arith/struct.Linearity.html" title="struct arithmetic_typing::arith::Linearity"><code>Linearity</code></a>.</li>
+</ul>
+<h2 id="inference-rules"><a class="doc-anchor" href="#inference-rules">§</a>Inference rules</h2>
+<p>Inference mostly corresponds to <a href="https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system#Typing_rules">Hindley–Milner typing rules</a>. It does not require
+type annotations, but utilizes them if present. Type unification (encapsulated in
+<a href="arith/struct.Substitutions.html" title="struct arithmetic_typing::arith::Substitutions"><code>Substitutions</code></a>) is performed at each variable use or assignment. Variable uses include
+function calls and unary and binary ops; the op behavior is customizable
+via <a href="arith/trait.TypeArithmetic.html" title="trait arithmetic_typing::arith::TypeArithmetic"><code>TypeArithmetic</code></a>.</p>
+<p>Whenever possible, the most generic type satisfying the constraints is used. In particular,
+this means that all type / length variables not resolved at the function definition site become
+parameters of the function. Likewise, each function call instantiates a separate instance
+of a generic function; type / length params for each call are assigned independently.
+See the example below for more details.</p>
+<h2 id="operations"><a class="doc-anchor" href="#operations">§</a>Operations</h2><h3 id="field-access"><a class="doc-anchor" href="#field-access">§</a>Field access</h3>
+<p>See <a href="struct.Tuple.html#indexing" title="struct arithmetic_typing::Tuple"><code>Tuple</code> docs</a> for discussion of indexing expressions, such as <code>xs.0</code>,
+and <a href="struct.Object.html" title="struct arithmetic_typing::Object"><code>Object</code> docs</a> for discussion of field access, such as <code>point.x</code>.</p>
+<h3 id="method-calls"><a class="doc-anchor" href="#method-calls">§</a>Method calls</h3>
+<p>In agreement with the <a href="https://crates.io/crates/arithmetic-eval"><code>arithmetic-eval</code></a> crate, methods are treated as syntactic sugar for functions.
+For example, <code>xs.map(sin)</code> is equivalent to <code>map(xs, sin)</code>.</p>
+<h3 id="type-casts"><a class="doc-anchor" href="#type-casts">§</a>Type casts</h3>
+<p><a href="../arithmetic_parser/ast/expr/enum.Expr.html#variant.TypeCast" title="variant arithmetic_parser::ast::expr::Expr::TypeCast">A type cast</a> is equivalent to introducing a new var
+with the specified annotation, assigning to it and returning the new var. That is,
+<code>x as Bool</code> is equivalent to <code>{ _x: Bool = x; _x }</code>. As such, casts are safe (cannot be used
+to transmute the type arbitrarily), unless <code>any</code> type is involved.</p>
+<h2 id="crate-features"><a class="doc-anchor" href="#crate-features">§</a>Crate features</h2><h3 id="std"><a class="doc-anchor" href="#std">§</a><code>std</code></h3>
+<p><em>(On by default)</em></p>
+<p>Enables support of types from <code>std</code>, such as the <code>Error</code> trait, and propagates to dependencies.</p>
+<h3 id="hashbrown"><a class="doc-anchor" href="#hashbrown">§</a><code>hashbrown</code></h3>
+<p><em>(Off by default)</em></p>
+<p>Imports hash maps and sets from the [eponymous crate][<code>hashbrown</code>] instead of using ones
+from the Rust std library. This feature is necessary if the <code>std</code> feature is disabled.</p>
+<h2 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h2>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>arithmetic_parser::grammars::{F32Grammar, Parse};
+<span class="kw">use </span>arithmetic_typing::{defs::Prelude, Annotated, TypeEnvironment, Type};
+
+<span class="kw">let </span>code = <span class="string">"sum = |xs| xs.fold(0, |acc, x| acc + x);"</span>;
+<span class="kw">let </span>ast = Annotated::&lt;F32Grammar&gt;::parse_statements(code)<span class="question-mark">?</span>;
+
+<span class="kw">let </span><span class="kw-2">mut </span>env = TypeEnvironment::new();
+env.insert(<span class="string">"fold"</span>, Prelude::Fold);
+
+<span class="comment">// Evaluate `code` to get the inferred `sum` function signature.
+</span><span class="kw">let </span>output_type = env.process_statements(<span class="kw-2">&amp;</span>ast)<span class="question-mark">?</span>;
+<span class="macro">assert!</span>(output_type.is_void());
+<span class="macro">assert_eq!</span>(env[<span class="string">"sum"</span>].to_string(), <span class="string">"([Num; N]) -&gt; Num"</span>);</code></pre></div>
+<p>Defining and using generic functions:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">let </span>code = <span class="string">"sum_with = |xs, init| xs.fold(init, |acc, x| acc + x);"</span>;
+<span class="kw">let </span>ast = Annotated::&lt;F32Grammar&gt;::parse_statements(code)<span class="question-mark">?</span>;
+
+<span class="kw">let </span><span class="kw-2">mut </span>env = TypeEnvironment::new();
+env.insert(<span class="string">"fold"</span>, Prelude::Fold);
+
+<span class="kw">let </span>output_type = env.process_statements(<span class="kw-2">&amp;</span>ast)<span class="question-mark">?</span>;
+<span class="macro">assert!</span>(output_type.is_void());
+<span class="macro">assert_eq!</span>(
+    env[<span class="string">"sum_with"</span>].to_string(),
+    <span class="string">"for&lt;'T: Ops&gt; (['T; N], 'T) -&gt; 'T"
+</span>);
+<span class="comment">// Note that `sum_with` is parametric by the element of the slice
+// (for which the linearity constraint is applied based on the arg usage)
+// *and* by its length.
+
+</span><span class="kw">let </span>usage_code = <span class="string">"
+    num_sum: Num = (1, 2, 3).sum_with(0);
+    tuple_sum: (Num, Num) = ((1, 2), (3, 4)).sum_with((0, 0));
+"</span>;
+<span class="kw">let </span>ast = Annotated::&lt;F32Grammar&gt;::parse_statements(usage_code)<span class="question-mark">?</span>;
+<span class="comment">// Both lengths and element types differ in these invocations,
+// but it works fine since they are treated independently.
+</span>env.process_statements(<span class="kw-2">&amp;</span>ast)<span class="question-mark">?</span>;</code></pre></div></div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="arith/index.html" title="mod arithmetic_typing::arith">arith</a></dt><dd>Types allowing to customize various aspects of the type system, such as type constraints
+and behavior of unary / binary ops.</dd><dt><a class="mod" href="ast/index.html" title="mod arithmetic_typing::ast">ast</a></dt><dd>ASTs for type annotations and their parsing logic.</dd><dt><a class="mod" href="defs/index.html" title="mod arithmetic_typing::defs">defs</a></dt><dd>Type definitions for the standard types from the <a href="https://docs.rs/arithmetic-eval/"><code>arithmetic-eval</code></a> crate.</dd><dt><a class="mod" href="error/index.html" title="mod arithmetic_typing::error">error</a></dt><dd>Errors related to type inference.</dd><dt><a class="mod" href="visit/index.html" title="mod arithmetic_typing::visit">visit</a></dt><dd>Visitor traits allowing to traverse <a href="enum.Type.html" title="enum arithmetic_typing::Type"><code>Type</code></a> and related types.</dd></dl><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Annotated.html" title="struct arithmetic_typing::Annotated">Annotated</a></dt><dd>Grammar with support of type annotations. Works as a decorator.</dd><dt><a class="struct" href="struct.DynConstraints.html" title="struct arithmetic_typing::DynConstraints">DynConstraints</a></dt><dd>Arbitrary type implementing certain constraints. Similar to <code>dyn _</code> types in Rust or use of
+interfaces in type position in TypeScript.</dd><dt><a class="struct" href="struct.FnWithConstraints.html" title="struct arithmetic_typing::FnWithConstraints">FnWith<wbr>Constraints</a></dt><dd>Function together with constraints on type variables contained either in the function itself
+or any of the child functions.</dd><dt><a class="struct" href="struct.Function.html" title="struct arithmetic_typing::Function">Function</a></dt><dd>Functional type.</dd><dt><a class="struct" href="struct.FunctionBuilder.html" title="struct arithmetic_typing::FunctionBuilder">Function<wbr>Builder</a></dt><dd>Builder for functional types.</dd><dt><a class="struct" href="struct.LengthVar.html" title="struct arithmetic_typing::LengthVar">Length<wbr>Var</a></dt><dd>Length variable.</dd><dt><a class="struct" href="struct.Object.html" title="struct arithmetic_typing::Object">Object</a></dt><dd>Object type: a collection of named fields with heterogeneous types.</dd><dt><a class="struct" href="struct.Slice.html" title="struct arithmetic_typing::Slice">Slice</a></dt><dd>Slice type. Unlike in Rust, slices are a subset of tuples. If <code>length</code> is
+exact (has no <a href="enum.UnknownLen.html" title="enum arithmetic_typing::UnknownLen"><code>UnknownLen</code></a> part), the slice is completely equivalent
+to the corresponding tuple.</dd><dt><a class="struct" href="struct.Tuple.html" title="struct arithmetic_typing::Tuple">Tuple</a></dt><dd>Tuple type.</dd><dt><a class="struct" href="struct.TupleLen.html" title="struct arithmetic_typing::TupleLen">Tuple<wbr>Len</a></dt><dd>Generic tuple length.</dd><dt><a class="struct" href="struct.TypeEnvironment.html" title="struct arithmetic_typing::TypeEnvironment">Type<wbr>Environment</a></dt><dd>Environment containing type information on named variables.</dd><dt><a class="struct" href="struct.TypeVar.html" title="struct arithmetic_typing::TypeVar">TypeVar</a></dt><dd>Type variable.</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.TupleIndex.html" title="enum arithmetic_typing::TupleIndex">Tuple<wbr>Index</a></dt><dd>Index of an element within a tuple.</dd><dt><a class="enum" href="enum.Type.html" title="enum arithmetic_typing::Type">Type</a></dt><dd>Enumeration encompassing all types supported by the type system.</dd><dt><a class="enum" href="enum.UnknownLen.html" title="enum arithmetic_typing::UnknownLen">Unknown<wbr>Len</a></dt><dd>Unknown / variable length, e.g., of a tuple.</dd></dl><h2 id="traits" class="section-header">Traits<a href="#traits" class="anchor">§</a></h2><dl class="item-table"><dt><a class="trait" href="trait.PrimitiveType.html" title="trait arithmetic_typing::PrimitiveType">Primitive<wbr>Type</a></dt><dd>Primitive types in a certain type system.</dd></dl></section></div></main></body></html>

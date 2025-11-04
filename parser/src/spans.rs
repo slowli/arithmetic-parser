@@ -1,6 +1,6 @@
 //! Types related to spanning parsed code.
 
-use std::ops;
+use core::ops;
 
 use nom::Input;
 

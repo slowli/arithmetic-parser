@@ -685,7 +685,7 @@ fn comparison_type_errors() {
     assert_matches!(err.context(), ErrorContext::BinaryOp(_));
     assert_matches!(
         err.kind(),
-        ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
+        ErrorKind::FailedConstraint { ty, .. } if **ty == Type::BOOL
     );
 }
 
@@ -721,9 +721,10 @@ fn any_can_be_unified_with_anything() {
         .single();
 
     let lhs_slice = match err.kind() {
-        ErrorKind::TypeMismatch(Type::Tuple(tuple), bool) if *bool == Type::BOOL => {
-            tuple.as_slice().unwrap()
-        }
+        ErrorKind::TypeMismatch(lhs, bool) if **bool == Type::BOOL => match lhs.as_ref() {
+            Type::Tuple(tuple) => tuple.as_slice().unwrap(),
+            _ => panic!("Unexpected LHS type: {lhs:?}"),
+        },
         _ => panic!("Unexpected error: {err:?}"),
     };
     assert_eq!(*lhs_slice.element(), Type::NUM);

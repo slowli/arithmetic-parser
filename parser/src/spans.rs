@@ -1,6 +1,8 @@
 //! Types related to spanning parsed code.
 
-use nom::Slice;
+use core::ops;
+
+use nom::Input;
 
 use crate::{
     alloc::{format, String},
@@ -144,10 +146,27 @@ impl<'a> Spanned<'a> {
     /// Creates a span from a `range` in the provided `code`. This is mostly useful for testing.
     pub fn from_str<R>(code: &'a str, range: R) -> Self
     where
-        InputSpan<'a>: Slice<R>,
+        InputSpan<'a>: Input,
+        R: ops::RangeBounds<usize>,
     {
         let input = InputSpan::new(code);
-        Self::new(input.slice(range), ())
+        let start = match range.start_bound() {
+            ops::Bound::Unbounded => 0,
+            ops::Bound::Included(&i) => i,
+            ops::Bound::Excluded(&i) => i + 1,
+        };
+        let mut input = input.take_from(start);
+
+        let len = match range.end_bound() {
+            ops::Bound::Unbounded => None,
+            ops::Bound::Included(&i) => Some((i + 1).saturating_sub(start)),
+            ops::Bound::Excluded(&i) => Some(i.saturating_sub(start)),
+        };
+        if let Some(len) = len {
+            input = input.take(len);
+        }
+
+        Self::new(input, ())
     }
 }
 
@@ -159,7 +178,8 @@ impl Location {
     /// Creates a location from a `range` in the provided `code`. This is mostly useful for testing.
     pub fn from_str<'a, R>(code: &'a str, range: R) -> Self
     where
-        InputSpan<'a>: Slice<R>,
+        InputSpan<'a>: Input,
+        R: ops::RangeBounds<usize>,
     {
         Spanned::from_str(code, range).into()
     }
@@ -185,11 +205,14 @@ impl<T> From<Spanned<'_, T>> for Location<T> {
 }
 
 /// Wrapper around parsers allowing to capture both their output and the relevant span.
-pub fn with_span<'a, O>(
-    mut parser: impl FnMut(InputSpan<'a>) -> NomResult<'a, O>,
-) -> impl FnMut(InputSpan<'a>) -> NomResult<'a, Spanned<'a, O>> {
-    move |input: InputSpan<'_>| {
-        parser(input).map(|(rest, output)| {
+pub fn with_span<'a, O, F>(
+    mut parser: F,
+) -> impl nom::Parser<InputSpan<'a>, Output = Spanned<'a, O>, Error = F::Error>
+where
+    F: nom::Parser<InputSpan<'a>, Output = O>,
+{
+    move |input: InputSpan<'a>| {
+        parser.parse(input).map(|(rest, output)| {
             let len = rest.location_offset() - input.location_offset();
             let spanned = Spanned {
                 offset: input.location_offset(),

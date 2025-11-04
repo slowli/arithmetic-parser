@@ -301,7 +301,7 @@ mod tests {
         lhs.constraint_object(&incompatible_field_rhs, &mut substitutions, errors.by_ref());
         assert_matches!(
             get_err(errors),
-            ErrorKind::TypeMismatch(lhs, rhs) if lhs == Type::NUM && rhs == Type::BOOL
+            ErrorKind::TypeMismatch(lhs, rhs) if *lhs == Type::NUM && *rhs == Type::BOOL
         );
     }
 }

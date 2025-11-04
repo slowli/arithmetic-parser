@@ -317,8 +317,8 @@ impl<T: ParseLiteral> Grammar for Annotated<T> {
     type Type<'a> = TypeAst<'a>;
 
     fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type<'_>> {
-        use nom::combinator::map;
-        map(TypeAst::parse, |ast| ast.extra)(input)
+        use nom::{combinator::map, Parser as _};
+        map(TypeAst::parse, |ast| ast.extra).parse(input)
     }
 }
 

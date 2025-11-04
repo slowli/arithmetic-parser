@@ -5,6 +5,12 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ## [Unreleased]
 
+### Changed
+
+- Bump minimum supported Rust version to 1.75. (#233)
+
+- Update `nom` dependency to 8.0.0. (#233)
+
 ## 0.4.0-beta.1 - 2024-09-22
 
 ### Added

@@ -45,7 +45,7 @@ impl TupleContext {
 #[non_exhaustive]
 pub enum ErrorKind<Prim: PrimitiveType> {
     /// Trying to unify incompatible types. The first type is LHS, the second one is RHS.
-    TypeMismatch(Type<Prim>, Type<Prim>),
+    TypeMismatch(Box<Type<Prim>>, Box<Type<Prim>>),
     /// Incompatible tuple lengths.
     TupleLenMismatch {
         /// Length of the LHS. This is the length determined by type annotations
@@ -60,7 +60,7 @@ pub enum ErrorKind<Prim: PrimitiveType> {
     /// Undefined variable occurrence.
     UndefinedVar(String),
     /// Trying to unify a type with a type containing it.
-    RecursiveType(Type<Prim>),
+    RecursiveType(Box<Type<Prim>>),
 
     /// Repeated assignment to the same variable in function args or tuple destructuring.
     RepeatedAssignment(String),
@@ -112,7 +112,7 @@ pub enum ErrorKind<Prim: PrimitiveType> {
     /// Failure when applying constraint to a type.
     FailedConstraint {
         /// Type that fails constraint requirement.
-        ty: Type<Prim>,
+        ty: Box<Type<Prim>>,
         /// Failing constraint.
         constraint: Box<dyn Constraint<Prim>>,
     },
@@ -129,8 +129,7 @@ pub enum ErrorKind<Prim: PrimitiveType> {
     /// if they encounter an unknown [`Type`] variant.
     ///
     /// [`TypeArithmetic`]: crate::arith::TypeArithmetic
-    /// [`Constraint`]: crate::arith::Constraint
-    UnsupportedType(Type<Prim>),
+    UnsupportedType(Box<Type<Prim>>),
 
     /// Unsupported use of type or length params in a function declaration.
     ///
@@ -251,7 +250,7 @@ impl<Prim: PrimitiveType> ErrorKind<Prim> {
     /// Creates a "failed constraint" error.
     pub fn failed_constraint(ty: Type<Prim>, constraint: impl Constraint<Prim> + Clone) -> Self {
         Self::FailedConstraint {
-            ty,
+            ty: Box::new(ty),
             constraint: Box::new(constraint),
         }
     }

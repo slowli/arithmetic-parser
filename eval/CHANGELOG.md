@@ -7,7 +7,9 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ### Changed
 
-- Update `hashbrown` dependency to 0.15.
+- Update `hashbrown` dependency to 0.16. (#233)
+
+- Bump minimum supported Rust version to 1.75. (#233)
 
 ## 0.4.0-beta.1 - 2024-09-22
 

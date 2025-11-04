@@ -29,7 +29,7 @@ fn multiple_independent_errors() {
     assert_matches!(
         errors[0].kind(),
         ErrorKind::FailedConstraint { ty, constraint }
-            if *ty == Type::BOOL && constraint.to_string() == "Ops"
+            if **ty == Type::BOOL && constraint.to_string() == "Ops"
     );
 
     assert_eq!(errors[1].main_location().span(code), "|x| x + 1");
@@ -40,7 +40,7 @@ fn multiple_independent_errors() {
     assert_matches!(
         errors[1].kind(),
         ErrorKind::TypeMismatch(lhs, rhs)
-            if *lhs == Type::BOOL && *rhs == Type::NUM
+            if **lhs == Type::BOOL && **rhs == Type::NUM
     );
 
     assert_eq!(errors[2].main_location().span(code), "false");
@@ -48,15 +48,15 @@ fn multiple_independent_errors() {
     assert_matches!(
         errors[2].kind(),
         ErrorKind::TypeMismatch(lhs, rhs)
-            if *lhs == Type::NUM && *rhs == Type::BOOL
+            if **lhs == Type::NUM && **rhs == Type::BOOL
     );
 
     assert_eq!(errors[3].main_location().span(code), "6");
     assert_eq!(errors[3].root_location().span(code), "(1, false).map(6)");
     assert_matches!(
         errors[3].kind(),
-        ErrorKind::TypeMismatch(Type::Function(_), rhs)
-            if *rhs == Type::NUM
+        ErrorKind::TypeMismatch(lhs, rhs)
+            if matches!(lhs.as_ref(), Type::Function(_)) && **rhs == Type::NUM
     );
 }
 
@@ -87,7 +87,7 @@ fn recovery_after_error() {
     assert_matches!(
         errors[1].kind(),
         ErrorKind::FailedConstraint { ty, constraint }
-            if *ty == Type::BOOL && constraint.to_string() == "Ops"
+            if **ty == Type::BOOL && constraint.to_string() == "Ops"
     );
 
     assert_eq!(errors[2].main_location().span(code), "false");
@@ -98,7 +98,7 @@ fn recovery_after_error() {
     assert_matches!(
         errors[2].kind(),
         ErrorKind::TypeMismatch(lhs, rhs)
-            if *lhs == Type::NUM && *rhs == Type::BOOL
+            if **lhs == Type::NUM && **rhs == Type::BOOL
     );
 
     assert_eq!(errors[3].main_location().span(code), "(x, y, z)");
@@ -133,7 +133,7 @@ fn recovery_in_fn_definition() {
     assert_matches!(
         errors[0].kind(),
         ErrorKind::TypeMismatch(lhs, rhs)
-            if *lhs == Type::BOOL && *rhs == Type::NUM
+            if **lhs == Type::BOOL && **rhs == Type::NUM
     );
 
     assert_eq!(errors[1].main_location().span(code), "true");
@@ -141,14 +141,15 @@ fn recovery_in_fn_definition() {
     assert_matches!(
         errors[1].kind(),
         ErrorKind::TypeMismatch(lhs, rhs)
-            if *lhs == Type::NUM && *rhs == Type::BOOL
+            if **lhs == Type::NUM && **rhs == Type::BOOL
     );
 
     assert_eq!(errors[2].main_location().span(code), "(1, 2, 3)");
     assert_eq!(errors[2].root_location().span(code), "(1, 2, 3).bogus()");
     assert_matches!(
         errors[2].kind(),
-        ErrorKind::TypeMismatch(lhs, Type::Tuple(_)) if *lhs == Type::NUM
+        ErrorKind::TypeMismatch(lhs, rhs)
+            if **lhs == Type::NUM && matches!(rhs.as_ref(), Type::Tuple(_))
     );
 }
 
@@ -181,7 +182,7 @@ fn recovery_in_mangled_fn_definition() {
     assert_matches!(
         errors[1].kind(),
         ErrorKind::TypeMismatch(lhs, rhs)
-            if *lhs == Type::BOOL && *rhs == Type::NUM
+            if **lhs == Type::BOOL && **rhs == Type::NUM
     );
 
     assert_eq!(errors[2].main_location().span(code), "2");
@@ -189,14 +190,14 @@ fn recovery_in_mangled_fn_definition() {
     assert_matches!(
         errors[2].kind(),
         ErrorKind::TypeMismatch(lhs, rhs)
-            if *lhs == Type::BOOL && *rhs == Type::NUM
+            if **lhs == Type::BOOL && **rhs == Type::NUM
     );
 
     assert_eq!(errors[3].main_location().span(code), "bogus(1, 2) == (3,)");
     assert_matches!(
         errors[3].kind(),
         ErrorKind::TypeMismatch(lhs, rhs)
-            if *lhs == Type::BOOL && *rhs == Type::NUM
+            if **lhs == Type::BOOL && **rhs == Type::NUM
     );
 }
 

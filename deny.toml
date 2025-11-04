@@ -26,9 +26,13 @@ skip-tree = [
   # `cortex-m` crates (which are only used in the no-std test crate) have some outdated deps.
   { name = "cortex-m", version = "^0.7" },
   { name = "cortex-m-rt", version = "^0.7" },
+  { name = "embedded-alloc", version = "^0.6" },
   # Used by some less frequently updated crates; since it only provides WinAPI declarations,
   # multiple versions should be OK (?).
-  { name = "windows-sys", version = "^0.52" },
+  { name = "windows-sys", version = "^0.59" },
+  { name = "windows-sys", version = "^0.60" },
+  # Only required by `glass_pumpkin` (dev dependency)
+  { name = "rand_core", version = "^0.6" },
 ]
 
 [sources]

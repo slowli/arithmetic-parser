@@ -139,7 +139,7 @@ mod bigint_tests {
             let x = gen_biguint(&mut rng, modulus.bits());
 
             // Check a random small exponent.
-            let exp = rng.gen_range(1_u64..1_000);
+            let exp = rng.random_range(1_u64..1_000);
             let expected_pow = (0..exp).fold(BigUint::one(), |acc, _| (acc * &x) % modulus);
             assert_eq!(
                 arithmetic.pow(x.clone(), BigUint::from(exp)).unwrap(),

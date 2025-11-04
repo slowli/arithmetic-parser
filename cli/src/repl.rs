@@ -15,7 +15,7 @@ use crate::{
 fn into_io_error(err: ReadlineError) -> io::Error {
     match err {
         ReadlineError::Io(err) => err,
-        other => io::Error::new(io::ErrorKind::Other, other),
+        other => io::Error::other(other),
     }
 }
 

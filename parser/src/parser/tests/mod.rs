@@ -3,6 +3,7 @@ use nom::{
     bytes::complete::{escaped_transform, is_not, take_while1},
     combinator::map_res,
     multi::{fold_many1, separated_list0},
+    Parser,
 };
 
 use super::{expr::simple_expr, *};
@@ -52,14 +53,15 @@ impl Literal {
         map(
             preceded(tag_char('"'), cut(terminated(opt(parser), tag_char('"')))),
             Option::unwrap_or_default,
-        )(input)
+        )
+        .parse(input)
     }
 
     /// Hex-encoded buffer like `0x09abcd`.
     fn hex_buffer(input: InputSpan<'_>) -> NomResult<'_, Self> {
         let hex_parser = preceded(
             tag("0x"),
-            cut(tuple((
+            cut((
                 opt(alt((
                     map(tag_char('s'), |_| LiteralType::Scalar),
                     map(tag_char('S'), |_| LiteralType::Scalar),
@@ -82,13 +84,14 @@ impl Literal {
                         acc
                     },
                 ),
-            ))),
+            )),
         );
 
         map(hex_parser, |(maybe_ty, value)| Literal::Bytes {
             ty: maybe_ty.unwrap_or(LiteralType::Bytes),
             value,
-        })(input)
+        })
+        .parse(input)
     }
 
     fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
@@ -102,7 +105,8 @@ impl Literal {
             map(take_while1(|c: char| c.is_ascii_digit()), |_| {
                 Literal::Number
             }),
-        ))(input)
+        ))
+        .parse(input)
     }
 }
 
@@ -141,7 +145,8 @@ fn type_info<Ty: GrammarType>(input: InputSpan<'_>) -> NomResult<'_, ValueType> 
             ),
             ValueType::Tuple,
         ),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 #[derive(Debug, Clone)]
@@ -718,7 +723,8 @@ fn no_unary_op_if_literal_without_it_not_parsed() {
                     tag_char('!'),
                 ),
                 |s: InputSpan<'_>| (*s.fragment()).to_owned(),
-            )(input)
+            )
+            .parse(input)
         }
     }
 
@@ -733,7 +739,7 @@ fn no_unary_op_if_literal_without_it_not_parsed() {
             assert_matches!(receiver.extra, Expr::Literal(s) if s == "foo");
         }
         _ => panic!("Unexpected expr: {expr:?}"),
-    };
+    }
 }
 
 #[test]

@@ -4,7 +4,7 @@ use core::{cmp::Ordering, iter, ops, ptr};
 
 use self::fns::{MonoTypeTransformer, ParamMapping};
 use crate::{
-    alloc::{vec, HashMap, HashSet, String, Vec},
+    alloc::{vec, Box, HashMap, HashSet, String, Vec},
     arith::{CompleteConstraints, Constraint},
     error::{ErrorKind, ErrorPathFragment, OpErrors, TupleContext},
     visit::{self, Visit, VisitMut},
@@ -114,7 +114,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
         let mut resolved_ty = ty;
         self.resolver().visit_type_mut(&mut resolved_ty);
         TypeSanitizer::new(recursive_var).visit_type_mut(&mut resolved_ty);
-        errors.push(ErrorKind::RecursiveType(resolved_ty));
+        errors.push(ErrorKind::RecursiveType(Box::new(resolved_ty)));
     }
 
     /// Returns type var indexes that are equivalent to the provided `var_idx`,
@@ -277,7 +277,7 @@ impl<Prim: PrimitiveType> Substitutions<Prim> {
                 resolver.visit_type_mut(&mut ty);
                 let mut other_ty = other_ty.clone();
                 resolver.visit_type_mut(&mut other_ty);
-                errors.push(ErrorKind::TypeMismatch(ty, other_ty));
+                errors.push(ErrorKind::TypeMismatch(Box::new(ty), Box::new(other_ty)));
             }
         }
     }

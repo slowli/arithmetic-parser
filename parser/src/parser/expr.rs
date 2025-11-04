@@ -9,8 +9,8 @@ use nom::{
     combinator::{cut, map, map_res, opt},
     error::context,
     multi::{many0, separated_list0},
-    sequence::{delimited, preceded, terminated, tuple},
-    Err as NomErr, Slice,
+    sequence::{delimited, preceded, terminated},
+    Err as NomErr, Input, Parser,
 };
 
 use super::{
@@ -40,11 +40,12 @@ where
     preceded(
         terminated(tag_char('('), ws::<Ty>),
         // Once we've encountered the opening `(`, the input *must* correspond to the parser.
-        cut(tuple((
+        cut((
             separated_list0(delimited(ws::<Ty>, tag_char(','), ws::<Ty>), expr::<T, Ty>),
-            terminated(maybe_comma, tuple((ws::<Ty>, tag_char(')')))),
-        ))),
-    )(input)
+            terminated(maybe_comma, (ws::<Ty>, tag_char(')'))),
+        )),
+    )
+    .parse(input)
 }
 
 /// Expression enclosed in parentheses. This may be a simple value (e.g., `(1 + 2)`)
@@ -54,26 +55,28 @@ where
     T: Parse,
     Ty: GrammarType,
 {
-    with_span(fn_args::<T, Ty>)(input).and_then(|(rest, parsed)| {
-        let comma_terminated = parsed.extra.1;
-        let terms = parsed.map_extra(|terms| terms.0);
+    with_span(fn_args::<T, Ty>)
+        .parse(input)
+        .and_then(|(rest, parsed)| {
+            let comma_terminated = parsed.extra.1;
+            let terms = parsed.map_extra(|terms| terms.0);
 
-        match (terms.extra.len(), comma_terminated) {
-            (1, false) => Ok((
-                rest,
-                terms.map_extra(|mut terms| terms.pop().unwrap().extra),
-            )),
-            _ => {
-                if T::FEATURES.contains(Features::TUPLES) {
-                    Ok((rest, terms.map_extra(Expr::Tuple)))
-                } else {
-                    Err(NomErr::Failure(
-                        ErrorKind::UnexpectedTerm { context: None }.with_span(&terms),
-                    ))
+            match (terms.extra.len(), comma_terminated) {
+                (1, false) => Ok((
+                    rest,
+                    terms.map_extra(|mut terms| terms.pop().unwrap().extra),
+                )),
+                _ => {
+                    if T::FEATURES.contains(Features::TUPLES) {
+                        Ok((rest, terms.map_extra(Expr::Tuple)))
+                    } else {
+                        Err(NomErr::Failure(
+                            ErrorKind::UnexpectedTerm { context: None }.with_span(&terms),
+                        ))
+                    }
                 }
             }
-        }
-    })
+        })
 }
 
 /// Parses a block and wraps it into an `Expr`.
@@ -84,7 +87,8 @@ where
 {
     map(with_span(block::<T, Ty>), |spanned| {
         spanned.map_extra(Expr::Block)
-    })(input)
+    })
+    .parse(input)
 }
 
 fn object_expr_field<T, Ty>(
@@ -95,10 +99,11 @@ where
     Ty: GrammarType,
 {
     let colon_sep = delimited(ws::<Ty>, tag_char(':'), ws::<Ty>);
-    tuple((
+    (
         map(var_name, Spanned::from),
         opt(preceded(colon_sep, expr::<T, Ty>)),
-    ))(input)
+    )
+        .parse(input)
 }
 
 pub(super) fn object_expr<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, SpannedExpr<'_, T::Base>>
@@ -119,7 +124,8 @@ where
 
     map(with_span(object), |spanned| {
         spanned.map_extra(|fields| Expr::Object(ObjectExpr { fields }))
-    })(input)
+    })
+    .parse(input)
 }
 
 /// Parses a function definition and wraps it into an `Expr`.
@@ -130,7 +136,8 @@ where
 {
     map(with_span(fn_def::<T, Ty>), |spanned| {
         spanned.map_extra(Expr::FnDefinition)
-    })(input)
+    })
+    .parse(input)
 }
 
 /// Parses a simple expression, i.e., one not containing binary operations or function calls.
@@ -175,10 +182,10 @@ where
         }),
         fn_def_parser,
         map(
-            with_span(tuple((
+            with_span((
                 terminated(with_span(one_of("-!")), ws::<Ty>),
                 expr_with_calls::<T, Ty>,
-            ))),
+            )),
             |spanned| {
                 spanned.map_extra(|(op, inner)| Expr::Unary {
                     op: UnaryOp::from_span(op),
@@ -189,7 +196,8 @@ where
         block_parser,
         object_parser,
         paren_expr::<T, Ty>,
-    ))(input)
+    ))
+    .parse(input)
 }
 
 #[derive(Debug)]
@@ -216,7 +224,8 @@ where
         separator: None,
         fn_name: None,
         args: Some(args),
-    })(input)
+    })
+    .parse(input)
 }
 
 fn method_or_fn_call<T, Ty>(input: InputSpan<'_>) -> MethodParseResult<'_, T>
@@ -232,10 +241,10 @@ where
         block_expr::<T, Ty>,
     ));
     let method_or_field_access_parser = map_res(
-        tuple((
+        (
             method_or_field_expr,
             opt(preceded(ws::<Ty>, fn_args::<T, Ty>)),
-        )),
+        ),
         |(fn_name, maybe_args)| {
             if maybe_args.is_some() {
                 let is_bogus_name = matches!(fn_name.extra, Expr::Variable)
@@ -252,17 +261,17 @@ where
         },
     );
     let method_or_field_access_parser = map(
-        tuple((
+        (
             terminated(with_span(tag_char('.')), ws::<Ty>),
             cut(method_or_field_access_parser),
-        )),
+        ),
         |(separator, mut call)| {
             call.separator = Some(separator.with_no_extra());
             call
         },
     );
 
-    alt((method_or_field_access_parser, fn_call::<T, Ty>))(input)
+    alt((method_or_field_access_parser, fn_call::<T, Ty>)).parse(input)
 }
 
 /// Expression, which includes, besides `simplest_expr`s, function calls.
@@ -277,11 +286,11 @@ where
         fn_call::<T, Ty>
     };
 
-    let mut parser = tuple((
+    let mut parser = (
         simplest_expr::<T, Ty>,
         many0(with_span(preceded(ws::<Ty>, method_or_fn_call))),
-    ));
-    parser(input).and_then(|(rest, (base, calls))| {
+    );
+    parser.parse(input).and_then(|(rest, (base, calls))| {
         fold_args(input, base, calls).map(|folded| (rest, folded))
     })
 }
@@ -293,10 +302,10 @@ where
     Ty: GrammarType,
 {
     let as_keyword = delimited(ws::<Ty>, tag("as"), mandatory_ws::<Ty>);
-    let parser = tuple((
+    let parser = (
         expr_with_calls::<T, Ty>,
         many0(preceded(as_keyword, cut(with_span(<T::Base>::parse_type)))),
-    ));
+    );
 
     map(parser, |(base, casts)| {
         casts.into_iter().fold(base, |value, ty| {
@@ -306,7 +315,8 @@ where
                 ty,
             })
         })
-    })(input)
+    })
+    .parse(input)
 }
 
 #[allow(clippy::option_if_let_else, clippy::range_plus_one)]
@@ -341,14 +351,14 @@ fn fold_args<'a, T: Grammar>(
 
     let reordered_op = if let Some(reordered_op) = maybe_reordered_op {
         let lit_start = base.location_offset() - input.location_offset();
-        let unsigned_lit_input = input.slice((lit_start + 1)..(lit_start + base.fragment().len()));
+        let unsigned_lit_input = input.take_from(lit_start + 1).take(base.fragment().len());
 
         if let Ok((_, unsigned_lit)) = T::parse_literal(unsigned_lit_input) {
             base = SpannedExpr::new(unsigned_lit_input, Expr::Literal(unsigned_lit));
 
             // `nom::Slice` is not implemented for inclusive range types, so the Clippy warning
             // cannot be fixed.
-            let op_span = input.slice(lit_start..(lit_start + 1));
+            let op_span = input.take_from(lit_start).take(1);
             Some(Spanned::new(op_span, reordered_op))
         } else {
             None
@@ -416,7 +426,7 @@ where
     let mut binary_ops = map(binary_ops, BinaryOp::from_span);
 
     let full_binary_ops = move |input| {
-        let (rest, spanned_op) = binary_ops(input)?;
+        let (rest, spanned_op) = binary_ops.parse(input)?;
         if spanned_op.extra.is_supported(T::FEATURES) {
             Ok((rest, spanned_op))
         } else {
@@ -427,15 +437,15 @@ where
         }
     };
 
-    let mut binary_parser = tuple((
+    let mut binary_parser = (
         simple_expr::<T, Ty>,
-        many0(tuple((
+        many0((
             delimited(ws::<Ty>, full_binary_ops, ws::<Ty>),
             cut(simple_expr::<T, Ty>),
-        ))),
-    ));
+        )),
+    );
 
-    let (remaining_input, (first, rest)) = binary_parser(input)?;
+    let (remaining_input, (first, rest)) = binary_parser.parse(input)?;
     let folded = fold_binary_expr(input, first, rest).map_err(NomErr::Failure)?;
     Ok((remaining_input, folded))
 }
@@ -486,9 +496,9 @@ fn fold_binary_expr<'a, T: Grammar>(
             .unwrap_or(right_contour.len());
 
         // We determine the error span later.
-        let chained_comparison = right_contour.get(insert_pos).map_or(false, |past_op| {
-            past_op.is_comparison() && new_op.extra.is_comparison()
-        });
+        let chained_comparison = right_contour
+            .get(insert_pos)
+            .is_some_and(|past_op| past_op.is_comparison() && new_op.extra.is_comparison());
 
         right_contour.truncate(insert_pos);
         right_contour.push(new_op.extra);
@@ -539,5 +549,5 @@ where
     T: Parse,
     Ty: GrammarType,
 {
-    context(Context::Expr.to_str(), binary_expr::<T, Ty>)(input)
+    context(Context::Expr.to_str(), binary_expr::<T, Ty>).parse(input)
 }

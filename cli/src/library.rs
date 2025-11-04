@@ -204,6 +204,7 @@ pub fn create_modular_env(modulus: u64) -> (Environment<u64>, TypeEnvironment) {
 macro_rules! declare_real_functions {
     ($type:ident) => {
         impl ReplLiteral for $type {
+            #[allow(clippy::incompatible_msrv)] // Weird false positive; a function doesn't have to be constant to be mentioned here
             const STD_LIB: StdLibrary<$type> = StdLibrary {
                 constants: &[
                     ("INF", $type::INFINITY),

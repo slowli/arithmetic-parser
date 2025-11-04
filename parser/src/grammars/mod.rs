@@ -25,8 +25,8 @@ use nom::{
     character::complete::{char as tag_char, digit1},
     combinator::{map_res, not, opt, peek, recognize},
     number::complete::{double, float},
-    sequence::{terminated, tuple},
-    Slice,
+    sequence::terminated,
+    Input, Parser as _,
 };
 
 pub use self::traits::{
@@ -65,11 +65,16 @@ pub trait NumLiteral: 'static + Clone + fmt::Debug {
 ///
 /// For example, `float` parses `-Inf`, which can lead to parser failure if it's a part of
 /// a larger expression (e.g., `-Infer(2, 3)`).
-pub fn ensure_no_overlap<'a, T>(
-    mut parser: impl FnMut(InputSpan<'a>) -> NomResult<'a, T>,
-) -> impl FnMut(InputSpan<'a>) -> NomResult<'a, T> {
+pub fn ensure_no_overlap<'a, F>(
+    mut parser: F,
+) -> impl nom::Parser<InputSpan<'a>, Output = F::Output, Error = F::Error>
+where
+    F: nom::Parser<InputSpan<'a>>,
+{
     let truncating_parser = move |input| {
-        parser(input).map(|(rest, number)| (maybe_truncate_consumed_input(input, rest), number))
+        parser
+            .parse(input)
+            .map(|(rest, number)| (maybe_truncate_consumed_input(input, rest), number))
     };
 
     terminated(
@@ -98,7 +103,7 @@ fn maybe_truncate_consumed_input<'a>(input: InputSpan<'a>, rest: InputSpan<'a>) 
     {
         // The last char consumed by the parser is '.' and the next part looks like
         // a method call. Shift the `rest` boundary to include '.'.
-        input.slice(last_consumed_byte_index..)
+        input.take_from(last_consumed_byte_index)
     } else {
         rest
     }
@@ -114,7 +119,7 @@ macro_rules! impl_num_literal_for_uint {
                         .parse::<$num>()
                         .map_err(|err| ErrorKind::literal(anyhow::anyhow!(err)))
                 };
-                map_res(digit1, parser)(input)
+                map_res(digit1, parser).parse(input)
             }
         }
         )+
@@ -133,7 +138,7 @@ macro_rules! impl_num_literal_for_int {
                         .parse::<$num>()
                         .map_err(|err| ErrorKind::literal(anyhow::anyhow!(err)))
                 };
-                map_res(recognize(tuple((opt(tag_char('-')), digit1))), parser)(input)
+                map_res(recognize((opt(tag_char('-')), digit1)), parser).parse(input)
             }
         }
         )+
@@ -144,13 +149,13 @@ impl_num_literal_for_int!(i8, i16, i32, i64, i128);
 
 impl NumLiteral for f32 {
     fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
-        ensure_no_overlap(float)(input)
+        ensure_no_overlap(float).parse(input)
     }
 }
 
 impl NumLiteral for f64 {
     fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
-        ensure_no_overlap(double)(input)
+        ensure_no_overlap(double).parse(input)
     }
 }
 
@@ -161,7 +166,7 @@ mod complex {
         character::complete::one_of,
         combinator::{map, opt},
         number::complete::{double, float},
-        sequence::tuple,
+        Parser as _,
     };
     use num_complex::Complex;
     use num_traits::Num;
@@ -169,12 +174,15 @@ mod complex {
     use super::{ensure_no_overlap, NumLiteral};
     use crate::{InputSpan, NomResult};
 
-    fn complex_parser<'a, T: Num>(
-        num_parser: impl FnMut(InputSpan<'a>) -> NomResult<'a, T>,
-    ) -> impl FnMut(InputSpan<'a>) -> NomResult<'a, Complex<T>> {
+    fn complex_parser<'a, T: Num, F>(
+        num_parser: F,
+    ) -> impl nom::Parser<InputSpan<'a>, Output = Complex<T>, Error = F::Error>
+    where
+        F: nom::Parser<InputSpan<'a>, Output = T>,
+    {
         let i_parser = map(one_of("ij"), |_| Complex::new(T::zero(), T::one()));
 
-        let parser = tuple((num_parser, opt(one_of("ij"))));
+        let parser = (num_parser, opt(one_of("ij")));
         let parser = map(parser, |(value, maybe_imag)| {
             if maybe_imag.is_some() {
                 Complex::new(T::zero(), value)
@@ -188,13 +196,13 @@ mod complex {
 
     impl NumLiteral for num_complex::Complex32 {
         fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
-            ensure_no_overlap(complex_parser(float))(input)
+            ensure_no_overlap(complex_parser(float)).parse(input)
         }
     }
 
     impl NumLiteral for num_complex::Complex64 {
         fn parse(input: InputSpan<'_>) -> NomResult<'_, Self> {
-            ensure_no_overlap(complex_parser(double))(input)
+            ensure_no_overlap(complex_parser(double)).parse(input)
         }
     }
 }
@@ -204,7 +212,7 @@ mod bigint {
     use nom::{
         character::complete::{char as tag_char, digit1},
         combinator::{map_res, opt, recognize},
-        sequence::tuple,
+        Parser as _,
     };
     use num_bigint::{BigInt, BigUint};
     use num_traits::Num;
@@ -218,7 +226,7 @@ mod bigint {
                 BigInt::from_str_radix(s.fragment(), 10)
                     .map_err(|err| ErrorKind::literal(anyhow::anyhow!(err)))
             };
-            map_res(recognize(tuple((opt(tag_char('-')), digit1))), parser)(input)
+            map_res(recognize((opt(tag_char('-')), digit1)), parser).parse(input)
         }
     }
 
@@ -228,7 +236,7 @@ mod bigint {
                 BigUint::from_str_radix(s.fragment(), 10)
                     .map_err(|err| ErrorKind::literal(anyhow::anyhow!(err)))
             };
-            map_res(digit1, parser)(input)
+            map_res(digit1, parser).parse(input)
         }
     }
 }

@@ -220,7 +220,7 @@ impl<Prim: PrimitiveType> Function<Prim> {
     pub(crate) fn is_parametric(&self) -> bool {
         self.params
             .as_ref()
-            .map_or(false, |params| !params.is_empty())
+            .is_some_and(|params| !params.is_empty())
     }
 
     /// Returns `true` iff this type does not contain type / length variables.

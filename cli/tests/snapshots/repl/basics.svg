@@ -1,4 +1,4 @@
-<!-- Created with term-transcript v0.3.0 (https://github.com/slowli/term-transcript) -->
+<!-- Created with term-transcript v0.4.0 (https://github.com/slowli/term-transcript) -->
 <svg viewBox="0 -22 720 384" width="720" height="384" xmlns="http://www.w3.org/2000/svg">
   <switch>
     <g requiredExtensions="http://www.w3.org/1999/xhtml">
@@ -63,7 +63,7 @@
       <circle cx="37" cy="-9" r="7" style="fill: #ffe755;"/>
       <circle cx="57" cy="-9" r="7" style="fill: #cee318;"/>
       <svg x="0" y="10" width="720" height="342" viewBox="0 0 720 342">
-        <animate attributeName="viewBox" values="0 0 720 342;0 52 720 342;0 104 720 342;0 156 720 342;0 208 720 342;0 260 720 342;0 312 720 342;0 364 720 342" dur="28.0s" repeatCount="indefinite" calcMode="discrete" />
+        <animate attributeName="viewBox" values="0 0 720 342;0 72 720 342;0 144 720 342;0 216 720 342;0 288 720 342;0 360 720 342" dur="20.0s" repeatCount="indefinite" calcMode="discrete" />
         <foreignObject width="720" height="660">
           <div xmlns="http://www.w3.org/1999/xhtml" class="container">
             <div class="input"><pre><span class="prompt">&gt;&gt;&gt;</span> 1 + 2*3</pre></div>
@@ -81,30 +81,30 @@
             <div class="output"><pre><span class="fg6">false</span></pre></div>
             <div class="input"><pre><span class="prompt">&gt;&gt;&gt;</span> all((1, 2, 5, Array.map), |x| 0 &lt; x)</pre></div>
             <div class="output"><pre><span class="bold fg9">error[EVAL]</span><span class="bold">: Value is not comparable</span>
-  <span class="fg4">┌─</span> Snippet #6:1:35
-  <span class="fg4">│</span>
-<span class="fg4">1</span> <span class="fg4">│</span> all((1, 2, 5, Array.map), |x| 0 &lt; <span class="fg1">x</span>)
-  <span class="fg4">│</span> <span class="fg4">----------------------------------</span><span class="fg1">^</span><span class="fg4">-</span>
-  <span class="fg4">│</span> <span class="fg4">│</span>                         <span class="fg4">│</span>       <span class="fg1">│</span>
-  <span class="fg4">│</span> <span class="fg4">│</span>                         <span class="fg4">│</span>       <span class="fg1">Cannot be compared</span>
-  <span class="fg4">│</span> <span class="fg4">│</span>                         <span class="fg4">The error occurred in function `pred`</span>
-  <span class="fg4">│</span> <span class="fg4">Call at depth 3</span>
-  <span class="fg4">│</span>
-  <span class="fg4">┌─</span> Snippet #2:1:21
-  <span class="fg4">│</span>
-<span class="fg4">1</span> <span class="fg4">│</span> all = |array, pred| array.fold(true, |acc, x| acc &amp;&amp; pred(x));
-  <span class="fg4">│</span>                     <span class="fg4">-----------------------------------------</span>
-  <span class="fg4">│</span>                     <span class="fg4">│</span>                                <span class="fg4">│</span>
-  <span class="fg4">│</span>                     <span class="fg4">│</span>                                <span class="fg4">Call at depth 1</span>
-  <span class="fg4">│</span>                     <span class="fg4">Call at depth 2</span>
-  <span class="fg4">│</span>
-  <span class="fg4">=</span> Only primitive values can be compared; complex values cannot
+  <span class="fg6">┌─</span> Snippet #6:1:35
+  <span class="fg6">│</span>
+<span class="fg6">1</span> <span class="fg6">│</span> all((1, 2, 5, Array.map), |x| 0 &lt; <span class="fg1">x</span>)
+  <span class="fg6">│</span> <span class="fg6">----------------------------------</span><span class="fg1">^</span><span class="fg6">-</span>
+  <span class="fg6">│</span> <span class="fg6">│</span>                         <span class="fg6">│</span>       <span class="fg1">│</span>
+  <span class="fg6">│</span> <span class="fg6">│</span>                         <span class="fg6">│</span>       <span class="fg1">Cannot be compared</span>
+  <span class="fg6">│</span> <span class="fg6">│</span>                         <span class="fg6">The error occurred in function `pred`</span>
+  <span class="fg6">│</span> <span class="fg6">Call at depth 3</span>
+  <span class="fg6">│</span>
+  <span class="fg6">┌─</span> Snippet #2:1:21
+  <span class="fg6">│</span>
+<span class="fg6">1</span> <span class="fg6">│</span> all = |array, pred| array.fold(true, |acc, x| acc &amp;&amp; pred(x));
+  <span class="fg6">│</span>                     <span class="fg6">-----------------------------------------</span>
+  <span class="fg6">│</span>                     <span class="fg6">│</span>                                <span class="fg6">│</span>
+  <span class="fg6">│</span>                     <span class="fg6">│</span>                                <span class="fg6">Call at depth 1</span>
+  <span class="fg6">│</span>                     <span class="fg6">Call at depth 2</span>
+  <span class="fg6">│</span>
+  <span class="fg6">=</span> Only primitive values can be compared; complex values cannot
 </pre></div>
           </div>
         </foreignObject>
       </svg>
       <rect class="scrollbar" x="713" y="10" width="5" height="40">
-        <animateTransform attributeName="transform" attributeType="XML" type="translate" values="0 0;0 43;0 86;0 129;0 172;0 215;0 258;0 302" dur="28.0s" repeatCount="indefinite" calcMode="discrete" />
+        <animateTransform attributeName="transform" attributeType="XML" type="translate" values="0 0;0 60;0 120;0 181;0 241;0 302" dur="20.0s" repeatCount="indefinite" calcMode="discrete" />
       </rect>
     </g>
     <text x="10" y="18" style="font: 14px SFMono-Regular, Consolas, Liberation Mono, Menlo, monospace; fill: #ff005b;">

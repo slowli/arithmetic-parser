@@ -24,7 +24,7 @@ use codespan_reporting::{
     diagnostic::{Diagnostic, Label, Severity},
     files::Error as FilesError,
     term::{
-        emit,
+        emit_to_write_style,
         termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor},
         Config as ReportingConfig,
     },
@@ -227,7 +227,7 @@ impl Reporter {
     }
 
     fn report_error(&self, diagnostic: &Diagnostic<FileId>) -> io::Result<()> {
-        emit(
+        emit_to_write_style(
             &mut self.writer.lock(),
             &self.config,
             &self.code_map.files,
@@ -235,7 +235,7 @@ impl Reporter {
         )
         .map_err(|err| match err {
             FilesError::Io(err) => err,
-            _ => io::Error::new(io::ErrorKind::Other, err),
+            _ => io::Error::other(err),
         })
     }
 

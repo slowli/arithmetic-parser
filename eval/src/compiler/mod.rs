@@ -305,6 +305,7 @@ mod tests {
         grammars::{F32Grammar, Parse, ParseLiteral, Typed, Untyped},
         Expr, Location, NomResult,
     };
+    use nom::Parser as _;
 
     use super::*;
     use crate::{exec::WildcardId, Environment, Value};
@@ -414,7 +415,7 @@ mod tests {
 
             fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type<'_>> {
                 use nom::{bytes::complete::tag, combinator::map};
-                map(tag("Num"), drop)(input)
+                map(tag("Num"), drop).parse(input)
             }
         }
 

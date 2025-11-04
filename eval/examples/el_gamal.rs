@@ -14,8 +14,11 @@ use arithmetic_eval::{
 };
 use arithmetic_parser::grammars::{NumGrammar, Parse, Untyped};
 use glass_pumpkin::safe_prime;
-use num_bigint::{BigUint, RandBigInt};
-use rand::thread_rng;
+use num_bigint::BigUint;
+
+use self::common::gen_uint_range;
+
+mod common;
 
 // NB: this is nowhere near a secure value (~2,048 bits).
 const BIT_LENGTH: usize = 256;
@@ -25,7 +28,7 @@ const BIT_LENGTH: usize = 256;
 /// number is guaranteed to be in the group, thus it will be a generator.
 fn find_generator(modulus: &BigUint) -> BigUint {
     let two = BigUint::from(2_u32);
-    let random_value = thread_rng().gen_biguint_range(&two, modulus);
+    let random_value = gen_uint_range(&mut rand::rng(), &two, modulus);
     random_value.modpow(&two, modulus)
 }
 
@@ -40,7 +43,7 @@ fn main() -> anyhow::Result<()> {
     for i in 0..5 {
         println!("\nRunning sample #{i}");
 
-        let modulus = safe_prime::new(BIT_LENGTH)?;
+        let modulus = safe_prime::new(BIT_LENGTH).map_err(|e| anyhow::anyhow!(e))?;
         println!("Generated safe prime: {modulus}");
 
         let prime_subgroup_order: BigUint = &modulus >> 1;
@@ -48,11 +51,10 @@ fn main() -> anyhow::Result<()> {
         let generator = find_generator(&modulus);
         let arithmetic = ModularArithmetic::new(modulus).without_comparisons();
 
-        let rng = RefCell::new(thread_rng());
+        let rng = RefCell::new(rand::rng());
         let two = BigUint::from(2_u32);
         let rand_scalar = Value::wrapped_fn(move || {
-            rng.borrow_mut()
-                .gen_biguint_range(&two, &prime_subgroup_order)
+            gen_uint_range(&mut rng.borrow_mut(), &two, &prime_subgroup_order)
         });
 
         let mut env = Environment::with_arithmetic(arithmetic);

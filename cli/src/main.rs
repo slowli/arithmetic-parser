@@ -10,7 +10,7 @@ use anyhow::format_err;
 use arithmetic_eval::Environment;
 use arithmetic_typing::TypeEnvironment;
 use clap::{Args, Parser, Subcommand};
-use codespan_reporting::term::{termcolor::ColorChoice, ColorArg};
+use codespan_reporting::term::termcolor::ColorChoice;
 use num_complex::{Complex32, Complex64};
 
 use crate::{
@@ -96,7 +96,7 @@ enum Command {
         command: Option<String>,
         /// Controls coloring of the output.
         #[arg(long, default_value = "auto", value_enum, ignore_case = true, env)]
-        color: ColorArg,
+        color: ColorChoice,
     },
     /// Evaluate the input, optionally checking types beforehand.
     Eval(EvalArgs),
@@ -124,7 +124,7 @@ struct EvalArgs {
     command: Option<String>,
     /// Controls coloring of the output.
     #[arg(long, default_value = "auto", value_enum, ignore_case = true, env)]
-    color: ColorArg,
+    color: ColorChoice,
 }
 
 impl Command {
@@ -134,14 +134,14 @@ impl Command {
                 arithmetic,
                 command,
                 color,
-            } => Self::output_ast(arithmetic, command, Self::color_choice(color)),
+            } => Self::output_ast(arithmetic, command, Self::resolve_color_choice(color)),
 
             Self::Eval(eval_args) => eval_args.run(),
         }
     }
 
-    fn color_choice(color_arg: ColorArg) -> ColorChoice {
-        match color_arg.into() {
+    fn resolve_color_choice(color_arg: ColorChoice) -> ColorChoice {
+        match color_arg {
             ColorChoice::Auto => {
                 if io::stdout().is_terminal() {
                     ColorChoice::Auto
@@ -222,7 +222,7 @@ impl EvalArgs {
     ) -> io::Result<()> {
         let type_env = self.types.then_some(type_env);
         if self.interactive {
-            repl(env, type_env, Command::color_choice(self.color))
+            repl(env, type_env, Command::resolve_color_choice(self.color))
         } else {
             self.run_command(env, type_env)
         }
@@ -241,7 +241,7 @@ impl EvalArgs {
                 buffer
             }
         };
-        let mut env = Env::new(env, type_env, Command::color_choice(self.color));
+        let mut env = Env::new(env, type_env, Command::resolve_color_choice(self.color));
 
         match env.parse_and_eval(&command, false)? {
             ParseAndEvalResult::Ok(()) => Ok(()),

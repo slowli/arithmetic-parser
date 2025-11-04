@@ -273,7 +273,7 @@ mod tests {
         let signed_wide_mod = i128::from(modulus);
         let mut rng = StdRng::seed_from_u64(modulus);
 
-        for (x, y) in (0..SAMPLE_COUNT).map(|_| rng.gen::<(u64, u64)>()) {
+        for (x, y) in (0..SAMPLE_COUNT).map(|_| rng.random::<(u64, u64)>()) {
             let expected = (u128::from(x) + u128::from(y)) % unsigned_wide_mod;
             assert_eq!(u128::from(arithmetic.add(x, y).unwrap()), expected);
 
@@ -287,7 +287,7 @@ mod tests {
             assert_eq!(u128::from(arithmetic.mul(x, y).unwrap()), expected);
         }
 
-        for x in (0..SAMPLE_COUNT).map(|_| rng.gen::<u64>()) {
+        for x in (0..SAMPLE_COUNT).map(|_| rng.random::<u64>()) {
             let inv = arithmetic.invert(x);
             if x % modulus == 0 {
                 // Quite unlikely, but better be safe than sorry.
@@ -299,11 +299,11 @@ mod tests {
         }
 
         for _ in 0..(SAMPLE_COUNT / 10) {
-            let x = rng.gen::<u64>();
+            let x = rng.random::<u64>();
             let wide_x = u128::from(x);
 
             // Check a random small exponent.
-            let exp = rng.gen_range(1_u64..1_000);
+            let exp = rng.random_range(1_u64..1_000);
             let expected_pow = (0..exp).fold(1_u128, |acc, _| (acc * wide_x) % unsigned_wide_mod);
             assert_eq!(u128::from(arithmetic.pow(x, exp).unwrap()), expected_pow);
 

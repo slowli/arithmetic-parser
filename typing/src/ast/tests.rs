@@ -1,11 +1,11 @@
-use core::ops::Range;
+use core::ops;
 
 use assert_matches::assert_matches;
 
 use super::*;
 use crate::alloc::vec;
 
-fn sp<T>(input: InputSpan<'_>, range: Range<usize>, extra: T) -> Spanned<'_, T> {
+fn sp<T>(input: InputSpan<'_>, range: ops::Range<usize>, extra: T) -> Spanned<'_, T> {
     Spanned::from_str(input.fragment(), range).copy_with_extra(extra)
 }
 

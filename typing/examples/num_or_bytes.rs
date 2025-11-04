@@ -10,6 +10,7 @@ use arithmetic_typing::{
     arith::*, defs::Prelude, error::OpErrors, visit::Visit, Annotated, PrimitiveType, Type,
     TypeEnvironment,
 };
+use nom::Parser as _;
 
 /// Literal for arithmetic: either an integer or a byte buffer.
 #[allow(dead_code)]
@@ -41,7 +42,7 @@ impl NumLiteral for NumOrBytes {
             )),
         );
 
-        alt((map(parse_hex, Self::Bytes), map(u32::parse, Self::Num)))(input)
+        alt((map(parse_hex, Self::Bytes), map(u32::parse, Self::Num))).parse(input)
     }
 }
 

@@ -21,9 +21,12 @@ use arithmetic_parser::{
     InputSpan, NomResult,
 };
 use glass_pumpkin::safe_prime;
-use num_bigint::{BigUint, RandBigInt};
-use rand::thread_rng;
+use num_bigint::BigUint;
 use sha2::{digest::Digest, Sha256};
+
+use self::common::gen_uint_range;
+
+mod common;
 
 /// Literals for our cyclic groups. We type them into scalars and group elements despite
 /// both being represented by `BigUint`, since allowed arithmetic ops on scalars and group elements
@@ -79,9 +82,8 @@ impl CyclicGroupArithmetic {
 
         // Generator search uses the DSA approach: generate a random element in Z/(2q + 1)Z,
         // and then square it so it falls into the prime-order subgroup.
-        let generator = thread_rng()
-            .gen_biguint_range(&two, &safe_prime)
-            .modpow(&two, &safe_prime);
+        let generator =
+            gen_uint_range(&mut rand::rng(), &two, &safe_prime).modpow(&two, &safe_prime);
 
         Self {
             for_group: ModularArithmetic::new(safe_prime),
@@ -92,15 +94,16 @@ impl CyclicGroupArithmetic {
 
     /// Returns a closure generating random scalars.
     fn rand_scalar(&self) -> impl Fn() -> GroupLiteral {
-        let rng = RefCell::new(thread_rng());
+        let rng = RefCell::new(rand::rng());
         let two = BigUint::from(2_u32);
         let prime_subgroup_order = self.for_scalars.modulus().to_owned();
 
         move || {
-            GroupLiteral::Scalar(
-                rng.borrow_mut()
-                    .gen_biguint_range(&two, &prime_subgroup_order),
-            )
+            GroupLiteral::Scalar(gen_uint_range(
+                &mut rng.borrow_mut(),
+                &two,
+                &prime_subgroup_order,
+            ))
         }
     }
 
@@ -188,7 +191,7 @@ impl NativeFn<GroupLiteral> for HashToScalar {
             }
         }
 
-        let mut hash_scalar = BigUint::from_bytes_le(hasher.finalize().as_slice());
+        let mut hash_scalar = BigUint::from_bytes_le(&hasher.finalize());
         // Reduce the scalar by the modulus.
         hash_scalar %= &self.modulus;
 

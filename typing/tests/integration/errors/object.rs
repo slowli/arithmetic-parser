@@ -58,10 +58,10 @@ fn calling_non_function_field() {
         .single();
 
     assert_eq!(err.main_location().span(code), "{pt.x}()");
-    assert_matches!(
-        err.kind(),
-        ErrorKind::TypeMismatch(Type::Function(_), Type::Prim(_))
-    );
+    assert_matches!(err.kind(), ErrorKind::TypeMismatch(lhs, rhs) => {
+        assert_matches!(lhs.as_ref(), Type::Function(_));
+        assert_matches!(rhs.as_ref(), Type::Prim(_));
+    });
 }
 
 #[test]
@@ -146,7 +146,7 @@ fn incompatible_field_types() {
     assert_matches!(err.context(), ErrorContext::FnCall { .. });
     assert_matches!(
         err.kind(),
-        ErrorKind::TypeMismatch(lhs, rhs) if *lhs == Type::NUM && rhs.to_string() == "(Num, Num)"
+        ErrorKind::TypeMismatch(lhs, rhs) if **lhs == Type::NUM && rhs.to_string() == "(Num, Num)"
     );
 }
 
@@ -164,7 +164,7 @@ fn incompatible_field_types_via_accesses() {
     assert_matches!(err.context(), ErrorContext::UnaryOp(_));
     assert_matches!(
         err.kind(),
-        ErrorKind::TypeMismatch(lhs, rhs) if *lhs == Type::BOOL && *rhs == Type::NUM
+        ErrorKind::TypeMismatch(lhs, rhs) if **lhs == Type::BOOL && **rhs == Type::NUM
     );
 }
 
@@ -185,7 +185,7 @@ fn incompatible_field_types_via_fn() {
     assert_matches!(err.context(), ErrorContext::FnCall { .. });
     assert_matches!(
         err.kind(),
-        ErrorKind::TypeMismatch(lhs, rhs) if *lhs == Type::BOOL && *rhs == Type::NUM
+        ErrorKind::TypeMismatch(lhs, rhs) if **lhs == Type::BOOL && **rhs == Type::NUM
     );
 }
 

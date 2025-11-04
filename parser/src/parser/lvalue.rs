@@ -6,8 +6,8 @@ use nom::{
     character::complete::char as tag_char,
     combinator::{cut, map, not, opt, peek},
     multi::{separated_list0, separated_list1},
-    sequence::{delimited, preceded, terminated, tuple},
-    Err as NomErr,
+    sequence::{delimited, preceded, terminated},
+    Err as NomErr, Parser,
 };
 
 use super::helpers::{comma_sep, var_name, ws, GrammarType};
@@ -24,7 +24,7 @@ where
     T: Parse,
     Ty: GrammarType,
 {
-    separated_list0(comma_sep::<Ty>, lvalue::<T, Ty>)(input)
+    separated_list0(comma_sep::<Ty>, lvalue::<T, Ty>).parse(input)
 }
 
 fn destructure_rest<T, Ty>(
@@ -50,7 +50,8 @@ where
                 })
             })
         },
-    )(input)
+    )
+    .parse(input)
 }
 
 type DestructureTail<'a, T> = (
@@ -65,10 +66,11 @@ where
     T: Parse,
     Ty: GrammarType,
 {
-    tuple((
+    (
         destructure_rest::<T, Ty>,
         opt(preceded(comma_sep::<Ty>, comma_separated_lvalues::<T, Ty>)),
-    ))(input)
+    )
+        .parse(input)
 }
 
 /// Parse the destructuring *without* the surrounding delimiters.
@@ -82,10 +84,10 @@ where
     let main_parser = alt((
         // `destructure_tail` has fast fail path: the input must start with `...`.
         map(destructure_tail::<T, Ty>, |rest| (vec![], Some(rest))),
-        tuple((
+        (
             comma_separated_lvalues::<T, Ty>,
             opt(preceded(comma_sep::<Ty>, destructure_tail::<T, Ty>)),
-        )),
+        ),
     ));
     // Allow for `,`-terminated lists.
     let main_parser = terminated(main_parser, opt(comma_sep::<Ty>));
@@ -104,7 +106,8 @@ where
                 end: vec![],
             }
         }
-    })(input)
+    })
+    .parse(input)
 }
 
 type GrammarLvalue<'a, T> = SpannedLvalue<'a, <<T as Parse>::Base as Grammar>::Type<'a>>;
@@ -121,7 +124,8 @@ where
             preceded(ws::<Ty>, tag_char(')')),
         ),
         Lvalue::Tuple,
-    ))(input)
+    ))
+    .parse(input)
 }
 
 /// Simple lvalue with an optional type annotation, e.g., `x` or `x: Num`.
@@ -134,15 +138,16 @@ where
     // when `$var_name::...` is encountered.
     let type_delimiter = terminated(tag_char(':'), peek(not(tag_char(':'))));
     map(
-        tuple((
+        (
             var_name,
             opt(preceded(
                 delimited(ws::<Ty>, type_delimiter, ws::<Ty>),
                 cut(with_span(<T::Base>::parse_type)),
             )),
-        )),
+        ),
         |(name, ty)| Spanned::new(name, Lvalue::Variable { ty }),
-    )(input)
+    )
+    .parse(input)
 }
 
 fn simple_lvalue_without_type<T>(input: InputSpan<'_>) -> NomResult<'_, GrammarLvalue<'_, T>>
@@ -151,7 +156,8 @@ where
 {
     map(var_name, |name| {
         Spanned::new(name, Lvalue::Variable { ty: None })
-    })(input)
+    })
+    .parse(input)
 }
 
 fn object_destructure_field<T, Ty>(
@@ -162,12 +168,13 @@ where
     Ty: GrammarType,
 {
     let field_sep = alt((tag(":"), tag("->")));
-    let field_sep = tuple((ws::<Ty>, field_sep, ws::<Ty>));
-    let field = tuple((var_name, opt(preceded(field_sep, lvalue::<T, Ty>))));
+    let field_sep = (ws::<Ty>, field_sep, ws::<Ty>);
+    let field = (var_name, opt(preceded(field_sep, lvalue::<T, Ty>)));
     map(field, |(name, maybe_binding)| ObjectDestructureField {
         field_name: Spanned::new(name, ()),
         binding: maybe_binding,
-    })(input)
+    })
+    .parse(input)
 }
 
 pub(super) fn object_destructure<T, Ty>(
@@ -184,7 +191,7 @@ where
         inner,
         preceded(ws::<Ty>, tag_char('}')),
     );
-    map(inner, |fields| ObjectDestructure { fields })(input)
+    map(inner, |fields| ObjectDestructure { fields }).parse(input)
 }
 
 fn mapped_object_destructure<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, GrammarLvalue<'_, T>>
@@ -192,7 +199,7 @@ where
     T: Parse,
     Ty: GrammarType,
 {
-    with_span(map(object_destructure::<T, Ty>, Lvalue::Object))(input)
+    with_span(map(object_destructure::<T, Ty>, Lvalue::Object)).parse(input)
 }
 
 /// Parses an `Lvalue`.
@@ -224,5 +231,5 @@ where
     } else {
         error::<T>
     };
-    alt((destructure, object_destructure, simple_lvalue))(input)
+    alt((destructure, object_destructure, simple_lvalue)).parse(input)
 }

@@ -13,7 +13,8 @@ use nom::{
     character::complete::char as tag_char,
     combinator::{cut, map, map_res, not, opt, peek, recognize},
     multi::{many0, separated_list0, separated_list1},
-    sequence::{delimited, preceded, separated_pair, terminated, tuple},
+    sequence::{delimited, preceded, separated_pair, terminated},
+    Parser as _,
 };
 
 pub use self::conversion::AstConversionError;
@@ -86,7 +87,7 @@ pub enum TypeAst<'a> {
 impl<'a> TypeAst<'a> {
     /// Parses `input` as a type. This parser can be composed using `nom` infrastructure.
     pub fn parse(input: InputSpan<'a>) -> NomResult<'a, Spanned<'a, Self>> {
-        with_span(type_definition)(input)
+        with_span(type_definition).parse(input)
     }
 }
 
@@ -202,18 +203,18 @@ fn ws(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
     }
 
     fn long_comment_body(input: InputSpan<'_>) -> NomResult<'_, InputSpan<'_>> {
-        cut(take_until("*/"))(input)
+        cut(take_until("*/")).parse(input)
     }
 
     let comment = preceded(tag("//"), take_while(|c: char| c != '\n'));
     let long_comment = delimited(tag("/*"), long_comment_body, tag("*/"));
     let ws_line = alt((narrow_ws, comment, long_comment));
-    recognize(many0(ws_line))(input)
+    recognize(many0(ws_line)).parse(input)
 }
 
 /// Comma separator.
 fn comma_sep(input: InputSpan<'_>) -> NomResult<'_, char> {
-    delimited(ws, tag_char(','), ws)(input)
+    delimited(ws, tag_char(','), ws).parse(input)
 }
 
 fn ident(input: InputSpan<'_>) -> NomResult<'_, Spanned<'_>> {
@@ -225,7 +226,8 @@ fn ident(input: InputSpan<'_>) -> NomResult<'_, Spanned<'_>> {
             take_while1(|c: char| c.is_ascii_alphanumeric() || c == '_'),
             Spanned::from,
         ),
-    )(input)
+    )
+    .parse(input)
 }
 
 fn not_keyword(input: InputSpan<'_>) -> NomResult<'_, Spanned<'_>> {
@@ -237,31 +239,33 @@ fn not_keyword(input: InputSpan<'_>) -> NomResult<'_, Spanned<'_>> {
         } else {
             Ok(ident)
         }
-    })(input)
+    })
+    .parse(input)
 }
 
 fn type_param_ident(input: InputSpan<'_>) -> NomResult<'_, Spanned<'_>> {
-    preceded(tag_char('\''), ident)(input)
+    preceded(tag_char('\''), ident).parse(input)
 }
 
 fn comma_separated_types(input: InputSpan<'_>) -> NomResult<'_, Vec<SpannedTypeAst<'_>>> {
-    separated_list0(delimited(ws, tag_char(','), ws), with_span(type_definition))(input)
+    separated_list0(delimited(ws, tag_char(','), ws), with_span(type_definition)).parse(input)
 }
 
 fn tuple_middle(input: InputSpan<'_>) -> NomResult<'_, Spanned<'_, SliceAst<'_>>> {
-    preceded(terminated(tag("..."), ws), with_span(slice_definition))(input)
+    preceded(terminated(tag("..."), ws), with_span(slice_definition)).parse(input)
 }
 
 type TupleTailAst<'a> = (Spanned<'a, SliceAst<'a>>, Vec<SpannedTypeAst<'a>>);
 
 fn tuple_tail(input: InputSpan<'_>) -> NomResult<'_, TupleTailAst<'_>> {
-    tuple((
+    (
         tuple_middle,
         map(
             opt(preceded(comma_sep, comma_separated_types)),
             Option::unwrap_or_default,
         ),
-    ))(input)
+    )
+        .parse(input)
 }
 
 fn tuple_definition(input: InputSpan<'_>) -> NomResult<'_, TupleAst<'_>> {
@@ -274,7 +278,7 @@ fn tuple_definition(input: InputSpan<'_>) -> NomResult<'_, TupleAst<'_>> {
             end,
         }),
         map(
-            tuple((comma_separated_types, opt(preceded(comma_sep, tuple_tail)))),
+            (comma_separated_types, opt(preceded(comma_sep, tuple_tail))),
             |(start, maybe_tail)| {
                 if let Some((middle, end)) = maybe_tail {
                     TupleAst {
@@ -296,15 +300,13 @@ fn tuple_definition(input: InputSpan<'_>) -> NomResult<'_, TupleAst<'_>> {
     preceded(
         terminated(tag_char('('), ws),
         // Once we've encountered the opening `(`, the input *must* correspond to the parser.
-        cut(terminated(
-            main_parser,
-            tuple((maybe_comma, ws, tag_char(')'))),
-        )),
-    )(input)
+        cut(terminated(main_parser, (maybe_comma, ws, tag_char(')')))),
+    )
+    .parse(input)
 }
 
 fn tuple_len(input: InputSpan<'_>) -> NomResult<'_, Spanned<'_, TupleLenAst>> {
-    let semicolon = tuple((ws, tag_char(';'), ws));
+    let semicolon = (ws, tag_char(';'), ws);
     let empty = map(take(0_usize), Spanned::from);
     map(alt((preceded(semicolon, not_keyword), empty)), |id| {
         id.map_extra(|()| match *id.fragment() {
@@ -312,7 +314,8 @@ fn tuple_len(input: InputSpan<'_>) -> NomResult<'_, Spanned<'_, TupleLenAst>> {
             "" => TupleLenAst::Dynamic,
             _ => TupleLenAst::Ident,
         })
-    })(input)
+    })
+    .parse(input)
 }
 
 fn slice_definition(input: InputSpan<'_>) -> NomResult<'_, SliceAst<'_>> {
@@ -321,30 +324,31 @@ fn slice_definition(input: InputSpan<'_>) -> NomResult<'_, SliceAst<'_>> {
         // Once we've encountered the opening `[`, the input *must* correspond to the parser.
         cut(terminated(
             map(
-                tuple((with_span(type_definition), tuple_len)),
+                (with_span(type_definition), tuple_len),
                 |(element, length)| SliceAst {
                     element: Box::new(element),
                     length,
                 },
             ),
-            tuple((ws, tag_char(']'))),
+            (ws, tag_char(']')),
         )),
-    )(input)
+    )
+    .parse(input)
 }
 
 fn object(input: InputSpan<'_>) -> NomResult<'_, ObjectAst<'_>> {
-    let colon = tuple((ws, tag_char(':'), ws));
+    let colon = (ws, tag_char(':'), ws);
     let object_field = separated_pair(ident, colon, with_span(type_definition));
     let object_body = terminated(separated_list1(comma_sep, object_field), opt(comma_sep));
     let object = preceded(
         terminated(tag_char('{'), ws),
-        cut(terminated(object_body, tuple((ws, tag_char('}'))))),
+        cut(terminated(object_body, (ws, tag_char('}')))),
     );
-    map(object, |fields| ObjectAst { fields })(input)
+    map(object, |fields| ObjectAst { fields }).parse(input)
 }
 
 fn constraint_sep(input: InputSpan<'_>) -> NomResult<'_, ()> {
-    map(tuple((ws, tag_char('+'), ws)), drop)(input)
+    map((ws, tag_char('+'), ws), drop).parse(input)
 }
 
 fn simple_type_bounds(input: InputSpan<'_>) -> NomResult<'_, TypeConstraintsAst<'_>> {
@@ -353,37 +357,39 @@ fn simple_type_bounds(input: InputSpan<'_>) -> NomResult<'_, TypeConstraintsAst<
             object: None,
             terms,
         }
-    })(input)
+    })
+    .parse(input)
 }
 
 fn type_bounds(input: InputSpan<'_>) -> NomResult<'_, TypeConstraintsAst<'_>> {
     alt((
         map(
-            tuple((
+            (
                 object,
                 opt(preceded(
                     constraint_sep,
                     separated_list1(constraint_sep, not_keyword),
                 )),
-            )),
+            ),
             |(object, terms)| TypeConstraintsAst {
                 object: Some(object),
                 terms: terms.unwrap_or_default(),
             },
         ),
         simple_type_bounds,
-    ))(input)
+    ))
+    .parse(input)
 }
 
 fn type_params(input: InputSpan<'_>) -> NomResult<'_, Vec<(Spanned<'_>, TypeConstraintsAst<'_>)>> {
-    let type_bounds = preceded(tuple((ws, tag_char(':'), ws)), type_bounds);
-    let type_param = tuple((type_param_ident, type_bounds));
-    separated_list1(comma_sep, type_param)(input)
+    let type_bounds = preceded((ws, tag_char(':'), ws), type_bounds);
+    let type_param = (type_param_ident, type_bounds);
+    separated_list1(comma_sep, type_param).parse(input)
 }
 
 /// Function params, including the `for` keyword and `<>` brackets.
 fn constraints(input: InputSpan<'_>) -> NomResult<'_, ConstraintsAst<'_>> {
-    let semicolon = tuple((ws, tag_char(';'), ws));
+    let semicolon = (ws, tag_char(';'), ws);
 
     let len_params = preceded(
         terminated(tag("len!"), ws),
@@ -392,17 +398,17 @@ fn constraints(input: InputSpan<'_>) -> NomResult<'_, ConstraintsAst<'_>> {
 
     let params_parser = alt((
         map(
-            tuple((len_params, opt(preceded(semicolon, type_params)))),
+            (len_params, opt(preceded(semicolon, type_params))),
             |(static_lengths, type_params)| (static_lengths, type_params.unwrap_or_default()),
         ),
         map(type_params, |type_params| (Vec::new(), type_params)),
     ));
 
-    let constraints_parser = tuple((
+    let constraints_parser = (
         terminated(tag("for"), ws),
         terminated(tag_char('<'), ws),
-        cut(terminated(params_parser, tuple((ws, tag_char('>'))))),
-    ));
+        cut(terminated(params_parser, (ws, tag_char('>')))),
+    );
 
     map(
         constraints_parser,
@@ -410,16 +416,17 @@ fn constraints(input: InputSpan<'_>) -> NomResult<'_, ConstraintsAst<'_>> {
             static_lengths,
             type_params,
         },
-    )(input)
+    )
+    .parse(input)
 }
 
 fn return_type(input: InputSpan<'_>) -> NomResult<'_, SpannedTypeAst<'_>> {
-    preceded(tuple((ws, tag("->"), ws)), cut(with_span(type_definition)))(input)
+    preceded((ws, tag("->"), ws), cut(with_span(type_definition))).parse(input)
 }
 
 fn fn_or_tuple(input: InputSpan<'_>) -> NomResult<'_, TypeAst<'_>> {
     map(
-        tuple((with_span(tuple_definition), opt(return_type))),
+        (with_span(tuple_definition), opt(return_type)),
         |(args, return_type)| {
             if let Some(return_type) = return_type {
                 TypeAst::Function(Box::new(FunctionAst { args, return_type }))
@@ -427,34 +434,38 @@ fn fn_or_tuple(input: InputSpan<'_>) -> NomResult<'_, TypeAst<'_>> {
                 TypeAst::Tuple(args.extra)
             }
         },
-    )(input)
+    )
+    .parse(input)
 }
 
 fn fn_definition(input: InputSpan<'_>) -> NomResult<'_, FunctionAst<'_>> {
     map(
-        tuple((with_span(tuple_definition), return_type)),
+        (with_span(tuple_definition), return_type),
         |(args, return_type)| FunctionAst { args, return_type },
-    )(input)
+    )
+    .parse(input)
 }
 
 fn fn_definition_with_constraints(input: InputSpan<'_>) -> NomResult<'_, TypeAst<'_>> {
     map(
-        tuple((with_span(constraints), ws, cut(with_span(fn_definition)))),
+        (with_span(constraints), ws, cut(with_span(fn_definition))),
         |(constraints, _, function)| TypeAst::FunctionWithConstraints {
             constraints,
             function: Box::new(function),
         },
-    )(input)
+    )
+    .parse(input)
 }
 
 fn not_ident_char(input: InputSpan<'_>) -> NomResult<'_, ()> {
     peek(not(take_while_m_n(1, 1, |c: char| {
         c.is_ascii_alphanumeric() || c == '_'
-    })))(input)
+    })))
+    .parse(input)
 }
 
 fn any_type(input: InputSpan<'_>) -> NomResult<'_, ()> {
-    terminated(map(tag("any"), drop), not_ident_char)(input)
+    terminated(map(tag("any"), drop), not_ident_char).parse(input)
 }
 
 fn dyn_type(input: InputSpan<'_>) -> NomResult<'_, TypeConstraintsAst<'_>> {
@@ -464,14 +475,16 @@ fn dyn_type(input: InputSpan<'_>) -> NomResult<'_, TypeConstraintsAst<'_>> {
             opt(preceded(ws, type_bounds)),
         ),
         Option::unwrap_or_default,
-    )(input)
+    )
+    .parse(input)
 }
 
 fn free_ident(input: InputSpan<'_>) -> NomResult<'_, TypeAst<'_>> {
     map(not_keyword, |id| match *id.fragment() {
         "_" => TypeAst::Some,
         _ => TypeAst::Ident,
-    })(input)
+    })
+    .parse(input)
 }
 
 fn type_definition(input: InputSpan<'_>) -> NomResult<'_, TypeAst<'_>> {
@@ -484,5 +497,6 @@ fn type_definition(input: InputSpan<'_>) -> NomResult<'_, TypeAst<'_>> {
         map(dyn_type, TypeAst::Dyn),
         map(any_type, |()| TypeAst::Any),
         free_ident,
-    ))(input)
+    ))
+    .parse(input)
 }

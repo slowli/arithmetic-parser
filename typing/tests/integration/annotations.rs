@@ -317,7 +317,7 @@ fn dyn_type_in_slice() {
     assert_eq!(err.main_location().span(code), "[dyn Lin; _]");
     assert_matches!(
         err.kind(),
-        ErrorKind::FailedConstraint { ty, .. } if *ty == Type::BOOL
+        ErrorKind::FailedConstraint { ty, .. } if **ty == Type::BOOL
     );
     assert_eq!(
         type_env["lin_tuple"].to_string(),

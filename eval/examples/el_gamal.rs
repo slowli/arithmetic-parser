@@ -43,7 +43,7 @@ fn main() -> anyhow::Result<()> {
     for i in 0..5 {
         println!("\nRunning sample #{i}");
 
-        let modulus = safe_prime::new(BIT_LENGTH)?;
+        let modulus = safe_prime::new(BIT_LENGTH).map_err(|e| anyhow::anyhow!(e))?;
         println!("Generated safe prime: {modulus}");
 
         let prime_subgroup_order: BigUint = &modulus >> 1;

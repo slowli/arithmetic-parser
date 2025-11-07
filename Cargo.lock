@@ -730,9 +730,9 @@ dependencies = [
 
 [[package]]
 name = "glass_pumpkin"
-version = "1.8.0"
+version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17567f20aa6eef73871963dfa01cde07c6300d46f4ab4ed82681100fa0a6012c"
+checksum = "41923edfeadce2964192d185f7f9f9e5d8737e6f5b8ee2580b0f02f717e81bd0"
 dependencies = [
  "core2",
  "num-bigint",

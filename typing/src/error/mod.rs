@@ -10,11 +10,11 @@ pub use self::{
     path::ErrorPathFragment,
 };
 use crate::{
-    alloc::{vec, ToOwned, Vec},
+    PrimitiveType, Tuple, Type,
+    alloc::{ToOwned, Vec, vec},
     arith::{BinaryOpContext, UnaryOpContext},
     ast::AstConversionError,
     visit::VisitMut,
-    PrimitiveType, Tuple, Type,
 };
 
 mod kind;

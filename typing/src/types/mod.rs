@@ -13,9 +13,9 @@ pub use self::{
     tuple::{LengthVar, Slice, Tuple, TupleIndex, TupleLen, UnknownLen},
 };
 use crate::{
-    alloc::{format, vec, Box, Cow},
-    arith::{CompleteConstraints, ConstraintSet, Num, ObjectSafeConstraint, WithBoolean},
     PrimitiveType,
+    alloc::{Box, Cow, format, vec},
+    arith::{CompleteConstraints, ConstraintSet, Num, ObjectSafeConstraint, WithBoolean},
 };
 
 mod fn_type;
@@ -470,7 +470,7 @@ impl<Prim: PrimitiveType> DynConstraints<Prim> {
     }
 
     fn is_concrete(&self) -> bool {
-        self.inner.object.as_ref().map_or(true, Object::is_concrete)
+        self.inner.object.as_ref().is_none_or(Object::is_concrete)
     }
 
     /// Adds the specified `constraint` to these constraints.

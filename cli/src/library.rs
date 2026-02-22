@@ -3,16 +3,17 @@
 use std::{fmt, iter, ops};
 
 use arithmetic_eval::{
+    Environment, Number, Object, Value,
     arith::{
         Arithmetic, ArithmeticExt, CheckedArithmetic, ModularArithmetic, OrdArithmetic,
         StdArithmetic, WrappingArithmetic,
     },
     env::{Assertions, Comparisons, Prelude},
-    fns, Environment, Number, Object, Value,
+    fns,
 };
 use arithmetic_parser::grammars::NumLiteral;
 use arithmetic_typing::{
-    arith::Num as NumType, defs, Function, Object as ObjectType, Type, TypeEnvironment,
+    Function, Object as ObjectType, Type, TypeEnvironment, arith::Num as NumType, defs,
 };
 use num_complex::{Complex, Complex32, Complex64};
 use num_traits::{CheckedRem, Num, WrappingNeg};

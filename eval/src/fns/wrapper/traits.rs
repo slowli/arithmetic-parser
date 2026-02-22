@@ -3,8 +3,8 @@
 use core::{cmp, fmt};
 
 use crate::{
-    alloc::{vec, String, Vec},
     CallContext, Error, ErrorKind, Function, Number, Object, Tuple, Value, ValueType,
+    alloc::{String, Vec, vec},
 };
 
 /// Error raised when a value cannot be converted to the expected type when using

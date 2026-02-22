@@ -1,16 +1,16 @@
 //! Transformation of AST output by the parser into non-recursive format.
 
 use arithmetic_parser::{
-    grammars::Grammar, BinaryOp, Block, Destructure, FnDefinition, InputSpan, Lvalue,
-    ObjectDestructure, Spanned, SpannedLvalue, UnaryOp,
+    BinaryOp, Block, Destructure, FnDefinition, InputSpan, Lvalue, ObjectDestructure, Spanned,
+    SpannedLvalue, UnaryOp, grammars::Grammar,
 };
 
 pub(crate) use self::captures::Captures;
 use self::captures::{CapturesExtractor, CompilerExtTarget};
 use crate::{
+    Error, ErrorKind,
     alloc::{Arc, HashMap, String, ToOwned},
     exec::{Atom, Command, CompiledExpr, Executable, ExecutableModule, FieldName, ModuleId},
-    Error, ErrorKind,
 };
 
 mod captures;
@@ -302,13 +302,13 @@ impl<'a, T: Grammar> CompilerExt<'a> for FnDefinition<'a, T> {
 #[cfg(test)]
 mod tests {
     use arithmetic_parser::{
-        grammars::{F32Grammar, Parse, ParseLiteral, Typed, Untyped},
         Expr, Location, NomResult,
+        grammars::{F32Grammar, Parse, ParseLiteral, Typed, Untyped},
     };
     use nom::Parser as _;
 
     use super::*;
-    use crate::{exec::WildcardId, Environment, Value};
+    use crate::{Environment, Value, exec::WildcardId};
 
     #[test]
     fn compilation_basics() {

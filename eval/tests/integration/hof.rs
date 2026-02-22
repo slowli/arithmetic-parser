@@ -1,8 +1,8 @@
 //! Demonstrates how to define high-order native functions.
 
 use arithmetic_eval::{
-    fns, CallContext, Environment, ErrorKind, EvalResult, ExecutableModule, Function, NativeFn,
-    SpannedValue, Value,
+    CallContext, Environment, ErrorKind, EvalResult, ExecutableModule, Function, NativeFn,
+    SpannedValue, Value, fns,
 };
 use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 

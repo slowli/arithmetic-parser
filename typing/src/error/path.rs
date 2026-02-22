@@ -1,14 +1,14 @@
 //! `ErrorLocation` and related functionality.
 
 use arithmetic_parser::{
-    grammars::Grammar, Destructure, DestructureRest, Expr, Lvalue, Spanned, SpannedExpr,
-    SpannedLvalue,
+    Destructure, DestructureRest, Expr, Lvalue, Spanned, SpannedExpr, SpannedLvalue,
+    grammars::Grammar,
 };
 
 use crate::{
+    TupleIndex,
     alloc::{String, ToOwned},
     ast::{SpannedTypeAst, TupleAst, TypeAst},
-    TupleIndex,
 };
 
 impl TupleIndex {
@@ -247,8 +247,8 @@ impl<'r, 'a> LvalueTree<'r, 'a> {
 #[cfg(test)]
 mod tests {
     use arithmetic_parser::{
-        grammars::{NumGrammar, Parse},
         Statement,
+        grammars::{NumGrammar, Parse},
     };
 
     use super::*;

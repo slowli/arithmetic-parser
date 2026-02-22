@@ -3,14 +3,14 @@
 use assert_matches::assert_matches;
 use nom::Err as NomErr;
 
-use super::{sp, span, FieldGrammar};
+use super::{FieldGrammar, sp, span};
 use crate::{
+    BinaryOp, ErrorKind, Expr, InputSpan, UnaryOp,
     grammars::{F32Grammar, Untyped},
     parser::{
-        expr::{binary_expr, expr},
         Complete,
+        expr::{binary_expr, expr},
     },
-    BinaryOp, ErrorKind, Expr, InputSpan, UnaryOp,
 };
 
 #[test]
@@ -45,8 +45,8 @@ fn evaluation_order_with_bool_expressions() {
     let input = InputSpan::new("x == 2 + 3 * 4 && y == G^x;");
     let output = expr::<FieldGrammar, Complete>(input).unwrap().1.extra;
     assert_matches!(
-        output,
-        Expr::Binary { op, ref lhs, ref rhs } if op == BinaryOp::from_span(span(15, "&&")) &&
+        &output,
+        Expr::Binary { op, lhs, rhs } if *op == BinaryOp::from_span(span(15, "&&")) &&
             *lhs.fragment() == "x == 2 + 3 * 4" &&
             *rhs.fragment() == "y == G^x"
     );
@@ -63,8 +63,8 @@ fn evaluation_order_with_complex_bool_expressions() {
     let input = InputSpan::new("x == 2 * z + 3 * 4 && (y, z) == (G^x, 2);");
     let output = expr::<FieldGrammar, Complete>(input).unwrap().1.extra;
     assert_matches!(
-        output,
-        Expr::Binary { op, ref lhs, ref rhs } if op == BinaryOp::from_span(span(19, "&&")) &&
+        &output,
+        Expr::Binary { op, lhs, rhs } if *op == BinaryOp::from_span(span(19, "&&")) &&
             *lhs.fragment() == "x == 2 * z + 3 * 4" &&
             *rhs.fragment() == "(y, z) == (G^x, 2)"
     );

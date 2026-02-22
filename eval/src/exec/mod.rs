@@ -2,7 +2,7 @@
 
 use core::fmt;
 
-use arithmetic_parser::{grammars::Grammar, Block};
+use arithmetic_parser::{Block, grammars::Grammar};
 
 pub use self::module_id::{IndexedId, ModuleId, WildcardId};
 pub(crate) use self::{
@@ -11,11 +11,11 @@ pub(crate) use self::{
 };
 pub use crate::compiler::CompilerExt;
 use crate::{
+    Value,
     alloc::Arc,
     compiler::{Captures, Compiler},
     env::Environment,
     error::{Backtrace, Error, ErrorKind, ErrorWithBacktrace},
-    Value,
 };
 
 mod command;

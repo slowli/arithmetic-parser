@@ -231,10 +231,10 @@ mod alloc {
     );
 
     #[cfg(not(feature = "hashbrown"))]
-    pub(crate) use std::collections::{hash_map, HashMap, HashSet};
+    pub(crate) use std::collections::{HashMap, HashSet, hash_map};
 
     #[cfg(feature = "hashbrown")]
-    pub(crate) use hashbrown::{hash_map, HashMap, HashSet};
+    pub(crate) use hashbrown::{HashMap, HashSet, hash_map};
 }
 
 pub use self::{

@@ -6,10 +6,10 @@ pub use arithmetic_parser::UnsupportedType;
 use arithmetic_parser::{BinaryOp, LocatedSpan, Location, LvalueLen, Op, UnaryOp};
 
 use crate::{
-    alloc::{format, vec, Arc, Box, HashSet, String, ToOwned, ToString, Vec},
+    Value,
+    alloc::{Arc, Box, HashSet, String, ToOwned, ToString, Vec, format, vec},
     exec::ModuleId,
     fns::FromValueError,
-    Value,
 };
 
 /// Arithmetic errors raised by [`Arithmetic`] operations on primitive values.
@@ -633,7 +633,7 @@ impl fmt::Display for ErrorWithBacktrace {
             for (index, call) in self.backtrace.calls.iter().enumerate() {
                 write!(formatter, "{:>4}: {} ", index + 1, call.fn_name)?;
 
-                if let Some(ref def_span) = call.def_location {
+                if let Some(def_span) = &call.def_location {
                     write!(formatter, "(module `{}`)", def_span.module_id)?;
                 } else {
                     formatter.write_str("(native)")?;
@@ -669,9 +669,10 @@ mod tests {
             def: LvalueLen::AtLeast(2),
             call: 1,
         };
-        assert!(err
-            .to_string()
-            .ends_with("definition requires at least 2 arg(s), call has 1"));
+        assert!(
+            err.to_string()
+                .ends_with("definition requires at least 2 arg(s), call has 1")
+        );
     }
 
     #[test]

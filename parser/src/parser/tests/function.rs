@@ -3,13 +3,14 @@
 use assert_matches::assert_matches;
 use nom::Err as NomErr;
 
-use super::{args, lsp, lvalue_tuple, sp, span, FieldGrammar, Literal, LiteralType, ValueType};
+use super::{FieldGrammar, Literal, LiteralType, ValueType, args, lsp, lvalue_tuple, sp, span};
 use crate::{
-    parser::{
-        expr::{expr, simple_expr},
-        fn_def, Complete,
-    },
     BinaryOp, Block, ErrorKind, Expr, FnDefinition, InputSpan, Lvalue, Spanned,
+    parser::{
+        Complete,
+        expr::{expr, simple_expr},
+        fn_def,
+    },
 };
 
 #[test]

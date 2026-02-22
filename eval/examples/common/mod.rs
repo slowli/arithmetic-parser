@@ -1,8 +1,8 @@
 use num_bigint::BigUint;
 use num_traits::Zero;
-use rand::RngCore;
+use rand::Rng;
 
-fn gen_uint(rng: &mut impl RngCore, bit_size: u64) -> BigUint {
+fn gen_uint(rng: &mut impl Rng, bit_size: u64) -> BigUint {
     let byte_size = bit_size.div_ceil(8);
     let mut bytes = vec![0u8; byte_size as usize];
     rng.fill_bytes(&mut bytes);
@@ -17,7 +17,7 @@ fn gen_uint(rng: &mut impl RngCore, bit_size: u64) -> BigUint {
     output
 }
 
-fn gen_uint_below(rng: &mut impl RngCore, bound: &BigUint) -> BigUint {
+fn gen_uint_below(rng: &mut impl Rng, bound: &BigUint) -> BigUint {
     assert!(!bound.is_zero());
 
     let bits = bound.bits();
@@ -29,7 +29,7 @@ fn gen_uint_below(rng: &mut impl RngCore, bound: &BigUint) -> BigUint {
     }
 }
 
-pub(crate) fn gen_uint_range(rng: &mut impl RngCore, low: &BigUint, hi: &BigUint) -> BigUint {
+pub(crate) fn gen_uint_range(rng: &mut impl Rng, low: &BigUint, hi: &BigUint) -> BigUint {
     assert!(*low < *hi);
     low + gen_uint_below(rng, &(hi - low))
 }

@@ -1,13 +1,13 @@
 //! Tests for tuples and destructuring.
 
-use super::{lsp, lvalue_tuple, sp, span, FieldGrammar, Literal, ValueType};
+use super::{FieldGrammar, Literal, ValueType, lsp, lvalue_tuple, sp, span};
 use crate::{
-    parser::{
-        destructure,
-        expr::{expr, paren_expr},
-        lvalue, Complete,
-    },
     BinaryOp, Destructure, DestructureRest, Expr, InputSpan, Lvalue, Spanned,
+    parser::{
+        Complete, destructure,
+        expr::{expr, paren_expr},
+        lvalue,
+    },
 };
 
 #[test]

@@ -158,8 +158,8 @@
 use core::{fmt, marker::PhantomData, str::FromStr};
 
 use arithmetic_parser::{
-    grammars::{Features, Grammar, Parse, ParseLiteral},
     InputSpan, NomResult,
+    grammars::{Features, Grammar, Parse, ParseLiteral},
 };
 
 use self::{arith::ConstraintSet, ast::TypeAst};
@@ -201,10 +201,10 @@ mod alloc {
     );
 
     #[cfg(not(feature = "hashbrown"))]
-    pub(crate) use std::collections::{hash_map, HashMap, HashSet};
+    pub(crate) use std::collections::{HashMap, HashSet, hash_map};
 
     #[cfg(feature = "hashbrown")]
-    pub(crate) use hashbrown::{hash_map, HashMap, HashSet};
+    pub(crate) use hashbrown::{HashMap, HashSet, hash_map};
 }
 
 /// Primitive types in a certain type system.
@@ -317,7 +317,7 @@ impl<T: ParseLiteral> Grammar for Annotated<T> {
     type Type<'a> = TypeAst<'a>;
 
     fn parse_type(input: InputSpan<'_>) -> NomResult<'_, Self::Type<'_>> {
-        use nom::{combinator::map, Parser as _};
+        use nom::{Parser as _, combinator::map};
         map(TypeAst::parse, |ast| ast.extra).parse(input)
     }
 }

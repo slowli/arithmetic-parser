@@ -113,8 +113,8 @@
 //! let block = Untyped::<F32Grammar>::parse_statements(PROGRAM)?;
 //! // First statement is an assignment.
 //! assert_matches!(
-//!     block.statements[0].extra,
-//!     Statement::Assignment { ref lhs, .. } if *lhs.fragment() == "x"
+//!     &block.statements[0].extra,
+//!     Statement::Assignment { lhs, .. } if *lhs.fragment() == "x"
 //! );
 //! // The RHS of the second statement is a function.
 //! let some_function = match &block.statements[1].extra {
@@ -124,7 +124,7 @@
 //! // This function has a single argument and a single statement in the body.
 //! assert_matches!(
 //!     some_function,
-//!     Expr::FnDefinition(FnDefinition { ref args, ref body, .. })
+//!     Expr::FnDefinition(FnDefinition { args, body, .. })
 //!         if args.extra.len() == LvalueLen::Exact(2)
 //!             && body.statements.is_empty()
 //!             && body.return_value.is_some()
@@ -160,7 +160,7 @@ pub use crate::{
     error::{Context, Error, ErrorKind, UnsupportedType},
     ops::{BinaryOp, Op, OpPriority, UnaryOp},
     parser::is_valid_variable_name,
-    spans::{with_span, InputSpan, LocatedSpan, Location, NomResult, Spanned},
+    spans::{InputSpan, LocatedSpan, Location, NomResult, Spanned, with_span},
 };
 
 mod ast;

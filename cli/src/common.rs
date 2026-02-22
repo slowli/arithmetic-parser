@@ -6,27 +6,26 @@ use std::{
 };
 
 use arithmetic_eval::{
+    Environment, ExecutableModule, Function, Object, Value,
     error::{BacktraceElement, Error as EvalError, ErrorWithBacktrace, LocationInModule},
     exec::{IndexedId, ModuleId},
-    Environment, ExecutableModule, Function, Object, Value,
 };
 use arithmetic_parser::{
-    grammars::{Grammar, NumGrammar, Parse},
     Block, Error as ParseError, LocatedSpan, LvalueLen,
+    grammars::{Grammar, NumGrammar, Parse},
 };
 use arithmetic_typing::{
+    Annotated, Type, TypeEnvironment,
     arith::{Num, NumArithmetic},
     error::Errors as TypingErrors,
-    Annotated, Type, TypeEnvironment,
 };
 use codespan::{FileId, Files};
 use codespan_reporting::{
     diagnostic::{Diagnostic, Label, Severity},
     files::Error as FilesError,
     term::{
-        emit_to_write_style,
+        Config as ReportingConfig, emit_to_write_style,
         termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor},
-        Config as ReportingConfig,
     },
 };
 use unindent::unindent;

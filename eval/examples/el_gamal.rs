@@ -8,9 +8,10 @@
 use std::cell::RefCell;
 
 use arithmetic_eval::{
+    Environment, ExecutableModule, Value,
     arith::{ArithmeticExt, ModularArithmetic},
     env::{Assertions, Prelude},
-    fns, Environment, ExecutableModule, Value,
+    fns,
 };
 use arithmetic_parser::grammars::{NumGrammar, Parse, Untyped};
 use glass_pumpkin::safe_prime;

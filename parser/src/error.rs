@@ -3,8 +3,8 @@
 use core::fmt;
 
 use nom::{
-    error::{ContextError, ErrorKind as NomErrorKind, FromExternalError, ParseError},
     Input,
+    error::{ContextError, ErrorKind as NomErrorKind, FromExternalError, ParseError},
 };
 
 use crate::{

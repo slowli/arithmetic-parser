@@ -2,7 +2,7 @@
 
 use core::{cmp::Ordering, fmt};
 
-use crate::{fns, Object, Value};
+use crate::{Object, Value, fns};
 
 /// Commonly used constants and functions from the [`fns` module](fns).
 ///

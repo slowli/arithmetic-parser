@@ -3,12 +3,13 @@
 use std::fs;
 
 use arithmetic_eval::{
+    ExecutableModule, Value,
     env::{Assertions, Environment, Prelude},
-    fns, ExecutableModule, Value,
+    fns,
 };
 use arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
 use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag, TagEnd};
-use rand::Rng;
+use rand::RngExt;
 
 fn read_file(path: &str) -> String {
     fs::read_to_string(path).unwrap_or_else(|err| panic!("Cannot read file {path}: {err}"))

@@ -4,11 +4,11 @@ use core::{cmp::Ordering, iter, ops, ptr};
 
 use self::fns::{MonoTypeTransformer, ParamMapping};
 use crate::{
-    alloc::{vec, Box, HashMap, HashSet, String, Vec},
+    Function, Object, PrimitiveType, Tuple, TupleLen, Type, TypeVar, UnknownLen,
+    alloc::{Box, HashMap, HashSet, String, Vec, vec},
     arith::{CompleteConstraints, Constraint},
     error::{ErrorKind, ErrorPathFragment, OpErrors, TupleContext},
     visit::{self, Visit, VisitMut},
-    Function, Object, PrimitiveType, Tuple, TupleLen, Type, TypeVar, UnknownLen,
 };
 
 mod fns;

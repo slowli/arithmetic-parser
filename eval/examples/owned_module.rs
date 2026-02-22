@@ -1,12 +1,13 @@
 //! Shows how to use owned modules.
 
 use arithmetic_eval::{
+    ErrorKind, ExecutableModule, Value,
     env::{Assertions, Environment, Prelude},
-    fns, ErrorKind, ExecutableModule, Value,
+    fns,
 };
 use arithmetic_parser::{
-    grammars::{F64Grammar, MockTypes, Parse, WithMockedTypes},
     BinaryOp,
+    grammars::{F64Grammar, MockTypes, Parse, WithMockedTypes},
 };
 use assert_matches::assert_matches;
 

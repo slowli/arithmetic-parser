@@ -7,7 +7,7 @@ documented in this file. The project adheres to [Semantic Versioning](http://sem
 
 ### Changed
 
-- Bump minimum supported Rust version to 1.75. (#233)
+- Bump minimum supported Rust version to 1.85 and switch to 2024 edition. (#233)
 
 - Update `nom` dependency to 8.0.0. (#233)
 

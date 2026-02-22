@@ -1,10 +1,10 @@
 //! Flow control functions.
 
 use crate::{
-    alloc::{vec, Vec},
+    CallContext, ErrorKind, EvalResult, NativeFn, SpannedValue, Value,
+    alloc::{Vec, vec},
     error::AuxErrorInfo,
     fns::extract_fn,
-    CallContext, ErrorKind, EvalResult, NativeFn, SpannedValue, Value,
 };
 
 /// `if` function that eagerly evaluates "if" / "else" terms.

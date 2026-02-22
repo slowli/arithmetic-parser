@@ -3,8 +3,8 @@
 use core::{fmt, iter::FromIterator, ops};
 
 use crate::{
-    alloc::{vec, Vec},
     Value,
+    alloc::{Vec, vec},
 };
 
 /// Tuple of zero or more values.

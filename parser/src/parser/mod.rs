@@ -1,26 +1,26 @@
 //! Parsers implemented with the help of `nom`.
 
 use nom::{
+    Err as NomErr, Parser as _,
     branch::alt,
     bytes::complete::tag,
     character::complete::char as tag_char,
     combinator::{cut, map, not, opt, peek},
     multi::many0,
     sequence::{delimited, preceded, terminated},
-    Err as NomErr, Parser as _,
 };
 
 pub use self::helpers::is_valid_variable_name;
 use self::{
     expr::expr,
-    helpers::{ws, Complete, GrammarType, Streaming},
+    helpers::{Complete, GrammarType, Streaming, ws},
     lvalue::{destructure, lvalue},
 };
 use crate::{
-    alloc::{vec, Box},
+    Block, Error, ErrorKind, FnDefinition, InputSpan, NomResult, SpannedStatement, Statement,
+    alloc::{Box, vec},
     grammars::Parse,
     spans::with_span,
-    Block, Error, ErrorKind, FnDefinition, InputSpan, NomResult, SpannedStatement, Statement,
 };
 
 mod expr;

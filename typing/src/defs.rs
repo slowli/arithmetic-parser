@@ -4,7 +4,7 @@
 
 use core::iter;
 
-use crate::{arith::WithBoolean, Function, Object, PrimitiveType, Type, UnknownLen};
+use crate::{Function, Object, PrimitiveType, Type, UnknownLen, arith::WithBoolean};
 
 /// Map containing type definitions for all variables from `Prelude` in the eval crate.
 ///

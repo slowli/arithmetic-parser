@@ -2,14 +2,14 @@
 
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
+    Type, TypeEnvironment,
     arith::NumArithmetic,
     defs::Prelude,
     error::{ErrorContext, ErrorKind, ErrorPathFragment},
-    Type, TypeEnvironment,
 };
 use assert_matches::assert_matches;
 
-use crate::{errors::fn_arg, hash_fn_type, ErrorsExt, F32Grammar};
+use crate::{ErrorsExt, F32Grammar, errors::fn_arg, hash_fn_type};
 
 #[test]
 fn recursive_object_constraint() {

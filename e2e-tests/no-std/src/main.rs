@@ -9,9 +9,10 @@ use alloc::vec::Vec;
 use core::cell::RefCell;
 
 use arithmetic_eval::{
+    CallContext, Environment, EvalResult, ExecutableModule, NativeFn, SpannedValue, Value,
     arith::CheckedArithmetic,
     env::{Assertions, Prelude},
-    fns, CallContext, Environment, EvalResult, ExecutableModule, NativeFn, SpannedValue, Value,
+    fns,
 };
 use arithmetic_parser::grammars::{NumGrammar, Parse, Untyped};
 use cortex_m_rt::entry;
@@ -20,8 +21,8 @@ use embedded_alloc::LlffHeap as Heap;
 #[cfg(target_arch = "arm")]
 use panic_halt as _;
 use rand_chacha::{
-    rand_core::{RngCore, SeedableRng},
     ChaChaRng,
+    rand_core::{Rng, SeedableRng},
 };
 
 #[global_allocator]

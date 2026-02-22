@@ -81,7 +81,7 @@ impl<'a, T: Grammar> Expr<'a, T> {
     /// Returns LHS of the binary expression. If this is not a binary expression, returns `None`.
     pub fn binary_lhs(&self) -> Option<&SpannedExpr<'a, T>> {
         match self {
-            Expr::Binary { ref lhs, .. } => Some(lhs),
+            Expr::Binary { lhs, .. } => Some(lhs),
             _ => None,
         }
     }
@@ -89,7 +89,7 @@ impl<'a, T: Grammar> Expr<'a, T> {
     /// Returns RHS of the binary expression. If this is not a binary expression, returns `None`.
     pub fn binary_rhs(&self) -> Option<&SpannedExpr<'a, T>> {
         match self {
-            Expr::Binary { ref rhs, .. } => Some(rhs),
+            Expr::Binary { rhs, .. } => Some(rhs),
             _ => None,
         }
     }

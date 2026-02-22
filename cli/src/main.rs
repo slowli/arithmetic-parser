@@ -14,9 +14,9 @@ use codespan_reporting::term::termcolor::ColorChoice;
 use num_complex::{Complex32, Complex64};
 
 use crate::{
-    common::{Env, ParseAndEvalResult, Reporter, ERROR_EXIT_CODE},
+    common::{ERROR_EXIT_CODE, Env, ParseAndEvalResult, Reporter},
     library::{
-        create_complex_env, create_float_env, create_int_env, create_modular_env, ReplLiteral,
+        ReplLiteral, create_complex_env, create_float_env, create_int_env, create_modular_env,
     },
     repl::repl,
 };

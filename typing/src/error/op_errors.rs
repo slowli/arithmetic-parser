@@ -2,13 +2,13 @@
 
 use core::ops;
 
-use arithmetic_parser::{grammars::Grammar, Destructure, Spanned, SpannedExpr, SpannedLvalue};
+use arithmetic_parser::{Destructure, Spanned, SpannedExpr, SpannedLvalue, grammars::Grammar};
 
 use crate::{
+    PrimitiveType,
     alloc::Vec,
     ast::TypeAst,
     error::{Error, ErrorContext, ErrorKind, ErrorPathFragment},
-    PrimitiveType,
 };
 
 /// Error container tied to a particular top-level operation that has a certain span

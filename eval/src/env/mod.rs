@@ -4,10 +4,11 @@ use core::{iter, ops};
 
 pub use self::variable_map::{Assertions, Comparisons, Prelude};
 use crate::{
-    alloc::{hash_map, Arc, HashMap, String, ToOwned},
+    NativeFn, Value,
+    alloc::{Arc, HashMap, String, ToOwned, hash_map},
     arith::{OrdArithmetic, StdArithmetic},
     exec::Operations,
-    fns, NativeFn, Value,
+    fns,
 };
 
 mod variable_map;

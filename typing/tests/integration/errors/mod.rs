@@ -2,14 +2,14 @@
 
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
+    DynConstraints, TupleIndex, TupleLen, Type, TypeEnvironment,
     arith::{BinaryOpContext, Linearity, NumArithmetic},
     defs::Prelude,
     error::{ErrorContext, ErrorKind, ErrorPathFragment, TupleContext},
-    DynConstraints, TupleIndex, TupleLen, Type, TypeEnvironment,
 };
 use assert_matches::assert_matches;
 
-use crate::{assert_incompatible_types, hash_fn_type, zip_fn_type, ErrorsExt, F32Grammar};
+use crate::{ErrorsExt, F32Grammar, assert_incompatible_types, hash_fn_type, zip_fn_type};
 
 mod annotations;
 mod multiple;
@@ -36,7 +36,7 @@ fn type_recursion() {
     assert_matches!(err.context(), ErrorContext::BinaryOp(_));
     assert_matches!(
         err.kind(),
-        ErrorKind::RecursiveType(ref ty) if ty.to_string() == "('T, Num)"
+        ErrorKind::RecursiveType(ty) if ty.to_string() == "('T, Num)"
     );
     assert_eq!(
         err.kind().to_string(),
@@ -56,7 +56,7 @@ fn indirect_type_recursion() {
     let err = type_env.process_statements(&block).unwrap_err().single();
     assert_matches!(
         err.kind(),
-        ErrorKind::RecursiveType(ref ty) if ty.to_string() == "(Num, 'T)"
+        ErrorKind::RecursiveType(ty) if ty.to_string() == "(Num, 'T)"
     );
 }
 
@@ -68,7 +68,7 @@ fn recursion_via_fn() {
     let err = type_env.process_statements(&block).unwrap_err().single();
     assert_matches!(
         err.kind(),
-        ErrorKind::RecursiveType(ref ty) if ty.to_string() == "(Num, 'T) -> _"
+        ErrorKind::RecursiveType(ty) if ty.to_string() == "(Num, 'T) -> _"
     );
 }
 

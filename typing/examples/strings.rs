@@ -4,14 +4,14 @@
 use std::{fmt, str::FromStr};
 
 use arithmetic_parser::{
-    grammars::{Parse, ParseLiteral},
     BinaryOp, InputSpan, NomResult,
+    grammars::{Parse, ParseLiteral},
 };
 use arithmetic_typing::{
+    Annotated, PrimitiveType, Type, TypeEnvironment,
     arith::*,
     defs::Assertions,
     error::{ErrorPathFragment, OpErrors},
-    Annotated, PrimitiveType, Type, TypeEnvironment,
 };
 use nom::Parser as _;
 

@@ -1,22 +1,22 @@
 //! Lvalue-related parsing functions.
 
 use nom::{
+    Err as NomErr, Parser,
     branch::alt,
     bytes::complete::tag,
     character::complete::char as tag_char,
     combinator::{cut, map, not, opt, peek},
     multi::{separated_list0, separated_list1},
     sequence::{delimited, preceded, terminated},
-    Err as NomErr, Parser,
 };
 
-use super::helpers::{comma_sep, var_name, ws, GrammarType};
+use super::helpers::{GrammarType, comma_sep, var_name, ws};
 use crate::{
-    alloc::{vec, Vec},
-    grammars::{Features, Grammar, Parse},
-    spans::with_span,
     Destructure, DestructureRest, ErrorKind, InputSpan, Lvalue, NomResult, ObjectDestructure,
     ObjectDestructureField, Spanned, SpannedLvalue,
+    alloc::{Vec, vec},
+    grammars::{Features, Grammar, Parse},
+    spans::with_span,
 };
 
 fn comma_separated_lvalues<T, Ty>(input: InputSpan<'_>) -> NomResult<'_, Vec<GrammarLvalue<'_, T>>>

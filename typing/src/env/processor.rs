@@ -3,20 +3,20 @@
 use core::{fmt, iter, mem};
 
 use arithmetic_parser::{
-    grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Destructure, DestructureRest, Expr,
-    FnDefinition, Lvalue, ObjectDestructure, ObjectExpr, Spanned, SpannedExpr, SpannedLvalue,
-    SpannedStatement, Statement, UnaryOp,
+    BinaryOp, Block, Destructure, DestructureRest, Expr, FnDefinition, Lvalue, ObjectDestructure,
+    ObjectExpr, Spanned, SpannedExpr, SpannedLvalue, SpannedStatement, Statement, UnaryOp,
+    grammars::Grammar, is_valid_variable_name,
 };
 
 use crate::{
-    alloc::{vec, HashMap, String, ToOwned, Vec},
+    Function, Object, PrimitiveType, Slice, Tuple, TupleLen, Type,
+    alloc::{HashMap, String, ToOwned, Vec, vec},
     arith::{BinaryOpContext, UnaryOpContext},
     ast::{AstConversionState, SpannedTypeAst, TypeAst},
     env::{FullArithmetic, TypeEnvironment},
     error::{Error, ErrorContext, ErrorKind, Errors, OpErrors, TupleContext},
     types::IndexError,
     visit::VisitMut,
-    Function, Object, PrimitiveType, Slice, Tuple, TupleLen, Type,
 };
 
 /// Processor for deriving type information.
@@ -98,7 +98,7 @@ where
 
             Expr::Literal(lit) => Type::Prim(self.arithmetic.type_of_literal(lit)),
 
-            Expr::Tuple(ref terms) => {
+            Expr::Tuple(terms) => {
                 let elements: Vec<_> = terms
                     .iter()
                     .map(|term| self.process_expr_inner(term))

@@ -3,16 +3,16 @@
 use core::iter;
 
 use arithmetic_parser::{
-    grammars::Grammar, is_valid_variable_name, BinaryOp, Block, Expr, FnDefinition, ObjectExpr,
-    Spanned, SpannedExpr, SpannedStatement, Statement,
+    BinaryOp, Block, Expr, FnDefinition, ObjectExpr, Spanned, SpannedExpr, SpannedStatement,
+    Statement, grammars::Grammar, is_valid_variable_name,
 };
 
-use super::{captures::extract_vars_iter, CapturesExtractor, Compiler};
+use super::{CapturesExtractor, Compiler, captures::extract_vars_iter};
 use crate::{
+    Error, ErrorKind,
     alloc::{HashMap, String, ToOwned, Vec},
     error::RepeatedAssignmentContext,
     exec::{Atom, Command, CompiledExpr, Executable, ExecutableFn, FieldName, LocatedAtom},
-    Error, ErrorKind,
 };
 
 impl Compiler {

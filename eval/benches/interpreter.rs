@@ -11,16 +11,17 @@
 use std::cmp::Ordering;
 
 use arithmetic_eval::{
+    CallContext, Environment, NativeFn, Value,
     env::Prelude,
     exec::{ExecutableModule, WildcardId},
-    fns, CallContext, Environment, NativeFn, Value,
+    fns,
 };
 use arithmetic_parser::{
-    grammars::{F32Grammar, Parse, Untyped},
     Location,
+    grammars::{F32Grammar, Parse, Untyped},
 };
-use criterion::{criterion_group, criterion_main, BatchSize, Bencher, Criterion, Throughput};
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use criterion::{BatchSize, Bencher, Criterion, Throughput, criterion_group, criterion_main};
+use rand::{RngExt, SeedableRng, rngs::StdRng};
 use typed_arena::Arena;
 
 const SEED: u64 = 123;

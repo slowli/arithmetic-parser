@@ -4,9 +4,9 @@ use core::{cmp::Ordering, fmt};
 
 use super::extract_fn;
 use crate::{
+    CallContext, ErrorKind, EvalResult, NativeFn, SpannedValue, Value,
     alloc::Vec,
     error::{AuxErrorInfo, Error},
-    CallContext, ErrorKind, EvalResult, NativeFn, SpannedValue, Value,
 };
 
 /// Assertion function.
@@ -372,7 +372,7 @@ mod tests {
     use assert_matches::assert_matches;
 
     use super::*;
-    use crate::{arith::CheckedArithmetic, exec::WildcardId, Environment, Object};
+    use crate::{Environment, Object, arith::CheckedArithmetic, exec::WildcardId};
 
     fn span_value<T>(value: Value<T>) -> SpannedValue<T> {
         Location::from_str("", ..).copy_with_extra(value)

@@ -7,8 +7,8 @@ use core::{
 };
 
 use crate::{
-    alloc::{hash_map, HashMap, String},
     Value,
+    alloc::{HashMap, String, hash_map},
 };
 
 /// Object with zero or more named fields.

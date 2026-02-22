@@ -5,8 +5,8 @@ use core::ops;
 use nom::Input;
 
 use crate::{
-    alloc::{format, String},
     Error,
+    alloc::{String, format},
 };
 
 /// Code span.

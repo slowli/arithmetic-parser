@@ -1,11 +1,11 @@
 //! Functional type substitutions.
 
 use crate::{
-    alloc::{hash_map::Entry, Arc, HashMap},
+    Function, Object, PrimitiveType, TupleLen, Type, UnknownLen,
+    alloc::{Arc, HashMap, hash_map::Entry},
     arith::{CompleteConstraints, Substitutions},
     types::{FnParams, ParamConstraints, ParamQuantifier},
     visit::{self, VisitMut},
-    Function, Object, PrimitiveType, TupleLen, Type, UnknownLen,
 };
 
 impl<Prim: PrimitiveType> Function<Prim> {

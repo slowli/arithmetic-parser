@@ -2,7 +2,7 @@
 
 use arithmetic_parser::grammars::{NumGrammar, Parse};
 use arithmetic_typing::{
-    defs::Prelude, error::ErrorKind, Annotated, TupleLen, Type, TypeEnvironment,
+    Annotated, TupleLen, Type, TypeEnvironment, defs::Prelude, error::ErrorKind,
 };
 use assert_matches::assert_matches;
 

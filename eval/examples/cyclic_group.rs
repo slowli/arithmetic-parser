@@ -10,19 +10,19 @@
 use std::{cell::RefCell, fmt};
 
 use arithmetic_eval::{
+    CallContext, Environment, EvalResult, ExecutableModule, NativeFn, Number, SpannedValue, Value,
     arith::{Arithmetic, ArithmeticExt, ModularArithmetic},
     env::{Assertions, Prelude},
     error::{ArithmeticError, AuxErrorInfo, ErrorKind},
-    fns, CallContext, Environment, EvalResult, ExecutableModule, NativeFn, Number, SpannedValue,
-    Value,
+    fns,
 };
 use arithmetic_parser::{
-    grammars::{Features, NumGrammar, NumLiteral, Parse, Untyped},
     InputSpan, NomResult,
+    grammars::{Features, NumGrammar, NumLiteral, Parse, Untyped},
 };
 use glass_pumpkin::safe_prime;
 use num_bigint::BigUint;
-use sha2::{digest::Digest, Sha256};
+use sha2::{Sha256, digest::Digest};
 
 use self::common::gen_uint_range;
 
@@ -93,7 +93,7 @@ impl CyclicGroupArithmetic {
     }
 
     /// Returns a closure generating random scalars.
-    fn rand_scalar(&self) -> impl Fn() -> GroupLiteral {
+    fn rand_scalar(&self) -> impl Fn() -> GroupLiteral + use<> {
         let rng = RefCell::new(rand::rng());
         let two = BigUint::from(2_u32);
         let prime_subgroup_order = self.for_scalars.modulus().to_owned();
@@ -119,7 +119,7 @@ impl CyclicGroupArithmetic {
     }
 
     /// Converts a group element to a scalar.
-    fn to_scalar(&self) -> impl Fn(GroupLiteral) -> GroupLiteral {
+    fn to_scalar(&self) -> impl Fn(GroupLiteral) -> GroupLiteral + use<> {
         let prime_subgroup_order = self.for_scalars.modulus().to_owned();
         move |value| match value {
             GroupLiteral::Scalar(sc) => GroupLiteral::Scalar(sc),

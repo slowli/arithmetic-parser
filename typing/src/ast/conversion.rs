@@ -8,6 +8,8 @@ use arithmetic_parser::{
 use nom::Err as NomErr;
 
 use crate::{
+    DynConstraints, Function, Object, PrimitiveType, Slice, Tuple, Type, TypeEnvironment,
+    UnknownLen,
     alloc::{Box, HashMap, HashSet, String, ToOwned},
     arith::{CompleteConstraints, Constraint, ConstraintSet},
     ast::{
@@ -16,8 +18,6 @@ use crate::{
     },
     error::{Error, Errors},
     types::{ParamConstraints, ParamQuantifier},
-    DynConstraints, Function, Object, PrimitiveType, Slice, Tuple, Type, TypeEnvironment,
-    UnknownLen,
 };
 
 /// Kinds of errors that can occur when converting `*Ast` types into their "main" counterparts.
@@ -529,7 +529,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        alloc::{vec, ToString},
+        alloc::{ToString, vec},
         arith::Num,
     };
 

@@ -1,9 +1,9 @@
 //! Demonstrates how to use custom comparison functions.
 
 use arithmetic_eval::{
+    Environment, ExecutableModule,
     arith::{ArithmeticExt, StdArithmetic},
     env::{Assertions, Prelude},
-    Environment, ExecutableModule,
 };
 use arithmetic_parser::grammars::{NumGrammar, Parse, Untyped};
 use num_complex::Complex64;

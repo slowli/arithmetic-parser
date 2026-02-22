@@ -2,14 +2,14 @@
 
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
+    TupleLen, Type, TypeEnvironment,
     arith::NumArithmetic,
     defs::{Assertions, Prelude},
     error::{ErrorKind, TupleContext},
-    TupleLen, Type, TypeEnvironment,
 };
 use assert_matches::assert_matches;
 
-use crate::{hash_fn_type, ErrorsExt, F32Grammar};
+use crate::{ErrorsExt, F32Grammar, hash_fn_type};
 
 #[test]
 fn object_expr_basics() {

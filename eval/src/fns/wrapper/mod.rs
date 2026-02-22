@@ -7,7 +7,7 @@ pub use self::traits::{
     TryFromValue,
 };
 use crate::{
-    alloc::Vec, error::AuxErrorInfo, CallContext, ErrorKind, EvalResult, NativeFn, SpannedValue,
+    CallContext, ErrorKind, EvalResult, NativeFn, SpannedValue, alloc::Vec, error::AuxErrorInfo,
 };
 
 mod traits;
@@ -235,10 +235,10 @@ mod tests {
 
     use super::*;
     use crate::{
-        alloc::{format, ToOwned},
+        Function, Object, Tuple, Value,
+        alloc::{ToOwned, format},
         env::{Environment, Prelude},
         exec::{ExecutableModule, WildcardId},
-        Function, Object, Tuple, Value,
     };
 
     #[test]
@@ -329,11 +329,12 @@ mod tests {
         env.insert_wrapped_fn("sum_arrays", sum_arrays);
 
         let err = module.with_env(&env)?.run().unwrap_err();
-        assert!(err
-            .source()
-            .kind()
-            .to_short_string()
-            .contains("Summed arrays must have the same size"));
+        assert!(
+            err.source()
+                .kind()
+                .to_short_string()
+                .contains("Summed arrays must have the same size")
+        );
         Ok(())
     }
 
@@ -379,7 +380,7 @@ mod tests {
 
         assert_matches!(
             err.source().kind(),
-            ErrorKind::NativeCall(ref msg) if msg.contains("Assertion failed")
+            ErrorKind::NativeCall(msg) if msg.contains("Assertion failed")
         );
         Ok(())
     }

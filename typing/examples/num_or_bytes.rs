@@ -3,12 +3,12 @@
 use std::{fmt, str::FromStr};
 
 use arithmetic_parser::{
-    grammars::{NumGrammar, NumLiteral, Parse},
     BinaryOp, InputSpan, NomResult,
+    grammars::{NumGrammar, NumLiteral, Parse},
 };
 use arithmetic_typing::{
-    arith::*, defs::Prelude, error::OpErrors, visit::Visit, Annotated, PrimitiveType, Type,
-    TypeEnvironment,
+    Annotated, PrimitiveType, Type, TypeEnvironment, arith::*, defs::Prelude, error::OpErrors,
+    visit::Visit,
 };
 use nom::Parser as _;
 

@@ -4,6 +4,7 @@ use std::{fmt, str::FromStr};
 
 use arithmetic_parser::grammars::{Features, NumGrammar, Parse};
 use arithmetic_typing::{
+    Annotated, DynConstraints, Function, PrimitiveType, Type, TypeEnvironment, UnknownLen,
     arith::{
         BinaryOpContext, BoolArithmetic, Constraint, MapPrimitiveType, Num, NumArithmetic,
         Substitutions, TypeArithmetic, UnaryOpContext, WithBoolean,
@@ -11,7 +12,6 @@ use arithmetic_typing::{
     defs::{Assertions, Prelude},
     error::{ErrorPathFragment, OpErrors},
     visit::Visit,
-    Annotated, DynConstraints, Function, PrimitiveType, Type, TypeEnvironment, UnknownLen,
 };
 
 use crate::Hashed;

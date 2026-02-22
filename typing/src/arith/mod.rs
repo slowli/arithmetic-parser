@@ -15,8 +15,8 @@ pub use self::{
     substitutions::Substitutions,
 };
 use crate::{
-    error::{ErrorKind, ErrorPathFragment, OpErrors},
     PrimitiveType, Type,
+    error::{ErrorKind, ErrorPathFragment, OpErrors},
 };
 
 mod constraints;

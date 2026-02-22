@@ -200,7 +200,7 @@ static_assertions::assert_impl_all!(ModularArithmetic<u64>: Arithmetic<u64>);
 
 #[cfg(test)]
 mod tests {
-    use rand::{rngs::StdRng, Rng, SeedableRng};
+    use rand::{RngExt, SeedableRng, rngs::StdRng};
 
     use super::*;
 

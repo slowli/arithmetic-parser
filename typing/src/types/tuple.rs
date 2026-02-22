@@ -3,9 +3,9 @@
 use core::{cmp, fmt, iter, ops};
 
 use crate::{
-    alloc::{format, Box, Cow, Vec},
-    arith::Num,
     PrimitiveType, Type,
+    alloc::{Box, Cow, Vec, format},
+    arith::Num,
 };
 
 /// Length variable.
@@ -337,7 +337,7 @@ impl<Prim: PrimitiveType> Tuple<Prim> {
 
     pub(crate) fn is_concrete(&self) -> bool {
         self.start.iter().chain(&self.end).all(Type::is_concrete)
-            && self.middle.as_ref().map_or(true, Slice::is_concrete)
+            && self.middle.as_ref().is_none_or(Slice::is_concrete)
     }
 
     /// Returns this tuple as slice if it fits (has no start or end components).
@@ -688,7 +688,7 @@ mod tests {
     use assert_matches::assert_matches;
 
     use super::*;
-    use crate::alloc::{vec, ToString};
+    use crate::alloc::{ToString, vec};
 
     #[test]
     fn tuple_length_display() {

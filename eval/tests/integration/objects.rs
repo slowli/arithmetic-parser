@@ -1,9 +1,9 @@
 //! Tests targeting objects / object field access.
 
 use arithmetic_eval::{
+    Value,
     env::{Assertions, Environment, Prelude},
     error::{AuxErrorInfo, ErrorKind},
-    Value,
 };
 use arithmetic_parser::BinaryOp;
 use assert_matches::assert_matches;

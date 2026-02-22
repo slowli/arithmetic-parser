@@ -5,11 +5,11 @@ use core::fmt;
 use arithmetic_parser::UnsupportedType;
 
 use crate::{
+    PrimitiveType, TupleIndex, TupleLen, Type,
     alloc::{Box, HashSet, String},
     arith::Constraint,
     ast::AstConversionError,
     error::ErrorPathFragment,
-    PrimitiveType, TupleIndex, TupleLen, Type,
 };
 
 /// Context in which a tuple is used.
@@ -148,10 +148,9 @@ pub enum ErrorKind<Prim: PrimitiveType> {
 impl<Prim: PrimitiveType> fmt::Display for ErrorKind<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::TypeMismatch(lhs, rhs) => write!(
-                formatter,
-                "Type `{rhs}` is not assignable to type `{lhs}`"
-            ),
+            Self::TypeMismatch(lhs, rhs) => {
+                write!(formatter, "Type `{rhs}` is not assignable to type `{lhs}`")
+            }
             Self::TupleLenMismatch {
                 lhs,
                 rhs,
@@ -223,10 +222,9 @@ impl<Prim: PrimitiveType> fmt::Display for ErrorKind<Prim> {
                 formatter.write_str("Params in declared function types are not supported yet")
             }
 
-            Self::AstConversion(err) => write!(
-                formatter,
-                "Error instantiating type from annotation: {err}"
-            ),
+            Self::AstConversion(err) => {
+                write!(formatter, "Error instantiating type from annotation: {err}")
+            }
         }
     }
 }

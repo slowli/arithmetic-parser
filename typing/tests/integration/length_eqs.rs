@@ -2,9 +2,9 @@
 
 use arithmetic_parser::grammars::{NumGrammar, Parse};
 use arithmetic_typing::{
+    Annotated, Function, TupleLen, Type, TypeEnvironment, UnknownLen,
     defs::Prelude,
     error::{ErrorKind, TupleContext},
-    Annotated, Function, TupleLen, Type, TypeEnvironment, UnknownLen,
 };
 use assert_matches::assert_matches;
 

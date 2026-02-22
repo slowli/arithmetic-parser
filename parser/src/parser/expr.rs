@@ -3,6 +3,7 @@
 use core::mem;
 
 use nom::{
+    Err as NomErr, Input, Parser,
     branch::alt,
     bytes::complete::{tag, take_while1},
     character::complete::{char as tag_char, one_of},
@@ -10,19 +11,18 @@ use nom::{
     error::context,
     multi::{many0, separated_list0},
     sequence::{delimited, preceded, terminated},
-    Err as NomErr, Input, Parser,
 };
 
 use super::{
     block, fn_def,
-    helpers::{comma_sep, is_valid_variable_name, mandatory_ws, var_name, ws, GrammarType},
+    helpers::{GrammarType, comma_sep, is_valid_variable_name, mandatory_ws, var_name, ws},
 };
 use crate::{
-    alloc::{vec, Box, Vec},
-    grammars::{Features, Grammar, Parse, ParseLiteral},
-    spans::{unite_spans, with_span},
     BinaryOp, Context, Error, ErrorKind, Expr, InputSpan, NomResult, ObjectExpr, Spanned,
     SpannedExpr, UnaryOp,
+    alloc::{Box, Vec, vec},
+    grammars::{Features, Grammar, Parse, ParseLiteral},
+    spans::{unite_spans, with_span},
 };
 
 /// Function arguments in the call position; e.g., `(a, B + 1)`.

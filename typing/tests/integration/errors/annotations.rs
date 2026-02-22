@@ -2,19 +2,19 @@
 
 use std::convert::TryFrom;
 
-use arithmetic_parser::{grammars::Parse, InputSpan};
+use arithmetic_parser::{InputSpan, grammars::Parse};
 use arithmetic_typing::{
+    TupleLen, Type, TypeEnvironment,
     ast::{AstConversionError, TypeAst},
     defs::Prelude,
     error::{ErrorContext, ErrorKind, TupleContext},
-    TupleLen, Type, TypeEnvironment,
 };
 use assert_matches::assert_matches;
 
 use crate::{
-    assert_incompatible_types,
+    ErrorsExt, F32Grammar, Hashed, assert_incompatible_types,
     errors::{fn_arg, tuple_element},
-    hash_fn_type, zip_fn_type, ErrorsExt, F32Grammar, Hashed,
+    hash_fn_type, zip_fn_type,
 };
 
 #[test]

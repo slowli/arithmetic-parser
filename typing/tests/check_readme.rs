@@ -4,9 +4,9 @@ use std::fs;
 
 use arithmetic_parser::grammars::{F32Grammar, Parse};
 use arithmetic_typing::{
+    Annotated, Type, TypeEnvironment,
     arith::{Num, NumArithmetic},
     defs::{Assertions, Prelude},
-    Annotated, Type, TypeEnvironment,
 };
 use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag, TagEnd};
 

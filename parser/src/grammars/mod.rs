@@ -21,19 +21,19 @@
 use core::{fmt, marker::PhantomData};
 
 use nom::{
+    Input, Parser as _,
     bytes::complete::take_while_m_n,
     character::complete::{char as tag_char, digit1},
     combinator::{map_res, not, opt, peek, recognize},
     number::complete::{double, float},
     sequence::terminated,
-    Input, Parser as _,
 };
 
 pub use self::traits::{
     Features, Grammar, IntoInputSpan, MockTypes, Parse, ParseLiteral, Typed, Untyped,
     WithMockedTypes,
 };
-use crate::{spans::NomResult, ErrorKind, InputSpan};
+use crate::{ErrorKind, InputSpan, spans::NomResult};
 
 mod traits;
 
@@ -162,16 +162,16 @@ impl NumLiteral for f64 {
 #[cfg(feature = "num-complex")]
 mod complex {
     use nom::{
+        Parser as _,
         branch::alt,
         character::complete::one_of,
         combinator::{map, opt},
         number::complete::{double, float},
-        Parser as _,
     };
     use num_complex::Complex;
     use num_traits::Num;
 
-    use super::{ensure_no_overlap, NumLiteral};
+    use super::{NumLiteral, ensure_no_overlap};
     use crate::{InputSpan, NomResult};
 
     fn complex_parser<'a, T: Num, F>(
@@ -210,9 +210,9 @@ mod complex {
 #[cfg(feature = "num-bigint")]
 mod bigint {
     use nom::{
+        Parser as _,
         character::complete::{char as tag_char, digit1},
         combinator::{map_res, opt, recognize},
-        Parser as _,
     };
     use num_bigint::{BigInt, BigUint};
     use num_traits::Num;

@@ -3,15 +3,15 @@
 use arithmetic_parser::{BinaryOp, Location, LvalueLen, UnaryOp};
 
 use crate::{
-    alloc::{vec, Arc, HashMap, String, ToOwned, Vec},
+    CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, SpannedValue, Value,
+    alloc::{Arc, HashMap, String, ToOwned, Vec, vec},
     arith::OrdArithmetic,
     compiler::Captures,
     error::{Backtrace, EvalResult, LocationInModule, TupleLenMismatchContext},
     exec::{
-        command::{Atom, Command, CompiledExpr, FieldName, LocatedAtom, LocatedCommand},
         ModuleId,
+        command::{Atom, Command, CompiledExpr, FieldName, LocatedAtom, LocatedCommand},
     },
-    CallContext, Environment, Error, ErrorKind, Function, InterpretedFn, SpannedValue, Value,
 };
 
 /// Sequence of instructions that can be executed with the `Registers`.
@@ -180,11 +180,10 @@ impl<T: 'static + Clone> Registers<T> {
         backtrace: Option<&mut Backtrace>,
     ) -> EvalResult<T> {
         self.execute_inner(executable, operations, backtrace)
-            .map_err(|err| {
+            .inspect_err(|_| {
                 if let Some(scope_start) = self.inner_scope_start.take() {
                     self.registers.truncate(scope_start);
                 }
-                err
             })
     }
 
@@ -455,11 +454,10 @@ impl<T: 'static + Clone> Registers<T> {
         }
         let mut context = CallContext::new(full_call_span, backtrace.as_deref_mut(), operations);
 
-        function.evaluate(arg_values, &mut context).map(|value| {
+        function.evaluate(arg_values, &mut context).inspect(|_| {
             if let Some(backtrace) = backtrace {
                 backtrace.pop_call();
             }
-            value
         })
     }
 

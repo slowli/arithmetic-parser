@@ -3,11 +3,11 @@
 use assert_matches::assert_matches;
 use nom::Err as NomErr;
 
-use super::{sp, span, FieldGrammarBase, Literal};
+use super::{FieldGrammarBase, Literal, sp, span};
 use crate::{
-    grammars::{Features, Parse, Untyped},
-    parser::{statement, Complete},
     BinaryOp, ErrorKind, Expr, InputSpan, Lvalue, Op, Statement,
+    grammars::{Features, Parse, Untyped},
+    parser::{Complete, statement},
 };
 
 #[test]

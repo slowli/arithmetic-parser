@@ -4,10 +4,10 @@ use std::collections::HashSet;
 
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
+    Type, TypeEnvironment,
     arith::NumArithmetic,
     defs::{Assertions, Prelude},
     error::ErrorKind,
-    Type, TypeEnvironment,
 };
 use assert_matches::assert_matches;
 

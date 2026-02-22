@@ -3,11 +3,11 @@
 use core::{fmt, marker::PhantomData};
 
 use crate::{
+    Function, Object, PrimitiveType, Slice, Tuple, Type, TypeVar,
     alloc::{Box, HashMap, String, ToString},
     arith::Substitutions,
     error::{ErrorKind, OpErrors},
     visit::{self, Visit},
-    Function, Object, PrimitiveType, Slice, Tuple, Type, TypeVar,
 };
 
 /// Constraint that can be placed on [`Type`]s.

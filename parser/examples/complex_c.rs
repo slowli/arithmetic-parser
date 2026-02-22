@@ -11,9 +11,9 @@ use std::{
 };
 
 use arithmetic_parser::{
-    grammars::{NumGrammar, Parse, Untyped},
     BinaryOp, Block, Expr, FnDefinition, InputSpan, Lvalue, OpPriority, SpannedExpr, SpannedLvalue,
     Statement, UnaryOp,
+    grammars::{NumGrammar, Parse, Untyped},
 };
 use num_complex::Complex32;
 

@@ -7,9 +7,10 @@ use alloc::string::ToString;
 use core::f64::consts as f64_consts;
 
 use arithmetic_eval::{
+    ExecutableModule, Value,
     env::{Assertions, Environment, Prelude},
     exec::WildcardId,
-    fns, ExecutableModule, Value,
+    fns,
 };
 use arithmetic_parser::grammars::{F64Grammar, Parse, Untyped};
 use wasm_bindgen::prelude::*;

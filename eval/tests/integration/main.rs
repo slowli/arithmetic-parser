@@ -1,14 +1,15 @@
 //! Tests of basic functionality.
 
 use arithmetic_eval::{
+    ExecutableModule, Value,
     env::{Comparisons, Environment},
     error::{Error, ErrorKind, ErrorWithBacktrace, RepeatedAssignmentContext},
     exec::WildcardId,
-    fns, ExecutableModule, Value,
+    fns,
 };
 use arithmetic_parser::{
-    grammars::{F32Grammar, Parse, Untyped},
     BinaryOp, LvalueLen, UnaryOp,
+    grammars::{F32Grammar, Parse, Untyped},
 };
 use assert_matches::assert_matches;
 

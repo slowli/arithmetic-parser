@@ -5,8 +5,8 @@ use bitflags::bitflags;
 use nom::{Err as NomErr, Input};
 
 use crate::{
-    parser::{statements, streaming_statements},
     Block, Error, ErrorKind, InputSpan, NomResult,
+    parser::{statements, streaming_statements},
 };
 
 bitflags! {

@@ -1,9 +1,10 @@
 //! Passing helpers.
 
 use nom::{
+    Parser as _,
     branch::alt,
     bytes::{
-        complete::{tag, take_until, take_while, take_while1, take_while_m_n},
+        complete::{tag, take_until, take_while, take_while_m_n, take_while1},
         streaming,
     },
     character::complete::char as tag_char,
@@ -11,10 +12,9 @@ use nom::{
     error::context,
     multi::many0,
     sequence::{delimited, preceded},
-    Parser as _,
 };
 
-use crate::{grammars::Features, BinaryOp, Context, InputSpan, NomResult, Spanned, UnaryOp};
+use crate::{BinaryOp, Context, InputSpan, NomResult, Spanned, UnaryOp, grammars::Features};
 
 pub(super) trait GrammarType {
     const COMPLETE: bool;

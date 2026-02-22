@@ -10,7 +10,7 @@ pub use self::{
     },
 };
 use crate::{
-    alloc::{vec, Box, Vec},
+    alloc::{Box, Vec, vec},
     grammars::Grammar,
     spans::Spanned,
 };

@@ -2,10 +2,11 @@
 
 use core::ops;
 
-use arithmetic_parser::{grammars::Grammar, Block};
+use arithmetic_parser::{Block, grammars::Grammar};
 
 use self::processor::TypeProcessor;
 use crate::{
+    Function, PrimitiveType, Type,
     alloc::{HashMap, String, ToOwned},
     arith::{
         Constraint, ConstraintSet, MapPrimitiveType, Num, NumArithmetic, ObjectSafeConstraint,
@@ -15,7 +16,6 @@ use crate::{
     error::Errors,
     types::{ParamConstraints, ParamQuantifier},
     visit::VisitMut,
-    Function, PrimitiveType, Type,
 };
 
 mod processor;

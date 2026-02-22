@@ -1,6 +1,7 @@
 //! Tests for integer arithmetics.
 
 use arithmetic_eval::{
+    ExecutableModule, Number, Value,
     arith::{
         ArithmeticExt, Checked, CheckedArithmetic, ModularArithmetic, OrdArithmetic,
         WrappingArithmetic,
@@ -8,7 +9,6 @@ use arithmetic_eval::{
     env::{Assertions, Comparisons, Environment, Prelude},
     error::{ErrorKind, ErrorWithBacktrace},
     exec::WildcardId,
-    ExecutableModule, Number, Value,
 };
 use arithmetic_parser::grammars::{NumGrammar, NumLiteral, Parse, Untyped};
 use assert_matches::assert_matches;

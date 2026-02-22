@@ -3,12 +3,12 @@
 use core::iter;
 
 use arithmetic_parser::{
-    grammars::Grammar, Block, Destructure, Expr, FnDefinition, Location, Lvalue, Spanned,
-    SpannedExpr, SpannedLvalue, SpannedStatement, Statement,
+    Block, Destructure, Expr, FnDefinition, Location, Lvalue, Spanned, SpannedExpr, SpannedLvalue,
+    SpannedStatement, Statement, grammars::Grammar,
 };
 
 use crate::{
-    alloc::{vec, Arc, HashMap, String, ToOwned, Vec},
+    alloc::{Arc, HashMap, String, ToOwned, Vec, vec},
     error::{AuxErrorInfo, Error, ErrorKind, RepeatedAssignmentContext},
     exec::{ModuleId, WildcardId},
 };
@@ -216,7 +216,7 @@ impl<'a> CapturesExtractor<'a> {
         for statement in &block.statements {
             self.eval_statement(statement)?;
         }
-        if let Some(ref return_expr) = block.return_value {
+        if let Some(return_expr) = &block.return_value {
             self.eval(return_expr)?;
         }
         self.local_vars.pop();

@@ -1,8 +1,8 @@
 //! Values used by the interpreter.
 
 use core::{
-    any::{type_name, Any},
-    fmt,
+    any::{Any, type_name},
+    fmt, ptr,
 };
 
 use arithmetic_parser::Location;
@@ -113,8 +113,8 @@ impl OpaqueRef {
             type_name: type_name::<T>(),
 
             dyn_eq: |this, other| {
-                let this_data = (this as *const dyn Any).cast::<()>();
-                let other_data = (other as *const dyn Any).cast::<()>();
+                let this_data = ptr::from_ref::<dyn Any>(this).cast::<()>();
+                let other_data = ptr::from_ref::<dyn Any>(other).cast::<()>();
                 this_data == other_data
             },
             dyn_fmt: |this, formatter| fmt::Debug::fmt(&this.type_id(), formatter),

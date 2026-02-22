@@ -3,10 +3,10 @@
 use core::mem;
 
 use crate::{
-    alloc::{hash_map::Entry, vec, HashMap, HashSet, Vec},
+    Function, Object, PrimitiveType, Tuple, Type, UnknownLen,
+    alloc::{HashMap, HashSet, Vec, hash_map::Entry, vec},
     types::{FnParams, ParamConstraints},
     visit::{self, Visit, VisitMut},
-    Function, Object, PrimitiveType, Tuple, Type, UnknownLen,
 };
 
 #[derive(Debug, Default)]
@@ -258,9 +258,9 @@ mod tests {
 
     use super::*;
     use crate::{
+        Object,
         alloc::ToString,
         arith::{CompleteConstraints, Num},
-        Object,
     };
 
     #[test]

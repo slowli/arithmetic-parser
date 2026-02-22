@@ -3,14 +3,14 @@
 use assert_matches::assert_matches;
 use nom::{Err as NomErr, Input};
 
-use super::{sp, FieldGrammar, Literal, LiteralType};
+use super::{FieldGrammar, Literal, LiteralType, sp};
 use crate::{
-    parser::{
-        expr,
-        helpers::{is_valid_variable_name, mandatory_ws, var_name, ws},
-        statements, Complete, Streaming,
-    },
     ErrorKind, Expr, InputSpan,
+    parser::{
+        Complete, Streaming, expr,
+        helpers::{is_valid_variable_name, mandatory_ws, var_name, ws},
+        statements,
+    },
 };
 
 #[test]

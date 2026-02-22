@@ -4,10 +4,10 @@ use std::fmt;
 
 use arithmetic_parser::grammars::NumGrammar;
 use arithmetic_typing::{
+    Annotated, DynConstraints, Function, PrimitiveType, Type, UnknownLen,
     arith::{Constraint, Num, ObjectSafeConstraint, Substitutions},
     error::{Error, ErrorKind, Errors, OpErrors},
     visit::Visit,
-    Annotated, DynConstraints, Function, PrimitiveType, Type, UnknownLen,
 };
 
 mod annotations;

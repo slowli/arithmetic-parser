@@ -3,10 +3,10 @@
 use core::fmt;
 
 use crate::{
+    LengthVar, PrimitiveType, Tuple, TupleLen, Type, TypeVar,
     alloc::{Arc, HashMap, HashSet, Vec},
     arith::{CompleteConstraints, Constraint, ConstraintSet, Num},
     types::ParamQuantifier,
-    LengthVar, PrimitiveType, Tuple, TupleLen, Type, TypeVar,
 };
 
 #[derive(Debug, Clone)]
@@ -429,7 +429,7 @@ mod tests {
     use core::iter;
 
     use super::*;
-    use crate::{alloc::ToString, arith::Linearity, UnknownLen};
+    use crate::{UnknownLen, alloc::ToString, arith::Linearity};
 
     #[test]
     fn constraints_display() {

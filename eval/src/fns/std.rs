@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::{exec::ModuleId, CallContext, EvalResult, NativeFn, SpannedValue, Value};
+use crate::{CallContext, EvalResult, NativeFn, SpannedValue, Value, exec::ModuleId};
 
 /// Acts similarly to the `dbg!` macro, outputting the argument(s) to stderr and returning
 /// them. If a single argument is provided, it's returned as-is; otherwise, the arguments

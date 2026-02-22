@@ -5,11 +5,11 @@ use core::cmp::Ordering;
 use arithmetic_parser::{BinaryOp, Location, Op, UnaryOp};
 
 use crate::{
+    Object, Tuple, Value,
     alloc::Arc,
     arith::OrdArithmetic,
     error::{AuxErrorInfo, Error, ErrorKind, TupleLenMismatchContext},
     exec::ModuleId,
-    Object, Tuple, Value,
 };
 
 #[derive(Debug, Clone, Copy)]

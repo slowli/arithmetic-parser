@@ -6,15 +6,15 @@
 //! [`TypeAst`] and [`FunctionAst`]. These two types expose `parse` method which
 //! allows to integrate them into `nom` parsing.
 
-use arithmetic_parser::{with_span, ErrorKind as ParseErrorKind, InputSpan, NomResult, Spanned};
+use arithmetic_parser::{ErrorKind as ParseErrorKind, InputSpan, NomResult, Spanned, with_span};
 use nom::{
+    Parser as _,
     branch::alt,
-    bytes::complete::{tag, take, take_until, take_while, take_while1, take_while_m_n},
+    bytes::complete::{tag, take, take_until, take_while, take_while_m_n, take_while1},
     character::complete::char as tag_char,
     combinator::{cut, map, map_res, not, opt, peek, recognize},
     multi::{many0, separated_list0, separated_list1},
     sequence::{delimited, preceded, separated_pair, terminated},
-    Parser as _,
 };
 
 pub use self::conversion::AstConversionError;

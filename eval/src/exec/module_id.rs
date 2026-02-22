@@ -2,7 +2,7 @@
 
 use core::{
     any::{Any, TypeId},
-    fmt,
+    fmt, ptr,
 };
 
 /// Identifier of an [`ExecutableModule`](crate::ExecutableModule). This is usually a "small" type,
@@ -44,7 +44,7 @@ impl dyn ModuleId {
     pub fn downcast_ref<T: ModuleId>(&self) -> Option<&T> {
         if self.is::<T>() {
             // SAFETY: Same code as for `<dyn Any>::downcast_ref()`.
-            unsafe { Some(&*(self as *const dyn ModuleId).cast::<T>()) }
+            unsafe { Some(&*ptr::from_ref::<dyn ModuleId>(self).cast::<T>()) }
         } else {
             None
         }

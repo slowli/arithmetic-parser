@@ -3,9 +3,9 @@
 use std::{process::Command, time::Duration};
 
 use term_transcript::{
+    ShellOptions, UserInput,
     svg::{ScrollOptions, Template, TemplateOptions},
     test::{MatchKind, TestConfig},
-    ShellOptions, UserInput,
 };
 
 const PATH_TO_BIN: &str = env!("CARGO_BIN_EXE_arithmetic-parser");

@@ -1,16 +1,16 @@
 //! `Function` and closely related types.
 
-use core::fmt;
+use core::{fmt, ptr};
 
 use arithmetic_parser::{Location, LvalueLen};
 
 use crate::{
+    Environment, EvalResult, SpannedValue, Value,
     alloc::{Arc, HashMap, String, ToOwned, Vec},
     arith::OrdArithmetic,
     error::{Backtrace, Error, ErrorKind, LocationInModule},
     exec::{ExecutableFn, ModuleId, Operations},
     fns::ValueCell,
-    Environment, EvalResult, SpannedValue, Value,
 };
 
 /// Context for native function calls.
@@ -125,7 +125,7 @@ impl<T> dyn NativeFn<T> {
         // see https://github.com/rust-lang/rust/issues/27751. This is seemingly
         // the simplest way to extract the data pointer; `TraitObject` in `std::raw` is
         // a more future-proof alternative, but it is unstable.
-        (self as *const dyn NativeFn<T>).cast()
+        ptr::from_ref::<dyn NativeFn<T>>(self).cast()
     }
 }
 

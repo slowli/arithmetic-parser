@@ -1,17 +1,17 @@
 use assert_matches::assert_matches;
 use nom::{
+    Parser,
     bytes::complete::{escaped_transform, is_not, take_while1},
     combinator::map_res,
     multi::{fold_many1, separated_list0},
-    Parser,
 };
 
 use super::{expr::simple_expr, *};
 use crate::{
+    BinaryOp, Destructure, Expr, Lvalue, SpannedLvalue, UnaryOp,
     alloc::String,
     grammars::{Grammar, ParseLiteral, Typed, Untyped},
     spans::Spanned,
-    BinaryOp, Destructure, Expr, Lvalue, SpannedLvalue, UnaryOp,
 };
 
 mod basics;

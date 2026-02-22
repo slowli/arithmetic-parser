@@ -5,10 +5,10 @@ use core::cmp::Ordering;
 use num_traits::{FromPrimitive, One, Zero};
 
 use crate::{
-    alloc::{format, vec, Vec},
+    CallContext, ErrorKind, EvalResult, NativeFn, SpannedValue, Tuple, Value,
+    alloc::{Vec, format, vec},
     error::AuxErrorInfo,
     fns::{extract_array, extract_fn, extract_primitive},
-    CallContext, ErrorKind, EvalResult, NativeFn, SpannedValue, Tuple, Value,
 };
 
 /// Function generating an array by mapping its indexes.
@@ -590,8 +590,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        arith::{OrdArithmetic, StdArithmetic, WrappingArithmetic},
         Environment, ExecutableModule,
+        arith::{OrdArithmetic, StdArithmetic, WrappingArithmetic},
     };
 
     fn test_len_function<T: NumLiteral, A>(arithmetic: A)

@@ -22,14 +22,14 @@ pub use self::{
     assertions::{Assert, AssertClose, AssertEq, AssertFails},
     flow::{If, While},
     wrapper::{
-        wrap, Binary, ErrorOutput, FnWrapper, FromValueError, FromValueErrorKind,
-        FromValueErrorLocation, IntoEvalResult, Quaternary, Ternary, TryFromValue, Unary,
+        Binary, ErrorOutput, FnWrapper, FromValueError, FromValueErrorKind, FromValueErrorLocation,
+        IntoEvalResult, Quaternary, Ternary, TryFromValue, Unary, wrap,
     },
 };
 use crate::{
-    alloc::{vec, Vec},
-    error::AuxErrorInfo,
     CallContext, Error, ErrorKind, EvalResult, Function, NativeFn, OpaqueRef, SpannedValue, Value,
+    alloc::{Vec, vec},
+    error::AuxErrorInfo,
 };
 
 mod array;
@@ -438,7 +438,7 @@ mod tests {
         assert_eq!(err.location().in_module().span(program), "min(1, (2, 3))");
         assert_matches!(
             err.kind(),
-            ErrorKind::NativeCall(ref msg) if msg.contains("requires 2 primitive arguments")
+            ErrorKind::NativeCall(msg) if msg.contains("requires 2 primitive arguments")
         );
         Ok(())
     }

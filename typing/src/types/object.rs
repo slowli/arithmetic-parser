@@ -3,10 +3,10 @@
 use core::{fmt, ops};
 
 use crate::{
+    DynConstraints, PrimitiveType, Type,
     alloc::{HashMap, HashSet, String, ToOwned, Vec},
     arith::Substitutions,
     error::{ErrorKind, OpErrors},
-    DynConstraints, PrimitiveType, Type,
 };
 
 /// Object type: a collection of named fields with heterogeneous types.

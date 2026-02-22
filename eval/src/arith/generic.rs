@@ -3,8 +3,8 @@
 use core::{cmp::Ordering, convert::TryFrom, marker::PhantomData, ops};
 
 use num_traits::{
-    checked_pow, CheckedAdd, CheckedDiv, CheckedMul, CheckedNeg, CheckedSub, NumOps, One, Pow,
-    Signed, Unsigned, WrappingAdd, WrappingMul, WrappingNeg, WrappingSub, Zero,
+    CheckedAdd, CheckedDiv, CheckedMul, CheckedNeg, CheckedSub, NumOps, One, Pow, Signed, Unsigned,
+    WrappingAdd, WrappingMul, WrappingNeg, WrappingSub, Zero, checked_pow,
 };
 
 use crate::{
@@ -180,11 +180,7 @@ pub struct NegateOnlyZero(());
 
 impl<T: Unsigned + Zero> CheckedArithmeticKind<T> for NegateOnlyZero {
     fn checked_neg(value: T) -> Option<T> {
-        if value.is_zero() {
-            Some(value)
-        } else {
-            None
-        }
+        if value.is_zero() { Some(value) } else { None }
     }
 }
 

@@ -2,13 +2,13 @@
 
 use arithmetic_parser::grammars::Parse;
 use arithmetic_typing::{
+    TupleLen, Type, TypeEnvironment, UnknownLen,
     defs::Prelude,
     error::{ErrorContext, ErrorKind, ErrorPathFragment},
-    TupleLen, Type, TypeEnvironment, UnknownLen,
 };
 use assert_matches::assert_matches;
 
-use crate::{assert_incompatible_types, hash_fn_type, ErrorsExt, F32Grammar, Hashed};
+use crate::{ErrorsExt, F32Grammar, Hashed, assert_incompatible_types, hash_fn_type};
 
 #[test]
 fn type_hint_within_tuple() {

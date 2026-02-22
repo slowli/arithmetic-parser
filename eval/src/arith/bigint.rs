@@ -75,7 +75,7 @@ impl Arithmetic<BigUint> for ModularArithmetic<BigUint> {
 #[cfg(test)]
 mod bigint_tests {
     use num_bigint::{BigInt, BigUint};
-    use rand::{rngs::StdRng, Rng, RngExt, SeedableRng};
+    use rand::{Rng, RngExt, SeedableRng, rngs::StdRng};
     use static_assertions::assert_impl_all;
 
     use super::*;
@@ -171,16 +171,14 @@ mod bigint_tests {
 
     #[test]
     fn mini_fuzz_for_384_bit_prime_modulus() {
-        let modulus =
-            "680077592003957715873956706738577254635634257392753873876268782486415186187701100959\
+        let modulus = "680077592003957715873956706738577254635634257392753873876268782486415186187701100959\
              54501183649227109037342431341197";
         mini_fuzz_for_big_prime_modulus(&modulus.parse().unwrap(), 2_000);
     }
 
     #[test]
     fn mini_fuzz_for_512_bit_prime_modulus() {
-        let modulus =
-            "134956060831834915306923365068985449378393338769474235719041178417311022526812045709\
+        let modulus = "134956060831834915306923365068985449378393338769474235719041178417311022526812045709\
              1169866466743447386864273902296614844109589811099153700965207136981133";
         mini_fuzz_for_big_prime_modulus(&modulus.parse().unwrap(), 2_000);
     }

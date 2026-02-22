@@ -4,9 +4,9 @@
 #![cfg(unix)]
 
 use term_transcript::{
+    ShellOptions,
     svg::{ScrollOptions, Template, TemplateOptions},
     test::{MatchKind, TestConfig},
-    ShellOptions,
 };
 
 fn test_config() -> TestConfig {

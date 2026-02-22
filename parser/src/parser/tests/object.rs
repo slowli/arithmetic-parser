@@ -3,16 +3,17 @@
 use assert_matches::assert_matches;
 use nom::Err as NomErr;
 
-use super::{lsp, sp, FieldGrammar, Literal, ValueType};
+use super::{FieldGrammar, Literal, ValueType, lsp, sp};
 use crate::{
+    BinaryOp, Expr, InputSpan, Lvalue, ObjectDestructure, ObjectDestructureField, ObjectExpr,
+    Statement,
     parser::{
+        Complete,
         expr::{expr, object_expr, simple_expr},
         fn_def,
         lvalue::{lvalue, object_destructure},
-        statement, Complete,
+        statement,
     },
-    BinaryOp, Expr, InputSpan, Lvalue, ObjectDestructure, ObjectDestructureField, ObjectExpr,
-    Statement,
 };
 
 #[test]

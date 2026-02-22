@@ -20,7 +20,7 @@ use embedded_alloc::LlffHeap as Heap;
 #[cfg(target_arch = "arm")]
 use panic_halt as _;
 use rand_chacha::{
-    rand_core::{RngCore, SeedableRng},
+    rand_core::{Rng, SeedableRng},
     ChaChaRng,
 };
 

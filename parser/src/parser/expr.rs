@@ -536,7 +536,7 @@ fn fold_binary_expr<'a, T: Grammar>(
                     op: new_op,
                     rhs: Box::new(expr),
                 };
-                *rhs = Box::new(rhs_span.copy_with_extra(new_expr));
+                **rhs = rhs_span.copy_with_extra(new_expr);
             }
             acc = united_span.copy_with_extra(acc.extra);
             Ok(acc)

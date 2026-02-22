@@ -20,7 +20,7 @@ use arithmetic_parser::{
     Location,
 };
 use criterion::{criterion_group, criterion_main, BatchSize, Bencher, Criterion, Throughput};
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{rngs::StdRng, RngExt, SeedableRng};
 use typed_arena::Arena;
 
 const SEED: u64 = 123;

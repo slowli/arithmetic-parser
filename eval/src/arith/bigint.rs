@@ -75,7 +75,7 @@ impl Arithmetic<BigUint> for ModularArithmetic<BigUint> {
 #[cfg(test)]
 mod bigint_tests {
     use num_bigint::{BigInt, BigUint};
-    use rand::{rngs::StdRng, Rng, SeedableRng};
+    use rand::{rngs::StdRng, Rng, RngExt, SeedableRng};
     use static_assertions::assert_impl_all;
 
     use super::*;

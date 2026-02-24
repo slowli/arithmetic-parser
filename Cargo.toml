@@ -43,7 +43,7 @@ num-complex = "0.4.6"
 num-traits = { version = "0.2.19", default-features = false }
 once_cell = { version = "1.20.2", default-features = false }
 panic-halt = "1.0.0"
-pulldown-cmark = "0.13.0"
+pulldown-cmark = "0.13.1"
 rand = "0.10.0"
 rand_chacha = { version = "0.10.0", default-features = false }
 rustyline = "17.0.2"

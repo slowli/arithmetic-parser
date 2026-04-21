@@ -257,15 +257,10 @@ impl<T> Value<T> {
         match (self, rhs) {
             (Self::Prim(this), Self::Prim(other)) => arithmetic.eq(this, other),
             (Self::Bool(this), Self::Bool(other)) => this == other,
-            (Self::Tuple(this), Self::Tuple(other)) => {
-                if this.len() == other.len() {
-                    this.iter()
-                        .zip(other.iter())
-                        .all(|(x, y)| x.eq_by_arithmetic(y, arithmetic))
-                } else {
-                    false
-                }
-            }
+            (Self::Tuple(this), Self::Tuple(other)) if this.len() == other.len() => this
+                .iter()
+                .zip(other.iter())
+                .all(|(x, y)| x.eq_by_arithmetic(y, arithmetic)),
             (Self::Object(this), Self::Object(other)) => this.eq_by_arithmetic(other, arithmetic),
             (Self::Function(this), Self::Function(other)) => this.is_same_function(other),
             (Self::Ref(this), Self::Ref(other)) => this == other,

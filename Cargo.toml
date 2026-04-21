@@ -46,7 +46,7 @@ panic-halt = "1.0.0"
 pulldown-cmark = "0.13.0"
 rand = "0.10.0"
 rand_chacha = { version = "0.10.0", default-features = false }
-rustyline = "17.0.2"
+rustyline = "18.0.0"
 sha2 = "0.10.9"
 static_assertions = "1.1.0"
 term-transcript = "0.4.0"

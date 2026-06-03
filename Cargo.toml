@@ -24,7 +24,7 @@ repository = "https://github.com/slowli/arithmetic-parser"
 # External dependencies
 anyhow = { version = "1.0.102", default-features = false }
 assert_matches = "1.5.0"
-bitflags = "2.11.1"
+bitflags = "2.12.1"
 clap = "4.6.1"
 codespan = "0.13.1"
 codespan-reporting = "0.13.1"
@@ -43,7 +43,7 @@ num-complex = "0.4.6"
 num-traits = { version = "0.2.19", default-features = false }
 once_cell = { version = "1.21.4", default-features = false }
 panic-halt = "1.0.0"
-pulldown-cmark = "0.13.3"
+pulldown-cmark = "0.13.4"
 rand = "0.10.1"
 rand_chacha = { version = "0.10.0", default-features = false }
 rustyline = "18.0.0"

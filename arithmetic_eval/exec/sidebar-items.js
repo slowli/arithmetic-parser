@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["ExecutableModule","IndexedId","WildcardId","WithEnvironment"],"trait":["CompilerExt","ModuleId"]};

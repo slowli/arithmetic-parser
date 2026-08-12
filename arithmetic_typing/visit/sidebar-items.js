@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["visit_function","visit_function_mut","visit_object","visit_object_mut","visit_tuple","visit_tuple_mut","visit_type","visit_type_mut"],"trait":["Visit","VisitMut"]};

@@ -1,0 +1,154 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Simple interpreter for ASTs produced by `arithmetic-parser`."><title>arithmetic_eval - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="arithmetic_eval" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0-nightly (bd3ac0330 2025-11-01)" data-channel="nightly" data-search-js="search-5c29b3b5.js" data-stringdex-js="stringdex-c3e638e9.js" data-settings-js="settings-c38705f0.js" ><script src="../static.files/storage-e2aeef58.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-ce535bd0.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate arithmetic_eval</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../arithmetic_eval/index.html">arithmetic_<wbr>eval</a><span class="version">0.4.0-beta.1</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#how-it-works" title="How it works">How it works</a></li><li><a href="#type-system" title="Type system">Type system</a></li><li><a href="#semantics" title="Semantics">Semantics</a><ul><li><a href="#value-comparisons" title="Value comparisons">Value comparisons</a></li><li><a href="#tuples" title="Tuples">Tuples</a></li><li><a href="#objects" title="Objects">Objects</a></li></ul></li><li><a href="#crate-features" title="Crate features">Crate features</a><ul><li><a href="#std" title="`std`"><code>std</code></a></li><li><a href="#hashbrown" title="`hashbrown`"><code>hashbrown</code></a></li><li><a href="#complex" title="`complex`"><code>complex</code></a></li><li><a href="#bigint" title="`bigint`"><code>bigint</code></a></li></ul></li><li><a href="#examples" title="Examples">Examples</a></li></ul><h3><a href="#reexports">Crate Items</a></h3><ul class="block"><li><a href="#reexports" title="Re-exports">Re-exports</a></li><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li><li><a href="#traits" title="Traits">Traits</a></li><li><a href="#types" title="Type Aliases">Type Aliases</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>arithmetic_<wbr>eval</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/arithmetic_eval/lib.rs.html#1-288">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Simple interpreter for ASTs produced by <a href="https://crates.io/crates/arithmetic-parser"><code>arithmetic-parser</code></a>.</p>
+<h2 id="how-it-works"><a class="doc-anchor" href="#how-it-works">§</a>How it works</h2>
+<ol>
+<li>A <code>Block</code> of statements is <em>compiled</em> into an <a href="exec/struct.ExecutableModule.html" title="struct arithmetic_eval::exec::ExecutableModule"><code>ExecutableModule</code></a>. Internally,
+compilation processes the AST of the block and transforms it into a non-recusrive form.
+An <a href="exec/struct.ExecutableModule.html" title="struct arithmetic_eval::exec::ExecutableModule"><code>ExecutableModule</code></a> may require <em>imports</em> (such as <a href="trait.NativeFn.html" title="trait arithmetic_eval::NativeFn"><code>NativeFn</code></a>s or constant <a href="enum.Value.html" title="enum arithmetic_eval::Value"><code>Value</code></a>s),
+which can be taken from an <a href="env/struct.Environment.html" title="struct arithmetic_eval::env::Environment"><code>Environment</code></a>.</li>
+<li><a href="exec/struct.ExecutableModule.html" title="struct arithmetic_eval::exec::ExecutableModule"><code>ExecutableModule</code></a> can then be executed, for the return value and/or for the
+changes at the top-level variable scope. There are two major variables influencing
+the execution outcome. An <a href="arith/index.html" title="mod arithmetic_eval::arith">arithmetic</a> is used to define arithmetic ops
+(<code>+</code>, unary and binary <code>-</code>, <code>*</code>, <code>/</code>, <code>^</code>) and comparisons (<code>==</code>, <code>!=</code>, <code>&gt;</code>, <code>&lt;</code>, <code>&gt;=</code>, <code>&lt;=</code>).
+Imports may be redefined at this stage as well.</li>
+</ol>
+<h2 id="type-system"><a class="doc-anchor" href="#type-system">§</a>Type system</h2>
+<p><a href="enum.Value.html" title="enum arithmetic_eval::Value"><code>Value</code></a>s have 5 major types:</p>
+<ul>
+<li><strong>Primitive values</strong> corresponding to literals in the parsed <code>Block</code></li>
+<li><strong>Boolean values</strong></li>
+<li><strong>Functions,</strong> which are further subdivided into native functions (defined in the Rust code)
+and interpreted ones (defined within a module)</li>
+<li><a href="#tuples"><strong>Tuples / arrays</strong></a>.</li>
+<li><a href="#objects"><strong>Objects</strong></a>.</li>
+</ul>
+<p>Besides these types, there is an auxiliary one: <a href="struct.OpaqueRef.html" title="struct arithmetic_eval::OpaqueRef"><code>OpaqueRef</code></a>, which represents a
+reference-counted native value, which can be returned from native functions or provided to
+them as an arg, but is otherwise opaque from the point of view of the interpreted code
+(cf. <code>anyref</code> in WASM).</p>
+<h2 id="semantics"><a class="doc-anchor" href="#semantics">§</a>Semantics</h2>
+<ul>
+<li>All variables are immutable. Re-declaring a var shadows the previous declaration.</li>
+<li>Functions are first-class (in fact, a function is just a variant of the <a href="enum.Value.html" title="enum arithmetic_eval::Value"><code>Value</code></a> enum).</li>
+<li>Functions can capture variables (including other functions). All captures are by value.</li>
+<li>Arithmetic operations are defined on primitive values, tuples and objects. Ops on primitives are defined
+via an <a href="arith/trait.Arithmetic.html" title="trait arithmetic_eval::arith::Arithmetic"><code>Arithmetic</code></a>. With tuples and objects, operations are performed per element / field.
+Binary operations require tuples of the same size / objects of the same shape,
+or a tuple / object and a primitive value.
+As an example, <code>(1, 2) + 3</code> and <code>#{ x: 2, y: 3 } / #{ x: 4, y: 5 }</code> are valid,
+but <code>(1, 2) * (3, 4, 5)</code> isn’t.</li>
+<li>Similar to <a href="https://rescript-lang.org/">ReScript</a>, methods are considered syntactic sugar for functions,
+with the method receiver considered the first function argument. For example, <code>(1, 2).map(sin)</code>
+is equivalent to <code>map((1, 2), sin)</code>. To specify namespaced functions, you can specify
+a method name in a <code>{}</code> block: <code>(1, 2).{Array.map}(sin)</code>. There’s no magic here; the method name
+expression is <em>just</em> another expression. Thus, something like <code>x.{curried(2)}(y, z)</code> is a valid
+method call equivalent to <code>curried(2)(x, y, z)</code>.</li>
+<li>No type checks are performed before evaluation.</li>
+<li>Type annotations and type casts are completely ignored.
+This means that the interpreter may execute  code that is incorrect with annotations
+(e.g., assignment of a tuple to a variable which is annotated to have a numeric type).</li>
+</ul>
+<h3 id="value-comparisons"><a class="doc-anchor" href="#value-comparisons">§</a>Value comparisons</h3>
+<p>Equality comparisons (<code>==</code>, <code>!=</code>) are defined on all types of values.</p>
+<ul>
+<li>For bool values, the comparisons work as expected.</li>
+<li>For functions, the equality is determined by the pointer (2 functions are equal
+iff they alias each other).</li>
+<li><code>OpaqueRef</code>s either use the <a href="https://doc.rust-lang.org/nightly/core/cmp/trait.PartialEq.html" title="trait core::cmp::PartialEq"><code>PartialEq</code></a> impl of the underlying type or
+the pointer equality, depending on how the reference was created; see <a href="struct.OpaqueRef.html" title="struct arithmetic_eval::OpaqueRef"><code>OpaqueRef</code></a> docs
+for more details.</li>
+<li>Equality for primitive values is determined by the <a href="arith/trait.Arithmetic.html" title="trait arithmetic_eval::arith::Arithmetic"><code>Arithmetic</code></a>.</li>
+<li>Tuples are equal if they contain the same number of elements and elements are pairwise
+equal.</li>
+<li>Different types of values are always non-equal.</li>
+</ul>
+<p>Order comparisons (<code>&gt;</code>, <code>&lt;</code>, <code>&gt;=</code>, <code>&lt;=</code>) are defined for primitive values only and use
+<a href="arith/trait.OrdArithmetic.html" title="trait arithmetic_eval::arith::OrdArithmetic"><code>OrdArithmetic</code></a>.</p>
+<h3 id="tuples"><a class="doc-anchor" href="#tuples">§</a>Tuples</h3>
+<ul>
+<li>Tuples are created using a <a href="../arithmetic_parser/ast/expr/enum.Expr.html#variant.Tuple" title="variant arithmetic_parser::ast::expr::Expr::Tuple"><code>Tuple</code> expression</a>, e.g., <code>(x, 1, 5)</code>.</li>
+<li>Indexing for tuples is performed via <a href="../arithmetic_parser/ast/expr/enum.Expr.html#variant.FieldAccess" title="variant arithmetic_parser::ast::expr::Expr::FieldAccess"><code>FieldAccess</code></a> with a numeric field name: <code>xs.0</code>.
+Thus, the index is always a “compile-time” constant. An error is raised if the index
+is out of bounds or the receiver is not a tuple.</li>
+<li>Tuples can be destructured using a <a href="../arithmetic_parser/ast/lvalue/struct.Destructure.html" title="struct arithmetic_parser::ast::lvalue::Destructure"><code>Destructure</code></a> LHS of an assignment, e.g.,
+<code>(x, y, ...) = (1, 2, 3, 4)</code>. An error will be raised if the destructured value is
+not a tuple, or has an incompatible length.</li>
+</ul>
+<h3 id="objects"><a class="doc-anchor" href="#objects">§</a>Objects</h3>
+<ul>
+<li>Objects can be created using <a href="../arithmetic_parser/ast/expr/enum.Expr.html#variant.Object" title="variant arithmetic_parser::ast::expr::Expr::Object">object expressions</a>, which are similar to ones in JavaScript.
+For example, <code>#{ x: 1, y: (2, 3) }</code> will create an object with two fields:
+<code>x</code> equal to 1 and <code>y</code> equal to <code>(2, 3)</code>. Similar to Rust / modern JavaScript, shortcut
+field initialization is available: <code>#{ x, y }</code> will take vars <code>x</code> and <code>y</code> from the context.</li>
+<li>Object fields can be accessed via <a href="../arithmetic_parser/ast/expr/enum.Expr.html#variant.FieldAccess" title="variant arithmetic_parser::ast::expr::Expr::FieldAccess"><code>FieldAccess</code></a> with a field name that is a valid
+variable name. No other values have such fields. An error will be raised if the object
+does not have the specified field.</li>
+<li>Objects can be destructured using an <a href="../arithmetic_parser/ast/lvalue/struct.ObjectDestructure.html" title="struct arithmetic_parser::ast::lvalue::ObjectDestructure"><code>ObjectDestructure</code></a> LHS of an assignment, e.g.,
+<code>{ x, y } = obj</code>. An error will be raised if the destructured value is not an object
+or does not have the specified fields. Destructuring is not exhaustive; i.e.,
+the destructured object may have extra fields.</li>
+<li>Functional fields are permitted. Similar to Rust, to call a function field, it must
+be enclosed in parentheses: <code>(obj.run)(arg0, arg1)</code> or braces: <code>{obj.run}(arg0, arg1)</code>.</li>
+</ul>
+<h2 id="crate-features"><a class="doc-anchor" href="#crate-features">§</a>Crate features</h2><h3 id="std"><a class="doc-anchor" href="#std">§</a><code>std</code></h3>
+<p><em>(On by default)</em></p>
+<p>Enables support of types from <code>std</code>, such as the <code>Error</code> trait, and propagates to dependencies.
+Importantly, <code>std</code> is necessary for floating-point arithmetics.</p>
+<h3 id="hashbrown"><a class="doc-anchor" href="#hashbrown">§</a><code>hashbrown</code></h3>
+<p><em>(Off by default)</em></p>
+<p>Imports hash maps and sets from the <a href="https://crates.io/crates/hashbrown">eponymous crate</a> instead of using ones
+from the Rust std library. This feature is necessary if the <code>std</code> feature is disabled.</p>
+<h3 id="complex"><a class="doc-anchor" href="#complex">§</a><code>complex</code></h3>
+<p><em>(Off by default)</em></p>
+<p>Implements <a href="trait.Number.html" title="trait arithmetic_eval::Number"><code>Number</code></a> for floating-point complex numbers from the <a href="https://crates.io/crates/num-complex"><code>num-complex</code></a> crate
+(i.e., <code>Complex32</code> and <code>Complex64</code>). Enables complex number parsing in <code>arithmetic-parser</code>.</p>
+<h3 id="bigint"><a class="doc-anchor" href="#bigint">§</a><code>bigint</code></h3>
+<p><em>(Off by default)</em></p>
+<p>Implements <code>Number</code> and a couple of other helpers for big integers from the <a href="https://crates.io/crates/num-bigint"><code>num-bigint</code></a> crate
+(i.e., <code>BigInt</code> and <code>BigUint</code>). Enables big integer parsing in <code>arithmetic-parser</code>.</p>
+<h2 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h2>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>arithmetic_parser::grammars::{F32Grammar, Parse, Untyped};
+<span class="kw">use </span>arithmetic_eval::{
+    env::{Assertions, Comparisons, Environment, Prelude}, ExecutableModule, Value,
+};
+
+<span class="kw">let </span>program = <span class="string">"
+    // The interpreter supports all parser features, including
+    // function definitions, tuples and blocks.
+    order = |x, y| (min(x, y), max(x, y));
+    assert_eq(order(0.5, -1), (-1, 0.5));
+    (_, M) = order(3^2, { x = 3; x + 5 });
+    M
+"</span>;
+<span class="kw">let </span>program = Untyped::&lt;F32Grammar&gt;::parse_statements(program)<span class="question-mark">?</span>;
+<span class="comment">// To execute statements, we first compile them into a module.
+</span><span class="kw">let </span>module = ExecutableModule::new(<span class="string">"test"</span>, <span class="kw-2">&amp;</span>program)<span class="question-mark">?</span>;
+
+<span class="comment">// Then, we construct an environment to run the module.
+</span><span class="kw">let </span><span class="kw-2">mut </span>env = Environment::new();
+<span class="comment">// Add some native functions to the environment.
+</span>env.extend(Prelude::iter());
+env.extend(Assertions::iter());
+env.extend(Comparisons::iter());
+
+<span class="comment">// Then, the module can be run.
+</span><span class="macro">assert_eq!</span>(module.with_env(<span class="kw-2">&amp;</span>env)<span class="question-mark">?</span>.run()<span class="question-mark">?</span>, Value::Prim(<span class="number">9.0</span>));</code></pre></div>
+<p>Using objects:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">let </span>program = <span class="string">"
+    minmax = |...xs| xs.fold(#{ min: INF, max: -INF }, |acc, x| #{
+         min: if(x &lt; acc.min, x, acc.min),
+         max: if(x &gt; acc.max, x, acc.max),
+    });
+    assert_eq(minmax(3, 7, 2, 4).min, 2);
+    assert_eq(minmax(5, -4, 6, 9, 1), #{ min: -4, max: 9 });
+"</span>;
+<span class="kw">let </span>program = Untyped::&lt;F32Grammar&gt;::parse_statements(program)<span class="question-mark">?</span>;
+<span class="kw">let </span>module = ExecutableModule::new(<span class="string">"minmax"</span>, <span class="kw-2">&amp;</span>program)<span class="question-mark">?</span>;
+
+<span class="kw">let </span><span class="kw-2">mut </span>env = Environment::new();
+env.extend(Prelude::iter().chain(Assertions::iter()));
+env.insert(<span class="string">"INF"</span>, Value::Prim(f32::INFINITY));
+module.with_env(<span class="kw-2">&amp;</span>env)<span class="question-mark">?</span>.run()<span class="question-mark">?</span>;</code></pre></div>
+<p>More complex examples are available in the <code>examples</code> directory of the crate.</p>
+</div></details><h2 id="reexports" class="section-header">Re-exports<a href="#reexports" class="anchor">§</a></h2><dl class="item-table reexports"><dt id="reexport.Environment"><code>pub use self::env::<a class="struct" href="env/struct.Environment.html" title="struct arithmetic_eval::env::Environment">Environment</a>;</code></dt><dt id="reexport.Error"><code>pub use self::error::<a class="struct" href="error/struct.Error.html" title="struct arithmetic_eval::error::Error">Error</a>;</code></dt><dt id="reexport.ErrorKind"><code>pub use self::error::<a class="enum" href="error/enum.ErrorKind.html" title="enum arithmetic_eval::error::ErrorKind">ErrorKind</a>;</code></dt><dt id="reexport.EvalResult"><code>pub use self::error::<a class="type" href="error/type.EvalResult.html" title="type arithmetic_eval::error::EvalResult">EvalResult</a>;</code></dt><dt id="reexport.ExecutableModule"><code>pub use self::exec::<a class="struct" href="exec/struct.ExecutableModule.html" title="struct arithmetic_eval::exec::ExecutableModule">ExecutableModule</a>;</code></dt></dl><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="arith/index.html" title="mod arithmetic_eval::arith">arith</a></dt><dd><code>Arithmetic</code> trait and its implementations.</dd><dt><a class="mod" href="env/index.html" title="mod arithmetic_eval::env">env</a></dt><dd><a href="env/struct.Environment.html" title="struct arithmetic_eval::env::Environment"><code>Environment</code></a> and other types related to <a href="enum.Value.html" title="enum arithmetic_eval::Value"><code>Value</code></a> collections.</dd><dt><a class="mod" href="error/index.html" title="mod arithmetic_eval::error">error</a></dt><dd>Evaluation errors.</dd><dt><a class="mod" href="exec/index.html" title="mod arithmetic_eval::exec">exec</a></dt><dd><a href="exec/struct.ExecutableModule.html" title="struct arithmetic_eval::exec::ExecutableModule"><code>ExecutableModule</code></a> and related types.</dd><dt><a class="mod" href="fns/index.html" title="mod arithmetic_eval::fns">fns</a></dt><dd>Standard functions for the interpreter, and the tools to define new native functions.</dd></dl><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.CallContext.html" title="struct arithmetic_eval::CallContext">Call<wbr>Context</a></dt><dd>Context for native function calls.</dd><dt><a class="struct" href="struct.InterpretedFn.html" title="struct arithmetic_eval::InterpretedFn">Interpreted<wbr>Fn</a></dt><dd>Function defined within the interpreter.</dd><dt><a class="struct" href="struct.Object.html" title="struct arithmetic_eval::Object">Object</a></dt><dd>Object with zero or more named fields.</dd><dt><a class="struct" href="struct.OpaqueRef.html" title="struct arithmetic_eval::OpaqueRef">Opaque<wbr>Ref</a></dt><dd>Opaque reference to a native value.</dd><dt><a class="struct" href="struct.Tuple.html" title="struct arithmetic_eval::Tuple">Tuple</a></dt><dd>Tuple of zero or more values.</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.Function.html" title="enum arithmetic_eval::Function">Function</a></dt><dd>Function definition. Functions can be either native (defined in the Rust code) or defined
+in the interpreter.</dd><dt><a class="enum" href="enum.Value.html" title="enum arithmetic_eval::Value">Value</a></dt><dd>Values produced by expressions during their interpretation.</dd><dt><a class="enum" href="enum.ValueType.html" title="enum arithmetic_eval::ValueType">Value<wbr>Type</a></dt><dd>Possible high-level types of <a href="enum.Value.html" title="enum arithmetic_eval::Value"><code>Value</code></a>s.</dd></dl><h2 id="traits" class="section-header">Traits<a href="#traits" class="anchor">§</a></h2><dl class="item-table"><dt><a class="trait" href="trait.NativeFn.html" title="trait arithmetic_eval::NativeFn">Native<wbr>Fn</a></dt><dd>Function on zero or more <a href="enum.Value.html" title="enum arithmetic_eval::Value"><code>Value</code></a>s.</dd><dt><a class="trait" href="trait.Number.html" title="trait arithmetic_eval::Number">Number</a></dt><dd>Marker trait for possible literals.</dd></dl><h2 id="types" class="section-header">Type Aliases<a href="#types" class="anchor">§</a></h2><dl class="item-table"><dt><a class="type" href="type.SpannedValue.html" title="type arithmetic_eval::SpannedValue">Spanned<wbr>Value</a></dt><dd>Value together with a span that has produced it.</dd></dl></section></div></main></body></html>

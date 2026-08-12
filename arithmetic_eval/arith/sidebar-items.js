@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["Checked","CheckedArithmetic","FullArithmetic","ModularArithmetic","NegateOnlyZero","StdArithmetic","Unchecked","WrappingArithmetic"],"trait":["Arithmetic","ArithmeticExt","CheckedArithmeticKind","DoubleWidth","OrdArithmetic"]};

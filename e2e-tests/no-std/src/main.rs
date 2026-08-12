@@ -15,6 +15,7 @@ use arithmetic_eval::{
     fns,
 };
 use arithmetic_parser::grammars::{NumGrammar, Parse, Untyped};
+use cortex_m as _;
 use cortex_m_rt::entry;
 use cortex_m_semihosting::{debug, hprintln, syscall};
 use embedded_alloc::LlffHeap as Heap;

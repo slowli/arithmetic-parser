@@ -12,15 +12,16 @@ use term_transcript::{
 fn test_config() -> TestConfig {
     let shell_options = ShellOptions::default()
         .with_env("COLOR", "always")
-        .with_cargo_path();
+        .with_cargo_path_for("arithmetic-parser");
     TestConfig::new(shell_options).with_match_kind(MatchKind::Precise)
 }
 
 fn scroll_template() -> Template {
-    Template::new(TemplateOptions {
+    let options = TemplateOptions {
         scroll: Some(ScrollOptions::default()),
         ..TemplateOptions::default()
-    })
+    };
+    Template::new(options.validated().unwrap())
 }
 
 #[test]

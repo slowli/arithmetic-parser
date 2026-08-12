@@ -4,18 +4,19 @@ use std::{process::Command, time::Duration};
 
 use term_transcript::{
     ShellOptions, UserInput,
-    svg::{ScrollOptions, Template, TemplateOptions},
+    svg::{ScrollOptions, Template, TemplateOptions, WindowOptions},
     test::{MatchKind, TestConfig},
 };
 
 const PATH_TO_BIN: &str = env!("CARGO_BIN_EXE_arithmetic-parser");
 
 fn scroll_template() -> Template {
-    Template::new(TemplateOptions {
+    let options = TemplateOptions {
         scroll: Some(ScrollOptions::default()),
-        window_frame: true,
+        window: Some(WindowOptions::default()),
         ..TemplateOptions::default()
-    })
+    };
+    Template::new(options.validated().unwrap())
 }
 
 fn test_config(with_types: bool) -> TestConfig {

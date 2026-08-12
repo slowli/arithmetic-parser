@@ -6,6 +6,9 @@ feature-depth = 1
 [advisories]
 db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "deny"
+ignore = [
+  "RUSTSEC-2026-0110", # `bare-metal` crate has been deprecated and archived; used by dev deps only
+]
 
 [licenses]
 allow = [

@@ -99,7 +99,7 @@ dependencies = [
  "glass_pumpkin",
  "hashbrown",
  "nom",
- "num-bigint",
+ "num-bigint 0.5.1",
  "num-complex",
  "num-traits",
  "once_cell",
@@ -121,7 +121,7 @@ dependencies = [
  "hex",
  "nom",
  "nom_locate",
- "num-bigint",
+ "num-bigint 0.5.1",
  "num-complex",
  "num-traits",
  "pulldown-cmark 0.13.4",
@@ -787,7 +787,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec260059e5d59a4899d78dff8bf59abf81f8f5b3b44e9d3ba25c9dade1390a36"
 dependencies = [
  "getrandom",
- "num-bigint",
+ "num-bigint 0.4.8",
  "num-integer",
  "num-traits",
  "once_cell",
@@ -1109,6 +1109,16 @@ name = "num-bigint"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c89e69e7e0f03bea5ef08013795c25018e101932225a656383bd384495ecc367"
+dependencies = [
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "num-bigint"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93e7820bc0a80a0238e650327316f929ba18d5be054b647490a3a6a339f3e7c0"
 dependencies = [
  "num-integer",
  "num-traits",

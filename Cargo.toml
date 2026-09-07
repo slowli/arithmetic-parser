@@ -33,7 +33,7 @@ cortex-m-rt = "0.7"
 cortex-m-semihosting = "0.6"
 criterion = "0.8.2"
 embedded-alloc = "0.7.0"
-glass_pumpkin = "=2.0.0-rc0"
+glass_pumpkin = "=2.0.0-rc1"
 hashbrown = "0.17"
 hex = "0.4.2"
 nom = { version = "8", default-features = false, features = ["alloc"] }

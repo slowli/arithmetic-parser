@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Num"],"struct":["BinaryOpContext","BoolArithmetic","ConstraintSet","Linearity","NumArithmetic","OpConstraintSettings","Ops","StructConstraint","Substitutions","UnaryOpContext"],"trait":["Constraint","LinearType","MapPrimitiveType","ObjectSafeConstraint","TypeArithmetic","WithBoolean"]};

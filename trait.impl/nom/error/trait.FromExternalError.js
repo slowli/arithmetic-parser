@@ -1,0 +1,9 @@
+(function() {
+    const implementors = Object.fromEntries([["arithmetic_parser",[["impl&lt;'a&gt; <a class=\"trait\" href=\"https://docs.rs/nom/~8.0.0/nom/error/trait.FromExternalError.html\" title=\"trait nom::error::FromExternalError\">FromExternalError</a>&lt;<a class=\"struct\" href=\"https://docs.rs/nom_locate/~5.0.0/nom_locate/struct.LocatedSpan.html\" title=\"struct nom_locate::LocatedSpan\">LocatedSpan</a>&lt;&amp;'a <a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.str.html\">str</a>&gt;, <a class=\"enum\" href=\"arithmetic_parser/enum.ErrorKind.html\" title=\"enum arithmetic_parser::ErrorKind\">ErrorKind</a>&gt; for <a class=\"struct\" href=\"arithmetic_parser/struct.Error.html\" title=\"struct arithmetic_parser::Error\">Error</a>",0]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":59,"fragment_lengths":[725]}

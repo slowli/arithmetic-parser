@@ -832,9 +832,9 @@ dependencies = [
 
 [[package]]
 name = "glass_pumpkin"
-version = "2.0.0-rc1"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7809b1b81636525574d3ff5afd967c43df03bb23598c8348ee926648672f6d4"
+checksum = "6ff9ef01d1ba41822349a2a9970e706dc6035637957cdddecf32482a8a90e86e"
 dependencies = [
  "crypto-bigint",
  "crypto-primes",

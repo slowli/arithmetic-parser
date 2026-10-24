@@ -172,12 +172,11 @@ impl<Prim: PrimitiveType> VisitMut<Prim> for MonoTypeTransformer<'_> {
         let (Some(target_len), _) = len.components_mut() else {
             return;
         };
-        if let UnknownLen::Var(var) = target_len {
-            if !var.is_free() {
-                if let Some(mapped_len) = self.mapping.lengths.get(&var.index()) {
-                    *target_len = UnknownLen::free_var(*mapped_len);
-                }
-            }
+        if let UnknownLen::Var(var) = target_len
+            && !var.is_free()
+            && let Some(mapped_len) = self.mapping.lengths.get(&var.index())
+        {
+            *target_len = UnknownLen::free_var(*mapped_len);
         }
     }
 

@@ -177,10 +177,10 @@ impl<Prim: PrimitiveType> fmt::Display for Function<Prim> {
             .params
             .as_ref()
             .and_then(|params| params.constraints.as_ref());
-        if let Some(constraints) = constraints {
-            if !constraints.is_empty() {
-                write!(formatter, "for<{constraints}> ")?;
-            }
+        if let Some(constraints) = constraints
+            && !constraints.is_empty()
+        {
+            write!(formatter, "for<{constraints}> ")?;
         }
 
         self.args.format_as_tuple(formatter)?;

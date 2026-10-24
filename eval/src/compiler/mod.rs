@@ -213,10 +213,10 @@ impl Compiler {
         }
 
         let start_register = start_register + destructure.start.len();
-        if let Some(middle) = &destructure.middle {
-            if let Some(lvalue) = middle.extra.to_lvalue() {
-                self.assign(executable, &lvalue, start_register)?;
-            }
+        if let Some(middle) = &destructure.middle
+            && let Some(lvalue) = middle.extra.to_lvalue()
+        {
+            self.assign(executable, &lvalue, start_register)?;
         }
 
         let start_register = start_register + 1;

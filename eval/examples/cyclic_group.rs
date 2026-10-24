@@ -110,7 +110,7 @@ impl CyclicGroupArithmetic {
     /// Returns a native function hashing data to a scalar.
     fn hash_to_scalar(&self) -> HashToScalar {
         let max_bit_len = self.for_group.modulus().bits();
-        let max_byte_len = (max_bit_len / 8) as usize + (max_bit_len % 8 != 0) as usize;
+        let max_byte_len = (max_bit_len / 8) as usize + !max_bit_len.is_multiple_of(8) as usize;
 
         HashToScalar {
             modulus: self.for_scalars.modulus().to_owned(),

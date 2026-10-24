@@ -475,11 +475,12 @@ impl<T: ReplLiteral> Env<T> {
 
     fn dump_scope(&mut self, dump_original_scope: bool) -> io::Result<()> {
         for (name, var) in order_vars(&self.env) {
-            if let Some(original_var) = self.original_env.get(name) {
-                if !dump_original_scope && original_var == var {
-                    // The variable is present in the original scope, no need to output it.
-                    continue;
-                }
+            if let Some(original_var) = self.original_env.get(name)
+                && !dump_original_scope
+                && original_var == var
+            {
+                // The variable is present in the original scope, no need to output it.
+                continue;
             }
 
             write!(self.reporter.writer, "{name} = ")?;

@@ -747,7 +747,7 @@ fn field_access_with_indexed_field() {
     let input = InputSpan::new("point.0");
     let (rest, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
 
-    assert!(rest.fragment().is_empty());
+    assert_eq!(*rest.fragment(), "");
     assert_eq!(
         expr.extra,
         Expr::FieldAccess {

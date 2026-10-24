@@ -68,7 +68,7 @@ impl ParamQuantifierOutput {
         }
 
         let mut level = mentions_by_depth.pop().unwrap();
-        debug_assert!(mentions_by_depth.is_empty());
+        debug_assert_eq!(mentions_by_depth, []);
         while level.len() > 1 {
             level = level.into_iter().map(|idx| functions[idx].parent).collect();
         }

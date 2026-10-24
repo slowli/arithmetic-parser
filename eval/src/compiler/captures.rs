@@ -263,12 +263,12 @@ fn add_var<'a>(
     context: RepeatedAssignmentContext,
 ) -> Result<(), Error> {
     let var_name = *var_span.fragment();
-    if var_name != "_" {
-        if let Some(prev_span) = vars.insert(var_name, var_span) {
-            let err = ErrorKind::RepeatedAssignment { context };
-            return Err(Error::new(module_id.clone(), &var_span, err)
-                .with_location(&prev_span.into(), AuxErrorInfo::PrevAssignment));
-        }
+    if var_name != "_"
+        && let Some(prev_span) = vars.insert(var_name, var_span)
+    {
+        let err = ErrorKind::RepeatedAssignment { context };
+        return Err(Error::new(module_id.clone(), &var_span, err)
+            .with_location(&prev_span.into(), AuxErrorInfo::PrevAssignment));
     }
     Ok(())
 }

@@ -232,10 +232,10 @@ where
     fn visit_tuple(&mut self, tuple: &Tuple<Prim>) {
         if self.inner.deny_dyn_slices {
             let middle_len = tuple.parts().1.map(Slice::len);
-            if let Some(middle_len) = middle_len {
-                if let Err(err) = self.substitutions.apply_static_len(middle_len) {
-                    self.errors.push(err);
-                }
+            if let Some(middle_len) = middle_len
+                && let Err(err) = self.substitutions.apply_static_len(middle_len)
+            {
+                self.errors.push(err);
             }
         }
 

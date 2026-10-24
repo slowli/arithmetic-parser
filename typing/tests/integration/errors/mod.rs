@@ -32,7 +32,7 @@ fn type_recursion() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(err.main_location().span(code), "x + (x, 2)");
-    assert!(err.path().is_empty());
+    assert_eq!(err.path(), []);
     assert_matches!(err.context(), ErrorContext::BinaryOp(_));
     assert_matches!(
         err.kind(),
@@ -80,7 +80,7 @@ fn unknown_method() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(err.main_location().span(code), "do_something");
-    assert!(err.path().is_empty());
+    assert_eq!(err.path(), []);
     assert_matches!(err.context(), ErrorContext::None);
     assert_matches!(err.kind(), ErrorKind::UndefinedVar(name) if name == "do_something");
     assert_eq!(
@@ -119,7 +119,7 @@ fn destructuring_error_on_assignment() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(err.main_location().span(bogus_code), "(x, y, ...zs)");
-    assert!(err.path().is_empty());
+    assert_eq!(err.path(), []);
     assert_matches!(
         err.context(),
         ErrorContext::Assignment { lhs, rhs }
@@ -337,7 +337,7 @@ fn comparisons_when_switched_off() {
     let err = type_env.process_statements(&block).unwrap_err().single();
 
     assert_eq!(err.main_location().span(code), "x > 1");
-    assert!(err.path().is_empty());
+    assert_eq!(err.path(), []);
     assert_matches!(err.context(), ErrorContext::BinaryOp(_));
     assert_matches!(err.kind(), ErrorKind::UnsupportedFeature(_));
     assert_eq!(

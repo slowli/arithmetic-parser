@@ -8,9 +8,9 @@ on:
 
 env:
   # Minimum supported Rust version.
-  msrv: 1.85.0
+  msrv: 1.88.0
   # Nightly Rust toolchain for building docs and checking nostd support.
-  nightly: nightly-2025-11-02
+  nightly: nightly-2026-10-24
 
 jobs:
   # Checks minimum supported Rust version.
@@ -166,11 +166,10 @@ jobs:
 
       - name: Build docs
         run: |
-          cargo clean --doc && \
+          cargo clean --doc
           cargo rustdoc -p arithmetic-parser --all-features -- -Z unstable-options \
-            --extern-html-root-url anyhow=https://docs.rs/anyhow/~1.0.27 \
-            --extern-html-root-url nom=https://docs.rs/nom/~7.0.0 \
-            --extern-html-root-url nom_locate=https://docs.rs/nom_locate/~4.0.0 && \
+            --extern-html-root-url nom=https://docs.rs/nom/~8.0.0 \
+            --extern-html-root-url nom_locate=https://docs.rs/nom_locate/~5.0.0
           cargo rustdoc -p arithmetic-eval --all-features -- --cfg docsrs
           cargo rustdoc -p arithmetic-typing --all-features -- --cfg docsrs
 

@@ -201,7 +201,7 @@ fn unsupported_type_param_in_generic_fn() {
     let mut type_env = TypeEnvironment::new();
     let err = type_env.process_statements(&block).unwrap_err().single();
 
-    assert!(err.path().is_empty());
+    assert_eq!(err.path(), []);
     assert_matches!(err.context(), ErrorContext::Assignment { .. });
     assert_eq!(err.main_location().span(code), "(('Arg,)) -> ('Arg,)");
     assert_matches!(err.kind(), ErrorKind::UnsupportedParam);

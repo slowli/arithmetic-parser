@@ -304,10 +304,10 @@ impl<Prim: PrimitiveType> PartialEq for Tuple<Prim> {
 
 impl<Prim: PrimitiveType> fmt::Display for Tuple<Prim> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(slice) = self.as_slice() {
-            if let (Some(_), _) = slice.length.components() {
-                return fmt::Display::fmt(slice, formatter);
-            }
+        if let Some(slice) = self.as_slice()
+            && let (Some(_), _) = slice.length.components()
+        {
+            return fmt::Display::fmt(slice, formatter);
         }
         self.format_as_tuple(formatter)
     }

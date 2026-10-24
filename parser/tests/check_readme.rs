@@ -37,7 +37,7 @@ fn code_sample_in_readme_is_parsed() {
             }
             Event::End(TagEnd::CodeBlock) => {
                 if let Some(code_sample) = code.take() {
-                    assert!(!code_sample.is_empty());
+                    assert_ne!(code_sample, "");
                     check_sample(&code_sample);
                 }
             }

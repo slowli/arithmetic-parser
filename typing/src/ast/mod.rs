@@ -133,7 +133,7 @@ pub struct SliceAst<'a> {
 /// # fn main() -> anyhow::Result<()> {
 /// let input = InputSpan::new("([Num; N]) -> Num");
 /// let (rest, ty) = FunctionAst::parse(input)?;
-/// assert!(rest.fragment().is_empty());
+/// assert_eq!(*rest.fragment(), "");
 /// assert_matches!(ty.args.extra.start[0].extra, TypeAst::Slice(_));
 /// assert_eq!(ty.return_type.extra, TypeAst::Ident);
 /// # Ok(())

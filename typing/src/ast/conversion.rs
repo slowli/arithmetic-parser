@@ -600,7 +600,7 @@ mod tests {
         };
 
         assert_eq!(ty.params.as_ref().unwrap().len_params.len(), 1);
-        assert!(ty.params.as_ref().unwrap().type_params.is_empty());
+        assert_eq!(ty.params.as_ref().unwrap().type_params, []);
         let args_slice = ty.args.as_slice().unwrap();
         assert_eq!(*args_slice.element(), Type::NUM);
         assert_eq!(args_slice.len(), UnknownLen::param(0).into());

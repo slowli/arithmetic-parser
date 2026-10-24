@@ -21,7 +21,7 @@ fn field_access_basics() {
     let input = InputSpan::new("point.x");
     let (rest, expr) = simple_expr::<FieldGrammar, Complete>(input).unwrap();
 
-    assert!(rest.fragment().is_empty());
+    assert_eq!(*rest.fragment(), "");
     assert_eq!(
         expr.extra,
         Expr::FieldAccess {
@@ -155,7 +155,7 @@ fn field_access_in_larger_context() {
 fn object_basics() {
     let input = InputSpan::new("#{ x: 1, y: 2 }");
     let (rest, obj) = object_expr::<FieldGrammar, Complete>(input).unwrap();
-    assert!(rest.fragment().is_empty());
+    assert_eq!(*rest.fragment(), "");
     assert_matches!(
         obj.extra,
         Expr::Object(ObjectExpr { fields }) if fields.len() == 2
@@ -163,7 +163,7 @@ fn object_basics() {
 
     let input = InputSpan::new("#{}");
     let (rest, obj) = object_expr::<FieldGrammar, Complete>(input).unwrap();
-    assert!(rest.fragment().is_empty());
+    assert_eq!(*rest.fragment(), "");
     assert_matches!(
         obj.extra,
         Expr::Object(ObjectExpr { fields }) if fields.is_empty()
@@ -221,7 +221,7 @@ fn objects_within_larger_context() {
     let input = InputSpan::new("|xs| #{ x: xs.0 }");
     let (_, fn_def) = fn_def::<FieldGrammar, Complete>(input).unwrap();
     assert_eq!(*fn_def.args.fragment(), "|xs|");
-    assert!(fn_def.body.statements.is_empty());
+    assert_eq!(fn_def.body.statements, []);
     let inner_expr = *fn_def.body.return_value.unwrap();
     assert_matches!(inner_expr.extra, Expr::Object(ObjectExpr { fields }) if fields.len() == 1);
 }
@@ -230,7 +230,7 @@ fn objects_within_larger_context() {
 fn object_destructure_basics() {
     let input = InputSpan::new("{ x }");
     let (rest, obj) = object_destructure::<FieldGrammar, Complete>(input).unwrap();
-    assert!(rest.fragment().is_empty());
+    assert_eq!(*rest.fragment(), "");
     assert_eq!(obj.fields.len(), 1);
     assert_eq!(
         obj.fields[0],
@@ -242,7 +242,7 @@ fn object_destructure_basics() {
 
     let input = InputSpan::new("{ x, y: new_y }");
     let (rest, obj) = object_destructure::<FieldGrammar, Complete>(input).unwrap();
-    assert!(rest.fragment().is_empty());
+    assert_eq!(*rest.fragment(), "");
     assert_eq!(
         obj.fields,
         vec![
@@ -259,7 +259,7 @@ fn object_destructure_basics() {
 
     let input = InputSpan::new("{ x, ys: (flag, ...ys) }");
     let (rest, obj) = object_destructure::<FieldGrammar, Complete>(input).unwrap();
-    assert!(rest.fragment().is_empty());
+    assert_eq!(*rest.fragment(), "");
     assert_eq!(obj.fields.len(), 2);
     assert_matches!(
         obj.fields[1].binding.as_ref().unwrap().extra,
@@ -271,7 +271,7 @@ fn object_destructure_basics() {
 fn embedded_object_destructuring() {
     let input = InputSpan::new("{ x: { y: _y, z } }");
     let (rest, obj) = object_destructure::<FieldGrammar, Complete>(input).unwrap();
-    assert!(rest.fragment().is_empty());
+    assert_eq!(*rest.fragment(), "");
 
     let inner_obj = ObjectDestructure {
         fields: vec![
@@ -299,7 +299,7 @@ fn object_destructuring_in_tuple() {
     let input = InputSpan::new("({ x, y -> (z, ...), }, ...pts)");
     let (rest, lvalue) = lvalue::<FieldGrammar, Complete>(input).unwrap();
 
-    assert!(rest.fragment().is_empty());
+    assert_eq!(*rest.fragment(), "");
     let Lvalue::Tuple(lvalue) = lvalue.extra else {
         panic!("Unexpected lvalue: {lvalue:?}");
     };
@@ -316,7 +316,7 @@ fn object_destructuring_in_tuple() {
 fn type_annotations_in_object_destructuring() {
     let input = InputSpan::new("{ x -> x: (Sc, Ge), y }");
     let (rest, obj) = object_destructure::<FieldGrammar, Complete>(input).unwrap();
-    assert!(rest.fragment().is_empty());
+    assert_eq!(*rest.fragment(), "");
 
     let ty = ValueType::Tuple(vec![ValueType::Scalar, ValueType::Element]);
     assert_eq!(
@@ -351,7 +351,7 @@ fn object_destructuring_in_statement() {
     for &input in sample_inputs {
         let input = InputSpan::new(input);
         let (rest, stmt) = statement::<FieldGrammar, Complete>(input).unwrap();
-        assert!(rest.fragment().is_empty());
+        assert_eq!(*rest.fragment(), "");
 
         let Statement::Assignment { lhs, .. } = stmt.extra else {
             panic!("Unexpected statement: {stmt:?}");

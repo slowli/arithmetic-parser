@@ -66,10 +66,10 @@ where
     fn insert_type(&mut self, name_span: Spanned<'a>, ty: Type<Prim>) {
         let name = *name_span.fragment();
         if name != "_" {
-            if let Some(lvalue_vars) = &mut self.lvalue_vars {
-                if lvalue_vars.insert(name, name_span).is_some() {
-                    self.errors.push(Error::repeated_assignment(name_span));
-                }
+            if let Some(lvalue_vars) = &mut self.lvalue_vars
+                && lvalue_vars.insert(name, name_span).is_some()
+            {
+                self.errors.push(Error::repeated_assignment(name_span));
             }
             let scope = self.scopes.last_mut().unwrap();
             scope.insert(name.to_owned(), ty);

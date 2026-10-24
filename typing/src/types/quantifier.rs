@@ -68,7 +68,7 @@ impl ParamQuantifierOutput {
         }
 
         let mut level = mentions_by_depth.pop().unwrap();
-        debug_assert!(mentions_by_depth.is_empty());
+        debug_assert_eq!(mentions_by_depth, []);
         while level.len() > 1 {
             level = level.into_iter().map(|idx| functions[idx].parent).collect();
         }
@@ -155,11 +155,11 @@ impl<Prim: PrimitiveType> Visit<Prim> for ParamQuantifier<'_, Prim> {
             return;
         };
 
-        if let UnknownLen::Var(var) = middle_len {
-            if !var.is_free() {
-                let stats = self.output.len_params.entry(var.index()).or_default();
-                stats.mentioning_fns.insert(self.current_function_idx);
-            }
+        if let UnknownLen::Var(var) = middle_len
+            && !var.is_free()
+        {
+            let stats = self.output.len_params.entry(var.index()).or_default();
+            stats.mentioning_fns.insert(self.current_function_idx);
         }
         visit::visit_tuple(self, tuple);
     }

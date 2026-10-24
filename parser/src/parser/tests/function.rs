@@ -208,7 +208,7 @@ fn method_expr_with_complex_name() {
     let Expr::Block(name) = &name.extra else {
         panic!("Unexpected name expr: {:#?}", name.extra);
     };
-    assert!(name.statements.is_empty());
+    assert_eq!(name.statements, []);
     assert_matches!(
         name.return_value.as_deref().unwrap().extra,
         Expr::FieldAccess { .. }
@@ -228,7 +228,7 @@ fn method_expr_with_complex_name() {
     else {
         panic!("Unexpected name expr: {:#?}", name.extra);
     };
-    assert!(statements.is_empty());
+    assert_eq!(statements, []);
     assert_eq!(
         *return_value.unwrap(),
         sp(
@@ -322,7 +322,7 @@ fn fn_definition_parsing() {
 
     let input = InputSpan::new("|x: Sc, (y, _: Ge)| { x + y }");
     let mut def = fn_def::<FieldGrammar, Complete>(input).unwrap().1;
-    assert!(def.body.statements.is_empty());
+    assert_eq!(def.body.statements, []);
     assert!(def.body.return_value.is_some());
 
     def.body = Block {

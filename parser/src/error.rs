@@ -265,10 +265,10 @@ impl<'a> ContextError<InputSpan<'a>> for Error {
             target.inner.extra = ErrorKind::UnfinishedComment;
         }
 
-        if input.location_offset() < target.inner.location_offset() {
-            if let Some(context) = target.inner.extra.context_mut() {
-                *context = Some(ctx);
-            }
+        if input.location_offset() < target.inner.location_offset()
+            && let Some(context) = target.inner.extra.context_mut()
+        {
+            *context = Some(ctx);
         }
         target
     }
